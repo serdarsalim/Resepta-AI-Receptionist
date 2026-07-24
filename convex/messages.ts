@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 
 const messageStatus = v.union(
@@ -99,49 +100,47 @@ export const applySendResult = internalMutation({
   },
 });
 
-// Delivery receipts from the webhook, matched by Meta's message id. Unknown
-// wamids are dropped silently (receipts for messages we didn't log).
-export const applyStatusByWamid = internalMutation({
-  args: {
-    wamid: v.string(),
-    status: v.string(),
-    error: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const message = await ctx.db
-      .query("messages")
-      .withIndex("by_wamid", (q) => q.eq("wamid", args.wamid))
-      .unique();
-    if (!message) return null;
-    if (args.status === "delivered" || args.status === "read") {
-      // Never regress read → delivered (Meta retries out of order).
-      if (message.status === "read") return null;
-      await ctx.db.patch(message._id, { status: args.status });
-    } else if (args.status === "failed") {
-      await ctx.db.patch(message._id, { status: "failed", error: args.error });
-    }
-    return null;
-  },
-});
+// Plain helpers for webhook.ts — it's already a mutation, so these run inside
+// its transaction rather than as separate internal mutations.
 
-export const logInbound = internalMutation({
+// Delivery receipts matched by Meta's message id. Unknown wamids drop
+// silently (receipts for messages we didn't log).
+export async function applyWamidStatus(
+  ctx: MutationCtx,
+  wamid: string,
+  status: string,
+  error?: string,
+) {
+  const message = await ctx.db
+    .query("messages")
+    .withIndex("by_wamid", (q) => q.eq("wamid", wamid))
+    .unique();
+  if (!message) return;
+  if (status === "delivered" || status === "read") {
+    // Never regress read → delivered (Meta retries out of order).
+    if (message.status === "read") return;
+    await ctx.db.patch(message._id, { status });
+  } else if (status === "failed") {
+    await ctx.db.patch(message._id, { status: "failed", error });
+  }
+}
+
+export async function logInboundRow(
+  ctx: MutationCtx,
   args: {
-    orgId: v.id("orgs"),
-    customerId: v.optional(v.id("customers")),
-    body: v.optional(v.string()),
-    wamid: v.optional(v.string()),
+    orgId: Id<"orgs">;
+    customerId?: Id<"customers">;
+    body?: string;
+    wamid?: string;
   },
-  returns: v.id("messages"),
-  handler: async (ctx, args) => {
-    return await ctx.db.insert("messages", {
-      orgId: args.orgId,
-      customerId: args.customerId,
-      direction: "in",
-      kind: "reply",
-      body: args.body,
-      wamid: args.wamid,
-      status: "received",
-    });
-  },
-});
+) {
+  await ctx.db.insert("messages", {
+    orgId: args.orgId,
+    customerId: args.customerId,
+    direction: "in",
+    kind: "reply",
+    body: args.body,
+    wamid: args.wamid,
+    status: "received",
+  });
+}

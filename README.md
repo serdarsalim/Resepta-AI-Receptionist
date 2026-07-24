@@ -5,6 +5,9 @@ dentists. One multi-org deployment, self-serve signup, per-business WhatsApp
 Cloud API number. Booking confirmations and reminders go out as Meta template
 messages; customers confirm or cancel by tapping a reply button.
 
+Bookings arrive from cal.com (webhook) or get typed in for walk-ins. UI is
+Turkish and English; customer messages follow each customer's own language.
+
 Working name. Sibling product to Nudge (full automation platform,
 instance-per-tenant); Randevu is deliberately small and shared.
 

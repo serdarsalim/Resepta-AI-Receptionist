@@ -41,7 +41,10 @@ export default defineSchema({
     reminderOffsetsHours: v.optional(v.array(v.number())),
     // Send a confirmation template immediately when an appointment is booked.
     sendBookingConfirmation: v.optional(v.boolean()),
-  }),
+    // Org-scoped secret in the cal.com webhook URL (?token=...) — how an
+    // inbound booking event resolves to its org. Generated in Settings.
+    calcomWebhookToken: v.optional(v.string()),
+  }).index("by_calcom_token", ["calcomWebhookToken"]),
 
   customers: defineTable({
     orgId: v.id("orgs"),
@@ -81,10 +84,16 @@ export default defineSchema({
     // the double-send guard across overlapping ticks.
     reminderSentOffsets: v.optional(v.array(v.number())),
     confirmationSentAt: v.optional(v.number()),
+    // Intake: unset = typed into Randevu; "calcom" = arrived via the cal.com
+    // webhook. externalUid is cal.com's booking uid — how RESCHEDULED and
+    // CANCELLED events find the row they refer to.
+    source: v.optional(v.union(v.literal("manual"), v.literal("calcom"))),
+    externalUid: v.optional(v.string()),
   })
     .index("by_org_start", ["orgId", "startAt"])
     .index("by_start", ["startAt"])
-    .index("by_customer", ["customerId"]),
+    .index("by_customer", ["customerId"])
+    .index("by_org_external", ["orgId", "externalUid"]),
 
   // One WhatsApp Cloud API number per org (Meta Business number, not personal).
   waAccounts: defineTable({
