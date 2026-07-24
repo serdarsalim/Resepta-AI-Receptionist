@@ -1,0 +1,118 @@
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { assertE164, requireOrg } from "./lib/orgAuth";
+
+const customerDoc = v.object({
+  _id: v.id("customers"),
+  _creationTime: v.number(),
+  orgId: v.id("orgs"),
+  firstName: v.string(),
+  lastName: v.optional(v.string()),
+  phone: v.string(),
+  language: v.optional(v.string()),
+  notes: v.optional(v.string()),
+  consentAt: v.optional(v.number()),
+  lastInboundAt: v.optional(v.number()),
+});
+
+export const list = query({
+  args: {},
+  returns: v.array(customerDoc),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    return await ctx.db
+      .query("customers")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(1000);
+  },
+});
+
+export const create = mutation({
+  args: {
+    firstName: v.string(),
+    lastName: v.optional(v.string()),
+    phone: v.string(),
+    notes: v.optional(v.string()),
+    consent: v.boolean(),
+  },
+  returns: v.id("customers"),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const firstName = args.firstName.trim();
+    if (!firstName) throw new Error("first-name-required");
+    const phone = assertE164(args.phone);
+    const dupe = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
+      .unique();
+    if (dupe) throw new Error("phone-exists");
+    return await ctx.db.insert("customers", {
+      orgId,
+      firstName,
+      lastName: args.lastName?.trim() || undefined,
+      phone,
+      notes: args.notes?.trim() || undefined,
+      consentAt: args.consent ? Date.now() : undefined,
+    });
+  },
+});
+
+export const update = mutation({
+  args: {
+    customerId: v.id("customers"),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    consent: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    const patch: Record<string, unknown> = {};
+    if (args.firstName !== undefined && args.firstName.trim()) {
+      patch.firstName = args.firstName.trim();
+    }
+    if (args.lastName !== undefined) patch.lastName = args.lastName.trim() || undefined;
+    if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
+    if (args.phone !== undefined) {
+      const phone = assertE164(args.phone);
+      if (phone !== customer.phone) {
+        const dupe = await ctx.db
+          .query("customers")
+          .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
+          .unique();
+        if (dupe) throw new Error("phone-exists");
+        patch.phone = phone;
+      }
+    }
+    if (args.consent !== undefined) {
+      // Re-consenting refreshes the stamp; revoking clears it and blocks sends.
+      patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
+    }
+    await ctx.db.patch(args.customerId, patch);
+    return null;
+  },
+});
+
+export const remove = mutation({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    const appointments = await ctx.db
+      .query("appointments")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect();
+    for (const appointment of appointments) {
+      await ctx.db.delete(appointment._id);
+    }
+    await ctx.db.delete(args.customerId);
+    return null;
+  },
+});

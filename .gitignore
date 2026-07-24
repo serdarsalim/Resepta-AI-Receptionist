@@ -1,0 +1,13 @@
+# deps / build
+node_modules/
+.next/
+*.tsbuildinfo
+next-env.d.ts
+
+# env — every deployment secret lives here, never in git
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
