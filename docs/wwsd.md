@@ -1,5 +1,11 @@
 # WWSD — deciding like Serdar without asking
 
+> **The canonical copy lives in Mana** (`/Volumes/server/SLMAI/AGENTS.md`,
+> committed 2026-07-25) so it applies to EVERY project, not just this one.
+> Serdar's point when he asked for it: he has repeated these same rules across
+> 20+ apps. Add new rules THERE when he corrects something — this file is a
+> local convenience copy.
+
 Read this BEFORE building any surface, not after he rejects one. Every rule
 below was extracted from an actual correction he made; the "because" is his
 reasoning, not mine. If a decision isn't covered here, decide by extrapolating
