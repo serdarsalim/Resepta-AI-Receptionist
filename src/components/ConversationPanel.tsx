@@ -5,10 +5,34 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
+
+// Delivery state is a storage word ("failed"), not a UI word. Same for the
+// reason slug the send action hands back. Both get translated here; an
+// inbound's "received" has no entry because we never label incoming messages.
+const STATUS_KEY: Record<string, TranslationKey> = {
+  queued: "message.queued",
+  sent: "message.sent",
+  delivered: "message.delivered",
+  read: "message.read",
+  failed: "message.failed",
+};
+
+// A slug we don't have copy for prints nothing at all. A salon owner reading
+// "wa-not-configured" is worse off than one who reads only "not sent".
+const ERROR_KEY: Record<string, TranslationKey> = {
+  "wa-not-configured": "error.wa-not-configured",
+  "no-consent": "error.no-consent",
+  "session-window-closed": "error.session-window-closed",
+  "no-template": "error.no-template",
+  "missing-phone": "error.missing-phone",
+  "agent-not-configured": "error.agent-not-configured",
+  "no-calendar-connected": "error.no-calendar-connected",
+};
 
 export type FeedFilter = Channel | "all";
 
@@ -61,28 +85,46 @@ export function ConversationPanel({
         {feed !== undefined && thread.length === 0 && (
           <p className="text-sm text-[var(--muted)]">{t("messages.none")}</p>
         )}
-        {thread.map((item) =>
-          item.channel === "call" ? (
-            <CallEntry key={item.id} item={item} />
-          ) : (
+        {thread.map((item) => {
+          if (item.channel === "call") return <CallEntry key={item.id} item={item} />;
+          const outbound = item.direction === "out";
+          const failed = outbound && item.status === "failed";
+          const statusKey = outbound && item.status ? STATUS_KEY[item.status] : undefined;
+          const errorKey = item.error ? ERROR_KEY[item.error] : undefined;
+          return (
             <div
               key={item.id}
+              // A send that never left reads as a failure at a glance: red fill,
+              // not the same green as a delivered reply. Fill only, no border.
               className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
-                item.direction === "out"
-                  ? "ml-auto bg-[var(--brand-soft)]"
-                  : "bg-[var(--muted-bg)]"
+                failed
+                  ? "ml-auto bg-red-500/10 dark:bg-red-500/15"
+                  : outbound
+                    ? "ml-auto bg-[var(--brand-soft)]"
+                    : "bg-[var(--muted-bg)]"
               }`}
             >
-              {item.body && <p className="whitespace-pre-wrap">{item.body}</p>}
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--muted)]">
+              {item.body ? (
+                <p className="whitespace-pre-wrap">{item.body}</p>
+              ) : (
+                // Template sends store no body (the text lives in Meta's
+                // approved template), so the bubble would otherwise be blank.
+                // Name what was sent instead of showing an empty box.
+                <p className="text-[var(--muted)]">{t("message.template")}</p>
+              )}
+              <p
+                className={`mt-0.5 flex flex-wrap items-center gap-1 text-[10px] ${
+                  failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"
+                }`}
+              >
                 <FeedIcon type={item.channel} size={11} />
-                {formatDateTime(item.at, language)}
-                {item.direction === "out" && item.status ? ` · ${item.status}` : ""}
-                {item.error ? ` · ${item.error}` : ""}
+                <span>{formatDateTime(item.at, language)}</span>
+                {statusKey && <span>· {t(statusKey)}</span>}
+                {errorKey && <span>· {t(errorKey)}</span>}
               </p>
             </div>
-          ),
-        )}
+          );
+        })}
       </div>
 
       {canCompose && (
@@ -120,8 +162,10 @@ export function ConversationPanel({
             </button>
           </form>
           {sendError && (
+            // Same rule as the bubbles: a known reason gets its sentence, an
+            // unknown one falls back to plain "not sent" rather than the slug.
             <p className="px-3 pb-2 text-xs text-red-600 dark:text-red-400">
-              {sendError}
+              {t(ERROR_KEY[sendError] ?? "message.failed")}
             </p>
           )}
         </>
