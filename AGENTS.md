@@ -1,5 +1,10 @@
 # Randevu — working in this codebase
 
+> **Read [`docs/wwsd.md`](docs/wwsd.md) FIRST.** It is the decision model —
+> how Serdar picks, what he rejects, and the design-language violations he has
+> personally flagged. Every rule there came from a real correction. Consult it
+> before building a surface, not after it gets rejected.
+
 WhatsApp appointment automation for SMBs (salons, barbers, dentists). One shared
 deployment serves EVERY business — this is the multi-org sibling of Nudge
 (`../nudge`), which is instance-per-tenant. The two products deliberately do not
