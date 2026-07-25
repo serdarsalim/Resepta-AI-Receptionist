@@ -32,6 +32,19 @@ export const current = query({
       emailFrom: v.optional(v.string()),
       calcomEventTypeId: v.optional(v.string()),
       calcomApiKeyTail: v.optional(v.string()),
+      // Left optional rather than defaulted: "no hours set" is a real state the
+      // away-reply depends on telling apart from "open all day".
+      businessHours: v.optional(
+        v.object({
+          activeDays: v.optional(v.array(v.number())),
+          startMinute: v.optional(v.number()),
+          endMinute: v.optional(v.number()),
+        }),
+      ),
+      autoReplyEnabled: v.boolean(),
+      autoReplyText: v.optional(v.string()),
+      bookingUrl: v.optional(v.string()),
+      publicPhone: v.optional(v.string()),
     }),
     me: v.object({
       name: v.optional(v.string()),
@@ -93,6 +106,11 @@ export const current = query({
         emailFrom: org.emailFrom,
         calcomEventTypeId: org.calcomEventTypeId,
         calcomApiKeyTail: org.calcomApiKey ? org.calcomApiKey.slice(-4) : undefined,
+        businessHours: org.businessHours,
+        autoReplyEnabled: org.autoReplyEnabled ?? false,
+        autoReplyText: org.autoReplyText,
+        bookingUrl: org.bookingUrl,
+        publicPhone: org.publicPhone,
       },
       me: {
         name: user.name,
@@ -133,6 +151,17 @@ export const update = mutation({
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
     emailFrom: v.optional(v.string()),
+    businessHours: v.optional(
+      v.object({
+        activeDays: v.optional(v.array(v.number())),
+        startMinute: v.optional(v.number()),
+        endMinute: v.optional(v.number()),
+      }),
+    ),
+    autoReplyEnabled: v.optional(v.boolean()),
+    autoReplyText: v.optional(v.string()),
+    bookingUrl: v.optional(v.string()),
+    publicPhone: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -160,6 +189,42 @@ export const update = mutation({
       patch.winbackDaysAfter = Math.min(90, Math.max(1, Math.round(args.winbackDaysAfter)));
     }
     if (args.emailFrom !== undefined) patch.emailFrom = args.emailFrom.trim() || undefined;
+    if (args.businessHours !== undefined) {
+      const { activeDays, startMinute, endMinute } = args.businessHours;
+      const clampMinute = (m: number) =>
+        Math.min(24 * 60, Math.max(0, Math.round(m)));
+      const start = startMinute === undefined ? undefined : clampMinute(startMinute);
+      const end = endMinute === undefined ? undefined : clampMinute(endMinute);
+      patch.businessHours = {
+        // Dedupe and keep 0–6 only; an out-of-range weekday would silently mean
+        // "closed forever" through isWithinActiveWindow.
+        activeDays:
+          activeDays === undefined
+            ? undefined
+            : [...new Set(activeDays.map((d) => Math.round(d)))]
+                .filter((d) => d >= 0 && d <= 6)
+                .sort((a, b) => a - b),
+        // A start at or after the end is not a window a salon meant to type.
+        // Dropping both is better than a config that reads "closed always".
+        startMinute: start !== undefined && end !== undefined && start >= end ? undefined : start,
+        endMinute: start !== undefined && end !== undefined && start >= end ? undefined : end,
+      };
+    }
+    if (args.autoReplyEnabled !== undefined) {
+      patch.autoReplyEnabled = args.autoReplyEnabled;
+    }
+    if (args.autoReplyText !== undefined) {
+      patch.autoReplyText = args.autoReplyText.trim() || undefined;
+    }
+    if (args.bookingUrl !== undefined) {
+      const url = args.bookingUrl.trim();
+      // Stored only if it is a URL a customer could actually tap. A malformed
+      // link in an away-reply is worse than no link.
+      patch.bookingUrl = /^https?:\/\/\S+$/.test(url) ? url : undefined;
+    }
+    if (args.publicPhone !== undefined) {
+      patch.publicPhone = args.publicPhone.trim() || undefined;
+    }
     await ctx.db.patch(orgId, patch);
     return null;
   },

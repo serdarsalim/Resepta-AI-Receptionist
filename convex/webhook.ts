@@ -5,6 +5,10 @@ import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
 import { nextUpcomingOf } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
+import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
+
+// Meta's session window: one away-reply per window, not per message.
+const SESSION_WINDOW_MS = 24 * 3600_000;
 
 // Bare-text fallbacks, per language. Button taps are the primary path; these
 // cover a customer who types instead of tapping.
@@ -139,7 +143,40 @@ export const handleWhatsappEvent = internalMutation({
                   ?._id ?? null;
             }
           }
-          if (!intent || !appointmentId) continue;
+          // Nothing actionable: they typed something that isn't a confirm or
+          // cancel, or said EVET with no upcoming appointment to apply it to.
+          // Out of hours that gets one away-reply with the booking link;
+          // in hours it gets nothing, because the staff are reading this and an
+          // auto-reply on top of a human who answers in five minutes reads like
+          // a robot on the one channel where the customer thinks they are
+          // talking to the salon. The owner alert above already fired either way.
+          if (!appointmentId) {
+            const org = await ctx.db.get(orgId);
+            const hours = org?.businessHours ?? {};
+            const now = Date.now();
+            const alreadyReplied =
+              customer?.lastAutoReplyAt !== undefined &&
+              now - customer.lastAutoReplyAt < SESSION_WINDOW_MS;
+            if (
+              org &&
+              (org.autoReplyEnabled ?? false) &&
+              // Unset hours mean nobody has said when this salon is closed, so
+              // we do not get to announce it. See lib/businessHours.ts.
+              hasBusinessHours(hours) &&
+              !isWithinActiveWindow(now, org.timezone, hours) &&
+              !alreadyReplied
+            ) {
+              // Stamped BEFORE scheduling: two inbound messages arriving as two
+              // separate webhook POSTs are two mutations, and the stamp is what
+              // stops both from sending. Same ordering as the reminder tick.
+              await ctx.db.patch(contactId, { lastAutoReplyAt: now });
+              await ctx.scheduler.runAfter(0, internal.wa.sendAwayReply, {
+                customerId: contactId,
+              });
+            }
+            continue;
+          }
+          if (!intent) continue;
 
           const appointment = await ctx.db.get(appointmentId);
           // Org check: a spoofed payload must not reach another salon's row.

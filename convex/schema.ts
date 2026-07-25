@@ -95,6 +95,37 @@ export default defineSchema({
     // From-address for customer emails; delivery rides the shared n8n
     // send-email workflow (env N8N_EMAIL_WEBHOOK_URL). Unset = email off.
     emailFrom: v.optional(v.string()),
+
+    // When the salon is OPEN — a different question from quietHours, which is
+    // when it is polite to message a customer. Drives the WhatsApp away-reply
+    // only. No defaults applied in code: a Turkish barber routinely opens
+    // Saturday and closes Monday, so a guessed default would announce "we're
+    // closed" on the busiest day. Unset = no away-reply (lib/businessHours.ts).
+    businessHours: v.optional(
+      v.object({
+        // 0=Sunday .. 6=Saturday. Empty/unset = every day.
+        activeDays: v.optional(v.array(v.number())),
+        // Minutes from local midnight.
+        startMinute: v.optional(v.number()),
+        endMinute: v.optional(v.number()),
+      }),
+    ),
+    // Reply once to an out-of-hours inbound that isn't a confirm/cancel, so a
+    // customer messaging at 23:00 gets the booking link instead of silence.
+    // Inside opening hours the staff answer it themselves — an auto-reply on
+    // top of a human who replies in five minutes reads like a robot on the one
+    // channel where the customer thinks they are talking to the salon.
+    autoReplyEnabled: v.optional(v.boolean()),
+    // Org's own wording, used verbatim when set. Single-language by nature, so
+    // an org serving mixed-language customers should leave it blank and take
+    // the per-language default instead.
+    autoReplyText: v.optional(v.string()),
+    // The org's PUBLIC cal.com page — what the away-reply sends people to. The
+    // spec cut the idea of hosting our own booking page; this is that link.
+    bookingUrl: v.optional(v.string()),
+    // Number to tell a customer to call. Offered second, after the link: a
+    // phone number is a dead end at 23:00, which is when people message.
+    publicPhone: v.optional(v.string()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
 
   // Voice lane (spec Phase C): one Retell agent per org; function calls and
@@ -141,6 +172,9 @@ export default defineSchema({
     consentAt: v.optional(v.number()),
     // Last inbound WhatsApp message — opens Meta's 24h session window.
     lastInboundAt: v.optional(v.number()),
+    // Last out-of-hours away-reply. One per session window, or a customer
+    // sending four messages in a row collects four identical bot replies.
+    lastAutoReplyAt: v.optional(v.number()),
     // Values for the org-defined contact fields, keyed by contactFields.key.
     // Stored as strings; the field's type drives the editor, not the storage.
     custom: v.optional(v.record(v.string(), v.string())),

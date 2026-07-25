@@ -17,6 +17,7 @@ import type * as customers from "../customers.js";
 import type * as devSeed from "../devSeed.js";
 import type * as http from "../http.js";
 import type * as lib_alerts from "../lib/alerts.js";
+import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_email from "../lib/email.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   devSeed: typeof devSeed;
   http: typeof http;
   "lib/alerts": typeof lib_alerts;
+  "lib/awayReply": typeof lib_awayReply;
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
   "lib/email": typeof lib_email;

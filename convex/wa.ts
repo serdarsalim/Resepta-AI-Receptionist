@@ -7,6 +7,7 @@ import { formatAppointmentTime } from "./lib/format";
 import { sendEmailViaN8n } from "./lib/email";
 import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { queueOrgAlert } from "./lib/alerts";
+import { awayReplyText } from "./lib/awayReply";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -116,6 +117,77 @@ export const sendSession = action({
       });
     }
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+// ---- Out-of-hours away-reply ----
+
+export const loadAwayReplyContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    // No requireOrg: this one is triggered by an inbound webhook, not a signed-in
+    // user. The org comes from the customer row, which the webhook already
+    // resolved by phone_number_id.
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return null;
+    const org = await ctx.db.get(customer.orgId);
+    if (!org) return null;
+    const waAccount = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+      .unique();
+    return { customer, org, waAccount };
+  },
+});
+
+// Deliberately does NOT require consentAt, unlike sendSession. Consent governs
+// messages WE start; this is a reply to someone who just wrote to us, which is
+// what every business messaging system does and what Meta's own away message
+// does. The session window is open by construction — their inbound opened it.
+// The once-per-window guard lives in webhook.ts, stamped before this is
+// scheduled, same ordering as the reminder tick's double-send guard.
+export const sendAwayReply = internalAction({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const context = await ctx.runQuery(internal.wa.loadAwayReplyContext, {
+      customerId: args.customerId,
+    });
+    if (!context) return null;
+    const { customer, org, waAccount } = context;
+    if (!waAccount) return null;
+    const body = awayReplyText({
+      businessName: org.name,
+      bookingUrl: org.bookingUrl,
+      publicPhone: org.publicPhone,
+      // The CUSTOMER's language, falling back to the org's.
+      language: customer.language ?? org.language,
+      override: org.autoReplyText,
+    });
+    // Null means no link and no phone are configured, so the message would say
+    // "we're closed" and nothing else. The owner's notification is better.
+    if (!body) return null;
+
+    const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+      orgId: customer.orgId,
+      customerId: customer._id,
+      kind: "session",
+      body,
+    });
+    const result = await sendWaCloudText({
+      accessToken: waAccount.accessToken,
+      phoneNumberId: waAccount.phoneNumberId,
+      to: customer.phone,
+      body,
+    });
+    await ctx.runMutation(internal.messages.applySendResult, {
+      messageId,
+      ok: result.ok,
+      wamid: result.ok ? result.wamid : undefined,
+      error: result.ok ? undefined : result.reason,
+    });
+    return null;
   },
 });
 
