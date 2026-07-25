@@ -3,6 +3,8 @@ import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
+// Reminder send window in the org's local hours (Türkiye default 09–21).
+export const DEFAULT_QUIET_HOURS = [9, 21] as const;
 
 const templateStatus = v.union(
   v.literal("draft"),
@@ -23,6 +25,12 @@ export const current = query({
       language: v.string(),
       reminderOffsetsHours: v.array(v.number()),
       sendBookingConfirmation: v.boolean(),
+      quietHoursStart: v.number(),
+      quietHoursEnd: v.number(),
+      winbackEnabled: v.boolean(),
+      winbackDaysAfter: v.number(),
+      calcomEventTypeId: v.optional(v.string()),
+      calcomApiKeyTail: v.optional(v.string()),
     }),
     me: v.object({
       name: v.optional(v.string()),
@@ -45,7 +53,11 @@ export const current = query({
     templates: v.array(
       v.object({
         _id: v.id("waTemplates"),
-        kind: v.union(v.literal("confirmation"), v.literal("reminder")),
+        kind: v.union(
+          v.literal("confirmation"),
+          v.literal("reminder"),
+          v.literal("winback"),
+        ),
         metaName: v.string(),
         language: v.string(),
         status: templateStatus,
@@ -73,6 +85,12 @@ export const current = query({
         language: org.language,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
+        quietHoursStart: org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0],
+        quietHoursEnd: org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1],
+        winbackEnabled: org.winbackEnabled ?? false,
+        winbackDaysAfter: org.winbackDaysAfter ?? 14,
+        calcomEventTypeId: org.calcomEventTypeId,
+        calcomApiKeyTail: org.calcomApiKey ? org.calcomApiKey.slice(-4) : undefined,
       },
       me: {
         name: user.name,
@@ -108,6 +126,10 @@ export const update = mutation({
     language: v.optional(v.string()),
     reminderOffsetsHours: v.optional(v.array(v.number())),
     sendBookingConfirmation: v.optional(v.boolean()),
+    quietHoursStart: v.optional(v.number()),
+    quietHoursEnd: v.optional(v.number()),
+    winbackEnabled: v.optional(v.boolean()),
+    winbackDaysAfter: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -123,6 +145,16 @@ export const update = mutation({
     }
     if (args.sendBookingConfirmation !== undefined) {
       patch.sendBookingConfirmation = args.sendBookingConfirmation;
+    }
+    if (args.quietHoursStart !== undefined) {
+      patch.quietHoursStart = Math.min(23, Math.max(0, Math.round(args.quietHoursStart)));
+    }
+    if (args.quietHoursEnd !== undefined) {
+      patch.quietHoursEnd = Math.min(24, Math.max(1, Math.round(args.quietHoursEnd)));
+    }
+    if (args.winbackEnabled !== undefined) patch.winbackEnabled = args.winbackEnabled;
+    if (args.winbackDaysAfter !== undefined) {
+      patch.winbackDaysAfter = Math.min(90, Math.max(1, Math.round(args.winbackDaysAfter)));
     }
     await ctx.db.patch(orgId, patch);
     return null;

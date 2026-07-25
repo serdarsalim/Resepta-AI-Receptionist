@@ -34,7 +34,11 @@ export const loadSendContext = internalQuery({
 export const sendAppointmentMessage = internalAction({
   args: {
     appointmentId: v.id("appointments"),
-    kind: v.union(v.literal("confirmation"), v.literal("reminder")),
+    kind: v.union(
+      v.literal("confirmation"),
+      v.literal("reminder"),
+      v.literal("winback"),
+    ),
     offsetHours: v.optional(v.number()),
   },
   returns: v.null(),
@@ -46,11 +50,17 @@ export const sendAppointmentMessage = internalAction({
     const { appointment, customer, org, waAccount, templates } = context;
     if (!customer || !org) return null;
 
-    // A cancelled/completed appointment gets no message; a reminder for a
-    // start time already in the past is stale queue noise, drop it.
-    if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+    // Status gate per kind: confirmations/reminders ride live appointments; a
+    // winback exists precisely BECAUSE the appointment ended as a no_show.
+    if (args.kind === "winback") {
+      if (appointment.status !== "no_show") return null;
+    } else if (
+      appointment.status !== "scheduled" &&
+      appointment.status !== "confirmed"
+    ) {
       return null;
     }
+    // A reminder for a start time already in the past is stale queue noise.
     if (args.kind === "reminder" && appointment.startAt <= Date.now()) return null;
 
     const messageKind =

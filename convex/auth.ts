@@ -97,6 +97,15 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         bodyPreview:
           "Merhaba {{1}}! {{2}} randevunuz {{3}}. Gelemeyecekseniz lütfen iptal butonunu kullanın.",
       });
+      await db.insert("waTemplates", {
+        orgId,
+        kind: "winback",
+        metaName: "randevu_telafi",
+        language: "tr",
+        status: "draft",
+        bodyPreview:
+          "Merhaba {{1}}! {{2}} olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+      });
 
       return await db.insert("users", {
         email,

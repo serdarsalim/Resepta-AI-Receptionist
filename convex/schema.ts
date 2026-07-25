@@ -63,7 +63,46 @@ export default defineSchema({
     // Org-scoped secret in the cal.com webhook URL (?token=...) — how an
     // inbound booking event resolves to its org. Generated in Settings.
     calcomWebhookToken: v.optional(v.string()),
+    // cal.com API (cal.com IS the scheduler — spec §Phase C/D): per-org key +
+    // event type drive slot checks and voice-agent bookings.
+    calcomApiKey: v.optional(v.string()),
+    calcomEventTypeId: v.optional(v.string()),
+    // Reminder send window in the org's timezone (defaults 9–21 in code).
+    quietHoursStart: v.optional(v.number()),
+    quietHoursEnd: v.optional(v.number()),
+    // No-show winback: template send N days after a no_show.
+    winbackEnabled: v.optional(v.boolean()),
+    winbackDaysAfter: v.optional(v.number()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
+
+  // Voice lane (spec Phase C): one Retell agent per org; function calls and
+  // the post-call webhook resolve the org by retellAgentId.
+  retellAgents: defineTable({
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    inboundNumber: v.optional(v.string()),
+    transferNumber: v.optional(v.string()),
+    enabled: v.boolean(),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_agent", ["retellAgentId"]),
+
+  calls: defineTable({
+    orgId: v.id("orgs"),
+    customerId: v.optional(v.id("customers")),
+    appointmentId: v.optional(v.id("appointments")),
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    fromNumber: v.optional(v.string()),
+    startedAt: v.number(),
+    durationSec: v.optional(v.number()),
+    outcome: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    transcript: v.optional(v.string()),
+    recordingUrl: v.optional(v.string()),
+    retellCallId: v.optional(v.string()),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_retell_call", ["retellCallId"]),
 
   customers: defineTable({
     orgId: v.id("orgs"),
@@ -78,9 +117,29 @@ export default defineSchema({
     consentAt: v.optional(v.number()),
     // Last inbound WhatsApp message — opens Meta's 24h session window.
     lastInboundAt: v.optional(v.number()),
+    // Values for the org-defined contact fields, keyed by contactFields.key.
+    // Stored as strings; the field's type drives the editor, not the storage.
+    custom: v.optional(v.record(v.string(), v.string())),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"]),
+
+  // Org-defined contact fields (the SMALL core of Nudge's Fields registry —
+  // no value maps, no variable keys, no sync scoping). Per-vertical custom
+  // properties: hair type for a salon, allergy notes for a dentist.
+  contactFields: defineTable({
+    orgId: v.id("orgs"),
+    key: v.string(),
+    label: v.string(),
+    type: v.union(
+      v.literal("text"),
+      v.literal("select"),
+      v.literal("number"),
+      v.literal("date"),
+    ),
+    options: v.optional(v.array(v.string())),
+    order: v.number(),
+  }).index("by_org", ["orgId"]),
 
   services: defineTable({
     orgId: v.id("orgs"),
@@ -103,6 +162,7 @@ export default defineSchema({
     // the double-send guard across overlapping ticks.
     reminderSentOffsets: v.optional(v.array(v.number())),
     confirmationSentAt: v.optional(v.number()),
+    winbackSentAt: v.optional(v.number()),
     // Intake: unset = typed into Randevu; "calcom" = arrived via the cal.com
     // webhook. externalUid is cal.com's booking uid — how RESCHEDULED and
     // CANCELLED events find the row they refer to.
@@ -138,7 +198,11 @@ export default defineSchema({
   // {{2}} business name, {{3}} appointment date+time.
   waTemplates: defineTable({
     orgId: v.id("orgs"),
-    kind: v.union(v.literal("confirmation"), v.literal("reminder")),
+    kind: v.union(
+      v.literal("confirmation"),
+      v.literal("reminder"),
+      v.literal("winback"),
+    ),
     metaName: v.string(),
     language: v.string(),
     status: v.union(
