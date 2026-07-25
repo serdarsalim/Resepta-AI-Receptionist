@@ -13,6 +13,34 @@ const customerDoc = v.object({
   notes: v.optional(v.string()),
   consentAt: v.optional(v.number()),
   lastInboundAt: v.optional(v.number()),
+  custom: v.optional(v.record(v.string(), v.string())),
+});
+
+export const get = query({
+  args: { customerId: v.id("customers") },
+  returns: v.union(customerDoc, v.null()),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    return customer;
+  },
+});
+
+// Contact data is daily staff work — org-scoped, not owner-gated.
+export const setCustomValue = mutation({
+  args: { customerId: v.id("customers"), key: v.string(), value: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    const custom = { ...(customer.custom ?? {}) };
+    if (args.value.trim()) custom[args.key] = args.value.trim();
+    else delete custom[args.key];
+    await ctx.db.patch(args.customerId, { custom });
+    return null;
+  },
 });
 
 export const list = query({

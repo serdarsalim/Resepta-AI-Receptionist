@@ -78,6 +78,42 @@ export const listRange = query({
   },
 });
 
+// The contact page's history pane: this customer's appointments, newest first.
+export const listForCustomer = query({
+  args: { customerId: v.id("customers") },
+  returns: v.array(
+    v.object({
+      _id: v.id("appointments"),
+      startAt: v.number(),
+      status: appointmentStatus,
+      serviceName: v.optional(v.string()),
+      staffName: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    const rows = await ctx.db
+      .query("appointments")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .collect();
+    rows.sort((a, b) => b.startAt - a.startAt);
+    const out = [];
+    for (const row of rows.slice(0, 50)) {
+      const service = row.serviceId ? await ctx.db.get(row.serviceId) : null;
+      out.push({
+        _id: row._id,
+        startAt: row.startAt,
+        status: row.status,
+        serviceName: service?.name,
+        staffName: row.staffName,
+      });
+    }
+    return out;
+  },
+});
+
 // Shared by manual create and the cal.com intake: after a booking lands,
 // queue the confirmation template if the org wants one and can send one.
 export async function scheduleConfirmationIfConfigured(

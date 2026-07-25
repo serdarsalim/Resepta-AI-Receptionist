@@ -146,6 +146,99 @@ function TeamCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+function FieldsCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const fields = useQuery(api.contactFields.list, {});
+  const createField = useMutation(api.contactFields.create);
+  const removeField = useMutation(api.contactFields.remove);
+  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
+      <ul className="mb-3 divide-y divide-[var(--border)]">
+        {(fields ?? []).map((field) => (
+          <li key={field._id} className="flex items-center gap-3 py-2 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="font-medium">{field.label}</span>
+              <span className="ml-2 text-xs text-[var(--muted)]">
+                {t(`fields.type.${field.type}` as "fields.type.text")}
+                {field.options?.length ? ` · ${field.options.join(", ")}` : ""}
+              </span>
+            </span>
+            {isOwner && (
+              <button
+                className="text-xs text-red-600 underline dark:text-red-400"
+                onClick={() => void removeField({ fieldId: field._id })}
+              >
+                {t("common.delete")}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {isOwner && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const formEl = event.currentTarget;
+            const form = new FormData(formEl);
+            setError(null);
+            try {
+              await createField({
+                label: String(form.get("label") ?? ""),
+                type,
+                options:
+                  type === "select"
+                    ? String(form.get("options") ?? "")
+                        .split(",")
+                        .map((o) => o.trim())
+                        .filter(Boolean)
+                    : undefined,
+              });
+              formEl.reset();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "error");
+            }
+          }}
+        >
+          <label className="text-sm">
+            {t("fields.label")}
+            <input name="label" required className="mt-1 w-44" />
+          </label>
+          <label className="text-sm">
+            {t("settings.templateStatus")}
+            <select
+              className="mt-1 w-auto"
+              value={type}
+              onChange={(e) => setType(e.target.value as typeof type)}
+            >
+              <option value="text">{t("fields.type.text")}</option>
+              <option value="select">{t("fields.type.select")}</option>
+              <option value="number">{t("fields.type.number")}</option>
+              <option value="date">{t("fields.type.date")}</option>
+            </select>
+          </label>
+          {type === "select" && (
+            <label className="text-sm">
+              {t("fields.options")}
+              <input name="options" className="mt-1 w-56" />
+            </label>
+          )}
+          <button
+            type="submit"
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("fields.add")}
+          </button>
+          {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
+        </form>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
@@ -228,6 +321,8 @@ export function SettingsView() {
       </Card>
 
       <TeamCard isOwner={isOwner} />
+
+      <FieldsCard isOwner={isOwner} />
 
       <Card title={t("settings.whatsapp")} disabled={!isOwner}>
         {settings.whatsapp.connected ? (

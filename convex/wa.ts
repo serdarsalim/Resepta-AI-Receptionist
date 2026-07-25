@@ -1,8 +1,72 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalQuery } from "./_generated/server";
+import { action, internalAction, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
-import { sendWaCloudTemplate } from "./lib/waCloud";
+import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import { requireOrg } from "./lib/orgAuth";
+
+const SESSION_WINDOW_MS = 24 * 3600_000;
+
+// Context for a rep-typed session message. Runs with the caller's auth (auth
+// propagates through runQuery), so the org scoping holds inside the action.
+export const loadSessionContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    const waAccount = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .unique();
+    return { customer, waAccount };
+  },
+});
+
+// Free-form reply from the contact page composer. Session messages only work
+// inside the 24h window the customer's last inbound opened — outside it Meta
+// rejects with 131047, so we refuse locally with a readable reason instead.
+export const sendSession = action({
+  args: { customerId: v.id("customers"), body: v.string() },
+  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const body = args.body.trim();
+    if (!body) return { ok: false, reason: "empty" };
+    const context = await ctx.runQuery(internal.wa.loadSessionContext, {
+      customerId: args.customerId,
+    });
+    if (!context) return { ok: false, reason: "not-found" };
+    const { customer, waAccount } = context;
+    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+    if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
+    if (
+      !customer.lastInboundAt ||
+      Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
+    ) {
+      return { ok: false, reason: "session-window-closed" };
+    }
+    const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+      orgId: customer.orgId,
+      customerId: customer._id,
+      kind: "session",
+      body,
+    });
+    const result = await sendWaCloudText({
+      accessToken: waAccount.accessToken,
+      phoneNumberId: waAccount.phoneNumberId,
+      to: customer.phone,
+      body,
+    });
+    await ctx.runMutation(internal.messages.applySendResult, {
+      messageId,
+      ok: result.ok,
+      wamid: result.ok ? result.wamid : undefined,
+      error: result.ok ? undefined : result.reason,
+    });
+    return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
 
 // Everything one send needs, in one read. Internal-only: the waAccount here
 // carries the live access token, which must never transit a public function.

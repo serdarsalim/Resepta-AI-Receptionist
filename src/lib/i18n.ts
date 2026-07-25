@@ -134,6 +134,26 @@ const dictionary = {
   "settings.calcomGenerate": { tr: "Adres oluştur", en: "Generate URL" },
   "settings.calcomRotate": { tr: "Yenile", en: "Rotate" },
 
+  "contact.typeMessage": { tr: "Mesaj yazın…", en: "Type a message…" },
+  "contact.send": { tr: "Gönder", en: "Send" },
+  "contact.sessionClosed": {
+    tr: "24 saatlik pencere kapalı — müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
+    en: "The 24h window is closed — only template messages until the customer writes.",
+  },
+
+  "fields.title": { tr: "Kişi alanları", en: "Contact fields" },
+  "fields.hint": {
+    tr: "İşletmenize özel müşteri alanları (örn. saç tipi, alerji notu). Kişi sayfasının sol panelinde görünür.",
+    en: "Customer fields specific to your business (e.g. hair type, allergy note). Shown on the contact page's left pane.",
+  },
+  "fields.add": { tr: "Alan ekle", en: "Add field" },
+  "fields.label": { tr: "Etiket", en: "Label" },
+  "fields.type.text": { tr: "Metin", en: "Text" },
+  "fields.type.select": { tr: "Seçim", en: "Select" },
+  "fields.type.number": { tr: "Sayı", en: "Number" },
+  "fields.type.date": { tr: "Tarih", en: "Date" },
+  "fields.options": { tr: "Seçenekler (virgülle)", en: "Options (comma-separated)" },
+
   "team.title": { tr: "Ekip", en: "Team" },
   "team.inviteHint": {
     tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez — adresi siz iletin.",

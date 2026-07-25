@@ -3,9 +3,14 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 
-export function CustomersView() {
+export function CustomersView({
+  onOpenContact,
+}: {
+  onOpenContact: (id: Id<"customers">) => void;
+}) {
   const { t } = useLanguage();
   const customers = useQuery(api.customers.list, {});
   const create = useMutation(api.customers.create);
@@ -88,14 +93,21 @@ export function CustomersView() {
       {customers && customers.length > 0 && (
         <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
           {customers.map((customer) => (
-            <li key={customer._id} className="flex items-center gap-3 px-4 py-3 text-sm">
+            <li
+              key={customer._id}
+              className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--row-hover-bg)]"
+              onClick={() => onOpenContact(customer._id)}
+            >
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
                   {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
                 </span>
                 <span className="block text-xs text-[var(--muted)]">{customer.phone}</span>
               </span>
-              <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              <label
+                className="flex items-center gap-2 text-xs text-[var(--muted)]"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <input
                   type="checkbox"
                   className="w-auto"

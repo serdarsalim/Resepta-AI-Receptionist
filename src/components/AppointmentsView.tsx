@@ -29,7 +29,11 @@ const STATUS_STYLE: Record<string, string> = {
   no_show: "bg-transparent text-red-600 dark:text-red-400",
 };
 
-export function AppointmentsView() {
+export function AppointmentsView({
+  onOpenContact,
+}: {
+  onOpenContact: (id: Id<"customers">) => void;
+}) {
   const { t, language } = useLanguage();
   const [adding, setAdding] = useState(false);
 
@@ -171,11 +175,14 @@ export function AppointmentsView() {
                   {formatTime(appointment.startAt, language)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
+                  <button
+                    className="block max-w-full truncate text-left font-medium hover:underline"
+                    onClick={() => onOpenContact(appointment.customerId)}
+                  >
                     {appointment.customer
                       ? `${appointment.customer.firstName} ${appointment.customer.lastName ?? ""}`.trim()
                       : "—"}
-                  </span>
+                  </button>
                   <span className="block truncate text-xs text-[var(--muted)]">
                     {[
                       appointment.serviceName,
