@@ -157,6 +157,23 @@ const dictionary = {
   },
   "onboarding.start": { tr: "Başla", en: "Get started", de: "Loslegen" },
 
+  "appointments.edit": { tr: "Randevuyu düzenle", en: "Edit appointment", de: "Termin bearbeiten" },
+  "appointments.duration": { tr: "Süre (dk)", en: "Duration (min)", de: "Dauer (Min.)" },
+  "appointments.bookAnyway": {
+    tr: "Yine de kaydet",
+    en: "Book anyway",
+    de: "Trotzdem buchen",
+  },
+  "appointments.cancelAppointment": {
+    tr: "Randevuyu iptal et",
+    en: "Cancel appointment",
+    de: "Termin stornieren",
+  },
+  "appointments.moveFailed": {
+    tr: "Takvim bu değişikliği kabul etmedi, randevu eski yerinde kaldı.",
+    en: "The calendar refused this change, so the appointment stayed where it was.",
+    de: "Der Kalender hat diese Änderung abgelehnt, der Termin blieb unverändert.",
+  },
   "appointments.title": { tr: "Randevular", en: "Appointments", de: "Termine" },
   "appointments.new": {
     tr: "Yeni randevu",

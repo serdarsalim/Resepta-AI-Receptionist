@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
@@ -10,12 +10,10 @@ import type { TranslationKey } from "@/lib/i18n";
 import {
   formatDayHeading,
   formatTime,
-  fromDatetimeLocalValue,
   localeFor,
-  toDatetimeLocalValue,
 } from "@/lib/datetime";
-import { PhoneInput } from "./PhoneField";
 import { useSearch } from "@/lib/useTableState";
+import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
 import { SearchInput } from "./DataTable";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
@@ -48,7 +46,6 @@ export function AppointmentsView({
   onOpenContact: (id: Id<"customers">) => void;
 }) {
   const { t, language } = useLanguage();
-  const [adding, setAdding] = useState(false);
   const [view, setView] = useState<ViewMode>("week");
   // The day the calendar is looking at. Day view steps it by one, week view
   // by seven, so one piece of state serves both.
@@ -63,10 +60,107 @@ export function AppointmentsView({
   }, []);
   const appointments = useQuery(api.appointments.listRange, range);
   const services = useQuery(api.services.list, {});
-  const create = useMutation(api.appointments.create);
+  const staff = useQuery(api.staff.list, {});
+  const settings = useQuery(api.orgs.current, {});
   const setStatus = useMutation(api.appointments.setStatus);
+  // Actions, not mutations: every one of these has to hear back from cal.com
+  // before our own row moves. See convex/schedule.ts.
+  const createBooking = useAction(api.schedule.create);
+  const moveBooking = useAction(api.schedule.move);
+  const updateDetails = useMutation(api.appointments.updateDetails);
+
+  const [sheet, setSheet] = useState<ModalDraft | null>(null);
+  const [sheetError, setSheetError] = useState<string | undefined>();
+  const [sheetCanForce, setSheetCanForce] = useState(false);
+  const [pending, setPending] = useState(false);
+  // Optimistic positions, keyed by appointment. A drag paints here first and
+  // the entry is dropped the moment the server agrees (the query row catches
+  // up) or refuses (the block snaps back to where it was).
+  const [optimistic, setOptimistic] = useState<
+    Map<string, { startAt: number; durationMinutes: number }>
+  >(new Map());
+  const [moveError, setMoveError] = useState<string | undefined>();
+
+  const staffLabel = settings?.org.staffLabel?.trim() || t("appointments.staff");
+
+  // Held so "book anyway" can replay the exact same values with force set,
+  // rather than asking the owner to retype anything.
+  const lastSubmit = useRef<ModalSubmit | null>(null);
+
+  const submitSheet = async (values: ModalSubmit | null, force: boolean) => {
+    if (!values || !sheet) return;
+    lastSubmit.current = values;
+    setPending(true);
+    setSheetError(undefined);
+    try {
+      if (sheet.appointmentId) {
+        // Details cal.com has no opinion about go straight in; time and length
+        // have to be agreed with cal.com first, so they ride schedule.move.
+        await updateDetails({
+          appointmentId: sheet.appointmentId,
+          serviceId: values.serviceId ?? null,
+          staffId: values.staffId ?? null,
+          notes: values.notes,
+        });
+        const timeChanged =
+          values.startAt !== sheet.startAt ||
+          values.durationMinutes !== sheet.durationMinutes;
+        if (timeChanged) {
+          const result = await moveBooking({
+            appointmentId: sheet.appointmentId,
+            startAt: values.startAt,
+            durationMinutes: values.durationMinutes,
+            force,
+          });
+          if (!result.ok) {
+            setSheetError(result.reason ?? t("appointments.moveFailed"));
+            setSheetCanForce(Boolean(result.canForce));
+            return;
+          }
+        }
+      } else {
+        const result = await createBooking({
+          customerId: values.customerId,
+          newCustomer: values.newCustomer,
+          serviceId: values.serviceId ?? undefined,
+          staffId: values.staffId ?? undefined,
+          startAt: values.startAt,
+          durationMinutes: values.durationMinutes,
+          notes: values.notes,
+          force,
+        });
+        if (!result.ok) {
+          setSheetError(result.reason ?? t("appointments.moveFailed"));
+          setSheetCanForce(Boolean(result.canForce));
+          return;
+        }
+      }
+      setSheet(null);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const clearOptimistic = (id: string) =>
+    setOptimistic((current) => {
+      if (!current.has(id)) return current;
+      const next = new Map(current);
+      next.delete(id);
+      return next;
+    });
 
   type Appointment = NonNullable<typeof appointments>[number];
+
+  // One place where the pending drag is layered over the server's answer, so
+  // the grid and the list can never disagree about where a block is.
+  const withOptimistic = useMemo(
+    () =>
+      (appointments ?? []).map((appointment) => {
+        const pendingMove = optimistic.get(appointment._id);
+        return pendingMove ? { ...appointment, ...pendingMove } : appointment;
+      }),
+    [appointments, optimistic],
+  );
   const byDay = useMemo(() => {
     const groups = new Map<string, Appointment[]>();
     for (const appointment of appointments ?? []) {
@@ -125,114 +219,74 @@ export function AppointmentsView({
         </div>
         <button
           className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
-          onClick={() => setAdding((v) => !v)}
+          onClick={() => {
+            setSheetError(undefined);
+            setSheetCanForce(false);
+            // No slot was clicked, so open on the next round hour — which is
+            // what "new appointment" from a toolbar means.
+            const next = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
+            setSheet({ startAt: next, durationMinutes: DEFAULT_DURATION });
+          }}
         >
-          {adding ? t("common.cancel") : t("appointments.new")}
+          {t("appointments.new")}
         </button>
         </div>
       </div>
 
-      {adding && (
-        <form
-          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:grid-cols-2"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            const serviceId = String(form.get("serviceId") ?? "");
-            await create({
-              newCustomer: {
-                firstName: String(form.get("firstName") ?? ""),
-                lastName: String(form.get("lastName") ?? "") || undefined,
-                phone: String(form.get("phone") ?? ""),
-                consent: form.get("consent") === "on",
-              },
-              serviceId: serviceId ? (serviceId as Id<"services">) : undefined,
-              startAt: fromDatetimeLocalValue(String(form.get("startAt") ?? "")),
-              staffName: String(form.get("staffName") ?? "") || undefined,
-            });
-            setAdding(false);
-          }}
-        >
-          <label className="text-sm">
-            {t("customers.firstName")}
-            <input name="firstName" required className="mt-1" />
-          </label>
-          <label className="text-sm">
-            {t("customers.lastName")}
-            <input name="lastName" className="mt-1" />
-          </label>
-          <label className="text-sm" htmlFor="new-appointment-phone">
-            {t("customers.phone")}
-            <PhoneInput id="new-appointment-phone" name="phone" required className="mt-1" />
-          </label>
-          <label className="text-sm">
-            {t("appointments.when")}
-            <input
-              name="startAt"
-              type="datetime-local"
-              required
-              defaultValue={toDatetimeLocalValue(Date.now() + 3600_000)}
-              className="mt-1"
-            />
-          </label>
-          <label className="text-sm">
-            {t("appointments.service")}
-            <select name="serviceId" className="mt-1">
-              {/* Blank, not a dash: no service picked is a real state, and a
-                  placeholder glyph is the noise the blank was meant to cut. */}
-              <option value="" />
-              {(services ?? [])
-                .filter((s) => s.active)
-                .map((s) => (
-                  <option key={s._id} value={s._id}>
-                    {s.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            {t("appointments.staff")}
-            <input name="staffName" className="mt-1" />
-          </label>
-          <label className="flex items-start gap-2 text-sm sm:col-span-2">
-            <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
-            <span>
-              {t("customers.consent")}
-              <span className="block text-xs text-[var(--muted)]">
-                {t("customers.consentHint")}
-              </span>
-            </span>
-          </label>
-          <div className="sm:col-span-2">
-            <button
-              type="submit"
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-            >
-              {t("common.add")}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {appointments === undefined && (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      )}
       {appointments?.length === 0 && view === "list" && (
         <p className="text-sm text-[var(--muted)]">{t("appointments.none")}</p>
       )}
 
       {view !== "list" && appointments !== undefined && (
         <Calendar
-          appointments={appointments}
+          appointments={withOptimistic}
           view={view}
           anchor={anchor}
           onAnchor={setAnchor}
-          onOpenContact={onOpenContact}
-          // A collapsed cluster in week view is a "there is too much here to
-          // read" marker, so the only useful click is to go look at that day.
+          businessHours={settings?.org.businessHours}
+          onOpenBlock={(row) => {
+            setSheetError(undefined);
+            setSheetCanForce(false);
+            setSheet({
+              appointmentId: row._id,
+              startAt: row.startAt,
+              durationMinutes: row.durationMinutes ?? 30,
+              customerId: row.customerId,
+              customerName: row.customer
+                ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                : undefined,
+              staffId: row.staffId ?? null,
+              notes: row.notes,
+              status: row.status,
+            });
+          }}
+          onDraft={(startAt, durationMinutes) => {
+            setSheetError(undefined);
+            setSheetCanForce(false);
+            setSheet({ startAt, durationMinutes });
+          }}
+          onMove={async (row, startAt, durationMinutes) => {
+            // Paint first, ask second. A drag that waits for a cal.com round
+            // trip before moving reads as broken on any real connection.
+            setOptimistic((current) =>
+              new Map(current).set(row._id, { startAt, durationMinutes }),
+            );
+            setMoveError(undefined);
+            const result = await moveBooking({
+              appointmentId: row._id,
+              startAt,
+              durationMinutes,
+            });
+            if (!result.ok) {
+              // Snap back. The server never moved, so dropping the optimistic
+              // entry is the whole rollback.
+              clearOptimistic(row._id);
+              setMoveError(result.reason ?? t("appointments.moveFailed"));
+            }
+          }}
           onOpenDay={(dayMs) => {
-            setView("day");
             setAnchor(dayMs);
+            setView("day");
           }}
         />
       )}
@@ -294,6 +348,45 @@ export function AppointmentsView({
           </ul>
         </section>
       ))}
+
+      {/* A failed drag already snapped back; this says why, once, without a
+          modal in the way of the calendar the owner is looking at. */}
+      {moveError && (
+        <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900 shadow-lg dark:bg-amber-900/80 dark:text-amber-100">
+          <span>{moveError}</span>
+          <button
+            className="ml-3 underline underline-offset-2"
+            onClick={() => setMoveError(undefined)}
+          >
+            {t("common.close")}
+          </button>
+        </div>
+      )}
+
+      {sheet && (
+        <AppointmentModal
+          draft={sheet}
+          services={(services ?? []).filter((service) => service.active)}
+          staff={staff ?? []}
+          staffLabel={staffLabel}
+          pending={pending}
+          error={sheetError}
+          canForce={sheetCanForce}
+          onClose={() => setSheet(null)}
+          onDelete={
+            sheet.appointmentId
+              ? () => {
+                  const id = sheet.appointmentId;
+                  if (!id) return;
+                  void setStatus({ appointmentId: id, status: "cancelled" });
+                  setSheet(null);
+                }
+              : undefined
+          }
+          onSubmit={(values) => void submitSheet(values, false)}
+          onForce={() => void submitSheet(lastSubmit.current, true)}
+        />
+      )}
     </div>
   );
 }
@@ -413,12 +506,14 @@ const DEFAULT_DURATION = 30;
 const DAY_MS = 86_400_000;
 
 type CalendarAppointment = {
-  _id: string;
+  _id: Id<"appointments">;
   customerId: Id<"customers">;
   startAt: number;
   durationMinutes?: number;
   status: string;
+  staffId?: Id<"staff">;
   staffName?: string;
+  notes?: string;
   customer: { firstName: string; lastName?: string } | null;
   serviceName?: string;
 };
@@ -549,6 +644,42 @@ type CalendarColumn = {
 // Estimated rather than measured: knowing whether a block can hold a name
 // isn't worth a layout pass on every render.
 const APPROX_GRID_PX = 1050;
+// Everything a drag produces lands on this grid. Fifteen minutes is what a
+// salon books in, and finer snapping just makes a steady hand a requirement.
+const SNAP_MINUTES = 15;
+// How close to the bottom edge counts as "resize" rather than "move". Sized for
+// a fingertip, not a mouse pointer.
+const RESIZE_HANDLE_PX = 10;
+
+type DragState =
+  | {
+      kind: "create";
+      day: number;
+      anchorMinute: number;
+      startMinute: number;
+      endMinute: number;
+      moved: boolean;
+    }
+  | {
+      kind: "move";
+      day: number;
+      row: CalendarAppointment;
+      // Where in the block the pointer grabbed it, so the top edge does not
+      // snap to the cursor the moment you pick it up.
+      grabOffset: number;
+      startMinute: number;
+      endMinute: number;
+      moved: boolean;
+    }
+  | {
+      kind: "resize";
+      day: number;
+      row: CalendarAppointment;
+      grabOffset: number;
+      startMinute: number;
+      endMinute: number;
+      moved: boolean;
+    };
 // Under this, a block is all padding and truncation, so the name comes off.
 const NARROW_BLOCK_PX = 80;
 
@@ -557,15 +688,29 @@ function Calendar({
   view,
   anchor,
   onAnchor,
-  onOpenContact,
+  onOpenBlock,
   onOpenDay,
+  onDraft,
+  onMove,
+  businessHours,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
   anchor: number;
   onAnchor: (next: number) => void;
-  onOpenContact: (id: Id<"customers">) => void;
+  onOpenBlock: (row: CalendarAppointment) => void;
   onOpenDay: (dayMs: number) => void;
+  // Click or drag on empty grid: hand the parent a start and a length and let
+  // it open the sheet. The grid never creates anything itself.
+  onDraft: (startAt: number, durationMinutes: number) => void;
+  // Committed drag of an existing block. The parent owns the optimistic state
+  // and the snap-back, because it also owns the mutation.
+  onMove: (row: CalendarAppointment, startAt: number, durationMinutes: number) => void;
+  businessHours?: {
+    activeDays?: number[];
+    startMinute?: number;
+    endMinute?: number;
+  };
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -604,22 +749,24 @@ function Calendar({
     }
     const day = days[0];
     const rows = visible.filter((a) => a.startAt >= day && a.startAt < day + DAY_MS);
-    const named = new Set<string>();
+    // Grouped by staff id, not by the printed name: two people can share a
+    // first name, and the old string grouping made one column out of both — and
+    // two columns out of one person whose name had a trailing space.
+    const named = new Map<string, string>();
     let anyUnassigned = false;
     for (const row of rows) {
-      const name = row.staffName?.trim();
-      if (name) named.add(name);
+      if (row.staffId) named.set(row.staffId, row.staffName?.trim() || row.staffId);
       else anyUnassigned = true;
     }
     if (named.size === 0) return [{ key: String(day), day, rows }];
 
-    const byStaff: CalendarColumn[] = [...named]
-      .sort((a, b) => a.localeCompare(b, locale))
-      .map((name) => ({
-        key: `${day}:${name}`,
+    const byStaff: CalendarColumn[] = [...named.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], locale))
+      .map(([staffId, label]) => ({
+        key: `${day}:${staffId}`,
         day,
-        label: name,
-        rows: rows.filter((row) => row.staffName?.trim() === name),
+        label,
+        rows: rows.filter((row) => row.staffId === staffId),
       }));
     // Trailing, and only when someone is actually unassigned: an empty column
     // for a state nobody is in is just noise.
@@ -628,7 +775,7 @@ function Calendar({
         key: `${day}:unassigned`,
         day,
         label: t("appointments.unassigned"),
-        rows: rows.filter((row) => !row.staffName?.trim()),
+        rows: rows.filter((row) => !row.staffId),
       });
     }
     return byStaff;
@@ -694,6 +841,112 @@ function Calendar({
   const staffColumns = columns.some((column) => column.label !== undefined);
   const columnPx = APPROX_GRID_PX / columns.length;
 
+  // ---- Direct manipulation ----
+  //
+  // One pointer handler set for three gestures, because they share all the
+  // maths and differ only in what moves: drag empty grid to draw a new slot,
+  // drag a block's body to move it, drag its bottom edge to resize. Pointer
+  // events rather than mouse events so a finger works without a second path;
+  // setPointerCapture keeps the gesture alive when the finger leaves the column.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  // A pointerup after a real drag is still followed by a click on the block's
+  // button. Without this the sheet would open every time you moved something.
+  const suppressClick = useRef(false);
+
+  // Pixel offset inside the grid body -> minutes since midnight, snapped.
+  const minuteAtClientY = (clientY: number): number => {
+    const body = gridRef.current;
+    if (!body) return dayStart * 60;
+    const rect = body.getBoundingClientRect();
+    const minutes = dayStart * 60 + ((clientY - rect.top) / HOUR_PX) * 60;
+    return Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+  };
+
+  const startDrag = (next: DragState, event: React.PointerEvent) => {
+    (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    setDrag(next);
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    if (!drag) return;
+    const minute = minuteAtClientY(event.clientY);
+    setDrag((current) => {
+      if (!current) return current;
+      if (current.kind === "create") {
+        // Drag up or down from where the pointer went down; the anchor is the
+        // fixed end and the pointer is the loose one.
+        const lo = Math.min(current.anchorMinute, minute);
+        const hi = Math.max(current.anchorMinute, minute);
+        return {
+          ...current,
+          startMinute: lo,
+          endMinute: Math.max(lo + SNAP_MINUTES, hi),
+          moved: true,
+        };
+      }
+      if (current.kind === "resize") {
+        // A block may never end before it starts; one snap step is the floor.
+        return {
+          ...current,
+          endMinute: Math.max(current.startMinute + SNAP_MINUTES, minute),
+          moved: true,
+        };
+      }
+      const length = current.endMinute - current.startMinute;
+      const startMinute = minute - current.grabOffset;
+      return { ...current, startMinute, endMinute: startMinute + length, moved: true };
+    });
+  };
+
+  const endDrag = () => {
+    if (!drag) return;
+    const current = drag;
+    setDrag(null);
+    const dayMs = current.day;
+    const startAt = dayMs + current.startMinute * 60_000;
+    const durationMinutes = Math.max(SNAP_MINUTES, current.endMinute - current.startMinute);
+    if (current.kind === "create") {
+      // A plain click is not a fifteen-minute booking — it is "book here", and
+      // the length comes from the service or the default.
+      onDraft(startAt, current.moved ? durationMinutes : DEFAULT_DURATION);
+      return;
+    }
+    // A gesture that changed nothing is a click, and the block's own onClick
+    // handles that — including for anyone arriving by keyboard.
+    if (
+      !current.moved ||
+      (startAt === current.row.startAt &&
+        durationMinutes === (current.row.durationMinutes ?? DEFAULT_DURATION))
+    ) {
+      return;
+    }
+    suppressClick.current = true;
+    onMove(current.row, startAt, durationMinutes);
+  };
+
+  // Closed days and off-hours read as dead space rather than bookable grid.
+  // Unset business hours mean nobody has said when this business is open, so
+  // nothing is shaded — a guessed default would grey out a barber's Saturday.
+  const closedBands = (day: number): { top: number; height: number }[] => {
+    if (!businessHours) return [];
+    const { activeDays, startMinute, endMinute } = businessHours;
+    const weekday = new Date(day).getDay();
+    const gridTop = dayStart * 60;
+    const gridBottom = dayEnd * 60;
+    const band = (fromMinute: number, toMinute: number) => ({
+      top: ((fromMinute - gridTop) / 60) * HOUR_PX,
+      height: ((toMinute - fromMinute) / 60) * HOUR_PX,
+    });
+    if (activeDays && activeDays.length > 0 && !activeDays.includes(weekday)) {
+      return [band(gridTop, gridBottom)];
+    }
+    const bands: { top: number; height: number }[] = [];
+    if (startMinute != null && startMinute > gridTop) bands.push(band(gridTop, startMinute));
+    if (endMinute != null && endMinute < gridBottom) bands.push(band(endMinute, gridBottom));
+    return bands;
+  };
+
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2 flex items-center gap-1">
@@ -757,7 +1010,14 @@ function Calendar({
       </div>
 
       <div ref={scrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="flex" style={{ height: gridHeight }}>
+        <div
+          ref={gridRef}
+          className="flex"
+          style={{ height: gridHeight, touchAction: drag ? "none" : undefined }}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={() => setDrag(null)}
+        >
           {/* Hour gutter. Labels sit ON their line, so they read as the moment
               the line marks rather than as a band. */}
           <div className="relative w-12 shrink-0">
@@ -791,7 +1051,51 @@ function Calendar({
                     "repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px var(--hour))",
                   ["--hour" as string]: `${HOUR_PX}px`,
                 }}
+                // Pointer down on the column ITSELF (never on a block, which
+                // stops propagation) starts drawing a new slot.
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  const minute = minuteAtClientY(event.clientY);
+                  startDrag(
+                    {
+                      kind: "create",
+                      day: column.day,
+                      anchorMinute: minute,
+                      startMinute: minute,
+                      endMinute: minute + SNAP_MINUTES,
+                      moved: false,
+                    },
+                    event,
+                  );
+                }}
               >
+                {/* Closed hours, behind everything. Pointer-events off so the
+                    grid stays draggable: a salon does book outside its posted
+                    hours, it just should not look like ordinary space. */}
+                {closedBands(column.day).map((band, index) => (
+                  <div
+                    key={index}
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bg-[var(--muted-bg)] opacity-60"
+                    style={{ top: band.top, height: band.height }}
+                  />
+                ))}
+                {/* The slot being drawn, or the block being dragged. */}
+                {drag && drag.day === column.day && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute z-20 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] opacity-80"
+                    style={{
+                      top: ((drag.startMinute - dayStart * 60) / 60) * HOUR_PX,
+                      height: Math.max(
+                        ((drag.endMinute - drag.startMinute) / 60) * HOUR_PX - 2,
+                        14,
+                      ),
+                      left: 2,
+                      right: 2,
+                    }}
+                  />
+                )}
                 {placeColumn(column.rows, view === "week").map((item) => {
                   if (item.kind === "cluster") {
                     const top =
@@ -845,7 +1149,41 @@ function Calendar({
                   return (
                     <button
                       key={item.key}
-                      onClick={() => onOpenContact(row.customerId)}
+                      onClick={() => {
+                        // Swallow the click that trails a real drag; a genuine
+                        // click (including from the keyboard) opens the sheet.
+                        if (suppressClick.current) {
+                          suppressClick.current = false;
+                          return;
+                        }
+                        onOpenBlock(row);
+                      }}
+                      onPointerDown={(event) => {
+                        if (event.button !== 0) return;
+                        // Never let this reach the column, or every grab would
+                        // also start drawing a new slot underneath.
+                        event.stopPropagation();
+                        const minute = minuteAtClientY(event.clientY);
+                        const startMinute = minutesInto(row.startAt);
+                        const endMinute =
+                          startMinute + (row.durationMinutes ?? DEFAULT_DURATION);
+                        const nearBottom =
+                          event.clientY >=
+                          event.currentTarget.getBoundingClientRect().bottom -
+                            RESIZE_HANDLE_PX;
+                        startDrag(
+                          {
+                            kind: nearBottom ? "resize" : "move",
+                            day: column.day,
+                            row,
+                            grabOffset: minute - startMinute,
+                            startMinute,
+                            endMinute,
+                            moved: false,
+                          },
+                          event,
+                        );
+                      }}
                       title={[name, row.serviceName, row.staffName]
                         .filter(Boolean)
                         .join(" · ")}
@@ -854,11 +1192,23 @@ function Calendar({
                         height,
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
+                        touchAction: "none",
                       }}
-                      className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 ${
+                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${
                         BLOCK_STYLE[row.status] ?? BLOCK_STYLE.scheduled
+                      } ${
+                        drag && "row" in drag && drag.row._id === row._id
+                          ? "opacity-30"
+                          : ""
                       }`}
                     >
+                      {/* Resize grip. Its own element so the cursor changes
+                          before you press, rather than after. */}
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 cursor-ns-resize"
+                        style={{ height: RESIZE_HANDLE_PX }}
+                      />
                       {/* A half-hour block is one line tall, so the time and
                           the name share it rather than clipping.
 
