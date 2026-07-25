@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -261,17 +262,40 @@ function RowMenu({
   onSetStatus: (status: AppointmentStatus) => void;
 }) {
   const { t } = useLanguage();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Portal + fixed positioning, measured at open time — an absolute child
+  // would clip on the card's overflow-hidden (the InfoTip rule; see AGENTS.md).
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setPos(null);
+      }
     };
+    const onScroll = () => setPos(null); // fixed coords go stale on scroll
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("scroll", onScroll, true);
+    };
   }, [open]);
+
+  const toggle = () => {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const MENU_W = 224; // w-56
+    setPos({
+      top: r.bottom + 4,
+      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+    });
+  };
 
   const items: { key: string; label: string; status: AppointmentStatus; danger?: boolean }[] =
     status === "scheduled" || status === "confirmed"
@@ -283,35 +307,42 @@ function RowMenu({
       : [{ key: "reopen", label: t("appointments.reopen"), status: "scheduled" }];
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={btnRef}
         aria-label="Actions"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className={`rounded-md px-1.5 py-0.5 text-[var(--muted)] transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
           open ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
         ⋯
       </button>
-      {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
-          {items.map((item) => (
-            <button
-              key={item.key}
-              className={`flex w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
-                item.danger ? "text-red-600 dark:text-red-400" : ""
-              }`}
-              onClick={() => {
-                setOpen(false);
-                onSetStatus(item.status);
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
+            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+          >
+            {items.map((item) => (
+              <button
+                key={item.key}
+                className={`flex w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
+                  item.danger ? "text-red-600 dark:text-red-400" : ""
+                }`}
+                onClick={() => {
+                  setPos(null);
+                  onSetStatus(item.status);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

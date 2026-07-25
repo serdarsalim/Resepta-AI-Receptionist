@@ -101,3 +101,14 @@ These change what gets built next — don't paper over them:
 - No Save buttons — autosave on blur/change. Explanatory copy behind tooltips,
   not inline paragraphs.
 - Small commits per logical unit.
+
+## Popovers NEVER position absolute inside a card (recurring, stop it)
+
+Every floating element — dropdown menu, tooltip, combobox list — renders
+through `createPortal(document.body)` with `position: fixed`, measured from
+the trigger's `getBoundingClientRect()` at open time, clamped to the viewport,
+closed on outside-mousedown AND on scroll (capture). An `absolute` child
+clips on the nearest `overflow-hidden`/scroll ancestor — every card and the
+shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
+implementations. Serdar has flagged this repeatedly across projects; treat a
+clipped popup as a bug you introduced knowingly.
