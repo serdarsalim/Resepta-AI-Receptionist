@@ -32,5 +32,14 @@ phone number ID, WABA ID, and approved template names.
 
 ## Dev
 
-The user runs the dev servers (`npx convex dev` + `next dev -p 3014`). See
-AGENTS.md before writing code — the org-scoping invariant is non-negotiable.
+```bash
+npm run dev
+```
+
+Runs the Convex backend and the Next frontend together (frontend on
+http://localhost:3006). Output is prefixed per process and Ctrl-C stops both.
+Run them separately with `npm run dev:backend` / `npm run dev:frontend` when you
+want one of them in its own terminal.
+
+The user runs the dev servers, not the agent. See AGENTS.md before writing
+code — the org-scoping invariant is non-negotiable.
