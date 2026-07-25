@@ -13,6 +13,23 @@ import { scheduleConfirmationIfConfigured } from "./appointments";
 // pasted into cal.com's webhook settings, subscribed to BOOKING_CREATED,
 // BOOKING_RESCHEDULED and BOOKING_CANCELLED.
 
+// cal.com API credentials (Settings → Bookings). Key is write-only from the
+// client; orgs.current returns only a tail.
+export const setApi = mutation({
+  args: { apiKey: v.optional(v.string()), eventTypeId: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const patch: Record<string, unknown> = {};
+    if (args.apiKey !== undefined) patch.calcomApiKey = args.apiKey.trim() || undefined;
+    if (args.eventTypeId !== undefined) {
+      patch.calcomEventTypeId = args.eventTypeId.trim() || undefined;
+    }
+    await ctx.db.patch(orgId, patch);
+    return null;
+  },
+});
+
 export const rotateWebhookToken = mutation({
   args: {},
   returns: v.string(),

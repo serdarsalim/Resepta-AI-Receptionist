@@ -20,6 +20,30 @@ function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+export async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  return hexOf(mac);
+}
+
+// Retell signs webhook/function bodies with the API key (x-retell-signature,
+// bare hex or "v1=<hex>"). Same fail-open-in-dev policy as the Meta check.
+export async function verifyRetellSignature(
+  apiKey: string,
+  rawBody: string,
+  signatureHeader: string | null,
+): Promise<boolean> {
+  if (!signatureHeader) return false;
+  const expected = signatureHeader.replace(/^v1=/, "").toLowerCase();
+  return safeEqual(await hmacSha256Hex(apiKey, rawBody), expected);
+}
+
 export async function verifyMetaSignature(
   appSecret: string,
   rawBody: string,
