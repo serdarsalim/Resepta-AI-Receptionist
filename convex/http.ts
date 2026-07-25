@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
 import { createBooking, getAvailableSlots } from "./lib/calcomApi";
-import { formatAppointmentTime } from "./lib/format";
+import { formatAppointmentTime, localDayRangeUtc, todayInZone } from "./lib/format";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -211,12 +211,13 @@ http.route({
       if (!org.calcomApiKey || !org.calcomEventTypeId) {
         return respond({ error: "no-calendar-connected" });
       }
-      const dayIso = String(args.date ?? new Date().toISOString().slice(0, 10));
+      const dayIso = String(args.date ?? todayInZone(org.timezone));
+      const { startIso, endIso } = localDayRangeUtc(dayIso, org.timezone);
       const result = await getAvailableSlots({
         apiKey: org.calcomApiKey,
         eventTypeId: org.calcomEventTypeId,
-        startIso: `${dayIso}T00:00:00Z`,
-        endIso: `${dayIso}T23:59:59Z`,
+        startIso,
+        endIso,
       });
       if (!result.ok) return respond({ error: result.reason });
       return respond({

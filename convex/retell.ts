@@ -443,16 +443,32 @@ export const recordCall = internalMutation({
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))
       .unique();
     if (existing) return null; // Retell retries webhooks; first write wins
-    let customerId;
-    if (args.fromNumber) {
-      const phone = args.fromNumber.startsWith("+")
-        ? args.fromNumber
-        : `+${args.fromNumber}`;
+    // A caller the salon has never seen is the normal case, not the edge: it is
+    // every first-time caller, and it is every demo. This row used to be
+    // written with customerId undefined, and the inbox groups by customer (the
+    // `push` guard in messages.ts), so the call landed nowhere — the agent
+    // booked correctly and the screen stayed empty. Create the contact, the
+    // same way an unknown inbound WhatsApp does, with the phone standing in
+    // until a human types a name. Consent stays unset: them ringing us is not
+    // KVKK consent for us to start messaging them.
+    // A withheld or unreadable caller ID still leaves this undefined, because
+    // there is no number to build a contact from.
+    let customerId: Id<"customers"> | undefined;
+    const callerPhone = args.fromNumber ? toE164(args.fromNumber) : null;
+    if (callerPhone) {
       const customer = await ctx.db
         .query("customers")
-        .withIndex("by_org_phone", (q) => q.eq("orgId", agent.orgId).eq("phone", phone))
+        .withIndex("by_org_phone", (q) =>
+          q.eq("orgId", agent.orgId).eq("phone", callerPhone),
+        )
         .unique();
-      customerId = customer?._id;
+      customerId =
+        customer?._id ??
+        (await ctx.db.insert("customers", {
+          orgId: agent.orgId,
+          firstName: "",
+          phone: callerPhone,
+        }));
     }
     await ctx.db.insert("calls", {
       orgId: agent.orgId,
