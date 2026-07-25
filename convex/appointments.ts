@@ -12,8 +12,13 @@ const enrichedAppointment = v.object({
   startAt: v.number(),
   durationMinutes: v.optional(v.number()),
   status: appointmentStatus,
+  staffId: v.optional(v.id("staff")),
+  // Resolved from the staff row, falling back to the legacy free-text column
+  // for orgs that have not run migrations:backfillStaff yet. The calendar lanes
+  // on staffId; this is only what the block prints.
   staffName: v.optional(v.string()),
   notes: v.optional(v.string()),
+  externalUid: v.optional(v.string()),
   source: v.optional(
     v.union(
       v.literal("manual"),
@@ -51,6 +56,7 @@ export const listRange = query({
     for (const row of rows) {
       const customer = await ctx.db.get(row.customerId);
       const service = row.serviceId ? await ctx.db.get(row.serviceId) : null;
+      const staff = row.staffId ? await ctx.db.get(row.staffId) : null;
       out.push({
         _id: row._id,
         _creationTime: row._creationTime,
@@ -58,8 +64,10 @@ export const listRange = query({
         startAt: row.startAt,
         durationMinutes: row.durationMinutes,
         status: row.status,
-        staffName: row.staffName,
+        staffId: row.staffId,
+        staffName: staff?.name ?? row.staffName,
         notes: row.notes,
+        externalUid: row.externalUid,
         source: row.source,
         reminderSentOffsets: row.reminderSentOffsets,
         confirmationSentAt: row.confirmationSentAt,
@@ -102,12 +110,13 @@ export const listForCustomer = query({
     const out = [];
     for (const row of rows.slice(0, 50)) {
       const service = row.serviceId ? await ctx.db.get(row.serviceId) : null;
+      const staff = row.staffId ? await ctx.db.get(row.staffId) : null;
       out.push({
         _id: row._id,
         startAt: row.startAt,
         status: row.status,
         serviceName: service?.name,
-        staffName: row.staffName,
+        staffName: staff?.name ?? row.staffName,
       });
     }
     return out;
@@ -284,6 +293,7 @@ export const markRescheduled = internalMutation({
   args: {
     appointmentId: v.id("appointments"),
     startAt: v.number(),
+    durationMinutes: v.optional(v.number()),
     externalUid: v.optional(v.string()),
   },
   returns: v.null(),
@@ -296,6 +306,9 @@ export const markRescheduled = internalMutation({
       status: "scheduled",
       reminderSentOffsets: [],
       confirmationSentAt: undefined,
+      ...(args.durationMinutes !== undefined
+        ? { durationMinutes: args.durationMinutes }
+        : {}),
       ...(args.externalUid ? { externalUid: args.externalUid } : {}),
     });
     await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
@@ -312,3 +325,47 @@ export function nextUpcomingOf(
     .filter((a) => a.startAt > now && statuses.includes(a.status))
     .sort((a, b) => a.startAt - b.startAt)[0];
 }
+
+// Everything the appointment modal edits that cal.com has no opinion about.
+// Time and duration are NOT here — those go through schedule.move, because
+// cal.com owns them and has to agree first.
+export const updateDetails = mutation({
+  args: {
+    appointmentId: v.id("appointments"),
+    serviceId: v.optional(v.union(v.id("services"), v.null())),
+    staffId: v.optional(v.union(v.id("staff"), v.null())),
+    notes: v.optional(v.string()),
+    status: v.optional(appointmentStatus),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
+    const patch: Record<string, unknown> = {};
+    if (args.serviceId !== undefined) {
+      if (args.serviceId === null) patch.serviceId = undefined;
+      else {
+        const service = await ctx.db.get(args.serviceId);
+        if (!service || service.orgId !== orgId) throw new Error("not-found");
+        patch.serviceId = args.serviceId;
+        // Changing the service does NOT silently restretch the block: the
+        // duration on the row may have been drawn by hand, and cal.com would
+        // have to agree to a new length anyway. The modal offers the service's
+        // duration as a separate, explicit resize.
+      }
+    }
+    if (args.staffId !== undefined) {
+      if (args.staffId === null) patch.staffId = undefined;
+      else {
+        const staff = await ctx.db.get(args.staffId);
+        if (!staff || staff.orgId !== orgId) throw new Error("not-found");
+        patch.staffId = args.staffId;
+      }
+    }
+    if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
+    if (args.status !== undefined) patch.status = args.status;
+    await ctx.db.patch(args.appointmentId, patch);
+    return null;
+  },
+});

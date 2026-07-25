@@ -30,6 +30,7 @@ import type * as migrations from "../migrations.js";
 import type * as orgs from "../orgs.js";
 import type * as reminders from "../reminders.js";
 import type * as retell from "../retell.js";
+import type * as schedule from "../schedule.js";
 import type * as services from "../services.js";
 import type * as staff from "../staff.js";
 import type * as team from "../team.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   orgs: typeof orgs;
   reminders: typeof reminders;
   retell: typeof retell;
+  schedule: typeof schedule;
   services: typeof services;
   staff: typeof staff;
   team: typeof team;
