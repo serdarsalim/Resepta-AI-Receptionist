@@ -11,16 +11,21 @@ import { useTheme, type Theme } from "@/lib/theme";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
 // fixed-height pane, recessed sidebar, floating main card that scrolls
-// internally. Settings is a sidebar destination in its own group at the foot
-// (Nudge does the same); the initials menu keeps a shortcut to it because the
-// sidebar is hidden on phones.
+// internally. Org config (Business, Settings) is a sidebar destination in its
+// own group at the foot; the avatar menu is the PERSON's menu and never routes
+// there.
+//
+// "account" is deliberately absent from the sidebar: it is reachable only from
+// the avatar menu, because your own name and alert preferences are not a place
+// you go to work.
 
 export type TabId =
   | "appointments"
   | "customers"
   | "inbox"
-  | "workspace"
-  | "settings";
+  | "business"
+  | "settings"
+  | "account";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
@@ -74,8 +79,8 @@ const InboxIcon = makeIcon(
     <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </>,
 );
-// Sliders: the workspace's own shape, set once and rarely touched.
-const WorkspaceIcon = makeIcon(
+// Sliders: the business's own shape, set once and rarely touched.
+const BusinessIcon = makeIcon(
   <>
     <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
     <path d="M1 14h6M9 8h6M17 16h6" />
@@ -115,13 +120,18 @@ const NAV_TABS: {
 
 // Config is not a place you work, so it closes the nav in its own group
 // (Nudge's grammar). Both entries wear --foreground rather than a hue for the
-// same reason. Workspace setup is what the business IS (team, services,
-// contact fields); Settings is what it is CONNECTED to.
+// same reason. Business is what the business IS (team, services, contact
+// fields); Settings is what it is CONNECTED to.
+//
+// The tab is "business", not "workspace": Fresha, Booksy, Square and Treatwell
+// all call this Business, and a salon owner does not think of the salon as a
+// workspace. "Workspace" stays only where it means the switcher between
+// several client businesses on one login.
 const FOOT_TABS: typeof NAV_TABS = [
   {
-    id: "workspace",
+    id: "business",
     key: "nav.business",
-    Icon: WorkspaceIcon,
+    Icon: BusinessIcon,
     color: "var(--foreground)",
   },
   {
@@ -166,11 +176,15 @@ function BrandMark({ size = 26 }: { size?: number }) {
   );
 }
 
-function ChevronLeftIcon() {
+// lucide panel-left. One definition, used by the desktop collapse toggle and
+// by the phone menu button, and it is the SAME glyph in both states: the icon
+// names the sidebar, it does not point anywhere. Chevrons and hamburgers are
+// both out of the design language here.
+function PanelLeftIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -179,25 +193,8 @@ function ChevronLeftIcon() {
       strokeLinejoin="round"
       aria-hidden
     >
-      <path d="m15 18-6-6 6-6" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="m9 18 6-6-6-6" />
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
     </svg>
   );
 }
@@ -274,6 +271,15 @@ function CheckIcon() {
     </svg>
   );
 }
+// A single person, not a gear: this menu is about you, not the business.
+function PersonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20v-.5a7 7 0 0 1 14 0v.5" />
+    </svg>
+  );
+}
 function SignOutIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -283,18 +289,23 @@ function SignOutIcon() {
   );
 }
 
-// Ported from Nudge's AppHeader UserMenu, minus the Convex theme persistence
-// (Randevu keeps the preference in localStorage only for now).
+// Ported from Nudge's AppHeader UserMenu.
+//
+// Strictly the signed-in person: who you are, how the app looks to you, how to
+// leave. It used to carry a Settings shortcut into the org config, which made
+// the top-right corner read as a second door into the business setup. It is
+// not. Business config is a sidebar destination, and phones reach it through
+// the drawer.
 function UserMenu({
   name,
   email,
   remoteTheme,
-  onOpenSettings,
+  onOpenAccount,
 }: {
   name?: string;
   email?: string;
   remoteTheme?: Theme;
-  onOpenSettings: () => void;
+  onOpenAccount: () => void;
 }) {
   const { t } = useLanguage();
   const { signOut } = useAuthActions();
@@ -375,14 +386,14 @@ function UserMenu({
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              onOpenSettings();
+              onOpenAccount();
             }}
             className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
           >
             <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-              <SettingsIcon width={16} height={16} />
+              <PersonIcon />
             </span>
-            {t("nav.settings")}
+            {t("nav.account")}
           </button>
           <div className="border-t border-[var(--border)] pt-1.5">
             <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted)]">
@@ -619,7 +630,7 @@ function SidebarButton({
       {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
       {dot && (
         <span
-          className={`h-2 w-2 shrink-0 rounded-full bg-red-500 ${
+          className={`h-2 w-2 shrink-0 rounded-full bg-[var(--brand)] ${
             collapsed ? "absolute right-1.5 top-1.5" : "ml-auto"
           }`}
           aria-label="failed sends"
@@ -640,7 +651,10 @@ export function AppShell({
 }) {
   const { t, language, setLanguage } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
-  const failedCount = useQuery(api.messages.failedCount, {});
+  // Same green dot the inbox rows wear, counted. It used to be a red badge
+  // fed by failed sends only, which meant two colours of dot for one idea:
+  // somebody still has to look at this.
+  const attentionCount = useQuery(api.messages.attentionCount, {});
 
   // Read on mount, not during render: the server has no localStorage, so
   // seeding state from it directly would hydrate-mismatch. One frame expanded
@@ -656,31 +670,86 @@ export function AppShell({
       return next;
     });
 
+  // Phone drawer. Below md the sidebar is off-canvas, and it is now the only
+  // way to reach Business and Settings: the avatar menu no longer shortcuts
+  // there, and the bottom bar carries the three work tabs only.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // The drawer is a phone surface, so it always shows the full-width sidebar.
+  // Folding the desktop collapse in here beats measuring the viewport: the
+  // drawer can only be open below md, where `collapsed` has no meaning.
+  const showCollapsed = collapsed && !mobileOpen;
+
+  // Lock the page behind the drawer so a swipe scrolls the drawer, not the
+  // appointments list underneath it. Escape closes it, same as every other
+  // floating surface in the app.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [mobileOpen]);
+
+  const goTo = (next: TabId) => {
+    onTab(next);
+    setMobileOpen(false);
+  };
+
   // The org's language is the app's language — set in Settings, nowhere else.
   const orgLanguage = settings?.org.language;
   useEffect(() => {
     if (isLanguage(orgLanguage) && orgLanguage !== language) setLanguage(orgLanguage);
   }, [orgLanguage, language, setLanguage]);
 
+  // "account" has no sidebar entry to borrow a label from, so its title is
+  // resolved directly.
+  const titleKey: TranslationKey =
+    tab === "account"
+      ? "account.title"
+      : ([...NAV_TABS, ...FOOT_TABS].find((entry) => entry.id === tab)?.key ??
+        "app.name");
+
   if (settings && settings.org.name === "") return <OnboardingGate />;
 
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
-      {/* Sidebar: recessed pane, hidden on phones (bottom nav takes over). */}
+      {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
+          keeps pointer-events off while closed so it never eats a tap. */}
+      <button
+        type="button"
+        tabIndex={mobileOpen ? 0 : -1}
+        aria-hidden={!mobileOpen}
+        aria-label="Close menu"
+        onClick={() => setMobileOpen(false)}
+        className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-200 motion-reduce:transition-none md:hidden ${
+          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+      {/* Sidebar: a recessed pane on desktop, an off-canvas drawer on phones.
+          Same markup either way, so the phone gets the real navigation instead
+          of a cut-down second copy of it. Below md the drawer is the ONLY way
+          to reach Business and Settings, now that the avatar menu no longer
+          shortcuts there. */}
       <aside
         aria-label="Primary navigation"
-        className={`app-pane hidden shrink-0 flex-col overflow-hidden transition-[width] duration-200 md:flex ${
-          collapsed ? "w-14" : "w-52"
-        }`}
+        className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
       >
         {/* Brand row. The mark stays put across the collapse so the eye has a
             fixed anchor; the name and the switcher are what fold away. */}
         <div
           className={`flex items-center gap-2 pt-3 ${
-            collapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
+            showCollapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
           }`}
         >
-          {collapsed ? (
+          {showCollapsed ? (
             <WorkspaceSwitcher fallbackName={settings?.org.name} collapsed />
           ) : (
             <>
@@ -690,39 +759,45 @@ export function AppShell({
               </div>
             </>
           )}
+          {/* One control, one glyph: on desktop it folds the sidebar down to
+              symbols, on the phone it slides the drawer away. Both mean "put
+              the sidebar back", which is why the icon does not change. */}
           <button
             type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? t("nav.expand") : t("nav.collapse")}
-            title={collapsed ? t("nav.expand") : t("nav.collapse")}
+            onClick={() => (mobileOpen ? setMobileOpen(false) : toggleCollapsed())}
+            aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+            title={showCollapsed ? t("nav.expand") : t("nav.collapse")}
             className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
           >
-            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+            <PanelLeftIcon />
           </button>
         </div>
 
-        <nav className={`flex flex-1 flex-col py-1 ${collapsed ? "px-1" : "px-2"}`}>
+        <nav className={`flex flex-1 flex-col py-1 ${showCollapsed ? "px-1" : "px-2"}`}>
           <div className="space-y-0.5">
             {NAV_TABS.map((entry) => (
               <SidebarButton
                 key={entry.id}
                 entry={entry}
                 active={tab === entry.id}
-                collapsed={collapsed}
-                dot={entry.id === "inbox" && (failedCount ?? 0) > 0}
-                onClick={() => onTab(entry.id)}
+                collapsed={showCollapsed}
+                dot={entry.id === "inbox" && (attentionCount ?? 0) > 0}
+                onClick={() => goTo(entry.id)}
               />
             ))}
           </div>
           {/* Config closes the nav, under a hairline. */}
-          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pt-1.5">
+          {/* pb-4 lifts the group off the pane's bottom edge: flush against it
+              the two entries read as cut off, and on a Mac the dev-tools bubble
+              lands right on top of the last one. */}
+          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pb-4 pt-1.5">
             {FOOT_TABS.map((entry) => (
               <SidebarButton
                 key={entry.id}
                 entry={entry}
                 active={tab === entry.id}
-                collapsed={collapsed}
-                onClick={() => onTab(entry.id)}
+                collapsed={showCollapsed}
+                onClick={() => goTo(entry.id)}
               />
             ))}
           </div>
@@ -732,16 +807,25 @@ export function AppShell({
       {/* Floating content card; scrolls internally (min-h-0 is load-bearing). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] md:rounded-xl md:border md:border-[var(--border)]">
         <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
-          <h1 className="page-title truncate text-sm font-semibold md:text-base">
-            {t(
-              [...NAV_TABS, ...FOOT_TABS].find((entry) => entry.id === tab)?.key ??
-                "app.name",
-            )}
-          </h1>
+          <div className="flex min-w-0 items-center gap-1">
+            {/* Phone door to the sidebar. Same panel-left glyph as the collapse
+                toggle, since it opens the same thing. */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              aria-label={t("nav.menu")}
+              className="-ml-1 rounded-md p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] md:hidden"
+            >
+              <PanelLeftIcon size={18} />
+            </button>
+            <h1 className="page-title truncate text-sm font-semibold md:text-base">
+              {t(titleKey)}
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
-            {(tab === "settings" || tab === "workspace") && (
+            {(tab === "settings" || tab === "business" || tab === "account") && (
               <button
-                aria-label="Close settings"
+                aria-label="Close"
                 onClick={() => onTab("appointments")}
                 className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
               >
@@ -752,7 +836,7 @@ export function AppShell({
               name={settings?.me.name}
               email={settings?.me.email}
               remoteTheme={settings?.me.themePreference}
-              onOpenSettings={() => onTab("settings")}
+              onOpenAccount={() => onTab("account")}
             />
           </div>
         </header>

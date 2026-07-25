@@ -1,21 +1,31 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useId, useState } from "react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { Card } from "./Card";
 import { Toggle } from "./Toggle";
-import { InlineEditValue } from "./RecordField";
+import { InfoTip } from "./InfoTip";
+import { RowLabel } from "./RowLabel";
+import { FieldGroup, InlineEditValue } from "./RecordField";
 
-// Workspace setup: how this business is SHAPED. Who works here, what it
+// Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
 // half, the connections and the sending rules.
 //
-// Nudge splits the same way (its Workspace setup tab holds fields and
-// categories while Settings holds accounts and channels), and the split is
-// what keeps a salon owner from hunting through one long scroll.
-export function WorkspaceSetupView() {
+// Named Business, not "Workspace setup", because that is what every product a
+// salon owner has already used calls it: Fresha, Booksy, Square and Treatwell
+// all say Business. Nobody thinks of their salon as a workspace. (This file
+// replaces WorkspaceSetupView.tsx.)
+//
+// It is also the surface that makes ONE deployment fit a salon, a dentist and
+// a garage: services and contact fields are org data, so the vertical's own
+// vocabulary (plate number, last cleaning, insurance) never needs a schema
+// change or a second deployment.
+export function BusinessView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -29,10 +39,79 @@ export function WorkspaceSetupView() {
           {t("settings.ownerOnly")}
         </p>
       )}
+      <DetailsCard isOwner={isOwner} />
       <TeamCard isOwner={isOwner} />
       <ServicesCard isOwner={isOwner} />
       <FieldsCard isOwner={isOwner} />
     </div>
+  );
+}
+
+// Settings row grid, per Serdar's documented spec: label column 220-260px,
+// label only (no helper text in it), control right, stacks on mobile. Same
+// string SettingsView uses; the two surfaces must line up when you flip
+// between them.
+const ROW_GRID =
+  "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
+
+const TIMEZONES = [
+  "Europe/Istanbul",
+  "Europe/Dublin",
+  "Europe/Berlin",
+  "Europe/London",
+  "UTC",
+];
+
+// Name, timezone, language, sender address. This used to be Settings' first
+// chip, which put the business's own identity behind a page about
+// connections. It is not a connection, so it leads here instead.
+function DetailsCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const update = useMutation(api.orgs.update);
+
+  return (
+    <Card title={t("settings.business")} disabled={!isOwner}>
+      {settings === undefined ? (
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      ) : (
+        <div className={ROW_GRID}>
+          <RowLabel label={t("settings.businessName")} />
+          <input
+            defaultValue={settings.org.name}
+            onBlur={(e) => void update({ name: e.target.value })}
+          />
+          <RowLabel label={t("settings.timezone")} />
+          <select
+            defaultValue={settings.org.timezone}
+            onChange={(e) => void update({ timezone: e.target.value })}
+          >
+            {TIMEZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+          <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
+          <input
+            defaultValue={settings.org.emailFrom ?? ""}
+            placeholder="info@salonunuz.com"
+            onBlur={(e) => void update({ emailFrom: e.target.value })}
+          />
+          <RowLabel label={t("settings.language")} />
+          <select
+            defaultValue={settings.org.language}
+            onChange={(e) => void update({ language: e.target.value })}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -272,37 +351,106 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+type ContactField = FunctionReturnType<typeof api.contactFields.list>[number];
+type FieldSource = "manual" | "voice";
+
+// Two named states, so a segmented control rather than a toggle: "off" is not
+// a way to say "voice agent".
+const FIELD_SOURCES: { id: FieldSource; key: TranslationKey }[] = [
+  { id: "manual", key: "fields.source.manual" },
+  { id: "voice", key: "fields.source.voice" },
+];
+
+// Voice rows carry a third column for the key, so header and rows share one
+// template string. Narrower on phones, where 11rem of key would eat the label.
+const VOICE_ROW_GRID =
+  "grid grid-cols-[1fr_8rem_3.5rem] items-center gap-2 sm:grid-cols-[1fr_11rem_4rem]";
+
 function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
   const createField = useMutation(api.contactFields.create);
   const removeField = useMutation(api.contactFields.remove);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
+  const [source, setSource] = useState<FieldSource>("manual");
   const [error, setError] = useState<string | null>(null);
+  const sourceLabelId = useId();
+
+  // Unset reads as "manual": fields defined before the voice agent existed are
+  // staff-filled by definition.
+  const rows = fields ?? [];
+  const manualFields = rows.filter((field) => (field.source ?? "manual") === "manual");
+  const voiceFields = rows.filter((field) => field.source === "voice");
+
+  const typeSummary = (field: ContactField) =>
+    `${t(`fields.type.${field.type}` as "fields.type.text")}${
+      field.options?.length ? ` · ${field.options.join(", ")}` : ""
+    }`;
+
+  const deleteButton = (field: ContactField, className: string) =>
+    isOwner && (
+      <button
+        className={`rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 ${className}`}
+        onClick={() => void removeField({ fieldId: field._id })}
+      >
+        {t("common.delete")}
+      </button>
+    );
 
   return (
     <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
-      <ul className="mb-3 divide-y divide-[var(--border)]">
-        {(fields ?? []).map((field) => (
-          <li key={field._id} className="group flex items-center gap-3 py-2 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="font-medium">{field.label}</span>
-              <span className="ml-2 text-xs text-[var(--muted)]">
-                {t(`fields.type.${field.type}` as "fields.type.text")}
-                {field.options?.length ? ` · ${field.options.join(", ")}` : ""}
+      {/* Staff-filled first, then whatever the agent collects on a call. Each
+          group is skipped whole when it is empty rather than left as a heading
+          over nothing. */}
+      {manualFields.length > 0 && (
+        <ul className="mb-3 divide-y divide-[var(--border)]">
+          {manualFields.map((field) => (
+            <li key={field._id} className="group flex items-center gap-3 py-2 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="font-medium">{field.label}</span>
+                <span className="ml-2 text-xs text-[var(--muted)]">
+                  {typeSummary(field)}
+                </span>
               </span>
-            </span>
-            {isOwner && (
-              <button
-                className="rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400"
-                onClick={() => void removeField({ fieldId: field._id })}
-              >
-                {t("common.delete")}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
+              {deleteButton(field, "")}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {voiceFields.length > 0 && (
+        <div className="mb-3">
+          <FieldGroup label={t("fields.voiceGroup")} />
+          {/* The key is what the owner pastes into Retell's update_contact
+              config, so it is a real column with a real label, not a
+              decoration on the end of the row. */}
+          <div className={`${VOICE_ROW_GRID} pt-2 text-xs text-[var(--muted)]`}>
+            <span>{t("fields.label")}</span>
+            <span>{t("fields.key")}</span>
+            <span />
+          </div>
+          <ul className="divide-y divide-[var(--border)]">
+            {voiceFields.map((field) => (
+              <li key={field._id} className={`group py-2 text-sm ${VOICE_ROW_GRID}`}>
+                <span className="min-w-0">
+                  <span className="font-medium">{field.label}</span>
+                  <span className="ml-2 text-xs text-[var(--muted)]">
+                    {typeSummary(field)}
+                  </span>
+                </span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
+                    {field.key}
+                  </code>
+                  <InfoTip text={t("fields.voiceHint")} />
+                </span>
+                {deleteButton(field, "justify-self-end")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {isOwner && (
         <form
           className="flex flex-wrap items-end gap-2"
@@ -315,6 +463,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               await createField({
                 label: String(form.get("label") ?? ""),
                 type,
+                source,
                 options:
                   type === "select"
                     ? String(form.get("options") ?? "")
@@ -324,6 +473,8 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                     : undefined,
               });
               formEl.reset();
+              setType("text");
+              setSource("manual");
             } catch (err) {
               setError(err instanceof Error ? err.message : "error");
             }
@@ -346,6 +497,35 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               <option value="date">{t("fields.type.date")}</option>
             </select>
           </label>
+          <div className="text-sm">
+            <span id={sourceLabelId} className="block">
+              {t("fields.source")}
+            </span>
+            {/* Segmented control, same track as the Day/Week/List one: rounded
+                --muted-bg track, selected segment on --background so it stays
+                visible in dark mode. No border on a segment. */}
+            <div
+              role="group"
+              aria-labelledby={sourceLabelId}
+              className="mt-1 inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5"
+            >
+              {FIELD_SOURCES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={source === option.id}
+                  onClick={() => setSource(option.id)}
+                  className={`rounded-md px-3 py-1 transition-colors ${
+                    source === option.id
+                      ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {t(option.key)}
+                </button>
+              ))}
+            </div>
+          </div>
           {type === "select" && (
             <label className="block text-sm">
               {t("fields.options")}

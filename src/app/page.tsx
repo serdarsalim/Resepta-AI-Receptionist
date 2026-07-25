@@ -7,7 +7,8 @@ import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
 import { InboxView } from "@/components/InboxView";
 import { SettingsView } from "@/components/SettingsView";
-import { WorkspaceSetupView } from "@/components/WorkspaceSetupView";
+import { BusinessView } from "@/components/BusinessView";
+import { AccountView } from "@/components/AccountView";
 import { ContactView } from "@/components/ContactView";
 
 export default function Home() {
@@ -29,8 +30,13 @@ export default function Home() {
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
-          {tab === "workspace" && <WorkspaceSetupView />}
+          {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
+              all call this Business, and a salon owner does not think of the
+              salon as a workspace. */}
+          {tab === "business" && <BusinessView />}
           {tab === "settings" && <SettingsView />}
+          {/* Personal, not org config. Only the avatar menu routes here. */}
+          {tab === "account" && <AccountView />}
         </>
       )}
     </AppShell>

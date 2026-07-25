@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
 
 const messageStatus = v.union(
@@ -211,6 +212,41 @@ export const feedForCustomer = query({
 
 // Inbox left pane: one row per customer, newest activity first, carrying the
 // last preview plus which channels are waiting on a reply from the business.
+// The sidebar's Inbox dot. Same meaning as a row's dot, counted: rows nobody
+// has dealt with yet. It is deliberately the same green, because two colours
+// of dot in one app is a legend the reader has to learn.
+export const attentionCount = query({
+  args: {},
+  returns: v.number(),
+  // Annotated on purpose: reading a sibling query through `api` inside the
+  // same file is circular for inference, and the annotation is what breaks it.
+  handler: async (ctx): Promise<number> => {
+    const rows: { needsAttention: boolean }[] = await ctx.runQuery(
+      api.messages.conversations,
+      {},
+    );
+    return rows.filter((row) => row.needsAttention).length;
+  },
+});
+
+// Clearing the dot by hand. Stamped on the customer, not per user: a salon
+// shares one inbox, so once anyone has handled a row it should stop asking
+// everyone else. Passing cleared: false unstamps it, which is how a row you
+// dismissed too early comes back.
+export const setAttention = mutation({
+  args: { customerId: v.id("customers"), cleared: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    await ctx.db.patch(args.customerId, {
+      attentionClearedAt: args.cleared ? Date.now() : undefined,
+    });
+    return null;
+  },
+});
+
 export const conversations = query({
   args: {},
   returns: v.array(
@@ -225,6 +261,11 @@ export const conversations = query({
       lastChannel: channel,
       hasFailed: v.boolean(),
       awaitingReply: v.boolean(),
+      // ONE dot, one meaning: somebody still has to look at this row. It
+      // covers an unanswered inbound and a send that failed, because both are
+      // "the salon has to act" and a second colour just made the reader learn
+      // a legend. Which one it is lives in the dot's title.
+      needsAttention: v.boolean(),
       // Channels whose most recent activity is an unanswered inbound. Drives
       // the pinned, tinted icons in the row's channel strip.
       awaitingChannels: v.array(channel),
@@ -300,6 +341,12 @@ export const conversations = query({
         lastChannel: last.channel,
         hasFailed: entries.some((e) => e.failed),
         awaitingReply: awaitingChannels.length > 0,
+        // Dismissing stamps the moment; anything that lands afterwards lights
+        // the dot again on its own, so clearing a row is never a way to lose a
+        // customer who wrote back an hour later.
+        needsAttention:
+          (awaitingChannels.length > 0 || entries.some((e) => e.failed)) &&
+          last.at > (customer.attentionClearedAt ?? 0),
         awaitingChannels,
       });
     }

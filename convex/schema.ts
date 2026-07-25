@@ -144,6 +144,12 @@ export default defineSchema({
     // Values for the org-defined contact fields, keyed by contactFields.key.
     // Stored as strings; the field's type drives the editor, not the storage.
     custom: v.optional(v.record(v.string(), v.string())),
+    // Inbox attention, cleared by hand. The dot on a conversation row means
+    // "someone still has to look at this"; tapping it stamps the moment it was
+    // dismissed, and anything that arrives afterwards lights it again. Stored
+    // on the customer rather than per user because a salon shares one inbox:
+    // once Hülya has handled it, the owner should not still see it waiting.
+    attentionClearedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"]),

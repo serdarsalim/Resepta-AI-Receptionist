@@ -3,6 +3,7 @@ import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
 import { nextUpcomingOf } from "./appointments";
+import { queueOrgAlert } from "./lib/alerts";
 
 // Bare-text fallbacks, per language. Button taps are the primary path; these
 // cover a customer who types instead of tapping.
@@ -79,6 +80,25 @@ export const handleWhatsappEvent = internalMutation({
             // Opens Meta's 24h session window for any future free-form reply.
             await ctx.db.patch(customer._id, { lastInboundAt: Date.now() });
           }
+
+          // Tell the staff who opted in. Scheduled, never inline: a broken
+          // alert must not cost the salon the customer's actual message.
+          const who = customer
+            ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
+            : phone;
+          const tap = /^(confirm|cancel):/.exec(payload)?.[1];
+          await queueOrgAlert(ctx, {
+            orgId,
+            kind: "inbound",
+            subject: `${who} replied on WhatsApp`,
+            // Never the raw button payload: that is an appointment id, not
+            // something a person should read in an email.
+            body: tap
+              ? tap === "confirm"
+                ? `${who} confirmed their appointment.`
+                : `${who} cancelled their appointment.`
+              : text || `${who} sent a message.`,
+          });
 
           // A button payload names its exact appointment; typed text falls
           // back to the customer's next upcoming one.

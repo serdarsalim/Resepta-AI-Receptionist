@@ -1,12 +1,41 @@
 import { v } from "convex/values";
+import type { Scheduler } from "convex/server";
 import { internal } from "./_generated/api";
 import { action, internalAction, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
 import { sendEmailViaN8n } from "./lib/email";
 import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import { queueOrgAlert } from "./lib/alerts";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
+
+// The reasons this file writes onto a failed row are internal shorthand. An
+// owner reading an alert gets the sentence, not the shorthand. Anything else
+// (Meta's own error title) already reads as English and passes through.
+function readableSendFailure(reason: string): string {
+  if (reason === "no-consent") return "The contact has not consented to messages.";
+  if (reason === "wa-not-configured") return "No WhatsApp number is connected yet.";
+  if (reason.startsWith("no-approved-template")) {
+    return "No approved template in the contact's language.";
+  }
+  return reason;
+}
+
+// Every failed row in this file routes through here. Scheduled by
+// queueOrgAlert, so a broken alert cannot roll back or delay the send path.
+async function alertFailedSend(
+  ctx: { scheduler: Scheduler },
+  args: { orgId: Id<"orgs">; name: string; reason: string },
+) {
+  await queueOrgAlert(ctx, {
+    orgId: args.orgId,
+    kind: "failed-send",
+    subject: `Message to ${args.name} did not send`,
+    body: readableSendFailure(args.reason),
+  });
+}
 
 // Context for a rep-typed session message. Runs with the caller's auth (auth
 // propagates through runQuery), so the org scoping holds inside the action.
@@ -65,6 +94,13 @@ export const sendSession = action({
       wamid: result.ok ? result.wamid : undefined,
       error: result.ok ? undefined : result.reason,
     });
+    if (!result.ok) {
+      await alertFailedSend(ctx, {
+        orgId: customer.orgId,
+        name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+        reason: result.reason,
+      });
+    }
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
   },
 });
@@ -145,6 +181,8 @@ export const sendAppointmentMessage = internalAction({
     const waTemplate =
       contentTemplate?.status === "approved" ? contentTemplate : undefined;
 
+    const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+
     const fail = async (reason: string) => {
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
@@ -156,6 +194,11 @@ export const sendAppointmentMessage = internalAction({
         messageId,
         ok: false,
         error: reason,
+      });
+      await alertFailedSend(ctx, {
+        orgId: appointment.orgId,
+        name: customerName,
+        reason,
       });
     };
 
@@ -208,6 +251,13 @@ export const sendAppointmentMessage = internalAction({
         wamid: result.ok ? result.wamid : undefined,
         error: result.ok ? undefined : result.reason,
       });
+      if (!result.ok) {
+        await alertFailedSend(ctx, {
+          orgId: appointment.orgId,
+          name: customerName,
+          reason: result.reason,
+        });
+      }
       if (result.ok && args.kind === "confirmation") {
         await ctx.runMutation(internal.appointments.stampConfirmationSent, {
           appointmentId: appointment._id,
@@ -239,6 +289,13 @@ export const sendAppointmentMessage = internalAction({
         ok: emailResult.ok,
         error: emailResult.ok ? undefined : emailResult.reason,
       });
+      if (!emailResult.ok) {
+        await alertFailedSend(ctx, {
+          orgId: appointment.orgId,
+          name: customerName,
+          reason: emailResult.reason,
+        });
+      }
     }
     return null;
   },

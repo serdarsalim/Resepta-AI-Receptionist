@@ -120,6 +120,43 @@ async function retellGuard(request: Request): Promise<
   }
 }
 
+// Retell hands values back in whatever shape the agent's function schema was
+// written in, so accept the nested object under the name most configs use and
+// fall back to the remaining top-level args. Non-scalars are dropped; keys
+// that could never be a contactFields key are dropped with them.
+function coerceContactValues(source: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === "object") continue;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_]*$/.test(key)) continue;
+    out[key] = String(value);
+  }
+  return out;
+}
+
+function contactValuesFromArgs(args: Record<string, unknown>): Record<string, string> {
+  const nested = args.values ?? args.properties ?? args.fields;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return coerceContactValues(nested as Record<string, unknown>);
+  }
+  const { phone: _phone, name: _name, ...rest } = args;
+  return coerceContactValues(rest);
+}
+
+// Short English sentence for the model to relay in the call's own language.
+// The arrays next to it are what a transcript reader checks.
+function contactUpdateSentence(savedLabels: string[], ignoredKeys: string[]): string {
+  const parts: string[] = [];
+  if (savedLabels.length > 0) parts.push(`Saved ${savedLabels.join(", ")}.`);
+  if (ignoredKeys.length > 0) {
+    parts.push(
+      `Ignored ${ignoredKeys.join(", ")}, not a contact field for this business.`,
+    );
+  }
+  return parts.join(" ") || "Nothing to save.";
+}
+
 // Custom function calls from the agent mid-conversation. The response body is
 // read by the LLM verbatim — return short, speakable facts, never internals.
 http.route({
@@ -203,6 +240,44 @@ http.route({
       });
     }
 
+    // Set org-defined contact properties mid-call. The org decides which
+    // properties exist (Settings → contact fields); this endpoint only fills
+    // in the ones already there.
+    if (name === "update_contact") {
+      if (!callerPhone) return respond({ saved: false, message: "No number for this contact." });
+      const values = contactValuesFromArgs(args);
+      if (Object.keys(values).length === 0) {
+        return respond({ saved: false, updated: [], ignored: [], message: "Nothing to save." });
+      }
+      let result;
+      try {
+        result = await ctx.runMutation(internal.retell.updateContactFromVoice, {
+          retellAgentId: agentId,
+          phone: callerPhone,
+          values,
+        });
+      } catch (err) {
+        console.error("update_contact failed", err);
+        return respond({ saved: false, message: "Could not save that right now." });
+      }
+      if (!result.ok) {
+        return respond({
+          saved: false,
+          reason: result.reason,
+          message:
+            result.reason === "no-contact-with-that-number"
+              ? "No contact with that number yet."
+              : "That number did not look right.",
+        });
+      }
+      return respond({
+        saved: result.updated.length > 0,
+        updated: result.updated,
+        ignored: result.ignored,
+        message: contactUpdateSentence(result.updatedLabels, result.ignored),
+      });
+    }
+
     if (name === "cancel_appointment") {
       if (!callerPhone) return respond({ error: "missing-phone" });
       const cancelled = await ctx.runMutation(internal.retell.voiceCancel, {
@@ -242,6 +317,32 @@ http.route({
         transcript: String(call.transcript ?? "") || undefined,
         recordingUrl: String(call.recording_url ?? "") || undefined,
       });
+    }
+
+    // Retell also posts what it collected during the call. Same mapping, same
+    // guard as the mid-call function: only keys the org defined as contact
+    // fields land on the customer, so the loose variable bag is harmless.
+    // This runs outside recordCall's idempotency check on purpose: the
+    // analysis arrives on the second event, after the call row already exists.
+    if (agentId) {
+      const collected: Record<string, unknown> = {
+        ...(call.retell_llm_dynamic_variables as Record<string, unknown> | undefined),
+        ...(call.collected_dynamic_variables as Record<string, unknown> | undefined),
+        ...(analysis.custom_analysis_data as Record<string, unknown> | undefined),
+      };
+      const values = coerceContactValues(collected);
+      const fromNumber = String(call.from_number ?? "");
+      if (fromNumber && Object.keys(values).length > 0) {
+        try {
+          await ctx.runMutation(internal.retell.updateContactFromVoice, {
+            retellAgentId: agentId,
+            phone: fromNumber,
+            values,
+          });
+        } catch (err) {
+          console.error("post-call contact update failed", err);
+        }
+      }
     }
     return new Response("ok", { status: 200 });
   }),

@@ -9,15 +9,23 @@ const fieldType = v.union(
   v.literal("date"),
 );
 
+// Where a field's value comes from. Unset reads as "manual" everywhere, so
+// every row written before this existed keeps behaving the way it did.
+const fieldSource = v.union(v.literal("manual"), v.literal("voice"));
+
 const fieldDoc = v.object({
   _id: v.id("contactFields"),
   _creationTime: v.number(),
   orgId: v.id("orgs"),
+  // `key` is the write address: it is what the voice agent sends to
+  // update_contact and what customers.custom is keyed by. The UI shows the
+  // label, never this.
   key: v.string(),
   label: v.string(),
   type: fieldType,
   options: v.optional(v.array(v.string())),
   order: v.number(),
+  source: v.optional(fieldSource),
 });
 
 export const list = query({
@@ -34,7 +42,12 @@ export const list = query({
 });
 
 export const create = mutation({
-  args: { label: v.string(), type: fieldType, options: v.optional(v.array(v.string())) },
+  args: {
+    label: v.string(),
+    type: fieldType,
+    options: v.optional(v.array(v.string())),
+    source: v.optional(fieldSource),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
@@ -64,6 +77,9 @@ export const create = mutation({
           ? (args.options ?? []).map((o) => o.trim()).filter(Boolean)
           : undefined,
       order: existing.length,
+      // Left unset for the default so the stored row stays as small as the
+      // meaning: a field nobody marked is a field staff fill in.
+      source: args.source === "voice" ? "voice" : undefined,
     });
     return null;
   },

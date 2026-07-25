@@ -6,7 +6,7 @@
 // not a separate tab (ported from Nudge's InboxView).
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -37,6 +37,7 @@ export function InboxView({
 }) {
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
+  const setAttention = useMutation(api.messages.setAttention);
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
@@ -157,15 +158,47 @@ export function InboxView({
                               );
                             })}
                           </span>
-                          {c.hasFailed ? (
-                            <span
-                              title={t("inbox.failedSend")}
-                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500"
+                          {/* ONE dot, one colour, one meaning: this row still
+                              needs somebody. A second hue only made the reader
+                              learn a legend, so whether it is an unanswered
+                              reply or a failed send lives in the title.
+
+                              Tapping it clears the row, and tapping again
+                              brings it back: a dismissed row keeps a hollow
+                              ring that appears on hover, so nothing is ever
+                              cleared beyond recall. Anything that arrives
+                              after the dismissal lights it again on its own. */}
+                          {c.needsAttention ? (
+                            <button
+                              type="button"
+                              title={
+                                c.hasFailed
+                                  ? t("inbox.failedSend")
+                                  : t("inbox.needsReply")
+                              }
+                              aria-label={t("inbox.dismiss")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void setAttention({
+                                  customerId: c.customerId,
+                                  cleared: true,
+                                });
+                              }}
+                              className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)]"
                             />
-                          ) : c.awaitingReply ? (
-                            <span
-                              title={t("inbox.needsReply")}
-                              className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                          ) : c.awaitingReply || c.hasFailed ? (
+                            <button
+                              type="button"
+                              title={t("inbox.restore")}
+                              aria-label={t("inbox.restore")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void setAttention({
+                                  customerId: c.customerId,
+                                  cleared: false,
+                                });
+                              }}
+                              className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border-2 border-[var(--brand)] opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
                             />
                           ) : (
                             <span className="h-2.5 w-2.5 shrink-0" />

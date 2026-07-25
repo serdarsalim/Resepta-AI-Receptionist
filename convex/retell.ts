@@ -1,6 +1,13 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 
@@ -153,6 +160,146 @@ export const voiceCancel = internalMutation({
     if (!next) return false;
     await ctx.db.patch(next._id, { status: "cancelled" });
     return true;
+  },
+});
+
+// ---- Contact properties written by the voice agent ----
+//
+// The vertical's own vocabulary (plate number for a garage, last cleaning for
+// a dentist, insurance for a clinic) lives in contactFields as ORG DATA. The
+// agent writes values by key; the fact that a contactFields row exists in this
+// org is the entire permission model. An agent that invents a variable name
+// changes nothing, which is what keeps this flexible without being clever.
+
+// Built-in columns are off limits to this path. A phone number misheard
+// mid-call must never overwrite the number we dialled, and consent is a KVKK
+// record with its own moment, not a value an agent infers from a chat.
+const RESERVED_CONTACT_KEYS = new Set([
+  "firstname",
+  "first_name",
+  "lastname",
+  "last_name",
+  "phone",
+  "phonenumber",
+  "phone_number",
+  "email",
+  "consent",
+  "consentat",
+  "consent_at",
+]);
+
+const contactUpdateResult = v.object({
+  ok: v.boolean(),
+  reason: v.optional(v.string()),
+  // Keys actually written, the matching labels (for anything spoken), and the
+  // keys we dropped so the agent's transcript shows what did not stick.
+  updated: v.array(v.string()),
+  updatedLabels: v.array(v.string()),
+  ignored: v.array(v.string()),
+});
+
+// Lenient sibling of assertE164: the voice lane must never throw at Retell,
+// so a number we cannot read comes back as a reason instead of a 500.
+function toE164(raw: string): string | null {
+  const trimmed = raw.replace(/[\s().-]/g, "");
+  const phone = trimmed.startsWith("+") ? trimmed : `+${trimmed}`;
+  return /^\+[1-9]\d{6,14}$/.test(phone) ? phone : null;
+}
+
+// The single mapping both voice write paths share: the mid-call function and
+// the post-call webhook. Two copies of this guard would drift.
+export async function applyVoiceContactValues(
+  ctx: MutationCtx,
+  args: { orgId: Id<"orgs">; phone: string; values: Record<string, string> },
+): Promise<{
+  ok: boolean;
+  reason?: string;
+  updated: string[];
+  updatedLabels: string[];
+  ignored: string[];
+}> {
+  const phone = toE164(args.phone);
+  if (!phone) {
+    return {
+      ok: false,
+      reason: "phone-not-recognised",
+      updated: [],
+      updatedLabels: [],
+      ignored: [],
+    };
+  }
+  const customer = await ctx.db
+    .query("customers")
+    .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
+    .unique();
+  if (!customer) {
+    return {
+      ok: false,
+      reason: "no-contact-with-that-number",
+      updated: [],
+      updatedLabels: [],
+      ignored: [],
+    };
+  }
+  const fields = await ctx.db
+    .query("contactFields")
+    .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+    .collect();
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+
+  const custom = { ...(customer.custom ?? {}) };
+  const updated: string[] = [];
+  const updatedLabels: string[] = [];
+  const ignored: string[] = [];
+  for (const [rawKey, rawValue] of Object.entries(args.values)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    const field = byKey.get(key);
+    if (!field || RESERVED_CONTACT_KEYS.has(key.toLowerCase())) {
+      ignored.push(key);
+      continue;
+    }
+    // Everything stores as a string; the field's type drives the editor, not
+    // the storage. An empty value clears the property rather than parking an
+    // empty string on the record.
+    const value = String(rawValue ?? "").trim();
+    if (value) custom[key] = value;
+    else delete custom[key];
+    updated.push(key);
+    updatedLabels.push(field.label);
+  }
+  if (updated.length > 0) await ctx.db.patch(customer._id, { custom });
+  return { ok: true, updated, updatedLabels, ignored };
+}
+
+// Org comes from the agent id on the signed payload, exactly like every other
+// voice entry point. A payload that names an org is a payload we ignore.
+export const updateContactFromVoice = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    phone: v.string(),
+    values: v.record(v.string(), v.string()),
+  },
+  returns: contactUpdateResult,
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent || !agent.enabled) {
+      return {
+        ok: false,
+        reason: "agent-not-configured",
+        updated: [],
+        updatedLabels: [],
+        ignored: [],
+      };
+    }
+    return await applyVoiceContactValues(ctx, {
+      orgId: agent.orgId,
+      phone: args.phone,
+      values: args.values,
+    });
   },
 });
 

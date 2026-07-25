@@ -149,6 +149,10 @@ const dictionary = {
     en: "The customer's KVKK consent to WhatsApp and email messages. Without it, no channel sends anything.",
   },
   "customers.noConsent": { tr: "İzin yok", en: "No consent" },
+  // Record footer. "Last activity" rather than "last update": a salon cares
+  // when the customer last got in touch, not when someone edited the row.
+  "customers.added": { tr: "Eklendi", en: "Added" },
+  "customers.lastActivity": { tr: "Son hareket", en: "Last activity" },
 
   "messages.none": { tr: "Henüz mesaj yok", en: "No messages yet" },
   // Delivery state and failure reasons in the reader's language. The stored
@@ -241,6 +245,8 @@ const dictionary = {
   },
   "inbox.needsReply": { tr: "Yanıt bekliyor", en: "Needs reply" },
   "inbox.failedSend": { tr: "Gönderilemedi", en: "Failed to send" },
+  "inbox.dismiss": { tr: "İlgilenildi olarak işaretle", en: "Mark as handled" },
+  "inbox.restore": { tr: "Geri getir", en: "Bring back" },
   "inbox.openContact": { tr: "Müşteriyi aç", en: "Open contact" },
 
   "calls.inbound": { tr: "Gelen arama", en: "Inbound call" },

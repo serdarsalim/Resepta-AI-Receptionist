@@ -4,19 +4,11 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
+import { type TranslationKey } from "@/lib/i18n";
 import { RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
-
-const TIMEZONES = [
-  "Europe/Istanbul",
-  "Europe/Dublin",
-  "Europe/Berlin",
-  "Europe/London",
-  "UTC",
-];
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid, autosave on blur/change, explanations behind InfoTips.
@@ -135,13 +127,16 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
   );
 }
 
-// Settings holds the connections and the sending rules. What the business IS
-// (team, services, contact fields) lives next door in Workspace setup, its own
-// sidebar destination. Sections here rather than one long scroll of cards.
-type Section = "business" | "reminders" | "whatsapp" | "bookings" | "voice";
+// Settings holds the connections and the sending rules, nothing else. What the
+// business IS (its name, timezone, language, team, services, contact fields)
+// lives next door in Business, its own sidebar destination. The business's own
+// identity was the first chip here and it never belonged: a name and a
+// timezone are not a connection.
+//
+// Sections rather than one long scroll of cards.
+type Section = "reminders" | "whatsapp" | "bookings" | "voice";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "business", key: "settings.business" },
   { id: "reminders", key: "settings.reminders" },
   { id: "whatsapp", key: "settings.whatsapp" },
   { id: "bookings", key: "settings.bookings" },
@@ -177,7 +172,7 @@ function SectionChip({
 
 export function SettingsView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("business");
+  const [section, setSection] = useState<Section>("reminders");
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
   const connectWhatsapp = useMutation(api.orgs.connectWhatsapp);
@@ -214,46 +209,6 @@ export function SettingsView() {
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
         </p>
-      )}
-
-      {section === "business" && (
-          <Card disabled={!isOwner}>
-            <div className={ROW_GRID}>
-              <RowLabel label={t("settings.businessName")} />
-              <input
-                defaultValue={settings.org.name}
-                onBlur={(e) => void update({ name: e.target.value })}
-              />
-              <RowLabel label={t("settings.timezone")} />
-              <select
-                defaultValue={settings.org.timezone}
-                onChange={(e) => void update({ timezone: e.target.value })}
-              >
-                {TIMEZONES.map((zone) => (
-                  <option key={zone} value={zone}>
-                    {zone}
-                  </option>
-                ))}
-              </select>
-              <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
-              <input
-                defaultValue={settings.org.emailFrom ?? ""}
-                placeholder="info@salonunuz.com"
-                onBlur={(e) => void update({ emailFrom: e.target.value })}
-              />
-              <RowLabel label={t("settings.language")} />
-              <select
-                defaultValue={settings.org.language}
-                onChange={(e) => void update({ language: e.target.value })}
-              >
-                {LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </Card>
       )}
 
       {section === "reminders" && (

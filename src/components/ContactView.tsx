@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
@@ -18,6 +18,39 @@ const STATUS_KEY: Record<string, TranslationKey> = {
   completed: "status.completed",
   no_show: "status.no_show",
 };
+
+// The org field's declared type picks the editor; a select hands its options to
+// the same control instead of a second one.
+const FIELD_INPUT: Record<Doc<"contactFields">["type"], "text" | "number" | "date"> = {
+  text: "text",
+  select: "text",
+  number: "number",
+  date: "date",
+};
+
+// One org-defined field, whichever group it sits in. Voice-collected rows are
+// this same editable row on purpose: an agent mishearing a plate number is
+// exactly the moment someone needs to correct it by hand.
+function CustomFieldRow({
+  field,
+  value,
+  onSave,
+}: {
+  field: Doc<"contactFields">;
+  value: string;
+  onSave: (value: string) => unknown;
+}) {
+  return (
+    <FieldRow label={field.label}>
+      <InlineEditValue
+        value={value}
+        options={field.type === "select" ? (field.options ?? []) : null}
+        type={FIELD_INPUT[field.type]}
+        onSave={onSave}
+      />
+    </FieldRow>
+  );
+}
 
 // Contact profile, Nudge's ContactView pattern: properties on the left,
 // the conversation on the right.
@@ -38,6 +71,14 @@ export function ContactView({
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
   const [mobilePane, setMobilePane] = useState<"record" | "conversation">("record");
+
+  // Two groups, in the order a reader works through the record: what staff
+  // typed, then what the calls collected and will keep collecting on their own.
+  // Source is unset on every field created before voice existed, so anything
+  // that isn't explicitly "voice" is staff-filled.
+  const orgFields: Doc<"contactFields">[] = fields ?? [];
+  const staffFields = orgFields.filter((field) => field.source !== "voice");
+  const voiceFields = orgFields.filter((field) => field.source === "voice");
 
   if (customer === null) {
     return <p className="text-sm text-[var(--muted)]">{t("customers.none")}</p>;
@@ -130,34 +171,80 @@ export function ContactView({
                   onSave={(next) => updateCustomer({ customerId, email: next })}
                 />
               </FieldRow>
+              {/* An empty group renders nothing, heading included: a lone
+                  divider over blank space is a frame around no content. */}
+              {staffFields.length > 0 && <FieldGroup label={t("fields.title")} />}
+              {staffFields.map((field) => (
+                <CustomFieldRow
+                  key={field._id}
+                  field={field}
+                  value={customer.custom?.[field.key] ?? ""}
+                  onSave={(next) =>
+                    setCustomValue({ customerId, key: field.key, value: next })
+                  }
+                />
+              ))}
+
+              {/* Where these values came from is the (i)'s job, not a
+                  paragraph's, and not a badge repeated on every row. */}
+              {voiceFields.length > 0 && (
+                <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
+              )}
+              {voiceFields.map((field) => (
+                <CustomFieldRow
+                  key={field._id}
+                  field={field}
+                  value={customer.custom?.[field.key] ?? ""}
+                  onSave={(next) =>
+                    setCustomValue({ customerId, key: field.key, value: next })
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Record meta, pinned under the fields the way Nudge's contact
+                footer works: when this customer arrived, when they last got in
+                touch, and their consent.
+
+                Consent sits HERE rather than up among the identity fields on
+                purpose. It is not a detail somebody types, it is a legal fact
+                about this one customer, and a stray tap next to the email box
+                either mutes them or marks them as having agreed to something
+                they never agreed to. Down here it reads as the record it is,
+                dated, and it cannot move to Settings: one org-wide switch
+                standing in for every customer's consent is the thing KVKK
+                exists to forbid. */}
+            <div className="shrink-0 space-y-1.5 border-t border-[var(--border)] px-4 py-3">
+              <FieldRow label={t("customers.added")}>
+                <span className="block py-1 text-sm text-[var(--muted)]">
+                  {formatDateTime(customer._creationTime, language)}
+                </span>
+              </FieldRow>
+              {/* Blank over zero: a customer who has never written gets no row
+                  rather than a dash. */}
+              {customer.lastInboundAt !== undefined && (
+                <FieldRow label={t("customers.lastActivity")}>
+                  <span className="block py-1 text-sm text-[var(--muted)]">
+                    {formatDateTime(customer.lastInboundAt, language)}
+                  </span>
+                </FieldRow>
+              )}
               <FieldRow label={t("customers.consent")} hint={t("customers.consentHint")}>
-                <span className="flex h-7 items-center">
+                <span className="flex h-7 items-center gap-2">
                   <Toggle
                     checked={customer.consentAt !== undefined}
                     onChange={(next) => void updateCustomer({ customerId, consent: next })}
                   />
+                  {/* The date is what makes this a record instead of a switch:
+                      "consented" with no when is not worth much if anyone ever
+                      asks. */}
+                  {customer.consentAt !== undefined && (
+                    <span className="text-xs text-[var(--muted)]">
+                      {formatDateTime(customer.consentAt, language)}
+                    </span>
+                  )}
                 </span>
               </FieldRow>
-
-              {(fields ?? []).length > 0 && <FieldGroup label={t("fields.title")} />}
-              {(fields ?? []).map((field) => (
-                <FieldRow key={field._id} label={field.label}>
-                  <InlineEditValue
-                    value={customer.custom?.[field.key] ?? ""}
-                    options={field.type === "select" ? (field.options ?? []) : null}
-                    type={
-                      field.type === "number"
-                        ? "number"
-                        : field.type === "date"
-                          ? "date"
-                          : "text"
-                    }
-                    onSave={(next) =>
-                      setCustomValue({ customerId, key: field.key, value: next })
-                    }
-                  />
-                </FieldRow>
-              ))}
             </div>
           </section>
 
