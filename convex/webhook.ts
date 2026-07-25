@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
 import { nextUpcomingOf } from "./appointments";
@@ -144,9 +145,31 @@ export const handleWhatsappEvent = internalMutation({
           // Org check: a spoofed payload must not reach another salon's row.
           if (!appointment || appointment.orgId !== orgId) continue;
           if (appointment.status === "completed") continue;
-          await ctx.db.patch(appointment._id, {
-            status: intent === "confirm" ? "confirmed" : "cancelled",
-          });
+
+          // Confirming is Randevu's own concept — cal.com bookings are already
+          // accepted, so there is nothing to tell it.
+          if (intent === "confirm") {
+            await ctx.db.patch(appointment._id, { status: "confirmed" });
+            continue;
+          }
+
+          // Cancelling is not ours to record alone: cal.com holds the slot, the
+          // salon's Google Calendar and the notification emails. This used to
+          // patch "cancelled" here and stop, so the slot stayed blocked for a
+          // customer who had already said they were not coming. A mutation
+          // cannot fetch, so the push runs as an action which writes our status
+          // only once cal.com agrees.
+          if (appointment.externalUid) {
+            await ctx.scheduler.runAfter(0, internal.calcom.pushCancelToCalcom, {
+              appointmentId: appointment._id,
+              orgId,
+              externalUid: appointment.externalUid,
+              who,
+            });
+            continue;
+          }
+          // A walk-in typed in by hand exists nowhere but here.
+          await ctx.db.patch(appointment._id, { status: "cancelled" });
         }
       }
     }

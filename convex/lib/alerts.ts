@@ -76,7 +76,8 @@ export type AlertTemplate =
   | "inboundConfirmed"
   | "inboundCancelled"
   | "failedNoTemplate"
-  | "failedOther";
+  | "failedOther"
+  | "failedCalendarCancel";
 
 export const alertTemplateValidator = v.union(
   v.literal("inboundText"),
@@ -85,6 +86,7 @@ export const alertTemplateValidator = v.union(
   v.literal("inboundCancelled"),
   v.literal("failedNoTemplate"),
   v.literal("failedOther"),
+  v.literal("failedCalendarCancel"),
 );
 
 // One row per alert a salon can receive. `kind` is on the row, not on the call
@@ -169,6 +171,24 @@ const ALERT_COPY: Record<
       tr: "{who} kişisine gönderim başarısız oldu. Sağlayıcının bildirdiği hata: {detail}",
       en: "The send to {who} failed. The provider reported: {detail}",
       de: "Der Versand an {who} ist fehlgeschlagen. Der Anbieter meldet: {detail}",
+    },
+  },
+  // Not failedOther: that one says a message did not send, and this is the
+  // opposite shape — the customer reached us, we could not reach the calendar.
+  // Rides the failed-send toggle rather than introducing a third AlertKind,
+  // because it is the same question for the owner: something did not land.
+  // The slot is the actionable part, so the body leads with it.
+  failedCalendarCancel: {
+    kind: "failed-send",
+    subject: {
+      tr: "{who} iptal etti, takvime işlenmedi",
+      en: "{who} cancelled, but your calendar did not update",
+      de: "{who} hat storniert, Ihr Kalender wurde nicht aktualisiert",
+    },
+    body: {
+      tr: "{who} randevusunu WhatsApp'tan iptal etti, ancak iptal cal.com takviminize işlenemedi. Saat hâlâ dolu görünüyor — takvimden elle silmeniz gerekiyor. Bildirilen hata: {detail}",
+      en: "{who} cancelled their appointment on WhatsApp, but the cancellation did not reach your cal.com calendar. The slot still looks booked — remove it by hand. The error was: {detail}",
+      de: "{who} hat den Termin über WhatsApp storniert, die Stornierung hat Ihren cal.com-Kalender aber nicht erreicht. Der Termin gilt weiter als gebucht — bitte manuell löschen. Fehlermeldung: {detail}",
     },
   },
 };

@@ -261,6 +261,48 @@ export const stampConfirmationSent = internalMutation({
 
 // Webhook-side transition (button tap / EVET / İPTAL). Not org-authed — the
 // caller (webhook.ts) already resolved the org and passes the row it loaded.
+// ---- Writes that follow a cal.com confirmation ----
+//
+// Both lanes (voice via http.ts, WhatsApp via the pushCancelToCalcom action)
+// call cal.com FIRST and only then land here. cal.com owns the slot inventory,
+// the salon's Google Calendar and the notification emails, so a status written
+// before cal.com agrees is a slot the salon holds for someone who is not
+// coming. Never patch status straight from a webhook handler again.
+
+export const markCancelled = internalMutation({
+  args: { appointmentId: v.id("appointments") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.appointmentId, { status: "cancelled" });
+    return null;
+  },
+});
+
+// externalUid moves because cal.com's reschedule mints a new booking and
+// retires the uid we were holding.
+export const markRescheduled = internalMutation({
+  args: {
+    appointmentId: v.id("appointments"),
+    startAt: v.number(),
+    externalUid: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment) return null;
+    await ctx.db.patch(args.appointmentId, {
+      startAt: args.startAt,
+      // A new time invalidates the reminders already sent for the old one.
+      status: "scheduled",
+      reminderSentOffsets: [],
+      confirmationSentAt: undefined,
+      ...(args.externalUid ? { externalUid: args.externalUid } : {}),
+    });
+    await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
+    return null;
+  },
+});
+
 export function nextUpcomingOf(
   appointments: Doc<"appointments">[],
   now: number,

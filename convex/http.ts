@@ -355,7 +355,7 @@ http.route({
           });
           if (!result.ok) return respond({ cancelled: false, error: result.reason });
         }
-        await ctx.runMutation(internal.retell.markCancelled, {
+        await ctx.runMutation(internal.appointments.markCancelled, {
           appointmentId: found.appointmentId,
         });
         return respond({ cancelled: true });
@@ -375,7 +375,7 @@ http.route({
         // cal.com minted a new booking; carry its uid or the next cancel 404s.
         newUid = result.uid;
       }
-      await ctx.runMutation(internal.retell.markRescheduled, {
+      await ctx.runMutation(internal.appointments.markRescheduled, {
         appointmentId: found.appointmentId,
         startAt,
         externalUid: newUid,

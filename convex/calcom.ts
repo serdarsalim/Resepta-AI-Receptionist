@@ -1,7 +1,15 @@
 import { v } from "convex/values";
-import { internalMutation, mutation } from "./_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireOwner } from "./lib/orgAuth";
 import { scheduleConfirmationIfConfigured } from "./appointments";
+import { cancelBooking } from "./lib/calcomApi";
+import { queueOrgAlert } from "./lib/alerts";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
 // themselves there); Randevu is the WhatsApp layer on top. The org is resolved
@@ -173,5 +181,65 @@ export const handleCalcomEvent = internalMutation({
     });
     await scheduleConfirmationIfConfigured(ctx, org._id, appointmentId);
     return { ok: true };
+  },
+});
+
+// ---- Pushing a WhatsApp cancel back to cal.com ----
+
+export const calcomKeyOf = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    return org?.calcomApiKey ?? null;
+  },
+});
+
+// A customer tapping Cancel on WhatsApp arrives in a mutation, and a Convex
+// mutation cannot reach the network — so the tap schedules this instead of
+// patching status itself. Same order as the voice lane: cal.com first, our row
+// second. If cal.com refuses, the appointment deliberately stays as it was and
+// the owner gets told, because the alternative is Randevu showing "cancelled"
+// over a slot cal.com still holds blocked for a customer who is not coming.
+export const pushCancelToCalcom = internalAction({
+  args: {
+    appointmentId: v.id("appointments"),
+    orgId: v.id("orgs"),
+    externalUid: v.string(),
+    who: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const apiKey = await ctx.runQuery(internal.calcom.calcomKeyOf, {
+      orgId: args.orgId,
+    });
+    const fail = async (detail: string) => {
+      console.error(
+        `calcom cancel failed for appointment ${args.appointmentId}: ${detail}`,
+      );
+      await queueOrgAlert(ctx, {
+        orgId: args.orgId,
+        template: "failedCalendarCancel",
+        who: args.who,
+        detail,
+      });
+    };
+    if (!apiKey) {
+      await fail("no cal.com API key on this org");
+      return null;
+    }
+    const result = await cancelBooking({
+      apiKey,
+      uid: args.externalUid,
+      reason: "Cancelled by the customer on WhatsApp",
+    });
+    if (!result.ok) {
+      await fail(result.reason);
+      return null;
+    }
+    await ctx.runMutation(internal.appointments.markCancelled, {
+      appointmentId: args.appointmentId,
+    });
+    return null;
   },
 });

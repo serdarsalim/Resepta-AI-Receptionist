@@ -179,40 +179,9 @@ export const nextAppointmentForPhone = internalQuery({
   },
 });
 
-// Only ever called after cal.com has confirmed the cancellation.
-export const markCancelled = internalMutation({
-  args: { appointmentId: v.id("appointments") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.appointmentId, { status: "cancelled" });
-    return null;
-  },
-});
-
-// Same contract for the new time. externalUid moves because cal.com's
-// reschedule mints a new booking and retires the uid we held.
-export const markRescheduled = internalMutation({
-  args: {
-    appointmentId: v.id("appointments"),
-    startAt: v.number(),
-    externalUid: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const appointment = await ctx.db.get(args.appointmentId);
-    if (!appointment) return null;
-    await ctx.db.patch(args.appointmentId, {
-      startAt: args.startAt,
-      // A new time invalidates reminders already sent for the old one.
-      status: "scheduled",
-      reminderSentOffsets: [],
-      confirmationSentAt: undefined,
-      ...(args.externalUid ? { externalUid: args.externalUid } : {}),
-    });
-    await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
-    return null;
-  },
-});
+// The writes themselves live in appointments.ts (markCancelled,
+// markRescheduled) — the WhatsApp lane cancels through the same pair, and an
+// appointment state transition does not belong in the voice module.
 
 // ---- Contact properties written by the voice agent ----
 //
