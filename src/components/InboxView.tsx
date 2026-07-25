@@ -13,6 +13,8 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { FeedIcon, CHANNELS, type Channel } from "./FeedIcon";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import type { TranslationKey } from "@/lib/i18n";
+import { useSearch } from "@/lib/useTableState";
+import { SearchInput } from "./DataTable";
 
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -38,6 +40,7 @@ export function InboxView({
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
   const setAttention = useMutation(api.messages.setAttention);
+  const search = useSearch();
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
@@ -52,6 +55,12 @@ export function InboxView({
     setSelected(conversations[0].customerId);
     setFilter(conversations[0].lastChannel);
   }, [conversations]);
+
+  // Search reads the whole row, preview text included: a salon owner looks
+  // for "the one who asked about balayage", not for a name they remember.
+  const shown = (conversations ?? []).filter((c) =>
+    search.matches(c.name, c.phone, c.email, c.lastBody),
+  );
 
   const active = conversations?.find((c) => c.customerId === selected);
 
@@ -71,10 +80,18 @@ export function InboxView({
         <section
           className={`${selected ? "hidden lg:flex" : "flex"} min-h-0 min-w-0 flex-col`}
         >
-          {/* Deliberately EMPTY. This fixed-height track mirrors the right
-              column's name + channel-pills row so both card borders start on
-              the same horizontal line — delete it and the columns misalign. */}
-          <div className="h-9 shrink-0" />
+          {/* This fixed-height track mirrors the right column's name +
+              channel-pills row so both card borders start on the same
+              horizontal line. It used to be deliberately empty; search is the
+              right tenant for height the layout already spends. */}
+          <div className="flex h-9 shrink-0 items-center pb-1">
+            <SearchInput
+              value={search.query}
+              onChange={search.setQuery}
+              placeholder={t("inbox.search")}
+              className="w-full"
+            />
+          </div>
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
             {conversations === undefined ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
@@ -84,9 +101,13 @@ export function InboxView({
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
                 {t("inbox.empty")}
               </p>
+            ) : shown.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-[var(--muted)]">
+                {t("table.noMatches")}
+              </p>
             ) : (
               <ul>
-                {conversations.map((c) => {
+                {shown.map((c) => {
                   const isActive = c.customerId === selected;
                   const open = (next?: FeedFilter) => {
                     setSelected(c.customerId);

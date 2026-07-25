@@ -199,6 +199,11 @@ const dictionary = {
   "appointments.day": { tr: "Gün", en: "Day", de: "Tag" },
   "appointments.week": { tr: "Hafta", en: "Week", de: "Woche" },
   "appointments.today": { tr: "Bugün", en: "Today", de: "Heute" },
+  "appointments.search": {
+    tr: "Randevularda ara",
+    en: "Search appointments",
+    de: "Termine durchsuchen",
+  },
   "appointments.bookings": { tr: "randevu", en: "bookings", de: "Termine" },
   "appointments.unassigned": {
     tr: "Atanmamış",
@@ -251,8 +256,31 @@ const dictionary = {
     en: "No consent",
     de: "Keine Einwilligung",
   },
+  // The consent funnel needs a name for the other half. The cell itself stays
+  // blank when consent is on file: only the missing one is worth a word.
+  "customers.consentGiven": {
+    tr: "İzin var",
+    en: "Consent on file",
+    de: "Einwilligung liegt vor",
+  },
+  // One column header for the whole identity, since the table shows first and
+  // last name together.
+  "customers.name": { tr: "Ad soyad", en: "Name", de: "Name" },
+  "customers.search": {
+    tr: "Müşteri ara",
+    en: "Search customers",
+    de: "Kunden suchen",
+  },
+  "customers.noMatches": {
+    tr: "Aramanıza uyan müşteri yok",
+    en: "No customer matches",
+    de: "Keine passenden Kunden",
+  },
   // Record footer. "Last activity" rather than "last update": a salon cares
   // when the customer last got in touch, not when someone edited the row.
+  // Column header, where "Messaging consent" truncates to "Messagin…". A
+  // header labels its column, and the column only ever says one thing.
+  "customers.consentShort": { tr: "İzin", en: "Consent", de: "Einwilligung" },
   "customers.added": { tr: "Eklendi", en: "Added", de: "Angelegt" },
   "customers.lastActivity": {
     tr: "Son hareket",
@@ -431,6 +459,11 @@ const dictionary = {
     tr: "Gönderilemedi",
     en: "Failed to send",
     de: "Nicht gesendet",
+  },
+  "inbox.search": {
+    tr: "Konuşmalarda ara",
+    en: "Search conversations",
+    de: "Unterhaltungen durchsuchen",
   },
   "inbox.dismiss": {
     tr: "İlgilenildi olarak işaretle",
@@ -660,6 +693,37 @@ const dictionary = {
     en: "Only the business owner can change these settings.",
     de: "Diese Einstellungen kann nur der Inhaber des Betriebs ändern.",
   },
+
+  // Table chrome. Shared by every list that adopts the DataTable primitives,
+  // so the words stay identical from one view to the next.
+  "table.columns": { tr: "Sütunlar", en: "Columns", de: "Spalten" },
+  "table.searchColumns": {
+    tr: "Sütun ara",
+    en: "Search columns",
+    de: "Spalten suchen",
+  },
+  "table.filterColumn": {
+    tr: "Sütunu filtrele",
+    en: "Filter column",
+    de: "Spalte filtern",
+  },
+  "table.noMatches": { tr: "Eşleşme yok", en: "No matches", de: "Keine Treffer" },
+  // The funnel entry for rows with nothing in that column.
+  "table.blank": { tr: "Boş", en: "Blank", de: "Leer" },
+  "table.clearFilters": {
+    tr: "Filtreleri temizle",
+    en: "Clear filters",
+    de: "Filter zurücksetzen",
+  },
+  "table.exportCsv": {
+    tr: "CSV olarak indir",
+    en: "Download CSV",
+    de: "Als CSV herunterladen",
+  },
+  // Relative dates stop at yesterday; older rows read as a real date, so
+  // nobody has to count back from "16 days ago".
+  "time.today": { tr: "Bugün", en: "Today", de: "Heute" },
+  "time.yesterday": { tr: "Dün", en: "Yesterday", de: "Gestern" },
 
   "common.save": { tr: "Kaydet", en: "Save", de: "Speichern" },
   "common.saving": {

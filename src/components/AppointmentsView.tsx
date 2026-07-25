@@ -15,6 +15,8 @@ import {
   toDatetimeLocalValue,
 } from "@/lib/datetime";
 import { PhoneInput } from "./PhoneField";
+import { useSearch } from "@/lib/useTableState";
+import { SearchInput } from "./DataTable";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -51,6 +53,7 @@ export function AppointmentsView({
   // The day the calendar is looking at. Day view steps it by one, week view
   // by seven, so one piece of state serves both.
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
+  const search = useSearch();
 
   // Two weeks back → six weeks forward covers the list AND every reachable
   // week-view page from one subscription.
@@ -67,6 +70,14 @@ export function AppointmentsView({
   const byDay = useMemo(() => {
     const groups = new Map<string, Appointment[]>();
     for (const appointment of appointments ?? []) {
+      const customer = appointment.customer;
+      const matches = search.matches(
+        customer ? `${customer.firstName} ${customer.lastName ?? ""}` : "",
+        customer?.phone,
+        appointment.serviceName,
+        appointment.staffName,
+      );
+      if (!matches) continue;
       const day = new Date(appointment.startAt).toDateString();
       const bucket = groups.get(day) ?? [];
       bucket.push(appointment);
@@ -75,7 +86,7 @@ export function AppointmentsView({
     return [...groups.entries()].sort(
       (a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime(),
     );
-  }, [appointments]);
+  }, [appointments, search]);
 
   return (
     <div
@@ -83,7 +94,16 @@ export function AppointmentsView({
         view === "list" ? "space-y-4" : "flex h-full min-h-0 flex-col gap-4"
       }
     >
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {view === "list" && (
+          <SearchInput
+            value={search.query}
+            onChange={search.setQuery}
+            placeholder={t("appointments.search")}
+            className="w-full sm:mr-auto sm:w-64"
+          />
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
         {/* Segmented control, not loose pills: three views of one thing read
             as one control. Selected sits on --background so it stays visible
             against the track in dark mode. */}
@@ -109,6 +129,7 @@ export function AppointmentsView({
         >
           {adding ? t("common.cancel") : t("appointments.new")}
         </button>
+        </div>
       </div>
 
       {adding && (
