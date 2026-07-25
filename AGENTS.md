@@ -112,3 +112,11 @@ clips on the nearest `overflow-hidden`/scroll ancestor — every card and the
 shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
 implementations. Serdar has flagged this repeatedly across projects; treat a
 clipped popup as a bug you introduced knowingly.
+
+## Borders only when absolutely necessary (Serdar's design language)
+
+Borders belong to CONTAINERS (cards, inputs, dropdown panels) — never to
+buttons. Secondary/ghost buttons are text + hover wash
+(`text-muted hover:bg-muted-bg`), primary buttons are solid accent fill.
+A bordered chip where a ghost button belongs reads as sloppy; check every
+new control against this before shipping it.

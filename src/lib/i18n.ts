@@ -33,6 +33,7 @@ const dictionary = {
   "nav.appointments": { tr: "Randevular", en: "Appointments" },
   "nav.customers": { tr: "Müşteriler", en: "Customers" },
   "nav.messages": { tr: "Mesajlar", en: "Messages" },
+  "nav.calls": { tr: "Aramalar", en: "Calls" },
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 
@@ -115,8 +116,12 @@ const dictionary = {
   "settings.language": { tr: "Dil", en: "Language" },
   "settings.reminders": { tr: "Hatırlatmalar", en: "Reminders" },
   "settings.reminderOffsets": {
-    tr: "Randevudan kaç saat önce",
-    en: "Hours before appointment",
+    tr: "Hatırlatma zamanları",
+    en: "Reminder times",
+  },
+  "settings.reminderOffsetsHint": {
+    tr: "Her seçili zaman için ayrı bir hatırlatma mesajı gönderilir.",
+    en: "One reminder message is sent for each selected time.",
   },
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
@@ -141,6 +146,22 @@ const dictionary = {
   },
   "settings.templateName": { tr: "Şablon adı", en: "Template name" },
   "settings.templateStatus": { tr: "Durum", en: "Status" },
+  "calls.none": { tr: "Henüz arama yok", en: "No calls yet" },
+  "calls.transcript": { tr: "Konuşma dökümü", en: "Transcript" },
+  "calls.recording": { tr: "Kayıt", en: "Recording" },
+
+  "settings.voice": { tr: "Sesli asistan", en: "Voice agent" },
+  "settings.voiceHint": {
+    tr: "Retell agent'ınız salonun telefonunu yanıtlar ve randevu alır. Fonksiyon adresi ve arama-sonu webhook'unu Retell panosunda bu URL'lere yönlendirin.",
+    en: "Your Retell agent answers the salon's phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
+  },
+  "settings.retellAgentId": { tr: "Retell agent ID", en: "Retell agent ID" },
+  "settings.inboundNumber": { tr: "Gelen arama numarası", en: "Inbound number" },
+  "settings.transferNumber": { tr: "Aktarma numarası", en: "Transfer number" },
+  "settings.voiceEnabled": { tr: "Etkin", en: "Enabled" },
+  "settings.calcomApiKey": { tr: "cal.com API anahtarı", en: "cal.com API key" },
+  "settings.calcomEventType": { tr: "cal.com event type ID", en: "cal.com event type ID" },
+
   "settings.bookings": { tr: "Rezervasyonlar", en: "Bookings" },
   "settings.calcomHint": {
     tr: "Bu adresi cal.com webhook ayarlarına yapıştırın (BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED).",

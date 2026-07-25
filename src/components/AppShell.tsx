@@ -12,11 +12,17 @@ import { useTheme, type Theme } from "@/lib/theme";
 // fixed-height pane, recessed sidebar, floating main card that scrolls
 // internally, settings behind the initials chip — never a nav tab.
 
-export type TabId = "appointments" | "customers" | "messages" | "settings";
+export type TabId =
+  | "appointments"
+  | "customers"
+  | "calls"
+  | "messages"
+  | "settings";
 
 const NAV_TABS: { id: TabId; key: TranslationKey }[] = [
   { id: "appointments", key: "nav.appointments" },
   { id: "customers", key: "nav.customers" },
+  { id: "calls", key: "nav.calls" },
   { id: "messages", key: "nav.messages" },
 ];
 
@@ -268,6 +274,7 @@ export function AppShell({
 }) {
   const { t, language, setLanguage } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
+  const failedCount = useQuery(api.messages.failedCount, {});
 
   // The org's language is the app's language — set in Settings, nowhere else.
   const orgLanguage = settings?.org.language;
@@ -299,7 +306,10 @@ export function AppShell({
                     : "text-[var(--muted)] hover:bg-[var(--row-hover-bg)] hover:text-[var(--foreground)]"
                 }`}
               >
-                {t(entry.key)}
+                <span className="flex-1 text-left">{t(entry.key)}</span>
+                {entry.id === "messages" && (failedCount ?? 0) > 0 && (
+                  <span className="h-2 w-2 rounded-full bg-red-500" aria-label="failed sends" />
+                )}
               </button>
             );
           })}

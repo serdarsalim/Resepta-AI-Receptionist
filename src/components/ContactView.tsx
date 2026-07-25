@@ -60,7 +60,7 @@ export function ContactView({
       <div className="mb-3 flex items-center gap-3">
         <button
           onClick={onClose}
-          className="rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
+          className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         >
           ←
         </button>

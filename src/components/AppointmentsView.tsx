@@ -69,15 +69,15 @@ export function AppointmentsView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-sm">
+          <div className="flex gap-1 text-sm">
             {(["list", "week"] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setView(mode)}
-                className={`px-3 py-1.5 ${
+                className={`rounded-md px-3 py-1.5 transition-colors ${
                   view === mode
                     ? "bg-[var(--muted-bg)] font-medium"
-                    : "text-[var(--muted)]"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
                 {mode === "list" ? t("appointments.list") : t("appointments.week")}
@@ -380,19 +380,19 @@ function WeekGrid({
     <section className="space-y-2">
       <div className="flex items-center gap-2">
         <button
-          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
           onClick={() => onWeekOffset(Math.max(-2, weekOffset - 1))}
         >
           ‹
         </button>
         <button
-          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
           onClick={() => onWeekOffset(0)}
         >
           {formatDayHeading(Date.now(), language)}
         </button>
         <button
-          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
           onClick={() => onWeekOffset(Math.min(5, weekOffset + 1))}
         >
           ›

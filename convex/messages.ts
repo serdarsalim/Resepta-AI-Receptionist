@@ -144,3 +144,21 @@ export async function logInboundRow(
     status: "received",
   });
 }
+
+// Red-dot badge on the Messages tab: failed sends in the last 48h.
+export const failedCount = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(200);
+    const cutoff = Date.now() - 48 * 3600_000;
+    return recent.filter(
+      (m) => m.status === "failed" && m._creationTime > cutoff,
+    ).length;
+  },
+});

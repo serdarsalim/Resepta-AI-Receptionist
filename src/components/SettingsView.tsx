@@ -239,6 +239,109 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+// Reminder timing as toggle chips — a salon owner taps "1 gün önce", never
+// types "24, 2". Amber = selection (Nudge: amber selects, blue acts).
+const OFFSET_PRESETS = [48, 24, 3, 2, 1];
+
+function OffsetChips({
+  selected,
+  onChange,
+}: {
+  selected: number[];
+  onChange: (next: number[]) => void;
+}) {
+  const { language } = useLanguage();
+  const label = (h: number) =>
+    language === "tr"
+      ? h % 24 === 0
+        ? `${h / 24} gün önce`
+        : `${h} saat önce`
+      : h % 24 === 0
+        ? `${h / 24} day${h > 24 ? "s" : ""} before`
+        : `${h} hour${h > 1 ? "s" : ""} before`;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {OFFSET_PRESETS.map((hours) => {
+        const active = selected.includes(hours);
+        return (
+          <button
+            key={hours}
+            type="button"
+            onClick={() =>
+              onChange(
+                active
+                  ? selected.filter((h) => h !== hours)
+                  : [...selected, hours].sort((a, b) => b - a),
+              )
+            }
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              active
+                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {label(hours)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) {
+  const { t } = useLanguage();
+  const config = useQuery(api.retell.config, {});
+  const setConfig = useMutation(api.retell.setConfig);
+  if (config === undefined) return null;
+  const commit = (patch: Partial<{ retellAgentId: string; inboundNumber: string; transferNumber: string; enabled: boolean }>) => {
+    void setConfig({
+      retellAgentId: patch.retellAgentId ?? config?.retellAgentId ?? "",
+      inboundNumber: patch.inboundNumber ?? config?.inboundNumber,
+      transferNumber: patch.transferNumber ?? config?.transferNumber,
+      enabled: patch.enabled ?? config?.enabled ?? false,
+    });
+  };
+  return (
+    <Card title={t("settings.voice")} tip={t("settings.voiceHint")} disabled={!isOwner}>
+      <div className={ROW_GRID}>
+        <RowLabel label={t("settings.retellAgentId")} />
+        <input
+          defaultValue={config?.retellAgentId ?? ""}
+          onBlur={(e) => e.target.value.trim() && commit({ retellAgentId: e.target.value })}
+        />
+        <RowLabel label={t("settings.inboundNumber")} />
+        <input
+          defaultValue={config?.inboundNumber ?? ""}
+          placeholder="+902121234567"
+          onBlur={(e) => config && commit({ inboundNumber: e.target.value })}
+        />
+        <RowLabel label={t("settings.transferNumber")} />
+        <input
+          defaultValue={config?.transferNumber ?? ""}
+          placeholder="+905321234567"
+          onBlur={(e) => config && commit({ transferNumber: e.target.value })}
+        />
+        <RowLabel label={t("settings.voiceEnabled")} />
+        <Toggle
+          checked={config?.enabled ?? false}
+          onChange={(next) => config && commit({ enabled: next })}
+          disabled={!config}
+        />
+      </div>
+      {config && (
+        <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
+          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+            {siteUrl}/retell/functions
+          </code>
+          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+            {siteUrl}/retell/call-ended
+          </code>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
@@ -247,6 +350,7 @@ export function SettingsView() {
   const disconnectWhatsapp = useMutation(api.orgs.disconnectWhatsapp);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
   const rotateToken = useMutation(api.calcom.rotateWebhookToken);
+  const setCalcomApi = useMutation(api.calcom.setApi);
   const [calcomUrl, setCalcomUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -306,17 +410,10 @@ export function SettingsView() {
 
       <Card title={t("settings.reminders")} disabled={!isOwner}>
         <div className={ROW_GRID}>
-          <RowLabel label={t("settings.reminderOffsets")} hint="24, 2" />
-          <input
-            defaultValue={settings.org.reminderOffsetsHours.join(", ")}
-            onBlur={(e) =>
-              void update({
-                reminderOffsetsHours: e.target.value
-                  .split(",")
-                  .map((part) => Number(part.trim()))
-                  .filter((n) => Number.isFinite(n) && n > 0),
-              })
-            }
+          <RowLabel label={t("settings.reminderOffsets")} hint={t("settings.reminderOffsetsHint")} />
+          <OffsetChips
+            selected={settings.org.reminderOffsetsHours}
+            onChange={(next) => void update({ reminderOffsetsHours: next })}
           />
           <RowLabel label={t("settings.sendConfirmation")} />
           <Toggle
@@ -341,7 +438,7 @@ export function SettingsView() {
               {settings.whatsapp.tokenTail}
             </span>
             <button
-              className="ml-auto rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-red-600 dark:text-red-400"
+              className="ml-auto rounded-lg px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
               onClick={() => void disconnectWhatsapp({})}
             >
               {t("settings.waDisconnect")}
@@ -414,10 +511,25 @@ export function SettingsView() {
         </div>
       </Card>
 
+      <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />
+
       <Card title={t("settings.bookings")} tip={t("settings.calcomHint")} disabled={!isOwner}>
+        <div className={`${ROW_GRID} mb-3`}>
+          <RowLabel label={t("settings.calcomApiKey")} />
+          <input
+            type="password"
+            placeholder={settings.org.calcomApiKeyTail ? `••••${settings.org.calcomApiKeyTail}` : "cal_live_…"}
+            onBlur={(e) => e.target.value.trim() && void setCalcomApi({ apiKey: e.target.value })}
+          />
+          <RowLabel label={t("settings.calcomEventType")} />
+          <input
+            defaultValue={settings.org.calcomEventTypeId ?? ""}
+            onBlur={(e) => void setCalcomApi({ eventTypeId: e.target.value })}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
+            className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
             onClick={async () => {
               const token = await rotateToken({});
               setCalcomUrl(`${siteUrl}/calcom/webhook?token=${token}`);
@@ -432,7 +544,7 @@ export function SettingsView() {
                 {calcomUrl}
               </code>
               <button
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
+                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
                 onClick={() => {
                   void navigator.clipboard.writeText(calcomUrl);
                   setCopied(true);
