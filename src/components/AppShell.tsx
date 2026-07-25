@@ -11,7 +11,9 @@ import { useTheme, type Theme } from "@/lib/theme";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
 // fixed-height pane, recessed sidebar, floating main card that scrolls
-// internally, settings behind the initials chip — never a nav tab.
+// internally. Settings is a sidebar destination in its own group at the foot
+// (Nudge does the same); the initials menu keeps a shortcut to it because the
+// sidebar is hidden on phones.
 
 export type TabId = "appointments" | "customers" | "inbox" | "settings";
 
@@ -67,6 +69,13 @@ const InboxIcon = makeIcon(
     <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </>,
 );
+// One gear definition, used at 18px in the sidebar and 16px in the user menu.
+const SettingsIcon = makeIcon(
+  <>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </>,
+);
 
 // Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
 // neutral — hue on the symbol plus a bold label is the selected cue, so the
@@ -90,6 +99,18 @@ const NAV_TABS: {
     color: "#8b5cf6",
   },
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
+];
+
+// Settings is config, not a place you work, so it sits in its own group at the
+// foot of the sidebar (Nudge's grammar: the config group closes the nav). It
+// wears --foreground rather than a hue for the same reason.
+const FOOT_TABS: typeof NAV_TABS = [
+  {
+    id: "settings",
+    key: "nav.settings",
+    Icon: SettingsIcon,
+    color: "var(--foreground)",
+  },
 ];
 
 // Nudge's mark, drawn inline rather than shipped as a file: the square takes
@@ -204,14 +225,6 @@ function OnboardingGate() {
   );
 }
 
-function GearIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
 function SunIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -348,7 +361,7 @@ function UserMenu({
             className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
           >
             <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-              <GearIcon />
+              <SettingsIcon width={16} height={16} />
             </span>
             {t("nav.settings")}
           </button>
@@ -534,6 +547,69 @@ function WorkspaceSwitcher({
   );
 }
 
+// One sidebar row, shared by the work group and the config group at the foot.
+function SidebarButton({
+  entry,
+  active,
+  collapsed,
+  dot,
+  onClick,
+}: {
+  entry: (typeof NAV_TABS)[number];
+  active: boolean;
+  collapsed: boolean;
+  // Failed sends. Rides the icon's corner when collapsed, the trailing edge
+  // otherwise — either way it never moves the label.
+  dot?: boolean;
+  onClick: () => void;
+}) {
+  const { t } = useLanguage();
+  const { Icon, color } = entry;
+  const label = t(entry.key);
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      title={collapsed ? label : undefined}
+      // The tab's hue as a variable so the collapsed active pill can tint with
+      // it. Harmless when inactive.
+      style={{ "--tab-hue": color } as React.CSSProperties}
+      className={`group relative flex h-9 items-center rounded-lg text-sm transition-colors ${
+        collapsed
+          ? // A centered rounded square around the symbol, not a full-width
+            // squat oval hugging it.
+            "mx-auto h-9 w-9 justify-center px-0"
+          : "w-full gap-3 px-3"
+      } ${
+        active
+          ? // Expanded keeps the neutral wash — hue lives on the symbol and the
+            // bold label finishes the job. Collapsed has no label, so the pill
+            // earns a tint of the tab's own hue as the stronger selected cue.
+            `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
+              collapsed ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]" : ""
+            }`
+          : "font-medium text-[var(--muted)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+      }`}
+    >
+      {/* Symbol carries the hue. Muted when idle so it accents rather than
+          shouts; full strength once active or hovered. */}
+      <Icon
+        className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
+        style={{ color, opacity: active ? 1 : undefined }}
+      />
+      {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
+      {dot && (
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full bg-red-500 ${
+            collapsed ? "absolute right-1.5 top-1.5" : "ml-auto"
+          }`}
+          aria-label="failed sends"
+        />
+      )}
+    </button>
+  );
+}
+
 export function AppShell({
   tab,
   onTab,
@@ -606,61 +682,31 @@ export function AppShell({
           </button>
         </div>
 
-        <nav className={`flex-1 space-y-0.5 py-1 ${collapsed ? "px-1" : "px-2"}`}>
-          {NAV_TABS.map(({ id, key, Icon, color }) => {
-            const active = tab === id;
-            const label = t(key);
-            return (
-              <button
-                key={id}
-                onClick={() => onTab(id)}
-                aria-current={active ? "page" : undefined}
-                title={collapsed ? label : undefined}
-                // The tab's hue as a variable so the collapsed active pill can
-                // tint with it. Harmless when inactive.
-                style={{ "--tab-hue": color } as React.CSSProperties}
-                className={`group relative flex h-9 items-center rounded-lg text-sm transition-colors ${
-                  collapsed
-                    ? // A centered rounded square around the symbol, not a
-                      // full-width squat oval hugging it.
-                      "mx-auto h-9 w-9 justify-center px-0"
-                    : "w-full gap-3 px-3"
-                } ${
-                  active
-                    ? // Expanded keeps the neutral wash — hue lives on the
-                      // symbol and the bold label finishes the job. Collapsed
-                      // has no label, so the pill earns a tint of the tab's own
-                      // hue as the stronger selected cue.
-                      `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
-                        collapsed
-                          ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]"
-                          : ""
-                      }`
-                    : "font-medium text-[var(--muted)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
-                }`}
-              >
-                {/* Symbol carries the hue. Muted when idle so it accents
-                    rather than shouts; full strength once active or hovered. */}
-                <Icon
-                  className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
-                  style={{ color, opacity: active ? 1 : undefined }}
-                />
-                {!collapsed && (
-                  <span className="flex-1 truncate text-left">{label}</span>
-                )}
-                {id === "inbox" && (failedCount ?? 0) > 0 && (
-                  // Collapsed there's no label to sit beside, so the dot rides
-                  // the icon's top-right corner instead of the trailing edge.
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full bg-red-500 ${
-                      collapsed ? "absolute right-1.5 top-1.5" : "ml-auto"
-                    }`}
-                    aria-label="failed sends"
-                  />
-                )}
-              </button>
-            );
-          })}
+        <nav className={`flex flex-1 flex-col py-1 ${collapsed ? "px-1" : "px-2"}`}>
+          <div className="space-y-0.5">
+            {NAV_TABS.map((entry) => (
+              <SidebarButton
+                key={entry.id}
+                entry={entry}
+                active={tab === entry.id}
+                collapsed={collapsed}
+                dot={entry.id === "inbox" && (failedCount ?? 0) > 0}
+                onClick={() => onTab(entry.id)}
+              />
+            ))}
+          </div>
+          {/* Config closes the nav, under a hairline. */}
+          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pt-1.5">
+            {FOOT_TABS.map((entry) => (
+              <SidebarButton
+                key={entry.id}
+                entry={entry}
+                active={tab === entry.id}
+                collapsed={collapsed}
+                onClick={() => onTab(entry.id)}
+              />
+            ))}
+          </div>
         </nav>
       </aside>
 

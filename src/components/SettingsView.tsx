@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANGUAGES } from "@/lib/i18n";
+import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
@@ -27,7 +27,9 @@ const ROW_GRID =
   "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
 
 function Card({ title, tip, disabled, children }: {
-  title: string;
+  // Omitted when the section chip above already names the card — a section
+  // with one card would otherwise stack "Reminders" under "Reminders".
+  title?: string;
   tip?: string;
   // Staff see owner-only cards read-only; a native fieldset disables every
   // input/button inside without per-control wiring.
@@ -36,10 +38,12 @@ function Card({ title, tip, disabled, children }: {
 }) {
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {tip && <InfoTip text={tip} />}
-      </div>
+      {title && (
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {tip && <InfoTip text={tip} />}
+        </div>
+      )}
       <fieldset disabled={disabled} className={disabled ? "opacity-70" : undefined}>
         {children}
       </fieldset>
@@ -94,7 +98,7 @@ function TeamCard({ isOwner }: { isOwner: boolean }) {
                 </span>
                 {isOwner && (
                   <button
-                    className="text-xs text-red-600 underline dark:text-red-400"
+                    className="rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
                     onClick={() => void revokeInvite({ inviteId: pendingInvite._id })}
                   >
                     {t("team.revoke")}
@@ -127,7 +131,7 @@ function TeamCard({ isOwner }: { isOwner: boolean }) {
                 type="email"
                 required
                 placeholder="ornek@gmail.com"
-                className="w-64 flex-1"
+                className="w-56"
               />
               <select name="role" defaultValue="staff" className="w-auto">
                 <option value="staff">{t("role.staff")}</option>
@@ -172,7 +176,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             </span>
             {isOwner && (
               <button
-                className="text-xs text-red-600 underline dark:text-red-400"
+                className="rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
                 onClick={() => void removeField({ fieldId: field._id })}
               >
                 {t("common.delete")}
@@ -207,14 +211,14 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             }
           }}
         >
-          <label className="text-sm">
+          <label className="block text-sm">
             {t("fields.label")}
-            <input name="label" required className="mt-1 w-44" />
+            <input name="label" required className="mt-1 block w-44" />
           </label>
-          <label className="text-sm">
-            {t("settings.templateStatus")}
+          <label className="block text-sm">
+            {t("fields.typeLabel")}
             <select
-              className="mt-1 w-auto"
+              className="mt-1 block w-auto"
               value={type}
               onChange={(e) => setType(e.target.value as typeof type)}
             >
@@ -225,9 +229,9 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             </select>
           </label>
           {type === "select" && (
-            <label className="text-sm">
+            <label className="block text-sm">
               {t("fields.options")}
-              <input name="options" className="mt-1 w-56" />
+              <input name="options" className="mt-1 block w-56" />
             </label>
           )}
           <button
@@ -296,7 +300,9 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
   const { t } = useLanguage();
   const config = useQuery(api.retell.config, {});
   const setConfig = useMutation(api.retell.setConfig);
-  if (config === undefined) return null;
+  if (config === undefined) {
+    return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+  }
   const commit = (patch: Partial<{ retellAgentId: string; inboundNumber: string; transferNumber: string; enabled: boolean }>) => {
     void setConfig({
       retellAgentId: patch.retellAgentId ?? config?.retellAgentId ?? "",
@@ -306,7 +312,7 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
     });
   };
   return (
-    <Card title={t("settings.voice")} tip={t("settings.voiceHint")} disabled={!isOwner}>
+    <Card disabled={!isOwner}>
       <div className={ROW_GRID}>
         <RowLabel label={t("settings.retellAgentId")} />
         <input
@@ -331,23 +337,68 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
           onChange={(next) => config && commit({ enabled: next })}
           disabled={!config}
         />
+        {config && (
+          <>
+            <RowLabel label={t("settings.voiceEndpoints")} hint={t("settings.voiceHint")} />
+            <div className="min-w-0 space-y-1 text-xs text-[var(--muted)]">
+              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+                {siteUrl}/retell/functions
+              </code>
+              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+                {siteUrl}/retell/call-ended
+              </code>
+            </div>
+          </>
+        )}
       </div>
-      {config && (
-        <div className="mt-3 space-y-1 text-xs text-[var(--muted)]">
-          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-            {siteUrl}/retell/functions
-          </code>
-          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-            {siteUrl}/retell/call-ended
-          </code>
-        </div>
-      )}
     </Card>
+  );
+}
+
+// Settings is one sidebar destination with sections inside it, rather than
+// eight cards on one long scroll. Workspace setup leads: it is the business
+// itself (name, who works here, what a customer record holds); the rest are
+// the channels hanging off it.
+type Section = "workspace" | "reminders" | "whatsapp" | "bookings" | "voice";
+
+const SECTIONS: { id: Section; key: TranslationKey }[] = [
+  { id: "workspace", key: "settings.section.workspace" },
+  { id: "reminders", key: "settings.reminders" },
+  { id: "whatsapp", key: "settings.whatsapp" },
+  { id: "bookings", key: "settings.bookings" },
+  { id: "voice", key: "settings.voice" },
+];
+
+// Active section is a solid accent fill; the rest are text + hover wash. No
+// border on either state — borders belong to containers, not buttons.
+function SectionChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`rounded-full px-3 py-1 text-sm transition-colors ${
+        active
+          ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
+          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
 export function SettingsView() {
   const { t } = useLanguage();
+  const [section, setSection] = useState<Section>("workspace");
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
   const connectWhatsapp = useMutation(api.orgs.connectWhatsapp);
@@ -369,197 +420,233 @@ export function SettingsView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <div className="flex flex-wrap items-center gap-1">
+        {SECTIONS.map((entry) => (
+          <SectionChip
+            key={entry.id}
+            active={section === entry.id}
+            label={t(entry.key)}
+            onClick={() => setSection(entry.id)}
+          />
+        ))}
+      </div>
+
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
         </p>
       )}
-      <Card title={t("settings.business")} disabled={!isOwner}>
-        <div className={ROW_GRID}>
-          <RowLabel label={t("settings.businessName")} />
-          <input
-            defaultValue={settings.org.name}
-            onBlur={(e) => void update({ name: e.target.value })}
-          />
-          <RowLabel label={t("settings.timezone")} />
-          <select
-            defaultValue={settings.org.timezone}
-            onChange={(e) => void update({ timezone: e.target.value })}
-          >
-            {TIMEZONES.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </select>
-          <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
-          <input
-            defaultValue={settings.org.emailFrom ?? ""}
-            placeholder="info@salonunuz.com"
-            onBlur={(e) => void update({ emailFrom: e.target.value })}
-          />
-          <RowLabel label={t("settings.language")} />
-          <select
-            defaultValue={settings.org.language}
-            onChange={(e) => void update({ language: e.target.value })}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </Card>
 
-      <Card title={t("settings.reminders")} disabled={!isOwner}>
-        <div className={ROW_GRID}>
-          <RowLabel label={t("settings.reminderOffsets")} hint={t("settings.reminderOffsetsHint")} />
-          <OffsetChips
-            selected={settings.org.reminderOffsetsHours}
-            onChange={(next) => void update({ reminderOffsetsHours: next })}
-          />
-          <RowLabel label={t("settings.sendConfirmation")} />
-          <Toggle
-            checked={settings.org.sendBookingConfirmation}
-            onChange={(next) => void update({ sendBookingConfirmation: next })}
-          />
-        </div>
-      </Card>
-
-      <TeamCard isOwner={isOwner} />
-
-      <FieldsCard isOwner={isOwner} />
-
-      <Card title={t("settings.whatsapp")} disabled={!isOwner}>
-        {settings.whatsapp.connected ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-              {t("settings.waConnected")}
-            </span>
-            <span className="text-[var(--muted)]">
-              {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId} · ••••
-              {settings.whatsapp.tokenTail}
-            </span>
-            <button
-              className="ml-auto rounded-lg px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
-              onClick={() => void disconnectWhatsapp({})}
-            >
-              {t("settings.waDisconnect")}
-            </button>
-          </div>
-        ) : (
-          <form
-            className={ROW_GRID}
-            onSubmit={async (event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              await connectWhatsapp({
-                phoneNumberId: String(form.get("phoneNumberId") ?? ""),
-                accessToken: String(form.get("accessToken") ?? ""),
-                displayNumber: String(form.get("displayNumber") ?? "") || undefined,
-              });
-            }}
-          >
-            <RowLabel label={t("settings.waPhoneNumberId")} />
-            <input name="phoneNumberId" required />
-            <RowLabel label={t("customers.phone")} />
-            <input name="displayNumber" placeholder="+905321234567" />
-            <RowLabel label={t("settings.waToken")} />
-            <input name="accessToken" type="password" required />
-            <span />
-            <div>
-              <button
-                type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("settings.waConnect")}
-              </button>
-            </div>
-          </form>
-        )}
-      </Card>
-
-      <Card title={t("settings.templates")} tip={t("settings.templatesHint")} disabled={!isOwner}>
-        <div className="divide-y divide-[var(--border)]">
-          {settings.templates.map((template) => (
-            <div key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
-              <span className="flex items-center gap-2 text-sm">
-                {template.kind === "confirmation"
-                  ? t("settings.sendConfirmation")
-                  : t("settings.reminders")}
-                {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
-              </span>
+      {section === "workspace" && (
+        <>
+          <Card title={t("settings.business")} disabled={!isOwner}>
+            <div className={ROW_GRID}>
+              <RowLabel label={t("settings.businessName")} />
               <input
-                defaultValue={template.metaName}
-                onBlur={(e) =>
-                  void updateTemplate({ templateId: template._id, metaName: e.target.value })
-                }
+                defaultValue={settings.org.name}
+                onBlur={(e) => void update({ name: e.target.value })}
               />
+              <RowLabel label={t("settings.timezone")} />
               <select
-                defaultValue={template.status}
-                onChange={(e) =>
-                  void updateTemplate({
-                    templateId: template._id,
-                    status: e.target.value as "draft" | "pending" | "approved" | "rejected",
-                  })
-                }
+                defaultValue={settings.org.timezone}
+                onChange={(e) => void update({ timezone: e.target.value })}
               >
-                <option value="draft">draft</option>
-                <option value="pending">pending</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
+                {TIMEZONES.map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone}
+                  </option>
+                ))}
+              </select>
+              <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
+              <input
+                defaultValue={settings.org.emailFrom ?? ""}
+                placeholder="info@salonunuz.com"
+                onBlur={(e) => void update({ emailFrom: e.target.value })}
+              />
+              <RowLabel label={t("settings.language")} />
+              <select
+                defaultValue={settings.org.language}
+                onChange={(e) => void update({ language: e.target.value })}
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
               </select>
             </div>
-          ))}
-        </div>
-      </Card>
+          </Card>
 
-      <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />
+          <TeamCard isOwner={isOwner} />
 
-      <Card title={t("settings.bookings")} tip={t("settings.calcomHint")} disabled={!isOwner}>
-        <div className={`${ROW_GRID} mb-3`}>
-          <RowLabel label={t("settings.calcomApiKey")} />
-          <input
-            type="password"
-            placeholder={settings.org.calcomApiKeyTail ? `••••${settings.org.calcomApiKeyTail}` : "cal_live_…"}
-            onBlur={(e) => e.target.value.trim() && void setCalcomApi({ apiKey: e.target.value })}
-          />
-          <RowLabel label={t("settings.calcomEventType")} />
-          <input
-            defaultValue={settings.org.calcomEventTypeId ?? ""}
-            onBlur={(e) => void setCalcomApi({ eventTypeId: e.target.value })}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            onClick={async () => {
-              const token = await rotateToken({});
-              setCalcomUrl(`${siteUrl}/calcom/webhook?token=${token}`);
-              setCopied(false);
-            }}
-          >
-            {calcomUrl ? t("settings.calcomRotate") : t("settings.calcomGenerate")}
-          </button>
-          {calcomUrl && (
-            <>
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-1.5 text-xs">
-                {calcomUrl}
-              </code>
-              <button
-                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                onClick={() => {
-                  void navigator.clipboard.writeText(calcomUrl);
-                  setCopied(true);
+          <FieldsCard isOwner={isOwner} />
+        </>
+      )}
+
+      {section === "reminders" && (
+        <Card disabled={!isOwner}>
+          <div className={ROW_GRID}>
+            <RowLabel
+              label={t("settings.reminderOffsets")}
+              hint={t("settings.reminderOffsetsHint")}
+            />
+            <OffsetChips
+              selected={settings.org.reminderOffsetsHours}
+              onChange={(next) => void update({ reminderOffsetsHours: next })}
+            />
+            <RowLabel label={t("settings.sendConfirmation")} />
+            <Toggle
+              checked={settings.org.sendBookingConfirmation}
+              onChange={(next) => void update({ sendBookingConfirmation: next })}
+            />
+          </div>
+        </Card>
+      )}
+
+      {section === "whatsapp" && (
+        <>
+          <Card disabled={!isOwner}>
+            {settings.whatsapp.connected ? (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  {t("settings.waConnected")}
+                </span>
+                <span className="text-[var(--muted)]">
+                  {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId} · ••••
+                  {settings.whatsapp.tokenTail}
+                </span>
+                <button
+                  className="ml-auto rounded-lg px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
+                  onClick={() => void disconnectWhatsapp({})}
+                >
+                  {t("settings.waDisconnect")}
+                </button>
+              </div>
+            ) : (
+              <form
+                className={ROW_GRID}
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const form = new FormData(event.currentTarget);
+                  await connectWhatsapp({
+                    phoneNumberId: String(form.get("phoneNumberId") ?? ""),
+                    accessToken: String(form.get("accessToken") ?? ""),
+                    displayNumber: String(form.get("displayNumber") ?? "") || undefined,
+                  });
                 }}
               >
-                {copied ? t("common.copied") : t("common.copy")}
+                <RowLabel label={t("settings.waPhoneNumberId")} />
+                <input name="phoneNumberId" required />
+                <RowLabel label={t("customers.phone")} />
+                <input name="displayNumber" placeholder="+905321234567" />
+                <RowLabel label={t("settings.waToken")} />
+                <input name="accessToken" type="password" required />
+                <span />
+                <div>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+                  >
+                    {t("settings.waConnect")}
+                  </button>
+                </div>
+              </form>
+            )}
+          </Card>
+
+          <Card
+            title={t("settings.templates")}
+            tip={t("settings.templatesHint")}
+            disabled={!isOwner}
+          >
+            <div className="divide-y divide-[var(--border)]">
+              {settings.templates.map((template) => (
+                <div key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
+                  <span className="flex items-center gap-2 text-sm">
+                    {template.kind === "confirmation"
+                      ? t("settings.sendConfirmation")
+                      : t("settings.reminders")}
+                    {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
+                  </span>
+                  <input
+                    defaultValue={template.metaName}
+                    onBlur={(e) =>
+                      void updateTemplate({ templateId: template._id, metaName: e.target.value })
+                    }
+                  />
+                  <select
+                    defaultValue={template.status}
+                    onChange={(e) =>
+                      void updateTemplate({
+                        templateId: template._id,
+                        status: e.target.value as "draft" | "pending" | "approved" | "rejected",
+                      })
+                    }
+                  >
+                    <option value="draft">{t("template.draft")}</option>
+                    <option value="pending">{t("template.pending")}</option>
+                    <option value="approved">{t("template.approved")}</option>
+                    <option value="rejected">{t("template.rejected")}</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      )}
+
+      {section === "voice" && <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />}
+
+      {section === "bookings" && (
+        <Card disabled={!isOwner}>
+          <div className={ROW_GRID}>
+            <RowLabel label={t("settings.calcomApiKey")} />
+            <input
+              type="password"
+              placeholder={
+                settings.org.calcomApiKeyTail
+                  ? `••••${settings.org.calcomApiKeyTail}`
+                  : "cal_live_…"
+              }
+              onBlur={(e) => e.target.value.trim() && void setCalcomApi({ apiKey: e.target.value })}
+            />
+            <RowLabel label={t("settings.calcomEventType")} />
+            <input
+              defaultValue={settings.org.calcomEventTypeId ?? ""}
+              onBlur={(e) => void setCalcomApi({ eventTypeId: e.target.value })}
+            />
+            <RowLabel label={t("settings.calcomWebhook")} hint={t("settings.calcomHint")} />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                onClick={async () => {
+                  const token = await rotateToken({});
+                  setCalcomUrl(`${siteUrl}/calcom/webhook?token=${token}`);
+                  setCopied(false);
+                }}
+              >
+                {calcomUrl ? t("settings.calcomRotate") : t("settings.calcomGenerate")}
               </button>
-            </>
-          )}
-        </div>
-      </Card>
+              {calcomUrl && (
+                <>
+                  <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-1.5 text-xs">
+                    {calcomUrl}
+                  </code>
+                  <button
+                    className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(calcomUrl);
+                      setCopied(true);
+                    }}
+                  >
+                    {copied ? t("common.copied") : t("common.copy")}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

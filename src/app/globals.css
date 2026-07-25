@@ -117,25 +117,32 @@ thead {
   background-clip: padding-box;
 }
 
-/* Base form controls on the shared tokens. */
-input,
-select,
-textarea {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  color: var(--foreground);
-  width: 100%;
-}
+/* Base form controls on the shared tokens.
 
-input[type="checkbox"] {
-  width: auto;
-}
+   Inside @layer base on purpose: un-layered CSS outranks every Tailwind layer,
+   so a bare `input { width: 100% }` here would beat `class="w-56"` and every
+   inline form would silently stack full-width. In the base layer a utility
+   class wins, which is what a reader expects. */
+@layer base {
+  input,
+  select,
+  textarea {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: var(--foreground);
+    width: 100%;
+  }
 
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  input[type="checkbox"] {
+    width: auto;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
 }

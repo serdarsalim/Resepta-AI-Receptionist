@@ -108,6 +108,9 @@ const dictionary = {
   "messages.none": { tr: "Henüz mesaj yok", en: "No messages yet" },
 
   "settings.title": { tr: "Ayarlar", en: "Settings" },
+  // Settings section chips. The rest reuse their card titles (Reminders,
+  // WhatsApp, Bookings, Voice agent) so a chip and its card never disagree.
+  "settings.section.workspace": { tr: "Çalışma alanı", en: "Workspace setup" },
   "settings.business": { tr: "İşletme", en: "Business" },
   "settings.businessName": { tr: "İşletme adı", en: "Business name" },
   "settings.timezone": { tr: "Saat dilimi", en: "Timezone" },
@@ -144,6 +147,12 @@ const dictionary = {
   },
   "settings.templateName": { tr: "Şablon adı", en: "Template name" },
   "settings.templateStatus": { tr: "Durum", en: "Status" },
+  // Meta's approval states, in the reader's language. The stored value stays
+  // the English slug.
+  "template.draft": { tr: "Taslak", en: "Draft" },
+  "template.pending": { tr: "Onay bekliyor", en: "Pending" },
+  "template.approved": { tr: "Onaylandı", en: "Approved" },
+  "template.rejected": { tr: "Reddedildi", en: "Rejected" },
   // Channels — one conversation, three lanes. Labels are the accessible names
   // behind the icon-only controls in the inbox.
   "channel.whatsapp": { tr: "WhatsApp", en: "WhatsApp" },
@@ -166,6 +175,7 @@ const dictionary = {
   "calls.recording": { tr: "Kayıt", en: "Recording" },
 
   "settings.voice": { tr: "Sesli asistan", en: "Voice agent" },
+  "settings.voiceEndpoints": { tr: "Webhook adresleri", en: "Webhook URLs" },
   "settings.voiceHint": {
     tr: "Retell agent'ınız salonun telefonunu yanıtlar ve randevu alır. Fonksiyon adresi ve arama-sonu webhook'unu Retell panosunda bu URL'lere yönlendirin.",
     en: "Your Retell agent answers the salon's phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
@@ -178,6 +188,7 @@ const dictionary = {
   "settings.calcomEventType": { tr: "cal.com event type ID", en: "cal.com event type ID" },
 
   "settings.bookings": { tr: "Rezervasyonlar", en: "Bookings" },
+  "settings.calcomWebhook": { tr: "Webhook adresi", en: "Webhook URL" },
   "settings.calcomHint": {
     tr: "Bu adresi cal.com webhook ayarlarına yapıştırın (BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED).",
     en: "Paste this URL into your cal.com webhook settings (BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED).",
@@ -188,8 +199,8 @@ const dictionary = {
   "contact.typeMessage": { tr: "Mesaj yazın…", en: "Type a message…" },
   "contact.send": { tr: "Gönder", en: "Send" },
   "contact.sessionClosed": {
-    tr: "24 saatlik pencere kapalı — müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
-    en: "The 24h window is closed — only template messages until the customer writes.",
+    tr: "24 saatlik pencere kapalı. Müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
+    en: "The 24h window is closed. Only template messages until the customer writes.",
   },
 
   "fields.title": { tr: "Kişi alanları", en: "Contact fields" },
@@ -199,6 +210,7 @@ const dictionary = {
   },
   "fields.add": { tr: "Alan ekle", en: "Add field" },
   "fields.label": { tr: "Etiket", en: "Label" },
+  "fields.typeLabel": { tr: "Tür", en: "Type" },
   "fields.type.text": { tr: "Metin", en: "Text" },
   "fields.type.select": { tr: "Seçim", en: "Select" },
   "fields.type.number": { tr: "Sayı", en: "Number" },
@@ -209,8 +221,8 @@ const dictionary = {
 
   "team.title": { tr: "Ekip", en: "Team" },
   "team.inviteHint": {
-    tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez — adresi siz iletin.",
-    en: "The invitee joins your team when they sign in with Google using this email. No email is sent — share the address yourself.",
+    tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez, adresi siz iletin.",
+    en: "The invitee joins your team when they sign in with Google using this email. No email is sent, so share the address yourself.",
   },
   "team.invite": { tr: "Davet et", en: "Invite" },
   "team.pending": { tr: "Bekleyen davetler", en: "Pending invites" },

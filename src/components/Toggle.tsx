@@ -20,8 +20,9 @@ export function Toggle({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed ${
-        checked ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+      style={{ backgroundColor: checked ? "var(--brand)" : undefined }}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+        checked ? "" : "bg-zinc-300 dark:bg-zinc-600"
       }`}
     >
       <span
