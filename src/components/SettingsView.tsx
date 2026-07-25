@@ -5,6 +5,9 @@ import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES } from "@/lib/i18n";
+import { RowLabel } from "./RowLabel";
+import { Toggle } from "./Toggle";
+import { InfoTip } from "./InfoTip";
 
 const TIMEZONES = [
   "Europe/Istanbul",
@@ -14,20 +17,24 @@ const TIMEZONES = [
   "UTC",
 ];
 
-// Autosave everywhere (no Save buttons) — the field commits on blur/change.
-function Row({ label, hint, children }: {
-  label: string;
-  hint?: string;
+// Nudge settings conventions: label-left/input-right on the shared RowLabel
+// grid, autosave on blur/change, explanations behind InfoTips.
+const ROW_GRID =
+  "grid grid-cols-1 gap-y-2 sm:grid-cols-[22rem_1fr] sm:items-center sm:gap-x-4 sm:gap-y-3";
+
+function Card({ title, tip, children }: {
+  title: string;
+  tip?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-2 py-3 sm:grid-cols-[16rem_1fr] sm:items-center">
-      <div>
-        <span className="text-sm">{label}</span>
-        {hint && <span className="block text-xs text-[var(--muted)]">{hint}</span>}
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {tip && <InfoTip text={tip} />}
       </div>
-      <div>{children}</div>
-    </div>
+      {children}
+    </section>
   );
 }
 
@@ -50,85 +57,73 @@ export function SettingsView() {
   );
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="mb-2 text-base font-medium">{t("settings.business")}</h2>
-        <div className="divide-y divide-[var(--border)]">
-          <Row label={t("settings.businessName")}>
-            <input
-              defaultValue={settings.org.name}
-              onBlur={(e) => void update({ name: e.target.value })}
-            />
-          </Row>
-          <Row label={t("settings.timezone")}>
-            <select
-              defaultValue={settings.org.timezone}
-              onChange={(e) => void update({ timezone: e.target.value })}
-            >
-              {TIMEZONES.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </select>
-          </Row>
-          <Row label={t("settings.language")}>
-            <select
-              defaultValue={settings.org.language}
-              onChange={(e) => void update({ language: e.target.value })}
-            >
-              {LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </Row>
+    <div className="mx-auto max-w-3xl space-y-4">
+      <Card title={t("settings.business")}>
+        <div className={ROW_GRID}>
+          <RowLabel label={t("settings.businessName")} />
+          <input
+            defaultValue={settings.org.name}
+            onBlur={(e) => void update({ name: e.target.value })}
+          />
+          <RowLabel label={t("settings.timezone")} />
+          <select
+            defaultValue={settings.org.timezone}
+            onChange={(e) => void update({ timezone: e.target.value })}
+          >
+            {TIMEZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+          <RowLabel label={t("settings.language")} />
+          <select
+            defaultValue={settings.org.language}
+            onChange={(e) => void update({ language: e.target.value })}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="mb-2 text-base font-medium">{t("settings.reminders")}</h2>
-        <div className="divide-y divide-[var(--border)]">
-          <Row label={t("settings.reminderOffsets")} hint="24, 2">
-            <input
-              defaultValue={settings.org.reminderOffsetsHours.join(", ")}
-              onBlur={(e) =>
-                void update({
-                  reminderOffsetsHours: e.target.value
-                    .split(",")
-                    .map((part) => Number(part.trim()))
-                    .filter((n) => Number.isFinite(n) && n > 0),
-                })
-              }
-            />
-          </Row>
-          <Row label={t("settings.sendConfirmation")}>
-            <input
-              type="checkbox"
-              className="w-auto"
-              defaultChecked={settings.org.sendBookingConfirmation}
-              onChange={(e) => void update({ sendBookingConfirmation: e.target.checked })}
-            />
-          </Row>
+      <Card title={t("settings.reminders")}>
+        <div className={ROW_GRID}>
+          <RowLabel label={t("settings.reminderOffsets")} hint="24, 2" />
+          <input
+            defaultValue={settings.org.reminderOffsetsHours.join(", ")}
+            onBlur={(e) =>
+              void update({
+                reminderOffsetsHours: e.target.value
+                  .split(",")
+                  .map((part) => Number(part.trim()))
+                  .filter((n) => Number.isFinite(n) && n > 0),
+              })
+            }
+          />
+          <RowLabel label={t("settings.sendConfirmation")} />
+          <Toggle
+            checked={settings.org.sendBookingConfirmation}
+            onChange={(next) => void update({ sendBookingConfirmation: next })}
+          />
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="mb-2 text-base font-medium">{t("settings.whatsapp")}</h2>
+      <Card title={t("settings.whatsapp")}>
         {settings.whatsapp.connected ? (
-          <div className="space-y-2 text-sm">
-            <p>
-              <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-xs text-[var(--accent)]">
-                {t("settings.waConnected")}
-              </span>{" "}
-              <span className="text-[var(--muted)]">
-                {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId} · ••••
-                {settings.whatsapp.tokenTail}
-              </span>
-            </p>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              {t("settings.waConnected")}
+            </span>
+            <span className="text-[var(--muted)]">
+              {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId} · ••••
+              {settings.whatsapp.tokenTail}
+            </span>
             <button
-              className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--danger)]"
+              className="ml-auto rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-red-600 dark:text-red-400"
               onClick={() => void disconnectWhatsapp({})}
             >
               {t("settings.waDisconnect")}
@@ -136,7 +131,7 @@ export function SettingsView() {
           </div>
         ) : (
           <form
-            className="grid gap-3 sm:grid-cols-2"
+            className={ROW_GRID}
             onSubmit={async (event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
@@ -147,41 +142,34 @@ export function SettingsView() {
               });
             }}
           >
-            <label className="text-sm">
-              {t("settings.waPhoneNumberId")}
-              <input name="phoneNumberId" required className="mt-1" />
-            </label>
-            <label className="text-sm">
-              {t("customers.phone")}
-              <input name="displayNumber" placeholder="+905321234567" className="mt-1" />
-            </label>
-            <label className="text-sm sm:col-span-2">
-              {t("settings.waToken")}
-              <input name="accessToken" type="password" required className="mt-1" />
-            </label>
-            <div className="sm:col-span-2">
+            <RowLabel label={t("settings.waPhoneNumberId")} />
+            <input name="phoneNumberId" required />
+            <RowLabel label={t("customers.phone")} />
+            <input name="displayNumber" placeholder="+905321234567" />
+            <RowLabel label={t("settings.waToken")} />
+            <input name="accessToken" type="password" required />
+            <span />
+            <div>
               <button
                 type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white"
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
               >
                 {t("settings.waConnect")}
               </button>
             </div>
           </form>
         )}
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="text-base font-medium">{t("settings.templates")}</h2>
-        <p className="mb-2 text-xs text-[var(--muted)]">{t("settings.templatesHint")}</p>
-        <ul className="divide-y divide-[var(--border)]">
+      <Card title={t("settings.templates")} tip={t("settings.templatesHint")}>
+        <div className="divide-y divide-[var(--border)]">
           {settings.templates.map((template) => (
-            <li key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
-              <span className="text-sm">
+            <div key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
+              <span className="flex items-center gap-2 text-sm">
                 {template.kind === "confirmation"
                   ? t("settings.sendConfirmation")
                   : t("settings.reminders")}
-                <span className="block text-xs text-[var(--muted)]">{template.bodyPreview}</span>
+                {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
               </span>
               <input
                 defaultValue={template.metaName}
@@ -203,14 +191,12 @@ export function SettingsView() {
                 <option value="approved">approved</option>
                 <option value="rejected">rejected</option>
               </select>
-            </li>
+            </div>
           ))}
-        </ul>
-      </section>
+        </div>
+      </Card>
 
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-        <h2 className="text-base font-medium">{t("settings.bookings")}</h2>
-        <p className="mb-2 text-xs text-[var(--muted)]">{t("settings.calcomHint")}</p>
+      <Card title={t("settings.bookings")} tip={t("settings.calcomHint")}>
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
@@ -224,7 +210,7 @@ export function SettingsView() {
           </button>
           {calcomUrl && (
             <>
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-1.5 text-xs">
                 {calcomUrl}
               </code>
               <button
@@ -239,7 +225,7 @@ export function SettingsView() {
             </>
           )}
         </div>
-      </section>
+      </Card>
     </div>
   );
 }

@@ -24,6 +24,11 @@ const dictionary = {
     en: "WhatsApp appointment reminders",
   },
 
+  "menu.appearance": { tr: "Görünüm", en: "Appearance" },
+  "theme.light": { tr: "Açık", en: "Light" },
+  "theme.dark": { tr: "Koyu", en: "Dark" },
+  "theme.auto": { tr: "Otomatik", en: "Auto" },
+
   "nav.today": { tr: "Bugün", en: "Today" },
   "nav.appointments": { tr: "Randevular", en: "Appointments" },
   "nav.customers": { tr: "Müşteriler", en: "Customers" },

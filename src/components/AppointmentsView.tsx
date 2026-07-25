@@ -22,11 +22,11 @@ const STATUS_KEY: Record<string, TranslationKey> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
-  scheduled: "bg-[var(--border)] text-[var(--text)]",
-  confirmed: "bg-[var(--accent-soft)] text-[var(--accent)]",
+  scheduled: "bg-[var(--border)] text-[var(--foreground)]",
+  confirmed: "bg-[var(--brand-soft)] text-emerald-700 dark:text-emerald-400",
   cancelled: "bg-transparent text-[var(--muted)] line-through",
   completed: "bg-[var(--border)] text-[var(--muted)]",
-  no_show: "bg-transparent text-[var(--danger)]",
+  no_show: "bg-transparent text-red-600 dark:text-red-400",
 };
 
 export function AppointmentsView() {
@@ -62,7 +62,7 @@ export function AppointmentsView() {
       <div className="flex items-center justify-between">
         <h2 className="text-base font-medium">{t("appointments.title")}</h2>
         <button
-          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white"
+          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => setAdding((v) => !v)}
         >
           {adding ? t("common.cancel") : t("appointments.new")}
@@ -71,7 +71,7 @@ export function AppointmentsView() {
 
       {adding && (
         <form
-          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-2"
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:grid-cols-2"
           onSubmit={async (event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -141,7 +141,7 @@ export function AppointmentsView() {
           <div className="sm:col-span-2">
             <button
               type="submit"
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
             >
               {t("common.add")}
             </button>
@@ -161,7 +161,7 @@ export function AppointmentsView() {
           <h3 className="text-sm font-medium text-[var(--muted)]">
             {formatDayHeading(new Date(day).getTime(), language)}
           </h3>
-          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+          <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
             {rows.map((appointment) => (
               <li
                 key={appointment._id}
@@ -188,7 +188,7 @@ export function AppointmentsView() {
                   </span>
                 </span>
                 {appointment.customer && !appointment.customer.consented && (
-                  <span className="rounded-full px-2 py-0.5 text-xs text-[var(--danger)]">
+                  <span className="rounded-full px-2 py-0.5 text-xs text-red-600 dark:text-red-400">
                     {t("customers.noConsent")}
                   </span>
                 )}
@@ -211,7 +211,7 @@ export function AppointmentsView() {
                       {t("appointments.complete")}
                     </button>
                     <button
-                      className="text-xs text-[var(--danger)] underline"
+                      className="text-xs text-red-600 dark:text-red-400 underline"
                       onClick={() =>
                         void setStatus({
                           appointmentId: appointment._id,

@@ -1,55 +1,130 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Token structure ported from Nudge (src/app/globals.css there): .dark class
+   flips the palette (driven by src/lib/theme.ts — sun-based auto), every
+   surface derives from the same small set. Only --brand differs: Randevu's
+   mark is its own green, not the Nudge mint. */
 :root {
-  --background: #f6f7f9;
-  --surface: #ffffff;
-  --border: #e4e7ec;
-  --text: #16181d;
-  --muted: #6b7280;
-  --accent: #1f7a5c;
-  --accent-soft: #e7f4ef;
-  --danger: #b42318;
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --border: #e5e5e5;
+  --muted: #737373;
+  --muted-bg: #f5f5f5;
+  --page-title: #334155;
+  --brand: #10b981;
+  --table-header-bg: color-mix(in srgb, var(--brand) 8%, var(--card));
+  --row-hover-bg: color-mix(in srgb, var(--brand) 4%, var(--card));
+  /* Recessed surface the sidebar + floating content card sit on */
+  --pane: #f1f1f3;
+  /* Primary action accent — soft blue, white text in both modes */
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  /* Brand-tinted wash for positive pills (confirmed status). */
+  --brand-soft: color-mix(in srgb, var(--brand) 12%, var(--card));
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #171717;
+  --border: #262626;
+  --muted: #a3a3a3;
+  --muted-bg: #171717;
+  --page-title: #cbd5e1;
+  --brand: #10b981;
+  --table-header-bg: color-mix(in srgb, var(--brand) 12%, var(--card));
+  --row-hover-bg: color-mix(in srgb, var(--brand) 7%, var(--card));
+  --pane: #0c0c0c;
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --brand-soft: color-mix(in srgb, var(--brand) 18%, var(--card));
+  --scrollbar-thumb: rgba(255, 255, 255, 0.16);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
   --color-border: var(--border);
-  --color-text: var(--text);
   --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-danger: var(--danger);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #101215;
-    --surface: #181b20;
-    --border: #2a2f37;
-    --text: #eceef2;
-    --muted: #9aa1ac;
-    --accent: #35a37b;
-    --accent-soft: #172b24;
-    --danger: #f97066;
-  }
+  --color-muted-bg: var(--muted-bg);
+  --font-sans: var(--font-geist-sans);
 }
 
 body {
   background: var(--background);
-  color: var(--text);
+  color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* One branded header treatment for every data table (Nudge convention). */
+thead {
+  background-color: var(--table-header-bg);
+}
+
+.page-title {
+  color: var(--page-title);
+}
+
+/* Recessed sidebar surface — reads as its own panel, no hard divider. */
+.app-pane {
+  background: linear-gradient(180deg, #f8f8f9 0%, #f1f1f3 100%);
+}
+.dark .app-pane {
+  background: linear-gradient(180deg, #141414 0%, #0c0c0c 100%);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin themed scrollbar for internal overflow containers. */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Base form controls on the shared tokens. */
 input,
 select,
 textarea {
-  background: var(--surface);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
-  color: var(--text);
+  color: var(--foreground);
   width: 100%;
+}
+
+input[type="checkbox"] {
+  width: auto;
 }
 
 input:focus,

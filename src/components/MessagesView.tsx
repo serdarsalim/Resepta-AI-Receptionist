@@ -19,7 +19,7 @@ export function MessagesView() {
         <p className="text-sm text-[var(--muted)]">{t("messages.none")}</p>
       )}
       {messages && messages.length > 0 && (
-        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
           {messages.map((message) => (
             <li key={message._id} className="px-4 py-3 text-sm">
               <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
@@ -33,7 +33,7 @@ export function MessagesView() {
                 <span
                   className={
                     message.status === "failed"
-                      ? "ml-auto text-[var(--danger)]"
+                      ? "ml-auto text-red-600 dark:text-red-400"
                       : "ml-auto text-[var(--muted)]"
                   }
                 >
@@ -42,7 +42,7 @@ export function MessagesView() {
               </div>
               {message.body && <p className="mt-1">{message.body}</p>}
               {message.error && (
-                <p className="mt-1 text-xs text-[var(--danger)]">{message.error}</p>
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{message.error}</p>
               )}
             </li>
           ))}

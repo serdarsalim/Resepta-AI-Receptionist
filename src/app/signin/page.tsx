@@ -33,10 +33,10 @@ export default function SignInPage() {
           </select>
         </div>
 
-        <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
           <button
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 font-medium text-white disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2.5 font-medium text-[var(--accent-fg)] disabled:opacity-60"
             onClick={async () => {
               setBusy(true);
               setError(false);
@@ -50,7 +50,7 @@ export default function SignInPage() {
           >
             {t("auth.continueWithGoogle")}
           </button>
-          {error && <p className="text-sm text-[var(--danger)]">{t("auth.failed")}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{t("auth.failed")}</p>}
           <p className="text-xs text-[var(--muted)]">{t("auth.googleHint")}</p>
         </div>
       </div>

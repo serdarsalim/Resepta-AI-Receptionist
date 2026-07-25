@@ -18,7 +18,7 @@ export function CustomersView() {
       <div className="flex items-center justify-between">
         <h2 className="text-base font-medium">{t("customers.title")}</h2>
         <button
-          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white"
+          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => setAdding((v) => !v)}
         >
           {adding ? t("common.cancel") : t("customers.new")}
@@ -27,7 +27,7 @@ export function CustomersView() {
 
       {adding && (
         <form
-          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:grid-cols-3"
+          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:grid-cols-3"
           onSubmit={async (event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -66,11 +66,11 @@ export function CustomersView() {
               </span>
             </span>
           </label>
-          {error && <p className="text-sm text-[var(--danger)] sm:col-span-3">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{error}</p>}
           <div className="sm:col-span-3">
             <button
               type="submit"
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white"
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
             >
               {t("common.add")}
             </button>
@@ -86,7 +86,7 @@ export function CustomersView() {
       )}
 
       {customers && customers.length > 0 && (
-        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+        <ul className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
           {customers.map((customer) => (
             <li key={customer._id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span className="min-w-0 flex-1">
