@@ -31,6 +31,13 @@ export default defineSchema({
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
     ),
+    // Per-person alerts, set in the account menu. Unset means on for inbound
+    // (a reply nobody sees is the whole failure mode this product exists to
+    // prevent) and on for failed sends (a salon going quiet without anyone
+    // noticing). Both are per USER, not per org: the owner and a stylist want
+    // different noise.
+    notifyInbound: v.optional(v.boolean()),
+    notifyFailedSend: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("by_org", ["orgId"]),
@@ -156,6 +163,14 @@ export default defineSchema({
     ),
     options: v.optional(v.array(v.string())),
     order: v.number(),
+    // Where the value comes from. "manual" is typed by staff on the contact
+    // page; "voice" is collected by the Retell agent during a call and written
+    // back through the update_contact function. Unset reads as "manual".
+    //
+    // This pair is how one deployment serves a salon, a dentist and a garage:
+    // the vertical's own vocabulary (plate number, last cleaning, insurance)
+    // is org data, not a schema change.
+    source: v.optional(v.union(v.literal("manual"), v.literal("voice"))),
   }).index("by_org", ["orgId"]),
 
   services: defineTable({

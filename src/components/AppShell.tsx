@@ -120,7 +120,7 @@ const NAV_TABS: {
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "workspace",
-    key: "nav.workspace",
+    key: "nav.business",
     Icon: WorkspaceIcon,
     color: "var(--foreground)",
   },

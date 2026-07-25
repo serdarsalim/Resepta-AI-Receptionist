@@ -35,8 +35,46 @@ const dictionary = {
   "nav.inbox": { tr: "Gelen Kutusu", en: "Inbox" },
   "nav.collapse": { tr: "Menüyü daralt", en: "Collapse sidebar" },
   "nav.expand": { tr: "Menüyü genişlet", en: "Expand sidebar" },
-  "nav.workspace": { tr: "Çalışma alanı", en: "Workspace setup" },
+  // "Business", not "Workspace": Fresha, Booksy, Square and Treatwell all use
+  // the business's own word for this, and a salon owner does not think of the
+  // salon as a workspace.
+  "nav.business": { tr: "İşletme", en: "Business" },
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
+  "nav.menu": { tr: "Menü", en: "Menu" },
+  "nav.account": { tr: "Hesabım", en: "My account" },
+
+  // The avatar menu is the USER's menu: their name, their alerts, their
+  // theme. It never routes into the business config, which lives in the
+  // sidebar.
+  "account.title": { tr: "Hesabım", en: "My account" },
+  "account.name": { tr: "Adınız", en: "Your name" },
+  "account.nameHint": {
+    tr: "Ekip listesinde ve gönderdiğiniz notlarda görünen ad.",
+    en: "The name your team sees in the members list and on anything you send.",
+  },
+  "account.email": { tr: "E-posta", en: "Email" },
+  "account.emailHint": {
+    tr: "Google hesabınızdan gelir ve burada değiştirilemez.",
+    en: "Comes from your Google account and cannot be changed here.",
+  },
+  "account.notifications": { tr: "Bildirimler", en: "Notifications" },
+  "account.notifyInbound": {
+    tr: "Müşteri yanıt yazdığında e-posta gönder",
+    en: "Email me when a customer replies",
+  },
+  "account.notifyInboundHint": {
+    tr: "Bir müşteri WhatsApp'tan yazdığında e-posta adresinize haber verilir. Her mesaj için bir e-posta, sessiz saatlerde toplu gönderilmez.",
+    en: "You get an email at your account address when a customer writes on WhatsApp. One email per message.",
+  },
+  "account.notifyFailed": {
+    tr: "Bir mesaj gönderilemediğinde e-posta gönder",
+    en: "Email me when a message fails to send",
+  },
+  "account.notifyFailedHint": {
+    tr: "Hatırlatma veya onay mesajı gönderilemediğinde haber verilir. Salonun sessizce mesajsız kalmaması için açık tutun.",
+    en: "Tells you when a reminder or confirmation could not be delivered, so the salon never goes quiet without anyone noticing.",
+  },
+  "account.role": { tr: "Rolünüz", en: "Your role" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 
   "auth.continueWithGoogle": {
@@ -259,6 +297,17 @@ const dictionary = {
   "fields.add": { tr: "Alan ekle", en: "Add field" },
   "fields.label": { tr: "Etiket", en: "Label" },
   "fields.typeLabel": { tr: "Tür", en: "Type" },
+  // Org-defined fields are how one deployment fits a salon, a dentist and a
+  // garage: plate number, last cleaning, insurance are data, not code.
+  "fields.source": { tr: "Kaynak", en: "Filled by" },
+  "fields.source.manual": { tr: "Ekip", en: "Staff" },
+  "fields.source.voice": { tr: "Sesli asistan", en: "Voice agent" },
+  "fields.voiceGroup": { tr: "Aramalardan gelen", en: "From calls" },
+  "fields.voiceHint": {
+    tr: "Sesli asistan arama sırasında bu alanı sorar ve yanıtı müşteri kaydına yazar. Alan anahtarını Retell'de update_contact fonksiyonuna verin.",
+    en: "The voice agent asks for this during a call and writes the answer onto the customer record. Give the field key to Retell's update_contact function.",
+  },
+  "fields.key": { tr: "Alan anahtarı", en: "Field key" },
   "fields.type.text": { tr: "Metin", en: "Text" },
   "fields.type.select": { tr: "Seçim", en: "Select" },
   "fields.type.number": { tr: "Sayı", en: "Number" },
