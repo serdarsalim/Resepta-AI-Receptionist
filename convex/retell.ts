@@ -141,24 +141,76 @@ export const voiceBook = internalMutation({
   },
 });
 
-export const voiceCancel = internalMutation({
+// Cancel and reschedule are split into a lookup and a write because a Convex
+// mutation cannot reach the network, and cal.com has to be told first: it owns
+// the slot inventory, the salon's Google Calendar and the notification emails.
+// The old single mutation patched status locally and stopped, so Randevu said
+// cancelled while cal.com kept the slot blocked for a customer who was not
+// coming. http.ts calls this, then cal.com, then the write below.
+export const nextAppointmentForPhone = internalQuery({
   args: { orgId: v.id("orgs"), phone: v.string() },
-  returns: v.boolean(),
+  returns: v.union(
+    v.null(),
+    v.object({
+      appointmentId: v.id("appointments"),
+      externalUid: v.optional(v.string()),
+      startAt: v.number(),
+    }),
+  ),
   handler: async (ctx, args) => {
-    const phone = assertE164(args.phone);
+    const phone = toE164(args.phone);
+    if (!phone) return null;
     const customer = await ctx.db
       .query("customers")
       .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
       .unique();
-    if (!customer) return false;
+    if (!customer) return null;
     const appointments = await ctx.db
       .query("appointments")
       .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
       .collect();
     const next = nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"]);
-    if (!next) return false;
-    await ctx.db.patch(next._id, { status: "cancelled" });
-    return true;
+    if (!next) return null;
+    return {
+      appointmentId: next._id,
+      externalUid: next.externalUid,
+      startAt: next.startAt,
+    };
+  },
+});
+
+// Only ever called after cal.com has confirmed the cancellation.
+export const markCancelled = internalMutation({
+  args: { appointmentId: v.id("appointments") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.appointmentId, { status: "cancelled" });
+    return null;
+  },
+});
+
+// Same contract for the new time. externalUid moves because cal.com's
+// reschedule mints a new booking and retires the uid we held.
+export const markRescheduled = internalMutation({
+  args: {
+    appointmentId: v.id("appointments"),
+    startAt: v.number(),
+    externalUid: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment) return null;
+    await ctx.db.patch(args.appointmentId, {
+      startAt: args.startAt,
+      // A new time invalidates reminders already sent for the old one.
+      status: "scheduled",
+      reminderSentOffsets: [],
+      confirmationSentAt: undefined,
+      ...(args.externalUid ? { externalUid: args.externalUid } : {}),
+    });
+    await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
+    return null;
   },
 });
 

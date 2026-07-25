@@ -3,7 +3,12 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
-import { createBooking, getAvailableSlots } from "./lib/calcomApi";
+import {
+  cancelBooking,
+  createBooking,
+  getAvailableSlots,
+  rescheduleBooking,
+} from "./lib/calcomApi";
 import { formatAppointmentTime, localDayRangeUtc, todayInZone } from "./lib/format";
 
 const http = httpRouter();
@@ -305,13 +310,77 @@ http.route({
       });
     }
 
-    if (name === "cancel_appointment") {
+    // Everything below addresses an appointment the caller already has, so it
+    // shares one lookup. cal.com is told BEFORE our status moves: it owns the
+    // slot inventory, the salon's Google Calendar and the notification emails,
+    // and a local-only write leaves the salon holding a slot for someone who
+    // is not coming. A walk-in typed in by hand has no externalUid and so has
+    // nothing on cal.com to move — that branch stays local by design.
+    if (
+      name === "find_appointment" ||
+      name === "cancel_appointment" ||
+      name === "reschedule_appointment"
+    ) {
       if (!callerPhone) return respond({ error: "missing-phone" });
-      const cancelled = await ctx.runMutation(internal.retell.voiceCancel, {
+      const phone = callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`;
+      const found = await ctx.runQuery(internal.retell.nextAppointmentForPhone, {
         orgId: org._id,
-        phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
+        phone,
       });
-      return respond({ cancelled });
+      const spokenOf = (at: number) =>
+        formatAppointmentTime(at, org.timezone, org.language);
+
+      // Lets the agent name the appointment before acting on it, instead of
+      // cancelling whatever happens to be next for a caller with two bookings.
+      if (name === "find_appointment") {
+        return respond(
+          found
+            ? { found: true, spoken_time: spokenOf(found.startAt) }
+            : { found: false },
+        );
+      }
+      if (!found) return respond({ error: "no-upcoming-appointment" });
+      if (found.externalUid && !org.calcomApiKey) {
+        // The booking lives on a calendar we can no longer reach. Saying so
+        // beats moving our row and letting the two drift apart.
+        return respond({ error: "no-calendar-connected" });
+      }
+
+      if (name === "cancel_appointment") {
+        if (found.externalUid && org.calcomApiKey) {
+          const result = await cancelBooking({
+            apiKey: org.calcomApiKey,
+            uid: found.externalUid,
+            reason: "Cancelled by phone",
+          });
+          if (!result.ok) return respond({ cancelled: false, error: result.reason });
+        }
+        await ctx.runMutation(internal.retell.markCancelled, {
+          appointmentId: found.appointmentId,
+        });
+        return respond({ cancelled: true });
+      }
+
+      const startAt = Date.parse(String(args.start ?? ""));
+      if (Number.isNaN(startAt)) return respond({ error: "missing-or-bad-start" });
+      let newUid: string | undefined;
+      if (found.externalUid && org.calcomApiKey) {
+        const result = await rescheduleBooking({
+          apiKey: org.calcomApiKey,
+          uid: found.externalUid,
+          startIso: new Date(startAt).toISOString(),
+          reason: "Rescheduled by phone",
+        });
+        if (!result.ok) return respond({ rescheduled: false, error: result.reason });
+        // cal.com minted a new booking; carry its uid or the next cancel 404s.
+        newUid = result.uid;
+      }
+      await ctx.runMutation(internal.retell.markRescheduled, {
+        appointmentId: found.appointmentId,
+        startAt,
+        externalUid: newUid,
+      });
+      return respond({ rescheduled: true, spoken_time: spokenOf(startAt) });
     }
 
     return respond({ error: `unknown-function-${name}` });
