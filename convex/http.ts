@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
+import { verifyMetaSignature } from "./lib/metaSig";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -24,15 +25,32 @@ http.route({
   }),
 });
 
-// Always 200: Meta retries non-2xx for hours and disables the webhook after
-// repeated failures, so a payload we can't use is still an acknowledged one.
+// Always 200 for parse/handler problems: Meta retries non-2xx for hours and
+// disables the webhook after repeated failures, so a payload we can't use is
+// still an acknowledged one. A BAD SIGNATURE is the one exception — that's
+// not Meta having a bad day, it's someone else entirely, and it gets a 401.
 http.route({
   path: "/whatsapp/webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const rawBody = await request.text();
+
+    const appSecret = process.env.WA_APP_SECRET;
+    if (appSecret) {
+      const valid = await verifyMetaSignature(
+        appSecret,
+        rawBody,
+        request.headers.get("x-hub-signature-256"),
+      );
+      if (!valid) return new Response("bad signature", { status: 401 });
+    } else {
+      // Dev convenience only. Prod must set WA_APP_SECRET (see .env.example).
+      console.warn("WA_APP_SECRET unset — webhook signature NOT verified");
+    }
+
     let payload: unknown;
     try {
-      payload = await request.json();
+      payload = JSON.parse(rawBody);
     } catch {
       return new Response("ok", { status: 200 });
     }
