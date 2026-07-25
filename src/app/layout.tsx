@@ -5,6 +5,9 @@ import { ConvexClientProvider } from "./ConvexClientProvider";
 import { LanguageProvider } from "@/lib/LanguageProvider";
 import { NO_FOUC_SCRIPT } from "@/lib/theme";
 import "./globals.css";
+// Country flags are flag-icons CSS sprites, never Unicode flag emoji: Windows
+// Chrome has no flag glyphs and renders those as the bare letters "TR".
+import "flag-icons/css/flag-icons.min.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { PhoneInput } from "./PhoneField";
 
 export function CustomersView({
   onOpenContact,
@@ -57,9 +58,9 @@ export function CustomersView({
             {t("customers.lastName")}
             <input name="lastName" className="mt-1" />
           </label>
-          <label className="text-sm">
+          <label className="text-sm" htmlFor="new-customer-phone">
             {t("customers.phone")}
-            <input name="phone" required placeholder="+905321234567" className="mt-1" />
+            <PhoneInput id="new-customer-phone" name="phone" required className="mt-1" />
           </label>
           <label className="text-sm">
             {t("customers.email")}

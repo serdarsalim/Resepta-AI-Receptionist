@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type TranslationKey } from "@/lib/i18n";
+import { formatReminderOffset } from "@/lib/datetime";
 import { RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
@@ -31,14 +32,7 @@ function OffsetChips({
   onChange: (next: number[]) => void;
 }) {
   const { language } = useLanguage();
-  const label = (h: number) =>
-    language === "tr"
-      ? h % 24 === 0
-        ? `${h / 24} gün önce`
-        : `${h} saat önce`
-      : h % 24 === 0
-        ? `${h / 24} day${h > 24 ? "s" : ""} before`
-        : `${h} hour${h > 1 ? "s" : ""} before`;
+  const label = (h: number) => formatReminderOffset(h, language);
   return (
     <div className="flex flex-wrap gap-1.5">
       {OFFSET_PRESETS.map((hours) => {

@@ -3,7 +3,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useState } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANGUAGES } from "@/lib/i18n";
+import { LANGUAGES, isLanguage } from "@/lib/i18n";
 
 export default function SignInPage() {
   const { signIn } = useAuthActions();
@@ -23,7 +23,12 @@ export default function SignInPage() {
             aria-label={t("settings.language")}
             className="w-auto text-sm"
             value={language}
-            onChange={(e) => setLanguage(e.target.value as typeof language)}
+            // Narrow through the type guard rather than casting: the option
+            // list and the Language union come from the same LANGUAGES array,
+            // and a cast would quietly survive them drifting apart.
+            onChange={(e) => {
+              if (isLanguage(e.target.value)) setLanguage(e.target.value);
+            }}
           >
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>

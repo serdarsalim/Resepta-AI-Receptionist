@@ -11,8 +11,10 @@ import {
   formatDayHeading,
   formatTime,
   fromDatetimeLocalValue,
+  localeFor,
   toDatetimeLocalValue,
 } from "@/lib/datetime";
+import { PhoneInput } from "./PhoneField";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -138,9 +140,9 @@ export function AppointmentsView({
             {t("customers.lastName")}
             <input name="lastName" className="mt-1" />
           </label>
-          <label className="text-sm">
+          <label className="text-sm" htmlFor="new-appointment-phone">
             {t("customers.phone")}
-            <input name="phone" required placeholder="+905321234567" className="mt-1" />
+            <PhoneInput id="new-appointment-phone" name="phone" required className="mt-1" />
           </label>
           <label className="text-sm">
             {t("appointments.when")}
@@ -545,7 +547,7 @@ function Calendar({
   onOpenDay: (dayMs: number) => void;
 }) {
   const { t, language } = useLanguage();
-  const locale = language === "tr" ? "tr-TR" : "en-GB";
+  const locale = localeFor(language);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(

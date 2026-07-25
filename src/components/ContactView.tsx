@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
 import { ConversationPanel } from "./ConversationPanel";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
+import { PhoneField } from "./PhoneField";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -158,9 +159,8 @@ export function ContactView({
                 />
               </FieldRow>
               <FieldRow label={t("customers.phone")}>
-                <InlineEditValue
+                <PhoneField
                   value={customer.phone}
-                  type="tel"
                   onSave={(next) => updateCustomer({ customerId, phone: next })}
                 />
               </FieldRow>

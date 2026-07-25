@@ -9,6 +9,7 @@ import {
   type CountryOption,
 } from "@/lib/phone";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { Language } from "@/lib/i18n";
 
 // The country dial-code picker, ported from Nudge (src/components/CountryCodeSelect.tsx)
 // with two corrections that Randevu's own rules demand:
@@ -45,13 +46,19 @@ const GAP = 6; // trigger to panel
 const EDGE = 8; // keep clear of the viewport edge
 
 // Strings live here rather than in src/lib/i18n.ts because that dictionary is
-// owned elsewhere right now. Same tr/en shape, so they lift straight into it.
-const COPY = {
-  pick: { tr: "Ülke kodu", en: "Country code" },
-  search: { tr: "Ülke veya kod arayın", en: "Search country or code" },
-  none: { tr: "Ülke bulunamadı", en: "No countries found" },
-  noCode: { tr: "Kod yok", en: "No code" },
-} as const;
+// owned elsewhere right now. Same shape as its entries, typed against the same
+// Language union, so adding a language column there breaks this file too and
+// these lift straight in when the file is free.
+const COPY: Record<string, Record<Language, string>> = {
+  pick: { tr: "Ülke kodu", en: "Country code", de: "Ländervorwahl" },
+  search: {
+    tr: "Ülke veya kod arayın",
+    en: "Search country or code",
+    de: "Land oder Vorwahl suchen",
+  },
+  none: { tr: "Ülke bulunamadı", en: "No countries found", de: "Keine Länder gefunden" },
+  noCode: { tr: "Kod yok", en: "No code", de: "Keine Vorwahl" },
+};
 
 // The "no country" sentinel: the one option with no ISO, and so no flag.
 const NOT_SET: CountryOption = { name: "", code: "", iso: "" };
