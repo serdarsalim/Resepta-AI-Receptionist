@@ -95,12 +95,12 @@ const dictionary = {
   "customers.phone": { tr: "Telefon", en: "Phone" },
   "customers.email": { tr: "E-posta", en: "Email" },
   "customers.consent": {
-    tr: "WhatsApp mesajlarına izin verdi",
-    en: "Consented to WhatsApp messages",
+    tr: "İletişim izni (KVKK)",
+    en: "Messaging consent (KVKK)",
   },
   "customers.consentHint": {
-    tr: "KVKK gereği izin olmadan mesaj gönderilmez.",
-    en: "No messages are sent without recorded consent.",
+    tr: "Müşterinin WhatsApp ve e-posta mesajlarına onayı. İzin kaydı olmadan hiçbir kanaldan mesaj gönderilmez.",
+    en: "The customer's consent to WhatsApp and email messages. Without it, no channel sends anything.",
   },
   "customers.noConsent": { tr: "İzin yok", en: "No consent" },
 

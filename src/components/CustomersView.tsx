@@ -14,7 +14,6 @@ export function CustomersView({
   const { t } = useLanguage();
   const customers = useQuery(api.customers.list, {});
   const create = useMutation(api.customers.create);
-  const update = useMutation(api.customers.update);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,20 +107,11 @@ export function CustomersView({
                 </span>
                 <span className="block text-xs text-[var(--muted)]">{customer.phone}</span>
               </span>
-              <label
-                className="flex items-center gap-2 text-xs text-[var(--muted)]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <input
-                  type="checkbox"
-                  className="w-auto"
-                  checked={customer.consentAt !== undefined}
-                  onChange={(e) =>
-                    void update({ customerId: customer._id, consent: e.target.checked })
-                  }
-                />
-                {t("customers.consent")}
-              </label>
+              {customer.consentAt === undefined && (
+                <span className="rounded-full px-2 py-0.5 text-xs text-red-600 dark:text-red-400">
+                  {t("customers.noConsent")}
+                </span>
+              )}
             </li>
           ))}
         </ul>
