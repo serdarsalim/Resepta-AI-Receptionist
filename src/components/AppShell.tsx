@@ -263,6 +263,80 @@ function UserMenu({
   );
 }
 
+// Workspace switcher (Retell-style): one login, many client businesses.
+// Collapses to a plain label when the user belongs to exactly one.
+function WorkspaceSwitcher({ fallbackName }: { fallbackName?: string }) {
+  const { t } = useLanguage();
+  const data = useQuery(api.users.myWorkspaces, {});
+  const setActiveOrg = useMutation(api.users.setActiveOrg);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const active = data?.workspaces.find((w) => w.orgId === data.activeOrgId);
+  const label = active?.name || fallbackName || t("app.name");
+
+  if (!data || data.workspaces.length < 2) {
+    return (
+      <span className="block px-2 text-sm font-semibold tracking-tight">{label}</span>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--row-hover-bg)]"
+      >
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="text-[10px] text-[var(--muted)]">▾</span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+        >
+          <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            {t("workspace.switch")}
+          </div>
+          {data.workspaces.map((workspace) => (
+            <button
+              key={workspace.orgId}
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                if (workspace.orgId !== data.activeOrgId) {
+                  void setActiveOrg({ orgId: workspace.orgId });
+                }
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {workspace.name || t("app.name")}
+              </span>
+              {workspace.orgId === data.activeOrgId && (
+                <span className="text-[var(--brand)]">
+                  <CheckIcon />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppShell({
   tab,
   onTab,
@@ -288,10 +362,8 @@ export function AppShell({
     <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
       {/* Sidebar: recessed pane, hidden on phones (bottom nav takes over). */}
       <aside className="app-pane hidden w-52 shrink-0 flex-col overflow-hidden md:flex">
-        <div className="px-4 pb-2 pt-4">
-          <span className="text-sm font-semibold tracking-tight">
-            {settings?.org.name || t("app.name")}
-          </span>
+        <div className="px-2 pb-2 pt-3">
+          <WorkspaceSwitcher fallbackName={settings?.org.name} />
         </div>
         <nav className="flex-1 space-y-0.5 px-2">
           {NAV_TABS.map((entry) => {

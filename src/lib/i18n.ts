@@ -190,6 +190,8 @@ const dictionary = {
   "fields.type.date": { tr: "Tarih", en: "Date" },
   "fields.options": { tr: "Seçenekler (virgülle)", en: "Options (comma-separated)" },
 
+  "workspace.switch": { tr: "İşletme değiştir", en: "Switch business" },
+
   "team.title": { tr: "Ekip", en: "Team" },
   "team.inviteHint": {
     tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez — adresi siz iletin.",
