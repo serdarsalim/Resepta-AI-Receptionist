@@ -49,6 +49,12 @@ export type BookingResult =
   | { ok: true; uid?: string }
   | { ok: false; reason: string };
 
+// lengthInMinutes is how a 90-minute colour blocks 90 minutes on the salon's
+// Google Calendar. Without it cal.com applies the event type's default length,
+// so Randevu said 90 and cal.com blocked 30 — the two calendars disagreed about
+// every appointment whose service wasn't the default duration. cal.com only
+// accepts it when the event type declares lengthInMinutesOptions covering that
+// value, so a rejection here is a setup problem and says so.
 export async function createBooking(args: {
   apiKey: string;
   eventTypeId: string;
@@ -58,6 +64,11 @@ export async function createBooking(args: {
   email?: string;
   timeZone: string;
   language: string;
+  lengthInMinutes?: number;
+  // Human overrule: book on top of a conflict, or outside opening hours,
+  // because the salon says so. Never defaulted on.
+  allowConflicts?: boolean;
+  allowBookingOutOfBounds?: boolean;
 }): Promise<BookingResult> {
   try {
     const res = await fetch(`${CALCOM_BASE}/bookings`, {
@@ -70,6 +81,9 @@ export async function createBooking(args: {
       body: JSON.stringify({
         eventTypeId: Number(args.eventTypeId),
         start: args.startIso,
+        ...(args.lengthInMinutes ? { lengthInMinutes: args.lengthInMinutes } : {}),
+        ...(args.allowConflicts ? { allowConflicts: true } : {}),
+        ...(args.allowBookingOutOfBounds ? { allowBookingOutOfBounds: true } : {}),
         attendee: {
           name: args.name,
           // cal.com requires an email; a phone-only walk-in gets a routable
@@ -158,6 +172,8 @@ export async function rescheduleBooking(args: {
   uid: string;
   startIso: string;
   reason?: string;
+  allowConflicts?: boolean;
+  allowBookingOutOfBounds?: boolean;
 }): Promise<BookingResult> {
   try {
     const res = await fetch(
@@ -172,6 +188,8 @@ export async function rescheduleBooking(args: {
         body: JSON.stringify({
           start: args.startIso,
           reschedulingReason: args.reason ?? "Rescheduled by the customer",
+          ...(args.allowConflicts ? { allowConflicts: true } : {}),
+          ...(args.allowBookingOutOfBounds ? { allowBookingOutOfBounds: true } : {}),
         }),
       },
     );

@@ -126,6 +126,12 @@ export default defineSchema({
     // Number to tell a customer to call. Offered second, after the link: a
     // phone number is a dead end at 23:00, which is when people message.
     publicPhone: v.optional(v.string()),
+    // What this business calls the person delivering the appointment —
+    // "Stylist", "Berber", "Techniker", "Hekim". Display only; the app never
+    // branches on the value. Unset falls back to the generic word already in
+    // the dictionary ("Personel"/"Staff"/"Mitarbeiter"), which is correct for
+    // most verticals and merely bland for the rest.
+    staffLabel: v.optional(v.string()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
 
   // Voice lane (spec Phase C): one Retell agent per org; function calls and
@@ -220,10 +226,39 @@ export default defineSchema({
     active: v.boolean(),
   }).index("by_org", ["orgId"]),
 
+  // Who delivers the appointment. A real row rather than the free-text
+  // appointments.staffName it replaces: the week view builds its columns by
+  // grouping on that string, so "Hülya" and "Hülya " were two different
+  // stylists with two different lanes, and nothing could rename a person
+  // without editing every appointment they had.
+  //
+  // Same reasoning as contactFields, applied to a relation instead of a
+  // property: the vertical's own vocabulary is org data. What this row is
+  // CALLED comes from orgs.staffLabel — stylist, berber, Techniker, mechanic,
+  // hekim — so one deployment serves a salon and a garage without a schema
+  // change. The label is a display string only; nothing branches on it.
+  //
+  // calcomHostId is deliberately unused for now. cal.com models people as
+  // hosts PER EVENT TYPE, so honouring staff assignment on their side means
+  // either one event type per person or round-robin config, which would
+  // multiply onboarding. Assignment stays Randevu-side until that is worth it;
+  // the column exists so the day it is, no migration is needed.
+  staff: defineTable({
+    orgId: v.id("orgs"),
+    name: v.string(),
+    active: v.boolean(),
+    order: v.number(),
+    calcomHostId: v.optional(v.string()),
+  }).index("by_org", ["orgId"]),
+
   appointments: defineTable({
     orgId: v.id("orgs"),
     customerId: v.id("customers"),
     serviceId: v.optional(v.id("services")),
+    staffId: v.optional(v.id("staff")),
+    // LEGACY, read-only after migrations:backfillStaff. Kept so a deployment
+    // that has not run the migration still renders; new writes set staffId.
+    // Delete the column once every org's rows carry staffId.
     staffName: v.optional(v.string()),
     startAt: v.number(),
     durationMinutes: v.optional(v.number()),
