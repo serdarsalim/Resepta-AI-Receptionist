@@ -530,6 +530,66 @@ const dictionary = {
     de: "Weiterleitungsnummer",
   },
   "settings.voiceEnabled": { tr: "Etkin", en: "Enabled", de: "Aktiv" },
+  "settings.businessHours": {
+    tr: "Açık olduğunuz günler",
+    en: "Days you're open",
+    de: "Ihre Öffnungstage",
+  },
+  "settings.businessHoursHint": {
+    tr: "Sadece WhatsApp otomatik yanıtı için kullanılır — hangi saatlerde kapalı olduğunuzu bilmeden \"şu anda kapalıyız\" yazamayız. Randevu hatırlatmalarının saatini bu değil, Hatırlatmalar bölümündeki sessiz saatler belirler.",
+    en: "Used only by the WhatsApp auto-reply — we can't say \"we're closed\" without knowing when you are. Reminder timing is set by quiet hours under Reminders, not here.",
+    de: "Wird nur für die WhatsApp-Autoantwort verwendet — ohne Ihre Zeiten können wir nicht \"geschlossen\" schreiben. Die Zeit für Erinnerungen steuern die Ruhezeiten unter Erinnerungen, nicht dies.",
+  },
+  "settings.openFrom": {
+    tr: "Açılış",
+    en: "Opens",
+    de: "Öffnet",
+  },
+  "settings.openTo": {
+    tr: "Kapanış",
+    en: "Closes",
+    de: "Schließt",
+  },
+  "settings.autoReply": {
+    tr: "Kapalıyken otomatik yanıt",
+    en: "Auto-reply when closed",
+    de: "Autoantwort bei geschlossen",
+  },
+  "settings.autoReplyHint": {
+    tr: "Kapalı olduğunuz saatlerde yazan müşteriye bir kez randevu linkinizi gönderir. Açıkken kapalıdır: mesajı zaten siz okuyorsunuz ve beş dakikada cevap veren bir insanın üzerine gelen robot yanıtı kötü görünür.",
+    en: "Sends your booking link once to anyone who writes while you're closed. Off during opening hours on purpose: you're reading those messages, and a bot replying on top of a human who answers in five minutes reads badly.",
+    de: "Sendet Ihren Buchungslink einmal an alle, die außerhalb der Öffnungszeiten schreiben. Während der Öffnungszeiten absichtlich aus: Sie lesen diese Nachrichten selbst, und eine Bot-Antwort über einem Menschen wirkt schlecht.",
+  },
+  "settings.autoReplyText": {
+    tr: "Kendi metniniz",
+    en: "Your own wording",
+    de: "Ihr eigener Text",
+  },
+  "settings.autoReplyTextHint": {
+    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın.",
+    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one.",
+    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden.",
+  },
+  "settings.bookingUrl": {
+    tr: "Randevu linki",
+    en: "Booking link",
+    de: "Buchungslink",
+  },
+  "settings.bookingUrlHint": {
+    tr: "cal.com sayfanızın adresi. Otomatik yanıtta ilk sırada bu gider — gece yarısı bir telefon numarası çıkmaz yol, link çalışır.",
+    en: "Your cal.com page. The auto-reply offers this first: a phone number is a dead end at midnight, a link isn't.",
+    de: "Ihre cal.com-Seite. Die Autoantwort nennt zuerst diesen Link — eine Telefonnummer führt um Mitternacht nirgendwohin.",
+  },
+  "settings.publicPhone": {
+    tr: "Müşteriye verilecek telefon",
+    en: "Phone to give customers",
+    de: "Telefonnummer für Kunden",
+  },
+  "settings.autoReplyInactive": {
+    tr: "Şu anda hiçbir şey gönderilmiyor: otomatik yanıt için en az bir açık gün veya saat ile bir link ya da telefon gerekiyor.",
+    en: "Nothing is being sent right now: the auto-reply needs at least one open day or hour, plus a link or a phone number.",
+    de: "Derzeit wird nichts gesendet: die Autoantwort braucht mindestens einen Öffnungstag oder eine Zeit sowie einen Link oder eine Telefonnummer.",
+  },
   "settings.calcomApiKey": {
     tr: "cal.com API anahtarı",
     en: "cal.com API key",

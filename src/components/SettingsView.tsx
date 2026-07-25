@@ -5,7 +5,12 @@ import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type TranslationKey } from "@/lib/i18n";
-import { formatReminderOffset } from "@/lib/datetime";
+import {
+  formatReminderOffset,
+  minutesToTimeValue,
+  timeValueToMinutes,
+  weekdayNames,
+} from "@/lib/datetime";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
@@ -54,6 +59,134 @@ function OffsetChips({
         );
       })}
     </div>
+  );
+}
+
+// Business hours + the out-of-hours WhatsApp reply. Everything the reply says
+// is org data, so this card is the whole configuration surface for it: which
+// days, which hours, the link, the number, and an optional override of the
+// wording. Weekday names come from Intl (see weekdayNames), not the dictionary.
+function AwayReplyCard({
+  isOwner,
+  org,
+  update,
+}: {
+  isOwner: boolean;
+  org: {
+    businessHours?: {
+      activeDays?: number[];
+      startMinute?: number;
+      endMinute?: number;
+    };
+    autoReplyEnabled: boolean;
+    autoReplyText?: string;
+    bookingUrl?: string;
+    publicPhone?: string;
+  };
+  update: (args: Record<string, unknown>) => void;
+}) {
+  const { t, language } = useLanguage();
+  const days = weekdayNames(language);
+  const hours = org.businessHours ?? {};
+  const activeDays = hours.activeDays ?? [];
+
+  // Mirrors hasBusinessHours + awayReplyText in the backend: hours must say
+  // something, and there must be a link or a number worth sending. Enabled but
+  // unconfigured sends nothing at all, and the owner should not have to find
+  // that out by a customer not hearing back.
+  const hasHours =
+    activeDays.length > 0 || hours.startMinute != null || hours.endMinute != null;
+  const hasSomethingToSay = Boolean(org.bookingUrl || org.publicPhone || org.autoReplyText);
+  const inactive = org.autoReplyEnabled && !(hasHours && hasSomethingToSay);
+
+  const patchHours = (next: Partial<NonNullable<typeof org.businessHours>>) =>
+    update({ businessHours: { ...hours, ...next } });
+
+  return (
+    <Card disabled={!isOwner}>
+      <div className={ROW_GRID}>
+        <RowLabel
+          label={t("settings.businessHours")}
+          hint={t("settings.businessHoursHint")}
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {days.map((label, index) => {
+            const active = activeDays.includes(index);
+            return (
+              <button
+                key={index}
+                type="button"
+                onClick={() =>
+                  patchHours({
+                    activeDays: active
+                      ? activeDays.filter((d) => d !== index)
+                      : [...activeDays, index].sort((a, b) => a - b),
+                  })
+                }
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  active
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <RowLabel label={t("settings.openFrom")} />
+        <input
+          type="time"
+          defaultValue={
+            hours.startMinute == null ? "" : minutesToTimeValue(hours.startMinute)
+          }
+          onChange={(e) => patchHours({ startMinute: timeValueToMinutes(e.target.value) })}
+        />
+        <RowLabel label={t("settings.openTo")} />
+        <input
+          type="time"
+          defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
+          onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
+        />
+
+        <RowLabel label={t("settings.autoReply")} hint={t("settings.autoReplyHint")} />
+        <Toggle
+          checked={org.autoReplyEnabled}
+          onChange={(next) => update({ autoReplyEnabled: next })}
+        />
+
+        <RowLabel label={t("settings.bookingUrl")} hint={t("settings.bookingUrlHint")} />
+        <input
+          defaultValue={org.bookingUrl ?? ""}
+          placeholder="https://cal.com/…"
+          onBlur={(e) => update({ bookingUrl: e.target.value })}
+        />
+
+        <RowLabel label={t("settings.publicPhone")} />
+        <input
+          defaultValue={org.publicPhone ?? ""}
+          placeholder="+90…"
+          onBlur={(e) => update({ publicPhone: e.target.value })}
+        />
+
+        <RowLabel
+          label={t("settings.autoReplyText")}
+          hint={t("settings.autoReplyTextHint")}
+        />
+        <textarea
+          rows={3}
+          defaultValue={org.autoReplyText ?? ""}
+          onBlur={(e) => update({ autoReplyText: e.target.value })}
+        />
+      </div>
+
+      {inactive && (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          {t("settings.autoReplyInactive")}
+        </p>
+      )}
+    </Card>
   );
 }
 
@@ -313,6 +446,14 @@ export function SettingsView() {
       )}
 
       {section === "voice" && <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />}
+
+      {section === "whatsapp" && (
+        <AwayReplyCard
+          isOwner={isOwner}
+          org={settings.org}
+          update={(args) => void update(args)}
+        />
+      )}
 
       {section === "bookings" && (
         <Card disabled={!isOwner}>
