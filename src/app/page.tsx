@@ -7,6 +7,7 @@ import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
 import { InboxView } from "@/components/InboxView";
 import { SettingsView } from "@/components/SettingsView";
+import { WorkspaceSetupView } from "@/components/WorkspaceSetupView";
 import { ContactView } from "@/components/ContactView";
 
 export default function Home() {
@@ -28,6 +29,7 @@ export default function Home() {
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
+          {tab === "workspace" && <WorkspaceSetupView />}
           {tab === "settings" && <SettingsView />}
         </>
       )}

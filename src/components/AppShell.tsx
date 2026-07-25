@@ -15,7 +15,12 @@ import { useTheme, type Theme } from "@/lib/theme";
 // (Nudge does the same); the initials menu keeps a shortcut to it because the
 // sidebar is hidden on phones.
 
-export type TabId = "appointments" | "customers" | "inbox" | "settings";
+export type TabId =
+  | "appointments"
+  | "customers"
+  | "inbox"
+  | "workspace"
+  | "settings";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
@@ -69,6 +74,13 @@ const InboxIcon = makeIcon(
     <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </>,
 );
+// Sliders: the workspace's own shape, set once and rarely touched.
+const WorkspaceIcon = makeIcon(
+  <>
+    <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
+    <path d="M1 14h6M9 8h6M17 16h6" />
+  </>,
+);
 // One gear definition, used at 18px in the sidebar and 16px in the user menu.
 const SettingsIcon = makeIcon(
   <>
@@ -101,10 +113,17 @@ const NAV_TABS: {
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
 ];
 
-// Settings is config, not a place you work, so it sits in its own group at the
-// foot of the sidebar (Nudge's grammar: the config group closes the nav). It
-// wears --foreground rather than a hue for the same reason.
+// Config is not a place you work, so it closes the nav in its own group
+// (Nudge's grammar). Both entries wear --foreground rather than a hue for the
+// same reason. Workspace setup is what the business IS (team, services,
+// contact fields); Settings is what it is CONNECTED to.
 const FOOT_TABS: typeof NAV_TABS = [
+  {
+    id: "workspace",
+    key: "nav.workspace",
+    Icon: WorkspaceIcon,
+    color: "var(--foreground)",
+  },
   {
     id: "settings",
     key: "nav.settings",
@@ -714,12 +733,13 @@ export function AppShell({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] md:rounded-xl md:border md:border-[var(--border)]">
         <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
           <h1 className="page-title truncate text-sm font-semibold md:text-base">
-            {tab === "settings"
-              ? t("settings.title")
-              : t(NAV_TABS.find((entry) => entry.id === tab)?.key ?? "app.name")}
+            {t(
+              [...NAV_TABS, ...FOOT_TABS].find((entry) => entry.id === tab)?.key ??
+                "app.name",
+            )}
           </h1>
           <div className="flex items-center gap-2">
-            {tab === "settings" && (
+            {(tab === "settings" || tab === "workspace") && (
               <button
                 aria-label="Close settings"
                 onClick={() => onTab("appointments")}

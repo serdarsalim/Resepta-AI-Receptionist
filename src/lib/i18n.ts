@@ -35,6 +35,7 @@ const dictionary = {
   "nav.inbox": { tr: "Gelen Kutusu", en: "Inbox" },
   "nav.collapse": { tr: "Menüyü daralt", en: "Collapse sidebar" },
   "nav.expand": { tr: "Menüyü genişlet", en: "Expand sidebar" },
+  "nav.workspace": { tr: "Çalışma alanı", en: "Workspace setup" },
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 
@@ -83,6 +84,9 @@ const dictionary = {
   "appointments.day": { tr: "Gün", en: "Day" },
   "appointments.week": { tr: "Hafta", en: "Week" },
   "appointments.today": { tr: "Bugün", en: "Today" },
+  "appointments.bookings": { tr: "randevu", en: "bookings" },
+  "appointments.unassigned": { tr: "Atanmamış", en: "Unassigned" },
+  "appointments.everyone": { tr: "Tüm personel", en: "Everyone" },
   "appointments.previous": { tr: "Önceki", en: "Previous" },
   "appointments.next": { tr: "Sonraki", en: "Next" },
 
@@ -109,6 +113,36 @@ const dictionary = {
   "customers.noConsent": { tr: "İzin yok", en: "No consent" },
 
   "messages.none": { tr: "Henüz mesaj yok", en: "No messages yet" },
+  // Delivery state and failure reasons in the reader's language. The stored
+  // values stay the English slugs; these are what a salon owner reads.
+  "message.queued": { tr: "sırada", en: "queued" },
+  "message.sent": { tr: "gönderildi", en: "sent" },
+  "message.delivered": { tr: "iletildi", en: "delivered" },
+  "message.read": { tr: "okundu", en: "read" },
+  "message.failed": { tr: "gönderilemedi", en: "not sent" },
+  "message.template": { tr: "Şablon mesajı", en: "Template message" },
+  "error.wa-not-configured": {
+    tr: "WhatsApp bağlı değil",
+    en: "WhatsApp not connected",
+  },
+  "error.no-consent": { tr: "Müşteri izni yok", en: "No consent from customer" },
+  "error.session-window-closed": {
+    tr: "24 saatlik pencere kapalı",
+    en: "24h window closed",
+  },
+  "error.no-template": {
+    tr: "Onaylı şablon yok",
+    en: "No approved template",
+  },
+  "error.missing-phone": { tr: "Telefon numarası yok", en: "No phone number" },
+  "error.agent-not-configured": {
+    tr: "Sesli asistan bağlı değil",
+    en: "Voice agent not connected",
+  },
+  "error.no-calendar-connected": {
+    tr: "cal.com bağlı değil",
+    en: "cal.com not connected",
+  },
 
   "settings.title": { tr: "Ayarlar", en: "Settings" },
   // Settings section chips. The rest reuse their card titles (Reminders,
@@ -205,6 +239,17 @@ const dictionary = {
     tr: "24 saatlik pencere kapalı. Müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
     en: "The 24h window is closed. Only template messages until the customer writes.",
   },
+
+  "services.title": { tr: "Hizmetler", en: "Services" },
+  "services.hint": {
+    tr: "Salonunuzun sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",
+    en: "What your salon offers. Bookings pick from this list, and the duration sets how long the appointment runs on the calendar.",
+  },
+  "services.name": { tr: "Hizmet adı", en: "Service name" },
+  "services.duration": { tr: "Süre", en: "Duration" },
+  "services.add": { tr: "Hizmet ekle", en: "Add service" },
+  "services.active": { tr: "Kullanımda", en: "Active" },
+  "services.minutes": { tr: "dk", en: "min" },
 
   "fields.title": { tr: "Kişi alanları", en: "Contact fields" },
   "fields.hint": {

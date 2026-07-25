@@ -61,6 +61,7 @@ export function InlineEditValue({
   options,
   type = "text",
   placeholder,
+  compact,
   onSave,
 }: {
   value: string;
@@ -68,6 +69,10 @@ export function InlineEditValue({
   options?: string[] | null;
   type?: "text" | "number" | "date" | "email" | "tel";
   placeholder?: string;
+  // Shrink-to-fit instead of filling its column. For values that read as one
+  // token with what follows them ("45" + "min"), where a full-width control
+  // would strand the unit on the far side of the row.
+  compact?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const [editing, setEditing] = useState(false);
@@ -108,7 +113,11 @@ export function InlineEditValue({
         onClick={() => setEditing(true)}
         // -mx-2 + px-2: the value stays flush with the label grid while the
         // hover wash bleeds outward instead of indenting the text.
-        className="group/iv -mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+        className={`group/iv flex min-w-0 items-center gap-1 rounded-md py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
+          compact
+            ? "px-1"
+            : "-mx-2 w-[calc(100%+1rem)] justify-between gap-2 px-2"
+        }`}
       >
         <span className={`min-w-0 break-words ${value ? "" : "text-[var(--muted)]"}`}>
           {value || placeholder || ""}
@@ -153,7 +162,7 @@ export function InlineEditValue({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setEditing(false);
       }}
-      className="px-2 py-1 text-sm"
+      className={`px-2 py-1 text-sm ${compact ? "w-20" : ""}`}
     />
   );
 }

@@ -8,6 +8,7 @@ import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
+import { Card } from "./Card";
 
 const TIMEZONES = [
   "Europe/Istanbul",
@@ -25,227 +26,6 @@ const TIMEZONES = [
 // row — not squeezed into the label column.
 const ROW_GRID =
   "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
-
-function Card({ title, tip, disabled, children }: {
-  // Omitted when the section chip above already names the card — a section
-  // with one card would otherwise stack "Reminders" under "Reminders".
-  title?: string;
-  tip?: string;
-  // Staff see owner-only cards read-only; a native fieldset disables every
-  // input/button inside without per-control wiring.
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-      {title && (
-        <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-sm font-semibold">{title}</h2>
-          {tip && <InfoTip text={tip} />}
-        </div>
-      )}
-      <fieldset disabled={disabled} className={disabled ? "opacity-70" : undefined}>
-        {children}
-      </fieldset>
-    </section>
-  );
-}
-
-function TeamCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
-  const team = useQuery(api.team.overview, {});
-  const invite = useMutation(api.team.invite);
-  const revokeInvite = useMutation(api.team.revokeInvite);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Card title={t("team.title")} tip={t("team.inviteHint")}>
-      {team === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : (
-        <div className="space-y-3">
-          <ul className="divide-y divide-[var(--border)]">
-            {team.members.map((member) => (
-              <li key={member._id} className="flex items-center gap-3 py-2 text-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="truncate font-medium">
-                    {member.name || member.email}
-                    {member.isMe && (
-                      <span className="ml-1 text-xs text-[var(--muted)]">
-                        ({t("team.you")})
-                      </span>
-                    )}
-                  </span>
-                  {member.name && member.email && (
-                    <span className="block truncate text-xs text-[var(--muted)]">
-                      {member.email}
-                    </span>
-                  )}
-                </span>
-                <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                  {member.role === "staff" ? t("role.staff") : t("role.owner")}
-                </span>
-              </li>
-            ))}
-            {team.pending.map((pendingInvite) => (
-              <li key={pendingInvite._id} className="flex items-center gap-3 py-2 text-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
-                  <span className="block text-xs text-[var(--muted)]">
-                    {t("team.pending")} ·{" "}
-                    {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
-                  </span>
-                </span>
-                {isOwner && (
-                  <button
-                    className="rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
-                    onClick={() => void revokeInvite({ inviteId: pendingInvite._id })}
-                  >
-                    {t("team.revoke")}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {isOwner && (
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const formEl = event.currentTarget;
-                const form = new FormData(formEl);
-                setError(null);
-                try {
-                  await invite({
-                    email: String(form.get("email") ?? ""),
-                    role: form.get("role") === "owner" ? "owner" : "staff",
-                  });
-                  formEl.reset();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "error");
-                }
-              }}
-            >
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder="ornek@gmail.com"
-                className="w-56"
-              />
-              <select name="role" defaultValue="staff" className="w-auto">
-                <option value="staff">{t("role.staff")}</option>
-                <option value="owner">{t("role.owner")}</option>
-              </select>
-              <button
-                type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("team.invite")}
-              </button>
-              {error && (
-                <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>
-              )}
-            </form>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function FieldsCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
-  const fields = useQuery(api.contactFields.list, {});
-  const createField = useMutation(api.contactFields.create);
-  const removeField = useMutation(api.contactFields.remove);
-  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
-      <ul className="mb-3 divide-y divide-[var(--border)]">
-        {(fields ?? []).map((field) => (
-          <li key={field._id} className="flex items-center gap-3 py-2 text-sm">
-            <span className="min-w-0 flex-1">
-              <span className="font-medium">{field.label}</span>
-              <span className="ml-2 text-xs text-[var(--muted)]">
-                {t(`fields.type.${field.type}` as "fields.type.text")}
-                {field.options?.length ? ` · ${field.options.join(", ")}` : ""}
-              </span>
-            </span>
-            {isOwner && (
-              <button
-                className="rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
-                onClick={() => void removeField({ fieldId: field._id })}
-              >
-                {t("common.delete")}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {isOwner && (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const formEl = event.currentTarget;
-            const form = new FormData(formEl);
-            setError(null);
-            try {
-              await createField({
-                label: String(form.get("label") ?? ""),
-                type,
-                options:
-                  type === "select"
-                    ? String(form.get("options") ?? "")
-                        .split(",")
-                        .map((o) => o.trim())
-                        .filter(Boolean)
-                    : undefined,
-              });
-              formEl.reset();
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "error");
-            }
-          }}
-        >
-          <label className="block text-sm">
-            {t("fields.label")}
-            <input name="label" required className="mt-1 block w-44" />
-          </label>
-          <label className="block text-sm">
-            {t("fields.typeLabel")}
-            <select
-              className="mt-1 block w-auto"
-              value={type}
-              onChange={(e) => setType(e.target.value as typeof type)}
-            >
-              <option value="text">{t("fields.type.text")}</option>
-              <option value="select">{t("fields.type.select")}</option>
-              <option value="number">{t("fields.type.number")}</option>
-              <option value="date">{t("fields.type.date")}</option>
-            </select>
-          </label>
-          {type === "select" && (
-            <label className="block text-sm">
-              {t("fields.options")}
-              <input name="options" className="mt-1 block w-56" />
-            </label>
-          )}
-          <button
-            type="submit"
-            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("fields.add")}
-          </button>
-          {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
-        </form>
-      )}
-    </Card>
-  );
-}
 
 // Reminder timing as toggle chips — a salon owner taps "1 gün önce", never
 // types "24, 2". Amber = selection (Nudge: amber selects, blue acts).
@@ -355,14 +135,13 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
   );
 }
 
-// Settings is one sidebar destination with sections inside it, rather than
-// eight cards on one long scroll. Workspace setup leads: it is the business
-// itself (name, who works here, what a customer record holds); the rest are
-// the channels hanging off it.
-type Section = "workspace" | "reminders" | "whatsapp" | "bookings" | "voice";
+// Settings holds the connections and the sending rules. What the business IS
+// (team, services, contact fields) lives next door in Workspace setup, its own
+// sidebar destination. Sections here rather than one long scroll of cards.
+type Section = "business" | "reminders" | "whatsapp" | "bookings" | "voice";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "workspace", key: "settings.section.workspace" },
+  { id: "business", key: "settings.business" },
   { id: "reminders", key: "settings.reminders" },
   { id: "whatsapp", key: "settings.whatsapp" },
   { id: "bookings", key: "settings.bookings" },
@@ -398,7 +177,7 @@ function SectionChip({
 
 export function SettingsView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("workspace");
+  const [section, setSection] = useState<Section>("business");
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
   const connectWhatsapp = useMutation(api.orgs.connectWhatsapp);
@@ -437,9 +216,8 @@ export function SettingsView() {
         </p>
       )}
 
-      {section === "workspace" && (
-        <>
-          <Card title={t("settings.business")} disabled={!isOwner}>
+      {section === "business" && (
+          <Card disabled={!isOwner}>
             <div className={ROW_GRID}>
               <RowLabel label={t("settings.businessName")} />
               <input
@@ -476,11 +254,6 @@ export function SettingsView() {
               </select>
             </div>
           </Card>
-
-          <TeamCard isOwner={isOwner} />
-
-          <FieldsCard isOwner={isOwner} />
-        </>
       )}
 
       {section === "reminders" && (

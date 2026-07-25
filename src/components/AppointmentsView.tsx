@@ -203,6 +203,12 @@ export function AppointmentsView({
           anchor={anchor}
           onAnchor={setAnchor}
           onOpenContact={onOpenContact}
+          // A collapsed cluster in week view is a "there is too much here to
+          // read" marker, so the only useful click is to go look at that day.
+          onOpenDay={(dayMs) => {
+            setView("day");
+            setAnchor(dayMs);
+          }}
         />
       )}
 
@@ -420,18 +426,35 @@ function minutesInto(ms: number): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+type Cluster = { key: string; startAt: number; endAt: number; size: number };
+type Placed = {
+  row: CalendarAppointment;
+  lane: number;
+  lanes: number;
+  cluster: Cluster;
+};
+
 // Side-by-side placement for bookings that overlap in time. Rows are grouped
 // into clusters of mutually overlapping appointments, and each cluster is
-// split into as many lanes as it needs.
-function laneOut(rows: CalendarAppointment[]) {
+// split into as many lanes as it needs. Every placement carries its cluster
+// back out so a caller can decide the cluster is too crowded to draw.
+function laneOut(rows: CalendarAppointment[]): Placed[] {
   const sorted = [...rows].sort((a, b) => a.startAt - b.startAt);
-  const placed: { row: CalendarAppointment; lane: number; lanes: number }[] = [];
+  const placed: Placed[] = [];
   let cluster: { row: CalendarAppointment; lane: number }[] = [];
   let clusterEnd = -Infinity;
 
   const flush = () => {
-    const lanes = cluster.reduce((max, item) => Math.max(max, item.lane + 1), 0);
-    for (const item of cluster) placed.push({ ...item, lanes });
+    if (cluster.length > 0) {
+      const lanes = cluster.reduce((max, item) => Math.max(max, item.lane + 1), 0);
+      const info: Cluster = {
+        key: cluster[0].row._id, // sorted, so the first row is the earliest
+        startAt: cluster[0].row.startAt,
+        endAt: clusterEnd,
+        size: cluster.length,
+      };
+      for (const item of cluster) placed.push({ ...item, lanes, cluster: info });
+    }
     cluster = [];
     clusterEnd = -Infinity;
   };
@@ -455,18 +478,69 @@ function laneOut(rows: CalendarAppointment[]) {
   return placed;
 }
 
+// Three bookings sharing a 160px week column leave ~50px each, which is a
+// sliver with no readable content. Past this many, the cluster stops trying
+// to be a schedule and becomes a count you can click into.
+const CROWDED = 3;
+
+type PlacedItem =
+  | { kind: "one"; key: string; row: CalendarAppointment; lane: number; lanes: number }
+  | { kind: "cluster"; key: string; startAt: number; endAt: number; count: number };
+
+// Day view always draws every booking: its columns are wide, and two bookings
+// in one person's column is a real double-booking worth seeing. Week view
+// folds the crowded clusters, and leaves clusters of one or two alone.
+function placeColumn(rows: CalendarAppointment[], collapse: boolean): PlacedItem[] {
+  const items: PlacedItem[] = [];
+  const folded = new Set<string>();
+  for (const { row, lane, lanes, cluster } of laneOut(rows)) {
+    if (!collapse || cluster.size < CROWDED) {
+      items.push({ kind: "one", key: row._id, row, lane, lanes });
+      continue;
+    }
+    if (folded.has(cluster.key)) continue;
+    folded.add(cluster.key);
+    items.push({
+      kind: "cluster",
+      key: cluster.key,
+      startAt: cluster.startAt,
+      endAt: cluster.endAt,
+      count: cluster.size,
+    });
+  }
+  return items;
+}
+
+// One column of the grid. In week view that is a day; in day view it is a
+// person, so a salon can read its chairs side by side.
+type CalendarColumn = {
+  key: string;
+  day: number;
+  label?: string;
+  rows: CalendarAppointment[];
+};
+
+// The grid is roughly this wide on a laptop once the hour gutter is gone.
+// Estimated rather than measured: knowing whether a block can hold a name
+// isn't worth a layout pass on every render.
+const APPROX_GRID_PX = 1050;
+// Under this, a block is all padding and truncation, so the name comes off.
+const NARROW_BLOCK_PX = 80;
+
 function Calendar({
   appointments,
   view,
   anchor,
   onAnchor,
   onOpenContact,
+  onOpenDay,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
   anchor: number;
   onAnchor: (next: number) => void;
   onOpenContact: (id: Id<"customers">) => void;
+  onOpenDay: (dayMs: number) => void;
 }) {
   const { t, language } = useLanguage();
   const locale = language === "tr" ? "tr-TR" : "en-GB";
@@ -487,6 +561,53 @@ function Calendar({
       (a) => a.startAt >= from && a.startAt < to && a.status !== "cancelled",
     );
   }, [appointments, days]);
+
+  // Day view splits the day by person: the question at the desk is "who is
+  // free at three", and that only reads if each person owns a column. Week
+  // view stays seven days, because seven days times four staff is a wall.
+  //
+  // Staff is free text and plenty of salons never fill it in, so the columns
+  // are derived from whatever is actually on the day. Nothing filled in means
+  // one plain column, exactly as before.
+  const columns = useMemo<CalendarColumn[]>(() => {
+    if (view !== "day") {
+      return days.map((day) => ({
+        key: String(day),
+        day,
+        rows: visible.filter((a) => a.startAt >= day && a.startAt < day + DAY_MS),
+      }));
+    }
+    const day = days[0];
+    const rows = visible.filter((a) => a.startAt >= day && a.startAt < day + DAY_MS);
+    const named = new Set<string>();
+    let anyUnassigned = false;
+    for (const row of rows) {
+      const name = row.staffName?.trim();
+      if (name) named.add(name);
+      else anyUnassigned = true;
+    }
+    if (named.size === 0) return [{ key: String(day), day, rows }];
+
+    const byStaff: CalendarColumn[] = [...named]
+      .sort((a, b) => a.localeCompare(b, locale))
+      .map((name) => ({
+        key: `${day}:${name}`,
+        day,
+        label: name,
+        rows: rows.filter((row) => row.staffName?.trim() === name),
+      }));
+    // Trailing, and only when someone is actually unassigned: an empty column
+    // for a state nobody is in is just noise.
+    if (anyUnassigned) {
+      byStaff.push({
+        key: `${day}:unassigned`,
+        day,
+        label: t("appointments.unassigned"),
+        rows: rows.filter((row) => !row.staffName?.trim()),
+      });
+    }
+    return byStaff;
+  }, [view, days, visible, locale, t]);
 
   // The grid opens on the working day and stretches only for bookings that
   // fall outside it, so an 08:00 salon never scrolls past six empty hours.
@@ -536,6 +657,9 @@ function Calendar({
           { day: "numeric", month: "long" },
         ).format(new Date(days[6]))}`;
 
+  const staffColumns = columns.some((column) => column.label !== undefined);
+  const columnPx = APPROX_GRID_PX / columns.length;
+
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2 flex items-center gap-1">
@@ -562,28 +686,40 @@ function Calendar({
         </button>
       </div>
 
-      {/* Day headers stay put while the hours scroll under them. */}
+      {/* Column headers stay put while the hours scroll under them. With staff
+          columns the names take this row over: the date is already in the
+          heading above, and a date row on top of a name row is two headers
+          stacked for one thing. */}
       <div className="flex pr-[10px]">
         <div className="w-12 shrink-0" />
-        {days.map((day) => {
-          const isToday = startOfDay(now) === day;
-          return (
-            <div key={day} className="min-w-0 flex-1 pb-2 text-center">
-              <div className="text-xs text-[var(--muted)]">
-                {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(day))}
-              </div>
+        {staffColumns
+          ? columns.map((column) => (
               <div
-                className={`mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
-                  isToday
-                    ? "bg-[var(--brand)] font-semibold text-white"
-                    : "text-[var(--foreground)]"
-                }`}
+                key={column.key}
+                className="min-w-0 flex-1 pb-2 text-center text-sm font-medium"
               >
-                {new Date(day).getDate()}
+                <span className="block truncate px-1">{column.label}</span>
               </div>
-            </div>
-          );
-        })}
+            ))
+          : days.map((day) => {
+              const isToday = startOfDay(now) === day;
+              return (
+                <div key={day} className="min-w-0 flex-1 pb-2 text-center">
+                  <div className="text-xs text-[var(--muted)]">
+                    {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(day))}
+                  </div>
+                  <div
+                    className={`mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
+                      isToday
+                        ? "bg-[var(--brand)] font-semibold text-white"
+                        : "text-[var(--foreground)]"
+                    }`}
+                  >
+                    {new Date(day).getDate()}
+                  </div>
+                </div>
+              );
+            })}
       </div>
 
       <div ref={scrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
@@ -606,16 +742,13 @@ function Calendar({
             ))}
           </div>
 
-          {days.map((day, dayIndex) => {
-            const rows = visible.filter(
-              (a) => a.startAt >= day && a.startAt < day + DAY_MS,
-            );
-            const showNow = startOfDay(now) === day;
+          {columns.map((column, columnIndex) => {
+            const showNow = startOfDay(now) === column.day;
             return (
               <div
-                key={day}
+                key={column.key}
                 className={`relative min-w-0 flex-1 ${
-                  dayIndex > 0 ? "border-l border-[var(--border)]" : ""
+                  columnIndex > 0 ? "border-l border-[var(--border)]" : ""
                 }`}
                 // Hour rules as a background gradient: one hairline per hour
                 // without a div per row.
@@ -625,7 +758,43 @@ function Calendar({
                   ["--hour" as string]: `${HOUR_PX}px`,
                 }}
               >
-                {laneOut(rows).map(({ row, lane, lanes }) => {
+                {placeColumn(column.rows, view === "week").map((item) => {
+                  if (item.kind === "cluster") {
+                    const top =
+                      ((minutesInto(item.startAt) - dayStart * 60) / 60) * HOUR_PX;
+                    const height = Math.max(
+                      ((item.endAt - item.startAt) / 3_600_000) * HOUR_PX - 2,
+                      20,
+                    );
+                    const count = `${item.count} ${t("appointments.bookings")}`;
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => onOpenDay(column.day)}
+                        title={count}
+                        style={{ top, height, left: 2, right: 2 }}
+                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 ${BLOCK_STYLE.scheduled}`}
+                      >
+                        {height < 40 ? (
+                          <span className="block truncate">
+                            <span className="font-medium tabular-nums">
+                              {formatTime(item.startAt, language)}
+                            </span>{" "}
+                            {count}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="block truncate font-medium tabular-nums">
+                              {formatTime(item.startAt, language)}
+                            </span>
+                            <span className="block truncate">{count}</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  }
+
+                  const { row, lane, lanes } = item;
                   const top =
                     ((minutesInto(row.startAt) - dayStart * 60) / 60) * HOUR_PX;
                   const height = Math.max(
@@ -635,9 +804,13 @@ function Calendar({
                   const name = row.customer
                     ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
                     : "";
+                  // Two lanes in a week column is about 75px each, and a name
+                  // in 75px minus padding is three letters and an ellipsis.
+                  // The time is the part you scan for, so it keeps the block.
+                  const narrow = columnPx / lanes < NARROW_BLOCK_PX;
                   return (
                     <button
-                      key={row._id}
+                      key={item.key}
                       onClick={() => onOpenContact(row.customerId)}
                       title={[name, row.serviceName, row.staffName]
                         .filter(Boolean)
@@ -654,7 +827,11 @@ function Calendar({
                     >
                       {/* A half-hour block is one line tall, so the time and
                           the name share it rather than clipping. */}
-                      {height < 40 ? (
+                      {narrow ? (
+                        <span className="block truncate font-medium tabular-nums">
+                          {formatTime(row.startAt, language)}
+                        </span>
+                      ) : height < 40 ? (
                         <span className="block truncate">
                           <span className="font-medium tabular-nums">
                             {formatTime(row.startAt, language)}

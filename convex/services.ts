@@ -61,3 +61,18 @@ export const update = mutation({
     return null;
   },
 });
+
+// Hard delete. Past appointments keep their own record and simply stop
+// resolving a service name, which is the honest outcome: the salon stopped
+// offering it. Deactivating instead is the softer path (`update`).
+export const remove = mutation({
+  args: { serviceId: v.id("services") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const service = await ctx.db.get(args.serviceId);
+    if (!service || service.orgId !== orgId) throw new Error("not-found");
+    await ctx.db.delete(args.serviceId);
+    return null;
+  },
+});
