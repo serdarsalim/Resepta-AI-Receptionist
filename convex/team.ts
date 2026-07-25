@@ -28,10 +28,15 @@ export const overview = query({
   }),
   handler: async (ctx) => {
     const { user, orgId } = await requireOrg(ctx);
-    const members = await ctx.db
-      .query("users")
+    const rows = await ctx.db
+      .query("memberships")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    const members = [];
+    for (const row of rows) {
+      const member = await ctx.db.get(row.userId);
+      if (member) members.push({ ...member, role: row.role });
+    }
     const invites = await ctx.db
       .query("invites")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -63,13 +68,28 @@ export const invite = mutation({
     const { user, orgId } = await requireOwner(ctx);
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("bad-email");
-    // Already a member anywhere? A Google account belongs to one org in this
-    // model — surface it instead of minting an invite that can never fire.
+    // Workspace model: an EXISTING account joins immediately as a membership
+    // (Retell/Slack behavior) — invite rows are only for addresses with no
+    // account yet.
     const existingUser = await ctx.db
       .query("users")
       .withIndex("email", (q) => q.eq("email", email))
       .first();
-    if (existingUser) throw new Error("already-registered");
+    if (existingUser) {
+      const already = await ctx.db
+        .query("memberships")
+        .withIndex("by_user_org", (q) =>
+          q.eq("userId", existingUser._id).eq("orgId", orgId),
+        )
+        .unique();
+      if (already) throw new Error("already-member");
+      await ctx.db.insert("memberships", {
+        userId: existingUser._id,
+        orgId,
+        role: args.role,
+      });
+      return null;
+    }
     const open = (
       await ctx.db
         .query("invites")

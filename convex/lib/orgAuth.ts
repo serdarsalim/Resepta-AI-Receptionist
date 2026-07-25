@@ -12,25 +12,39 @@ export async function requireUser(ctx: Ctx): Promise<Doc<"users">> {
   return user;
 }
 
-// The gate every org-scoped function goes through. Also the only place the
-// caller→org mapping is resolved, so a query can't accidentally take orgId as
-// a client-supplied argument.
+// The gate every org-scoped function goes through — and since workspaces
+// (2026-07-25) the only place membership is verified. users.orgId is the
+// ACTIVE workspace; access requires a memberships row for it. A stale active
+// org (revoked membership) falls back to the first remaining membership.
 export async function requireOrg(
   ctx: Ctx,
-): Promise<{ user: Doc<"users">; orgId: Id<"orgs"> }> {
+): Promise<{ user: Doc<"users">; orgId: Id<"orgs">; role: "owner" | "staff" }> {
   const user = await requireUser(ctx);
-  if (!user.orgId) throw new Error("no-org");
-  return { user, orgId: user.orgId };
+  if (user.orgId) {
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) =>
+        q.eq("userId", user._id).eq("orgId", user.orgId!),
+      )
+      .unique();
+    if (membership) return { user, orgId: membership.orgId, role: membership.role };
+  }
+  const fallback = await ctx.db
+    .query("memberships")
+    .withIndex("by_user", (q) => q.eq("userId", user._id))
+    .first();
+  if (!fallback) throw new Error("no-org");
+  return { user, orgId: fallback.orgId, role: fallback.role };
 }
 
 // Owner-only gate for org configuration: Settings mutations, WhatsApp
 // credentials, invites. Staff read the org and work the appointments; they
-// don't reshape the business. `role` unset (pre-invite rows) counts as owner.
+// don't reshape the business.
 export async function requireOwner(
   ctx: Ctx,
 ): Promise<{ user: Doc<"users">; orgId: Id<"orgs"> }> {
-  const { user, orgId } = await requireOrg(ctx);
-  if (user.role !== undefined && user.role !== "owner") throw new Error("owner-only");
+  const { user, orgId, role } = await requireOrg(ctx);
+  if (role !== "owner") throw new Error("owner-only");
   return { user, orgId };
 }
 

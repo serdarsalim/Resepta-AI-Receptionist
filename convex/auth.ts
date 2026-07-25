@@ -58,6 +58,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           orgId: invite.orgId,
           role: invite.role,
         });
+        await db.insert("memberships", {
+          userId,
+          orgId: invite.orgId,
+          role: invite.role,
+        });
         // Audit trail of who admitted whom; stamping also drops the row off
         // the pending list.
         await db.patch(invite._id, {

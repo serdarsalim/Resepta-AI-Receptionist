@@ -67,7 +67,7 @@ export const current = query({
     ),
   }),
   handler: async (ctx) => {
-    const { user, orgId } = await requireOrg(ctx);
+    const { user, orgId, role } = await requireOrg(ctx);
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("no-org");
     const waAccount = await ctx.db
@@ -97,7 +97,7 @@ export const current = query({
       me: {
         name: user.name,
         email: user.email,
-        role: user.role,
+        role,
         themePreference: user.themePreference,
       },
       whatsapp: waAccount

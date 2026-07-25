@@ -35,6 +35,18 @@ export default defineSchema({
     .index("email", ["email"])
     .index("by_org", ["orgId"]),
 
+  // Workspace memberships (Retell-style, decided 2026-07-25): one login can
+  // belong to MANY orgs; users.orgId is merely the ACTIVE workspace. Role
+  // lives here, per workspace — never on the user row.
+  memberships: defineTable({
+    userId: v.id("users"),
+    orgId: v.id("orgs"),
+    role: v.union(v.literal("owner"), v.literal("staff")),
+  })
+    .index("by_user", ["userId"])
+    .index("by_org", ["orgId"])
+    .index("by_user_org", ["userId", "orgId"]),
+
   // Team invites. No token is mailed and none is checked (Nudge's model):
   // Google has already proven the signer-in controls the address, so matching
   // on the address IS the verification. An open invite = acceptedAt unset.
