@@ -9,7 +9,8 @@ import {
   getAvailableSlots,
   rescheduleBooking,
 } from "./lib/calcomApi";
-import { formatAppointmentTime, localDayRangeUtc, todayInZone } from "./lib/format";
+import { formatAppointmentTime } from "./lib/format";
+import { localDayRangeUtc, todayInZone } from "./lib/businessHours";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);

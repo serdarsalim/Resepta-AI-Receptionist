@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { DEFAULT_QUIET_HOURS, DEFAULT_REMINDER_OFFSETS } from "./orgs";
+import { getLocalPartsSafe } from "./lib/businessHours";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // Offsets are capped at 168h in orgs.update, so everything that could be due
@@ -11,25 +12,14 @@ const DAY_MS = 24 * 3600_000;
 // Winback looks back at most this far for no_shows still worth chasing.
 const WINBACK_LOOKBACK_MS = 45 * DAY_MS;
 
-// Local hour (0–23) in the org's timezone; on a bad zone fall back to UTC.
-function hourInZone(now: number, timezone: string): number {
-  try {
-    return Number(
-      new Intl.DateTimeFormat("en-GB", {
-        timeZone: timezone,
-        hour: "numeric",
-        hourCycle: "h23",
-      }).format(new Date(now)),
-    );
-  } catch {
-    return new Date(now).getUTCHours();
-  }
-}
-
+// Quiet hours are about the CUSTOMER's evening, not the salon's opening times:
+// a barber closed on Monday still wants Monday's reminders going out for
+// Tuesday's appointments. Business hours (orgs.businessHours) are a separate
+// window and drive the WhatsApp away-reply instead.
 function insideSendWindow(org: Doc<"orgs">, now: number): boolean {
   const start = org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0];
   const end = org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1];
-  const hour = hourInZone(now, org.timezone);
+  const hour = getLocalPartsSafe(now, org.timezone).hour;
   return hour >= start && hour < end;
 }
 
