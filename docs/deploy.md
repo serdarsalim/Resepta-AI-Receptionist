@@ -82,6 +82,35 @@ The cal.com token is per-org and is how a booking resolves to a business —
 cal.com's payload carries no tenant identity. Rotating it in Settings
 invalidates the old URL.
 
+## 4b. cal.com event type: two settings that are not optional
+
+Both are consequences of Randevu writing to cal.com rather than reading from it.
+
+**Turn OFF cal.com's attendee emails** for the Randevu event type. Randevu owns
+every message to the customer — that is the product — and a phone-only walk-in
+is booked with a placeholder address (`…@noemail.randevu.app`) that cal.com would
+otherwise try to email and bounce. cal.com keeps the calendar; Randevu keeps the
+conversation.
+
+**Add duration options covering your service lengths.** Set
+`lengthInMinutesOptions` on the event type to include every duration in
+Settings → Services (30, 45, 60, 90…). cal.com takes `lengthInMinutes` on a
+booking only when the event type declares it, so without this a 90-minute colour
+books as the event type's default length and the salon's Google Calendar is
+wrong about how long the chair is busy. A resize that cal.com will not accept is
+refused with a readable reason rather than moving the block and lying.
+
+## 4c. Backfill staff
+
+One-shot, after the first deploy of the staff table. Turns the old free-text
+`staffName` into one row per person per org and links every appointment.
+
+```bash
+npx convex run migrations:backfillStaff
+```
+
+Idempotent, and it leaves `staffName` in place so a rollback still renders.
+
 ## 5. Seed the demo org
 
 `convex/devSeed.ts` already builds a believable business: services, 20 Turkish
@@ -117,6 +146,14 @@ Each step is the first live exercise of code that has only ever typechecked.
    cal.com again.
 8. **Message the number outside business hours** with something that isn't
    EVET/İPTAL. Expect one away-reply with the booking link, and only one.
+9. **Click an empty slot on the calendar**, book, and confirm the booking appears
+   in cal.com with the right *length*, not just the right start.
+10. **Drag a block to a new time.** It should move instantly, then stay. Watch
+    cal.com: the old slot frees, the new one blocks.
+11. **Drag a block onto an occupied slot.** It should snap back with a reason and
+    offer "book anyway"; taking that offer should double-book deliberately.
+12. **Drag a block's bottom edge.** This is cancel-and-rebook underneath, so
+    check cal.com ends up with exactly one booking at the new length.
 
 Write down every step that surprised you. That list is the onboarding script.
 
