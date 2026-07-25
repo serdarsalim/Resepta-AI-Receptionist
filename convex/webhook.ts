@@ -70,16 +70,30 @@ export const handleWhatsappEvent = internalMutation({
           const text = (message.text as { body?: string } | undefined)?.body ?? "";
           const payload = buttonPayload ?? interactivePayload ?? "";
 
+          // A number we have never seen is not noise, it is the new customer
+          // this product exists to catch. It used to be logged with no
+          // customerId, and the inbox groups by customer, so the message was
+          // invisible everywhere: nobody ever learned that someone had
+          // written. Create the record instead, with the phone standing in
+          // until a human types a name. Consent stays unset; them writing to
+          // us opens Meta's session window, it is not KVKK consent for us to
+          // start messaging them.
+          const contactId =
+            customer?._id ??
+            (await ctx.db.insert("customers", {
+              orgId,
+              firstName: "",
+              phone,
+            }));
+
           await logInboundRow(ctx, {
             orgId,
-            customerId: customer?._id,
+            customerId: contactId,
             body: payload || text,
             wamid: message.id as string | undefined,
           });
-          if (customer) {
-            // Opens Meta's 24h session window for any future free-form reply.
-            await ctx.db.patch(customer._id, { lastInboundAt: Date.now() });
-          }
+          // Opens Meta's 24h session window for any future free-form reply.
+          await ctx.db.patch(contactId, { lastInboundAt: Date.now() });
 
           // Tell the staff who opted in. Scheduled, never inline: a broken
           // alert must not cost the salon the customer's actual message. The

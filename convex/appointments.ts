@@ -123,11 +123,10 @@ export async function scheduleConfirmationIfConfigured(
 ) {
   const org = await ctx.db.get(orgId);
   if (!org || org.sendBookingConfirmation === false) return;
-  const waAccount = await ctx.db
-    .query("waAccounts")
-    .withIndex("by_org", (q) => q.eq("orgId", orgId))
-    .unique();
-  if (!waAccount) return;
+  // No WhatsApp account is NOT a reason to skip the confirmation. The sender
+  // attempts each channel independently, so an org with an email address and
+  // no WABA still confirms its bookings; returning here meant an unconfigured
+  // WhatsApp silently blocked the email lane too.
   await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
     appointmentId,
     kind: "confirmation",
