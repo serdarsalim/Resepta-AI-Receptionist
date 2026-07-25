@@ -53,34 +53,66 @@ strategy documented in session notes, revisit post-launch).
   `no_show`, org toggle, same scheduler pattern.
 - **Quiet hours:** org-level send window for reminders (Türkiye default
   09:00–21:00); the tick already stamps offsets, it just holds dispatch.
+- **Email connector:** per-org sender (Resend or SMTP) for booking
+  confirmations to customers who give an email — port Nudge's `emailSenders`
+  shape (shared registry, sender-id keying, `replaceSignature`). Optional
+  channel, never blocks WhatsApp.
+- **Evolution API lane: probable-later, NOT in v1** (Serdar, 2026-07-25).
+  When it lands it's a second provider on the send path (dedicated-number
+  strategy per the session notes), mirroring Nudge's per-number provider
+  branch. Nothing in Phase B may assume wa_cloud is the only provider —
+  keep the branch point.
 
 ### Phase C — voice receptionist (the fonio core)
 - **Retell agent per org:** `retellAgents` table (agentId, voice, language,
   greeting, transfer number, inbound number). Nudge's Retell integration is the
   prior art (REST direct with `RETELL_API_KEY`).
-- **Inbound flow:** number → Retell agent → function calls into Randevu:
-  `check_availability(date)` → free slots from the availability model,
-  `book_appointment(name, phone, service, slot)` → same `appointments` insert
-  path as every other channel (source `"voice"`), `cancel/reschedule` by phone
-  lookup, `transfer_to_human` → org's transfer number.
+- **Inbound flow — DECIDED: agent routes through Randevu, not cal.com
+  directly.** Number → Retell agent → custom function calls into Randevu's
+  Convex HTTP endpoints → our cal.com adapter. Rationale: the agent needs
+  OUR data (caller recognition by phone, the caller's existing appointments
+  for cancel/reschedule, consent state) and every function call must be
+  logged on our side for debugging; cal.com only knows slots. Functions:
+  `check_availability(date)` → cal.com slots API via org's key;
+  `book_appointment(name, phone, service, slot)` → cal.com booking API, echo
+  deduped by externalUid, source `"voice"`; `cancel/reschedule` by phone
+  lookup in OUR appointments table; `transfer_to_human` → org's transfer
+  number.
+  **Exception:** the week-one Turkish test call uses Retell's NATIVE cal.com
+  tools (zero code) purely to validate voice quality and flow — production
+  never ships on the native tools.
 - **Post-call:** webhook → call row (transcript, summary, outcome, recording
   URL) + optional WhatsApp confirmation to the caller (booking confirmations
   are template sends — same lane as everything else).
 - **Calls tab:** list with outcome badges, transcript drawer, recording player.
-- **RISK (validate before building):** Turkish inbound numbers. Retell's
-  number inventory is US-centric; TR numbers likely need a local SIP trunk
-  (Netgsm/Bulutfon) bridged via Retell SIP. Partner should confirm the
-  provisioning path for ONE real number before this phase starts. Turkish
-  voice quality on ElevenLabs/Retell also needs a listen test.
+- **Numbers: DECIDED (2026-07-25, Serdar) — TR numbers come in via SIP trunk
+  to Retell.** Serdar owns provisioning. The agent/number management layer is
+  a PORT of Nudge's Retell subsystem (`retellAgentNumbers`: agent-first model,
+  number pinning, hourly binding sync, working-hours clamp) — reuse, don't
+  redesign.
+- **Availability: DECIDED (2026-07-25, Serdar) — cal.com IS the scheduling
+  system.** No in-app availability model. The voice agent's
+  `check_availability` calls cal.com's slots API and `book_appointment`
+  creates the booking via cal.com's API (per-org API key + event type in
+  Settings → Bookings); the booking echoes back through our existing webhook
+  and the upsert-by-externalUid already dedupes it. cal.com owns working
+  hours, staff schedules, collisions, and Google Calendar sync.
+- **Remaining voice risk — Turkish call quality:** fonio works because German
+  ASR/TTS is excellent. Turkish speech recognition with noisy salon callers
+  (names, dates, phone numbers spoken aloud) is the product-quality gate. Do a
+  scripted Turkish test call in week one of Phase C, before building the tab.
 
-### Phase D — calendar & availability
-- **In-app availability model:** org working hours + per-staff schedules +
-  service durations → slot computation (feeds both the voice agent and a
-  booking UI).
-- **cal.com two-way** (API, not just webhooks) OR native Google Calendar sync —
-  decide when a pilot org actually asks; webhook intake stays regardless.
-- **Public booking page** (`/b/<org-slug>`): mobile-first, Turkish, books
-  straight into availability. This replaces cal.com for orgs that don't have it.
+### Phase D — deeper cal.com integration (shrunk: cal.com is the scheduler)
+- Per-org cal.com API key + event-type mapping UI (entered in Settings →
+  Bookings alongside the webhook URL; validated with a live slots call).
+- Booking page = the org's cal.com hosted page; we surface/QR the link in
+  Settings rather than building our own (revisit only if pilot orgs reject
+  cal.com's page).
+- In-app "next free slots" preview on the Appointments tab (read-only, via the
+  org's API key) so staff quote availability without leaving Randevu.
+- **Onboarding dependency (partner playbook):** every org needs a cal.com
+  account + event type before voice booking works. This is a provisioning
+  step, not code — belongs in the partner's setup checklist next to WABA.
 
 ### Phase E — parity extras
 - Multi-language voice agents (agent language per org).
@@ -131,7 +163,7 @@ FIRST — match → join that org as invited role; no match → create new org
 
 1. Domain name for the product.
 2. WABA path for pilot org #1 (Meta Business verification + 2 template approvals).
-3. TR inbound number provisioning path confirmed (Phase C gate).
+3. ~~TR inbound numbers~~ — DECIDED: SIP trunk into Retell, Serdar provisions.
 4. Pricing intent (affects nothing until Phase E, informs partner pitch now).
 5. fonio.ai account walkthrough if possible — screenshots of their onboarding
    would sharpen Phase C scope.
