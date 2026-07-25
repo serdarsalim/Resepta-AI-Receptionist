@@ -29,14 +29,22 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       setLanguageState(stored);
       return;
     }
+    // navigator.language is a full tag, so a browser reporting de-AT or de-CH
+    // resolves to de the same way en-US resolves to en.
     const browser = navigator.language.split("-")[0];
     if (isLanguage(browser)) setLanguageState(browser);
   }, []);
 
+  // Keep the document tag honest whatever moved the language: the stored
+  // preference, the browser, the org, or the picker. Screen readers and
+  // hyphenation read this, and German is where a wrong lang starts to show.
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+
   const setLanguage = useCallback((next: Language) => {
     setLanguageState(next);
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
-    document.documentElement.lang = next;
   }, []);
 
   const value = useMemo(

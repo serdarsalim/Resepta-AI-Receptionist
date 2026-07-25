@@ -640,17 +640,26 @@ function Calendar({
   }, []);
 
   // Land on the first booking of the period (or the top of the working day)
-  // instead of wherever the scroll happened to sit.
+  // instead of wherever the scroll happened to sit. Computed here rather than
+  // inside the effect so the dependency is a plain number the linter can
+  // check, and so the scroll only moves when the period actually changes.
+  const firstBookingMinute = useMemo(
+    () =>
+      visible.reduce(
+        (min, a) => Math.min(min, minutesInto(a.startAt)),
+        DEFAULT_DAY_START * 60,
+      ),
+    [visible],
+  );
+  const periodStart = days[0];
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
-    const earliest = visible.reduce(
-      (min, a) => Math.min(min, minutesInto(a.startAt)),
-      DEFAULT_DAY_START * 60,
+    container.scrollTop = Math.max(
+      0,
+      ((firstBookingMinute - dayStart * 60) / 60) * HOUR_PX - HOUR_PX / 2,
     );
-    container.scrollTop = Math.max(0, ((earliest - dayStart * 60) / 60) * HOUR_PX - HOUR_PX / 2);
-    // Only when the period or the range changes, never on every render.
-  }, [days[0], dayStart, visible.length]);
+  }, [periodStart, dayStart, firstBookingMinute]);
 
   const step = view === "day" ? 1 : 7;
   const heading =

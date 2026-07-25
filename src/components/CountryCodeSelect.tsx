@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   COUNTRY_OPTIONS,
@@ -80,6 +80,9 @@ export function CountryCodeSelect({
       : "w-full inline-flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-base hover:bg-[var(--muted-bg)] disabled:opacity-50 disabled:cursor-not-allowed";
 
   const [open, setOpen] = useState(false);
+  // The listbox needs a stable id so the trigger can point aria-controls at
+  // it; useId keeps two pickers on one page from colliding.
+  const listId = useId();
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -179,6 +182,7 @@ export function CountryCodeSelect({
         className={triggerCls}
         role="combobox"
         aria-expanded={open}
+        aria-controls={listId}
         aria-haspopup="listbox"
         aria-label={placeholder}
       >
@@ -216,6 +220,7 @@ export function CountryCodeSelect({
             style={{ top: pos.top, left: pos.left, width: PANEL_W }}
             className="fixed z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
             role="listbox"
+            id={listId}
           >
             <input
               ref={searchRef}
