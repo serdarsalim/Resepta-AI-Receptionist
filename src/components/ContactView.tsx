@@ -91,7 +91,7 @@ export function ContactView({
           dual-scroll): the record scrolls left, the conversation scrolls right,
           the page itself never does. */}
       <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        {/* Left: the record — everything ABOUT the customer. */}
+        {/* Left: the record, everything ABOUT the customer. */}
         <div
           className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-4 lg:flex`}
         >
@@ -101,7 +101,7 @@ export function ContactView({
 
               The card fills the column and the field list scrolls INSIDE it, so
               the scrollbar hugs the card border the way the conversation card's
-              does — instead of a short card floating in an empty column. */}
+              does, instead of a short card floating in an empty column. */}
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
             <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
               <FieldRow label={t("customers.firstName")}>
@@ -181,7 +181,7 @@ export function ContactView({
               <ul className="thin-scroll stable-gutter max-h-52 divide-y divide-[var(--border)] overflow-y-auto">
                 {appointments.map((appointment) => (
                   <li key={appointment._id}>
-                    {/* Flat row, hairline divider, wash on hover — no border per
+                    {/* Flat row, hairline divider, wash on hover. No border per
                         row, and nothing moves. */}
                     <div className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
                       <span className="min-w-0 flex-1">
@@ -205,8 +205,8 @@ export function ContactView({
           </section>
         </div>
 
-        {/* Right: conversation — shared component, never a page variant. The
-            card fills the pane; the feed scrolls with the composer pinned. */}
+        {/* Right: conversation, the shared component, never a page variant.
+            The card fills the pane; the feed scrolls with the composer pinned. */}
         <section
           className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] lg:flex`}
         >

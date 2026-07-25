@@ -155,7 +155,9 @@ export function AppointmentsView({
           <label className="text-sm">
             {t("appointments.service")}
             <select name="serviceId" className="mt-1">
-              <option value="">—</option>
+              {/* Blank, not a dash: no service picked is a real state, and a
+                  placeholder glyph is the noise the blank was meant to cut. */}
+              <option value="" />
               {(services ?? [])
                 .filter((s) => s.active)
                 .map((s) => (
@@ -826,11 +828,23 @@ function Calendar({
                       }`}
                     >
                       {/* A half-hour block is one line tall, so the time and
-                          the name share it rather than clipping. */}
-                      {narrow ? (
-                        <span className="block truncate font-medium tabular-nums">
-                          {formatTime(row.startAt, language)}
+                          the name share it rather than clipping.
+
+                          Too narrow for both: the NAME wins, not the time. The
+                          block's position on the grid already says when it is,
+                          which makes the clock the redundant half here. Two
+                          15:30 blocks both reading "15:30" told you nothing. */}
+                      {narrow && height < 40 ? (
+                        <span className="block truncate font-medium">
+                          {name || formatTime(row.startAt, language)}
                         </span>
+                      ) : narrow ? (
+                        <>
+                          <span className="block truncate font-medium tabular-nums">
+                            {formatTime(row.startAt, language)}
+                          </span>
+                          <span className="block truncate">{name}</span>
+                        </>
                       ) : height < 40 ? (
                         <span className="block truncate">
                           <span className="font-medium tabular-nums">
