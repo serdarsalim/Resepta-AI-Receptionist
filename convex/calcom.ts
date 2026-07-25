@@ -43,6 +43,7 @@ function attendeeOf(payload: Record<string, unknown>) {
     firstName: firstName || name || "",
     lastName: rest.join(" ") || undefined,
     phone: String(phone).replace(/[\s().-]/g, ""),
+    email: String(first.email ?? "").trim() || undefined,
     language: (first.language as string | undefined) ?? undefined,
   };
 }
@@ -113,6 +114,7 @@ export const handleCalcomEvent = internalMutation({
         firstName: attendee.firstName || attendee.phone,
         lastName: attendee.lastName,
         phone: attendee.phone,
+        email: attendee.email,
         language: attendee.language,
         // Booking through the salon's own cal.com page IS the opt-in moment.
         consentAt: Date.now(),

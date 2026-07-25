@@ -66,8 +66,7 @@ export function AppointmentsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-medium">{t("appointments.title")}</h2>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-sm">
             {(["list", "week"] as const).map((mode) => (

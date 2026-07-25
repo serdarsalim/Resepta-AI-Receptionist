@@ -9,6 +9,7 @@ const customerDoc = v.object({
   firstName: v.string(),
   lastName: v.optional(v.string()),
   phone: v.string(),
+  email: v.optional(v.string()),
   language: v.optional(v.string()),
   notes: v.optional(v.string()),
   consentAt: v.optional(v.number()),
@@ -61,6 +62,7 @@ export const create = mutation({
     firstName: v.string(),
     lastName: v.optional(v.string()),
     phone: v.string(),
+    email: v.optional(v.string()),
     notes: v.optional(v.string()),
     consent: v.boolean(),
   },
@@ -80,6 +82,7 @@ export const create = mutation({
       firstName,
       lastName: args.lastName?.trim() || undefined,
       phone,
+      email: args.email?.trim() || undefined,
       notes: args.notes?.trim() || undefined,
       consentAt: args.consent ? Date.now() : undefined,
     });
@@ -92,6 +95,7 @@ export const update = mutation({
     firstName: v.optional(v.string()),
     lastName: v.optional(v.string()),
     phone: v.optional(v.string()),
+    email: v.optional(v.string()),
     notes: v.optional(v.string()),
     consent: v.optional(v.boolean()),
   },
@@ -106,6 +110,7 @@ export const update = mutation({
     }
     if (args.lastName !== undefined) patch.lastName = args.lastName.trim() || undefined;
     if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
+    if (args.email !== undefined) patch.email = args.email.trim() || undefined;
     if (args.phone !== undefined) {
       const phone = assertE164(args.phone);
       if (phone !== customer.phone) {

@@ -20,8 +20,7 @@ export function CustomersView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium">{t("customers.title")}</h2>
+      <div className="flex items-center justify-end">
         <button
           className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => setAdding((v) => !v)}
@@ -42,6 +41,7 @@ export function CustomersView({
                 firstName: String(form.get("firstName") ?? ""),
                 lastName: String(form.get("lastName") ?? "") || undefined,
                 phone: String(form.get("phone") ?? ""),
+                email: String(form.get("email") ?? "") || undefined,
                 consent: form.get("consent") === "on",
               });
               setAdding(false);
@@ -61,6 +61,10 @@ export function CustomersView({
           <label className="text-sm">
             {t("customers.phone")}
             <input name="phone" required placeholder="+905321234567" className="mt-1" />
+          </label>
+          <label className="text-sm">
+            {t("customers.email")}
+            <input name="email" type="email" className="mt-1" />
           </label>
           <label className="flex items-start gap-2 text-sm sm:col-span-3">
             <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />

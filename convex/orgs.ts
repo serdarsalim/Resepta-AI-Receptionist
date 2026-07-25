@@ -29,6 +29,7 @@ export const current = query({
       quietHoursEnd: v.number(),
       winbackEnabled: v.boolean(),
       winbackDaysAfter: v.number(),
+      emailFrom: v.optional(v.string()),
       calcomEventTypeId: v.optional(v.string()),
       calcomApiKeyTail: v.optional(v.string()),
     }),
@@ -89,6 +90,7 @@ export const current = query({
         quietHoursEnd: org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1],
         winbackEnabled: org.winbackEnabled ?? false,
         winbackDaysAfter: org.winbackDaysAfter ?? 14,
+        emailFrom: org.emailFrom,
         calcomEventTypeId: org.calcomEventTypeId,
         calcomApiKeyTail: org.calcomApiKey ? org.calcomApiKey.slice(-4) : undefined,
       },
@@ -130,6 +132,7 @@ export const update = mutation({
     quietHoursEnd: v.optional(v.number()),
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
+    emailFrom: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -156,6 +159,7 @@ export const update = mutation({
     if (args.winbackDaysAfter !== undefined) {
       patch.winbackDaysAfter = Math.min(90, Math.max(1, Math.round(args.winbackDaysAfter)));
     }
+    if (args.emailFrom !== undefined) patch.emailFrom = args.emailFrom.trim() || undefined;
     await ctx.db.patch(orgId, patch);
     return null;
   },

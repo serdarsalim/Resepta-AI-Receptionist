@@ -11,7 +11,6 @@ export function MessagesView() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-medium">{t("messages.title")}</h2>
       {messages === undefined && (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       )}

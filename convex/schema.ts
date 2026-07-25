@@ -73,6 +73,9 @@ export default defineSchema({
     // No-show winback: template send N days after a no_show.
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
+    // From-address for customer emails; delivery rides the shared n8n
+    // send-email workflow (env N8N_EMAIL_WEBHOOK_URL). Unset = email off.
+    emailFrom: v.optional(v.string()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
 
   // Voice lane (spec Phase C): one Retell agent per org; function calls and
@@ -110,6 +113,7 @@ export default defineSchema({
     lastName: v.optional(v.string()),
     // E.164 with dial code, or the row doesn't exist (assertE164 gates writes).
     phone: v.string(),
+    email: v.optional(v.string()),
     language: v.optional(v.string()),
     notes: v.optional(v.string()),
     // KVKK: when the customer consented to WhatsApp messages. Unset = no

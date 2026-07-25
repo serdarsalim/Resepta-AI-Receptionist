@@ -92,6 +92,7 @@ const dictionary = {
   "customers.firstName": { tr: "Ad", en: "First name" },
   "customers.lastName": { tr: "Soyad", en: "Last name" },
   "customers.phone": { tr: "Telefon", en: "Phone" },
+  "customers.email": { tr: "E-posta", en: "Email" },
   "customers.consent": {
     tr: "WhatsApp mesajlarına izin verdi",
     en: "Consented to WhatsApp messages",
@@ -120,6 +121,11 @@ const dictionary = {
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
     en: "Send a confirmation when a booking is made",
+  },
+  "settings.emailFrom": { tr: "E-posta gönderen adresi", en: "Email from address" },
+  "settings.emailFromHint": {
+    tr: "Doluysa onay ve hatırlatmalar e-posta adresi olan müşterilere e-postayla da gider (n8n üzerinden).",
+    en: "When set, confirmations and reminders also go by email to customers with an address (via n8n).",
   },
   "settings.whatsapp": { tr: "WhatsApp", en: "WhatsApp" },
   "settings.waConnected": { tr: "Bağlı", en: "Connected" },

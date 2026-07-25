@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalAction, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
+import { sendEmailViaN8n } from "./lib/email";
 import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { requireOrg } from "./lib/orgAuth";
 
@@ -133,12 +134,16 @@ export const sendAppointmentMessage = internalAction({
         : args.kind;
 
     // Exact language match, no cross-language fallback (Nudge lesson: the
-    // wrong-language message is worse than no message).
+    // wrong-language message is worse than no message). The template ROW is
+    // the content source for both channels; Meta approval only gates the
+    // WhatsApp send, not the email.
     const language = customer.language ?? org.language;
-    const template = templates.find(
-      (t: { kind: string; language: string; status: string }) =>
-        t.kind === args.kind && t.language === language && t.status === "approved",
+    const contentTemplate = templates.find(
+      (t: { kind: string; language: string }) =>
+        t.kind === args.kind && t.language === language,
     );
+    const waTemplate =
+      contentTemplate?.status === "approved" ? contentTemplate : undefined;
 
     const fail = async (reason: string) => {
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
@@ -154,17 +159,7 @@ export const sendAppointmentMessage = internalAction({
       });
     };
 
-    // Each of these logs a failed row rather than throwing silently — an
-    // unconfigured number or an unapproved template is exactly what the
-    // Messages tab needs to show the owner.
-    if (!waAccount) {
-      await fail("wa-not-configured");
-      return null;
-    }
-    if (!template) {
-      await fail(`no-approved-template-${language}`);
-      return null;
-    }
+    // KVKK consent gates EVERY channel.
     if (customer.consentAt === undefined) {
       await fail("no-consent");
       return null;
@@ -172,44 +167,77 @@ export const sendAppointmentMessage = internalAction({
 
     const when = formatAppointmentTime(appointment.startAt, org.timezone, language);
     const bodyParams = [customer.firstName, org.name, when];
-    const body = template.bodyPreview
-      ? template.bodyPreview
+    const body = contentTemplate?.bodyPreview
+      ? contentTemplate.bodyPreview
           .replace(/\{\{1\}\}/g, customer.firstName)
           .replace(/\{\{2\}\}/g, org.name)
           .replace(/\{\{3\}\}/g, when)
       : undefined;
 
-    const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
-      orgId: appointment.orgId,
-      customerId: customer._id,
-      appointmentId: appointment._id,
-      kind: messageKind,
-      templateName: template.metaName,
-      body,
-    });
-
-    const result = await sendWaCloudTemplate({
-      accessToken: waAccount.accessToken,
-      phoneNumberId: waAccount.phoneNumberId,
-      to: customer.phone,
-      templateName: template.metaName,
-      languageCode: template.language,
-      bodyParams,
-      buttons: [
-        { index: 0, payload: `confirm:${appointment._id}` },
-        { index: 1, payload: `cancel:${appointment._id}` },
-      ],
-    });
-
-    await ctx.runMutation(internal.messages.applySendResult, {
-      messageId,
-      ok: result.ok,
-      wamid: result.ok ? result.wamid : undefined,
-      error: result.ok ? undefined : result.reason,
-    });
-    if (result.ok && args.kind === "confirmation") {
-      await ctx.runMutation(internal.appointments.stampConfirmationSent, {
+    // ---- WhatsApp attempt. Failures log a visible row and do NOT block the
+    // email lane — an unconfigured number is exactly what the Messages tab
+    // needs to show the owner.
+    if (!waAccount) {
+      await fail("wa-not-configured");
+    } else if (!waTemplate) {
+      await fail(`no-approved-template-${language}`);
+    } else {
+      const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+        orgId: appointment.orgId,
+        customerId: customer._id,
         appointmentId: appointment._id,
+        kind: messageKind,
+        templateName: waTemplate.metaName,
+        body,
+      });
+      const result = await sendWaCloudTemplate({
+        accessToken: waAccount.accessToken,
+        phoneNumberId: waAccount.phoneNumberId,
+        to: customer.phone,
+        templateName: waTemplate.metaName,
+        languageCode: waTemplate.language,
+        bodyParams,
+        buttons: [
+          { index: 0, payload: `confirm:${appointment._id}` },
+          { index: 1, payload: `cancel:${appointment._id}` },
+        ],
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId,
+        ok: result.ok,
+        wamid: result.ok ? result.wamid : undefined,
+        error: result.ok ? undefined : result.reason,
+      });
+      if (result.ok && args.kind === "confirmation") {
+        await ctx.runMutation(internal.appointments.stampConfirmationSent, {
+          appointmentId: appointment._id,
+        });
+      }
+    }
+
+    // Email lane (n8n-delivered): rides alongside WhatsApp when the customer
+    // left an email and the org set a From. No Meta approval applies to
+    // email, so the template's bodyPreview text sends as-is.
+    const emailWebhook = process.env.N8N_EMAIL_WEBHOOK_URL;
+    if (emailWebhook && customer.email && org.emailFrom && body) {
+      const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
+        orgId: appointment.orgId,
+        customerId: customer._id,
+        appointmentId: appointment._id,
+        kind: `email_${messageKind}`,
+        body,
+      });
+      const emailResult = await sendEmailViaN8n({
+        webhookUrl: emailWebhook,
+        from: org.emailFrom,
+        to: customer.email,
+        subject: `${org.name} — ${when}`,
+        html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId: emailMessageId,
+        ok: emailResult.ok,
+        error: emailResult.ok ? undefined : emailResult.reason,
       });
     }
     return null;

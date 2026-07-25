@@ -16,6 +16,7 @@ import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as devSeed from "../devSeed.js";
 import type * as http from "../http.js";
+import type * as lib_email from "../lib/email.js";
 import type * as lib_format from "../lib/format.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   customers: typeof customers;
   devSeed: typeof devSeed;
   http: typeof http;
+  "lib/email": typeof lib_email;
   "lib/format": typeof lib_format;
   "lib/metaSig": typeof lib_metaSig;
   "lib/orgAuth": typeof lib_orgAuth;

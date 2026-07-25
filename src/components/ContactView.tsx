@@ -105,6 +105,16 @@ export function ContactView({
                   }
                 />
               </label>
+              <label className="block text-sm">
+                {t("customers.email")}
+                <input
+                  className="mt-1"
+                  defaultValue={customer.email ?? ""}
+                  onBlur={(e) =>
+                    void updateCustomer({ customerId, email: e.target.value })
+                  }
+                />
+              </label>
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span>{t("customers.consent")}</span>
                 <Toggle

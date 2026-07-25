@@ -284,6 +284,12 @@ export function SettingsView() {
               </option>
             ))}
           </select>
+          <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
+          <input
+            defaultValue={settings.org.emailFrom ?? ""}
+            placeholder="info@salonunuz.com"
+            onBlur={(e) => void update({ emailFrom: e.target.value })}
+          />
           <RowLabel label={t("settings.language")} />
           <select
             defaultValue={settings.org.language}
