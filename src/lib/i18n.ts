@@ -33,6 +33,8 @@ const dictionary = {
   "nav.appointments": { tr: "Randevular", en: "Appointments" },
   "nav.customers": { tr: "Müşteriler", en: "Customers" },
   "nav.inbox": { tr: "Gelen Kutusu", en: "Inbox" },
+  "nav.collapse": { tr: "Menüyü daralt", en: "Collapse sidebar" },
+  "nav.expand": { tr: "Menüyü genişlet", en: "Expand sidebar" },
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 

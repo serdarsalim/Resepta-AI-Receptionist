@@ -3,6 +3,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
@@ -13,6 +14,8 @@ import { useTheme, type Theme } from "@/lib/theme";
 // internally, settings behind the initials chip — never a nav tab.
 
 export type TabId = "appointments" | "customers" | "inbox" | "settings";
+
+const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 
@@ -88,6 +91,76 @@ const NAV_TABS: {
   },
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
 ];
+
+// Nudge's mark, drawn inline rather than shipped as a file: the square takes
+// --brand, so it follows Randevu's own green (and any future theming) instead
+// of hardcoding the sibling product's hex.
+function BrandMark({ size = 26 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      className="shrink-0"
+      aria-hidden
+    >
+      <rect width="64" height="64" rx="14" fill="var(--brand)" />
+      <path
+        d="M18 20 L32 32 L18 44"
+        stroke="#ffffff"
+        strokeWidth="6.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M33 20 L47 32 L33 44"
+        stroke="#ffffff"
+        strokeWidth="6.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.6"
+      />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
+}
 
 function initialsFrom(name?: string | null, email?: string | null): string {
   const source = (name || email || "?").trim();
@@ -328,75 +401,136 @@ function UserMenu({
 
 // Workspace switcher (Retell-style): one login, many client businesses.
 // Collapses to a plain label when the user belongs to exactly one.
-function WorkspaceSwitcher({ fallbackName }: { fallbackName?: string }) {
+const WORKSPACE_MENU_WIDTH = 224; // w-56, used for the viewport clamp
+
+function WorkspaceSwitcher({
+  fallbackName,
+  collapsed = false,
+}: {
+  fallbackName?: string;
+  // Collapsed, the brand mark IS the trigger — otherwise switching org would
+  // mean expanding the sidebar first, which for an operator running several
+  // client workspaces is the one thing they do most.
+  collapsed?: boolean;
+}) {
   const { t } = useLanguage();
   const data = useQuery(api.users.myWorkspaces, {});
   const setActiveOrg = useMutation(api.users.setActiveOrg);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Menu position, measured from the trigger at open time. Null = closed.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setPos(null);
     };
+    // Capture, so a scroll inside any pane closes it rather than leaving the
+    // menu floating away from its trigger.
+    const onScroll = () => setPos(null);
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+    };
   }, [open]);
 
   const active = data?.workspaces.find((w) => w.orgId === data.activeOrgId);
   const label = active?.name || fallbackName || t("app.name");
 
   if (!data || data.workspaces.length < 2) {
-    return (
-      <span className="block px-2 text-sm font-semibold tracking-tight">{label}</span>
+    return collapsed ? (
+      <BrandMark size={24} />
+    ) : (
+      <span className="block truncate text-sm font-semibold tracking-tight">
+        {label}
+      </span>
     );
   }
 
+  const toggle = () => {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({
+      top: r.bottom + 4,
+      left: Math.max(
+        8,
+        Math.min(r.left, window.innerWidth - WORKSPACE_MENU_WIDTH - 8),
+      ),
+    });
+  };
+
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
-        onClick={() => setOpen((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--row-hover-bg)]"
+        title={collapsed ? label : undefined}
+        className={
+          collapsed
+            ? "rounded-md transition-opacity hover:opacity-80"
+            : "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--row-hover-bg)]"
+        }
       >
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="text-[10px] text-[var(--muted)]">▾</span>
+        {collapsed ? (
+          <BrandMark size={24} />
+        ) : (
+          <>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            <span className="text-[10px] text-[var(--muted)]">▾</span>
+          </>
+        )}
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
-        >
-          <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted)]">
-            {t("workspace.switch")}
-          </div>
-          {data.workspaces.map((workspace) => (
-            <button
-              key={workspace.orgId}
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                if (workspace.orgId !== data.activeOrgId) {
-                  void setActiveOrg({ orgId: workspace.orgId });
-                }
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {workspace.name || t("app.name")}
-              </span>
-              {workspace.orgId === data.activeOrgId && (
-                <span className="text-[var(--brand)]">
-                  <CheckIcon />
+      {/* Through a portal with fixed positioning, never an absolute child: the
+          sidebar is overflow-hidden, so an in-flow menu gets clipped at the
+          pane edge (see AGENTS.md — this recurs). */}
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", width: WORKSPACE_MENU_WIDTH, ...pos }}
+            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+          >
+            <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted)]">
+              {t("workspace.switch")}
+            </div>
+            {data.workspaces.map((workspace) => (
+              <button
+                key={workspace.orgId}
+                role="menuitem"
+                onClick={() => {
+                  setPos(null);
+                  if (workspace.orgId !== data.activeOrgId) {
+                    void setActiveOrg({ orgId: workspace.orgId });
+                  }
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {workspace.name || t("app.name")}
                 </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+                {workspace.orgId === data.activeOrgId && (
+                  <span className="text-[var(--brand)]">
+                    <CheckIcon />
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -413,6 +547,20 @@ export function AppShell({
   const settings = useQuery(api.orgs.current, {});
   const failedCount = useQuery(api.messages.failedCount, {});
 
+  // Read on mount, not during render: the server has no localStorage, so
+  // seeding state from it directly would hydrate-mismatch. One frame expanded
+  // is cheaper than a hydration error.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+  }, []);
+  const toggleCollapsed = () =>
+    setCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+
   // The org's language is the app's language — set in Settings, nowhere else.
   const orgLanguage = settings?.org.language;
   useEffect(() => {
@@ -424,21 +572,70 @@ export function AppShell({
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
       {/* Sidebar: recessed pane, hidden on phones (bottom nav takes over). */}
-      <aside className="app-pane hidden w-52 shrink-0 flex-col overflow-hidden md:flex">
-        <div className="px-2 pb-2 pt-3">
-          <WorkspaceSwitcher fallbackName={settings?.org.name} />
+      <aside
+        aria-label="Primary navigation"
+        className={`app-pane hidden shrink-0 flex-col overflow-hidden transition-[width] duration-200 md:flex ${
+          collapsed ? "w-14" : "w-52"
+        }`}
+      >
+        {/* Brand row. The mark stays put across the collapse so the eye has a
+            fixed anchor; the name and the switcher are what fold away. */}
+        <div
+          className={`flex items-center gap-2 pt-3 ${
+            collapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
+          }`}
+        >
+          {collapsed ? (
+            <WorkspaceSwitcher fallbackName={settings?.org.name} collapsed />
+          ) : (
+            <>
+              <BrandMark size={26} />
+              <div className="min-w-0 flex-1">
+                <WorkspaceSwitcher fallbackName={settings?.org.name} />
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? t("nav.expand") : t("nav.collapse")}
+            title={collapsed ? t("nav.expand") : t("nav.collapse")}
+            className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+          </button>
         </div>
-        <nav className="flex-1 space-y-0.5 px-2 py-1">
+
+        <nav className={`flex-1 space-y-0.5 py-1 ${collapsed ? "px-1" : "px-2"}`}>
           {NAV_TABS.map(({ id, key, Icon, color }) => {
             const active = tab === id;
+            const label = t(key);
             return (
               <button
                 key={id}
                 onClick={() => onTab(id)}
                 aria-current={active ? "page" : undefined}
-                className={`group flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors ${
+                title={collapsed ? label : undefined}
+                // The tab's hue as a variable so the collapsed active pill can
+                // tint with it. Harmless when inactive.
+                style={{ "--tab-hue": color } as React.CSSProperties}
+                className={`group relative flex h-9 items-center rounded-lg text-sm transition-colors ${
+                  collapsed
+                    ? // A centered rounded square around the symbol, not a
+                      // full-width squat oval hugging it.
+                      "mx-auto h-9 w-9 justify-center px-0"
+                    : "w-full gap-3 px-3"
+                } ${
                   active
-                    ? "bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)]"
+                    ? // Expanded keeps the neutral wash — hue lives on the
+                      // symbol and the bold label finishes the job. Collapsed
+                      // has no label, so the pill earns a tint of the tab's own
+                      // hue as the stronger selected cue.
+                      `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
+                        collapsed
+                          ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]"
+                          : ""
+                      }`
                     : "font-medium text-[var(--muted)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
                 }`}
               >
@@ -448,10 +645,16 @@ export function AppShell({
                   className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
                   style={{ color, opacity: active ? 1 : undefined }}
                 />
-                <span className="flex-1 truncate text-left">{t(key)}</span>
+                {!collapsed && (
+                  <span className="flex-1 truncate text-left">{label}</span>
+                )}
                 {id === "inbox" && (failedCount ?? 0) > 0 && (
+                  // Collapsed there's no label to sit beside, so the dot rides
+                  // the icon's top-right corner instead of the trailing edge.
                   <span
-                    className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                    className={`h-2 w-2 shrink-0 rounded-full bg-red-500 ${
+                      collapsed ? "absolute right-1.5 top-1.5" : "ml-auto"
+                    }`}
                     aria-label="failed sends"
                   />
                 )}
