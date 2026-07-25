@@ -29,7 +29,7 @@ export default function Home() {
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "calls" && <CallsView />}
-          {tab === "messages" && <MessagesView />}
+          {tab === "messages" && <MessagesView onOpenContact={setContactId} />}
           {tab === "settings" && <SettingsView />}
         </>
       )}

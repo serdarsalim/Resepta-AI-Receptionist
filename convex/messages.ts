@@ -162,3 +162,53 @@ export const failedCount = query({
     ).length;
   },
 });
+
+// Inbox left pane: one row per customer with message history, newest first,
+// carrying the last message preview + unanswered-inbound flag.
+export const conversations = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      customerId: v.id("customers"),
+      name: v.string(),
+      phone: v.string(),
+      lastAt: v.number(),
+      lastBody: v.optional(v.string()),
+      lastDirection: v.union(v.literal("out"), v.literal("in")),
+      hasFailed: v.boolean(),
+      awaitingReply: v.boolean(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(500);
+    const byCustomer = new Map<string, typeof rows>();
+    for (const row of rows) {
+      if (!row.customerId) continue;
+      const bucket = byCustomer.get(row.customerId) ?? [];
+      bucket.push(row);
+      byCustomer.set(row.customerId, bucket);
+    }
+    const out = [];
+    for (const [customerId, msgs] of byCustomer) {
+      const customer = await ctx.db.get(customerId as Id<"customers">);
+      if (!customer) continue;
+      const last = msgs[0];
+      out.push({
+        customerId: customer._id,
+        name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+        phone: customer.phone,
+        lastAt: last._creationTime,
+        lastBody: last.body,
+        lastDirection: last.direction,
+        hasFailed: msgs.some((m) => m.status === "failed"),
+        awaitingReply: last.direction === "in",
+      });
+    }
+    return out.sort((a, b) => b.lastAt - a.lastAt);
+  },
+});

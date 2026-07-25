@@ -342,7 +342,7 @@ export function AppShell({
             />
           </div>
         </header>
-        <main className="thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+        <main className="thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
           {children}
         </main>
         {/* Phone nav */}

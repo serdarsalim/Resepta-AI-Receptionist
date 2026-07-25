@@ -88,6 +88,12 @@ thead {
 }
 
 /* Thin themed scrollbar for internal overflow containers. */
+/* Reserve the scrollbar track always — content must never shift when a list
+   grows past the fold (Nudge behavior). Pairs with .thin-scroll. */
+.stable-gutter {
+  scrollbar-gutter: stable;
+}
+
 .thin-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;

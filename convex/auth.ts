@@ -112,13 +112,17 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           "Merhaba {{1}}! {{2}} olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
       });
 
-      return await db.insert("users", {
+      const userId = await db.insert("users", {
         email,
         name,
         image: args.profile.image as string | undefined,
         orgId,
         role: "owner",
       });
+      // Membership is what grants access (requireOrg verifies it) — the
+      // founding sign-in gets one exactly like an invited user.
+      await db.insert("memberships", { userId, orgId, role: "owner" });
+      return userId;
     },
   },
 });
