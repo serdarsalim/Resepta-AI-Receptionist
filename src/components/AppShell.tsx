@@ -217,7 +217,7 @@ function UserMenu({
             {t("nav.settings")}
           </button>
           <div className="border-t border-[var(--border)] pt-1.5">
-            <div className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+            <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted)]">
               {t("menu.appearance")}
             </div>
             {THEME_OPTIONS.map(({ value, key, Icon }) => {
@@ -306,7 +306,7 @@ function WorkspaceSwitcher({ fallbackName }: { fallbackName?: string }) {
           role="menu"
           className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
         >
-          <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]">
+          <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted)]">
             {t("workspace.switch")}
           </div>
           {data.workspaces.map((workspace) => (

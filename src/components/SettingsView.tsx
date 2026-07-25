@@ -19,8 +19,12 @@ const TIMEZONES = [
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid, autosave on blur/change, explanations behind InfoTips.
+// Settings row grid, per Serdar's documented spec (Mana 40_Patterns,
+// 2026-05-08): label column 220-260px, label only (no helper text in it),
+// control right, stacks on mobile. Helper text spans the section BELOW the
+// row — not squeezed into the label column.
 const ROW_GRID =
-  "grid grid-cols-1 gap-y-2 sm:grid-cols-[22rem_1fr] sm:items-center sm:gap-x-4 sm:gap-y-3";
+  "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
 
 function Card({ title, tip, disabled, children }: {
   title: string;
