@@ -80,12 +80,25 @@ export const handleCalcomEvent = internalMutation({
     const uid = String(booking.uid ?? "");
     if (!uid) return { ok: false, reason: "no-uid" };
 
-    const existing = await ctx.db
-      .query("appointments")
-      .withIndex("by_org_external", (q) =>
-        q.eq("orgId", org._id).eq("externalUid", uid),
-      )
-      .unique();
+    const findByUid = async (candidate: string) =>
+      candidate
+        ? await ctx.db
+            .query("appointments")
+            .withIndex("by_org_external", (q) =>
+              q.eq("orgId", org._id).eq("externalUid", candidate),
+            )
+            .unique()
+        : null;
+
+    // A reschedule is a NEW cal.com booking: the payload's `uid` is the new one
+    // and `rescheduleUid` points at the booking we already store. Resolving
+    // only `uid` found nothing, so the BOOKING_RESCHEDULED branch was skipped
+    // and the create path below inserted a SECOND appointment while the old
+    // time stayed on the salon's calendar. `uid` stays the first candidate
+    // because every other trigger reports the live booking there.
+    const previousUid = String(booking.rescheduleUid ?? "");
+    let existing = await findByUid(uid);
+    if (!existing && previousUid) existing = await findByUid(previousUid);
 
     if (triggerEvent === "BOOKING_CANCELLED") {
       if (existing) await ctx.db.patch(existing._id, { status: "cancelled" });
@@ -101,9 +114,12 @@ export const handleCalcomEvent = internalMutation({
 
     if (triggerEvent === "BOOKING_RESCHEDULED" && existing) {
       // New time ⇒ the sent reminders no longer apply; reset and re-confirm.
+      // externalUid moves to the new booking: cal.com retires the old uid, so
+      // a later cancel or reschedule aimed at it would 404.
       await ctx.db.patch(existing._id, {
         startAt,
         durationMinutes,
+        externalUid: uid,
         status: "scheduled",
         reminderSentOffsets: [],
         confirmationSentAt: undefined,
