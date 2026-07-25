@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -36,11 +36,14 @@ export function AppointmentsView({
 }) {
   const { t, language } = useLanguage();
   const [adding, setAdding] = useState(false);
+  const [view, setView] = useState<"list" | "week">("list");
+  const [weekOffset, setWeekOffset] = useState(0);
 
-  // Yesterday → +30 days: the window a salon actually looks at.
+  // Two weeks back → six weeks forward covers the list AND every reachable
+  // week-view page from one subscription.
   const range = useMemo(() => {
     const now = Date.now();
-    return { fromMs: now - 86_400_000, toMs: now + 30 * 86_400_000 };
+    return { fromMs: now - 14 * 86_400_000, toMs: now + 42 * 86_400_000 };
   }, []);
   const appointments = useQuery(api.appointments.listRange, range);
   const services = useQuery(api.services.list, {});
@@ -63,14 +66,31 @@ export function AppointmentsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-medium">{t("appointments.title")}</h2>
-        <button
-          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
-          onClick={() => setAdding((v) => !v)}
-        >
-          {adding ? t("common.cancel") : t("appointments.new")}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-[var(--border)] text-sm">
+            {(["list", "week"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setView(mode)}
+                className={`px-3 py-1.5 ${
+                  view === mode
+                    ? "bg-[var(--muted-bg)] font-medium"
+                    : "text-[var(--muted)]"
+                }`}
+              >
+                {mode === "list" ? t("appointments.list") : t("appointments.week")}
+              </button>
+            ))}
+          </div>
+          <button
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
+            onClick={() => setAdding((v) => !v)}
+          >
+            {adding ? t("common.cancel") : t("appointments.new")}
+          </button>
+        </div>
       </div>
 
       {adding && (
@@ -160,7 +180,17 @@ export function AppointmentsView({
         <p className="text-sm text-[var(--muted)]">{t("appointments.none")}</p>
       )}
 
-      {byDay.map(([day, rows]) => (
+      {view === "week" && (
+        <WeekGrid
+          appointments={appointments ?? []}
+          weekOffset={weekOffset}
+          onWeekOffset={setWeekOffset}
+          onOpenContact={onOpenContact}
+        />
+      )}
+
+      {view === "list" &&
+      byDay.map(([day, rows]) => (
         <section key={day} className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--muted)]">
             {formatDayHeading(new Date(day).getTime(), language)}
@@ -169,7 +199,7 @@ export function AppointmentsView({
             {rows.map((appointment) => (
               <li
                 key={appointment._id}
-                className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+                className="group flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--row-hover-bg)]"
               >
                 <span className="w-12 font-medium tabular-nums">
                   {formatTime(appointment.startAt, language)}
@@ -204,37 +234,188 @@ export function AppointmentsView({
                 >
                   {t(STATUS_KEY[appointment.status])}
                 </span>
-                {appointment.status !== "cancelled" && (
-                  <span className="flex gap-2">
-                    <button
-                      className="text-xs text-[var(--muted)] underline"
-                      onClick={() =>
-                        void setStatus({
-                          appointmentId: appointment._id,
-                          status: "completed",
-                        })
-                      }
-                    >
-                      {t("appointments.complete")}
-                    </button>
-                    <button
-                      className="text-xs text-red-600 dark:text-red-400 underline"
-                      onClick={() =>
-                        void setStatus({
-                          appointmentId: appointment._id,
-                          status: "cancelled",
-                        })
-                      }
-                    >
-                      {t("appointments.cancel")}
-                    </button>
-                  </span>
-                )}
+                <RowMenu
+                  status={appointment.status}
+                  onSetStatus={(status) =>
+                    void setStatus({ appointmentId: appointment._id, status })
+                  }
+                />
               </li>
             ))}
           </ul>
         </section>
       ))}
     </div>
+  );
+}
+
+type AppointmentStatus = "scheduled" | "confirmed" | "cancelled" | "completed" | "no_show";
+
+// Row actions live behind a hover-revealed ⋯ menu (Nudge convention: row
+// actions show on hover only). Items are contextual verbs, never a repeat of
+// the status pill's label.
+function RowMenu({
+  status,
+  onSetStatus,
+}: {
+  status: AppointmentStatus;
+  onSetStatus: (status: AppointmentStatus) => void;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const items: { key: string; label: string; status: AppointmentStatus; danger?: boolean }[] =
+    status === "scheduled" || status === "confirmed"
+      ? [
+          { key: "complete", label: t("appointments.complete"), status: "completed" },
+          { key: "noshow", label: t("appointments.noShow"), status: "no_show" },
+          { key: "cancel", label: t("appointments.cancel"), status: "cancelled", danger: true },
+        ]
+      : [{ key: "reopen", label: t("appointments.reopen"), status: "scheduled" }];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        aria-label="Actions"
+        onClick={() => setOpen((o) => !o)}
+        className={`rounded-md px-1.5 py-0.5 text-[var(--muted)] transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+          open ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              className={`flex w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
+                item.danger ? "text-red-600 dark:text-red-400" : ""
+              }`}
+              onClick={() => {
+                setOpen(false);
+                onSetStatus(item.status);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Week view: 7 day columns, time-sorted chips. A VIEW of our data — cal.com
+// stays the availability brain (spec §Phase D).
+function WeekGrid({
+  appointments,
+  weekOffset,
+  onWeekOffset,
+  onOpenContact,
+}: {
+  appointments: {
+    _id: string;
+    customerId: Id<"customers">;
+    startAt: number;
+    status: string;
+    customer: { firstName: string; lastName?: string } | null;
+    serviceName?: string;
+  }[];
+  weekOffset: number;
+  onWeekOffset: (next: number) => void;
+  onOpenContact: (id: Id<"customers">) => void;
+}) {
+  const { t, language } = useLanguage();
+  const weekStart = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const day = (now.getDay() + 6) % 7; // Monday-start week
+    return now.getTime() - day * 86_400_000 + weekOffset * 7 * 86_400_000;
+  }, [weekOffset]);
+  const days = [...Array(7)].map((_, i) => weekStart + i * 86_400_000);
+  const todayKey = new Date().toDateString();
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          onClick={() => onWeekOffset(Math.max(-2, weekOffset - 1))}
+        >
+          ‹
+        </button>
+        <button
+          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          onClick={() => onWeekOffset(0)}
+        >
+          {formatDayHeading(Date.now(), language)}
+        </button>
+        <button
+          className="rounded-md border border-[var(--border)] px-2 py-1 text-sm"
+          onClick={() => onWeekOffset(Math.min(5, weekOffset + 1))}
+        >
+          ›
+        </button>
+      </div>
+      <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        {days.map((dayStart) => {
+          const isToday = new Date(dayStart).toDateString() === todayKey;
+          const dayRows = appointments
+            .filter(
+              (a) =>
+                a.startAt >= dayStart &&
+                a.startAt < dayStart + 86_400_000 &&
+                a.status !== "cancelled",
+            )
+            .sort((a, b) => a.startAt - b.startAt);
+          return (
+            <div
+              key={dayStart}
+              className="min-h-40 border-r border-[var(--border)] p-1.5 last:border-r-0"
+            >
+              <p
+                className={`mb-1 text-center text-xs ${
+                  isToday ? "font-semibold" : "text-[var(--muted)]"
+                }`}
+              >
+                {new Intl.DateTimeFormat(language === "tr" ? "tr-TR" : "en-GB", {
+                  weekday: "short",
+                  day: "numeric",
+                }).format(new Date(dayStart))}
+              </p>
+              <div className="space-y-1">
+                {dayRows.map((appointment) => (
+                  <button
+                    key={appointment._id}
+                    onClick={() => onOpenContact(appointment.customerId)}
+                    className="block w-full truncate rounded-md bg-[var(--brand-soft)] px-1.5 py-1 text-left text-[11px] leading-tight hover:opacity-80"
+                    title={appointment.serviceName}
+                  >
+                    <span className="font-medium tabular-nums">
+                      {formatTime(appointment.startAt, language)}
+                    </span>{" "}
+                    {appointment.customer?.firstName ?? "—"}
+                  </button>
+                ))}
+                {dayRows.length === 0 && (
+                  <p className="text-center text-[10px] text-[var(--muted)]">—</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

@@ -67,9 +67,18 @@ const dictionary = {
   "appointments.status": { tr: "Durum", en: "Status" },
   "appointments.notes": { tr: "Not", en: "Notes" },
   "appointments.source": { tr: "Kaynak", en: "Source" },
-  "appointments.cancel": { tr: "İptal et", en: "Cancel" },
-  "appointments.complete": { tr: "Tamamlandı", en: "Mark complete" },
-  "appointments.noShow": { tr: "Gelmedi", en: "No-show" },
+  "appointments.cancel": { tr: "Randevuyu iptal et", en: "Cancel appointment" },
+  "appointments.complete": {
+    tr: "Tamamlandı olarak işaretle",
+    en: "Mark as completed",
+  },
+  "appointments.noShow": {
+    tr: "Gelmedi olarak işaretle",
+    en: "Mark as no-show",
+  },
+  "appointments.reopen": { tr: "Yeniden planla", en: "Reopen" },
+  "appointments.list": { tr: "Liste", en: "List" },
+  "appointments.week": { tr: "Hafta", en: "Week" },
 
   "status.scheduled": { tr: "Planlandı", en: "Scheduled" },
   "status.confirmed": { tr: "Onaylandı", en: "Confirmed" },
