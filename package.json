@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev:frontend": "next dev -p 3014",
+    "dev:frontend": "next dev -p 3006",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
