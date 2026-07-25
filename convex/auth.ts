@@ -1,26 +1,20 @@
-import { Password } from "@convex-dev/auth/providers/Password";
+import Google from "@auth/core/providers/google";
 import { convexAuth } from "@convex-dev/auth/server";
-import type { DataModel } from "./_generated/dataModel";
 import type { DatabaseWriter } from "./_generated/server";
 
-// Self-serve: signing up IS creating a business. No invites, no operator.
-// The signUp form carries orgName; profile() passes it through to
-// createOrUpdateUser, which creates the org and its owner user in one shot.
+// Google OAuth only (Serdar's call, 2026-07-25): every salon owner in the
+// target market has a Google account on their phone, and one tap beats any
+// form — plus no password-reset flow to ever build or support. Signing in for
+// the first time IS creating the business; the org starts unnamed and the app
+// asks for the business name right after (AppShell onboarding gate).
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
-    Password<DataModel>({
-      profile(params) {
-        const profile = {
-          email: String(params.email ?? "")
-            .toLowerCase()
-            .trim(),
-          name: String(params.name ?? "").trim() || undefined,
-          orgName: String(params.orgName ?? "").trim(),
-        };
-        // orgName isn't a users field; it rides along for the callback only.
-        return profile as typeof profile & { email: string };
-      },
+    // Force the account chooser instead of silently reusing whatever session
+    // the browser remembers (same reasoning as Nudge: people have multiple
+    // Google accounts).
+    Google({
+      authorization: { params: { prompt: "select_account" } },
     }),
   ],
   callbacks: {
@@ -29,21 +23,25 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         // Guard against an auth account pointing at a deleted users row
         // (admin wiped tables in dev) — fall through to re-create.
         const existing = await ctx.db.get(args.existingUserId);
-        if (existing) return args.existingUserId;
+        if (existing) {
+          // Refresh identity bits from Google, nothing else.
+          await ctx.db.patch(args.existingUserId, {
+            email: args.profile.email?.toLowerCase(),
+            image: args.profile.image as string | undefined,
+          });
+          return args.existingUserId;
+        }
       }
 
-      const profile = args.profile as {
-        email?: string;
-        name?: string;
-        orgName?: string;
-      };
-      const email = profile.email;
+      const email = args.profile.email?.toLowerCase();
+      const name = (args.profile.name as string | undefined)?.trim();
       // `ctx.db` is typed against the generic auth data model; narrow it to
       // this app's schema to write org rows.
       const db = ctx.db as unknown as DatabaseWriter;
 
+      // Unnamed until onboarding — "" renders as the name prompt in the app.
       const orgId = await db.insert("orgs", {
-        name: profile.orgName || email || "My business",
+        name: "",
         timezone: "Europe/Istanbul",
         language: "tr",
         sendBookingConfirmation: true,
@@ -73,7 +71,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
       return await db.insert("users", {
         email,
-        name: profile.name,
+        name,
+        image: args.profile.image as string | undefined,
         orgId,
         role: "owner",
       });

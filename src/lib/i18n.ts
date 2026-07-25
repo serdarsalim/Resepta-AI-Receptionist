@@ -31,18 +31,26 @@ const dictionary = {
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 
-  "auth.signIn": { tr: "Giriş yap", en: "Sign in" },
-  "auth.signUp": { tr: "Kayıt ol", en: "Create account" },
-  "auth.email": { tr: "E-posta", en: "Email" },
-  "auth.password": { tr: "Şifre", en: "Password" },
-  "auth.yourName": { tr: "Adınız", en: "Your name" },
-  "auth.businessName": { tr: "İşletme adı", en: "Business name" },
-  "auth.haveAccount": { tr: "Hesabınız var mı? Giriş yapın", en: "Have an account? Sign in" },
-  "auth.noAccount": { tr: "Hesabınız yok mu? Kayıt olun", en: "No account? Sign up" },
-  "auth.failed": {
-    tr: "Giriş başarısız. Bilgilerinizi kontrol edin.",
-    en: "Sign-in failed. Check your details.",
+  "auth.continueWithGoogle": {
+    tr: "Google ile devam et",
+    en: "Continue with Google",
   },
+  "auth.googleHint": {
+    tr: "İlk girişte işletmeniz otomatik oluşturulur.",
+    en: "Your business is created on first sign-in.",
+  },
+  "auth.failed": {
+    tr: "Giriş başarısız. Tekrar deneyin.",
+    en: "Sign-in failed. Try again.",
+  },
+
+  "onboarding.title": { tr: "Hoş geldiniz!", en: "Welcome!" },
+  "onboarding.prompt": {
+    tr: "İşletmenizin adı ne? Müşterilerinize giden mesajlarda görünecek.",
+    en: "What's your business called? It appears in messages to your customers.",
+  },
+  "onboarding.businessName": { tr: "İşletme adı", en: "Business name" },
+  "onboarding.start": { tr: "Başla", en: "Get started" },
 
   "appointments.title": { tr: "Randevular", en: "Appointments" },
   "appointments.new": { tr: "Yeni randevu", en: "New appointment" },

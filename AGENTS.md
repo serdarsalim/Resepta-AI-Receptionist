@@ -21,10 +21,13 @@ style issue.
   confirmations + reminders, confirm/cancel by reply. NOT lead qualification,
   NOT deal stages, NOT HubSpot. If a feature request looks like Nudge, it
   belongs in Nudge.
-- Self-serve: a salon signs up (email + password via Convex Auth Password
-  provider), which creates its org. No invites, no fleet provisioning, no
-  operator in the loop. (An agency/partner-operated admin surface is the
-  likely next layer — see "Open product questions".)
+- Self-serve: a salon signs in with **Google OAuth only** (Serdar, 2026-07-25:
+  ease of use wins; no passwords, no reset flow ever). First sign-in creates
+  the org unnamed; the AppShell onboarding gate asks the one question
+  (business name). No invites, no fleet provisioning, no operator in the loop.
+  (An agency/partner-operated admin surface is the likely next layer — note
+  that Google-only means the partner can't pre-provision credentials; if that
+  model wins, add a second provider then. See "Open product questions".)
 - **Appointment intake is cal.com, not a calendar we own.** The salon keeps
   booking where it already books; Randevu is the WhatsApp layer on top.
   `convex/calcom.ts` handles BOOKING_CREATED / RESCHEDULED / CANCELLED, and the

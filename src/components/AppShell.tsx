@@ -1,11 +1,44 @@
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useEffect } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, isLanguage, type TranslationKey } from "@/lib/i18n";
+
+// Google OAuth carries no business name, so a fresh org arrives unnamed —
+// this one-question gate runs before anything else and is the whole
+// onboarding.
+function OnboardingGate() {
+  const { t } = useLanguage();
+  const update = useMutation(api.orgs.update);
+  return (
+    <div className="mx-auto mt-16 max-w-sm rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <h2 className="text-lg font-semibold">{t("onboarding.title")}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{t("onboarding.prompt")}</p>
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
+          if (name) void update({ name });
+        }}
+      >
+        <label className="block text-sm">
+          {t("onboarding.businessName")}
+          <input name="name" required autoFocus className="mt-1" />
+        </label>
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-white"
+        >
+          {t("onboarding.start")}
+        </button>
+      </form>
+    </div>
+  );
+}
 
 export type TabId = "appointments" | "customers" | "messages" | "settings";
 
@@ -36,11 +69,13 @@ export function AppShell({
     if (isLanguage(orgLanguage) && orgLanguage !== language) setLanguage(orgLanguage);
   }, [orgLanguage, language, setLanguage]);
 
+  if (settings && settings.org.name === "") return <OnboardingGate />;
+
   return (
     <div className="mx-auto flex min-h-dvh max-w-5xl flex-col p-4 sm:p-6">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">{settings?.org.name ?? t("app.name")}</h1>
+          <h1 className="text-lg font-semibold">{settings?.org.name || t("app.name")}</h1>
           <p className="text-xs text-[var(--muted)]">{t("app.tagline")}</p>
         </div>
         <div className="flex items-center gap-2">
