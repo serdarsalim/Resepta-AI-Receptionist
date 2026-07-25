@@ -12,18 +12,81 @@ import { useTheme, type Theme } from "@/lib/theme";
 // fixed-height pane, recessed sidebar, floating main card that scrolls
 // internally, settings behind the initials chip — never a nav tab.
 
-export type TabId =
-  | "appointments"
-  | "customers"
-  | "calls"
-  | "messages"
-  | "settings";
+export type TabId = "appointments" | "customers" | "inbox" | "settings";
 
-const NAV_TABS: { id: TabId; key: TranslationKey }[] = [
-  { id: "appointments", key: "nav.appointments" },
-  { id: "customers", key: "nav.customers" },
-  { id: "calls", key: "nav.calls" },
-  { id: "messages", key: "nav.messages" },
+type IconProps = React.SVGProps<SVGSVGElement>;
+
+function makeIcon(paths: React.ReactNode) {
+  function Icon(props: IconProps) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        {...props}
+      >
+        {paths}
+      </svg>
+    );
+  }
+  return Icon;
+}
+
+const AppointmentsIcon = makeIcon(
+  <>
+    <rect x="3" y="4.5" width="18" height="16" rx="2" />
+    <path d="M3 9.5h18" />
+    <path d="M8 2.5v4M16 2.5v4" />
+    <path d="m9 14.5 2 2 4-4" />
+  </>,
+);
+// A group of three people, same glyph Nudge uses for Contacts.
+const CustomersIcon = makeIcon(
+  <>
+    <circle cx="12" cy="6.5" r="3" />
+    <path d="M6.5 19v-.5a5.5 5.5 0 0 1 11 0v.5" />
+    <circle cx="4.5" cy="9" r="2" />
+    <path d="M1 17v-.3a3.3 3.3 0 0 1 3.5-3.2" />
+    <circle cx="19.5" cy="9" r="2" />
+    <path d="M23 17v-.3a3.3 3.3 0 0 0-3.5-3.2" />
+  </>,
+);
+// A tray, not a speech bubble: the tab holds WhatsApp, email, and calls.
+const InboxIcon = makeIcon(
+  <>
+    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  </>,
+);
+
+// Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
+// neutral — hue on the symbol plus a bold label is the selected cue, so the
+// sidebar never turns into a stack of coloured blocks.
+const NAV_TABS: {
+  id: TabId;
+  key: TranslationKey;
+  Icon: (props: IconProps) => React.ReactElement;
+  color: string;
+}[] = [
+  {
+    id: "appointments",
+    key: "nav.appointments",
+    Icon: AppointmentsIcon,
+    color: "var(--brand)",
+  },
+  {
+    id: "customers",
+    key: "nav.customers",
+    Icon: CustomersIcon,
+    color: "#8b5cf6",
+  },
+  { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
 ];
 
 function initialsFrom(name?: string | null, email?: string | null): string {
@@ -365,22 +428,32 @@ export function AppShell({
         <div className="px-2 pb-2 pt-3">
           <WorkspaceSwitcher fallbackName={settings?.org.name} />
         </div>
-        <nav className="flex-1 space-y-0.5 px-2">
-          {NAV_TABS.map((entry) => {
-            const active = tab === entry.id;
+        <nav className="flex-1 space-y-0.5 px-2 py-1">
+          {NAV_TABS.map(({ id, key, Icon, color }) => {
+            const active = tab === id;
             return (
               <button
-                key={entry.id}
-                onClick={() => onTab(entry.id)}
-                className={`flex w-full items-center rounded-md px-3 py-2 text-sm transition-colors ${
+                key={id}
+                onClick={() => onTab(id)}
+                aria-current={active ? "page" : undefined}
+                className={`group flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors ${
                   active
-                    ? "bg-[var(--row-hover-bg)] font-medium text-[var(--foreground)]"
-                    : "text-[var(--muted)] hover:bg-[var(--row-hover-bg)] hover:text-[var(--foreground)]"
+                    ? "bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)]"
+                    : "font-medium text-[var(--muted)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
                 }`}
               >
-                <span className="flex-1 text-left">{t(entry.key)}</span>
-                {entry.id === "messages" && (failedCount ?? 0) > 0 && (
-                  <span className="h-2 w-2 rounded-full bg-red-500" aria-label="failed sends" />
+                {/* Symbol carries the hue. Muted when idle so it accents
+                    rather than shouts; full strength once active or hovered. */}
+                <Icon
+                  className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
+                  style={{ color, opacity: active ? 1 : undefined }}
+                />
+                <span className="flex-1 truncate text-left">{t(key)}</span>
+                {id === "inbox" && (failedCount ?? 0) > 0 && (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full bg-red-500"
+                    aria-label="failed sends"
+                  />
                 )}
               </button>
             );
@@ -419,19 +492,27 @@ export function AppShell({
         </main>
         {/* Phone nav */}
         <nav className="flex border-t border-[var(--border)] md:hidden">
-          {NAV_TABS.map((entry) => (
-            <button
-              key={entry.id}
-              onClick={() => onTab(entry.id)}
-              className={`flex-1 px-2 py-2.5 text-xs ${
-                tab === entry.id
-                  ? "font-semibold text-[var(--foreground)]"
-                  : "text-[var(--muted)]"
-              }`}
-            >
-              {t(entry.key)}
-            </button>
-          ))}
+          {NAV_TABS.map(({ id, key, Icon, color }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onTab(id)}
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
+                  active
+                    ? "font-semibold text-[var(--foreground)]"
+                    : "text-[var(--muted)]"
+                }`}
+              >
+                <Icon
+                  className="shrink-0"
+                  style={{ color, opacity: active ? 1 : 0.8 }}
+                />
+                {t(key)}
+              </button>
+            );
+          })}
         </nav>
       </div>
     </div>

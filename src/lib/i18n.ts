@@ -32,8 +32,7 @@ const dictionary = {
   "nav.today": { tr: "Bugün", en: "Today" },
   "nav.appointments": { tr: "Randevular", en: "Appointments" },
   "nav.customers": { tr: "Müşteriler", en: "Customers" },
-  "nav.messages": { tr: "Mesajlar", en: "Messages" },
-  "nav.calls": { tr: "Aramalar", en: "Calls" },
+  "nav.inbox": { tr: "Gelen Kutusu", en: "Inbox" },
   "nav.settings": { tr: "Ayarlar", en: "Settings" },
   "nav.signOut": { tr: "Çıkış", en: "Sign out" },
 
@@ -104,10 +103,7 @@ const dictionary = {
   },
   "customers.noConsent": { tr: "İzin yok", en: "No consent" },
 
-  "messages.title": { tr: "Mesajlar", en: "Messages" },
   "messages.none": { tr: "Henüz mesaj yok", en: "No messages yet" },
-  "messages.out": { tr: "Giden", en: "Sent" },
-  "messages.in": { tr: "Gelen", en: "Received" },
 
   "settings.title": { tr: "Ayarlar", en: "Settings" },
   "settings.business": { tr: "İşletme", en: "Business" },
@@ -146,6 +142,23 @@ const dictionary = {
   },
   "settings.templateName": { tr: "Şablon adı", en: "Template name" },
   "settings.templateStatus": { tr: "Durum", en: "Status" },
+  // Channels — one conversation, three lanes. Labels are the accessible names
+  // behind the icon-only controls in the inbox.
+  "channel.whatsapp": { tr: "WhatsApp", en: "WhatsApp" },
+  "channel.email": { tr: "E-posta", en: "Email" },
+  "channel.call": { tr: "Arama", en: "Call" },
+
+  "inbox.all": { tr: "Tümü", en: "All" },
+  "inbox.empty": {
+    tr: "Henüz konuşma yok. Bir müşteri yazdığında ya da aradığında burada görünür.",
+    en: "No conversations yet. When a customer writes or calls, it lands here.",
+  },
+  "inbox.needsReply": { tr: "Yanıt bekliyor", en: "Needs reply" },
+  "inbox.failedSend": { tr: "Gönderilemedi", en: "Failed to send" },
+  "inbox.openContact": { tr: "Müşteriyi aç", en: "Open contact" },
+
+  "calls.inbound": { tr: "Gelen arama", en: "Inbound call" },
+  "calls.outbound": { tr: "Giden arama", en: "Outbound call" },
   "calls.none": { tr: "Henüz arama yok", en: "No calls yet" },
   "calls.transcript": { tr: "Konuşma dökümü", en: "Transcript" },
   "calls.recording": { tr: "Kayıt", en: "Recording" },
@@ -217,6 +230,7 @@ const dictionary = {
   "common.copy": { tr: "Kopyala", en: "Copy" },
   "common.copied": { tr: "Kopyalandı", en: "Copied" },
   "common.loading": { tr: "Yükleniyor…", en: "Loading…" },
+  "common.back": { tr: "Geri", en: "Back" },
   "common.optional": { tr: "isteğe bağlı", en: "optional" },
 } as const;
 

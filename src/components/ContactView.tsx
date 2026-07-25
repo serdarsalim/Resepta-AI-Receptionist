@@ -7,7 +7,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
-import { MessageThread } from "./MessageThread";
+import { ConversationPanel } from "./ConversationPanel";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -187,7 +187,7 @@ export function ContactView({
 
         {/* Right: conversation — shared component, never a page variant */}
         <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          <MessageThread
+          <ConversationPanel
             customerId={customerId}
             lastInboundAt={customer.lastInboundAt}
             className="flex-1"

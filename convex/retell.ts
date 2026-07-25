@@ -70,55 +70,6 @@ export const setConfig = mutation({
   },
 });
 
-const callDoc = v.object({
-  _id: v.id("calls"),
-  _creationTime: v.number(),
-  customerId: v.optional(v.id("customers")),
-  direction: v.union(v.literal("inbound"), v.literal("outbound")),
-  fromNumber: v.optional(v.string()),
-  startedAt: v.number(),
-  durationSec: v.optional(v.number()),
-  outcome: v.optional(v.string()),
-  summary: v.optional(v.string()),
-  transcript: v.optional(v.string()),
-  recordingUrl: v.optional(v.string()),
-  customerName: v.optional(v.string()),
-});
-
-export const listCalls = query({
-  args: {},
-  returns: v.array(callDoc),
-  handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
-    const rows = await ctx.db
-      .query("calls")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .order("desc")
-      .take(100);
-    const out = [];
-    for (const row of rows) {
-      const customer = row.customerId ? await ctx.db.get(row.customerId) : null;
-      out.push({
-        _id: row._id,
-        _creationTime: row._creationTime,
-        customerId: row.customerId,
-        direction: row.direction,
-        fromNumber: row.fromNumber,
-        startedAt: row.startedAt,
-        durationSec: row.durationSec,
-        outcome: row.outcome,
-        summary: row.summary,
-        transcript: row.transcript,
-        recordingUrl: row.recordingUrl,
-        customerName: customer
-          ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
-          : undefined,
-      });
-    }
-    return out;
-  },
-});
-
 // ---- Internal plumbing for the HTTP endpoints ----
 
 // Org + scheduling config for a function call, resolved by agent id.

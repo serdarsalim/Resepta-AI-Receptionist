@@ -12,49 +12,6 @@ const messageStatus = v.union(
   v.literal("received"),
 );
 
-const messageDoc = v.object({
-  _id: v.id("messages"),
-  _creationTime: v.number(),
-  orgId: v.id("orgs"),
-  customerId: v.optional(v.id("customers")),
-  appointmentId: v.optional(v.id("appointments")),
-  direction: v.union(v.literal("out"), v.literal("in")),
-  kind: v.string(),
-  body: v.optional(v.string()),
-  templateName: v.optional(v.string()),
-  status: messageStatus,
-  wamid: v.optional(v.string()),
-  error: v.optional(v.string()),
-});
-
-export const listRecent = query({
-  args: {},
-  returns: v.array(messageDoc),
-  handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .order("desc")
-      .take(100);
-  },
-});
-
-export const listForCustomer = query({
-  args: { customerId: v.id("customers") },
-  returns: v.array(messageDoc),
-  handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
-    const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
-    const rows = await ctx.db
-      .query("messages")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .order("desc")
-      .take(200);
-    return rows;
-  },
-});
 
 // ---- Internal plumbing (send action + webhook) ----
 
@@ -145,7 +102,7 @@ export async function logInboundRow(
   });
 }
 
-// Red-dot badge on the Messages tab: failed sends in the last 48h.
+// Red-dot badge on the Inbox tab: failed sends in the last 48h.
 export const failedCount = query({
   args: {},
   returns: v.number(),
@@ -163,8 +120,97 @@ export const failedCount = query({
   },
 });
 
-// Inbox left pane: one row per customer with message history, newest first,
-// carrying the last message preview + unanswered-inbound flag.
+// ---- Unified conversation feed (WhatsApp + email + calls) ----
+//
+// The inbox is per CUSTOMER, not per channel (Nudge's InboxView model). A
+// customer who called and then wrote on WhatsApp is ONE conversation with two
+// channels, never two rows. Calls live in their own table because they carry
+// transcripts and recordings, so the merge happens here on read rather than by
+// forcing calls into `messages`.
+
+export const channel = v.union(
+  v.literal("whatsapp"),
+  v.literal("email"),
+  v.literal("call"),
+);
+
+export type Channel = "whatsapp" | "email" | "call";
+
+// The email lane logs under `email_<kind>` (see wa.ts) — the prefix IS the
+// channel marker. Everything else in `messages` rode WhatsApp.
+export function channelOfMessage(kind: string): Channel {
+  return kind.startsWith("email_") ? "email" : "whatsapp";
+}
+
+const feedItem = v.object({
+  id: v.string(),
+  channel,
+  at: v.number(),
+  // Normalized across tables: a call's "inbound" is a message's "in".
+  direction: v.union(v.literal("out"), v.literal("in")),
+  kind: v.string(),
+  body: v.optional(v.string()),
+  status: v.optional(messageStatus),
+  error: v.optional(v.string()),
+  // Call-only.
+  durationSec: v.optional(v.number()),
+  outcome: v.optional(v.string()),
+  summary: v.optional(v.string()),
+  transcript: v.optional(v.string()),
+  recordingUrl: v.optional(v.string()),
+});
+
+// One customer's whole history, newest first, every channel interleaved.
+// Shared by the inbox right pane and the contact page — one implementation.
+export const feedForCustomer = query({
+  args: { customerId: v.id("customers") },
+  returns: v.array(feedItem),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(200);
+    const calls = await ctx.db
+      .query("calls")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(200);
+
+    const items = [
+      ...messages.map((m) => ({
+        id: m._id as string,
+        channel: channelOfMessage(m.kind),
+        at: m._creationTime,
+        direction: m.direction,
+        kind: m.kind,
+        body: m.body,
+        status: m.status,
+        error: m.error,
+      })),
+      ...calls.map((c) => ({
+        id: c._id as string,
+        channel: "call" as const,
+        at: c.startedAt,
+        direction: (c.direction === "inbound" ? "in" : "out") as "in" | "out",
+        kind: "call",
+        durationSec: c.durationSec,
+        outcome: c.outcome,
+        summary: c.summary,
+        transcript: c.transcript,
+        recordingUrl: c.recordingUrl,
+      })),
+    ];
+    return items.sort((a, b) => b.at - a.at);
+  },
+});
+
+// Inbox left pane: one row per customer, newest activity first, carrying the
+// last preview plus which channels are waiting on a reply from the business.
 export const conversations = query({
   args: {},
   returns: v.array(
@@ -172,41 +218,89 @@ export const conversations = query({
       customerId: v.id("customers"),
       name: v.string(),
       phone: v.string(),
+      email: v.optional(v.string()),
       lastAt: v.number(),
       lastBody: v.optional(v.string()),
       lastDirection: v.union(v.literal("out"), v.literal("in")),
+      lastChannel: channel,
       hasFailed: v.boolean(),
       awaitingReply: v.boolean(),
+      // Channels whose most recent activity is an unanswered inbound. Drives
+      // the pinned, tinted icons in the row's channel strip.
+      awaitingChannels: v.array(channel),
     }),
   ),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    const rows = await ctx.db
+    const messages = await ctx.db
       .query("messages")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(500);
-    const byCustomer = new Map<string, typeof rows>();
-    for (const row of rows) {
-      if (!row.customerId) continue;
-      const bucket = byCustomer.get(row.customerId) ?? [];
-      bucket.push(row);
-      byCustomer.set(row.customerId, bucket);
+    const calls = await ctx.db
+      .query("calls")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(200);
+
+    type Entry = {
+      channel: Channel;
+      at: number;
+      direction: "in" | "out";
+      body?: string;
+      failed: boolean;
+    };
+    const byCustomer = new Map<string, Entry[]>();
+    const push = (customerId: string | undefined, entry: Entry) => {
+      if (!customerId) return;
+      const bucket = byCustomer.get(customerId) ?? [];
+      bucket.push(entry);
+      byCustomer.set(customerId, bucket);
+    };
+    for (const m of messages) {
+      push(m.customerId, {
+        channel: channelOfMessage(m.kind),
+        at: m._creationTime,
+        direction: m.direction,
+        body: m.body,
+        failed: m.status === "failed",
+      });
     }
+    for (const c of calls) {
+      push(c.customerId, {
+        channel: "call",
+        at: c.startedAt,
+        direction: c.direction === "inbound" ? "in" : "out",
+        body: c.summary,
+        failed: false,
+      });
+    }
+
     const out = [];
-    for (const [customerId, msgs] of byCustomer) {
+    for (const [customerId, entries] of byCustomer) {
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
-      const last = msgs[0];
+      entries.sort((a, b) => b.at - a.at);
+      const last = entries[0];
+      // Per channel, only the LATEST entry decides — an old unanswered reply
+      // that was since answered on that channel is not still waiting.
+      const awaitingChannels: Channel[] = [];
+      for (const ch of ["whatsapp", "email", "call"] as const) {
+        const latest = entries.find((e) => e.channel === ch);
+        if (latest?.direction === "in") awaitingChannels.push(ch);
+      }
       out.push({
         customerId: customer._id,
         name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
         phone: customer.phone,
-        lastAt: last._creationTime,
+        email: customer.email,
+        lastAt: last.at,
         lastBody: last.body,
         lastDirection: last.direction,
-        hasFailed: msgs.some((m) => m.status === "failed"),
-        awaitingReply: last.direction === "in",
+        lastChannel: last.channel,
+        hasFailed: entries.some((e) => e.failed),
+        awaitingReply: awaitingChannels.length > 0,
+        awaitingChannels,
       });
     }
     return out.sort((a, b) => b.lastAt - a.lastAt);

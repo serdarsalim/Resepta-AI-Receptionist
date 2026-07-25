@@ -117,6 +117,7 @@ export default defineSchema({
     retellCallId: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
+    .index("by_customer", ["customerId"])
     .index("by_retell_call", ["retellCallId"]),
 
   customers: defineTable({

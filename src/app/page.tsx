@@ -5,8 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { AppShell, type TabId } from "@/components/AppShell";
 import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
-import { MessagesView } from "@/components/MessagesView";
-import { CallsView } from "@/components/CallsView";
+import { InboxView } from "@/components/InboxView";
 import { SettingsView } from "@/components/SettingsView";
 import { ContactView } from "@/components/ContactView";
 
@@ -28,8 +27,7 @@ export default function Home() {
         <>
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
-          {tab === "calls" && <CallsView />}
-          {tab === "messages" && <MessagesView onOpenContact={setContactId} />}
+          {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
           {tab === "settings" && <SettingsView />}
         </>
       )}
