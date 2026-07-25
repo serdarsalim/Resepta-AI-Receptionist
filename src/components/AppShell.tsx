@@ -324,12 +324,23 @@ export function AppShell({
               ? t("settings.title")
               : t(NAV_TABS.find((entry) => entry.id === tab)?.key ?? "app.name")}
           </h1>
-          <UserMenu
-            name={settings?.me.name}
-            email={settings?.me.email}
-            remoteTheme={settings?.me.themePreference}
-            onOpenSettings={() => onTab("settings")}
-          />
+          <div className="flex items-center gap-2">
+            {tab === "settings" && (
+              <button
+                aria-label="Close settings"
+                onClick={() => onTab("appointments")}
+                className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                ×
+              </button>
+            )}
+            <UserMenu
+              name={settings?.me.name}
+              email={settings?.me.email}
+              remoteTheme={settings?.me.themePreference}
+              onOpenSettings={() => onTab("settings")}
+            />
+          </div>
         </header>
         <main className="thin-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
           {children}
