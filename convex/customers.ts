@@ -15,6 +15,10 @@ const customerDoc = v.object({
   consentAt: v.optional(v.number()),
   lastInboundAt: v.optional(v.number()),
   custom: v.optional(v.record(v.string(), v.string())),
+  // When someone last cleared this customer's dot in the inbox. Convex
+  // validates RETURNS as strictly as arguments, so a column added to the
+  // schema and not added here makes every read of the table throw.
+  attentionClearedAt: v.optional(v.number()),
 });
 
 export const get = query({
