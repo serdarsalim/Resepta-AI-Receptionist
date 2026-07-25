@@ -114,17 +114,42 @@ function SignOutIcon() {
 function UserMenu({
   name,
   email,
+  remoteTheme,
   onOpenSettings,
 }: {
   name?: string;
   email?: string;
+  remoteTheme?: Theme;
   onOpenSettings: () => void;
 }) {
   const { t } = useLanguage();
   const { signOut } = useAuthActions();
   const { theme, setTheme, mounted } = useTheme();
+  const saveTheme = useMutation(api.users.setMyTheme);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Convex is the cross-device source of truth; localStorage (inside useTheme)
+  // is the instant no-FOUC cache. Adopt the stored server preference, but hold
+  // a pending ref so our own optimistic write doesn't get reverted by the
+  // round-trip lag (Nudge's pattern, ported).
+  const pending = useRef<Theme | null>(null);
+  useEffect(() => {
+    if (!mounted || !remoteTheme) return;
+    if (pending.current) {
+      if (remoteTheme === pending.current) pending.current = null;
+      return;
+    }
+    if (remoteTheme !== theme) setTheme(remoteTheme);
+  }, [mounted, remoteTheme, theme, setTheme]);
+
+  const chooseTheme = (next: Theme) => {
+    pending.current = next;
+    setTheme(next);
+    saveTheme({ theme: next }).catch(() => {
+      pending.current = null;
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -197,7 +222,7 @@ function UserMenu({
                   type="button"
                   role="menuitemradio"
                   aria-checked={active}
-                  onClick={() => setTheme(value)}
+                  onClick={() => chooseTheme(value)}
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
                 >
                   <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
@@ -292,6 +317,7 @@ export function AppShell({
           <UserMenu
             name={settings?.me.name}
             email={settings?.me.email}
+            remoteTheme={settings?.me.themePreference}
             onOpenSettings={() => onTab("settings")}
           />
         </header>

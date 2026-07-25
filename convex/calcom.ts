@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
-import { requireOrg } from "./lib/orgAuth";
+import { requireOwner } from "./lib/orgAuth";
 import { scheduleConfirmationIfConfigured } from "./appointments";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
@@ -17,7 +17,7 @@ export const rotateWebhookToken = mutation({
   args: {},
   returns: v.string(),
   handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const token = crypto.randomUUID().replace(/-/g, "");
     await ctx.db.patch(orgId, { calcomWebhookToken: token });
     return token;

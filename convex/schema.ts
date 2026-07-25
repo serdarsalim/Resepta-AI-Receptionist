@@ -28,7 +28,26 @@ export default defineSchema({
     isAnonymous: v.optional(v.boolean()),
     orgId: v.optional(v.id("orgs")),
     role: v.optional(v.union(v.literal("owner"), v.literal("staff"))),
-  }).index("email", ["email"]),
+    themePreference: v.optional(
+      v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
+    ),
+  })
+    .index("email", ["email"])
+    .index("by_org", ["orgId"]),
+
+  // Team invites. No token is mailed and none is checked (Nudge's model):
+  // Google has already proven the signer-in controls the address, so matching
+  // on the address IS the verification. An open invite = acceptedAt unset.
+  invites: defineTable({
+    orgId: v.id("orgs"),
+    email: v.string(),
+    role: v.union(v.literal("owner"), v.literal("staff")),
+    invitedBy: v.id("users"),
+    acceptedAt: v.optional(v.number()),
+    acceptedUserId: v.optional(v.id("users")),
+  })
+    .index("by_email", ["email"])
+    .index("by_org", ["orgId"]),
 
   orgs: defineTable({
     name: v.string(),
@@ -87,7 +106,14 @@ export default defineSchema({
     // Intake: unset = typed into Randevu; "calcom" = arrived via the cal.com
     // webhook. externalUid is cal.com's booking uid — how RESCHEDULED and
     // CANCELLED events find the row they refer to.
-    source: v.optional(v.union(v.literal("manual"), v.literal("calcom"))),
+    source: v.optional(
+      v.union(
+        v.literal("manual"),
+        v.literal("calcom"),
+        v.literal("voice"),
+        v.literal("booking_page"),
+      ),
+    ),
     externalUid: v.optional(v.string()),
   })
     .index("by_org_start", ["orgId", "startAt"])

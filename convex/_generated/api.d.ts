@@ -21,6 +21,8 @@ import type * as messages from "../messages.js";
 import type * as orgs from "../orgs.js";
 import type * as reminders from "../reminders.js";
 import type * as services from "../services.js";
+import type * as team from "../team.js";
+import type * as users from "../users.js";
 import type * as wa from "../wa.js";
 import type * as webhook from "../webhook.js";
 
@@ -44,6 +46,8 @@ declare const fullApi: ApiFromModules<{
   orgs: typeof orgs;
   reminders: typeof reminders;
   services: typeof services;
+  team: typeof team;
+  users: typeof users;
   wa: typeof wa;
   webhook: typeof webhook;
 }>;

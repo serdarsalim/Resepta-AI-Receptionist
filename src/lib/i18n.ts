@@ -134,6 +134,22 @@ const dictionary = {
   "settings.calcomGenerate": { tr: "Adres oluştur", en: "Generate URL" },
   "settings.calcomRotate": { tr: "Yenile", en: "Rotate" },
 
+  "team.title": { tr: "Ekip", en: "Team" },
+  "team.inviteHint": {
+    tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez — adresi siz iletin.",
+    en: "The invitee joins your team when they sign in with Google using this email. No email is sent — share the address yourself.",
+  },
+  "team.invite": { tr: "Davet et", en: "Invite" },
+  "team.pending": { tr: "Bekleyen davetler", en: "Pending invites" },
+  "team.revoke": { tr: "İptal et", en: "Revoke" },
+  "team.you": { tr: "siz", en: "you" },
+  "role.owner": { tr: "Sahip", en: "Owner" },
+  "role.staff": { tr: "Personel", en: "Staff" },
+  "settings.ownerOnly": {
+    tr: "Bu ayarları yalnızca işletme sahibi değiştirebilir.",
+    en: "Only the business owner can change these settings.",
+  },
+
   "common.save": { tr: "Kaydet", en: "Save" },
   "common.saving": { tr: "Kaydediliyor…", en: "Saving…" },
   "common.saved": { tr: "Kaydedildi", en: "Saved" },

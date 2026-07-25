@@ -22,9 +22,12 @@ const TIMEZONES = [
 const ROW_GRID =
   "grid grid-cols-1 gap-y-2 sm:grid-cols-[22rem_1fr] sm:items-center sm:gap-x-4 sm:gap-y-3";
 
-function Card({ title, tip, children }: {
+function Card({ title, tip, disabled, children }: {
   title: string;
   tip?: string;
+  // Staff see owner-only cards read-only; a native fieldset disables every
+  // input/button inside without per-control wiring.
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -33,8 +36,113 @@ function Card({ title, tip, children }: {
         <h2 className="text-sm font-semibold">{title}</h2>
         {tip && <InfoTip text={tip} />}
       </div>
-      {children}
+      <fieldset disabled={disabled} className={disabled ? "opacity-70" : undefined}>
+        {children}
+      </fieldset>
     </section>
+  );
+}
+
+function TeamCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const team = useQuery(api.team.overview, {});
+  const invite = useMutation(api.team.invite);
+  const revokeInvite = useMutation(api.team.revokeInvite);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Card title={t("team.title")} tip={t("team.inviteHint")}>
+      {team === undefined ? (
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      ) : (
+        <div className="space-y-3">
+          <ul className="divide-y divide-[var(--border)]">
+            {team.members.map((member) => (
+              <li key={member._id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="truncate font-medium">
+                    {member.name || member.email}
+                    {member.isMe && (
+                      <span className="ml-1 text-xs text-[var(--muted)]">
+                        ({t("team.you")})
+                      </span>
+                    )}
+                  </span>
+                  {member.name && member.email && (
+                    <span className="block truncate text-xs text-[var(--muted)]">
+                      {member.email}
+                    </span>
+                  )}
+                </span>
+                <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                  {member.role === "staff" ? t("role.staff") : t("role.owner")}
+                </span>
+              </li>
+            ))}
+            {team.pending.map((pendingInvite) => (
+              <li key={pendingInvite._id} className="flex items-center gap-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
+                  <span className="block text-xs text-[var(--muted)]">
+                    {t("team.pending")} ·{" "}
+                    {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
+                  </span>
+                </span>
+                {isOwner && (
+                  <button
+                    className="text-xs text-red-600 underline dark:text-red-400"
+                    onClick={() => void revokeInvite({ inviteId: pendingInvite._id })}
+                  >
+                    {t("team.revoke")}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {isOwner && (
+            <form
+              className="flex flex-wrap items-end gap-2"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const formEl = event.currentTarget;
+                const form = new FormData(formEl);
+                setError(null);
+                try {
+                  await invite({
+                    email: String(form.get("email") ?? ""),
+                    role: form.get("role") === "owner" ? "owner" : "staff",
+                  });
+                  formEl.reset();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "error");
+                }
+              }}
+            >
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="ornek@gmail.com"
+                className="w-64 flex-1"
+              />
+              <select name="role" defaultValue="staff" className="w-auto">
+                <option value="staff">{t("role.staff")}</option>
+                <option value="owner">{t("role.owner")}</option>
+              </select>
+              <button
+                type="submit"
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+              >
+                {t("team.invite")}
+              </button>
+              {error && (
+                <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>
+              )}
+            </form>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -55,10 +163,17 @@ export function SettingsView() {
     ".convex.cloud",
     ".convex.site",
   );
+  // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
+  const isOwner = settings.me.role !== "staff";
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <Card title={t("settings.business")}>
+      {!isOwner && (
+        <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
+          {t("settings.ownerOnly")}
+        </p>
+      )}
+      <Card title={t("settings.business")} disabled={!isOwner}>
         <div className={ROW_GRID}>
           <RowLabel label={t("settings.businessName")} />
           <input
@@ -90,7 +205,7 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card title={t("settings.reminders")}>
+      <Card title={t("settings.reminders")} disabled={!isOwner}>
         <div className={ROW_GRID}>
           <RowLabel label={t("settings.reminderOffsets")} hint="24, 2" />
           <input
@@ -112,7 +227,9 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card title={t("settings.whatsapp")}>
+      <TeamCard isOwner={isOwner} />
+
+      <Card title={t("settings.whatsapp")} disabled={!isOwner}>
         {settings.whatsapp.connected ? (
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
@@ -161,7 +278,7 @@ export function SettingsView() {
         )}
       </Card>
 
-      <Card title={t("settings.templates")} tip={t("settings.templatesHint")}>
+      <Card title={t("settings.templates")} tip={t("settings.templatesHint")} disabled={!isOwner}>
         <div className="divide-y divide-[var(--border)]">
           {settings.templates.map((template) => (
             <div key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
@@ -196,7 +313,7 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card title={t("settings.bookings")} tip={t("settings.calcomHint")}>
+      <Card title={t("settings.bookings")} tip={t("settings.calcomHint")} disabled={!isOwner}>
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"

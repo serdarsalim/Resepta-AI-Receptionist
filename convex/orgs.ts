@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireOrg } from "./lib/orgAuth";
+import { requireOrg, requireOwner } from "./lib/orgAuth";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 
@@ -28,6 +28,9 @@ export const current = query({
       name: v.optional(v.string()),
       email: v.optional(v.string()),
       role: v.optional(v.union(v.literal("owner"), v.literal("staff"))),
+      themePreference: v.optional(
+        v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
+      ),
     }),
     whatsapp: v.union(
       v.object({
@@ -71,7 +74,12 @@ export const current = query({
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
       },
-      me: { name: user.name, email: user.email, role: user.role },
+      me: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        themePreference: user.themePreference,
+      },
       whatsapp: waAccount
         ? {
             connected: true as const,
@@ -103,7 +111,7 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
     if (args.timezone !== undefined) patch.timezone = args.timezone;
@@ -130,7 +138,7 @@ export const connectWhatsapp = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const phoneNumberId = args.phoneNumberId.trim();
     const accessToken = args.accessToken.trim();
     if (!phoneNumberId || !accessToken) throw new Error("missing-credentials");
@@ -169,7 +177,7 @@ export const disconnectWhatsapp = mutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const existing = await ctx.db
       .query("waAccounts")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -188,7 +196,7 @@ export const updateTemplate = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};

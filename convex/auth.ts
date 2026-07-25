@@ -39,6 +39,35 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       // this app's schema to write org rows.
       const db = ctx.db as unknown as DatabaseWriter;
 
+      // ---- Invite check FIRST (multi-user orgs). An open invite for this
+      // address means this person JOINS that org instead of founding a new
+      // one. Indexed by email; the open-invite pick happens in JS.
+      const invite = email
+        ? (
+            await db
+              .query("invites")
+              .withIndex("by_email", (q) => q.eq("email", email))
+              .collect()
+          ).find((row) => row.acceptedAt === undefined) ?? null
+        : null;
+      if (invite) {
+        const userId = await db.insert("users", {
+          email,
+          name,
+          image: args.profile.image as string | undefined,
+          orgId: invite.orgId,
+          role: invite.role,
+        });
+        // Audit trail of who admitted whom; stamping also drops the row off
+        // the pending list.
+        await db.patch(invite._id, {
+          acceptedAt: Date.now(),
+          acceptedUserId: userId,
+        });
+        return userId;
+      }
+
+      // ---- No invite: founding sign-in. ----
       // Unnamed until onboarding — "" renders as the name prompt in the app.
       const orgId = await db.insert("orgs", {
         name: "",

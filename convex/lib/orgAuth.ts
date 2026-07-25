@@ -23,6 +23,17 @@ export async function requireOrg(
   return { user, orgId: user.orgId };
 }
 
+// Owner-only gate for org configuration: Settings mutations, WhatsApp
+// credentials, invites. Staff read the org and work the appointments; they
+// don't reshape the business. `role` unset (pre-invite rows) counts as owner.
+export async function requireOwner(
+  ctx: Ctx,
+): Promise<{ user: Doc<"users">; orgId: Id<"orgs"> }> {
+  const { user, orgId } = await requireOrg(ctx);
+  if (user.role !== undefined && user.role !== "owner") throw new Error("owner-only");
+  return { user, orgId };
+}
+
 // E.164 or it doesn't exist (Nudge convention). Normalizes separators, rejects
 // anything without a dial code.
 export function assertE164(raw: string): string {

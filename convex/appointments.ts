@@ -14,7 +14,14 @@ const enrichedAppointment = v.object({
   status: appointmentStatus,
   staffName: v.optional(v.string()),
   notes: v.optional(v.string()),
-  source: v.optional(v.union(v.literal("manual"), v.literal("calcom"))),
+  source: v.optional(
+    v.union(
+      v.literal("manual"),
+      v.literal("calcom"),
+      v.literal("voice"),
+      v.literal("booking_page"),
+    ),
+  ),
   reminderSentOffsets: v.optional(v.array(v.number())),
   confirmationSentAt: v.optional(v.number()),
   customer: v.union(
