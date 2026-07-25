@@ -39,6 +39,11 @@ const dictionary = {
   },
 
   "menu.appearance": { tr: "Görünüm", en: "Appearance", de: "Darstellung" },
+  "menu.account": {
+    tr: "Hesap menüsü",
+    en: "Account menu",
+    de: "Kontomenü",
+  },
   "theme.light": { tr: "Açık", en: "Light", de: "Hell" },
   "theme.dark": { tr: "Koyu", en: "Dark", de: "Dunkel" },
   "theme.auto": { tr: "Otomatik", en: "Auto", de: "Automatisch" },
@@ -63,6 +68,16 @@ const dictionary = {
   "nav.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
   "nav.settings": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   "nav.menu": { tr: "Menü", en: "Menu", de: "Menü" },
+  "nav.closeMenu": {
+    tr: "Menüyü kapat",
+    en: "Close menu",
+    de: "Menü schließen",
+  },
+  "nav.primary": {
+    tr: "Ana gezinme",
+    en: "Main navigation",
+    de: "Hauptnavigation",
+  },
   "nav.account": { tr: "Hesabım", en: "My account", de: "Mein Konto" },
 
   // The avatar menu is the USER's menu: their name, their alerts, their
@@ -92,7 +107,7 @@ const dictionary = {
     de: "E-Mail schicken, wenn ein Kunde antwortet",
   },
   "account.notifyInboundHint": {
-    tr: "Bir müşteri WhatsApp'tan yazdığında e-posta adresinize haber verilir. Her mesaj için bir e-posta, sessiz saatlerde toplu gönderilmez.",
+    tr: "Bir müşteri WhatsApp'tan yazdığında e-posta adresinize haber verilir. Her mesaj için bir e-posta.",
     en: "You get an email at your account address when a customer writes on WhatsApp. One email per message.",
     de: "Sie bekommen eine E-Mail an Ihre Kontoadresse, sobald ein Kunde über WhatsApp schreibt. Eine E-Mail pro Nachricht.",
   },
@@ -303,13 +318,8 @@ const dictionary = {
   },
 
   "settings.title": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
-  // Settings section chips. The rest reuse their card titles (Reminders,
-  // WhatsApp, Bookings, Voice agent) so a chip and its card never disagree.
-  "settings.section.workspace": {
-    tr: "Çalışma alanı",
-    en: "Workspace setup",
-    de: "Allgemein",
-  },
+  // Settings section chips reuse their card titles (Reminders, WhatsApp,
+  // Bookings, Voice agent) so a chip and its card never disagree.
   "settings.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
   "settings.businessName": {
     tr: "İşletme adı",
@@ -346,7 +356,7 @@ const dictionary = {
   "settings.emailFromHint": {
     tr: "Doluysa onay ve hatırlatmalar e-posta adresi olan müşterilere e-postayla da gider (n8n üzerinden).",
     en: "When set, confirmations and reminders also go by email to customers with an address (via n8n).",
-    de: "Ist sie gesetzt, gehen Bestätigungen und Erinnerungen zusätzlich per E-Mail an alle Kunden mit E-Mail-Adresse (über n8n).",
+    de: "Ist sie hinterlegt, gehen Bestätigungen und Erinnerungen zusätzlich per E-Mail an alle Kunden mit E-Mail-Adresse (über n8n).",
   },
   "settings.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
   "settings.waConnected": { tr: "Bağlı", en: "Connected", de: "Verbunden" },
@@ -403,12 +413,19 @@ const dictionary = {
   "inbox.empty": {
     tr: "Henüz konuşma yok. Bir müşteri yazdığında ya da aradığında burada görünür.",
     en: "No conversations yet. When a customer writes or calls, it lands here.",
-    de: "Noch keine Unterhaltungen. Sobald ein Kunde schreibt oder anruft, erscheint sie hier.",
+    de: "Noch keine Unterhaltungen. Sobald ein Kunde schreibt oder anruft, sehen Sie es hier.",
   },
   "inbox.needsReply": {
     tr: "Yanıt bekliyor",
     en: "Needs reply",
     de: "Antwort offen",
+  },
+  // The sidebar badge and the row dot say the same thing, so they share a
+  // string: somebody still has to look at this.
+  "inbox.needsAttention": {
+    tr: "İlgi bekliyor",
+    en: "Needs attention",
+    de: "Wartet auf Sie",
   },
   "inbox.failedSend": {
     tr: "Gönderilemedi",
@@ -560,7 +577,11 @@ const dictionary = {
   "fields.typeLabel": { tr: "Tür", en: "Type", de: "Typ" },
   // Org-defined fields are how one deployment fits a salon, a dentist and a
   // garage: plate number, last cleaning, insurance are data, not code.
-  "fields.source": { tr: "Kaynak", en: "Filled by", de: "Ausgefüllt von" },
+  // "Dolduran", not "Kaynak": the two options are Ekip and Sesli asistan, so
+  // the label asks who fills the field in. "Kaynak" already means where an
+  // appointment came from (appointments.source), and one word for two ideas
+  // reads as the same column twice.
+  "fields.source": { tr: "Dolduran", en: "Filled by", de: "Ausgefüllt von" },
   "fields.source.manual": { tr: "Ekip", en: "Staff", de: "Mitarbeiter" },
   "fields.source.voice": {
     tr: "Sesli asistan",
@@ -572,10 +593,34 @@ const dictionary = {
     en: "From calls",
     de: "Aus Anrufen",
   },
+  // Honest version. Randevu does not own the Retell agent's prompt, so marking
+  // a field "voice" cannot make the agent ask for it. What Randevu does own is
+  // the endpoint that accepts the answer, so the copy says exactly that and the
+  // block below the list is the configuration the owner still has to paste in.
   "fields.voiceHint": {
-    tr: "Sesli asistan arama sırasında bu alanı sorar ve yanıtı müşteri kaydına yazar. Alan anahtarını Retell'de update_contact fonksiyonuna verin.",
-    en: "The voice agent asks for this during a call and writes the answer onto the customer record. Give the field key to Retell's update_contact function.",
-    de: "Der Sprachassistent fragt das während des Anrufs ab und schreibt die Antwort in den Kundendatensatz. Hinterlegen Sie den Feldschlüssel in Retell bei der Funktion update_contact.",
+    tr: "Randevu, sesli asistanın konuşma metnini yazmaz. Bu alanlar ancak anahtarlarını Retell'deki update_contact fonksiyonuna verdiğinizde dolar. Aşağıdaki bloğu kopyalayıp agent yapılandırmanıza yapıştırın.",
+    en: "Randevu does not write your voice agent's prompt. These fields only get filled once you give their keys to the update_contact function in Retell. Copy the block below into your agent configuration.",
+    de: "Randevu schreibt den Prompt Ihres Sprachassistenten nicht. Diese Felder werden erst befüllt, wenn Sie ihre Schlüssel in Retell bei der Funktion update_contact hinterlegen. Kopieren Sie den Block unten in Ihre Agent-Konfiguration.",
+  },
+  // Same group heading, different reader. On the customer record nobody is
+  // configuring anything; they want to know why this value is here and whether
+  // they may correct it.
+  "fields.voiceRecordHint": {
+    tr: "Bu alanları sesli asistan arama sırasında doldurur. Yanlış duyulmuşsa elle düzeltebilirsiniz.",
+    en: "The voice agent fills these during a call. Correct any of them by hand if it misheard.",
+    de: "Diese Felder füllt der Sprachassistent während eines Anrufs. Bei einem Hörfehler können Sie sie von Hand korrigieren.",
+  },
+  "fields.voiceSetup": {
+    tr: "Retell yapılandırması",
+    en: "Retell configuration",
+    de: "Retell-Konfiguration",
+  },
+  // Heads the field list inside the pasteable block, so the block still makes
+  // sense once it is sitting in Retell with no Randevu around it.
+  "fields.voiceSetupFields": {
+    tr: "Bu işletmenin alanları:",
+    en: "Fields this business collects:",
+    de: "Felder dieses Betriebs:",
   },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
   "fields.type.text": { tr: "Metin", en: "Text", de: "Text" },
@@ -598,7 +643,7 @@ const dictionary = {
   "team.inviteHint": {
     tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez, adresi siz iletin.",
     en: "The invitee joins your team when they sign in with Google using this email. No email is sent, so share the address yourself.",
-    de: "Die eingeladene Person kommt in Ihr Team, sobald sie sich mit dieser E-Mail-Adresse über Google anmeldet. Es geht keine E-Mail raus, geben Sie die Adresse selbst weiter.",
+    de: "Die eingeladene Person kommt in Ihr Team, sobald sie sich mit dieser E-Mail-Adresse über Google anmeldet. Es wird keine E-Mail verschickt, geben Sie die Adresse selbst weiter.",
   },
   "team.invite": { tr: "Davet et", en: "Invite", de: "Einladen" },
   "team.pending": {
@@ -625,6 +670,7 @@ const dictionary = {
   "common.saved": { tr: "Kaydedildi", en: "Saved", de: "Gespeichert" },
   "common.add": { tr: "Ekle", en: "Add", de: "Hinzufügen" },
   "common.cancel": { tr: "Vazgeç", en: "Cancel", de: "Abbrechen" },
+  "common.close": { tr: "Kapat", en: "Close", de: "Schließen" },
   "common.delete": { tr: "Sil", en: "Delete", de: "Löschen" },
   "common.copy": { tr: "Kopyala", en: "Copy", de: "Kopieren" },
   "common.copied": { tr: "Kopyalandı", en: "Copied", de: "Kopiert" },

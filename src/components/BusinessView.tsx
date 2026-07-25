@@ -8,8 +8,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { Card } from "./Card";
 import { Toggle } from "./Toggle";
-import { InfoTip } from "./InfoTip";
-import { RowLabel } from "./RowLabel";
+import { ROW_GRID, RowLabel } from "./RowLabel";
 import { FieldGroup, InlineEditValue } from "./RecordField";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
@@ -47,12 +46,9 @@ export function BusinessView() {
   );
 }
 
-// Settings row grid, per Serdar's documented spec: label column 220-260px,
-// label only (no helper text in it), control right, stacks on mobile. Same
-// string SettingsView uses; the two surfaces must line up when you flip
-// between them.
-const ROW_GRID =
-  "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
+// Rows use the shared ROW_GRID from RowLabel, the same string SettingsView and
+// AccountView import: the three surfaces must line up when you flip between
+// them, which they stop doing the moment the string exists in three places.
 
 const TIMEZONES = [
   "Europe/Istanbul",
@@ -218,6 +214,13 @@ function TeamCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
+// Header and rows share one template, and it only becomes a grid at sm. The
+// four fixed columns add up to ~264px, which on a 390px phone left about 60px
+// for the service name: the exact anti-pattern the design language names.
+// Below sm the row is a wrapping flex line instead, name on its own row.
+const SERVICE_ROW_GRID =
+  "sm:grid sm:grid-cols-[1fr_7rem_4rem_4rem] sm:items-center sm:gap-2";
+
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
 // nothing to pick and every appointment falls back to 30 minutes.
@@ -231,6 +234,10 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
 
   const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
+  // Staff cannot add a service, so an empty list for them is a heading, an (i)
+  // and an empty fieldset. Nothing to read and nothing to do: render nothing.
+  if (!isOwner && services !== undefined && rows.length === 0) return null;
+
   return (
     <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
       {services === undefined ? (
@@ -239,8 +246,10 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
         <div className="space-y-2">
           {rows.length > 0 && (
             // Column headers label their columns, so a row of toggles is never
-            // an unlabelled switch.
-            <div className="grid grid-cols-[1fr_7rem_4rem_4rem] items-center gap-2 px-1 text-xs text-[var(--muted)]">
+            // an unlabelled switch. They only exist where the columns actually
+            // sit side by side; below sm the row stacks and each value carries
+            // its own label instead.
+            <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
               <span>{t("services.name")}</span>
               <span>{t("services.duration")}</span>
               <span>{t("services.active")}</span>
@@ -251,14 +260,18 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
             {rows.map((service) => (
               <li
                 key={service._id}
-                className="group grid grid-cols-[1fr_7rem_4rem_4rem] items-center gap-2 py-1.5 text-sm"
+                className={`group flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
               >
-                <InlineEditValue
-                  value={service.name}
-                  onSave={(next) =>
-                    next && update({ serviceId: service._id, name: next })
-                  }
-                />
+                {/* Full width on a phone, so the name is not fighting 264px of
+                    fixed columns for the 60px that is left. */}
+                <span className="w-full min-w-0 sm:w-auto">
+                  <InlineEditValue
+                    value={service.name}
+                    onSave={(next) =>
+                      next && update({ serviceId: service._id, name: next })
+                    }
+                  />
+                </span>
                 <span className="flex items-center gap-0.5">
                   <InlineEditValue
                     value={String(service.durationMinutes)}
@@ -273,16 +286,23 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     {t("services.minutes")}
                   </span>
                 </span>
-                <Toggle
-                  checked={service.active}
-                  label={t("services.active")}
-                  onChange={(next) =>
-                    void update({ serviceId: service._id, active: next })
-                  }
-                />
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs text-[var(--muted)] sm:hidden">
+                    {t("services.active")}
+                  </span>
+                  <Toggle
+                    checked={service.active}
+                    label={t("services.active")}
+                    onChange={(next) =>
+                      void update({ serviceId: service._id, active: next })
+                    }
+                  />
+                </span>
+                {/* Hover reveal is a desktop idea. A phone has no hover, so the
+                    button stays visible there rather than being unreachable. */}
                 <button
                   onClick={() => void remove({ serviceId: service._id })}
-                  className="justify-self-end rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400"
+                  className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
                 >
                   {t("common.delete")}
                 </button>
@@ -374,6 +394,9 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
   const [source, setSource] = useState<FieldSource>("manual");
   const [error, setError] = useState<string | null>(null);
+  // What was copied, not whether something was: add a field after copying and
+  // the button has to stop claiming the clipboard holds the current block.
+  const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const sourceLabelId = useId();
 
   // Unset reads as "manual": fields defined before the voice agent existed are
@@ -386,6 +409,39 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
     `${t(`fields.type.${field.type}` as "fields.type.text")}${
       field.options?.length ? ` · ${field.options.join(", ")}` : ""
     }`;
+
+  // Marking a field "voice" only sets source: "voice" in this org's data. The
+  // Retell agent has no idea the field exists, because Randevu does not write
+  // the agent's prompt or its function schema. What Randevu CAN do is generate
+  // the exact configuration the owner has to paste in, so the promise the UI
+  // makes is one the owner can actually complete.
+  //
+  // The argument shape mirrors what /retell/functions parses today
+  // (convex/http.ts): `phone` falls back to the call's from_number, and the
+  // values live under `values` (it also accepts `properties` or `fields`, or
+  // bare top-level args, but one documented shape is what the owner needs).
+  // Keys that are not a contactFields row in this org are ignored by
+  // retell.applyVoiceContactValues, so the key list IS the permission model.
+  const voiceSetupBlock = [
+    "update_contact",
+    "",
+    "{",
+    '  "phone": "+905551112233",',
+    '  "values": {',
+    ...voiceFields.map(
+      (field, index) =>
+        `    "${field.key}": ""${index < voiceFields.length - 1 ? "," : ""}`,
+    ),
+    "  }",
+    "}",
+    "",
+    t("fields.voiceSetupFields"),
+    ...voiceFields.map((field) => `${field.key}: ${field.label} (${typeSummary(field)})`),
+  ].join("\n");
+
+  // Staff cannot add a field, so an empty list for them is a heading, an (i)
+  // and an empty fieldset. Don't render the frame.
+  if (!isOwner && fields !== undefined && rows.length === 0) return null;
 
   const deleteButton = (field: ContactField, className: string) =>
     isOwner && (
@@ -420,7 +476,10 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 
       {voiceFields.length > 0 && (
         <div className="mb-3">
-          <FieldGroup label={t("fields.voiceGroup")} />
+          {/* One (i) for the group. It used to sit on every row, so six voice
+              fields stacked six identical icons carrying the same two
+              sentences down the column. */}
+          <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
           {/* The key is what the owner pastes into Retell's update_contact
               config, so it is a real column with a real label, not a
               decoration on the end of the row. */}
@@ -438,16 +497,35 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                     {typeSummary(field)}
                   </span>
                 </span>
-                <span className="flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center">
                   <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
                     {field.key}
                   </code>
-                  <InfoTip text={t("fields.voiceHint")} />
                 </span>
                 {deleteButton(field, "justify-self-end")}
               </li>
             ))}
           </ul>
+
+          {/* The half of the setup Randevu cannot do for you, generated from
+              your own fields so there is nothing left to translate by hand. */}
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-sm font-medium">{t("fields.voiceSetup")}</span>
+            <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(voiceSetupBlock);
+                setCopiedBlock(voiceSetupBlock);
+              }}
+              className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {copiedBlock === voiceSetupBlock ? t("common.copied") : t("common.copy")}
+            </button>
+          </div>
+          <pre className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)]">
+            {voiceSetupBlock}
+          </pre>
         </div>
       )}
 

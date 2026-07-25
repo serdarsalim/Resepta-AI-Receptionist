@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { Card } from "./Card";
-import { RowLabel } from "./RowLabel";
+import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 
 // The signed-in person's own settings, reached ONLY from the avatar menu.
@@ -13,11 +13,9 @@ import { Toggle } from "./Toggle";
 // and Settings destinations in the sidebar, because those are shared by the
 // whole team and this page is not.
 //
-// Settings row grid, per the documented spec: label column 220-260px, label
+// Rows use the shared ROW_GRID from RowLabel: label column 220-260px, label
 // only, control on the right, one column on phones. Explanations hide behind
 // the (i) on the label, never as a paragraph under the control.
-const ROW_GRID =
-  "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
 
 // A read-only value in the control column. Plain text, not a disabled input:
 // a greyed-out box invites a click that will never do anything.

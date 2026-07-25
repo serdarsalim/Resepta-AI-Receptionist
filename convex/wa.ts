@@ -11,17 +11,27 @@ import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
-// The reasons this file writes onto a failed row are internal shorthand. An
-// owner reading an alert gets the sentence, not the shorthand. Anything else
-// (Meta's own error title) already reads as English and passes through.
-function readableSendFailure(reason: string): string {
-  if (reason === "no-consent") return "The contact has not consented to messages.";
-  if (reason === "wa-not-configured") return "No WhatsApp number is connected yet.";
-  if (reason.startsWith("no-approved-template")) {
-    return "No approved template in the contact's language.";
-  }
-  return reason;
-}
+// Not every failed row is an incident. These three reasons are the steady
+// state of a normally-working account, and emailing about them is how a salon
+// learns to ignore the alert that actually matters:
+//
+//   no-consent            every contact who never opted in fails this way,
+//                         every time, forever. It is a KVKK record, not a bug.
+//   wa-not-configured     true for every send until the org connects a number,
+//                         so a brand new org would get one email per send on
+//                         day one.
+//   session-window-closed normal WhatsApp behaviour. Meta closes the 24h
+//                         window; nothing is broken and nothing is fixable.
+//
+// Everything else is either the org's own missing template or the provider
+// refusing a send, and both are broken AND actionable. The failed row still
+// gets written in all cases: the Messages tab is where the steady-state ones
+// belong.
+const STEADY_STATE_FAILURES = new Set([
+  "no-consent",
+  "wa-not-configured",
+  "session-window-closed",
+]);
 
 // Every failed row in this file routes through here. Scheduled by
 // queueOrgAlert, so a broken alert cannot roll back or delay the send path.
@@ -29,11 +39,15 @@ async function alertFailedSend(
   ctx: { scheduler: Scheduler },
   args: { orgId: Id<"orgs">; name: string; reason: string },
 ) {
+  if (STEADY_STATE_FAILURES.has(args.reason)) return;
+  const missingTemplate = args.reason.startsWith("no-approved-template");
   await queueOrgAlert(ctx, {
     orgId: args.orgId,
-    kind: "failed-send",
-    subject: `Message to ${args.name} did not send`,
-    body: readableSendFailure(args.reason),
+    template: missingTemplate ? "failedNoTemplate" : "failedOther",
+    who: args.name,
+    // The provider's own text only reaches the reader on the generic template;
+    // the missing-template case has a sentence that says what to do instead.
+    detail: missingTemplate ? undefined : args.reason,
   });
 }
 
@@ -281,7 +295,7 @@ export const sendAppointmentMessage = internalAction({
         webhookUrl: emailWebhook,
         from: org.emailFrom,
         to: customer.email,
-        subject: `${org.name} — ${when}`,
+        subject: `${org.name}, ${when}`,
         html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
       });
       await ctx.runMutation(internal.messages.applySendResult, {

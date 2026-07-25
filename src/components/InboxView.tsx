@@ -107,11 +107,23 @@ export function InboxView({
                           }
                         }}
                         // The LEFT BAR separates hover from selection, not the
-                        // tint step — position survives fast scanning in a way
+                        // tint step: position survives fast scanning in a way
                         // a few percent of wash doesn't.
+                        //
+                        // The bar is NEUTRAL, not brand green, and that is a
+                        // decision. Green in this product means exactly one
+                        // thing, "somebody still has to look at this", and it
+                        // is the attention dot on this row plus the same dot
+                        // on the sidebar's inbox tab. A green selection bar
+                        // put that hue on a second job inside a single row,
+                        // so the reader had to tell two greens apart at a
+                        // glance. The bar only ever needed position and
+                        // shape, and --foreground gives it both without
+                        // borrowing the status hue. This is the only left-bar
+                        // selection in the app, so nothing else drifts.
                         className={`group relative flex min-h-[3.875rem] w-full cursor-pointer items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] ${
                           isActive
-                            ? "bg-[var(--row-hover-bg)] before:bg-[var(--brand)]"
+                            ? "bg-[var(--row-hover-bg)] before:bg-[var(--foreground)]"
                             : "hover:bg-[var(--row-hover-bg)]"
                         }`}
                       >
@@ -123,7 +135,10 @@ export function InboxView({
                           {c.name || c.phone}
                         </span>
 
-                        <span className="flex shrink-0 items-center gap-2">
+                        {/* No gap: the attention button is a 40px tap box and
+                            already carries its own breathing room, so a gap
+                            on top of it just pushes the cluster wide. */}
+                        <span className="flex shrink-0 items-center gap-1">
                           {/* Channel strip. A channel with an unanswered
                               inbound is PINNED open and tinted so the list
                               stays scannable; the rest fade in on row hover.
@@ -141,7 +156,6 @@ export function InboxView({
                                     e.stopPropagation();
                                     open(ch);
                                   }}
-                                  title={label}
                                   aria-label={label}
                                   // Hover bg is an ALPHA, not a solid: this
                                   // button sits on three different row
@@ -160,23 +174,31 @@ export function InboxView({
                           </span>
                           {/* ONE dot, one colour, one meaning: this row still
                               needs somebody. A second hue only made the reader
-                              learn a legend, so whether it is an unanswered
-                              reply or a failed send lives in the title.
+                              learn a legend. What KIND of attention it is
+                              (unanswered reply vs failed send) used to live in
+                              a native title, which does not exist on a phone
+                              and never reached a screen reader, so it now
+                              leads the accessible name and the action follows
+                              it.
 
                               Tapping it clears the row, and tapping again
                               brings it back: a dismissed row keeps a hollow
-                              ring that appears on hover, so nothing is ever
-                              cleared beyond recall. Anything that arrives
-                              after the dismissal lights it again on its own. */}
+                              ring, so nothing is ever cleared beyond recall.
+                              Anything that arrives after the dismissal lights
+                              it again on its own.
+
+                              The dot stays 10px, but its button is a 40px box
+                              so a thumb can hit it without opening the
+                              conversation underneath. All three states use the
+                              same box, so the row never reflows. */}
                           {c.needsAttention ? (
                             <button
                               type="button"
-                              title={
+                              aria-label={`${
                                 c.hasFailed
                                   ? t("inbox.failedSend")
                                   : t("inbox.needsReply")
-                              }
-                              aria-label={t("inbox.dismiss")}
+                              }. ${t("inbox.dismiss")}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 void setAttention({
@@ -184,12 +206,13 @@ export function InboxView({
                                   cleared: true,
                                 });
                               }}
-                              className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)]"
-                            />
+                              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-black/[0.07] dark:hover:bg-white/[0.12]"
+                            >
+                              <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
+                            </button>
                           ) : c.awaitingReply || c.hasFailed ? (
                             <button
                               type="button"
-                              title={t("inbox.restore")}
                               aria-label={t("inbox.restore")}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -198,10 +221,20 @@ export function InboxView({
                                   cleared: false,
                                 });
                               }}
-                              className="h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border-2 border-[var(--brand)] opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-                            />
+                              // Hover reveals it on a pointer, focus-visible
+                              // reveals it on a keyboard, and on a touch
+                              // screen there is no hover to wait for, so it
+                              // just stays visible. A control you can only
+                              // reach by hovering does not exist on a phone.
+                              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-[opacity,background-color] duration-[120ms] hover:bg-black/[0.07] focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-white/[0.12] [@media(hover:none)]:opacity-100"
+                            >
+                              {/* An inset shadow, not a border: buttons in
+                                  this design language never carry one. Reads
+                                  as the same hollow ring. */}
+                              <span className="h-2.5 w-2.5 rounded-full shadow-[inset_0_0_0_2px_var(--brand)]" />
+                            </button>
                           ) : (
-                            <span className="h-2.5 w-2.5 shrink-0" />
+                            <span className="h-10 w-10 shrink-0" />
                           )}
                         </span>
 
@@ -268,7 +301,6 @@ export function InboxView({
                       type="button"
                       onClick={() => setFilter(k)}
                       aria-label={label}
-                      title={label}
                       className={`flex items-center justify-center rounded-full border px-2.5 py-1 text-xs transition-colors ${
                         filter === k
                           ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--accent)]"

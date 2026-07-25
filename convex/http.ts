@@ -130,7 +130,14 @@ function coerceContactValues(source: Record<string, unknown>): Record<string, st
     if (value === null || value === undefined) continue;
     if (typeof value === "object") continue;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_]*$/.test(key)) continue;
-    out[key] = String(value);
+    const text = String(value).trim();
+    // An empty value is Retell saying it did not collect this field, never
+    // "erase what you have". Post-call analysis reports every configured key
+    // whether or not the caller answered, so passing "" through would let one
+    // vague call wipe a value a human typed. Clearing a field is a job for the
+    // contact page, by hand.
+    if (!text) continue;
+    out[key] = text;
   }
   return out;
 }
@@ -145,13 +152,30 @@ function contactValuesFromArgs(args: Record<string, unknown>): Record<string, st
 }
 
 // Short English sentence for the model to relay in the call's own language.
-// The arrays next to it are what a transcript reader checks.
-function contactUpdateSentence(savedLabels: string[], ignoredKeys: string[]): string {
+// The arrays next to it are what a transcript reader checks. Each rejection
+// bucket gets its own clause: "did not stick" is useless to whoever reads the
+// transcript, "the value did not fit the field" tells them to ask again.
+function contactUpdateSentence(result: {
+  updatedLabels: string[];
+  ignored: string[];
+  notForVoice: string[];
+  rejected: string[];
+}): string {
   const parts: string[] = [];
-  if (savedLabels.length > 0) parts.push(`Saved ${savedLabels.join(", ")}.`);
-  if (ignoredKeys.length > 0) {
+  if (result.updatedLabels.length > 0) {
+    parts.push(`Saved ${result.updatedLabels.join(", ")}.`);
+  }
+  if (result.rejected.length > 0) {
     parts.push(
-      `Ignored ${ignoredKeys.join(", ")}, not a contact field for this business.`,
+      `Could not save ${result.rejected.join(", ")}: the value did not fit that field. Ask again and have the caller say it plainly.`,
+    );
+  }
+  if (result.notForVoice.length > 0) {
+    parts.push(`${result.notForVoice.join(", ")} is filled in by staff, so it was left alone.`);
+  }
+  if (result.ignored.length > 0) {
+    parts.push(
+      `Ignored ${result.ignored.join(", ")}, not a contact field for this business.`,
     );
   }
   return parts.join(" ") || "Nothing to save.";
@@ -274,7 +298,9 @@ http.route({
         saved: result.updated.length > 0,
         updated: result.updated,
         ignored: result.ignored,
-        message: contactUpdateSentence(result.updatedLabels, result.ignored),
+        not_for_voice: result.notForVoice,
+        rejected: result.rejected,
+        message: contactUpdateSentence(result),
       });
     }
 
@@ -299,6 +325,16 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const guard = await retellGuard(request);
     if (!guard.ok) return guard.response;
+    // Retell posts EVERY lifecycle event to this one URL. call_started carries
+    // no transcript, no duration and nothing collected, and recordCall is
+    // first-write-wins by call id, so letting it through would park an empty
+    // row and lock the real one out. An event field we don't recognise is
+    // acknowledged and ignored; a payload without the field at all still runs,
+    // which keeps older test posts working.
+    const event = String(guard.payload.event ?? "");
+    if (event && event !== "call_ended" && event !== "call_analyzed") {
+      return new Response("ok", { status: 200 });
+    }
     const call = (guard.payload.call ?? {}) as Record<string, unknown>;
     const analysis = (call.call_analysis ?? {}) as Record<string, unknown>;
     const startedAt = Number(call.start_timestamp ?? Date.now());
@@ -320,10 +356,12 @@ http.route({
     }
 
     // Retell also posts what it collected during the call. Same mapping, same
-    // guard as the mid-call function: only keys the org defined as contact
-    // fields land on the customer, so the loose variable bag is harmless.
-    // This runs outside recordCall's idempotency check on purpose: the
-    // analysis arrives on the second event, after the call row already exists.
+    // guards as the mid-call function: only keys the org defined as contact
+    // fields, only fields marked as voice-filled, and only values that survive
+    // their type. This runs outside recordCall's idempotency check on purpose:
+    // the analysis arrives on the second event, after the call row already
+    // exists. Both call_ended and call_analyzed reach here (the gate above
+    // dropped call_started); writing the same values twice is a no-op.
     if (agentId) {
       const collected: Record<string, unknown> = {
         ...(call.retell_llm_dynamic_variables as Record<string, unknown> | undefined),

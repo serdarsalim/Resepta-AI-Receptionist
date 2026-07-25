@@ -296,6 +296,8 @@ function SignOutIcon() {
 // the top-right corner read as a second door into the business setup. It is
 // not. Business config is a sidebar destination, and phones reach it through
 // the drawer.
+const USER_MENU_WIDTH = 224; // w-56, used for the viewport clamp
+
 function UserMenu({
   name,
   email,
@@ -311,8 +313,14 @@ function UserMenu({
   const { signOut } = useAuthActions();
   const { theme, setTheme, mounted } = useTheme();
   const saveTheme = useMutation(api.users.setMyTheme);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Menu position, measured from the trigger at open time. Null = closed.
+  // Same mechanism as WorkspaceSwitcher below, deliberately: the header sits
+  // inside `flex min-h-0 flex-1 flex-col overflow-hidden`, so an absolute
+  // child gets clipped at the card edge and no z-index rescues it.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
 
   // Convex is the cross-device source of truth; localStorage (inside useTheme)
   // is the instant no-FOUC cache. Adopt the stored server preference, but hold
@@ -339,18 +347,45 @@ function UserMenu({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setPos(null);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setPos(null);
     };
+    // Capture, so a scroll inside any pane closes it rather than leaving the
+    // menu floating away from its trigger.
+    const onScroll = () => setPos(null);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
+
+  // Right-aligned under the avatar, then clamped so it can never hang off a
+  // 390px screen.
+  const toggle = () => {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({
+      top: r.bottom + 8,
+      left: Math.max(
+        8,
+        Math.min(
+          r.right - USER_MENU_WIDTH,
+          window.innerWidth - USER_MENU_WIDTH - 8,
+        ),
+      ),
+    });
+  };
 
   const THEME_OPTIONS: { value: Theme; key: TranslationKey; Icon: () => React.ReactNode }[] = [
     { value: "light", key: "theme.light", Icon: SunIcon },
@@ -359,86 +394,96 @@ function UserMenu({
   ];
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Account menu"
+        aria-label={t("menu.account")}
         className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:ring-[var(--muted)] transition-shadow"
       >
         {initialsFrom(name, email)}
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
-        >
-          <div className="border-b border-[var(--border)] px-3 py-2.5">
-            <div className="truncate text-sm font-medium">{name || email}</div>
-            {name && email && (
-              <div className="truncate text-xs text-[var(--muted)]">{email}</div>
-            )}
-          </div>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onOpenAccount();
-            }}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
+      {/* Through a portal with fixed positioning, never an absolute child: the
+          content card is overflow-hidden, so an in-flow menu gets clipped at
+          the card edge (see AGENTS.md — this recurs). */}
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", width: USER_MENU_WIDTH, ...pos }}
+            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
           >
-            <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-              <PersonIcon />
-            </span>
-            {t("nav.account")}
-          </button>
-          <div className="border-t border-[var(--border)] pt-1.5">
-            <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted)]">
-              {t("menu.appearance")}
+            <div className="border-b border-[var(--border)] px-3 py-2.5">
+              <div className="truncate text-sm font-medium">{name || email}</div>
+              {name && email && (
+                <div className="truncate text-xs text-[var(--muted)]">
+                  {email}
+                </div>
+              )}
             </div>
-            {THEME_OPTIONS.map(({ value, key, Icon }) => {
-              const active = mounted && theme === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={active}
-                  onClick={() => chooseTheme(value)}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
-                >
-                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-                    <Icon />
-                  </span>
-                  <span className="flex-1 text-left">{t(key)}</span>
-                  {active && (
-                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
-                      <CheckIcon />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="border-t border-[var(--border)]">
             <button
               type="button"
               role="menuitem"
-              onClick={() => void signOut()}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm hover:bg-[var(--muted-bg)] transition-colors"
+              onClick={() => {
+                setPos(null);
+                onOpenAccount();
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
             >
               <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-                <SignOutIcon />
+                <PersonIcon />
               </span>
-              {t("nav.signOut")}
+              {t("nav.account")}
             </button>
-          </div>
-        </div>
-      )}
-    </div>
+            <div className="border-t border-[var(--border)] pt-1.5">
+              <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted)]">
+                {t("menu.appearance")}
+              </div>
+              {THEME_OPTIONS.map(({ value, key, Icon }) => {
+                const active = mounted && theme === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => chooseTheme(value)}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                  >
+                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
+                      <Icon />
+                    </span>
+                    <span className="flex-1 text-left">{t(key)}</span>
+                    {active && (
+                      <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
+                        <CheckIcon />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-[var(--border)]">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => void signOut()}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+              >
+                <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
+                  <SignOutIcon />
+                </span>
+                {t("nav.signOut")}
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -474,13 +519,18 @@ function WorkspaceSwitcher({
       }
       setPos(null);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPos(null);
+    };
     // Capture, so a scroll inside any pane closes it rather than leaving the
     // menu floating away from its trigger.
     const onScroll = () => setPos(null);
     document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
@@ -588,8 +638,9 @@ function SidebarButton({
   entry: (typeof NAV_TABS)[number];
   active: boolean;
   collapsed: boolean;
-  // Failed sends. Rides the icon's corner when collapsed, the trailing edge
-  // otherwise — either way it never moves the label.
+  // Something in that tab still needs somebody: unanswered replies and failed
+  // sends counted together. Rides the icon's corner when collapsed, the
+  // trailing edge otherwise, and either way it never moves the label.
   dot?: boolean;
   onClick: () => void;
 }) {
@@ -629,11 +680,16 @@ function SidebarButton({
       />
       {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
       {dot && (
+        // role="img" so the label actually lands in the accessibility tree and
+        // folds into the button's name: "Gelen Kutusu, İlgi bekliyor". Green
+        // here is the same --brand green as the inbox row dot, on purpose:
+        // one hue, one meaning, wherever it appears.
         <span
+          role="img"
+          aria-label={t("inbox.needsAttention")}
           className={`h-2 w-2 shrink-0 rounded-full bg-[var(--brand)] ${
             collapsed ? "absolute right-1.5 top-1.5" : "ml-auto"
           }`}
-          aria-label="failed sends"
         />
       )}
     </button>
@@ -725,9 +781,9 @@ export function AppShell({
         type="button"
         tabIndex={mobileOpen ? 0 : -1}
         aria-hidden={!mobileOpen}
-        aria-label="Close menu"
+        aria-label={t("nav.closeMenu")}
         onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-200 motion-reduce:transition-none md:hidden ${
+        className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-[120ms] motion-reduce:transition-none md:hidden ${
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
@@ -736,10 +792,18 @@ export function AppShell({
           of a cut-down second copy of it. Below md the drawer is the ONLY way
           to reach Business and Settings, now that the avatar menu no longer
           shortcuts there. */}
+      {/* Off-canvas is not hidden: translated away, the drawer keeps its place
+          in the accessibility tree and every destination inside it stays
+          tabbable, so tabbing off the phone menu button walks into an
+          invisible sidebar. `visibility: hidden` fixes that without a
+          matchMedia guard or a hydration-risky client measurement, and it is
+          transitionable: hidden → visible flips at the start, visible →
+          hidden waits for the slide to finish, so the animation survives.
+          `md:visible` puts the desktop pane back. */}
       <aside
-        aria-label="Primary navigation"
-        className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        aria-label={t("nav.primary")}
+        className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
+          mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
         } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
       >
         {/* Brand row. The mark stays put across the collapse so the eye has a
@@ -766,7 +830,6 @@ export function AppShell({
             type="button"
             onClick={() => (mobileOpen ? setMobileOpen(false) : toggleCollapsed())}
             aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
-            title={showCollapsed ? t("nav.expand") : t("nav.collapse")}
             className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
           >
             <PanelLeftIcon />
@@ -825,7 +888,8 @@ export function AppShell({
           <div className="flex items-center gap-2">
             {(tab === "settings" || tab === "business" || tab === "account") && (
               <button
-                aria-label="Close"
+                type="button"
+                aria-label={t("common.close")}
                 onClick={() => onTab("appointments")}
                 className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
               >

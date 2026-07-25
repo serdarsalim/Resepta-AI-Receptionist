@@ -188,7 +188,7 @@ export function ContactView({
               {/* Where these values came from is the (i)'s job, not a
                   paragraph's, and not a badge repeated on every row. */}
               {voiceFields.length > 0 && (
-                <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
+                <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceRecordHint")} />
               )}
               {voiceFields.map((field) => (
                 <CustomFieldRow

@@ -6,19 +6,14 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type TranslationKey } from "@/lib/i18n";
 import { formatReminderOffset } from "@/lib/datetime";
-import { RowLabel } from "./RowLabel";
+import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
-// grid, autosave on blur/change, explanations behind InfoTips.
-// Settings row grid, per Serdar's documented spec (Mana 40_Patterns,
-// 2026-05-08): label column 220-260px, label only (no helper text in it),
-// control right, stacks on mobile. Helper text spans the section BELOW the
-// row — not squeezed into the label column.
-const ROW_GRID =
-  "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_1fr] sm:items-start";
+// grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
+// explanations behind InfoTips.
 
 // Reminder timing as toggle chips — a salon owner taps "1 gün önce", never
 // types "24, 2". Amber = selection (Nudge: amber selects, blue acts).

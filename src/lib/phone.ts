@@ -2,7 +2,7 @@
 //
 // Ported wholesale from Nudge (`src/lib/countries.ts` + `src/lib/phoneCountry.ts`),
 // merged into one file because Randevu has exactly one consumer for both halves.
-// Same data, same longest-prefix rule, same trunk-zero handling — the two apps
+// Same data, same longest-prefix rule, same trunk-zero handling: the two apps
 // must agree on what a phone number is, since both feed the same Meta Cloud
 // sender.
 //

@@ -82,22 +82,26 @@ export const handleWhatsappEvent = internalMutation({
           }
 
           // Tell the staff who opted in. Scheduled, never inline: a broken
-          // alert must not cost the salon the customer's actual message.
+          // alert must not cost the salon the customer's actual message. The
+          // wording resolves from the org's language at delivery time, so this
+          // side only picks WHICH alert and hands over the substitutions.
           const who = customer
             ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
             : phone;
           const tap = /^(confirm|cancel):/.exec(payload)?.[1];
+          // Never the raw button payload: that is an appointment id, not
+          // something a person should read in an email.
           await queueOrgAlert(ctx, {
             orgId,
-            kind: "inbound",
-            subject: `${who} replied on WhatsApp`,
-            // Never the raw button payload: that is an appointment id, not
-            // something a person should read in an email.
-            body: tap
+            template: tap
               ? tap === "confirm"
-                ? `${who} confirmed their appointment.`
-                : `${who} cancelled their appointment.`
-              : text || `${who} sent a message.`,
+                ? "inboundConfirmed"
+                : "inboundCancelled"
+              : text
+                ? "inboundText"
+                : "inboundPlain",
+            who,
+            detail: tap ? undefined : text || undefined,
           });
 
           // A button payload names its exact appointment; typed text falls

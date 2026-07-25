@@ -1,7 +1,12 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { api } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
 
 const messageStatus = v.union(
@@ -103,24 +108,6 @@ export async function logInboundRow(
   });
 }
 
-// Red-dot badge on the Inbox tab: failed sends in the last 48h.
-export const failedCount = query({
-  args: {},
-  returns: v.number(),
-  handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
-    const recent = await ctx.db
-      .query("messages")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .order("desc")
-      .take(200);
-    const cutoff = Date.now() - 48 * 3600_000;
-    return recent.filter(
-      (m) => m.status === "failed" && m._creationTime > cutoff,
-    ).length;
-  },
-});
-
 // ---- Unified conversation feed (WhatsApp + email + calls) ----
 //
 // The inbox is per CUSTOMER, not per channel (Nudge's InboxView model). A
@@ -210,22 +197,127 @@ export const feedForCustomer = query({
   },
 });
 
-// Inbox left pane: one row per customer, newest activity first, carrying the
-// last preview plus which channels are waiting on a reply from the business.
+// ---- The shared half of the inbox --------------------------------------------
+//
+// The inbox list and the sidebar's dot ask the same question of the same 500
+// messages. They used to ask it twice: the badge ran the whole conversations
+// query and threw away everything but a boolean. The scan and the per-row
+// reasoning live here now, and each caller reads only what it needs from the
+// customers table on top.
+
+type ConversationEntry = {
+  channel: Channel;
+  at: number;
+  direction: "in" | "out";
+  body?: string;
+  failed: boolean;
+};
+
+// The expensive half: one window over messages and calls, grouped by customer.
+// Nothing from the customers table is touched here.
+async function conversationEntries(
+  ctx: QueryCtx,
+  orgId: Id<"orgs">,
+): Promise<Map<string, ConversationEntry[]>> {
+  const messages = await ctx.db
+    .query("messages")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .order("desc")
+    .take(500);
+  const calls = await ctx.db
+    .query("calls")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .order("desc")
+    .take(200);
+
+  const byCustomer = new Map<string, ConversationEntry[]>();
+  const push = (customerId: string | undefined, entry: ConversationEntry) => {
+    if (!customerId) return;
+    const bucket = byCustomer.get(customerId) ?? [];
+    bucket.push(entry);
+    byCustomer.set(customerId, bucket);
+  };
+  for (const m of messages) {
+    push(m.customerId, {
+      channel: channelOfMessage(m.kind),
+      at: m._creationTime,
+      direction: m.direction,
+      body: m.body,
+      failed: m.status === "failed",
+    });
+  }
+  for (const c of calls) {
+    push(c.customerId, {
+      channel: "call",
+      at: c.startedAt,
+      direction: c.direction === "inbound" ? "in" : "out",
+      body: c.summary,
+      failed: false,
+    });
+  }
+  return byCustomer;
+}
+
+type ConversationSummary = {
+  last: ConversationEntry;
+  awaitingChannels: Channel[];
+  hasFailed: boolean;
+  // The newest moment that WANTS attention: an unanswered inbound, or a failed
+  // send. Zero when nothing in this conversation ever asks for a look.
+  //
+  // This is what a dismissal gets compared against, and getting it wrong is
+  // what made the dot un-clearable: comparing the dismissal to the row's last
+  // ACTIVITY meant any later message, even one the salon itself sent, dragged
+  // a months-old failure back into view. Failure included, same clock.
+  attentionAt: number;
+};
+
+// Everything the entries alone decide. Sorts in place; the caller owns the
+// array.
+function summariseEntries(entries: ConversationEntry[]): ConversationSummary {
+  entries.sort((a, b) => b.at - a.at);
+  // Per channel, only the LATEST entry decides — an old unanswered reply that
+  // was since answered on that channel is not still waiting.
+  const awaitingChannels: Channel[] = [];
+  let attentionAt = 0;
+  for (const ch of ["whatsapp", "email", "call"] as const) {
+    const latest = entries.find((e) => e.channel === ch);
+    if (latest?.direction === "in") {
+      awaitingChannels.push(ch);
+      attentionAt = Math.max(attentionAt, latest.at);
+    }
+  }
+  // Newest first, so the first failure found is the newest one.
+  const newestFailure = entries.find((e) => e.failed);
+  if (newestFailure) attentionAt = Math.max(attentionAt, newestFailure.at);
+  return {
+    last: entries[0],
+    awaitingChannels,
+    hasFailed: newestFailure !== undefined,
+    attentionAt,
+  };
+}
+
 // The sidebar's Inbox dot. Same meaning as a row's dot, counted: rows nobody
 // has dealt with yet. It is deliberately the same green, because two colours
 // of dot in one app is a legend the reader has to learn.
 export const attentionCount = query({
   args: {},
   returns: v.number(),
-  // Annotated on purpose: reading a sibling query through `api` inside the
-  // same file is circular for inference, and the annotation is what breaks it.
-  handler: async (ctx): Promise<number> => {
-    const rows: { needsAttention: boolean }[] = await ctx.runQuery(
-      api.messages.conversations,
-      {},
-    );
-    return rows.filter((row) => row.needsAttention).length;
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const byCustomer = await conversationEntries(ctx, orgId);
+    let count = 0;
+    for (const [customerId, entries] of byCustomer) {
+      const { attentionAt } = summariseEntries(entries);
+      // A conversation with nothing waiting can never be lit, whatever the
+      // customer row says, so it never earns a read of that row.
+      if (attentionAt === 0) continue;
+      const customer = await ctx.db.get(customerId as Id<"customers">);
+      if (!customer) continue;
+      if (attentionAt > (customer.attentionClearedAt ?? 0)) count += 1;
+    }
+    return count;
   },
 });
 
@@ -247,6 +339,8 @@ export const setAttention = mutation({
   },
 });
 
+// Inbox left pane: one row per customer, newest activity first, carrying the
+// last preview plus which channels are waiting on a reply from the business.
 export const conversations = query({
   args: {},
   returns: v.array(
@@ -273,81 +367,30 @@ export const conversations = query({
   ),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .order("desc")
-      .take(500);
-    const calls = await ctx.db
-      .query("calls")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .order("desc")
-      .take(200);
-
-    type Entry = {
-      channel: Channel;
-      at: number;
-      direction: "in" | "out";
-      body?: string;
-      failed: boolean;
-    };
-    const byCustomer = new Map<string, Entry[]>();
-    const push = (customerId: string | undefined, entry: Entry) => {
-      if (!customerId) return;
-      const bucket = byCustomer.get(customerId) ?? [];
-      bucket.push(entry);
-      byCustomer.set(customerId, bucket);
-    };
-    for (const m of messages) {
-      push(m.customerId, {
-        channel: channelOfMessage(m.kind),
-        at: m._creationTime,
-        direction: m.direction,
-        body: m.body,
-        failed: m.status === "failed",
-      });
-    }
-    for (const c of calls) {
-      push(c.customerId, {
-        channel: "call",
-        at: c.startedAt,
-        direction: c.direction === "inbound" ? "in" : "out",
-        body: c.summary,
-        failed: false,
-      });
-    }
+    const byCustomer = await conversationEntries(ctx, orgId);
 
     const out = [];
     for (const [customerId, entries] of byCustomer) {
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
-      entries.sort((a, b) => b.at - a.at);
-      const last = entries[0];
-      // Per channel, only the LATEST entry decides — an old unanswered reply
-      // that was since answered on that channel is not still waiting.
-      const awaitingChannels: Channel[] = [];
-      for (const ch of ["whatsapp", "email", "call"] as const) {
-        const latest = entries.find((e) => e.channel === ch);
-        if (latest?.direction === "in") awaitingChannels.push(ch);
-      }
+      const summary = summariseEntries(entries);
       out.push({
         customerId: customer._id,
         name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
         phone: customer.phone,
         email: customer.email,
-        lastAt: last.at,
-        lastBody: last.body,
-        lastDirection: last.direction,
-        lastChannel: last.channel,
-        hasFailed: entries.some((e) => e.failed),
-        awaitingReply: awaitingChannels.length > 0,
-        // Dismissing stamps the moment; anything that lands afterwards lights
-        // the dot again on its own, so clearing a row is never a way to lose a
-        // customer who wrote back an hour later.
-        needsAttention:
-          (awaitingChannels.length > 0 || entries.some((e) => e.failed)) &&
-          last.at > (customer.attentionClearedAt ?? 0),
-        awaitingChannels,
+        lastAt: summary.last.at,
+        lastBody: summary.last.body,
+        lastDirection: summary.last.direction,
+        lastChannel: summary.last.channel,
+        hasFailed: summary.hasFailed,
+        awaitingReply: summary.awaitingChannels.length > 0,
+        // Dismissing stamps the moment; anything that WANTS attention after
+        // that lights the dot again on its own, so clearing a row is never a
+        // way to lose a customer who wrote back an hour later, and never a way
+        // for an old failure to come back either.
+        needsAttention: summary.attentionAt > (customer.attentionClearedAt ?? 0),
+        awaitingChannels: summary.awaitingChannels,
       });
     }
     return out.sort((a, b) => b.lastAt - a.lastAt);
