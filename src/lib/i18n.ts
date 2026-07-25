@@ -80,7 +80,11 @@ const dictionary = {
   },
   "appointments.reopen": { tr: "Yeniden planla", en: "Reopen" },
   "appointments.list": { tr: "Liste", en: "List" },
+  "appointments.day": { tr: "Gün", en: "Day" },
   "appointments.week": { tr: "Hafta", en: "Week" },
+  "appointments.today": { tr: "Bugün", en: "Today" },
+  "appointments.previous": { tr: "Önceki", en: "Previous" },
+  "appointments.next": { tr: "Sonraki", en: "Next" },
 
   "status.scheduled": { tr: "Planlandı", en: "Scheduled" },
   "status.confirmed": { tr: "Onaylandı", en: "Confirmed" },
