@@ -10,10 +10,25 @@ import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 // Meta's session window: one away-reply per window, not per message.
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
-// Bare-text fallbacks, per language. Button taps are the primary path; these
-// cover a customer who types instead of tapping.
-const CONFIRM_WORDS = ["evet", "onay", "onaylıyorum", "tamam", "ok", "yes", "confirm"];
-const CANCEL_WORDS = ["iptal", "hayır", "hayir", "no", "cancel"];
+// Bare-text fallbacks. Button taps are the primary path; these cover a customer
+// who types instead of tapping.
+//
+// All three UI languages, checked as one list rather than per customer language:
+// none of these words collides across tr/en/de, and a Turkish-speaking customer
+// of a Vienna salon may well reply "ok" to a German reminder. German was missing
+// entirely, which mattered more once the away-reply shipped — an unmatched
+// "Storno" used to do nothing, and would now answer "we're closed, book here" to
+// somebody who was trying to cancel.
+const CONFIRM_WORDS = [
+  "evet", "onay", "onaylıyorum", "tamam", "olur", // tr
+  "ok", "okay", "yes", "confirm", // en
+  "ja", "bestätigen", "bestätige", "bestaetigen", // de
+];
+const CANCEL_WORDS = [
+  "iptal", "hayır", "hayir", // tr
+  "no", "cancel", // en
+  "nein", "storno", "stornieren", "absagen", // de
+];
 
 function intentOf(text: string): "confirm" | "cancel" | null {
   const norm = text.trim().toLowerCase();

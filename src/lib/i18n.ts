@@ -117,8 +117,8 @@ const dictionary = {
     de: "E-Mail schicken, wenn eine Nachricht nicht ankommt",
   },
   "account.notifyFailedHint": {
-    tr: "Hatırlatma veya onay mesajı gönderilemediğinde haber verilir. Salonun sessizce mesajsız kalmaması için açık tutun.",
-    en: "Tells you when a reminder or confirmation could not be delivered, so the salon never goes quiet without anyone noticing.",
+    tr: "Hatırlatma veya onay mesajı gönderilemediğinde haber verilir. İşletmenin sessizce mesajsız kalmaması için açık tutun.",
+    en: "Tells you when a reminder or confirmation could not be delivered, so your business never goes quiet without anyone noticing.",
     de: "Meldet, wenn eine Erinnerung oder Bestätigung nicht zugestellt werden konnte. So merken Sie es, bevor ein Kunde ohne Nachricht dasteht.",
   },
   "account.role": { tr: "Rolünüz", en: "Your role", de: "Ihre Rolle" },
@@ -510,8 +510,8 @@ const dictionary = {
     de: "Webhook-Adressen",
   },
   "settings.voiceHint": {
-    tr: "Retell agent'ınız salonun telefonunu yanıtlar ve randevu alır. Fonksiyon adresi ve arama-sonu webhook'unu Retell panosunda bu URL'lere yönlendirin.",
-    en: "Your Retell agent answers the salon's phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
+    tr: "Retell agent'ınız işletmenin telefonunu yanıtlar ve randevu alır. Fonksiyon adresi ve arama-sonu webhook'unu Retell panosunda bu URL'lere yönlendirin.",
+    en: "Your Retell agent answers your business phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
     de: "Ihr Retell-Agent nimmt die Anrufe im Betrieb entgegen und vergibt Termine. Richten Sie die Funktions-URL und den Webhook für beendete Anrufe im Retell-Dashboard auf diese Adressen.",
   },
   "settings.retellAgentId": {
@@ -637,8 +637,8 @@ const dictionary = {
 
   "services.title": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
   "services.hint": {
-    tr: "Salonunuzun sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",
-    en: "What your salon offers. Bookings pick from this list, and the duration sets how long the appointment runs on the calendar.",
+    tr: "İşletmenizin sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",
+    en: "What your business offers. Bookings pick from this list, and the duration sets how long the appointment runs on the calendar.",
     de: "Was Ihr Betrieb anbietet. Beim Buchen wird aus dieser Liste gewählt, und die Dauer bestimmt, wie viel Zeit der Termin im Kalender einnimmt.",
   },
   "services.name": {
