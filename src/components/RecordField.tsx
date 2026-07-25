@@ -1,0 +1,159 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { InfoTip } from "./InfoTip";
+
+// Record fields, ported from Nudge's ContactView (StackedField +
+// InlineEditValue). A record page shows VALUES, not a form: the value reads as
+// plain text, hover reveals the affordance, click swaps in the real control
+// already focused. Enter commits, Escape reverts, blur saves.
+//
+// Ported with one correction: Nudge's group heading is uppercase, which is out
+// of the design language. Sentence case here.
+
+export function FieldRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(6rem,7.5rem)_minmax(0,1fr)] items-start gap-x-2">
+      <div className="flex items-center gap-1.5 pt-1 text-sm leading-snug text-[var(--muted)]">
+        <span className="min-w-0 break-words">{label}</span>
+        {hint && <InfoTip text={hint} />}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+export function FieldGroup({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
+    </div>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+export function InlineEditValue({
+  value,
+  options,
+  type = "text",
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  // null → free text; array → picklist.
+  options?: string[] | null;
+  type?: "text" | "number" | "date" | "email" | "tel";
+  placeholder?: string;
+  onSave: (value: string) => unknown;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) return;
+    selectRef.current?.focus();
+    inputRef.current?.focus();
+  }, [editing]);
+
+  const commit = async (next: string) => {
+    setEditing(false);
+    if (next.trim() === value.trim()) return;
+    setSaving(true);
+    try {
+      await onSave(next.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (saving) {
+    // Same box as the value it replaces, so the row never resizes mid-save.
+    return (
+      <span className="block animate-pulse px-2 py-1 text-sm text-[var(--muted)]">
+        {value}
+      </span>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        // -mx-2 + px-2: the value stays flush with the label grid while the
+        // hover wash bleeds outward instead of indenting the text.
+        className="group/iv -mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+      >
+        <span className={`min-w-0 break-words ${value ? "" : "text-[var(--muted)]"}`}>
+          {value || placeholder || ""}
+        </span>
+        <span className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover/iv:opacity-100 group-focus-visible/iv:opacity-100">
+          {options ? <ChevronIcon /> : <PencilIcon />}
+        </span>
+      </button>
+    );
+  }
+
+  if (options) {
+    const merged = value && !options.includes(value) ? [value, ...options] : options;
+    return (
+      <select
+        ref={selectRef}
+        defaultValue={value}
+        onChange={(e) => void commit(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="px-2 py-1 text-sm"
+      >
+        <option value="" />
+        {merged.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      defaultValue={value}
+      onBlur={(e) => void commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") setEditing(false);
+      }}
+      className="px-2 py-1 text-sm"
+    />
+  );
+}

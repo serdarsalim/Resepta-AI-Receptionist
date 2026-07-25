@@ -8,6 +8,7 @@ import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
 import { ConversationPanel } from "./ConversationPanel";
+import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -55,105 +56,70 @@ export function ContactView({
         <span className="text-sm text-[var(--muted)]">{customer.phone}</span>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[24rem_1fr]">
         {/* Left: properties */}
         <div className="thin-scroll stable-gutter min-h-0 space-y-4 overflow-y-auto pr-1">
+          {/* One record, not two forms: the built-in fields and the org's own
+              fields read the same way and sit in the same card. Adding a field
+              in Workspace setup adds a row here, no code. */}
           <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-            <div className="space-y-3">
-              <label className="block text-sm">
-                {t("customers.firstName")}
-                <input
-                  className="mt-1"
-                  defaultValue={customer.firstName}
-                  onBlur={(e) =>
-                    void updateCustomer({ customerId, firstName: e.target.value })
-                  }
+            <div className="space-y-1.5">
+              <FieldRow label={t("customers.firstName")}>
+                <InlineEditValue
+                  value={customer.firstName}
+                  onSave={(next) => updateCustomer({ customerId, firstName: next })}
                 />
-              </label>
-              <label className="block text-sm">
-                {t("customers.lastName")}
-                <input
-                  className="mt-1"
-                  defaultValue={customer.lastName ?? ""}
-                  onBlur={(e) =>
-                    void updateCustomer({ customerId, lastName: e.target.value })
-                  }
+              </FieldRow>
+              <FieldRow label={t("customers.lastName")}>
+                <InlineEditValue
+                  value={customer.lastName ?? ""}
+                  onSave={(next) => updateCustomer({ customerId, lastName: next })}
                 />
-              </label>
-              <label className="block text-sm">
-                {t("customers.phone")}
-                <input
-                  className="mt-1"
-                  defaultValue={customer.phone}
-                  onBlur={(e) =>
-                    void updateCustomer({ customerId, phone: e.target.value })
-                  }
+              </FieldRow>
+              <FieldRow label={t("customers.phone")}>
+                <InlineEditValue
+                  value={customer.phone}
+                  type="tel"
+                  onSave={(next) => updateCustomer({ customerId, phone: next })}
                 />
-              </label>
-              <label className="block text-sm">
-                {t("customers.email")}
-                <input
-                  className="mt-1"
-                  defaultValue={customer.email ?? ""}
-                  onBlur={(e) =>
-                    void updateCustomer({ customerId, email: e.target.value })
-                  }
+              </FieldRow>
+              <FieldRow label={t("customers.email")}>
+                <InlineEditValue
+                  value={customer.email ?? ""}
+                  type="email"
+                  onSave={(next) => updateCustomer({ customerId, email: next })}
                 />
-              </label>
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>{t("customers.consent")}</span>
-                <Toggle
-                  checked={customer.consentAt !== undefined}
-                  onChange={(next) => void updateCustomer({ customerId, consent: next })}
-                />
-              </div>
+              </FieldRow>
+              <FieldRow label={t("customers.consent")} hint={t("customers.consentHint")}>
+                <span className="flex h-7 items-center">
+                  <Toggle
+                    checked={customer.consentAt !== undefined}
+                    onChange={(next) => void updateCustomer({ customerId, consent: next })}
+                  />
+                </span>
+              </FieldRow>
+
+              {(fields ?? []).length > 0 && <FieldGroup label={t("fields.title")} />}
+              {(fields ?? []).map((field) => (
+                <FieldRow key={field._id} label={field.label}>
+                  <InlineEditValue
+                    value={customer.custom?.[field.key] ?? ""}
+                    options={field.type === "select" ? (field.options ?? []) : null}
+                    type={
+                      field.type === "number"
+                        ? "number"
+                        : field.type === "date"
+                          ? "date"
+                          : "text"
+                    }
+                    onSave={(next) =>
+                      setCustomValue({ customerId, key: field.key, value: next })
+                    }
+                  />
+                </FieldRow>
+              ))}
             </div>
           </section>
-
-          {(fields ?? []).length > 0 && (
-            <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-              <h3 className="mb-2 text-sm font-semibold">{t("fields.title")}</h3>
-              <div className="space-y-3">
-                {(fields ?? []).map((field) => {
-                  const value = customer.custom?.[field.key] ?? "";
-                  const commit = (next: string) =>
-                    void setCustomValue({ customerId, key: field.key, value: next });
-                  return (
-                    <label key={field._id} className="block text-sm">
-                      {field.label}
-                      {field.type === "select" ? (
-                        <select
-                          className="mt-1"
-                          defaultValue={value}
-                          onChange={(e) => commit(e.target.value)}
-                        >
-                          <option value="">—</option>
-                          {(field.options ?? []).map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          className="mt-1"
-                          type={
-                            field.type === "number"
-                              ? "number"
-                              : field.type === "date"
-                                ? "date"
-                                : "text"
-                          }
-                          defaultValue={value}
-                          onBlur={(e) => commit(e.target.value)}
-                        />
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            </section>
-          )}
 
           <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
             <h3 className="mb-2 text-sm font-semibold">{t("appointments.title")}</h3>

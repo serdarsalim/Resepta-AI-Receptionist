@@ -99,13 +99,12 @@ const dictionary = {
   "customers.lastName": { tr: "Soyad", en: "Last name" },
   "customers.phone": { tr: "Telefon", en: "Phone" },
   "customers.email": { tr: "E-posta", en: "Email" },
-  "customers.consent": {
-    tr: "İletişim izni (KVKK)",
-    en: "Messaging consent (KVKK)",
-  },
+  // Short enough to sit on one line in a record label column; the KVKK detail
+  // lives in the hint next to it.
+  "customers.consent": { tr: "İletişim izni", en: "Messaging consent" },
   "customers.consentHint": {
-    tr: "Müşterinin WhatsApp ve e-posta mesajlarına onayı. İzin kaydı olmadan hiçbir kanaldan mesaj gönderilmez.",
-    en: "The customer's consent to WhatsApp and email messages. Without it, no channel sends anything.",
+    tr: "Müşterinin WhatsApp ve e-posta mesajlarına KVKK onayı. İzin kaydı olmadan hiçbir kanaldan mesaj gönderilmez.",
+    en: "The customer's KVKK consent to WhatsApp and email messages. Without it, no channel sends anything.",
   },
   "customers.noConsent": { tr: "İzin yok", en: "No consent" },
 
