@@ -13,6 +13,13 @@ import {
   localeFor,
 } from "@/lib/datetime";
 import { useSearch } from "@/lib/useTableState";
+import {
+  SNAP_MINUTES,
+  advanceDrag,
+  dragResult,
+  minuteAt,
+  type DragGeometry,
+} from "@/lib/calendarDrag";
 import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
 import { SearchInput } from "./DataTable";
 
@@ -644,43 +651,17 @@ type CalendarColumn = {
 // Estimated rather than measured: knowing whether a block can hold a name
 // isn't worth a layout pass on every render.
 const APPROX_GRID_PX = 1050;
-// Everything a drag produces lands on this grid. Fifteen minutes is what a
-// salon books in, and finer snapping just makes a steady hand a requirement.
-const SNAP_MINUTES = 15;
 // How close to the bottom edge counts as "resize" rather than "move". Sized for
 // a fingertip, not a mouse pointer.
 const RESIZE_HANDLE_PX = 10;
 
-type DragState =
-  | {
-      kind: "create";
-      day: number;
-      anchorMinute: number;
-      startMinute: number;
-      endMinute: number;
-      moved: boolean;
-    }
-  | {
-      kind: "move";
-      day: number;
-      row: CalendarAppointment;
-      // Where in the block the pointer grabbed it, so the top edge does not
-      // snap to the cursor the moment you pick it up.
-      grabOffset: number;
-      startMinute: number;
-      endMinute: number;
-      moved: boolean;
-    }
-  | {
-      kind: "resize";
-      day: number;
-      row: CalendarAppointment;
-      grabOffset: number;
-      startMinute: number;
-      endMinute: number;
-      moved: boolean;
-    };
-// Under this, a block is all padding and truncation, so the name comes off.
+// Geometry lives in lib/calendarDrag.ts so the arithmetic can be tested without
+// a browser; this only adds what the grid needs on top of it.
+type DragState = DragGeometry & {
+  day: number;
+  row?: CalendarAppointment;
+};
+
 const NARROW_BLOCK_PX = 80;
 
 function Calendar({
@@ -854,13 +835,10 @@ function Calendar({
   // button. Without this the sheet would open every time you moved something.
   const suppressClick = useRef(false);
 
-  // Pixel offset inside the grid body -> minutes since midnight, snapped.
   const minuteAtClientY = (clientY: number): number => {
     const body = gridRef.current;
     if (!body) return dayStart * 60;
-    const rect = body.getBoundingClientRect();
-    const minutes = dayStart * 60 + ((clientY - rect.top) / HOUR_PX) * 60;
-    return Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
+    return minuteAt(clientY, body.getBoundingClientRect().top, dayStart, HOUR_PX);
   };
 
   const startDrag = (next: DragState, event: React.PointerEvent) => {
@@ -871,45 +849,18 @@ function Calendar({
   const onPointerMove = (event: React.PointerEvent) => {
     if (!drag) return;
     const minute = minuteAtClientY(event.clientY);
-    setDrag((current) => {
-      if (!current) return current;
-      if (current.kind === "create") {
-        // Drag up or down from where the pointer went down; the anchor is the
-        // fixed end and the pointer is the loose one.
-        const lo = Math.min(current.anchorMinute, minute);
-        const hi = Math.max(current.anchorMinute, minute);
-        return {
-          ...current,
-          startMinute: lo,
-          endMinute: Math.max(lo + SNAP_MINUTES, hi),
-          moved: true,
-        };
-      }
-      if (current.kind === "resize") {
-        // A block may never end before it starts; one snap step is the floor.
-        return {
-          ...current,
-          endMinute: Math.max(current.startMinute + SNAP_MINUTES, minute),
-          moved: true,
-        };
-      }
-      const length = current.endMinute - current.startMinute;
-      const startMinute = minute - current.grabOffset;
-      return { ...current, startMinute, endMinute: startMinute + length, moved: true };
-    });
+    setDrag((current) =>
+      current ? { ...current, ...advanceDrag(current, minute) } : current,
+    );
   };
 
   const endDrag = () => {
     if (!drag) return;
     const current = drag;
     setDrag(null);
-    const dayMs = current.day;
-    const startAt = dayMs + current.startMinute * 60_000;
-    const durationMinutes = Math.max(SNAP_MINUTES, current.endMinute - current.startMinute);
-    if (current.kind === "create") {
-      // A plain click is not a fifteen-minute booking — it is "book here", and
-      // the length comes from the service or the default.
-      onDraft(startAt, current.moved ? durationMinutes : DEFAULT_DURATION);
+    const { startAt, durationMinutes } = dragResult(current, current.day, DEFAULT_DURATION);
+    if (current.kind === "create" || !current.row) {
+      onDraft(startAt, durationMinutes);
       return;
     }
     // A gesture that changed nothing is a click, and the block's own onClick
@@ -1061,6 +1012,7 @@ function Calendar({
                       kind: "create",
                       day: column.day,
                       anchorMinute: minute,
+                      grabOffset: 0,
                       startMinute: minute,
                       endMinute: minute + SNAP_MINUTES,
                       moved: false,
@@ -1176,6 +1128,7 @@ function Calendar({
                             kind: nearBottom ? "resize" : "move",
                             day: column.day,
                             row,
+                            anchorMinute: startMinute,
                             grabOffset: minute - startMinute,
                             startMinute,
                             endMinute,
@@ -1197,7 +1150,7 @@ function Calendar({
                       className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${
                         BLOCK_STYLE[row.status] ?? BLOCK_STYLE.scheduled
                       } ${
-                        drag && "row" in drag && drag.row._id === row._id
+                        drag?.row?._id === row._id
                           ? "opacity-30"
                           : ""
                       }`}

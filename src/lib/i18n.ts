@@ -174,6 +174,20 @@ const dictionary = {
     en: "The calendar refused this change, so the appointment stayed where it was.",
     de: "Der Kalender hat diese Änderung abgelehnt, der Termin blieb unverändert.",
   },
+  "staff.title": { tr: "Ekip", en: "People", de: "Personen" },
+  "staff.hint": {
+    tr: "Randevuyu kim veriyor. Gün görünümü herkese bir sütun açar. Ayrılan biri silinmez, pasife alınır — geçmiş randevuları bir isme bağlı kalmalı.",
+    en: "Who delivers the appointment. Day view gives each person a column. Somebody who leaves is deactivated, not deleted — their past appointments still need a name.",
+    de: "Wer den Termin ausführt. Die Tagesansicht gibt jeder Person eine Spalte. Wer geht, wird deaktiviert statt gelöscht — vergangene Termine brauchen weiterhin einen Namen.",
+  },
+  "staff.label": {
+    tr: "Bu kişilere ne diyorsunuz?",
+    en: "What do you call these people?",
+    de: "Wie nennen Sie diese Personen?",
+  },
+  "staff.none": { tr: "Henüz kimse eklenmedi.", en: "Nobody added yet.", de: "Noch niemand hinzugefügt." },
+  "staff.namePlaceholder": { tr: "Ad", en: "Name", de: "Name" },
+  "staff.add": { tr: "Ekle", en: "Add", de: "Hinzufügen" },
   "appointments.title": { tr: "Randevular", en: "Appointments", de: "Termine" },
   "appointments.new": {
     tr: "Yeni randevu",

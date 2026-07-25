@@ -41,6 +41,7 @@ export function BusinessView() {
       <DetailsCard isOwner={isOwner} />
       <TeamCard isOwner={isOwner} />
       <ServicesCard isOwner={isOwner} />
+      <StaffCard isOwner={isOwner} />
       <FieldsCard isOwner={isOwner} />
     </div>
   );
@@ -618,6 +619,101 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
           </button>
           {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
         </form>
+      )}
+    </Card>
+  );
+}
+
+// Who delivers the appointment. A row per person rather than a name typed onto
+// each booking: the day view builds a column per person, so free text made one
+// stylist into two columns whenever a space crept in, and renaming somebody
+// meant editing their whole history.
+//
+// The LABEL is the org's own word. A Friseur has stylists, a Kfz-Werkstatt has
+// Techniker, a Zahnarztpraxis has Hekim. Blank falls back to the dictionary's
+// generic word, which is right for most verticals and merely bland for the
+// rest — the point is that a new vertical needs no schema change.
+function StaffCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const staff = useQuery(api.staff.list, {});
+  const settings = useQuery(api.orgs.current, {});
+  const add = useMutation(api.staff.add);
+  const rename = useMutation(api.staff.rename);
+  const setActive = useMutation(api.staff.setActive);
+  const updateOrg = useMutation(api.orgs.update);
+  const [draft, setDraft] = useState("");
+
+  if (!isOwner && staff !== undefined && staff.length === 0) return null;
+
+  return (
+    <Card title={t("staff.title")} tip={t("staff.hint")} disabled={!isOwner}>
+      {staff === undefined ? (
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      ) : (
+        <div className="space-y-3">
+          <label className="block text-xs text-[var(--muted)]">
+            {t("staff.label")}
+            <input
+              className="mt-1"
+              defaultValue={settings?.org.staffLabel ?? ""}
+              placeholder={t("appointments.staff")}
+              onBlur={(e) => void updateOrg({ staffLabel: e.target.value })}
+            />
+          </label>
+
+          <ul className="divide-y divide-[var(--border)]">
+            {staff.map((person) => (
+              <li
+                key={person._id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm"
+              >
+                <span className="min-w-0 flex-1">
+                  <InlineEditValue
+                    value={person.name}
+                    onSave={(next) => next && rename({ staffId: person._id, name: next })}
+                  />
+                </span>
+                {/* Deactivated, never deleted: whoever left still did last
+                    month's work, and those appointments must keep a name. */}
+                <Toggle
+                  checked={person.active}
+                  label={t("services.active")}
+                  onChange={(next) =>
+                    void setActive({ staffId: person._id, active: next })
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+
+          {staff.length === 0 && (
+            <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
+          )}
+
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = draft.trim();
+              if (!name) return;
+              void add({ name });
+              setDraft("");
+            }}
+          >
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={t("staff.namePlaceholder")}
+              className="flex-1"
+            />
+            <button
+              type="submit"
+              className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {t("staff.add")}
+            </button>
+          </form>
+        </div>
       )}
     </Card>
   );
