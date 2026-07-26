@@ -299,9 +299,6 @@ export function InboxView({
               >
                 {active.name || active.phone}
               </button>
-              <span className="hidden truncate text-xs text-[var(--muted)] sm:inline">
-                {filter === "email" ? active.email : active.phone}
-              </span>
               <FeedFilterPills
                 customerId={active.customerId}
                 value={filter}

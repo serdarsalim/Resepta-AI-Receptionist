@@ -129,6 +129,9 @@ export function ConversationPanel({
   const [scheduling, setScheduling] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  // Grows with what is typed, bottom-anchored and capped, so a three-line note
+  // is visible while writing without the field owning half the pane.
+  const noteDraftRef = useRef<HTMLTextAreaElement>(null);
   // The email composer is a disclosure, not a permanent bar: unlike WhatsApp,
   // where you reply constantly, most visits to the email tab are to READ. It
   // opens on Compose and closes on send.
@@ -239,6 +242,13 @@ export function ConversationPanel({
     if (filter !== "call") setOpenCallId(null);
     setOpenRows(new Set());
   }, [filter]);
+
+  useEffect(() => {
+    const el = noteDraftRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, [noteDraft, filter]);
 
   // Restore the index's position once a routed detail has navigated back.
   // rAF because the rows have to be laid out before a scrollTop means anything.
@@ -418,21 +428,25 @@ export function ConversationPanel({
         </div>
       )}
       {filter === "note" && (
-        <div className="shrink-0 p-3 pb-0">
-          <div className="flex items-end gap-2 rounded-xl bg-[var(--muted-bg)] p-1.5">
+        <div className="shrink-0 px-4 pt-3">
+          {/* One pill, not a box with a button beside it: a note is a single
+              short thought, and the composer should look like somewhere you
+              type one rather than a form you fill in. Nudge's shape. */}
+          <div className="flex items-end gap-1 rounded-3xl bg-[var(--muted-bg)] py-1.5 pl-1.5 pr-1.5">
             <textarea
+              ref={noteDraftRef}
               value={noteDraft}
               onChange={(event) => setNoteDraft(event.target.value)}
               disabled={noteSaving}
-              rows={2}
+              rows={1}
               placeholder={t("notes.placeholder")}
-              className="flex-1 resize-none bg-transparent px-2 py-1 text-sm focus:outline-none"
+              className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none"
             />
             <button
               type="button"
               onClick={() => void saveNote()}
               disabled={noteSaving || !noteDraft.trim()}
-              className="shrink-0 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
+              className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {noteSaving ? t("common.saving") : t("notes.add")}
             </button>
@@ -441,7 +455,12 @@ export function ConversationPanel({
       )}
       <div
         ref={threadRef}
-        className="thin-scroll stable-gutter min-h-0 flex-1 space-y-2 overflow-y-auto p-4"
+        // Bubbles need breathing room between them; a LIST does not — its rows
+        // are separated by hairlines, and 8px of margin on top of a border is
+        // what made the note cards read as a stack of boxes.
+        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
+          chatOrder ? "space-y-2" : ""
+        }`}
       >
         {feed === undefined && (
           <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
@@ -867,6 +886,17 @@ function EmailBody({ html }: { html: string }) {
 // A note is a full-width card too, and deliberately not a bubble: a bubble
 // means somebody said this to somebody. Nobody sent this anywhere — it's the
 // salon writing on its own record, so it reads as a card with an author.
+// One note, as a flush row in a list rather than a card in a stream.
+//
+// Cards were the prototype: five amber boxes stacked down a pane, every one
+// fully expanded, so finding the note about the ammonia allergy meant reading
+// all of them. A list is scannable, and reading is what you came to do.
+//
+// Expandability is MEASURED, not guessed. A note with no line breaks can still
+// be too long for the row, and no character count knows the rendered width of
+// a pane the user can resize — so the snippet reports its own overflow. A note
+// that fits shows all of it and gets no chevron: expand theatre on a six-word
+// note is a click that changes nothing.
 function NoteEntry({
   item,
 }: {
@@ -881,88 +911,190 @@ function NoteEntry({
   const { t, language } = useLanguage();
   const updateNote = useMutation(api.notes.update);
   const removeNote = useMutation(api.notes.remove);
+  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.body ?? "");
   const [busy, setBusy] = useState(false);
 
+  const body = item.body ?? "";
+  const snippetRef = useRef<HTMLSpanElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const el = snippetRef.current;
+    // Open or editing: keep the last measurement rather than resetting it, or
+    // collapsing would decide the row is short and drop its own chevron.
+    if (!el) return;
+    const measure = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    // Again after paint. The synchronous pass can run while the row still has
+    // no width — the pane it lives in was hidden a moment ago — and a zero
+    // measurement would otherwise stick: nothing resizes afterwards, so the
+    // observer never gets a second chance and a long note loses its chevron.
+    const raf = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [body, open, editing]);
+  const expandable = /\n/.test(body.trim()) || overflowing;
+
   const save = async () => {
-    const body = draft.trim();
-    if (!body || busy) return;
+    const next = draft.trim();
+    if (!next || busy) return;
     setBusy(true);
     try {
-      await updateNote({ noteId: item.id as Id<"notes">, body });
+      await updateNote({ noteId: item.id as Id<"notes">, body: next });
       setEditing(false);
     } finally {
       setBusy(false);
     }
   };
 
-  return (
-    <div className="group rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-sm dark:bg-amber-500/[0.08]">
-      {editing ? (
-        <>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+  if (editing) {
+    return (
+      <li className="-mx-4 list-none border-b border-[var(--border)] px-4 py-3 first:border-t">
+        <textarea
+          autoFocus
+          value={draft}
+          disabled={busy}
+          onChange={(event) => setDraft(event.target.value)}
+          className="min-h-[4rem] w-full resize-y text-sm"
+        />
+        <div className="mt-1.5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(body);
+              setEditing(false);
+            }}
             disabled={busy}
-            rows={3}
-            className="w-full resize-none rounded-lg bg-[var(--card)] px-2 py-1.5 text-sm"
-          />
-          <div className="mt-1.5 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setDraft(item.body ?? "");
-                setEditing(false);
-              }}
-              className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+            className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy || !draft.trim()}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            {busy ? t("common.saving") : t("common.save")}
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  const meta = (
+    <>
+      {item.editedAt !== undefined && (
+        <span className="shrink-0 text-[11px] text-[var(--muted)]">
+          {t("notes.edited")}
+        </span>
+      )}
+      {item.authorName && (
+        <span className="hidden shrink-0 text-xs text-[var(--muted)] sm:inline">
+          {item.authorName}
+        </span>
+      )}
+      {/* Hover-revealed, and a span rather than a button because this sits
+          inside the row's own button when the note is expandable. */}
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={t("notes.edit")}
+        onClick={(event) => {
+          event.stopPropagation();
+          setDraft(body);
+          setEditing(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.stopPropagation();
+          setDraft(body);
+          setEditing(true);
+        }}
+        className="shrink-0 cursor-pointer text-[var(--muted)] opacity-0 transition-opacity hover:text-[var(--foreground)] focus:opacity-100 group-hover:opacity-100"
+      >
+        <FeedIcon type="note" size={13} tinted={false} />
+      </span>
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={t("common.delete")}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!confirm(t("notes.deleteConfirm"))) return;
+          void removeNote({ noteId: item.id as Id<"notes"> });
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.stopPropagation();
+          if (!confirm(t("notes.deleteConfirm"))) return;
+          void removeNote({ noteId: item.id as Id<"notes"> });
+        }}
+        className="shrink-0 cursor-pointer text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus:opacity-100 group-hover:opacity-100 dark:hover:text-red-400"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M3 6h18" />
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+        </svg>
+      </span>
+      <span
+        className="ml-3 min-w-[4.5rem] shrink-0 text-right text-xs text-[var(--muted)]"
+        title={formatDateTime(item.at, language)}
+      >
+        {formatDateTime(item.at, language)}
+      </span>
+    </>
+  );
+
+  return (
+    <li className="-mx-4 list-none border-b border-[var(--border)] first:border-t">
+      {expandable ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="group flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+          >
+            <span
+              aria-hidden
+              className={`w-3 shrink-0 text-xs text-[var(--muted)] transition-transform ${open ? "rotate-90" : ""}`}
             >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={busy || !draft.trim()}
-              className="rounded-lg bg-[var(--accent)] px-3 py-1 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
-            >
-              {busy ? t("common.saving") : t("common.save")}
-            </button>
-          </div>
+              ▸
+            </span>
+            {open ? (
+              // The body below already shows the first line; repeating it here
+              // reads as the note having been written twice. Spacer keeps the
+              // meta column where it was.
+              <span className="min-w-0 flex-1" />
+            ) : (
+              <span ref={snippetRef} className="min-w-0 flex-1 truncate text-sm">
+                {body}
+              </span>
+            )}
+            {meta}
+          </button>
+          {open && (
+            <div className="px-4 pb-3.5 pl-11 pt-1">
+              <p className="whitespace-pre-wrap break-words text-sm">{body}</p>
+            </div>
+          )}
         </>
       ) : (
-        <p className="whitespace-pre-wrap break-words">{item.body}</p>
-      )}
-      <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-[var(--muted)]">
-        <FeedIcon type="note" size={11} />
-        {item.authorName && <span>{item.authorName} ·</span>}
-        <span>{formatDateTime(item.at, language)}</span>
-        {item.editedAt !== undefined && <span>· {t("notes.edited")}</span>}
-        {!editing && (
-          // Edit and delete stay out of the way until the row is hovered — a
-          // note is read far more often than it is corrected. Focus reveals
-          // them too, so they're reachable by keyboard.
-          <span className="ml-auto flex gap-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="hover:text-[var(--foreground)]"
-            >
-              {t("notes.edit")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!confirm(t("notes.deleteConfirm"))) return;
-                void removeNote({ noteId: item.id as Id<"notes"> });
-              }}
-              className="hover:text-red-600 dark:hover:text-red-400"
-            >
-              {t("common.delete")}
-            </button>
+        <div className="group flex w-full items-center gap-2 px-4 py-2.5">
+          <span aria-hidden className="w-3 shrink-0" />
+          <span ref={snippetRef} className="min-w-0 flex-1 truncate text-sm">
+            {body}
           </span>
-        )}
-      </p>
-    </div>
+          {meta}
+        </div>
+      )}
+    </li>
   );
 }
 
