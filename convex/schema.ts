@@ -74,6 +74,13 @@ export default defineSchema({
     timezone: v.string(),
     // BCP 47-ish short code driving template language + date formatting ("tr").
     language: v.string(),
+    // ISO 4217 ("TRY"). The unit every price in the org is stored and rendered
+    // in — services, appointments, anything that gets summed. Optional so orgs
+    // created before money existed keep working; code defaults it (lib/money).
+    // Deliberately its own field rather than derived from a country: the
+    // Eurozone alone breaks country → currency, and an org that bills in a
+    // currency other than the one on its address is not an error to correct.
+    currency: v.optional(v.string()),
     // Hours before startAt to send a reminder. Default [24, 2] applied in code
     // when unset so existing orgs pick up default changes.
     reminderOffsetsHours: v.optional(v.array(v.number())),

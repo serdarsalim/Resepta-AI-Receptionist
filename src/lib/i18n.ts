@@ -331,6 +331,13 @@ const dictionary = {
     de: "Noch keine Nachrichten",
   },
 
+  "settings.currency": { tr: "Para birimi", en: "Currency", de: "Währung" },
+  "settings.currencyHint": {
+    tr: "Fiyatların gösterildiği para birimi. Değiştirmek tutarları çevirmez.",
+    en: "The currency prices are shown in. Changing it does not convert amounts.",
+    de: "Die Währung, in der Preise angezeigt werden. Ein Wechsel rechnet Beträge nicht um.",
+  },
+
   "notes.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
   "notes.none": {
     tr: "Henüz not yok",

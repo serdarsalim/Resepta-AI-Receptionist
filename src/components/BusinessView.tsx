@@ -7,6 +7,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
+import { CURRENCIES, currencySymbol } from "@/lib/money";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -157,6 +158,23 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.label}
+              </option>
+            ))}
+          </select>
+          {/* Sits under language because the two answer together: language
+              picks the separators and digit grouping, currency picks the
+              symbol. Changing this does NOT convert anything — a price stored
+              as 40000 is ₺400,00 today and €400.00 tomorrow. That is the
+              honest behaviour: we don't know an exchange rate and inventing
+              one would silently rewrite what customers were charged. */}
+          <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
+          <select
+            defaultValue={settings.org.currency}
+            onChange={(e) => void update({ currency: e.target.value })}
+          >
+            {CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {`${code} · ${currencySymbol(code, settings.org.language)}`}
               </option>
             ))}
           </select>

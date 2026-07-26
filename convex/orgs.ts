@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -23,6 +24,7 @@ export const current = query({
       name: v.string(),
       timezone: v.string(),
       language: v.string(),
+      currency: v.string(),
       reminderOffsetsHours: v.array(v.number()),
       sendBookingConfirmation: v.boolean(),
       quietHoursStart: v.number(),
@@ -98,6 +100,7 @@ export const current = query({
         name: org.name,
         timezone: org.timezone,
         language: org.language,
+        currency: org.currency ?? DEFAULT_CURRENCY,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
         quietHoursStart: org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0],
@@ -146,6 +149,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     timezone: v.optional(v.string()),
     language: v.optional(v.string()),
+    currency: v.optional(v.string()),
     reminderOffsetsHours: v.optional(v.array(v.number())),
     sendBookingConfirmation: v.optional(v.boolean()),
     quietHoursStart: v.optional(v.number()),
@@ -173,6 +177,12 @@ export const update = mutation({
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
     if (args.timezone !== undefined) patch.timezone = args.timezone;
     if (args.language !== undefined) patch.language = args.language;
+    // Allowlisted, not free text: an unknown code reaches Intl.NumberFormat at
+    // render time and throws there, which turns a bad Settings save into a
+    // blank page on every screen that shows a price.
+    if (args.currency !== undefined && isCurrency(args.currency)) {
+      patch.currency = args.currency;
+    }
     if (args.reminderOffsetsHours !== undefined) {
       patch.reminderOffsetsHours = args.reminderOffsetsHours
         .filter((h) => h > 0 && h <= 168)
