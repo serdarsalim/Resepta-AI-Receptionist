@@ -144,6 +144,44 @@ export async function sendWaCloudText(args: {
   );
 }
 
+// ---- Outbound images (session lane) ----
+//
+// Sent by LINK rather than by uploading to Meta's media endpoint first. Meta
+// fetches the URL itself, which means one round trip instead of two and no
+// media id to store and expire. The link has to be publicly reachable — a
+// Convex storage URL is, which is why the library keeps blobs there.
+//
+// Session-only, like the text lane: an image cannot open a conversation. A
+// template with a media header is a different payload and needs Meta approval,
+// so it belongs with the template sends and not here.
+export function waCloudImagePayload(
+  to: string,
+  link: string,
+  caption?: string,
+): Record<string, unknown> {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "image",
+    image: { link, ...(caption ? { caption } : {}) },
+  };
+}
+
+export async function sendWaCloudImage(args: {
+  accessToken: string;
+  phoneNumberId: string;
+  to: string;
+  link: string;
+  caption?: string;
+}): Promise<WaCloudSendResult> {
+  return postWaCloud(
+    args.accessToken,
+    args.phoneNumberId,
+    waCloudImagePayload(args.to, args.link, args.caption),
+  );
+}
+
 // ---- Inbound media ----
 //
 // Meta hands the webhook a media ID, not the bytes, and the download is TWO

@@ -494,7 +494,34 @@ export default defineSchema({
     // Failure surfacing per org — the Messages tab badge and the platform
     // admin's per-org health both ask "what broke here lately".
     .index("by_org_status", ["orgId", "status"])
+    // Which messages show a given image. Exists so deleting a library asset
+    // can ask exactly that, rather than scanning recent messages and hoping
+    // the one that would break is among them.
+    .index("by_media", ["mediaStorageId"])
     .index("by_wamid", ["wamid"]),
+
+  // Images the salon sends OUT — a price list, a before-and-after, the card
+  // machine being broken today. Inbound images already land in Convex storage
+  // (messages.mediaStorageId); this is the other direction, and it needs a
+  // library rather than an upload-per-message because the same price list gets
+  // sent forty times.
+  //
+  // The blob lives in Convex storage; this row is the name, the size and the
+  // fact that this org owns it. Deleting a row is refused while any message
+  // still shows the image — a thread that renders a broken image is a worse
+  // outcome than an asset list with an old entry in it.
+  mediaAssets: defineTable({
+    orgId: v.id("orgs"),
+    storageId: v.id("_storage"),
+    // What the uploader called the file. Shown in the picker, so it is worth
+    // keeping even though the blob has no idea what its name is.
+    name: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    uploadedBy: v.optional(v.id("users")),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_storage", ["storageId"]),
 
   // Who did what. Written for ONE question: a salon shares a login-per-person
   // and an inbox, so "who cancelled Ayşe's appointment?" and "who marked that

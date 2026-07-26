@@ -128,6 +128,10 @@ export function ConversationPanel({
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const [draft, setDraft] = useState("");
+  // An image from the library, chosen for THIS message. Same disclosure shape
+  // as the schedule row: closed by default, because most messages are words.
+  const [attaching, setAttaching] = useState(false);
+  const [attached, setAttached] = useState<AttachedImage | null>(null);
   // Grows with the message, capped, bottom-anchored — the extra lines push the
   // field upward the way WhatsApp Web does rather than pushing the thread down.
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -790,7 +794,9 @@ export function ConversationPanel({
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
-              if (!body) return;
+              // An image on its own is a message. Requiring text alongside it
+              // would mean captioning a price list to send a price list.
+              if (!body && !attached) return;
               setSending(true);
               setSendError(null);
               const when = scheduleAt ? fromDatetimeLocalValue(scheduleAt) : undefined;
@@ -802,12 +808,15 @@ export function ConversationPanel({
                 ...(when !== undefined && when > Date.now()
                   ? { scheduledFor: when }
                   : {}),
+                ...(attached ? { mediaStorageId: attached.storageId } : {}),
               });
               setSending(false);
               if (result.ok) {
                 setDraft("");
                 setScheduleAt("");
                 setScheduling(false);
+                setAttached(null);
+                setAttaching(false);
               } else setSendError(result.reason ?? "error");
             }}
           >
@@ -839,6 +848,27 @@ export function ConversationPanel({
               disabled={!windowOpen || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
             />
+            {/* Inside the same pill as the clock: both are secondary actions
+                on the message you are writing, and giving either its own
+                surface outside the pill turns a chat box back into a form. */}
+            <button
+              type="button"
+              onClick={() => setAttaching((prev) => !prev)}
+              aria-label={t("media.attach")}
+              aria-pressed={attaching}
+              disabled={!windowOpen || sending}
+              className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
+                attaching || attached
+                  ? "text-[var(--accent)]"
+                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={() => setScheduling((prev) => !prev)}
@@ -858,7 +888,7 @@ export function ConversationPanel({
             </button>
             <button
               type="submit"
-              disabled={!windowOpen || sending || !draft.trim()}
+              disabled={!windowOpen || sending || (!draft.trim() && !attached)}
               className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {t("contact.send")}
@@ -878,6 +908,39 @@ export function ConversationPanel({
               </span>
             </div>
           )}
+          {/* An in-flow strip, not a popover: the schedule row above already
+              set that precedent here, and a disclosure the composer pushes
+              down needs none of the portal machinery a floating panel would
+              (see AGENTS.md on clipped popovers). */}
+          {attaching && (
+            <MediaStrip
+              selectedId={attached?.storageId}
+              onPick={(asset) => {
+                setAttached(asset);
+                setAttaching(false);
+              }}
+            />
+          )}
+          {attached && (
+            <div className="flex items-center gap-2 px-3 pb-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attached.url}
+                alt=""
+                className="h-10 w-10 rounded object-cover"
+              />
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--muted)]">
+                {attached.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setAttached(null)}
+                className="rounded px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                {t("media.remove")}
+              </button>
+            </div>
+          )}
           {sendError && (
             // Same rule as the bubbles: a known reason gets its sentence, an
             // unknown one falls back to plain "not sent" rather than the slug.
@@ -886,6 +949,120 @@ export function ConversationPanel({
             </p>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+type AttachedImage = { storageId: Id<"_storage">; name: string; url: string };
+
+// The org's image library, as a row of thumbnails plus an upload tile.
+//
+// A library rather than a file input per message: the same price list goes out
+// forty times, and re-picking it off a phone every time is the difference
+// between a feature someone uses and one they try once. Uploading is the LAST
+// tile rather than the first control, because after the first week the common
+// case is picking something that is already there.
+function MediaStrip({
+  selectedId,
+  onPick,
+}: {
+  selectedId?: Id<"_storage">;
+  onPick: (asset: AttachedImage) => void;
+}) {
+  const { t } = useLanguage();
+  const assets = useQuery(api.media.list, {});
+  const generateUploadUrl = useMutation(api.media.generateUploadUrl);
+  const register = useMutation(api.media.register);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const upload = async (file: File) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const url = await generateUploadUrl();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      // The backend re-checks type and size against what actually landed —
+      // the upload URL accepts anything, so this is where the limits are real.
+      // Its error slug is what the reader sees, translated.
+      await register({ storageId, name: file.name });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "";
+      setError(
+        reason.includes("too-large")
+          ? t("media.tooLarge")
+          : reason.includes("unsupported-type")
+            ? t("media.unsupported")
+            : t("message.failed"),
+      );
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div className="px-3 pb-2">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {assets?.map(
+          (asset) =>
+            asset.url && (
+              <button
+                key={asset._id}
+                type="button"
+                onClick={() =>
+                  onPick({
+                    storageId: asset.storageId,
+                    name: asset.name,
+                    url: asset.url!,
+                  })
+                }
+                title={asset.name}
+                className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg transition-opacity hover:opacity-80 ${
+                  selectedId === asset.storageId
+                    ? "ring-2 ring-[var(--accent)]"
+                    : ""
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={asset.url}
+                  alt={asset.name}
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ),
+        )}
+        <label
+          className={`flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[var(--border)] text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] ${
+            uploading ? "opacity-50" : ""
+          }`}
+        >
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              // Cleared so picking the SAME file again after a failed upload
+              // still fires a change event.
+              event.target.value = "";
+              if (file) void upload(file);
+            }}
+          />
+          {uploading ? "…" : "+"}
+        </label>
+      </div>
+      {assets?.length === 0 && !uploading && (
+        <p className="pt-1 text-xs text-[var(--muted)]">{t("media.empty")}</p>
+      )}
+      {error && (
+        <p className="pt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
       )}
     </div>
   );

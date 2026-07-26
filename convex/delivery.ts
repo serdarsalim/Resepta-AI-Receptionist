@@ -41,7 +41,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
 import { sendEmail, emailLaneConfigured } from "./lib/email";
-import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
 // and the cron runs every minute — 50 is far more than a healthy deployment
@@ -135,6 +135,12 @@ export const claimForRetry = internalMutation({
       phoneNumberId: waAccount?.phoneNumberId,
       templateName: message.templateName,
       templateLanguage: template?.language ?? language,
+      // Resolved here rather than in the action: a retry of an image send has
+      // to go back out as an image, and getUrl needs the storage id from the
+      // row we just read.
+      mediaLink: message.mediaStorageId
+        ? await ctx.storage.getUrl(message.mediaStorageId)
+        : null,
       // Only appointment-bound sends carry the date parameter and the
       // confirm/cancel buttons; a bulk or session message has neither.
       when: appointment
@@ -185,6 +191,7 @@ type RetryJob = {
   templateLanguage: string;
   when?: string;
   appointmentId?: string;
+  mediaLink?: string | null;
 };
 
 // One re-send, routed by what the row is. Mirrors the three shapes the send
@@ -225,6 +232,16 @@ async function attempt(
             { index: 1, payload: `cancel:${job.appointmentId}` },
           ]
         : undefined,
+    });
+  }
+
+  if (job.mediaLink) {
+    return await sendWaCloudImage({
+      accessToken: job.accessToken,
+      phoneNumberId: job.phoneNumberId,
+      to: job.to,
+      link: job.mediaLink,
+      caption: job.body || undefined,
     });
   }
 

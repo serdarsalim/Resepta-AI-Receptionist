@@ -10,7 +10,12 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
 import { emailLaneConfigured, sendEmail } from "./lib/email";
-import { fetchWaMedia, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import {
+  fetchWaMedia,
+  sendWaCloudImage,
+  sendWaCloudTemplate,
+  sendWaCloudText,
+} from "./lib/waCloud";
 import { isOrgSetupFailure } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
 import { renderTokens } from "./lib/renderTokens";
@@ -51,11 +56,22 @@ export const sendSession = action({
     // cron to pick up — the salon writing tonight's follow-up at 23:00 and
     // having it land at 10:00 tomorrow.
     scheduledFor: v.optional(v.number()),
+    // An image from the library (convex/media.ts). With one attached the body
+    // becomes the CAPTION rather than a separate message, because two
+    // notifications for one thought is how a salon's thread becomes noise.
+    mediaStorageId: v.optional(v.id("_storage")),
   },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
-  handler: async (ctx, args) => {
+  // Annotated explicitly: this handler calls internal.wa.* from the file that
+  // defines it, so without a written return type the inference runs back
+  // through the generated api and lands on itself (TS7022/7023). The
+  // annotation cuts the loop — and losing it degrades the api types to `any`
+  // for every caller in src/, which is a much noisier failure than it looks.
+  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const raw = args.body.trim();
-    if (!raw) return { ok: false, reason: "empty" };
+    // An image on its own is a message; text on its own is a message; neither
+    // is not.
+    if (!raw && !args.mediaStorageId) return { ok: false, reason: "empty" };
     const context = await ctx.runQuery(internal.wa.loadSessionContext, {
       customerId: args.customerId,
     });
@@ -72,7 +88,7 @@ export const sendSession = action({
       businessName: org?.name,
       phone: customer.phone,
     });
-    if (!body) return { ok: false, reason: "empty" };
+    if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
     if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
     if (
       !customer.lastInboundAt ||
@@ -92,17 +108,36 @@ export const sendSession = action({
       kind: "session",
       body,
       scheduledFor: args.scheduledFor,
+      mediaStorageId: args.mediaStorageId,
     });
     // Parked. The row is visible in the thread immediately, counting down,
     // which is the whole point: a scheduled message you cannot see is a
     // message you will send twice.
     if (args.scheduledFor) return { ok: true };
-    const result = await sendWaCloudText({
-      accessToken: waAccount.accessToken,
-      phoneNumberId: waAccount.phoneNumberId,
-      to: customer.phone,
-      body,
-    });
+
+    // Meta fetches the image from this URL itself, so it has to be reachable
+    // from the outside. In DEV ctx.storage.getUrl returns a 127.0.0.1 address
+    // that Meta obviously cannot reach — image sends only work from a
+    // deployed backend. (Nudge hit exactly this and it is worth knowing before
+    // you spend an evening on it.)
+    const link = args.mediaStorageId
+      ? await ctx.storage.getUrl(args.mediaStorageId)
+      : null;
+    const result =
+      args.mediaStorageId && link
+        ? await sendWaCloudImage({
+            accessToken: waAccount.accessToken,
+            phoneNumberId: waAccount.phoneNumberId,
+            to: customer.phone,
+            link,
+            caption: body || undefined,
+          })
+        : await sendWaCloudText({
+            accessToken: waAccount.accessToken,
+            phoneNumberId: waAccount.phoneNumberId,
+            to: customer.phone,
+            body,
+          });
     await ctx.runMutation(internal.messages.applySendResult, {
       messageId,
       ok: result.ok,
@@ -441,7 +476,14 @@ export const downloadInboundMedia = internalAction({
 export const dueScheduled = internalQuery({
   args: {},
   returns: v.array(
-    v.object({ messageId: v.id("messages"), customerId: v.id("customers"), body: v.string() }),
+    v.object({
+      messageId: v.id("messages"),
+      customerId: v.id("customers"),
+      // Optional because an image on its own is a legitimate message; with one
+      // attached this is the caption.
+      body: v.optional(v.string()),
+      mediaStorageId: v.optional(v.id("_storage")),
+    }),
   ),
   handler: async (ctx) => {
     const rows = await ctx.db
@@ -454,11 +496,12 @@ export const dueScheduled = internalQuery({
       )
       .take(100);
     return rows
-      .filter((row) => row.customerId && row.body)
+      .filter((row) => row.customerId && (row.body || row.mediaStorageId))
       .map((row) => ({
         messageId: row._id,
         customerId: row.customerId!,
-        body: row.body!,
+        body: row.body,
+        mediaStorageId: row.mediaStorageId,
       }));
   },
 });
@@ -519,12 +562,24 @@ export const sendDueScheduled = internalAction({
         });
         continue;
       }
-      const result = await sendWaCloudText({
-        accessToken: waAccount.accessToken,
-        phoneNumberId: waAccount.phoneNumberId,
-        to: customer.phone,
-        body: item.body,
-      });
+      const link = item.mediaStorageId
+        ? await ctx.storage.getUrl(item.mediaStorageId)
+        : null;
+      const result =
+        item.mediaStorageId && link
+          ? await sendWaCloudImage({
+              accessToken: waAccount.accessToken,
+              phoneNumberId: waAccount.phoneNumberId,
+              to: customer.phone,
+              link,
+              caption: item.body || undefined,
+            })
+          : await sendWaCloudText({
+              accessToken: waAccount.accessToken,
+              phoneNumberId: waAccount.phoneNumberId,
+              to: customer.phone,
+              body: item.body ?? "",
+            });
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId: item.messageId,
         ok: result.ok,

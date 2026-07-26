@@ -1131,6 +1131,32 @@ const dictionary = {
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
 
+  // Outbound images.
+  "media.attach": { tr: "Görsel ekle", en: "Attach image", de: "Bild anhängen" },
+  "media.library": { tr: "Görseller", en: "Images", de: "Bilder" },
+  "media.upload": { tr: "Yükle", en: "Upload", de: "Hochladen" },
+  "media.empty": {
+    tr: "Henüz görsel yok. Fiyat listesi, önce-sonra fotoğrafı — bir kez yükleyin, hep kullanın.",
+    en: "No images yet. A price list, a before-and-after — upload once, send it forever.",
+    de: "Noch keine Bilder. Eine Preisliste, ein Vorher-Nachher — einmal hochladen, immer senden.",
+  },
+  "media.remove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
+  "media.tooLarge": {
+    tr: "Dosya çok büyük (en fazla 2 MB).",
+    en: "That file is too large (2 MB maximum).",
+    de: "Die Datei ist zu groß (maximal 2 MB).",
+  },
+  "media.unsupported": {
+    tr: "Yalnızca JPG, PNG ve WebP gönderilebilir.",
+    en: "Only JPG, PNG and WebP can be sent.",
+    de: "Es können nur JPG, PNG und WebP gesendet werden.",
+  },
+  "media.inUse": {
+    tr: "Bu görsel gönderilmiş bir mesajda var, silinemez.",
+    en: "This image is in a message already sent, so it can't be deleted.",
+    de: "Dieses Bild steht in einer bereits gesendeten Nachricht und kann nicht gelöscht werden.",
+  },
+
   // Activity log. The kind labels are written as things that HAPPENED, not as
   // commands — the reader is looking back at a record, so "Termin verschoben"
   // rather than "Termin verschieben".
