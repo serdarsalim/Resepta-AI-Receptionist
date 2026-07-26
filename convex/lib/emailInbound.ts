@@ -92,6 +92,34 @@ export function bareAddress(input: string): string {
   return (angled ? angled[1] : input).trim().toLowerCase();
 }
 
+// The display half of a From header: "Ayşe Yılmaz <ayse@example.com>" →
+// "Ayşe Yılmaz". Empty when the sender's client didn't set one, or when it
+// set the address again (some do) — a "name" that is just the address is not
+// a name, and writing it into firstName would look like a bug to the salon.
+export function displayName(input: string): string {
+  const angled = /^\s*(.+?)\s*<[^>]+>\s*$/.exec(input);
+  if (!angled) return "";
+  const name = angled[1].replace(/^["']|["']$/g, "").trim();
+  return name.includes("@") ? "" : name;
+}
+
+// "Ayşe Yılmaz" → { firstName: "Ayşe", lastName: "Yılmaz" }. First token, then
+// the rest — the same split Nudge does inline in half a dozen files, kept in
+// ONE place here.
+//
+// It is a guess and it is wrong for compound Turkish given names: "Ayşe Nur
+// Yılmaz" becomes Ayşe / Nur Yılmaz. That is fine and deliberate — every field
+// it fills is editable on the record, and a wrong-but-close name is far more
+// use to a salon than a blank row labelled by an email address.
+export function splitName(full: string): { firstName: string; lastName?: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "" };
+  return {
+    firstName: parts[0],
+    lastName: parts.length > 1 ? parts.slice(1).join(" ") : undefined,
+  };
+}
+
 // The local part of an address on OUR domain — the org routing key.
 export function localPart(address: string): string {
   return bareAddress(address).split("@")[0] ?? "";

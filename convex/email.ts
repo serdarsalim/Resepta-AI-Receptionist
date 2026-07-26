@@ -3,7 +3,12 @@ import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
 import { sendEmail } from "./lib/email";
-import { bareAddress, normalizeSubject } from "./lib/emailInbound";
+import {
+  bareAddress,
+  displayName,
+  normalizeSubject,
+  splitName,
+} from "./lib/emailInbound";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
 // wa.ts (the template lane that rides alongside WhatsApp); this file is what
@@ -75,9 +80,15 @@ export const recordInbound = internalMutation({
     // name, and consent stays unset — writing to us is not KVKK consent for
     // us to start messaging them.
     if (!customerId) {
+      // The From header usually carries a display name; use it rather than
+      // filing a nameless row the salon has to guess at. Blank when the
+      // sender's client sent no name, which the record shows as an
+      // unnamed-but-reachable customer.
+      const named = splitName(displayName(args.from));
       customerId = await ctx.db.insert("customers", {
         orgId: args.orgId,
-        firstName: "",
+        firstName: named.firstName,
+        ...(named.lastName ? { lastName: named.lastName } : {}),
         phone: "",
         email: from,
       });
