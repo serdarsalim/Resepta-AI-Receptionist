@@ -16,6 +16,7 @@ import {
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
+import { Sheet } from "./Sheet";
 
 type Customer = FunctionReturnType<typeof api.customers.list>[number];
 type ContactField = Doc<"contactFields">;
@@ -100,9 +101,7 @@ export function CustomersView({
   const { t, language } = useLanguage();
   const customers = useQuery(api.customers.list, {});
   const contactFields = useQuery(api.contactFields.list, {});
-  const create = useMutation(api.customers.create);
   const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
   const search = useHeaderSearch(t("common.search"));
@@ -379,70 +378,14 @@ export function CustomersView({
           )}
           <button
             className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-            onClick={() => setAdding((v) => !v)}
+            onClick={() => setAdding(true)}
           >
-            {adding ? t("common.cancel") : t("customers.new")}
+            {t("customers.new")}
           </button>
         </div>
       </div>
 
-      {adding && (
-        <form
-          className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 sm:grid-cols-3"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            setError(null);
-            try {
-              await create({
-                firstName: String(form.get("firstName") ?? ""),
-                lastName: String(form.get("lastName") ?? "") || undefined,
-                phone: String(form.get("phone") ?? ""),
-                email: String(form.get("email") ?? "") || undefined,
-                consent: form.get("consent") === "on",
-              });
-              setAdding(false);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "error");
-            }
-          }}
-        >
-          <label className="text-sm">
-            {t("customers.firstName")}
-            <input name="firstName" required className="mt-1" />
-          </label>
-          <label className="text-sm">
-            {t("customers.lastName")}
-            <input name="lastName" className="mt-1" />
-          </label>
-          <label className="text-sm" htmlFor="new-customer-phone">
-            {t("customers.phone")}
-            <PhoneInput id="new-customer-phone" name="phone" required className="mt-1" />
-          </label>
-          <label className="text-sm">
-            {t("customers.email")}
-            <input name="email" type="email" className="mt-1" />
-          </label>
-          <label className="flex items-start gap-2 text-sm sm:col-span-3">
-            <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
-            <span>
-              {t("customers.consent")}
-              <span className="block text-xs text-[var(--muted)]">
-                {t("customers.consentHint")}
-              </span>
-            </span>
-          </label>
-          {error && <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-3">{error}</p>}
-          <div className="sm:col-span-3">
-            <button
-              type="submit"
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-            >
-              {t("common.add")}
-            </button>
-          </div>
-        </form>
-      )}
+      {adding && <NewCustomerSheet onClose={() => setAdding(false)} />}
 
       {customers === undefined && (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
@@ -596,5 +539,103 @@ export function CustomersView({
         </div>
       )}
     </div>
+  );
+}
+
+// One field per line, in the order somebody says them out loud: who they are,
+// how to reach them, and whether we may. The old version was a three-column
+// grid wedged between the toolbar and the table, which pushed the list you
+// came to read off the bottom of the screen every time you opened it.
+//
+// Consent is last and stays checked, but it is not decoration: without it the
+// KVKK gate in wa.sendAppointmentMessage silently drops every confirmation and
+// reminder for this person. That is why it gets a sentence rather than a
+// label, and why the field it guards sits directly above it.
+function NewCustomerSheet({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
+  const create = useMutation(api.customers.create);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Sheet title={t("customers.new")} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setError(null);
+          setPending(true);
+          try {
+            await create({
+              firstName: String(form.get("firstName") ?? ""),
+              lastName: String(form.get("lastName") ?? "") || undefined,
+              phone: String(form.get("phone") ?? ""),
+              email: String(form.get("email") ?? "") || undefined,
+              consent: form.get("consent") === "on",
+            });
+            onClose();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "error");
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        {/* Two names on one line: they are one answer to one question, and
+            stacking them spends a row on a nine-character field. */}
+        <div className="flex gap-2">
+          <label className="min-w-0 flex-1 text-xs text-[var(--muted)]">
+            {t("customers.firstName")}
+            <input name="firstName" required autoFocus className="mt-1" />
+          </label>
+          <label className="min-w-0 flex-1 text-xs text-[var(--muted)]">
+            {t("customers.lastName")}
+            <input name="lastName" className="mt-1" />
+          </label>
+        </div>
+
+        <label className="block text-xs text-[var(--muted)]" htmlFor="new-customer-phone">
+          {t("customers.phone")}
+          <PhoneInput id="new-customer-phone" name="phone" required className="mt-1" />
+        </label>
+
+        <label className="block text-xs text-[var(--muted)]">
+          {t("customers.email")}
+          <input name="email" type="email" className="mt-1" />
+        </label>
+
+        <label className="flex items-start gap-2 rounded-lg bg-[var(--muted-bg)] p-3 text-sm">
+          <input name="consent" type="checkbox" defaultChecked className="mt-0.5 w-auto" />
+          <span className="min-w-0">
+            {t("customers.consent")}
+            <span className="mt-0.5 block text-xs text-[var(--muted)]">
+              {t("customers.consentHint")}
+            </span>
+          </span>
+        </label>
+
+        {/* The line is reserved whether or not it holds anything, so a failed
+            save does not shove the buttons out from under the pointer. */}
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
+          >
+            {t("common.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
