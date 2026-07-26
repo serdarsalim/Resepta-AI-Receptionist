@@ -303,6 +303,7 @@ export function InboxView({
                 {filter === "email" ? active.email : active.phone}
               </span>
               <FeedFilterPills
+                customerId={active.customerId}
                 value={filter}
                 onChange={setFilter}
                 className="ml-auto"

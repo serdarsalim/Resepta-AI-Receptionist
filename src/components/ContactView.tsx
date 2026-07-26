@@ -107,7 +107,21 @@ export function ContactView({
         <h2 className="min-w-0 truncate text-base font-semibold">
           {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
         </h2>
-        <div className="ml-auto flex shrink-0 items-center gap-1 lg:hidden">
+        {/* Pills ride the header line so the record card and the conversation
+            card start on the same line below it. On phones they only appear
+            while the conversation pane is showing — filtering a feed you
+            aren't looking at is a control with nothing to control. */}
+        <FeedFilterPills
+          customerId={customerId}
+          value={filter}
+          onChange={setFilter}
+          className={`ml-auto ${mobilePane === "conversation" ? "flex" : "hidden"} lg:flex`}
+        />
+        <div
+          className={`flex shrink-0 items-center gap-1 lg:hidden ${
+            mobilePane === "conversation" ? "" : "ml-auto"
+          }`}
+        >
           {(
             [
               ["record", "fields.title"],
@@ -297,23 +311,18 @@ export function ContactView({
         </div>
 
         {/* Right: conversation, the shared component, never a page variant.
-            The pills sit ABOVE the card rather than inside it, the way the
-            inbox does it — the filter is a question about the pane, not a
-            control belonging to the feed, and keeping it outside means the
-            card's own scroll still starts at its border. */}
-        <div
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
+            The card leads the column with nothing above it, so its top edge
+            lines up with the record card's. */}
+        <section
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] lg:flex`}
         >
-          <FeedFilterPills value={filter} onChange={setFilter} className="justify-end" />
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-            <ConversationPanel
-              customerId={customerId}
-              lastInboundAt={customer.lastInboundAt}
-              filter={filter}
-              className="flex-1"
-            />
-          </section>
-        </div>
+          <ConversationPanel
+            customerId={customerId}
+            lastInboundAt={customer.lastInboundAt}
+            filter={filter}
+            className="flex-1"
+          />
+        </section>
       </div>
     </div>
   );
