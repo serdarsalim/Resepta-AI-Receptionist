@@ -827,7 +827,10 @@ const dictionary = {
     de: "Betrieb wechseln",
   },
 
-  "team.title": { tr: "Ekip", en: "Team", de: "Team" },
+  // Not "Ekip": staff.title already is, one card below on the same page, and
+  // two cards with one title is how the two concepts got confused in the first
+  // place. This card is logins; Ekip is the people you can book.
+  "team.title": { tr: "Kullanıcılar", en: "Users", de: "Benutzer" },
   "team.inviteHint": {
     tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez, adresi siz iletin.",
     en: "The invitee joins your team when they sign in with Google using this email. No email is sent, so share the address yourself.",
@@ -841,12 +844,25 @@ const dictionary = {
   },
   "team.revoke": { tr: "İptal et", en: "Revoke", de: "Zurückziehen" },
   "team.you": { tr: "siz", en: "you", de: "Sie" },
-  "role.owner": { tr: "Sahip", en: "Owner", de: "Inhaber" },
-  "role.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
+  // The two access tiers. Named for the PERMISSION, not the person: the
+  // backend lets several people hold the top tier (team.invite takes a role),
+  // so "Sahip"/"Owner" was naming a human being where it meant a capability.
+  //
+  // And the lower tier is deliberately not "Personel" any more. That word is
+  // the default label for the bookable person (appointments.staff), and the
+  // two are genuinely different things — a barber can be bookable with no
+  // login at all, and a bookkeeper can log in and never be booked. While the
+  // role wore the same word, the Business page ran two cards both titled
+  // "Ekip", one labelling its rows Personel and one whose people were called
+  // Personel. Personel now means the bookable person and nothing else.
+  "role.owner": { tr: "Yönetici", en: "Admin", de: "Administrator" },
+  "role.staff": { tr: "Üye", en: "Member", de: "Mitglied" },
+  // Follows role.owner: the gate is the tier, not the person who owns the
+  // salon, and several people can hold it.
   "settings.ownerOnly": {
-    tr: "Bu ayarları yalnızca işletme sahibi değiştirebilir.",
-    en: "Only the business owner can change these settings.",
-    de: "Diese Einstellungen kann nur der Inhaber des Betriebs ändern.",
+    tr: "Bu ayarları yalnızca yöneticiler değiştirebilir.",
+    en: "Only admins can change these settings.",
+    de: "Diese Einstellungen können nur Administratoren ändern.",
   },
 
   // Table chrome. Shared by every list that adopts the DataTable primitives,
