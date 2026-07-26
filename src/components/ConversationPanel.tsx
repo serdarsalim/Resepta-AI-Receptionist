@@ -89,7 +89,7 @@ function DeliveryTicks({ status, label }: { status: string; label: string }) {
   );
 }
 
-export type FeedFilter = Channel | "note" | "all";
+export type FeedFilter = Channel | "form" | "note" | "all";
 
 // One customer's whole history — WhatsApp, email, calls, and the salon's own
 // notes in a single interleaved feed — plus the composer. Shared by the inbox

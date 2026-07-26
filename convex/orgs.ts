@@ -26,6 +26,8 @@ export const current = query({
       language: v.string(),
       currency: v.string(),
       inboundAddress: v.optional(v.string()),
+      publicSlug: v.optional(v.string()),
+      formEnabled: v.optional(v.boolean()),
       // The domain half, from deployment env — the client needs it to show the
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
@@ -106,6 +108,8 @@ export const current = query({
         language: org.language,
         currency: org.currency ?? DEFAULT_CURRENCY,
         inboundAddress: org.inboundAddress,
+        publicSlug: org.publicSlug,
+        formEnabled: org.formEnabled,
         inboundDomain: process.env.RESEND_INBOUND_DOMAIN,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,

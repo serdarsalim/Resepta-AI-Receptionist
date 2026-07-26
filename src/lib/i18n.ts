@@ -338,6 +338,16 @@ const dictionary = {
   },
   "appointments.total": { tr: "Toplam", en: "Total", de: "Gesamt" },
   "services.price": { tr: "Fiyat", en: "Price", de: "Preis" },
+  "settings.formEnabled": {
+    tr: "Talep formu",
+    en: "Request form",
+    de: "Anfrageformular",
+  },
+  "settings.formEnabledHint": {
+    tr: "Müşterilerin doldurup size ulaşabileceği herkese açık sayfa. Gelen talepler müşterinin sohbetine düşer; randevu otomatik oluşturulmaz.",
+    en: "A public page customers fill in to reach you. Requests land in that customer's conversation; no appointment is created automatically.",
+    de: "Eine öffentliche Seite, über die Kunden Sie erreichen. Anfragen landen im Gespräch des Kunden; ein Termin wird nicht automatisch angelegt.",
+  },
   "settings.inboundAddress": {
     tr: "Gelen e-posta adresi",
     en: "Incoming email address",
@@ -387,6 +397,37 @@ const dictionary = {
     tr: "E-posta bağlı değil",
     en: "Email is not connected",
     de: "E-Mail ist nicht verbunden",
+  },
+  "forms.title": { tr: "Form", en: "Form", de: "Formular" },
+  "forms.name": { tr: "Adınız", en: "Your name", de: "Ihr Name" },
+  "forms.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
+  "forms.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  "forms.services": {
+    tr: "Ne yaptırmak istersiniz?",
+    en: "What would you like booked?",
+    de: "Was möchten Sie buchen?",
+  },
+  "forms.note": { tr: "Not", en: "Note", de: "Notiz" },
+  "forms.send": { tr: "Gönder", en: "Send request", de: "Anfrage senden" },
+  "forms.thanks": {
+    tr: "Teşekkürler, talebiniz bize ulaştı. En kısa sürede sizi arayacağız.",
+    en: "Thanks — we've got your request and will be in touch to confirm a time.",
+    de: "Danke, Ihre Anfrage ist angekommen. Wir melden uns zur Terminbestätigung.",
+  },
+  "forms.notFound": {
+    tr: "Bu form bulunamadı.",
+    en: "This form isn't available.",
+    de: "Dieses Formular ist nicht verfügbar.",
+  },
+  "forms.badPhone": {
+    tr: "Telefon numarası geçerli görünmüyor.",
+    en: "That phone number doesn't look right.",
+    de: "Diese Telefonnummer sieht nicht korrekt aus.",
+  },
+  "forms.failed": {
+    tr: "Gönderilemedi, lütfen tekrar deneyin.",
+    en: "Couldn't send — please try again.",
+    de: "Konnte nicht gesendet werden — bitte erneut versuchen.",
   },
   "notes.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
   "notes.none": {

@@ -127,6 +127,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
+  const enableForm = useMutation(api.forms.enable);
+  // Read at render rather than baked in: the same deployment serves localhost
+  // and the real domain, and a hardcoded host would hand the salon a link that
+  // works for nobody but whoever built it.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   return (
     <Card title={t("settings.business")} disabled={!isOwner}>
@@ -153,6 +158,28 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {/* The address customers write TO. One verified domain serves every
               business; this left-hand part is what routes an incoming email to
               THIS org, so it has to be unique and the save rejects a clash. */}
+          {/* The public request form. Off by default: a live URL that answers
+              before anyone has looked at what it asks is worse than a 404. */}
+          <RowLabel label={t("settings.formEnabled")} hint={t("settings.formEnabledHint")} />
+          <span className="flex flex-wrap items-center gap-2">
+            <Toggle
+              checked={settings.org.formEnabled ?? false}
+              onChange={(next) => void enableForm({ enabled: next })}
+            />
+            {settings.org.formEnabled && settings.org.publicSlug && (
+              // Shown as the whole URL, not a slug: what the salon needs is
+              // something to paste into an Instagram bio, and a fragment they
+              // have to assemble themselves is a step where people give up.
+              <a
+                href={`/r/${settings.org.publicSlug}`}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate text-sm text-[var(--accent)] hover:underline"
+              >
+                {`${origin}/r/${settings.org.publicSlug}`}
+              </a>
+            )}
+          </span>
           <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
           <span className="flex items-center gap-1">
             <input

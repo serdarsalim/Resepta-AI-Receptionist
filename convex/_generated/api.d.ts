@@ -16,6 +16,7 @@ import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as devSeed from "../devSeed.js";
 import type * as email from "../email.js";
+import type * as forms from "../forms.js";
 import type * as http from "../http.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   customers: typeof customers;
   devSeed: typeof devSeed;
   email: typeof email;
+  forms: typeof forms;
   http: typeof http;
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;

@@ -23,9 +23,10 @@ export const CHANNEL_LABEL: Record<Channel, TranslationKey> = {
   call: "channel.call",
 };
 
-// Notes sit last of the things you can narrow to, and All is separated by a
-// rule because it isn't one of them — it's the way back out.
-const TABS: readonly FeedFilter[] = [...CHANNELS, "note"];
+// Channels first, then the two things that are not channels — a form arrival
+// and a note. All is separated by a rule because it isn't one of them; it's
+// the way back out.
+const TABS: readonly FeedFilter[] = [...CHANNELS, "form", "note"];
 
 export function FeedFilterPills({
   customerId,
@@ -55,7 +56,9 @@ export function FeedFilterPills({
         ? t("inbox.all")
         : tab === "note"
           ? t("notes.title")
-          : t(CHANNEL_LABEL[tab]);
+          : tab === "form"
+            ? t("forms.title")
+            : t(CHANNEL_LABEL[tab]);
     return (
       <button
         key={tab}
@@ -83,7 +86,9 @@ export function FeedFilterPills({
             you find the channel, and dropping it to accent on select means the
             pill you're looking at is the one that stopped being recognizable. */}
         {tab !== "all" && <FeedIcon type={tab} size={14} />}
-        {(tab === "all" || tab === "note") && <span>{label}</span>}
+        {(tab === "all" || tab === "note" || tab === "form") && (
+          <span>{label}</span>
+        )}
         {/* Zero renders nothing. A row of noughts is noise, and the dimmed
             pill already says the tab is empty. */}
         {count > 0 && <span className="tabular-nums">{count}</span>}

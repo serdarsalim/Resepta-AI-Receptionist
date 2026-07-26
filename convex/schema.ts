@@ -74,6 +74,15 @@ export default defineSchema({
     timezone: v.string(),
     // BCP 47-ish short code driving template language + date formatting ("tr").
     language: v.string(),
+    // The org's public handle, used in its request-form URL (/r/<slug>).
+    // Generated from the name on first enable rather than asked for: one more
+    // thing to invent is one more reason a salon owner stops halfway through
+    // setup. Separate from inboundAddress on purpose — an org changing the
+    // address customers email must not break every form link it has shared.
+    publicSlug: v.optional(v.string()),
+    // Off until switched on. A form URL that answers before anyone has looked
+    // at what it asks is worse than a 404.
+    formEnabled: v.optional(v.boolean()),
     // The local part of this org's address on the shared inbound domain
     // (RESEND_INBOUND_DOMAIN): "guzellik" becomes guzellik@mail.example.com.
     // Routing an inbound email to an ORG happens on this, not on the domain,

@@ -132,17 +132,29 @@ export const channel = v.union(
 
 export type Channel = "whatsapp" | "email" | "call";
 
-// The email lane logs under `email_<kind>` (see wa.ts) — the prefix IS the
-// channel marker. Everything else in `messages` rode WhatsApp.
-export function channelOfMessage(kind: string): Channel {
-  return kind.startsWith("email_") ? "email" : "whatsapp";
+// Where a row came from. `form` is an INTAKE, not a channel: somebody filled
+// in a page, which is not something the salon can reach them back on. It
+// therefore lives here and in feedChannel, never in the `channel` union that
+// the inbox's "reachable on" strip reads — same rule as notes.
+export type FeedSource = Channel | "form" | "note";
+
+// The email lane logs under `email_<kind>` (see wa.ts) and the form lane under
+// `form_<kind>` — the prefix IS the marker. Everything else rode WhatsApp.
+export function channelOfMessage(kind: string): Channel | "form" {
+  if (kind.startsWith("email_")) return "email";
+  if (kind.startsWith("form_")) return "form";
+  return "whatsapp";
 }
 
 // What a feed row can be, which is wider than what a channel can be: a note is
 // a row here but it is not something a customer can be reached on. The narrow
 // `channel` union above stays narrow so the inbox list's channel strip can't
 // start claiming a customer was contacted by note.
-export const feedChannel = v.union(channel, v.literal("note"));
+export const feedChannel = v.union(
+  channel,
+  v.literal("form"),
+  v.literal("note"),
+);
 
 const feedItem = v.object({
   id: v.string(),
@@ -250,7 +262,10 @@ export const feedForCustomer = query({
 // customers table on top.
 
 type ConversationEntry = {
-  channel: Channel;
+  // The inbox list's own strip, which answers "how can I reach this person" —
+  // so a form intake counts as one more thing that happened, not as a way
+  // back to them. Narrowed at the push below.
+  channel: Channel | "form";
   at: number;
   direction: "in" | "out";
   body?: string;
@@ -396,7 +411,10 @@ export const conversations = query({
       lastAt: v.number(),
       lastBody: v.optional(v.string()),
       lastDirection: v.union(v.literal("out"), v.literal("in")),
-      lastChannel: channel,
+      // The last thing that HAPPENED, which can be a form arrival. Distinct
+      // from awaitingChannels below, which is only ever real channels because
+      // it answers "where do I reply".
+      lastChannel: feedChannel,
       hasFailed: v.boolean(),
       awaitingReply: v.boolean(),
       // ONE dot, one meaning: somebody still has to look at this row. It
