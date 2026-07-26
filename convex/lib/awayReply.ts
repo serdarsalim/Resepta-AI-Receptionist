@@ -15,6 +15,8 @@
 // start a conversation; a cold "we're open, book here" needs an approved
 // template and belongs nowhere near this file.
 
+import { renderTokens } from "./renderTokens";
+
 type ReplyLanguage = "tr" | "en" | "de";
 
 function resolveLanguage(raw: string | undefined): ReplyLanguage {
@@ -62,11 +64,26 @@ export function awayReplyText(args: {
   publicPhone?: string;
   // customers.language ?? orgs.language — the customer's, not the salon's.
   language?: string;
-  // The org's own wording, used verbatim when set.
+  // The org's own wording, used when set. Tokens in it resolve first.
   override?: string;
+  // Who is being replied to, for those tokens. Absent for a customer we know
+  // nothing about beyond a phone number, which renderTokens handles by
+  // dropping the token rather than printing it.
+  firstName?: string;
 }): string | null {
   const override = args.override?.trim();
-  if (override) return override;
+  // "Merhaba [ad], şu anda kapalıyız" is the whole reason an override exists:
+  // the built-in copy cannot greet somebody by name. An unresolved token
+  // renders as nothing rather than as itself — see lib/renderTokens.
+  if (override) {
+    return (
+      renderTokens(override, {
+        firstName: args.firstName,
+        businessName: args.businessName,
+        phone: args.publicPhone,
+      }) || null
+    );
+  }
 
   const copy = COPY[resolveLanguage(args.language)];
   const url = args.bookingUrl?.trim();

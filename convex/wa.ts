@@ -13,6 +13,7 @@ import { emailLaneConfigured, sendEmail } from "./lib/email";
 import { fetchWaMedia, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { isOrgSetupFailure } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
+import { renderTokens } from "./lib/renderTokens";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -26,11 +27,16 @@ export const loadSessionContext = internalQuery({
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) return null;
-    const waAccount = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .unique();
-    return { customer, waAccount };
+    const [waAccount, org] = await Promise.all([
+      ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .unique(),
+      ctx.db.get(orgId),
+    ]);
+    // org rides along for token rendering ([isletme]); the send itself needs
+    // only the account.
+    return { customer, waAccount, org };
   },
 });
 
@@ -48,14 +54,25 @@ export const sendSession = action({
   },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
-    const body = args.body.trim();
-    if (!body) return { ok: false, reason: "empty" };
+    const raw = args.body.trim();
+    if (!raw) return { ok: false, reason: "empty" };
     const context = await ctx.runQuery(internal.wa.loadSessionContext, {
       customerId: args.customerId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { customer, waAccount } = context;
+    const { customer, waAccount, org } = context;
     if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+    // Free-form session text, so named tokens work here — this is not a Meta
+    // template and nothing about {{1}} applies. Rendered ONCE, at send time,
+    // and the stored row keeps the rendered text: the thread has to show what
+    // the customer actually received, not the recipe for it.
+    const body = renderTokens(raw, {
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      businessName: org?.name,
+      phone: customer.phone,
+    });
+    if (!body) return { ok: false, reason: "empty" };
     if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
     if (
       !customer.lastInboundAt ||
@@ -144,6 +161,7 @@ export const sendAwayReply = internalAction({
       // The CUSTOMER's language, falling back to the org's.
       language: customer.language ?? org.language,
       override: org.autoReplyText,
+      firstName: customer.firstName,
     });
     // Null means no link and no phone are configured, so the message would say
     // "we're closed" and nothing else. The owner's notification is better.

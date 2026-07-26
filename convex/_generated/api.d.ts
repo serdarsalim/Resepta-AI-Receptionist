@@ -33,6 +33,7 @@ import type * as lib_money from "../lib/money.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
 import type * as lib_platformAuth from "../lib/platformAuth.js";
 import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
+import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as messages from "../messages.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   "lib/orgAuth": typeof lib_orgAuth;
   "lib/platformAuth": typeof lib_platformAuth;
   "lib/reminderSchedule": typeof lib_reminderSchedule;
+  "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/waCloud": typeof lib_waCloud;
   messages: typeof messages;

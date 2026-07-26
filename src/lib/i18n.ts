@@ -842,9 +842,9 @@ const dictionary = {
     de: "Ihr eigener Text",
   },
   "settings.autoReplyTextHint": {
-    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın.",
-    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one.",
-    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden.",
+    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın. [ad] ve [isletme] yazarsanız yerine müşterinin adı ve işletmenizin adı geçer.",
+    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one. Write [ad] or [isletme] to drop in the customer's name or your business name.",
+    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden. Mit [ad] oder [isletme] werden Kundenname und Betriebsname eingesetzt.",
   },
   "settings.bookingUrl": {
     tr: "Randevu linki",
