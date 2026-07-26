@@ -623,7 +623,20 @@ function laneOut(rows: CalendarAppointment[]): Placed[] {
 // Three bookings sharing a 160px week column leave ~50px each, which is a
 // sliver with no readable content. Past this many, the cluster stops trying
 // to be a schedule and becomes a count you can click into.
-const CROWDED = 3;
+// Was a flat count: three overlapping bookings collapsed, two split the column
+// and took their chances. In a seven-day week two lanes is ~73px each, which
+// renders "Fatma …" and "Emre Çe…" — a name truncated to nothing and no time
+// at all. The threshold is a WIDTH now, measured against the same
+// NARROW_BLOCK_PX the blocks already use to decide whether they can carry
+// their own content.
+//
+// Never merge overlapping bookings into one block, which is what this looks
+// like it should do — Google, Apple and Outlook all keep them side by side,
+// because a merged block hides which customer it is and gives you nothing to
+// click. Collapsing to a COUNT is different: it admits there is no room and
+// hands you the day view, where a salon gets one column per person the way
+// Fresha and Booksy do.
+const MIN_LANE_PX = 80;
 
 type PlacedItem =
   | { kind: "one"; key: string; row: CalendarAppointment; lane: number; lanes: number }
@@ -632,11 +645,13 @@ type PlacedItem =
 // Day view always draws every booking: its columns are wide, and two bookings
 // in one person's column is a real double-booking worth seeing. Week view
 // folds the crowded clusters, and leaves clusters of one or two alone.
-function placeColumn(rows: CalendarAppointment[], collapse: boolean): PlacedItem[] {
+// `columnPx` is the width one column gets, or 0 to never collapse — day view
+// passes 0 because its clusters would open the day you are already looking at.
+function placeColumn(rows: CalendarAppointment[], columnPx: number): PlacedItem[] {
   const items: PlacedItem[] = [];
   const folded = new Set<string>();
   for (const { row, lane, lanes, cluster } of laneOut(rows)) {
-    if (!collapse || cluster.size < CROWDED) {
+    if (columnPx <= 0 || columnPx / lanes >= MIN_LANE_PX) {
       items.push({ kind: "one", key: row._id, row, lane, lanes });
       continue;
     }
@@ -1096,7 +1111,10 @@ function Calendar({
                     }}
                   />
                 )}
-                {placeColumn(column.rows, view === "week").map((item) => {
+                {placeColumn(
+                  column.rows,
+                  view === "week" ? APPROX_GRID_PX / columns.length : 0,
+                ).map((item) => {
                   if (item.kind === "cluster") {
                     const dayIsPast = column.day < startOfDay(now);
                     const top =
