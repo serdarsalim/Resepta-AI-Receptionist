@@ -127,6 +127,10 @@ export function ConversationPanel({
   // asks a question nobody usually has an answer to.
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduling, setScheduling] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Grows with the message, capped, bottom-anchored — the extra lines push the
+  // field upward the way WhatsApp Web does rather than pushing the thread down.
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   // Grows with what is typed, bottom-anchored and capped, so a three-line note
@@ -242,6 +246,13 @@ export function ConversationPanel({
     if (filter !== "call") setOpenCallId(null);
     setOpenRows(new Set());
   }, [filter]);
+
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  }, [draft, filter]);
 
   useEffect(() => {
     const el = noteDraftRef.current;
@@ -775,12 +786,11 @@ export function ConversationPanel({
       {canCompose && (
         <>
           <form
-            className="flex items-end gap-2 p-3"
+            className="p-3"
             onSubmit={async (event) => {
               event.preventDefault();
-              const formEl = event.currentTarget;
-              const body = String(new FormData(formEl).get("body") ?? "");
-              if (!body.trim()) return;
+              const body = draft.trim();
+              if (!body) return;
               setSending(true);
               setSendError(null);
               const when = scheduleAt ? fromDatetimeLocalValue(scheduleAt) : undefined;
@@ -795,20 +805,39 @@ export function ConversationPanel({
               });
               setSending(false);
               if (result.ok) {
-                formEl.reset();
+                setDraft("");
                 setScheduleAt("");
                 setScheduling(false);
               } else setSendError(result.reason ?? "error");
             }}
           >
+            {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and
+                Send inside a single rounded surface rather than three controls
+                sharing a row. A chat composer should read as somewhere you
+                talk, not as a form with a submit button. */}
+            <div
+              className={`flex items-end gap-1 rounded-3xl bg-[var(--muted-bg)] p-1.5 ${
+                windowOpen ? "" : "opacity-60"
+              }`}
+            >
             <textarea
-              name="body"
-              rows={2}
+              ref={composerRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter sends, Shift+Enter breaks the line — what every chat
+                // app trains people to expect. Without it a two-line message
+                // means finding the mouse.
+                if (event.key !== "Enter" || event.shiftKey) return;
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }}
+              rows={1}
               placeholder={
                 windowOpen ? t("contact.typeMessage") : t("contact.sessionClosed")
               }
               disabled={!windowOpen || sending}
-              className="flex-1 resize-none"
+              className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
             />
             <button
               type="button"
@@ -816,7 +845,7 @@ export function ConversationPanel({
               aria-label={t("message.scheduleAt")}
               aria-pressed={scheduling}
               disabled={!windowOpen || sending}
-              className={`shrink-0 rounded-lg px-2 py-2 transition-colors disabled:opacity-50 ${
+              className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
                 scheduling || scheduleAt
                   ? "text-[var(--accent)]"
                   : "text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -829,11 +858,12 @@ export function ConversationPanel({
             </button>
             <button
               type="submit"
-              disabled={!windowOpen || sending}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
+              disabled={!windowOpen || sending || !draft.trim()}
+              className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {t("contact.send")}
             </button>
+            </div>
           </form>
           {scheduling && (
             <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
