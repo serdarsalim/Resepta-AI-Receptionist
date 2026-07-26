@@ -8,6 +8,8 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
+import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
+import { SearchInput } from "./DataTable";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
 // fixed-height pane, recessed sidebar, floating main card that scrolls
@@ -196,6 +198,134 @@ function PanelLeftIcon({ size = 16 }: { size?: number }) {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M9 3v18" />
     </svg>
+  );
+}
+
+// The header, extracted so it can read the search context — a provider
+// rendered in AppShell's own output is not an ancestor of AppShell's body, so
+// the consumer has to be a child component rather than an inline block.
+//
+// Search sits in the right-hand cluster ahead of the avatar, in the same place
+// on every tab that has one, which is the whole point of moving it out of the
+// views. Below sm it collapses to a magnifier and expands over the title: the
+// phone header has room for a title or a search field, never both, and losing
+// search on phones to gain a fixed position would be a bad trade.
+function ShellHeader({
+  titleKey,
+  closable,
+  onClose,
+  onOpenMenu,
+  name,
+  email,
+  remoteTheme,
+  onOpenAccount,
+}: {
+  titleKey: TranslationKey;
+  closable: boolean;
+  onClose: () => void;
+  onOpenMenu: () => void;
+  name?: string;
+  email?: string;
+  remoteTheme?: Theme;
+  onOpenAccount: () => void;
+}) {
+  const { t } = useLanguage();
+  const { query, setQuery, placeholder } = useHeaderSearchSlot();
+  const [expanded, setExpanded] = useState(false);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (expanded) searchRef.current?.focus();
+  }, [expanded]);
+
+  // A tab with no search box must not leave the phone header stuck in its
+  // expanded state with nothing to type into.
+  useEffect(() => {
+    if (!placeholder) setExpanded(false);
+  }, [placeholder]);
+
+  return (
+    <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
+      <div
+        className={`flex min-w-0 items-center gap-1 ${
+          expanded ? "hidden sm:flex" : "flex"
+        }`}
+      >
+        {/* Phone door to the sidebar. Same panel-left glyph as the collapse
+            toggle, since it opens the same thing. */}
+        <button
+          type="button"
+          onClick={onOpenMenu}
+          aria-label={t("nav.menu")}
+          className="-ml-1 rounded-md p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] md:hidden"
+        >
+          <PanelLeftIcon size={18} />
+        </button>
+        <h1 className="page-title truncate text-sm font-semibold md:text-base">
+          {t(titleKey)}
+        </h1>
+      </div>
+      <div
+        className={`flex items-center gap-2 ${expanded ? "min-w-0 flex-1 sm:flex-none" : ""}`}
+      >
+        {placeholder && !expanded && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label={placeholder}
+            className="rounded-md p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] sm:hidden"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="17"
+              height="17"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+          </button>
+        )}
+        {placeholder && (
+          <div
+            className={
+              expanded ? "min-w-0 flex-1 sm:w-56 sm:flex-none" : "hidden sm:block sm:w-56"
+            }
+          >
+            <SearchInput
+              ref={searchRef}
+              value={query}
+              onChange={setQuery}
+              placeholder={placeholder}
+              onBlur={() => {
+                // Collapse only when it would take nothing with it.
+                if (!query) setExpanded(false);
+              }}
+            />
+          </div>
+        )}
+        {closable && (
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            ×
+          </button>
+        )}
+        <UserMenu
+          name={name}
+          email={email}
+          remoteTheme={remoteTheme}
+          onOpenAccount={onOpenAccount}
+        />
+      </div>
+    </header>
   );
 }
 
@@ -774,6 +904,9 @@ export function AppShell({
   if (settings && settings.org.name === "") return <OnboardingGate />;
 
   return (
+    // Above both the header and the views: the box is rendered up here, the
+    // filtering happens down there, so the query has to sit over the pair.
+    <HeaderSearchProvider>
     <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
       {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
           keeps pointer-events off while closed so it never eats a tap. */}
@@ -869,41 +1002,16 @@ export function AppShell({
 
       {/* Floating content card; scrolls internally (min-h-0 is load-bearing). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] md:rounded-xl md:border md:border-[var(--border)]">
-        <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
-          <div className="flex min-w-0 items-center gap-1">
-            {/* Phone door to the sidebar. Same panel-left glyph as the collapse
-                toggle, since it opens the same thing. */}
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              aria-label={t("nav.menu")}
-              className="-ml-1 rounded-md p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] md:hidden"
-            >
-              <PanelLeftIcon size={18} />
-            </button>
-            <h1 className="page-title truncate text-sm font-semibold md:text-base">
-              {t(titleKey)}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {(tab === "settings" || tab === "business" || tab === "account") && (
-              <button
-                type="button"
-                aria-label={t("common.close")}
-                onClick={() => onTab("appointments")}
-                className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                ×
-              </button>
-            )}
-            <UserMenu
-              name={settings?.me.name}
-              email={settings?.me.email}
-              remoteTheme={settings?.me.themePreference}
-              onOpenAccount={() => onTab("account")}
-            />
-          </div>
-        </header>
+        <ShellHeader
+          titleKey={titleKey}
+          closable={tab === "settings" || tab === "business" || tab === "account"}
+          onClose={() => onTab("appointments")}
+          onOpenMenu={() => setMobileOpen(true)}
+          name={settings?.me.name}
+          email={settings?.me.email}
+          remoteTheme={settings?.me.themePreference}
+          onOpenAccount={() => onTab("account")}
+        />
         <main className="thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
           {children}
         </main>
@@ -933,5 +1041,6 @@ export function AppShell({
         </nav>
       </div>
     </div>
+    </HeaderSearchProvider>
   );
 }

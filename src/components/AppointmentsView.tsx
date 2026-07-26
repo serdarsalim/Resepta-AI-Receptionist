@@ -6,13 +6,13 @@ import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
 import type { TranslationKey } from "@/lib/i18n";
 import {
   formatDayHeading,
   formatTime,
   localeFor,
 } from "@/lib/datetime";
-import { useSearch } from "@/lib/useTableState";
 import {
   SNAP_MINUTES,
   advanceDrag,
@@ -21,7 +21,6 @@ import {
   type DragGeometry,
 } from "@/lib/calendarDrag";
 import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
-import { SearchInput } from "./DataTable";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -57,7 +56,10 @@ export function AppointmentsView({
   // The day the calendar is looking at. Day view steps it by one, week view
   // by seven, so one piece of state serves both.
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
-  const search = useSearch();
+  // Only the list can be searched: filtering a week grid by name would
+  // leave holes in a layout whose whole job is showing the shape of the
+  // week, so the calendar views release the header's box entirely.
+  const search = useHeaderSearch(view === "list" ? t("appointments.search") : null);
 
   // Two weeks back → six weeks forward covers the list AND every reachable
   // week-view page from one subscription.
@@ -196,14 +198,6 @@ export function AppointmentsView({
       }
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {view === "list" && (
-          <SearchInput
-            value={search.query}
-            onChange={search.setQuery}
-            placeholder={t("appointments.search")}
-            className="w-full sm:mr-auto sm:w-64"
-          />
-        )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
         {/* Segmented control, not loose pills: three views of one thing read
             as one control. Selected sits on --background so it stays visible

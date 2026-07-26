@@ -478,11 +478,17 @@ export function SearchInput({
   onChange,
   placeholder,
   className = "",
+  ref,
+  onBlur,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   className?: string;
+  // The header owns focus for the phone's expand-to-search, so it needs a
+  // handle on the field and a say in when the field gives focus back.
+  ref?: React.Ref<HTMLInputElement>;
+  onBlur?: () => void;
 }) {
   const t = useT();
   return (
@@ -502,10 +508,12 @@ export function SearchInput({
         <path d="m20 20-3.5-3.5" />
       </svg>
       <input
+        ref={ref}
         // Not type="search": WebKit paints its own clear button next to ours.
         type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         aria-label={placeholder}
         // 16px floor below sm: iOS Safari zooms the viewport under it.

@@ -10,11 +10,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { FeedIcon, CHANNELS, type Channel } from "./FeedIcon";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import type { TranslationKey } from "@/lib/i18n";
-import { useSearch } from "@/lib/useTableState";
-import { SearchInput } from "./DataTable";
 
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -40,7 +39,7 @@ export function InboxView({
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
   const setAttention = useMutation(api.messages.setAttention);
-  const search = useSearch();
+  const search = useHeaderSearch(t("inbox.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
@@ -82,16 +81,12 @@ export function InboxView({
         >
           {/* This fixed-height track mirrors the right column's name +
               channel-pills row so both card borders start on the same
-              horizontal line. It used to be deliberately empty; search is the
-              right tenant for height the layout already spends. */}
-          <div className="flex h-9 shrink-0 items-center pb-1">
-            <SearchInput
-              value={search.query}
-              onChange={search.setQuery}
-              placeholder={t("inbox.search")}
-              className="w-full"
-            />
-          </div>
+              horizontal line, which is the whole reason it exists. It held the
+              search box for a while; search now lives in the header with every
+              other tab's, so the track is back to spending its height on
+              alignment alone. Load-bearing despite being empty — delete it and
+              the two cards stop lining up. */}
+          <div className="h-9 shrink-0 pb-1" aria-hidden />
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
             {conversations === undefined ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">

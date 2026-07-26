@@ -90,10 +90,13 @@ export type Search = {
   matches: (...values: Array<string | number | null | undefined>) => boolean;
 };
 
-// The search primitive. Deliberately not table-specific: the appointments list
-// and the inbox conversation list feed it their own strings.
-export function useSearch(): Search {
-  const [query, setQuery] = useState("");
+// The matching half, over query state somebody else owns. Split out because
+// the search BOX now lives in the app header while the list that reacts to it
+// lives in a view — see useHeaderSearch, which holds the state in between.
+export function useSearchFrom(
+  query: string,
+  setQuery: (query: string) => void,
+): Search {
   const folded = foldSearch(query.trim());
   const matches = useCallback(
     (...values: Array<string | number | null | undefined>) => {
@@ -108,6 +111,14 @@ export function useSearch(): Search {
     [folded],
   );
   return { query, setQuery, active: folded.length > 0, matches };
+}
+
+// The search primitive for a list that owns its own box. Deliberately not
+// table-specific: the appointments list and the inbox conversation list feed
+// it their own strings.
+export function useSearch(): Search {
+  const [query, setQuery] = useState("");
+  return useSearchFrom(query, setQuery);
 }
 
 // Blanks sort last in BOTH directions. Flipping the direction is meant to

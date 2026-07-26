@@ -10,11 +10,11 @@ import { formatAge, localeFor } from "@/lib/datetime";
 import {
   compareCells,
   moveKey,
-  useSearch,
   useTableState,
   type CellValue,
 } from "@/lib/useTableState";
-import { ColumnPicker, HeaderFilter, MenuItem, SearchInput, Th } from "./DataTable";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
+import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
 
 type Customer = FunctionReturnType<typeof api.customers.list>[number];
@@ -105,7 +105,7 @@ export function CustomersView({
   const [error, setError] = useState<string | null>(null);
 
   const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
-  const search = useSearch();
+  const search = useHeaderSearch(t("customers.search"));
 
   const fields: ContactField[] = useMemo(() => contactFields ?? [], [contactFields]);
   const fieldByKey = useMemo(
@@ -327,14 +327,8 @@ export function CustomersView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {hasCustomers && (
-          <SearchInput
-            value={search.query}
-            onChange={search.setQuery}
-            placeholder={t("customers.search")}
-            className="w-full sm:w-64"
-          />
-        )}
+        {/* Search moved to the header, where it is in the same place on
+            every tab. What is left here belongs to this table specifically. */}
         <div className="ml-auto flex items-center gap-2">
           {/* The picker belongs to the table, and below sm there is no table. */}
           {hasCustomers && (
