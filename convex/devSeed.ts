@@ -33,12 +33,33 @@ const SERVICES: { name: string; durationMinutes: number; price: number }[] = [
 ];
 const STAFF = ["Hülya", "Murat", "Ebru"];
 
+// Voice calls. Seeded because the call lane is otherwise the one channel with
+// no sample data, which meant its UI could only ever be checked against an
+// empty state. Shapes match what the Retell webhook writes.
+const CALLS = [
+  {
+    outcome: "Randevu alındı",
+    summary:
+      "Müşteri cumartesi için saç kesimi randevusu istedi. 14:00 uygun bulundu ve onaylandı.",
+    transcript:
+      "Ajan: Merhaba, Autotakt. Size nasıl yardımcı olabilirim?\nMüşteri: Cumartesi saç kesimi için yer var mı?\nAjan: 14:00 uygun görünüyor, ayarlayayım mı?\nMüşteri: Olur, teşekkürler.",
+    durationSec: 95,
+  },
+  {
+    outcome: "Cevapsız",
+    summary: "Müşteri açmadı, sesli mesaj bırakıldı.",
+    transcript: undefined,
+    durationSec: 18,
+  },
+];
+
 export const seed = internalMutation({
   args: { orgId: v.optional(v.id("orgs")), force: v.optional(v.boolean()) },
   returns: v.object({
     customers: v.number(),
     appointments: v.number(),
     messages: v.number(),
+    calls: v.number(),
   }),
   handler: async (ctx, args) => {
     const org = args.orgId
@@ -51,6 +72,37 @@ export const seed = internalMutation({
       .withIndex("by_org", (q) => q.eq("orgId", org._id))
       .first();
     if (existing && !args.force) throw new Error("already-seeded (pass force:true)");
+
+    // force means RESEED, not "seed again on top". Without this it stacked a
+    // second copy of every customer and appointment onto the first, which is
+    // never what anyone passing the flag wanted.
+    if (args.force) {
+      // Listed one by one rather than looped over a table-name array: Convex
+      // types each index per table, so the loop version loses the type and
+      // would happily accept a table that has no by_org.
+      const orgId = org._id;
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      const calls = await ctx.db
+        .query("calls")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      // appointments indexes on (orgId, startAt) rather than orgId alone —
+      // an org-only index would duplicate the prefix of this one.
+      const appointments = await ctx.db
+        .query("appointments")
+        .withIndex("by_org_start", (q) => q.eq("orgId", orgId))
+        .collect();
+      const olderCustomers = await ctx.db
+        .query("customers")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      for (const row of [...messages, ...calls, ...appointments, ...olderCustomers]) {
+        await ctx.db.delete(row._id);
+      }
+    }
 
     // Services (idempotent-ish: only when none exist)
     const hasServices = await ctx.db
@@ -90,6 +142,7 @@ export const seed = internalMutation({
 
     const now = Date.now();
     const HOUR = 3600_000;
+    let callCount = 0;
     const DAY = 24 * HOUR;
     let appointmentCount = 0;
     let messageCount = 0;
@@ -197,9 +250,35 @@ export const seed = internalMutation({
           }
         }
       }
+
+      // Every fifth customer also rang. Enough to populate the call tab for a
+      // handful of records without making voice look like the main channel,
+      // which it isn't.
+      if (i % 5 === 0) {
+        for (const [index, call] of CALLS.entries()) {
+          await ctx.db.insert("calls", {
+            orgId: org._id,
+            customerId,
+            direction: index === 0 ? "inbound" : "outbound",
+            fromNumber: phone,
+            startedAt: now - (i + index + 1) * HOUR,
+            durationSec: call.durationSec,
+            outcome: call.outcome,
+            summary: call.summary,
+            ...(call.transcript ? { transcript: call.transcript } : {}),
+            retellCallId: `seed-call-${i}-${index}`,
+          });
+          callCount++;
+        }
+      }
     }
 
-    return { customers: 20, appointments: appointmentCount, messages: messageCount };
+    return {
+      customers: 20,
+      appointments: appointmentCount,
+      messages: messageCount,
+      calls: callCount,
+    };
   },
 });
 

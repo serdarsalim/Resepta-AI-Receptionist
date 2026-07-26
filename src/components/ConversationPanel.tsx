@@ -12,6 +12,12 @@ import { normalizeSubject } from "../../convex/lib/emailInbound";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
+// 95 seconds reads as 1:35, not "95s". Shared by the call list and the call
+// detail so the same call never wears two different lengths.
+function formatDuration(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 // Delivery state is a storage word ("failed"), not a UI word. Same for the
 // reason slug the send action hands back. Both get translated here; an
 // inbound's "received" has no entry because we never label incoming messages.
@@ -119,6 +125,9 @@ export function ConversationPanel({
     key: string;
     subject: string;
   } | null>(null);
+  // The call tab mirrors the email tab: a list you scan, then one call you
+  // read. Same navigation, so learning one teaches the other.
+  const [openCallId, setOpenCallId] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
@@ -173,9 +182,16 @@ export function ConversationPanel({
         )
       : [];
 
+  const openCall =
+    filter === "call" && openCallId
+      ? visible.find((item) => item.id === openCallId)
+      : undefined;
+
   const inScope = openThread
     ? visible.filter((item) => threadKeyOf(item) === openThread.key)
-    : visible;
+    : openCall
+      ? [openCall]
+      : visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
 
   useEffect(() => {
@@ -188,6 +204,7 @@ export function ConversationPanel({
   // conversation you navigated away from reads as the app losing its place.
   useEffect(() => {
     if (filter !== "email") setOpenThread(null);
+    if (filter !== "call") setOpenCallId(null);
   }, [filter]);
 
   const windowOpen =
@@ -320,6 +337,33 @@ export function ConversationPanel({
           )}
         </div>
       )}
+      {/* Call tab header, the email tab's shape: the list needs no chrome, an
+          open call gets back-arrow + outcome + when. There is no compose here
+          on purpose — placing a call is Retell's job, not a button in a
+          conversation pane. */}
+      {filter === "call" && openCall && (
+        <div className="flex shrink-0 items-center gap-2 px-3 pt-3">
+          <button
+            type="button"
+            onClick={() => setOpenCallId(null)}
+            aria-label={t("common.back")}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+          </button>
+          {"outcome" in openCall && openCall.outcome && (
+            <span className="shrink-0 rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]">
+              {openCall.outcome}
+            </span>
+          )}
+          <h3 className="min-w-0 truncate text-sm font-semibold">
+            {formatDateTime(openCall.at, language)}
+          </h3>
+        </div>
+      )}
       {filter === "note" && (
         <div className="shrink-0 p-3 pb-0">
           <div className="flex items-end gap-2 rounded-xl bg-[var(--muted-bg)] p-1.5">
@@ -351,7 +395,11 @@ export function ConversationPanel({
         )}
         {feed !== undefined && thread.length === 0 && (
           <p className="text-sm text-[var(--muted)]">
-            {filter === "note" ? t("notes.none") : t("messages.none")}
+            {filter === "note"
+              ? t("notes.none")
+              : filter === "call"
+                ? t("calls.none")
+                : t("messages.none")}
           </p>
         )}
         {/* Email index: one row per conversation, flush like a mail client
@@ -390,8 +438,52 @@ export function ConversationPanel({
               </span>
             </button>
           ))}
-        {filter === "email" && !openThread ? null : thread.map((item, index) => {
-          if (item.channel === "call") return <CallEntry key={item.id} item={item} />;
+        {/* Call index: flush rows like the email tab. A call is not a chat
+            bubble — it is a record with a summary, a transcript and a
+            recording, and scanning "what happened" beats reading four cards. */}
+        {filter === "call" && !openCall &&
+          thread.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setOpenCallId(item.id)}
+              className="-mx-4 flex w-[calc(100%+2rem)] items-start gap-2 border-b border-[var(--border)] px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+            >
+              <FeedIcon type="call" size={13} />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm">
+                    {("direction" in item ? item.direction : undefined) === "in"
+                      ? t("calls.inbound")
+                      : t("calls.outbound")}
+                  </span>
+                  {"outcome" in item && item.outcome && (
+                    <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+                      {item.outcome}
+                    </span>
+                  )}
+                  {"durationSec" in item && item.durationSec !== undefined && (
+                    <span className="text-xs text-[var(--muted)]">
+                      {formatDuration(item.durationSec)}
+                    </span>
+                  )}
+                </span>
+                {"summary" in item && item.summary && (
+                  <span className="block truncate text-xs text-[var(--muted)]">
+                    {item.summary}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-xs text-[var(--muted)]">
+                {formatDateTime(item.at, language)}
+              </span>
+            </button>
+          ))}
+        {(filter === "email" && !openThread) || (filter === "call" && !openCall)
+          ? null
+          : thread.map((item, index) => {
+          if (item.channel === "call")
+            return <CallEntry key={item.id} item={item} detail={filter === "call"} />;
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
@@ -626,9 +718,15 @@ function NoteEntry({
 
 // A call is a full-width card, not a chat bubble — it carries a summary, a
 // transcript, and a recording, none of which fit the bubble rhythm.
+//
+// `detail` is the same card opened deliberately from the call tab rather than
+// scrolled past in the mixed feed: transcript open, recording playable in
+// place, and no repeat of what the pane header already says.
 function CallEntry({
   item,
+  detail = false,
 }: {
+  detail?: boolean;
   item: {
     at: number;
     direction?: "in" | "out";
@@ -640,36 +738,55 @@ function CallEntry({
   };
 }) {
   const { t, language } = useLanguage();
-  const duration = item.durationSec
-    ? `${Math.floor(item.durationSec / 60)}:${String(item.durationSec % 60).padStart(2, "0")}`
-    : null;
+  const duration =
+    item.durationSec !== undefined ? formatDuration(item.durationSec) : null;
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-        <FeedIcon type="call" size={13} />
-        <span>{item.direction === "in" ? t("calls.inbound") : t("calls.outbound")}</span>
-        <span>{formatDateTime(item.at, language)}</span>
-        {duration && <span>· {duration}</span>}
-        {item.outcome && (
-          <span className="rounded-full bg-[var(--card)] px-2 py-0.5">
-            {item.outcome}
-          </span>
-        )}
-        {item.recordingUrl && (
-          <a
-            href={item.recordingUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto text-[var(--accent)] hover:underline"
-          >
-            {t("calls.recording")}
-          </a>
-        )}
-      </div>
+      {/* Header line repeats direction and time only when this card is riding
+          in the mixed feed. Inside the call tab the pane's own header already
+          said both, and saying them twice made the card look like a second
+          call. */}
+      {!detail && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+          <FeedIcon type="call" size={13} />
+          <span>{item.direction === "in" ? t("calls.inbound") : t("calls.outbound")}</span>
+          <span>{formatDateTime(item.at, language)}</span>
+          {duration && <span>· {duration}</span>}
+          {item.outcome && (
+            <span className="rounded-full bg-[var(--card)] px-2 py-0.5">
+              {item.outcome}
+            </span>
+          )}
+        </div>
+      )}
+      {detail && duration && (
+        <p className="text-xs text-[var(--muted)]">{duration}</p>
+      )}
       {item.summary && <p className="mt-1">{item.summary}</p>}
+      {item.recordingUrl && (
+        <>
+          {/* In the detail view the recording PLAYS here rather than opening a
+              tab: the transcript is right underneath, and listening while
+              reading is the whole reason anyone opens a call. */}
+          {detail ? (
+            <audio controls src={item.recordingUrl} className="mt-2 h-9 w-full" />
+          ) : (
+            <a
+              href={item.recordingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline"
+            >
+              {t("calls.recording")}
+            </a>
+          )}
+        </>
+      )}
       {item.transcript && (
-        <details className="mt-1">
+        // Open by default in the detail view — you navigated here to read it.
+        // Collapsed in the mixed feed, where it would bury everything after.
+        <details className="mt-1" open={detail}>
           <summary className="cursor-pointer text-xs text-[var(--muted)]">
             {t("calls.transcript")}
           </summary>
