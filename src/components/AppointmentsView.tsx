@@ -510,8 +510,10 @@ function RowMenu({
 // brain (spec, Phase D), so nothing here writes a slot.
 
 const HOUR_PX = 56; // one hour of column height; a 30-min booking is 28px
+// Not the grid's bounds any more — the grid is a full 24 hours. This is where
+// the view SCROLLS to when a period holds no bookings, so an empty week opens
+// on the working morning instead of on midnight.
 const DEFAULT_DAY_START = 8;
-const DEFAULT_DAY_END = 21;
 const DEFAULT_DURATION = 30;
 const DAY_MS = 86_400_000;
 
@@ -775,21 +777,15 @@ function Calendar({
     return byStaff;
   }, [view, days, visible, locale, t]);
 
-  // The grid opens on the working day and stretches only for bookings that
-  // fall outside it, so an 08:00 salon never scrolls past six empty hours.
-  const [dayStart, dayEnd] = useMemo(() => {
-    let first = DEFAULT_DAY_START;
-    let last = DEFAULT_DAY_END;
-    for (const a of visible) {
-      const start = Math.floor(minutesInto(a.startAt) / 60);
-      const end = Math.ceil(
-        (minutesInto(a.startAt) + (a.durationMinutes ?? DEFAULT_DURATION)) / 60,
-      );
-      first = Math.min(first, start);
-      last = Math.max(last, end);
-    }
-    return [Math.max(0, first), Math.min(24, Math.max(last, first + 1))];
-  }, [visible]);
+  // A full 24-hour day, like every calendar a salon owner already uses. It used
+  // to open on the working day and stretch only for bookings outside it, which
+  // meant the grid silently changed height as the week changed — 08:00 one
+  // week, 06:00 the next, and a booking dragged to 07:00 moved every row on
+  // screen. A fixed day is worth the scroll.
+  //
+  // The scroll position is what makes this liveable: see the effect below,
+  // which lands on the first booking rather than on midnight.
+  const [dayStart, dayEnd] = [0, 24];
 
   const hours = [...Array(dayEnd - dayStart)].map((_, i) => dayStart + i);
   const gridHeight = hours.length * HOUR_PX;
@@ -1004,7 +1000,7 @@ function Calendar({
       <div ref={scrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           ref={gridRef}
-          className="flex"
+          className="flex border-b border-[var(--border)]"
           style={{ height: gridHeight, touchAction: drag ? "none" : undefined }}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
