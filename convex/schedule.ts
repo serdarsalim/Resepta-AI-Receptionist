@@ -10,6 +10,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireOrg, assertE164 } from "./lib/orgAuth";
 import { cancelBooking, createBooking, rescheduleBooking } from "./lib/calcomApi";
 import { scheduleConfirmationIfConfigured } from "./appointments";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { queueOrgAlert } from "./lib/alerts";
 
 const lineInput = v.object({
@@ -205,6 +206,9 @@ export const finishCreate = internalMutation({
       source: "manual",
       externalUid: args.externalUid,
     });
+    // Arms the reminder cron for this booking (lib/reminderSchedule.ts). A row
+    // inserted without this never reminds anybody.
+    await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
     return appointmentId;
   },

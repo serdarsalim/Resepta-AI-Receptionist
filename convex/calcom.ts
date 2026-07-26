@@ -10,6 +10,7 @@ import { requireOwner } from "./lib/orgAuth";
 import { scheduleConfirmationIfConfigured } from "./appointments";
 import { cancelBooking } from "./lib/calcomApi";
 import { queueOrgAlert } from "./lib/alerts";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
 // themselves there); Randevu is the WhatsApp layer on top. The org is resolved
@@ -109,7 +110,10 @@ export const handleCalcomEvent = internalMutation({
     if (!existing && previousUid) existing = await findByUid(previousUid);
 
     if (triggerEvent === "BOOKING_CANCELLED") {
-      if (existing) await ctx.db.patch(existing._id, { status: "cancelled" });
+      if (existing) {
+        await ctx.db.patch(existing._id, { status: "cancelled" });
+        await syncAppointmentSchedule(ctx, existing._id);
+      }
       return { ok: true };
     }
 
@@ -132,6 +136,7 @@ export const handleCalcomEvent = internalMutation({
         reminderSentOffsets: [],
         confirmationSentAt: undefined,
       });
+      await syncAppointmentSchedule(ctx, existing._id);
       await scheduleConfirmationIfConfigured(ctx, org._id, existing._id);
       return { ok: true };
     }
@@ -166,6 +171,7 @@ export const handleCalcomEvent = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { startAt, durationMinutes });
+      await syncAppointmentSchedule(ctx, existing._id);
       return { ok: true };
     }
 
@@ -179,6 +185,7 @@ export const handleCalcomEvent = internalMutation({
       source: "calcom",
       externalUid: uid,
     });
+    await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, org._id, appointmentId);
     return { ok: true };
   },

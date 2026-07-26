@@ -28,6 +28,7 @@ import type * as lib_format from "../lib/format.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
+import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   "lib/metaSig": typeof lib_metaSig;
   "lib/money": typeof lib_money;
   "lib/orgAuth": typeof lib_orgAuth;
+  "lib/reminderSchedule": typeof lib_reminderSchedule;
   "lib/waCloud": typeof lib_waCloud;
   messages: typeof messages;
   notes: typeof notes;

@@ -6,6 +6,7 @@ import { applyWamidStatus, logInboundRow } from "./messages";
 import { nextUpcomingOf } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // Meta's session window: one away-reply per window, not per message.
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -219,6 +220,9 @@ export const handleWhatsappEvent = internalMutation({
           // accepted, so there is nothing to tell it.
           if (intent === "confirm") {
             await ctx.db.patch(appointment._id, { status: "confirmed" });
+            // Confirmed is still a live booking, so reminders continue — but
+            // the recompute has to run or the field drifts from the row.
+            await syncAppointmentSchedule(ctx, appointment._id);
             continue;
           }
 
@@ -239,6 +243,7 @@ export const handleWhatsappEvent = internalMutation({
           }
           // A walk-in typed in by hand exists nowhere but here.
           await ctx.db.patch(appointment._id, { status: "cancelled" });
+          await syncAppointmentSchedule(ctx, appointment._id);
         }
       }
     }

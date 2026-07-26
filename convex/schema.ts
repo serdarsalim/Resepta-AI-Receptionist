@@ -325,6 +325,25 @@ export default defineSchema({
     // cron stamps an offset here BEFORE scheduling the send — that ordering is
     // the double-send guard across overlapping ticks.
     reminderSentOffsets: v.optional(v.array(v.number())),
+    // When this appointment next wants to send the customer something —
+    // the earliest unsent reminder while it is live, or the winback once it
+    // ends as a no_show. ONE field for both because the cron's question is the
+    // same either way ("who is due?") and the status on the row already says
+    // which kind is owed.
+    //
+    // Denormalised on purpose: without it the cron has to scan every
+    // appointment starting in the next week ACROSS ALL ORGS to find the
+    // handful that are due, which is work proportional to how many salons
+    // exist rather than to how much there is to do. Unset means nothing is
+    // owed — cancelled, completed, already fully reminded — and unset rows are
+    // excluded from the index range the cron reads, so they cost nothing.
+    //
+    // Every write that moves startAt, status, reminderSentOffsets or
+    // winbackSentAt must call syncAppointmentSchedule (lib/reminderSchedule.ts)
+    // after patching. It is idempotent and recomputes from scratch, so calling
+    // it twice is free and reminders.reconcile repairs anything a future write
+    // path forgets.
+    nextMessageAt: v.optional(v.number()),
     confirmationSentAt: v.optional(v.number()),
     winbackSentAt: v.optional(v.number()),
     // Intake: unset = typed into Randevu; "calcom" = arrived via the cal.com
@@ -343,7 +362,14 @@ export default defineSchema({
     .index("by_org_start", ["orgId", "startAt"])
     .index("by_start", ["startAt"])
     .index("by_customer", ["customerId"])
-    .index("by_org_external", ["orgId", "externalUid"]),
+    .index("by_org_external", ["orgId", "externalUid"])
+    // Cross-org cron reads. Status first so a sweep for the few appointments
+    // in a given state skips the overwhelming majority that are already
+    // settled: completePast wants only rows still live after their day ended.
+    .index("by_status_start", ["status", "startAt"])
+    // Due sends, cheapest read in the app: the cron asks for rows whose next
+    // message has come due and gets back exactly those.
+    .index("by_next_message", ["nextMessageAt"]),
 
   // One WhatsApp Cloud API number per org (Meta Business number, not personal).
   waAccounts: defineTable({

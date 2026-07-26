@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // Dev-only demo data: 20 Turkish salon customers, services, a week of
 // appointments in both directions, and a believable message history. Run
@@ -233,6 +234,7 @@ export const seed = internalMutation({
           reminderSentOffsets: reminded ? [24] : undefined,
           confirmationSentAt: consented ? startAt - 2 * DAY : undefined,
         });
+        await syncAppointmentSchedule(ctx, appointmentId);
         appointmentCount++;
 
         // Message history for consented customers.

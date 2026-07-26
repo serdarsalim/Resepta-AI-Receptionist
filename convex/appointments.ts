@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { appointmentStatus } from "./schema";
 import { requireOrg } from "./lib/orgAuth";
 import { getLocalPartsSafe } from "./lib/businessHours";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // A line as the client asks for it: which service, and optionally what it
 // actually cost this time. Everything else on the stored line — the name, the
@@ -219,6 +220,9 @@ export const setStatus = mutation({
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
     await ctx.db.patch(args.appointmentId, { status: args.status });
+    // Status decides what is owed: marking a no_show arms the winback,
+    // cancelling disarms every reminder still queued behind it.
+    await syncAppointmentSchedule(ctx, args.appointmentId);
     return null;
   },
 });
@@ -262,6 +266,7 @@ export const markCancelled = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.patch(args.appointmentId, { status: "cancelled" });
+    await syncAppointmentSchedule(ctx, args.appointmentId);
     return null;
   },
 });
@@ -290,6 +295,8 @@ export const markRescheduled = internalMutation({
         : {}),
       ...(args.externalUid ? { externalUid: args.externalUid } : {}),
     });
+    // New time, cleared offsets — every reminder is owed again from scratch.
+    await syncAppointmentSchedule(ctx, args.appointmentId);
     await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
     return null;
   },
@@ -343,6 +350,7 @@ export const updateDetails = mutation({
     if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
     await ctx.db.patch(args.appointmentId, patch);
+    if (args.status !== undefined) await syncAppointmentSchedule(ctx, args.appointmentId);
     return null;
   },
 });
@@ -359,35 +367,54 @@ export const updateDetails = mutation({
 // The cut is the END OF THE DAY in the ORG's timezone, not startAt + duration.
 // An owner has until closing to mark who didn't turn up; marking someone
 // completed while they are still in the chair would be worse than waiting.
+// Reads by (status, startAt) so it sees ONLY bookings still sitting live in
+// the past — the set it might actually change, which drains as it works rather
+// than growing with the calendar. Reading the whole two-week window and
+// discarding the settled rows was work proportional to how many orgs exist,
+// and the .take() that bounded it truncated in silence: past enough salons,
+// the ones sorting last never completed at all. Same failure the reminder scan
+// had (see lib/reminderSchedule.ts).
 export const completePast = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
     const now = Date.now();
     const orgCache = new Map<Id<"orgs">, Doc<"orgs"> | null>();
-    // Bounded like reminders.tick: two weeks covers a salon that was away, and
-    // anything older is a backlog no cron should quietly rewrite.
-    const past = await ctx.db
-      .query("appointments")
-      .withIndex("by_start", (q) =>
-        q.gt("startAt", now - 14 * 24 * 3600_000).lt("startAt", now),
-      )
-      .take(500);
-    for (const appointment of past) {
-      if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
-        continue;
+    // Two weeks covers a salon that was away; anything older is a backlog no
+    // cron should quietly rewrite.
+    const from = now - 14 * 24 * 3600_000;
+    let handled = 0;
+
+    for (const status of ["scheduled", "confirmed"] as const) {
+      const past = await ctx.db
+        .query("appointments")
+        .withIndex("by_status_start", (q) =>
+          q.eq("status", status).gt("startAt", from).lt("startAt", now),
+        )
+        .take(500);
+      for (const appointment of past) {
+        let org = orgCache.get(appointment.orgId);
+        if (org === undefined) {
+          org = await ctx.db.get(appointment.orgId);
+          orgCache.set(appointment.orgId, org);
+        }
+        if (!org) continue;
+        const then = getLocalPartsSafe(appointment.startAt, org.timezone);
+        const today = getLocalPartsSafe(now, org.timezone);
+        const sameDay = then.y === today.y && then.m0 === today.m0 && then.d === today.d;
+        if (sameDay) continue;
+        await ctx.db.patch(appointment._id, { status: "completed" });
+        // Completing settles the booking: no reminder is owed any more, and a
+        // stale due time would keep the row in the cron's read forever.
+        await syncAppointmentSchedule(ctx, appointment._id);
+        handled += 1;
       }
-      let org = orgCache.get(appointment.orgId);
-      if (org === undefined) {
-        org = await ctx.db.get(appointment.orgId);
-        orgCache.set(appointment.orgId, org);
-      }
-      if (!org) continue;
-      const then = getLocalPartsSafe(appointment.startAt, org.timezone);
-      const today = getLocalPartsSafe(now, org.timezone);
-      const sameDay = then.y === today.y && then.m0 === today.m0 && then.d === today.d;
-      if (sameDay) continue;
-      await ctx.db.patch(appointment._id, { status: "completed" });
+    }
+
+    // Drained a full page of one status — come back rather than waiting an
+    // hour with a backlog still standing.
+    if (handled >= 500) {
+      await ctx.scheduler.runAfter(0, internal.appointments.completePast, {});
     }
     return null;
   },

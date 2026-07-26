@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
@@ -6,6 +7,10 @@ import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
 export const DEFAULT_QUIET_HOURS = [9, 21] as const;
+// Days after a no_show before the winback goes out. Two weeks: long enough
+// that it doesn't read as nagging someone who just missed an appointment,
+// short enough that the salon is still the one they think of.
+export const DEFAULT_WINBACK_DAYS = 14;
 
 const templateStatus = v.union(
   v.literal("draft"),
@@ -278,6 +283,19 @@ export const update = mutation({
       patch.staffLabel = args.staffLabel.trim() || undefined;
     }
     await ctx.db.patch(orgId, patch);
+
+    // Reminder timing and the winback are baked into each appointment's
+    // nextMessageAt (lib/reminderSchedule.ts), so changing them here leaves
+    // every existing booking holding a due time derived from the OLD setting.
+    // Re-derive this org's future calendar in the background — bounded to one
+    // org, and the only write path that needs a sweep rather than a recompute.
+    if (
+      patch.reminderOffsetsHours !== undefined ||
+      patch.winbackEnabled !== undefined ||
+      patch.winbackDaysAfter !== undefined
+    ) {
+      await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
+    }
     return null;
   },
 });

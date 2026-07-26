@@ -9,6 +9,7 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
+import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // Voice lane (spec Phase C): one Retell agent per org. Function calls and the
 // post-call webhook resolve the org by retellAgentId — never by caller number.
@@ -136,6 +137,7 @@ export const voiceBook = internalMutation({
       source: "voice",
       externalUid: args.externalUid,
     });
+    await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
     return appointmentId;
   },
