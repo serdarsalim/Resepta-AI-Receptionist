@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/lib/LanguageProvider";
+import {
+  currencySymbol,
+  formatMoney,
+  moneyInputValue,
+  parseMoney,
+} from "@/lib/money";
 import { toDatetimeLocalValue, fromDatetimeLocalValue } from "@/lib/datetime";
 import { PhoneInput } from "./PhoneField";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -22,7 +28,9 @@ export type ModalDraft = {
   customerId?: Id<"customers">;
   customerName?: string;
   phone?: string;
-  serviceId?: Id<"services"> | null;
+  // The visit's line items. One entry per service delivered; prices are minor
+  // units, absent when the line was never priced.
+  lines?: { serviceId: Id<"services">; price?: number }[];
   staffId?: Id<"staff"> | null;
   notes?: string;
   status?: string;
@@ -33,7 +41,7 @@ export type ModalSubmit = {
   durationMinutes: number;
   customerId?: Id<"customers">;
   newCustomer?: { firstName: string; lastName?: string; phone: string; consent: boolean };
-  serviceId?: Id<"services"> | null;
+  lines: { serviceId: Id<"services">; price?: number }[];
   staffId?: Id<"staff"> | null;
   notes?: string;
 };
@@ -41,6 +49,7 @@ export type ModalSubmit = {
 export function AppointmentModal({
   draft,
   services,
+  currency,
   staff,
   staffLabel,
   pending,
@@ -53,7 +62,13 @@ export function AppointmentModal({
   onOpenCustomer,
 }: {
   draft: ModalDraft;
-  services: { _id: Id<"services">; name: string; durationMinutes: number }[];
+  services: {
+    _id: Id<"services">;
+    name: string;
+    durationMinutes: number;
+    price?: number;
+  }[];
+  currency: string;
   staff: { _id: Id<"staff">; name: string; active: boolean }[];
   staffLabel: string;
   pending: boolean;
@@ -67,18 +82,53 @@ export function AppointmentModal({
   // caller closes us first, so there is never a modal behind a modal.
   onOpenCustomer: (id: Id<"customers">) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const panelRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [startAt, setStartAt] = useState(draft.startAt);
   const [durationMinutes, setDurationMinutes] = useState(draft.durationMinutes);
-  const [serviceId, setServiceId] = useState<string>(draft.serviceId ?? "");
+  // Line rows, held as strings because that is what the inputs speak. An empty
+  // list is a real state — a blocked-out hour with no service on it — so the
+  // modal opens with no rows rather than one blank one begging to be filled.
+  const [lines, setLines] = useState<{ serviceId: string; price: string }[]>(() =>
+    (draft.lines ?? []).map((line) => ({
+      serviceId: line.serviceId as string,
+      price: moneyInputValue(line.price, currency, language),
+    })),
+  );
   const [staffId, setStaffId] = useState<string>(draft.staffId ?? "");
   const [notes, setNotes] = useState(draft.notes ?? "");
 
   const editing = draft.appointmentId !== undefined;
+
+  // Picking a service fills its list price and, on a NEW booking, restretches
+  // the block to what the work adds up to. On an existing one it leaves the
+  // length alone: a block drawn by hand meant that length on purpose, and
+  // cal.com would have to agree to a new one anyway.
+  const setLine = (index: number, serviceId: string) => {
+    const picked = services.find((s) => s._id === serviceId);
+    const next = lines.map((line, i) =>
+      i === index
+        ? {
+            serviceId,
+            price: moneyInputValue(picked?.price, currency, language),
+          }
+        : line,
+    );
+    setLines(next);
+    if (editing) return;
+    const minutes = next
+      .map((line) => services.find((s) => s._id === line.serviceId)?.durationMinutes ?? 0)
+      .reduce((sum, m) => sum + m, 0);
+    if (minutes > 0) setDurationMinutes(minutes);
+  };
+
+  const priced = lines
+    .map((line) => parseMoney(line.price, currency, language))
+    .filter((p): p is number => p !== undefined);
+  const total = priced.length ? priced.reduce((sum, p) => sum + p, 0) : undefined;
 
   useEffect(() => {
     firstFieldRef.current?.focus();
@@ -121,7 +171,17 @@ export function AppointmentModal({
     const values: ModalSubmit = {
       startAt,
       durationMinutes,
-      serviceId: serviceId ? (serviceId as Id<"services">) : null,
+      // Rows still on "—" are dropped rather than sent: an unfinished row is
+      // someone mid-thought, not a line they meant to record.
+      lines: lines
+        .filter((line) => line.serviceId)
+        .map((line) => {
+          const price = parseMoney(line.price, currency, language);
+          return {
+            serviceId: line.serviceId as Id<"services">,
+            ...(price !== undefined ? { price } : {}),
+          };
+        }),
       staffId: staffId ? (staffId as Id<"staff">) : null,
       notes,
     };
@@ -229,28 +289,75 @@ export function AppointmentModal({
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs text-[var(--muted)]">
+          {/* One row per service delivered. A cut plus a beard trim is one
+              visit with two lines, not two bookings on top of each other. */}
+          <div className="space-y-1.5">
+            <span className="block text-xs text-[var(--muted)]">
               {t("appointments.service")}
-              <select
-                className="mt-1"
-                value={serviceId}
-                onChange={(e) => {
-                  setServiceId(e.target.value);
-                  // Picking a service offers its length — it does not force it,
-                  // because a block drawn by hand meant that length on purpose.
-                  const picked = services.find((s) => s._id === e.target.value);
-                  if (picked && !editing) setDurationMinutes(picked.durationMinutes);
-                }}
+            </span>
+            {lines.map((line, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <select
+                  className="min-w-0 flex-1"
+                  value={line.serviceId}
+                  onChange={(e) => setLine(index, e.target.value)}
+                >
+                  <option value="">—</option>
+                  {services.map((service) => (
+                    <option key={service._id} value={service._id}>
+                      {service.name}
+                    </option>
+                  ))}
+                </select>
+                {/* Prefilled from the service, editable on the spot. Typing a
+                    different number IS the discount — there is no override
+                    toggle, because the field already permits the edit. */}
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="w-24 shrink-0"
+                  value={line.price}
+                  placeholder={currencySymbol(currency, language)}
+                  onChange={(e) =>
+                    setLines((prev) =>
+                      prev.map((l, i) =>
+                        i === index ? { ...l, price: e.target.value } : l,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  aria-label={t("common.delete")}
+                  onClick={() =>
+                    setLines((prev) => prev.filter((_, i) => i !== index))
+                  }
+                  className="shrink-0 rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setLines((prev) => [...prev, { serviceId: "", price: "" }])}
+                className="rounded-md py-1 text-xs text-[var(--accent)] hover:underline"
               >
-                <option value="">—</option>
-                {services.map((service) => (
-                  <option key={service._id} value={service._id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {t("appointments.addService")}
+              </button>
+              {/* The total is the sum and only the sum, so it can never
+                  disagree with the lines above it. */}
+              {total !== undefined && (
+                <span className="ml-auto text-sm font-medium tabular-nums">
+                  {formatMoney(total, currency, language)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs text-[var(--muted)]">
               {staffLabel}
               <select

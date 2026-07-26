@@ -272,7 +272,33 @@ export default defineSchema({
   appointments: defineTable({
     orgId: v.id("orgs"),
     customerId: v.id("customers"),
+    // LEGACY, read-only after migrations:backfillItems. One appointment held
+    // one service; `items` replaced it. Delete the column once every org's
+    // rows carry items.
     serviceId: v.optional(v.id("services")),
+    // What was delivered in this session, as LINE ITEMS. A haircut plus a
+    // beard trim is ONE appointment with two lines — one calendar block, one
+    // reminder, one visit — not two bookings stacked on each other.
+    //
+    // Every line SNAPSHOTS its name, price and duration. Raising a service's
+    // list price in September must not rewrite what March recorded, and that
+    // is the whole reason these aren't just ids pointing at `services`.
+    // serviceId on a line is kept for reference only, and stays optional
+    // because a salon can stop offering a service without erasing the visit.
+    //
+    // A discount is a line whose price differs from the service's — there is
+    // no separate override field, and no total on the appointment. The total
+    // is the sum, always, so the two can never disagree.
+    items: v.optional(
+      v.array(
+        v.object({
+          serviceId: v.optional(v.id("services")),
+          name: v.string(),
+          price: v.optional(v.number()),
+          durationMinutes: v.number(),
+        }),
+      ),
+    ),
     staffId: v.optional(v.id("staff")),
     // LEGACY, read-only after migrations:backfillStaff. Kept so a deployment
     // that has not run the migration still renders; new writes set staffId.

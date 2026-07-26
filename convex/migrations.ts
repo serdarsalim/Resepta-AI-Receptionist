@@ -85,3 +85,54 @@ export const backfillStaff = internalMutation({
 function normalise(name: string): string {
   return name.trim().toLocaleLowerCase("tr");
 }
+
+// One-shot (2026-07-26): appointments held ONE serviceId; they now hold `items`,
+// a list of snapshotted lines, so a haircut plus a beard trim is one visit
+// rather than two bookings. Copies each row's service into a single line,
+// snapshotting the name, the duration and today's list price.
+//
+// Today's list price is the honest best guess for a booking made before prices
+// existed — there is no record of what was actually charged, and leaving it
+// unpriced would be indistinguishable from a visit somebody chose not to
+// price. Anyone who cares can correct the line.
+//
+// Idempotent: rows that already carry items are skipped.
+// Run: npx convex run migrations:backfillItems
+export const backfillItems = internalMutation({
+  args: {},
+  returns: v.object({ migrated: v.number(), skipped: v.number() }),
+  handler: async (ctx) => {
+    const appointments = await ctx.db.query("appointments").collect();
+    let migrated = 0;
+    let skipped = 0;
+    for (const appointment of appointments) {
+      if (appointment.items !== undefined) {
+        skipped++;
+        continue;
+      }
+      if (!appointment.serviceId) {
+        // An appointment with no service at all becomes an empty line set, not
+        // a missing one — "we looked and there was nothing" is a finished
+        // migration, and it keeps the reader off the legacy column.
+        await ctx.db.patch(appointment._id, { items: [] });
+        migrated++;
+        continue;
+      }
+      const service = await ctx.db.get(appointment.serviceId);
+      await ctx.db.patch(appointment._id, {
+        items: service
+          ? [
+              {
+                serviceId: service._id,
+                name: service.name,
+                ...(service.price !== undefined ? { price: service.price } : {}),
+                durationMinutes: service.durationMinutes,
+              },
+            ]
+          : [],
+      });
+      migrated++;
+    }
+    return { migrated, skipped };
+  },
+});

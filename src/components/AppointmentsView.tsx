@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { DEFAULT_CURRENCY } from "@/lib/money";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import type { TranslationKey } from "@/lib/i18n";
 import {
@@ -113,7 +114,7 @@ export function AppointmentsView({
         // have to be agreed with cal.com first, so they ride schedule.move.
         await updateDetails({
           appointmentId: sheet.appointmentId,
-          serviceId: values.serviceId ?? null,
+          lines: values.lines,
           staffId: values.staffId ?? null,
           notes: values.notes,
         });
@@ -137,7 +138,7 @@ export function AppointmentsView({
         const result = await createBooking({
           customerId: values.customerId,
           newCustomer: values.newCustomer,
-          serviceId: values.serviceId ?? undefined,
+          lines: values.lines,
           staffId: values.staffId ?? undefined,
           startAt: values.startAt,
           durationMinutes: values.durationMinutes,
@@ -261,6 +262,13 @@ export function AppointmentsView({
               customerName: row.customer
                 ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
                 : undefined,
+              // Snapshotted lines, not ids resolved fresh: the sheet has to
+              // show what this visit recorded, not what the service costs now.
+              lines: (row.items ?? []).flatMap((item) =>
+                item.serviceId
+                  ? [{ serviceId: item.serviceId, price: item.price }]
+                  : [],
+              ),
               staffId: row.staffId ?? null,
               notes: row.notes,
               status: row.status,
@@ -373,6 +381,7 @@ export function AppointmentsView({
         <AppointmentModal
           draft={sheet}
           services={(services ?? []).filter((service) => service.active)}
+          currency={settings?.org.currency ?? DEFAULT_CURRENCY}
           staff={staff ?? []}
           staffLabel={staffLabel}
           pending={pending}
@@ -528,6 +537,13 @@ type CalendarAppointment = {
   notes?: string;
   customer: { firstName: string; lastName?: string } | null;
   serviceName?: string;
+  items?: {
+    serviceId?: Id<"services">;
+    name: string;
+    price?: number;
+    durationMinutes: number;
+  }[];
+  total?: number;
 };
 
 // Fill per status. No left accent bars: the fill carries the state, and a

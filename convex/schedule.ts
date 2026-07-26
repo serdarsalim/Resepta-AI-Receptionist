@@ -1,11 +1,52 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, assertE164 } from "./lib/orgAuth";
 import { cancelBooking, createBooking, rescheduleBooking } from "./lib/calcomApi";
 import { scheduleConfirmationIfConfigured } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
+
+const lineInput = v.object({
+  serviceId: v.id("services"),
+  price: v.optional(v.number()),
+});
+
+const storedItem = v.object({
+  serviceId: v.optional(v.id("services")),
+  name: v.string(),
+  price: v.optional(v.number()),
+  durationMinutes: v.number(),
+});
+
+// Same contract as appointments.resolveLines, and same reason: the client
+// says WHICH service and optionally what it cost, the server fills in the
+// name and the duration so neither can be invented.
+async function resolveLines(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  lines: { serviceId: Id<"services">; price?: number }[],
+) {
+  const items = [];
+  for (const line of lines) {
+    const service = await ctx.db.get(line.serviceId);
+    if (!service || service.orgId !== orgId) throw new Error("not-found");
+    const price = line.price ?? service.price;
+    items.push({
+      serviceId: service._id,
+      name: service.name,
+      ...(price !== undefined ? { price: Math.max(0, Math.round(price)) } : {}),
+      durationMinutes: service.durationMinutes,
+    });
+  }
+  return items;
+}
+
 
 // The calendar's write path. Everything the grid does — create by clicking a
 // slot, move by dragging, resize by dragging an edge — comes through here.
@@ -79,7 +120,7 @@ export const prepareCreate = internalMutation({
         consent: v.boolean(),
       }),
     ),
-    serviceId: v.optional(v.id("services")),
+    lines: v.optional(v.array(lineInput)),
     durationMinutes: v.optional(v.number()),
   },
   returns: v.any(),
@@ -109,17 +150,20 @@ export const prepareCreate = internalMutation({
     const customer = await ctx.db.get(customerId);
     if (!customer) throw new Error("customer-failed");
 
-    // Duration precedence: an explicit drag beats the service default. Dragging
-    // a 30-minute cut out to 45 has to mean 45, or resize is a lie.
+    // Snapshotted here rather than at insert time so the cal.com round-trip
+    // in between can't see a different price than the row ends up with.
+    const items = await resolveLines(ctx, orgId, args.lines ?? []);
+
+    // Duration precedence: an explicit drag beats what the services add up to.
+    // Dragging a 30-minute cut out to 45 has to mean 45, or resize is a lie.
     let durationMinutes = args.durationMinutes;
-    if (durationMinutes === undefined && args.serviceId) {
-      const service = await ctx.db.get(args.serviceId);
-      if (!service || service.orgId !== orgId) throw new Error("not-found");
-      durationMinutes = service.durationMinutes;
+    if (durationMinutes === undefined && items.length) {
+      durationMinutes = items.reduce((sum, i) => sum + i.durationMinutes, 0);
     }
     return {
       orgId,
       customerId,
+      items,
       customerName: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
       phone: customer.phone,
       email: customer.email,
@@ -132,7 +176,7 @@ export const finishCreate = internalMutation({
   args: {
     orgId: v.id("orgs"),
     customerId: v.id("customers"),
-    serviceId: v.optional(v.id("services")),
+    items: v.optional(v.array(storedItem)),
     staffId: v.optional(v.id("staff")),
     startAt: v.number(),
     durationMinutes: v.optional(v.number()),
@@ -148,7 +192,7 @@ export const finishCreate = internalMutation({
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: args.orgId,
       customerId: args.customerId,
-      serviceId: args.serviceId,
+      items: args.items ?? [],
       staffId: args.staffId,
       startAt: args.startAt,
       durationMinutes: args.durationMinutes,
@@ -175,7 +219,7 @@ export const create = action({
         consent: v.boolean(),
       }),
     ),
-    serviceId: v.optional(v.id("services")),
+    lines: v.optional(v.array(lineInput)),
     staffId: v.optional(v.id("staff")),
     startAt: v.number(),
     // Set when the slot was drawn by dragging rather than picked from a service.
@@ -197,7 +241,7 @@ export const create = action({
     const prepared = await ctx.runMutation(internal.schedule.prepareCreate, {
       customerId: args.customerId,
       newCustomer: args.newCustomer,
-      serviceId: args.serviceId,
+      lines: args.lines,
       durationMinutes: args.durationMinutes,
     });
 
@@ -232,7 +276,7 @@ export const create = action({
     const appointmentId = await ctx.runMutation(internal.schedule.finishCreate, {
       orgId: prepared.orgId,
       customerId: prepared.customerId,
-      serviceId: args.serviceId,
+      items: prepared.items,
       staffId: args.staffId,
       startAt: args.startAt,
       durationMinutes: prepared.durationMinutes,

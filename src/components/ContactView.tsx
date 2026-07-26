@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
+import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
 import { PhoneField } from "./PhoneField";
 
@@ -67,6 +68,8 @@ export function ContactView({
   const customer = useQuery(api.customers.get, { customerId });
   const fields = useQuery(api.contactFields.list, {});
   const appointments = useQuery(api.appointments.listForCustomer, { customerId });
+  const settings = useQuery(api.orgs.current, {});
+  const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
   // Below lg the two panes swap instead of sharing the row (InboxView does the
@@ -278,8 +281,20 @@ export function ContactView({
                               .join(" · ")}
                           </span>
                         </span>
-                        <span className="shrink-0 text-xs text-[var(--muted)]">
-                          {t(STATUS_KEY[appointment.status])}
+                        {/* The money reads as the row's fact and the status as
+                            its footnote, so the total takes the ink and the
+                            word sits under it. A visit nobody priced shows no
+                            amount rather than a dash — an empty slot is easier
+                            to skim past than a placeholder. */}
+                        <span className="shrink-0 text-right">
+                          {appointment.total !== undefined && (
+                            <span className="block text-sm tabular-nums">
+                              {formatMoney(appointment.total, currency, language)}
+                            </span>
+                          )}
+                          <span className="block text-xs text-[var(--muted)]">
+                            {t(STATUS_KEY[appointment.status])}
+                          </span>
                         </span>
                       </div>
                     </li>

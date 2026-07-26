@@ -21,12 +21,15 @@ const LAST_NAMES = [
   "Doğan", "Kılıç", "Aslan", "Çetin", "Koç", "Kurt", "Özdemir", "Şimşek",
   "Polat", "Erdoğan", "Yıldız", "Güneş",
 ];
-const SERVICES: { name: string; durationMinutes: number }[] = [
-  { name: "Saç kesimi", durationMinutes: 30 },
-  { name: "Sakal tıraşı", durationMinutes: 15 },
-  { name: "Saç boyama", durationMinutes: 90 },
-  { name: "Manikür", durationMinutes: 45 },
-  { name: "Cilt bakımı", durationMinutes: 60 },
+// Prices in minor units — 35000 is ₺350,00, the same integer the real app
+// stores. Seeding round floats here would hide exactly the bug the integer
+// choice exists to prevent.
+const SERVICES: { name: string; durationMinutes: number; price: number }[] = [
+  { name: "Saç kesimi", durationMinutes: 30, price: 35000 },
+  { name: "Sakal tıraşı", durationMinutes: 15, price: 15000 },
+  { name: "Saç boyama", durationMinutes: 90, price: 120000 },
+  { name: "Manikür", durationMinutes: 45, price: 50000 },
+  { name: "Cilt bakımı", durationMinutes: 60, price: 80000 },
 ];
 const STAFF = ["Hülya", "Murat", "Ebru"];
 
@@ -107,7 +110,16 @@ export const seed = internalMutation({
         const appointmentId = await ctx.db.insert("appointments", {
           orgId: org._id,
           customerId,
-          serviceId: serviceIds[serviceIdx],
+          items: serviceIds[serviceIdx]
+            ? [
+                {
+                  serviceId: serviceIds[serviceIdx],
+                  name: SERVICES[serviceIdx].name,
+                  price: SERVICES[serviceIdx].price,
+                  durationMinutes: SERVICES[serviceIdx].durationMinutes,
+                },
+              ]
+            : [],
           staffName: STAFF[i % STAFF.length],
           startAt,
           durationMinutes: SERVICES[serviceIdx].durationMinutes,

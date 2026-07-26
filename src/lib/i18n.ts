@@ -331,6 +331,12 @@ const dictionary = {
     de: "Noch keine Nachrichten",
   },
 
+  "appointments.addService": {
+    tr: "+ Hizmet ekle",
+    en: "+ Add service",
+    de: "+ Leistung hinzufügen",
+  },
+  "appointments.total": { tr: "Toplam", en: "Total", de: "Gesamt" },
   "services.price": { tr: "Fiyat", en: "Price", de: "Preis" },
   "settings.currency": { tr: "Para birimi", en: "Currency", de: "Währung" },
   "settings.currencyHint": {

@@ -6,6 +6,80 @@ import { appointmentStatus } from "./schema";
 import { assertE164, requireOrg } from "./lib/orgAuth";
 import { getLocalPartsSafe } from "./lib/businessHours";
 
+// A line as the client asks for it: which service, and optionally what it
+// actually cost this time. Everything else on the stored line — the name, the
+// duration — is resolved SERVER-side from the service, so a client can't
+// invent a service called "Free" or a zero-minute haircut.
+const lineInput = v.object({
+  serviceId: v.id("services"),
+  price: v.optional(v.number()),
+});
+
+const storedItem = v.object({
+  serviceId: v.optional(v.id("services")),
+  name: v.string(),
+  price: v.optional(v.number()),
+  durationMinutes: v.number(),
+});
+
+type StoredItem = {
+  serviceId?: Id<"services">;
+  name: string;
+  price?: number;
+  durationMinutes: number;
+};
+
+// Client lines -> stored snapshot lines. The price falls back to the service's
+// list price; passing one explicitly IS the discount, which is why there is no
+// separate override field anywhere in this file.
+async function resolveLines(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  lines: { serviceId: Id<"services">; price?: number }[],
+): Promise<StoredItem[]> {
+  const items: StoredItem[] = [];
+  for (const line of lines) {
+    const service = await ctx.db.get(line.serviceId);
+    if (!service || service.orgId !== orgId) throw new Error("not-found");
+    const price = line.price ?? service.price;
+    items.push({
+      serviceId: service._id,
+      name: service.name,
+      // Whole minor units only, and never negative — a sum is trustworthy
+      // only if nothing feeding it can be a fraction.
+      ...(price !== undefined ? { price: Math.max(0, Math.round(price)) } : {}),
+      durationMinutes: service.durationMinutes,
+    });
+  }
+  return items;
+}
+
+// What the block prints. Two services read "Sac kesimi, Sakal tirasi"; the
+// callers that have to fit it in a 30-minute block truncate their own copy.
+export function itemsLabel(items: StoredItem[] | undefined): string | undefined {
+  if (!items?.length) return undefined;
+  return items.map((i) => i.name).join(", ");
+}
+
+// The visit's length: what the services add up to. Only used as the DEFAULT at
+// create — once a row has a durationMinutes it is authoritative, because
+// somebody may have drawn the block by hand.
+function itemsDuration(items: StoredItem[]): number | undefined {
+  return items.length
+    ? items.reduce((sum, i) => sum + i.durationMinutes, 0)
+    : undefined;
+}
+
+// The visit's total. Undefined when NO line carries a price — "nothing was
+// priced" and "this visit was free" are different facts and a bare 0 says the
+// wrong one. Lines that are individually unpriced count as zero within a
+// visit that has any price at all.
+export function itemsTotal(items: StoredItem[] | undefined): number | undefined {
+  if (!items?.length) return undefined;
+  if (items.every((i) => i.price === undefined)) return undefined;
+  return items.reduce((sum, i) => sum + (i.price ?? 0), 0);
+}
+
 const enrichedAppointment = v.object({
   _id: v.id("appointments"),
   _creationTime: v.number(),
@@ -40,6 +114,8 @@ const enrichedAppointment = v.object({
     v.null(),
   ),
   serviceName: v.optional(v.string()),
+  items: v.optional(v.array(storedItem)),
+  total: v.optional(v.number()),
 });
 
 export const listRange = query({
@@ -56,7 +132,6 @@ export const listRange = query({
     const out = [];
     for (const row of rows) {
       const customer = await ctx.db.get(row.customerId);
-      const service = row.serviceId ? await ctx.db.get(row.serviceId) : null;
       const staff = row.staffId ? await ctx.db.get(row.staffId) : null;
       out.push({
         _id: row._id,
@@ -80,7 +155,9 @@ export const listRange = query({
               consented: customer.consentAt !== undefined,
             }
           : null,
-        serviceName: service?.name,
+        serviceName: itemsLabel(row.items),
+        items: row.items,
+        total: itemsTotal(row.items),
       });
     }
     return out;
@@ -97,6 +174,7 @@ export const listForCustomer = query({
       status: appointmentStatus,
       serviceName: v.optional(v.string()),
       staffName: v.optional(v.string()),
+      total: v.optional(v.number()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -110,14 +188,14 @@ export const listForCustomer = query({
     rows.sort((a, b) => b.startAt - a.startAt);
     const out = [];
     for (const row of rows.slice(0, 50)) {
-      const service = row.serviceId ? await ctx.db.get(row.serviceId) : null;
       const staff = row.staffId ? await ctx.db.get(row.staffId) : null;
       out.push({
         _id: row._id,
         startAt: row.startAt,
         status: row.status,
-        serviceName: service?.name,
+        serviceName: itemsLabel(row.items),
         staffName: staff?.name ?? row.staffName,
+        total: itemsTotal(row.items),
       });
     }
     return out;
@@ -156,7 +234,7 @@ export const create = mutation({
         consent: v.boolean(),
       }),
     ),
-    serviceId: v.optional(v.id("services")),
+    lines: v.optional(v.array(lineInput)),
     startAt: v.number(),
     staffName: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -189,19 +267,15 @@ export const create = mutation({
       if (!customer || customer.orgId !== orgId) throw new Error("not-found");
     }
 
-    let durationMinutes: number | undefined;
-    if (args.serviceId) {
-      const service = await ctx.db.get(args.serviceId);
-      if (!service || service.orgId !== orgId) throw new Error("not-found");
-      durationMinutes = service.durationMinutes;
-    }
+    const items = await resolveLines(ctx, orgId, args.lines ?? []);
 
     const appointmentId = await ctx.db.insert("appointments", {
       orgId,
       customerId,
-      serviceId: args.serviceId,
+      items,
       startAt: args.startAt,
-      durationMinutes,
+      // The block starts as long as the work takes; a drag can redraw it after.
+      durationMinutes: itemsDuration(items),
       status: "scheduled",
       staffName: args.staffName?.trim() || undefined,
       notes: args.notes?.trim() || undefined,
@@ -333,7 +407,10 @@ export function nextUpcomingOf(
 export const updateDetails = mutation({
   args: {
     appointmentId: v.id("appointments"),
-    serviceId: v.optional(v.union(v.id("services"), v.null())),
+    // The WHOLE line set, replaced. Not a per-index patch: rows get added and
+    // removed in the modal, and index-based edits against a list that shifts
+    // under them is how the wrong line gets the discount.
+    lines: v.optional(v.array(lineInput)),
     staffId: v.optional(v.union(v.id("staff"), v.null())),
     notes: v.optional(v.string()),
     status: v.optional(appointmentStatus),
@@ -344,17 +421,12 @@ export const updateDetails = mutation({
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
-    if (args.serviceId !== undefined) {
-      if (args.serviceId === null) patch.serviceId = undefined;
-      else {
-        const service = await ctx.db.get(args.serviceId);
-        if (!service || service.orgId !== orgId) throw new Error("not-found");
-        patch.serviceId = args.serviceId;
-        // Changing the service does NOT silently restretch the block: the
-        // duration on the row may have been drawn by hand, and cal.com would
-        // have to agree to a new length anyway. The modal offers the service's
-        // duration as a separate, explicit resize.
-      }
+    if (args.lines !== undefined) {
+      patch.items = await resolveLines(ctx, orgId, args.lines);
+      // Changing the services does NOT silently restretch the block: the
+      // duration on the row may have been drawn by hand, and cal.com would
+      // have to agree to a new length anyway. The modal offers the services'
+      // combined duration as a separate, explicit resize.
     }
     if (args.staffId !== undefined) {
       if (args.staffId === null) patch.staffId = undefined;
