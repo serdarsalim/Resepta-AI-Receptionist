@@ -351,4 +351,26 @@ export default defineSchema({
     .index("by_customer", ["customerId"])
     .index("by_appointment", ["appointmentId"])
     .index("by_wamid", ["wamid"]),
+
+  // Staff-written notes on a customer — "allergic to ammonia", "always late,
+  // book the 10:30". Their own table, NOT a row in `messages`: a note has no
+  // direction, no delivery status, no wamid. Sharing that table would mean
+  // either stamping a fake "sent" on every note or making `status` optional
+  // and losing the guarantee that every real message carries one.
+  //
+  // The feed merges the two on read, exactly the way `calls` already does.
+  notes: defineTable({
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    body: v.string(),
+    // Who wrote it, by reference. The display name is resolved at read time,
+    // so someone changing their name doesn't leave stale attribution frozen
+    // into every note they ever wrote.
+    authorId: v.id("users"),
+    // Set on the first edit. Unset means the note still says what it said when
+    // it was written, which is the whole reason anyone trusts a note.
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_customer", ["customerId"]),
 });

@@ -11,9 +11,9 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
-import { FeedIcon, CHANNELS, type Channel } from "./FeedIcon";
+import { FeedIcon, CHANNELS } from "./FeedIcon";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
-import type { TranslationKey } from "@/lib/i18n";
+import { FeedFilterPills, CHANNEL_LABEL } from "./FeedFilterPills";
 
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -24,12 +24,6 @@ function formatAgo(ts: number): string {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
-
-const CHANNEL_LABEL: Record<Channel, TranslationKey> = {
-  whatsapp: "channel.whatsapp",
-  email: "channel.email",
-  call: "channel.call",
-};
 
 export function InboxView({
   onOpenContact,
@@ -308,28 +302,11 @@ export function InboxView({
               <span className="hidden truncate text-xs text-[var(--muted)] sm:inline">
                 {filter === "email" ? active.email : active.phone}
               </span>
-              <div className="ml-auto flex shrink-0 flex-wrap gap-1.5">
-                {[...CHANNELS, "all" as const].map((k) => {
-                  const label = k === "all" ? t("inbox.all") : t(CHANNEL_LABEL[k]);
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setFilter(k)}
-                      aria-label={label}
-                      className={`flex items-center justify-center rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                        filter === k
-                          ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
-                          : // Explicit card bg — the pane behind is tinted, so
-                            // an unset background reads as a grey chip.
-                            "border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                      }`}
-                    >
-                      {k === "all" ? label : <FeedIcon type={k} size={14} />}
-                    </button>
-                  );
-                })}
-              </div>
+              <FeedFilterPills
+                value={filter}
+                onChange={setFilter}
+                className="ml-auto"
+              />
             </div>
             <ConversationPanel
               key={active.customerId}

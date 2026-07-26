@@ -330,6 +330,26 @@ const dictionary = {
     en: "No messages yet",
     de: "Noch keine Nachrichten",
   },
+
+  "notes.title": { tr: "Not", en: "Note", de: "Notiz" },
+  "notes.none": {
+    tr: "Henüz not yok",
+    en: "No notes yet",
+    de: "Noch keine Notizen",
+  },
+  "notes.placeholder": {
+    tr: "Not yaz…",
+    en: "Write a note…",
+    de: "Notiz schreiben…",
+  },
+  "notes.add": { tr: "Not ekle", en: "Add note", de: "Notiz hinzufügen" },
+  "notes.edit": { tr: "Düzenle", en: "Edit", de: "Bearbeiten" },
+  "notes.edited": { tr: "düzenlendi", en: "edited", de: "bearbeitet" },
+  "notes.deleteConfirm": {
+    tr: "Bu not silinsin mi?",
+    en: "Delete this note?",
+    de: "Diese Notiz löschen?",
+  },
   // Delivery state and failure reasons in the reader's language. The stored
   // values stay the English slugs; these are what a salon owner reads.
   "message.queued": { tr: "sırada", en: "queued", de: "in Warteschlange" },

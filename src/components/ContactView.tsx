@@ -8,7 +8,8 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
-import { ConversationPanel } from "./ConversationPanel";
+import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
+import { FeedFilterPills } from "./FeedFilterPills";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
 import { PhoneField } from "./PhoneField";
 
@@ -72,6 +73,7 @@ export function ContactView({
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
   const [mobilePane, setMobilePane] = useState<"record" | "conversation">("record");
+  const [filter, setFilter] = useState<FeedFilter>("all");
 
   // Two groups, in the order a reader works through the record: what staff
   // typed, then what the calls collected and will keep collecting on their own.
@@ -295,16 +297,23 @@ export function ContactView({
         </div>
 
         {/* Right: conversation, the shared component, never a page variant.
-            The card fills the pane; the feed scrolls with the composer pinned. */}
-        <section
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] lg:flex`}
+            The pills sit ABOVE the card rather than inside it, the way the
+            inbox does it — the filter is a question about the pane, not a
+            control belonging to the feed, and keeping it outside means the
+            card's own scroll still starts at its border. */}
+        <div
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
         >
-          <ConversationPanel
-            customerId={customerId}
-            lastInboundAt={customer.lastInboundAt}
-            className="flex-1"
-          />
-        </section>
+          <FeedFilterPills value={filter} onChange={setFilter} className="justify-end" />
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+            <ConversationPanel
+              customerId={customerId}
+              lastInboundAt={customer.lastInboundAt}
+              filter={filter}
+              className="flex-1"
+            />
+          </section>
+        </div>
       </div>
     </div>
   );

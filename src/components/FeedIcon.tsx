@@ -8,6 +8,11 @@ export type Channel = "whatsapp" | "email" | "call";
 
 export const CHANNELS: readonly Channel[] = ["whatsapp", "email", "call"];
 
+// A note is a row in the feed but not a way to reach anybody, so it gets a
+// glyph without joining CHANNELS — which drives the inbox row's "reachable on"
+// strip and must stay honest.
+export type FeedIconType = Channel | "note";
+
 export function FeedIcon({
   type,
   size = 15,
@@ -15,7 +20,7 @@ export function FeedIcon({
   // hover reads cleanly; feed and filter rows keep the per-channel tint.
   tinted = true,
 }: {
-  type: Channel;
+  type: FeedIconType;
   size?: number;
   tinted?: boolean;
 }) {
@@ -50,6 +55,13 @@ export function FeedIcon({
         <svg {...common} className={tint("text-blue-500/80")}>
           <rect x="2" y="4" width="20" height="16" rx="2" />
           <path d="m22 7-10 5L2 7" />
+        </svg>
+      ) : type === "note" ? (
+        // Amber, the one hue no channel uses: a note is the only row in the
+        // feed nobody outside the salon ever saw.
+        <svg {...common} className={tint("text-amber-500/90")}>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
         </svg>
       ) : (
         <svg {...common} className={tint("text-sky-500/80")}>

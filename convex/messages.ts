@@ -131,12 +131,19 @@ export function channelOfMessage(kind: string): Channel {
   return kind.startsWith("email_") ? "email" : "whatsapp";
 }
 
+// What a feed row can be, which is wider than what a channel can be: a note is
+// a row here but it is not something a customer can be reached on. The narrow
+// `channel` union above stays narrow so the inbox list's channel strip can't
+// start claiming a customer was contacted by note.
+export const feedChannel = v.union(channel, v.literal("note"));
+
 const feedItem = v.object({
   id: v.string(),
-  channel,
+  channel: feedChannel,
   at: v.number(),
   // Normalized across tables: a call's "inbound" is a message's "in".
-  direction: v.union(v.literal("out"), v.literal("in")),
+  // Optional because a note has no direction — nobody sent it anywhere.
+  direction: v.optional(v.union(v.literal("out"), v.literal("in"))),
   kind: v.string(),
   body: v.optional(v.string()),
   status: v.optional(messageStatus),
@@ -147,6 +154,9 @@ const feedItem = v.object({
   summary: v.optional(v.string()),
   transcript: v.optional(v.string()),
   recordingUrl: v.optional(v.string()),
+  // Note-only.
+  authorName: v.optional(v.string()),
+  editedAt: v.optional(v.number()),
 });
 
 // One customer's whole history, newest first, every channel interleaved.
@@ -169,6 +179,19 @@ export const feedForCustomer = query({
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .order("desc")
       .take(200);
+    const notes = await ctx.db
+      .query("notes")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(200);
+
+    // Authors resolved once per distinct writer, not once per note: a salon
+    // owner who left forty notes on a regular is one read, not forty.
+    const authors = new Map<string, string | undefined>();
+    for (const authorId of new Set(notes.map((n) => n.authorId))) {
+      const author = await ctx.db.get(authorId);
+      authors.set(authorId, author?.name ?? author?.email ?? undefined);
+    }
 
     const items = [
       ...messages.map((m) => ({
@@ -192,6 +215,15 @@ export const feedForCustomer = query({
         summary: c.summary,
         transcript: c.transcript,
         recordingUrl: c.recordingUrl,
+      })),
+      ...notes.map((n) => ({
+        id: n._id as string,
+        channel: "note" as const,
+        at: n._creationTime,
+        kind: "note",
+        body: n.body,
+        authorName: authors.get(n.authorId),
+        editedAt: n.editedAt,
       })),
     ];
     return items.sort((a, b) => b.at - a.at);
