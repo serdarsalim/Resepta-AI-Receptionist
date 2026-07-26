@@ -1000,7 +1000,7 @@ function Calendar({
       <div ref={scrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
         <div
           ref={gridRef}
-          className="flex border-b border-[var(--border)]"
+          className="flex"
           style={{ height: gridHeight, touchAction: drag ? "none" : undefined }}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
@@ -1029,10 +1029,16 @@ function Calendar({
             return (
               <div
                 key={column.key}
-                // Closed on BOTH edges, like Google Calendar: a rule down the
-                // left of the first day and the right of the last, so the week
-                // reads as a bounded grid instead of columns trailing off.
-                className={`relative min-w-0 flex-1 border-l border-[var(--border)] ${
+                // Closed on all four edges, like Google Calendar: a rule down
+                // the left of the first day, the right of the last, and along
+                // the bottom, so the week reads as a bounded grid instead of
+                // columns trailing off.
+                //
+                // The bottom rule lives on the COLUMNS, not on the row that
+                // holds them — the row also contains the hour gutter, and a
+                // border there hangs a stray line under the last time label
+                // where no column exists.
+                className={`relative min-w-0 flex-1 border-b border-l border-[var(--border)] ${
                   columnIndex === columns.length - 1
                     ? "border-r border-[var(--border)]"
                     : ""
