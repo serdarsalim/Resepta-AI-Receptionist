@@ -5,7 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
-import { useLanguage } from "@/lib/LanguageProvider";
+import { useLanguage, useT } from "@/lib/LanguageProvider";
 import { formatAge, localeFor } from "@/lib/datetime";
 import {
   compareCells,
@@ -44,6 +44,48 @@ type Column = {
 
 function fullName(customer: Customer): string {
   return `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+}
+
+// A bell with a line through it: this person gets no messages. Consent used to
+// own a whole column that was blank for everyone who had it — 130px spent
+// saying nothing four rows in five, which is also what pushed Last activity
+// off the right edge. Nobody in the category does that: HubSpot and Salesforce
+// keep consent on the record and make it a segment, and Fresha and Booksy keep
+// it on the client profile.
+//
+// It cannot go all the way onto the profile here, though. In those products
+// consent gates MARKETING; under KVKK it gates everything, reminders included
+// (wa.sendAppointmentMessage), so a customer without it books on Friday and is
+// simply never reminded. That is a broken row, not a preference, and a broken
+// row earns a mark. Quiet per row, loud in the count above the table — the
+// same split as the notification rules card in Settings.
+function NoConsentMark() {
+  const t = useT();
+  return (
+    <span
+      title={t("customers.cannotBeMessaged")}
+      aria-label={t("customers.cannotBeMessaged")}
+      className="inline-flex shrink-0 items-center text-amber-600 dark:text-amber-500"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        <path d="M18.63 13A17.9 17.9 0 0 1 18 8" />
+        <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14" />
+        <path d="M18 8a6 6 0 0 0-9.33-5" />
+        <path d="m2 2 20 20" />
+      </svg>
+    </span>
+  );
 }
 
 function csvCell(value: string): string {
@@ -137,10 +179,6 @@ export function CustomersView({
         return customer.phone;
       case "email":
         return customer.email ?? "";
-      case "consent":
-        // Consent on file is the normal case and says nothing worth a word;
-        // only its absence is news.
-        return customer.consentAt ? "" : t("customers.noConsent");
       case "added":
         return formatAge(customer._creationTime, language);
       case "lastActivity":
@@ -162,15 +200,6 @@ export function CustomersView({
     const built: Column[] = [
       { key: "phone", label: t("customers.phone"), width: 165, sortable: true, numeric: true },
       { key: "email", label: t("customers.email"), width: 210, sortable: true },
-      {
-        key: "consent",
-        label: t("customers.consentShort"),
-        width: 130,
-        sortable: true,
-        filterOptions: [CONSENT_ON, CONSENT_OFF],
-        labelFor: (value) =>
-          value === CONSENT_ON ? t("customers.consentGiven") : t("customers.noConsent"),
-      },
       { key: "added", label: t("customers.added"), width: 140, sortable: true, numeric: true },
       {
         key: "lastActivity",
@@ -264,7 +293,14 @@ export function CustomersView({
   };
 
   const exportCsv = () => {
-    const exported = [{ key: "name", label: t("customers.name") }, ...visibleColumns];
+    // Consent rides along unconditionally now that it has no column to be
+    // visible in. It is the one field here that answers to a regulator, and
+    // "it wasn't on screen when I exported" is not a defence.
+    const exported = [
+      { key: "name", label: t("customers.name") },
+      ...visibleColumns,
+      { key: "consent", label: t("customers.consent") },
+    ];
     const lines = [
       exported.map((column) => csvCell(column.label)).join(","),
       ...rows.map((customer) =>
@@ -285,6 +321,14 @@ export function CustomersView({
   };
 
   const hasCustomers = (customers?.length ?? 0) > 0;
+  // Counted across every customer, not the filtered rows: this is a standing
+  // fact about the book, and it should not drop to zero just because a search
+  // is narrowing the view.
+  const withoutConsent = (customers ?? []).filter(
+    (customer) => customer.consentAt === undefined,
+  ).length;
+  const showingWithoutConsent = table.filterFor("consent").includes(CONSENT_OFF);
+
   const widthOf = (column: Column) => table.widthFor(column.key, column.width);
   const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
@@ -298,6 +342,26 @@ export function CustomersView({
             placeholder={t("customers.search")}
             className="w-full sm:w-64"
           />
+        )}
+        {/* The segment, which is how every CRM in this category exposes
+            consent. It is also the only part of this that gets the problem
+            FIXED: a count you can click lands on the exact people to chase,
+            and each row from there opens the profile that records it. */}
+        {withoutConsent > 0 && (
+          <button
+            type="button"
+            aria-pressed={showingWithoutConsent}
+            onClick={() => table.toggleFilter("consent", CONSENT_OFF)}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm transition-colors ${
+              showingWithoutConsent
+                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-amber-700 hover:bg-[var(--muted-bg)] dark:text-amber-500"
+            }`}
+          >
+            <NoConsentMark />
+            <span className="tabular-nums">{withoutConsent}</span>
+            <span>{t("customers.withoutConsent")}</span>
+          </button>
         )}
         <div className="ml-auto flex items-center gap-2">
           {/* The picker belongs to the table, and below sm there is no table. */}
@@ -439,16 +503,14 @@ export function CustomersView({
               onClick={() => onOpenContact(customer._id)}
             >
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{fullName(customer)}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="truncate font-medium">{fullName(customer)}</span>
+                  {customer.consentAt === undefined && <NoConsentMark />}
+                </span>
                 <span className="block text-xs tabular-nums text-[var(--muted)]">
                   {customer.phone}
                 </span>
               </span>
-              {customer.consentAt === undefined && (
-                <span className="shrink-0 text-xs text-red-600 dark:text-red-400">
-                  {t("customers.noConsent")}
-                </span>
-              )}
             </li>
           ))}
         </ul>
@@ -528,23 +590,22 @@ export function CustomersView({
                     }}
                     className="cursor-pointer outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)]"
                   >
-                    <td className="truncate px-4 py-2.5 font-medium">{fullName(customer)}</td>
-                    {visibleColumns.map((column) => {
-                      const text = displayValue(customer, column.key);
-                      const missingConsent = column.key === "consent" && text !== "";
-                      return (
-                        <td
-                          key={column.key}
-                          className={`truncate px-4 py-2.5 ${column.numeric ? "tabular-nums " : ""}${
-                            missingConsent
-                              ? "text-red-600 dark:text-red-400"
-                              : "text-[var(--muted)]"
-                          }`}
-                        >
-                          {text}
-                        </td>
-                      );
-                    })}
+                    <td className="px-4 py-2.5 font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate">{fullName(customer)}</span>
+                        {customer.consentAt === undefined && <NoConsentMark />}
+                      </span>
+                    </td>
+                    {visibleColumns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={`truncate px-4 py-2.5 text-[var(--muted)] ${
+                          column.numeric ? "tabular-nums" : ""
+                        }`}
+                      >
+                        {displayValue(customer, column.key)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
