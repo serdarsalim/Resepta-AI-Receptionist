@@ -83,6 +83,10 @@ export default defineSchema({
     // Off until switched on. A form URL that answers before anyone has looked
     // at what it asks is worse than a 404.
     formEnabled: v.optional(v.boolean()),
+    // Whether the takings tab exists at all. Off by default: an org that
+    // never fills in prices would otherwise get a nav item leading to three
+    // zeroes, which reads as the app being broken rather than unused.
+    revenueEnabled: v.optional(v.boolean()),
     // The local part of this org's address on the shared inbound domain
     // (RESEND_INBOUND_DOMAIN): "guzellik" becomes guzellik@mail.example.com.
     // Routing an inbound email to an ORG happens on this, not on the domain,

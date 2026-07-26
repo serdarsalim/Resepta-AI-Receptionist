@@ -25,6 +25,7 @@ export type TabId =
   | "appointments"
   | "customers"
   | "inbox"
+  | "revenue"
   | "business"
   | "settings"
   | "account";
@@ -99,6 +100,13 @@ const SettingsIcon = makeIcon(
 // Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
 // neutral — hue on the symbol plus a bold label is the selected cue, so the
 // sidebar never turns into a stack of coloured blocks.
+const RevenueIcon = makeIcon(
+  <>
+    <path d="M12 2v20" />
+    <path d="M17 7H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H6" />
+  </>,
+);
+
 const NAV_TABS: {
   id: TabId;
   key: TranslationKey;
@@ -112,6 +120,12 @@ const NAV_TABS: {
     color: "#8b5cf6",
   },
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
+  {
+    id: "revenue",
+    key: "nav.revenue",
+    Icon: RevenueIcon,
+    color: "#f59e0b",
+  },
   {
     id: "appointments",
     key: "nav.appointments",
@@ -834,6 +848,12 @@ export function AppShell({
 }) {
   const { t, language, setLanguage } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
+  // The takings tab is opt-in, so the nav is built from the org rather than
+  // being a constant. Filtered rather than conditionally rendered so the
+  // phone bar and the sidebar can never disagree about which tabs exist.
+  const navTabs = NAV_TABS.filter(
+    (entry) => entry.id !== "revenue" || settings?.org.revenueEnabled,
+  );
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
   // somebody still has to look at this.
@@ -968,7 +988,7 @@ export function AppShell({
 
         <nav className={`flex flex-1 flex-col pb-1 pt-4 ${showCollapsed ? "px-1" : "px-2"}`}>
           <div className="space-y-0.5">
-            {NAV_TABS.map((entry) => (
+            {navTabs.map((entry) => (
               <SidebarButton
                 key={entry.id}
                 entry={entry}
@@ -1014,7 +1034,7 @@ export function AppShell({
         </main>
         {/* Phone nav */}
         <nav className="flex border-t border-[var(--border)] md:hidden">
-          {NAV_TABS.map(({ id, key, Icon, color }) => {
+          {navTabs.map(({ id, key, Icon, color }) => {
             const active = tab === id;
             return (
               <button

@@ -28,6 +28,7 @@ export const current = query({
       inboundAddress: v.optional(v.string()),
       publicSlug: v.optional(v.string()),
       formEnabled: v.optional(v.boolean()),
+      revenueEnabled: v.optional(v.boolean()),
       // The domain half, from deployment env — the client needs it to show the
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
@@ -110,6 +111,7 @@ export const current = query({
         inboundAddress: org.inboundAddress,
         publicSlug: org.publicSlug,
         formEnabled: org.formEnabled,
+        revenueEnabled: org.revenueEnabled,
         inboundDomain: process.env.RESEND_INBOUND_DOMAIN,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
@@ -161,6 +163,7 @@ export const update = mutation({
     language: v.optional(v.string()),
     currency: v.optional(v.string()),
     inboundAddress: v.optional(v.string()),
+    revenueEnabled: v.optional(v.boolean()),
     reminderOffsetsHours: v.optional(v.array(v.number())),
     sendBookingConfirmation: v.optional(v.boolean()),
     quietHoursStart: v.optional(v.number()),
@@ -194,6 +197,7 @@ export const update = mutation({
     if (args.currency !== undefined && isCurrency(args.currency)) {
       patch.currency = args.currency;
     }
+    if (args.revenueEnabled !== undefined) patch.revenueEnabled = args.revenueEnabled;
     if (args.inboundAddress !== undefined) {
       // Slugged, not trusted: this becomes the left side of a real address, so
       // anything that isn't a-z0-9.- would bounce mail rather than route it.

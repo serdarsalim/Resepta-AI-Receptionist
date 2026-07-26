@@ -33,6 +33,7 @@ import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
 import type * as orgs from "../orgs.js";
 import type * as reminders from "../reminders.js";
+import type * as reports from "../reports.js";
 import type * as retell from "../retell.js";
 import type * as schedule from "../schedule.js";
 import type * as services from "../services.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   notes: typeof notes;
   orgs: typeof orgs;
   reminders: typeof reminders;
+  reports: typeof reports;
   retell: typeof retell;
   schedule: typeof schedule;
   services: typeof services;

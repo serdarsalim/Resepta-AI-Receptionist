@@ -158,6 +158,15 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {/* The address customers write TO. One verified domain serves every
               business; this left-hand part is what routes an incoming email to
               THIS org, so it has to be unique and the save rejects a clash. */}
+          {/* Off by default: an org that never fills in prices would get a nav
+              item leading to three zeroes, which reads as broken not unused. */}
+          <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
+          <span className="flex items-center">
+            <Toggle
+              checked={settings.org.revenueEnabled ?? false}
+              onChange={(next) => void update({ revenueEnabled: next })}
+            />
+          </span>
           {/* The public request form. Off by default: a live URL that answers
               before anyone has looked at what it asks is worse than a 404. */}
           <RowLabel label={t("settings.formEnabled")} hint={t("settings.formEnabledHint")} />

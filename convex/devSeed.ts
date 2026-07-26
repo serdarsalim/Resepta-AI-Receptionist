@@ -116,6 +116,16 @@ export const seed = internalMutation({
           await ctx.db.insert("services", { orgId: org._id, ...service, active: true }),
         );
       }
+    } else {
+      // Load what is already there. Without this branch a reseed onto an org
+      // that already had services left every appointment with an EMPTY line
+      // set — no service name on the calendar, and nothing for the takings to
+      // add up. Same shape as the staff branch below.
+      const existingServices = await ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      serviceIds.push(...existingServices.map((service) => service._id));
     }
 
     // Staff rows, same idempotent shape as services. Seeded as real rows
@@ -139,6 +149,33 @@ export const seed = internalMutation({
         .collect();
       staffIds.push(...existing.map((person) => person._id));
     }
+
+    // Snapshot lines from the live service rows where they exist, falling
+    // back to the fixture when this is a fresh org. Reading the constant
+    // unconditionally would stamp fixture prices onto an org that has since
+    // repriced its own services.
+    const liveServices = await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", org._id))
+      .collect();
+    const seedItemsFor = (index: number) => {
+      const id = serviceIds[index];
+      if (!id) return [];
+      const live = liveServices.find((service) => service._id === id);
+      const fixture = SERVICES[index];
+      return [
+        {
+          serviceId: id,
+          name: live?.name ?? fixture.name,
+          ...(live
+            ? live.price !== undefined
+              ? { price: live.price }
+              : {}
+            : { price: fixture.price }),
+          durationMinutes: live?.durationMinutes ?? fixture.durationMinutes,
+        },
+      ];
+    };
 
     const now = Date.now();
     const HOUR = 3600_000;
@@ -185,16 +222,7 @@ export const seed = internalMutation({
         const appointmentId = await ctx.db.insert("appointments", {
           orgId: org._id,
           customerId,
-          items: serviceIds[serviceIdx]
-            ? [
-                {
-                  serviceId: serviceIds[serviceIdx],
-                  name: SERVICES[serviceIdx].name,
-                  price: SERVICES[serviceIdx].price,
-                  durationMinutes: SERVICES[serviceIdx].durationMinutes,
-                },
-              ]
-            : [],
+          items: seedItemsFor(serviceIdx),
           ...(staffIds.length
             ? { staffId: staffIds[i % staffIds.length] }
             : {}),

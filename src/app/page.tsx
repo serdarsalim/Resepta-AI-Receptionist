@@ -5,6 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { AppShell, type TabId } from "@/components/AppShell";
 import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
+import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
 import { SettingsView } from "@/components/SettingsView";
 import { BusinessView } from "@/components/BusinessView";
@@ -30,6 +31,7 @@ export default function Home() {
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
+          {tab === "revenue" && <RevenueView />}
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
