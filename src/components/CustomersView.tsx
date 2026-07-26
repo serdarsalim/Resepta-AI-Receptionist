@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -9,6 +9,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { formatAge, localeFor } from "@/lib/datetime";
 import {
   compareCells,
+  moveKey,
   useSearch,
   useTableState,
   type CellValue,
@@ -61,7 +62,7 @@ export function CustomersView({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const table = useTableState<string>({ key: "added", dir: "desc" });
+  const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
   const search = useSearch();
 
   const fields: ContactField[] = useMemo(() => contactFields ?? [], [contactFields]);
@@ -211,7 +212,13 @@ export function CustomersView({
     return built;
   }, [customers, fields, t]);
 
-  const visibleColumns = columns.filter((column) => table.isColumnVisible(column.key));
+  // Order first, then hide. The stored order covers EVERY column, not just the
+  // visible ones, so re-showing a column from the picker returns it to where
+  // it was dragged rather than to the end of the row.
+  const orderedColumns = table.orderColumns(columns);
+  const visibleColumns = orderedColumns.filter((column) => table.isColumnVisible(column.key));
+  const columnKeys = orderedColumns.map((column) => column.key);
+  const dragKey = useRef<string | null>(null);
 
   const rows = useMemo(() => {
     const list = customers ?? [];
@@ -278,7 +285,8 @@ export function CustomersView({
   };
 
   const hasCustomers = (customers?.length ?? 0) > 0;
-  const minWidth = 260 + visibleColumns.reduce((total, column) => total + column.width, 0);
+  const widthOf = (column: Column) => table.widthFor(column.key, column.width);
+  const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
   return (
     <div className="space-y-4">
@@ -296,7 +304,10 @@ export function CustomersView({
           {hasCustomers && (
             <div className="hidden sm:block">
               <ColumnPicker
-                columns={columns}
+                // Ordered, not the raw list: once a column has been dragged,
+                // a picker still reading left-to-right in the original order
+                // is a second, disagreeing map of the same table.
+                columns={orderedColumns}
                 hidden={table.hiddenColumns}
                 onToggle={table.toggleColumn}
                 footer={(close) => (
@@ -309,6 +320,18 @@ export function CustomersView({
                         }}
                       >
                         {t("table.clearFilters")}
+                      </MenuItem>
+                    )}
+                    {/* A column dragged to the minimum width, or parked behind
+                        ten others, is genuinely hard to undo by hand. */}
+                    {table.layoutChanged && (
+                      <MenuItem
+                        onClick={() => {
+                          table.resetLayout();
+                          close();
+                        }}
+                      >
+                        {t("table.resetLayout")}
                       </MenuItem>
                     )}
                     <MenuItem
@@ -442,7 +465,7 @@ export function CustomersView({
                     fixed columns leave, so a row never ends in a ghost gap. */}
                 <col />
                 {visibleColumns.map((column) => (
-                  <col key={column.key} style={{ width: column.width }} />
+                  <col key={column.key} style={{ width: widthOf(column) }} />
                 ))}
               </colgroup>
               <thead className="text-left text-[var(--muted)]">
@@ -458,6 +481,18 @@ export function CustomersView({
                       label={column.label}
                       sortDir={table.sort.key === column.key ? table.sort.dir : null}
                       onSort={column.sortable ? () => table.toggleSort(column.key) : undefined}
+                      width={widthOf(column)}
+                      onResize={(next) => table.setWidth(column.key, next)}
+                      drag={{
+                        onDragStart: () => {
+                          dragKey.current = column.key;
+                        },
+                        onDrop: () => {
+                          const from = dragKey.current;
+                          dragKey.current = null;
+                          if (from) table.setColumnOrder(moveKey(columnKeys, from, column.key));
+                        },
+                      }}
                       filter={
                         column.filterOptions ? (
                           <HeaderFilter

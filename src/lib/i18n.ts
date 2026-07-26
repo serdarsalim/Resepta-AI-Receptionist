@@ -863,6 +863,18 @@ const dictionary = {
   "table.noMatches": { tr: "Eşleşme yok", en: "No matches", de: "Keine Treffer" },
   // The funnel entry for rows with nothing in that column.
   "table.blank": { tr: "Boş", en: "Blank", de: "Leer" },
+  "table.resizeColumn": {
+    tr: "Sütun genişliğini değiştir",
+    en: "Resize column",
+    de: "Spaltenbreite ändern",
+  },
+  // Offered only once the layout has actually been changed, so it isn't a
+  // permanent invitation to undo something nobody did.
+  "table.resetLayout": {
+    tr: "Sütun düzenini sıfırla",
+    en: "Reset column layout",
+    de: "Spaltenlayout zurücksetzen",
+  },
   "table.clearFilters": {
     tr: "Filtreleri temizle",
     en: "Clear filters",

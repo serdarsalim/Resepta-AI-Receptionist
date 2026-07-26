@@ -209,29 +209,137 @@ export function HeaderFilter({
   );
 }
 
+// Narrow enough to be a deliberate choice, wide enough that a column can
+// always be grabbed again after someone drags it as small as it goes.
+const MIN_COLUMN_WIDTH = 72;
+
+// Pointer events, not a window mousemove pair: setPointerCapture keeps the
+// drag attached to this handle when the pointer outruns a 6px target, and it
+// releases on its own if the browser cancels the gesture.
+function ResizeHandle({
+  width,
+  onResize,
+}: {
+  width: number;
+  onResize: (next: number) => void;
+}) {
+  const t = useT();
+  const start = useRef<{ x: number; width: number } | null>(null);
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t("table.resizeColumn")}
+      // The header itself is an HTML5 drag source for reordering. Grabbing the
+      // resize edge must not also pick the column up and move it.
+      draggable={false}
+      onDragStart={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        start.current = { x: event.clientX, width };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const from = start.current;
+        if (!from) return;
+        onResize(
+          Math.max(MIN_COLUMN_WIDTH, Math.round(from.width + (event.clientX - from.x))),
+        );
+      }}
+      onPointerUp={(event) => {
+        start.current = null;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-[var(--border)]"
+    />
+  );
+}
+
+export type ColumnDrag = {
+  onDragStart: () => void;
+  onDrop: () => void;
+};
+
 // Column header. Sortable when onSort is given: the active column keeps a
 // directional caret, an unsorted one reveals a neutral glyph on hover, and the
 // space is reserved either way so the label never moves.
+//
+// Resize and reorder are both opt-in per column, because the Name column is
+// anchored: it carries no fixed width (it absorbs whatever the others leave)
+// so there is nothing to drag, and it stays first so a reordered table is
+// still readable. Nudge anchors its checkbox and Name columns the same way.
+//
+// Reordering is pointer-only, as it is in Nudge. Keyboard users can still hide
+// and show columns from the picker; moving them needs a different affordance
+// than drag, and inventing one here would be guesswork.
 export function Th({
   label,
   sortDir,
   onSort,
   filter,
+  width,
+  onResize,
+  drag,
   className = "",
 }: {
   label: string;
   sortDir?: SortDir | null;
   onSort?: () => void;
   filter?: React.ReactNode;
+  width?: number;
+  onResize?: (next: number) => void;
+  drag?: ColumnDrag;
   className?: string;
 }) {
+  const [dropTarget, setDropTarget] = useState(false);
   return (
     <th
       scope="col"
       aria-sort={sortDir ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
-      className={`group whitespace-nowrap px-4 py-2 font-medium ${className}`}
+      // Drop TARGET is the whole cell; the drag SOURCE is the label span
+      // below. They are deliberately different elements: dragstart fires on
+      // the nearest draggable ANCESTOR, so a draggable <th> would also pick
+      // the column up when the grab started on the resize handle — the
+      // handle's own onDragStart never gets a look in, because the event
+      // never targets it. Anchoring the source inside the label leaves the
+      // handle with no draggable ancestor and the two gestures stop competing.
+      onDragEnd={() => setDropTarget(false)}
+      onDragOver={(event) => {
+        if (!drag) return;
+        // Without preventDefault the browser refuses the drop outright.
+        event.preventDefault();
+        setDropTarget(true);
+      }}
+      onDragLeave={() => setDropTarget(false)}
+      onDrop={(event) => {
+        if (!drag) return;
+        event.preventDefault();
+        setDropTarget(false);
+        drag.onDrop();
+      }}
+      className={`group relative overflow-hidden whitespace-nowrap px-4 py-2 font-medium ${
+        dropTarget ? "bg-[var(--muted-bg)]" : ""
+      } ${className}`}
     >
-      <span className="inline-flex max-w-full items-center gap-1">
+      {/* The landing edge, drawn inside the cell so it cannot widen the row. */}
+      {dropTarget && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-0.5 bg-[var(--accent)]"
+        />
+      )}
+      <span
+        draggable={drag !== undefined}
+        onDragStart={drag?.onDragStart}
+        className={`inline-flex max-w-full items-center gap-1 ${
+          drag ? "cursor-grab active:cursor-grabbing" : ""
+        }`}
+      >
         {onSort ? (
           <button
             type="button"
@@ -259,6 +367,9 @@ export function Th({
         )}
         {filter}
       </span>
+      {onResize && width !== undefined && (
+        <ResizeHandle width={width} onResize={onResize} />
+      )}
     </th>
   );
 }

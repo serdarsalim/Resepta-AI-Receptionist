@@ -1,12 +1,65 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 // Table behaviour that has nothing to do with what a table renders: sort,
-// per-column filters, column visibility, and search. Ported from Nudge's
-// LeadsTable, minus everything that made that file 2800 lines — no saved
-// views, no condition builder, no resizable columns, no URL state. State is
-// plain component state and dies with the view.
+// per-column filters, column visibility, widths, order, and search. Ported
+// from Nudge's LeadsTable, minus what made that file 2800 lines — no saved
+// views, no condition builder, no URL state.
+//
+// Resizing and reordering were on that cut list too, and came back by request.
+// They brought persistence with them, which is not decoration: a column you
+// dragged to the right width and lost on the next navigation is worse than one
+// you could never drag at all. Sort, filters and the search query still die
+// with the view — those answer a question you are asking right now. Layout is
+// a preference, and preferences outlive the question.
+const STORAGE_PREFIX = "randevu.table.";
+
+type StoredLayout = {
+  hidden?: string[];
+  widths?: Record<string, number>;
+  order?: string[];
+};
+
+// Anything can be in localStorage: a half-written entry, a shape from a build
+// two months ago, a value a user typed into devtools. Every field is checked
+// on the way in, and a bad one falls back to the default rather than taking
+// the table down with it.
+function readLayout(storageKey: string): StoredLayout | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + storageKey);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const { hidden, widths, order } = parsed as StoredLayout;
+    const out: StoredLayout = {};
+    if (Array.isArray(hidden)) out.hidden = hidden.filter((k) => typeof k === "string");
+    if (Array.isArray(order)) out.order = order.filter((k) => typeof k === "string");
+    if (widths && typeof widths === "object" && !Array.isArray(widths)) {
+      out.widths = Object.fromEntries(
+        Object.entries(widths).filter(
+          ([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0,
+        ),
+      );
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+// Move one key to another key's position. Pure, and exported because the drop
+// handler is the only place that knows which column was dragged onto which.
+export function moveKey(keys: string[], fromKey: string, toKey: string): string[] {
+  if (fromKey === toKey) return keys;
+  const from = keys.indexOf(fromKey);
+  const to = keys.indexOf(toKey);
+  if (from < 0 || to < 0) return keys;
+  const next = [...keys];
+  next.splice(from, 1);
+  next.splice(to, 0, fromKey);
+  return next;
+}
 
 export type SortDir = "asc" | "desc";
 export type SortState<K extends string> = { key: K; dir: SortDir };
@@ -83,9 +136,25 @@ export type TableState<K extends string> = {
   activeFilterCount: number;
   // OR inside one column, AND across columns.
   matchesFilters: (valueOf: (column: string) => string) => boolean;
+  widthFor: (key: string, fallback: number) => number;
+  setWidth: (key: string, width: number) => void;
+  // Applies the stored order to a column list. Columns the stored order has
+  // never seen keep their natural position instead of being flung to the end,
+  // so a contact field the owner adds next week lands where the code puts it.
+  orderColumns: <C extends { key: string }>(columns: C[]) => C[];
+  setColumnOrder: (keys: string[]) => void;
+  // Escape hatch. A column dragged down to the minimum width, or off to the
+  // right of a dozen others, is hard to undo by hand.
+  resetLayout: () => void;
+  layoutChanged: boolean;
 };
 
-export function useTableState<K extends string>(initial: SortState<K>): TableState<K> {
+export function useTableState<K extends string>(
+  initial: SortState<K>,
+  // Omit to keep layout in memory only. Given, it is the localStorage suffix,
+  // so two tables in the app never share a layout.
+  storageKey?: string,
+): TableState<K> {
   const [sort, setSort] = useState<SortState<K>>(initial);
   const toggleSort = useCallback((key: K) => {
     setSort((current) =>
@@ -112,6 +181,76 @@ export function useTableState<K extends string>(initial: SortState<K>): TableSta
     (key: string) => !hiddenColumns.has(key),
     [hiddenColumns],
   );
+
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const [order, setOrder] = useState<string[]>([]);
+
+  // Read on mount, not during render: the server has no localStorage, and
+  // seeding state from it during render is a hydration mismatch (same reason
+  // AppShell reads the sidebar flag in an effect). Costs one frame at the
+  // default layout before the stored one lands.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (!storageKey) {
+      setRestored(true);
+      return;
+    }
+    const stored = readLayout(storageKey);
+    if (stored?.hidden) setHiddenColumns(new Set(stored.hidden));
+    if (stored?.widths) setWidths(stored.widths);
+    if (stored?.order) setOrder(stored.order);
+    setRestored(true);
+  }, [storageKey]);
+
+  // Gated on `restored` so the empty defaults of that first frame never
+  // overwrite what is on disk before the read lands.
+  useEffect(() => {
+    if (!storageKey || !restored) return;
+    try {
+      window.localStorage.setItem(
+        STORAGE_PREFIX + storageKey,
+        JSON.stringify({ hidden: [...hiddenColumns], widths, order }),
+      );
+    } catch {
+      // Private mode, or the quota is full. A table that cannot remember its
+      // layout still works; one that throws while you drag a column does not.
+    }
+  }, [storageKey, restored, hiddenColumns, widths, order]);
+
+  const widthFor = useCallback(
+    (key: string, fallback: number) => widths[key] ?? fallback,
+    [widths],
+  );
+  const setWidth = useCallback((key: string, width: number) => {
+    setWidths((prev) => ({ ...prev, [key]: width }));
+  }, []);
+
+  const orderColumns = useCallback(
+    <C extends { key: string }>(columns: C[]): C[] => {
+      if (order.length === 0) return columns;
+      const rank = new Map(order.map((key, index) => [key, index]));
+      // Array#sort is stable, so two columns the stored order has never seen
+      // hold their natural order relative to each other.
+      return [...columns].sort((a, b) => {
+        const rankA = rank.get(a.key);
+        const rankB = rank.get(b.key);
+        if (rankA === undefined && rankB === undefined) return 0;
+        if (rankA === undefined) return 1;
+        if (rankB === undefined) return -1;
+        return rankA - rankB;
+      });
+    },
+    [order],
+  );
+
+  const resetLayout = useCallback(() => {
+    setHiddenColumns(new Set<string>());
+    setWidths({});
+    setOrder([]);
+  }, []);
+
+  const layoutChanged =
+    hiddenColumns.size > 0 || Object.keys(widths).length > 0 || order.length > 0;
 
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const toggleFilter = useCallback((column: string, value: string) => {
@@ -154,5 +293,11 @@ export function useTableState<K extends string>(initial: SortState<K>): TableSta
     clearFilters,
     activeFilterCount,
     matchesFilters,
+    widthFor,
+    setWidth,
+    orderColumns,
+    setColumnOrder: setOrder,
+    resetLayout,
+    layoutChanged,
   };
 }
