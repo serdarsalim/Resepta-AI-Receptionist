@@ -454,6 +454,9 @@ function UserMenu({
   const { signOut } = useAuthActions();
   const { theme, setTheme, mounted } = useTheme();
   const saveTheme = useMutation(api.users.setMyTheme);
+  // False for every salon user, and false is what it returns rather than
+  // throwing — so this costs one cheap query and reveals nothing.
+  const isPlatformAdmin = useQuery(api.platform.amPlatformAdmin, {});
   // Menu position, measured from the trigger at open time. Null = closed.
   // Same mechanism as WorkspaceSwitcher below, deliberately: the header sits
   // inside `flex min-h-0 flex-1 flex-col overflow-hidden`, so an absolute
@@ -608,6 +611,24 @@ function UserMenu({
                 );
               })}
             </div>
+            {/* Operator-only, and invisible to everyone else — the query
+                returns false rather than throwing, so a salon owner's menu is
+                exactly what it was before this existed. English on purpose:
+                the fleet page has one reader (see src/app/admin/page.tsx). */}
+            {isPlatformAdmin && (
+              <div className="border-t border-[var(--border)]">
+                <a
+                  href="/admin"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
+                    <SettingsIcon />
+                  </span>
+                  Fleet
+                </a>
+              </div>
+            )}
             <div className="border-t border-[var(--border)]">
               <button
                 type="button"
