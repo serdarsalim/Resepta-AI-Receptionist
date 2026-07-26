@@ -30,6 +30,11 @@ export const logOutQueued = internalMutation({
     kind: v.string(),
     templateName: v.optional(v.string()),
     body: v.optional(v.string()),
+    // Email lane only. Carried here rather than patched afterwards so the row
+    // is complete the moment it appears in the feed — a bubble that renders
+    // subject-less for a second and then pops one is worse than either.
+    emailSubject: v.optional(v.string()),
+    emailFrom: v.optional(v.string()),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -41,6 +46,8 @@ export const logOutQueued = internalMutation({
       kind: args.kind,
       templateName: args.templateName,
       body: args.body,
+      emailSubject: args.emailSubject,
+      emailFrom: args.emailFrom,
       status: "queued",
     });
   },

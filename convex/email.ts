@@ -1,5 +1,8 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { requireOrg } from "./lib/orgAuth";
+import { sendEmail } from "./lib/email";
 import { bareAddress, normalizeSubject } from "./lib/emailInbound";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
@@ -107,3 +110,100 @@ export const recordInbound = internalMutation({
 // Thread key for the email tab, exported so the client and the server agree on
 // what counts as "the same conversation".
 export { normalizeSubject };
+
+// ---- Sending a free-form email to one customer ----
+//
+// Separate from the template lane in wa.ts, which fires alongside WhatsApp on
+// a booking. This is a person typing to a person.
+
+export const loadSendContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.union(
+    v.object({
+      orgId: v.id("orgs"),
+      orgName: v.string(),
+      emailFrom: v.optional(v.string()),
+      inboundAddress: v.optional(v.string()),
+      customerEmail: v.optional(v.string()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+    return {
+      orgId,
+      orgName: org.name,
+      emailFrom: org.emailFrom,
+      inboundAddress: org.inboundAddress,
+      customerEmail: customer.email,
+    };
+  },
+});
+
+export const sendToCustomer = action({
+  args: {
+    customerId: v.id("customers"),
+    subject: v.string(),
+    body: v.string(),
+  },
+  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const subject = args.subject.trim();
+    const body = args.body.trim();
+    if (!body) return { ok: false, reason: "empty" };
+    const context = await ctx.runQuery(internal.email.loadSendContext, {
+      customerId: args.customerId,
+    });
+    if (!context) return { ok: false, reason: "not-found" };
+    if (!context.customerEmail) return { ok: false, reason: "missing-email" };
+    if (!context.emailFrom) return { ok: false, reason: "no-from-address" };
+
+    // Replies come back to US, not to whatever mailbox the From address
+    // belongs to. Without this the customer's answer lands in the salon
+    // owner's personal inbox and never reaches the timeline — which would
+    // make the whole inbound lane decorative.
+    const domain = process.env.RESEND_INBOUND_DOMAIN;
+    const replyTo =
+      context.inboundAddress && domain
+        ? `${context.inboundAddress}@${domain}`
+        : undefined;
+
+    const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+      orgId: context.orgId,
+      customerId: args.customerId,
+      kind: "email_reply",
+      body,
+      emailSubject: subject || undefined,
+      emailFrom: context.emailFrom,
+    });
+
+    const result = await sendEmail({
+      from: `${context.orgName} <${context.emailFrom}>`,
+      to: context.customerEmail,
+      subject: subject || context.orgName,
+      // Typed as plain text, sent as HTML: escaped first so a customer name
+      // with an ampersand in it can't become markup, then newlines become
+      // breaks so the mail reads the way it was written.
+      html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+      replyTo,
+    });
+    await ctx.runMutation(internal.messages.applySendResult, {
+      messageId,
+      ok: result.ok,
+      error: result.ok ? undefined : result.reason,
+    });
+    return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

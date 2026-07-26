@@ -27,6 +27,10 @@ export async function sendEmail(args: {
   to: string;
   subject: string;
   html: string;
+  // Where a reply should go. For customer mail this is the org's own inbound
+  // address, so the answer comes back into the app instead of dead-ending in
+  // whichever mailbox the From address belongs to.
+  replyTo?: string;
 }): Promise<EmailSendResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, reason: "email-not-configured" };
@@ -42,6 +46,7 @@ export async function sendEmail(args: {
         to: [args.to],
         subject: args.subject,
         html: args.html,
+        ...(args.replyTo ? { reply_to: args.replyTo } : {}),
       }),
     });
     if (!res.ok) {

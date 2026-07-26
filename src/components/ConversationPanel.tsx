@@ -32,6 +32,10 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "missing-phone": "error.missing-phone",
   "agent-not-configured": "error.agent-not-configured",
   "no-calendar-connected": "error.no-calendar-connected",
+  // Email lane.
+  "missing-email": "error.missing-email",
+  "no-from-address": "error.no-from-address",
+  "email-not-configured": "error.email-not-configured",
 };
 
 export type FeedFilter = Channel | "note" | "all";
@@ -54,11 +58,20 @@ export function ConversationPanel({
   const { t, language } = useLanguage();
   const feed = useQuery(api.messages.feedForCustomer, { customerId });
   const sendSession = useAction(api.wa.sendSession);
+  const sendEmail = useAction(api.email.sendToCustomer);
   const addNote = useMutation(api.notes.add);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  // The email composer is a disclosure, not a permanent bar: unlike WhatsApp,
+  // where you reply constantly, most visits to the email tab are to READ. It
+  // opens on Compose and closes on send.
+  const [composing, setComposing] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
@@ -97,8 +110,87 @@ export function ConversationPanel({
     }
   };
 
+  const submitEmail = async () => {
+    if (!emailBody.trim() || emailSending) return;
+    setEmailSending(true);
+    setEmailError(null);
+    const result = await sendEmail({
+      customerId,
+      subject: emailSubject,
+      body: emailBody,
+    });
+    setEmailSending(false);
+    if (!result.ok) {
+      setEmailError(result.reason ?? "error");
+      return;
+    }
+    setEmailSubject("");
+    setEmailBody("");
+    setComposing(false);
+  };
+
   return (
     <div className={`flex min-h-0 flex-col ${className ?? ""}`}>
+      {/* Email tab header. Compose sits top-right, Gmail's convention and
+          Nudge's — the old full-width footer bar spent a whole row on one
+          action. This is the slot the notes composer occupies below; each
+          tab owns what goes here. */}
+      {filter === "email" && (
+        <div className="shrink-0 px-3 pt-3">
+          {composing ? (
+            <div className="space-y-2 rounded-xl border border-[var(--border)] p-2">
+              <input
+                value={emailSubject}
+                onChange={(event) => setEmailSubject(event.target.value)}
+                placeholder={t("email.subject")}
+                disabled={emailSending}
+              />
+              <textarea
+                value={emailBody}
+                onChange={(event) => setEmailBody(event.target.value)}
+                placeholder={t("email.bodyPlaceholder")}
+                rows={4}
+                disabled={emailSending}
+                className="resize-none"
+              />
+              {emailError && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {t(ERROR_KEY[emailError] ?? "message.failed")}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposing(false);
+                    setEmailError(null);
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitEmail()}
+                  disabled={emailSending || !emailBody.trim()}
+                  className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
+                >
+                  {emailSending ? t("common.saving") : t("contact.send")}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setComposing(true)}
+              className="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+            >
+              <FeedIcon type="email" size={14} tinted={false} />
+              {t("email.compose")}
+            </button>
+          )}
+        </div>
+      )}
       {filter === "note" && (
         <div className="shrink-0 p-3 pb-0">
           <div className="flex items-end gap-2 rounded-xl bg-[var(--muted-bg)] p-1.5">

@@ -360,6 +360,28 @@ const dictionary = {
     de: "Die Währung, in der Preise angezeigt werden. Ein Wechsel rechnet Beträge nicht um.",
   },
 
+  "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
+  "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
+  "email.bodyPlaceholder": {
+    tr: "Mesajınızı yazın…",
+    en: "Write your message…",
+    de: "Ihre Nachricht…",
+  },
+  "error.missing-email": {
+    tr: "Bu müşterinin e-posta adresi yok",
+    en: "This customer has no email address",
+    de: "Dieser Kunde hat keine E-Mail-Adresse",
+  },
+  "error.no-from-address": {
+    tr: "Gönderen adresi ayarlanmamış (İşletme ayarları)",
+    en: "No sender address set (Business settings)",
+    de: "Keine Absenderadresse hinterlegt (Betriebseinstellungen)",
+  },
+  "error.email-not-configured": {
+    tr: "E-posta bağlı değil",
+    en: "Email is not connected",
+    de: "E-Mail ist nicht verbunden",
+  },
   "notes.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
   "notes.none": {
     tr: "Henüz not yok",
