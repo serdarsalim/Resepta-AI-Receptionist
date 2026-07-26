@@ -162,7 +162,7 @@ export function ContactView({
               The card fills the column and the field list scrolls INSIDE it, so
               the scrollbar hugs the card border the way the conversation card's
               does, instead of a short card floating in an empty column. */}
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden card-raised">
             <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
               <FieldRow label={t("customers.firstName")}>
                 <InlineEditValue
@@ -270,7 +270,7 @@ export function ContactView({
               property, and they must not ride along when the fields scroll. The
               list caps its own height so a heavy customer can't squeeze the
               record card out of the column. */}
-          <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <section className="flex shrink-0 flex-col overflow-hidden card-raised">
             <h3 className="shrink-0 px-4 pt-4 pb-2 text-sm font-semibold">
               {t("appointments.title")}
             </h3>
@@ -314,7 +314,7 @@ export function ContactView({
             The card leads the column with nothing above it, so its top edge
             lines up with the record card's. */}
         <section
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] lg:flex`}
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex`}
         >
           <ConversationPanel
             customerId={customerId}

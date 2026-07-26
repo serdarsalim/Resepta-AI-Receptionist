@@ -81,7 +81,7 @@ export function InboxView({
               alignment alone. Load-bearing despite being empty — delete it and
               the two cards stop lining up. */}
           <div className="h-9 shrink-0 pb-1" aria-hidden />
-          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto card-raised">
             {conversations === undefined ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
                 {t("common.loading")}
@@ -314,7 +314,7 @@ export function InboxView({
               customerId={active.customerId}
               lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
               filter={filter}
-              className="min-h-0 flex-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]"
+              className="min-h-0 flex-1 overflow-hidden card-raised"
             />
           </section>
         )}

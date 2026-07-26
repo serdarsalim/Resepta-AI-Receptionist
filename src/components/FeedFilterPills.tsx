@@ -87,7 +87,10 @@ export function FeedFilterPills({
   };
 
   return (
-    <div className={`flex shrink-0 flex-wrap items-center gap-1.5 ${className ?? ""}`}>
+    // No wrap: the inbox header is a fixed h-9 track (it exists to line the two
+    // cards up), so a second row of pills would spill out of it rather than
+    // push the card down. The pills are small enough to hold one line.
+    <div className={`flex shrink-0 flex-nowrap items-center gap-1.5 ${className ?? ""}`}>
       {TABS.map(pill)}
       <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--border)]" />
       {pill("all")}
