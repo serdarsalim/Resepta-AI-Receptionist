@@ -9,6 +9,8 @@ import {
 } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { alertFailedSend } from "./lib/alerts";
+import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 
 const messageStatus = v.union(
   v.literal("queued"),
@@ -51,10 +53,35 @@ export const logOutQueued = internalMutation({
       emailFrom: args.emailFrom,
       scheduledFor: args.scheduledFor,
       status: "queued",
+      // A row with no scheduledFor is being sent RIGHT NOW by the action that
+      // just created it, so it is in flight from this moment. Stamping it here
+      // is what lets delivery.reapStuck find it if that action dies between
+      // this insert and applySendResult — otherwise the row sits queued
+      // forever with nothing owed and nothing watching it.
+      ...(args.scheduledFor === undefined ? { sendingAt: Date.now() } : {}),
     });
   },
 });
 
+// ── The one place a send outcome is decided ─────────────────────────────────
+//
+// Every send path in the app lands here, which is deliberate: retry policy,
+// dead-lettering and the failure alert all have to agree, and the only way to
+// guarantee that is to have one function own all three.
+//
+// A failure is classified (lib/sendFailure.ts) before anything is written:
+//
+//   permanent   -> status "failed" now, alert now. Nothing about waiting would
+//                  help — no consent, no approved template, a shut window.
+//   transient   -> status stays "queued" with nextAttemptAt set, and NO alert.
+//                  The salon should never hear about a 500 that the backoff
+//                  quietly recovered from thirty seconds later.
+//   out of budget -> "failed" plus deadLetteredAt, and the alert says we tried.
+//
+// Keeping a retrying row as "queued" rather than "failed" matters: the Messages
+// tab and the health counts both read status, and a message still in flight is
+// not a message that failed. Telling the owner otherwise makes them chase
+// something that is about to deliver itself.
 export const applySendResult = internalMutation({
   args: {
     messageId: v.id("messages"),
@@ -64,10 +91,57 @@ export const applySendResult = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) return null;
+    const attempts = (message.attempts ?? 0) + 1;
+
+    if (args.ok) {
+      await ctx.db.patch(args.messageId, {
+        status: "sent",
+        wamid: args.wamid,
+        error: undefined,
+        attempts,
+        nextAttemptAt: undefined,
+        sendingAt: undefined,
+      });
+      return null;
+    }
+
+    const permanent = classifyFailure(args.error) === "permanent";
+    const delay = permanent ? undefined : nextAttemptDelay(attempts);
+
+    if (delay !== undefined) {
+      await ctx.db.patch(args.messageId, {
+        status: "queued",
+        error: args.error,
+        attempts,
+        nextAttemptAt: Date.now() + delay,
+        sendingAt: undefined,
+      });
+      return null;
+    }
+
+    // Terminal. A permanent refusal was never retried, so it is not a dead
+    // letter — that word is reserved for "we tried properly and the provider
+    // never took it", which is the one worth waking somebody for.
+    const deadLettered = !permanent;
     await ctx.db.patch(args.messageId, {
-      status: args.ok ? "sent" : "failed",
-      wamid: args.wamid,
+      status: "failed",
       error: args.error,
+      attempts,
+      nextAttemptAt: undefined,
+      sendingAt: undefined,
+      ...(deadLettered ? { deadLetteredAt: Date.now() } : {}),
+    });
+
+    const customer = message.customerId ? await ctx.db.get(message.customerId) : null;
+    await alertFailedSend(ctx, {
+      orgId: message.orgId,
+      name: customer
+        ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
+        : "—",
+      reason: args.error ?? "unknown",
+      deadLettered,
     });
     return null;
   },

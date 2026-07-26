@@ -28,4 +28,15 @@ crons.interval("complete-past", { hours: 1 }, internal.appointments.completePast
 // for. The claim-then-send ordering inside makes overlapping ticks harmless.
 crons.interval("send-scheduled-messages", { minutes: 1 }, internal.wa.sendDueScheduled, {});
 
+// Sends the provider refused for a reason that might not hold later — a 500, a
+// rate limit, a dropped connection. Every minute because the first backoff
+// step is one minute and a reminder that recovers is only useful if it
+// recovers before the appointment.
+crons.interval("retry-failed-sends", { minutes: 1 }, internal.delivery.retryDue, {});
+
+// Rows claimed for sending whose action never came back. Ten minutes is far
+// more often than the two-hour threshold needs, and it costs one indexed read
+// that returns nothing on a healthy deployment.
+crons.interval("reap-stuck-sends", { minutes: 10 }, internal.delivery.reapStuck, {});
+
 export default crons;

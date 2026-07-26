@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import type { Scheduler } from "convex/server";
 import { internal } from "./_generated/api";
 import {
   action,
@@ -12,66 +11,11 @@ import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
 import { emailLaneConfigured, sendEmail } from "./lib/email";
 import { fetchWaMedia, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
-import { queueOrgAlert } from "./lib/alerts";
+import { isOrgSetupFailure } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
-
-// Not every failed row is an incident. These three reasons are the steady
-// state of a normally-working account, and emailing about them is how a salon
-// learns to ignore the alert that actually matters:
-//
-//   no-consent            every contact who never opted in fails this way,
-//                         every time, forever. It is a KVKK record, not a bug.
-//   wa-not-configured     true for every send until the org connects a number,
-//                         so a brand new org would get one email per send on
-//                         day one.
-//   session-window-closed normal WhatsApp behaviour. Meta closes the 24h
-//                         window; nothing is broken and nothing is fixable.
-//
-// Everything else is either the org's own missing template or the provider
-// refusing a send, and both are broken AND actionable. The failed row still
-// gets written in all cases: the Messages tab is where the steady-state ones
-// belong.
-const STEADY_STATE_FAILURES = new Set([
-  "no-consent",
-  "wa-not-configured",
-  "session-window-closed",
-]);
-
-// A narrower set: failures that say nothing about the customer or the message,
-// only that the ORG has not finished setting up. These get ONE row and then go
-// quiet, because otherwise every reminder for every customer writes another
-// red line into a conversation that is supposed to show what that person was
-// told. Settings already reports this state, in one place, loudly.
-//
-// no-consent is deliberately NOT in here even though it repeats forever: it is
-// a KVKK record that we correctly did not message somebody, and evidence is
-// the one kind of row worth keeping duplicated. session-window-closed stays
-// too — it depends on when THAT customer last wrote, so it belongs in THAT
-// thread.
-function isOrgSetupFailure(reason: string): boolean {
-  return reason === "wa-not-configured" || reason.startsWith("no-approved-template");
-}
-
-// Every failed row in this file routes through here. Scheduled by
-// queueOrgAlert, so a broken alert cannot roll back or delay the send path.
-async function alertFailedSend(
-  ctx: { scheduler: Scheduler },
-  args: { orgId: Id<"orgs">; name: string; reason: string },
-) {
-  if (STEADY_STATE_FAILURES.has(args.reason)) return;
-  const missingTemplate = args.reason.startsWith("no-approved-template");
-  await queueOrgAlert(ctx, {
-    orgId: args.orgId,
-    template: missingTemplate ? "failedNoTemplate" : "failedOther",
-    who: args.name,
-    // The provider's own text only reaches the reader on the generic template;
-    // the missing-template case has a sentence that says what to do instead.
-    detail: missingTemplate ? undefined : args.reason,
-  });
-}
 
 // Context for a rep-typed session message. Runs with the caller's auth (auth
 // propagates through runQuery), so the org scoping holds inside the action.
@@ -148,13 +92,10 @@ export const sendSession = action({
       wamid: result.ok ? result.wamid : undefined,
       error: result.ok ? undefined : result.reason,
     });
-    if (!result.ok) {
-      await alertFailedSend(ctx, {
-        orgId: customer.orgId,
-        name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-        reason: result.reason,
-      });
-    }
+    // No alert here: applySendResult owns that decision now, because it is the
+    // only place that knows whether this failure is terminal or about to be
+    // retried. The caller still gets the reason back — someone typed this
+    // message and is watching for it to land.
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
   },
 });
@@ -306,8 +247,6 @@ export const sendAppointmentMessage = internalAction({
     const waTemplate =
       contentTemplate?.status === "approved" ? contentTemplate : undefined;
 
-    const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
-
     const fail = async (reason: string) => {
       if (
         isOrgSetupFailure(reason) &&
@@ -326,15 +265,14 @@ export const sendAppointmentMessage = internalAction({
         appointmentId: appointment._id,
         kind: messageKind,
       });
+      // applySendResult alerts if this reason warrants it. Every reason that
+      // reaches here is a local refusal, so it classifies permanent and fails
+      // terminally rather than entering the retry queue — which is right: a
+      // customer who never consented will not have consented in five minutes.
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId,
         ok: false,
         error: reason,
-      });
-      await alertFailedSend(ctx, {
-        orgId: appointment.orgId,
-        name: customerName,
-        reason,
       });
     };
 
@@ -387,13 +325,6 @@ export const sendAppointmentMessage = internalAction({
         wamid: result.ok ? result.wamid : undefined,
         error: result.ok ? undefined : result.reason,
       });
-      if (!result.ok) {
-        await alertFailedSend(ctx, {
-          orgId: appointment.orgId,
-          name: customerName,
-          reason: result.reason,
-        });
-      }
       if (result.ok && args.kind === "confirmation") {
         await ctx.runMutation(internal.appointments.stampConfirmationSent, {
           appointmentId: appointment._id,
@@ -423,13 +354,6 @@ export const sendAppointmentMessage = internalAction({
         ok: emailResult.ok,
         error: emailResult.ok ? undefined : emailResult.reason,
       });
-      if (!emailResult.ok) {
-        await alertFailedSend(ctx, {
-          orgId: appointment.orgId,
-          name: customerName,
-          reason: emailResult.reason,
-        });
-      }
     }
     return null;
   },
@@ -505,11 +429,14 @@ export const dueScheduled = internalQuery({
     const rows = await ctx.db
       .query("messages")
       .withIndex("by_status_scheduled", (q) =>
-        q.eq("status", "queued").lte("scheduledFor", Date.now()),
+        // Above zero excludes rows with no scheduledFor at all — unset sorts
+        // before every number, so without it this range reads every queued
+        // message on the deployment, including ones merely waiting on a retry.
+        q.eq("status", "queued").gt("scheduledFor", 0).lte("scheduledFor", Date.now()),
       )
       .take(100);
     return rows
-      .filter((row) => row.scheduledFor !== undefined && row.customerId && row.body)
+      .filter((row) => row.customerId && row.body)
       .map((row) => ({
         messageId: row._id,
         customerId: row.customerId!,
@@ -527,7 +454,13 @@ export const claimScheduled = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.messageId);
     if (!row || row.status !== "queued" || row.scheduledFor === undefined) return false;
-    await ctx.db.patch(args.messageId, { scheduledFor: undefined });
+    // sendingAt marks it in flight so delivery.reapStuck can find it if this
+    // action dies before reporting a result. Without it a parked send whose
+    // dispatch was killed would sit queued with nothing left to pick it up.
+    await ctx.db.patch(args.messageId, {
+      scheduledFor: undefined,
+      sendingAt: Date.now(),
+    });
     return true;
   },
 });

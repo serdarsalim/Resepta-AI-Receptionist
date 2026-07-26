@@ -40,6 +40,7 @@ import { internalAction, internalQuery, query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireOrg } from "./orgAuth";
 import { emailLaneConfigured, sendEmail } from "./email";
+import { MAX_ATTEMPTS } from "./sendFailure";
 
 export type AlertKind = "inbound" | "failed-send";
 
@@ -381,4 +382,69 @@ export async function queueOrgAlert(
   } catch {
     // Never throw into the caller. See the header.
   }
+}
+
+// ── Failed-send alerts ──────────────────────────────────────────────────────
+//
+// Not every failed row is an incident. These three reasons are the steady
+// state of a normally-working account, and emailing about them is how a salon
+// learns to ignore the alert that actually matters:
+//
+//   no-consent            every contact who never opted in fails this way,
+//                         every time, forever. It is a KVKK record, not a bug.
+//   wa-not-configured     true for every send until the org connects a number,
+//                         so a brand new org would get one email per send on
+//                         day one.
+//   session-window-closed normal WhatsApp behaviour. Meta closes the 24h
+//                         window; nothing is broken and nothing is fixable.
+//
+// Everything else is either the org's own missing template or the provider
+// refusing a send, and both are broken AND actionable. The failed row still
+// gets written in all cases: the Messages tab is where the steady-state ones
+// belong.
+const STEADY_STATE_FAILURES = new Set([
+  "no-consent",
+  "wa-not-configured",
+  "session-window-closed",
+]);
+
+// A narrower set: failures that say nothing about the customer or the message,
+// only that the ORG has not finished setting up. These get ONE row and then go
+// quiet, because otherwise every reminder for every customer writes another
+// red line into a conversation that is supposed to show what that person was
+// told. Settings already reports this state, in one place, loudly.
+//
+// no-consent is deliberately NOT in here even though it repeats forever: it is
+// a KVKK record that we correctly did not message somebody, and evidence is
+// the one kind of row worth keeping duplicated. session-window-closed stays
+// too — it depends on when THAT customer last wrote, so it belongs in THAT
+// thread.
+export function isOrgSetupFailure(reason: string): boolean {
+  return reason === "wa-not-configured" || reason.startsWith("no-approved-template");
+}
+
+// Called ONLY when a send has terminally failed — never on a transient failure
+// that is about to be retried. A provider hiccup that the backoff recovers
+// from is not something to email a salon owner about at 06:00; the whole point
+// of the retry queue is that they never hear about it.
+export async function alertFailedSend(
+  ctx: { scheduler: Scheduler },
+  args: { orgId: Id<"orgs">; name: string; reason: string; deadLettered?: boolean },
+) {
+  if (STEADY_STATE_FAILURES.has(args.reason)) return;
+  const missingTemplate = args.reason.startsWith("no-approved-template");
+  await queueOrgAlert(ctx, {
+    orgId: args.orgId,
+    template: missingTemplate ? "failedNoTemplate" : "failedOther",
+    who: args.name,
+    // The provider's own text only reaches the reader on the generic template;
+    // the missing-template case has a sentence that says what to do instead.
+    // A dead letter says so explicitly — "we tried and gave up" is a different
+    // thing to be told than "this was refused".
+    detail: missingTemplate
+      ? undefined
+      : args.deadLettered
+        ? `${args.reason} (${MAX_ATTEMPTS} attempts)`
+        : args.reason,
+  });
 }

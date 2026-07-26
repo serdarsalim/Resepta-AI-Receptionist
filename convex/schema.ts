@@ -449,6 +449,35 @@ export default defineSchema({
     // copy of the same reply in the customer's timeline.
     emailId: v.optional(v.string()),
     error: v.optional(v.string()),
+
+    // ---- Delivery durability (lib/sendFailure.ts, delivery.ts) ------------
+    //
+    // A reminder that fails once used to stay failed forever: the send path
+    // wrote the row and stopped. Meta returning a 500, a rate limit, or a
+    // dropped connection meant that customer simply never heard from the
+    // salon, which is the product not working.
+    //
+    // So a failure that could plausibly succeed later is RETRIED on a backoff,
+    // and only a failure that cannot — no consent, no approved template, a
+    // closed session window — goes straight to `failed`.
+
+    // How many provider attempts this row has had. Retained after success as
+    // well: "delivered on the third try" is worth being able to see.
+    attempts: v.optional(v.number()),
+    // When the next attempt is due. Set only while a row is waiting to retry;
+    // the row keeps status "queued" throughout, because a message we are still
+    // trying to deliver has not failed yet and telling the salon otherwise
+    // would be a lie it acts on.
+    nextAttemptAt: v.optional(v.number()),
+    // Stamped when an attempt is claimed, cleared when it lands. A row holding
+    // this for longer than the reaper's threshold had its action die mid-POST
+    // — nothing will ever come back for it, so the reaper fails it rather than
+    // leaving it in flight forever.
+    sendingAt: v.optional(v.number()),
+    // Set when the retry budget ran out. Distinct from a plain `failed`: this
+    // one was tried properly and the provider never took it, which is the
+    // failure worth waking someone for.
+    deadLetteredAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"])
@@ -457,6 +486,14 @@ export default defineSchema({
     // Due scheduled sends. Status first so the scan skips everything already
     // sent, which is nearly the whole table.
     .index("by_status_scheduled", ["status", "scheduledFor"])
+    // Rows waiting on a retry. Unset sorts before every number, so the cron's
+    // range starts above zero and reads only rows actually owed an attempt.
+    .index("by_next_attempt", ["nextAttemptAt"])
+    // In-flight rows, for the reaper. Same trick: unset means not in flight.
+    .index("by_sending", ["sendingAt"])
+    // Failure surfacing per org — the Messages tab badge and the platform
+    // admin's per-org health both ask "what broke here lately".
+    .index("by_org_status", ["orgId", "status"])
     .index("by_wamid", ["wamid"]),
 
   // Staff-written notes on a customer — "allergic to ammonia", "always late,
