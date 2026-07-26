@@ -39,6 +39,8 @@ npx convex env set --prod RETELL_API_KEY <Retell dashboard>
 npx convex env set --prod WA_APP_SECRET <Meta app secret>
 npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <any random string, kept>
 npx convex env set --prod RESEND_API_KEY <Resend dashboard, API keys>
+npx convex env set --prod RESEND_INBOUND_DOMAIN <the domain customers write to>
+npx convex env set --prod RESEND_WEBHOOK_SECRET <whsec_… from the webhook you add>
 ```
 
 `RETELL_API_KEY` and `WA_APP_SECRET` are the two that close the fail-open holes.
@@ -46,6 +48,14 @@ npx convex env set --prod RESEND_API_KEY <Resend dashboard, API keys>
 means alerts are logged and dropped. The domain in each org's `emailFrom` must
 also be verified in Resend (DNS: SPF + DKIM records it gives you), or sends come
 back 403 and land in the message row's error column.
+
+Inbound email needs two more things beyond the key. `RESEND_INBOUND_DOMAIN` is
+the domain customers write TO — one verified domain serves every org, because
+routing happens on the LOCAL PART (each org's `inboundAddress`, set in Business
+settings). And in Resend, add a webhook for `email.received` pointing at
+`<your convex site url>/email/inbound`; the `whsec_…` it gives you is
+`RESEND_WEBHOOK_SECRET`. Unset means the route answers 503 and mail is
+dropped rather than silently accepted unverified.
 
 Google OAuth redirect URI, added in Google Cloud console:
 
