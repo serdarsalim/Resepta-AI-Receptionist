@@ -104,18 +104,18 @@ const NAV_TABS: {
   color: string;
 }[] = [
   {
-    id: "appointments",
-    key: "nav.appointments",
-    Icon: AppointmentsIcon,
-    color: "var(--brand)",
-  },
-  {
     id: "customers",
     key: "nav.customers",
     Icon: CustomersIcon,
     color: "#8b5cf6",
   },
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
+  {
+    id: "appointments",
+    key: "nav.appointments",
+    Icon: AppointmentsIcon,
+    color: "var(--brand)",
+  },
 ];
 
 // Config is not a place you work, so it closes the nav in its own group
@@ -836,7 +836,7 @@ export function AppShell({
           </button>
         </div>
 
-        <nav className={`flex flex-1 flex-col py-1 ${showCollapsed ? "px-1" : "px-2"}`}>
+        <nav className={`flex flex-1 flex-col pb-1 pt-4 ${showCollapsed ? "px-1" : "px-2"}`}>
           <div className="space-y-0.5">
             {NAV_TABS.map((entry) => (
               <SidebarButton
@@ -853,7 +853,7 @@ export function AppShell({
           {/* pb-4 lifts the group off the pane's bottom edge: flush against it
               the two entries read as cut off, and on a Mac the dev-tools bubble
               lands right on top of the last one. */}
-          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pb-4 pt-1.5">
+          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pb-7 pt-2">
             {FOOT_TABS.map((entry) => (
               <SidebarButton
                 key={entry.id}
