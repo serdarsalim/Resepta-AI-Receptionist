@@ -27,8 +27,8 @@
 // triggered it. A salon losing an alert email is bad; a salon losing the
 // customer's actual message because the alert broke is unforgivable.
 //
-// Delivery rides the same n8n webhook as customer email (lib/email.ts), from
-// the org's own From address. No emailFrom set, or no N8N_EMAIL_WEBHOOK_URL on
+// Delivery rides the same provider as customer email (lib/email.ts), from
+// the org's own From address. No emailFrom set, or no RESEND_API_KEY on
 // the deployment, means the org has no email lane at all. That case used to
 // return silently while the account switches still promised email; it now logs
 // and is readable from the `alertHealth` query below so the UI can say so.
@@ -39,7 +39,7 @@ import { internal } from "../_generated/api";
 import { internalAction, internalQuery, query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireOrg } from "./orgAuth";
-import { sendEmailViaN8n } from "./email";
+import { emailLaneConfigured, sendEmail } from "./email";
 
 export type AlertKind = "inbound" | "failed-send";
 
@@ -284,7 +284,7 @@ export const alertHealth = query({
       if (alertEnabled(user, "inbound")) inbound.add(user.email);
       if (alertEnabled(user, "failed-send")) failedSend.add(user.email);
     }
-    const laneConfigured = Boolean(process.env.N8N_EMAIL_WEBHOOK_URL);
+    const laneConfigured = emailLaneConfigured();
     const emailFrom = org?.emailFrom;
     const blocker = !laneConfigured
       ? ("no-email-lane" as const)
@@ -316,12 +316,11 @@ export const deliverOrgAlert = internalAction({
   handler: async (ctx, args): Promise<null> => {
     try {
       const copy = ALERT_COPY[args.template];
-      const webhookUrl = process.env.N8N_EMAIL_WEBHOOK_URL;
-      if (!webhookUrl) {
+      if (!emailLaneConfigured()) {
         // Not silent any more: the account switches promise email, so a
         // deployment with no email lane has to be findable in the logs.
         console.warn(
-          `alert dropped (${args.template}, org ${args.orgId}): N8N_EMAIL_WEBHOOK_URL is unset, this deployment has no email lane`,
+          `alert dropped (${args.template}, org ${args.orgId}): RESEND_API_KEY is unset, this deployment has no email lane`,
         );
         return null;
       }
@@ -349,11 +348,10 @@ export const deliverOrgAlert = internalAction({
       const subject = fill(copy.subject[language], args.who, args.detail ?? "");
       const body = fill(copy.body[language], args.who, args.detail ?? "");
       const html = `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`;
-      // sendEmailViaN8n reports failure rather than throwing, and one bad
-      // address must not cost the rest of the team their alert.
+      // sendEmail reports failure rather than throwing, and one bad address
+      // must not cost the rest of the team their alert.
       for (const to of recipients.emails) {
-        await sendEmailViaN8n({
-          webhookUrl,
+        await sendEmail({
           from: recipients.from,
           to,
           subject,

@@ -99,8 +99,9 @@ export default defineSchema({
     // No-show winback: template send N days after a no_show.
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
-    // From-address for customer emails; delivery rides the shared n8n
-    // send-email workflow (env N8N_EMAIL_WEBHOOK_URL). Unset = email off.
+    // From-address for customer emails; delivery goes straight to the email
+    // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
+    // verified there or sends are rejected. Unset = email off.
     emailFrom: v.optional(v.string()),
 
     // When the salon is OPEN — a different question from quietHours, which is

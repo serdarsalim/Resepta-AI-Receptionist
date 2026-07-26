@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { action, internalAction, internalQuery } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
-import { sendEmailViaN8n } from "./lib/email";
+import { emailLaneConfigured, sendEmail } from "./lib/email";
 import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { queueOrgAlert } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
@@ -377,11 +377,10 @@ export const sendAppointmentMessage = internalAction({
       }
     }
 
-    // Email lane (n8n-delivered): rides alongside WhatsApp when the customer
-    // left an email and the org set a From. No Meta approval applies to
-    // email, so the template's bodyPreview text sends as-is.
-    const emailWebhook = process.env.N8N_EMAIL_WEBHOOK_URL;
-    if (emailWebhook && customer.email && org.emailFrom && body) {
+    // Email lane: rides alongside WhatsApp when the customer left an address
+    // and the org set a From. No Meta approval applies to email, so the
+    // template's bodyPreview text sends as-is.
+    if (emailLaneConfigured() && customer.email && org.emailFrom && body) {
       const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,
@@ -389,8 +388,7 @@ export const sendAppointmentMessage = internalAction({
         kind: `email_${messageKind}`,
         body,
       });
-      const emailResult = await sendEmailViaN8n({
-        webhookUrl: emailWebhook,
+      const emailResult = await sendEmail({
         from: org.emailFrom,
         to: customer.email,
         subject: `${org.name}, ${when}`,

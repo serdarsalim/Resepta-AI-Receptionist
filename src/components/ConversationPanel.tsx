@@ -79,9 +79,9 @@ export function ConversationPanel({
 
   const windowOpen =
     !!lastInboundAt && Date.now() - lastInboundAt < SESSION_WINDOW_MS;
-  // Replies only exist on WhatsApp: email here is one-way (template text via
-  // n8n) and a call isn't something you type back into. The notes tab has its
-  // own composer at the top and doesn't want this one.
+  // Replies only exist on WhatsApp: email here is still one-way (template text
+  // out, no inbound lane yet) and a call isn't something you type back into.
+  // The notes tab has its own composer at the top and doesn't want this one.
   const canCompose = filter === "all" || filter === "whatsapp";
 
   const saveNote = async () => {

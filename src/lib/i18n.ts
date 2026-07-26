@@ -515,9 +515,9 @@ const dictionary = {
     de: "Absenderadresse",
   },
   "settings.emailFromHint": {
-    tr: "Doluysa onay ve hatırlatmalar e-posta adresi olan müşterilere e-postayla da gider (n8n üzerinden).",
-    en: "When set, confirmations and reminders also go by email to customers with an address (via n8n).",
-    de: "Ist sie hinterlegt, gehen Bestätigungen und Erinnerungen zusätzlich per E-Mail an alle Kunden mit E-Mail-Adresse (über n8n).",
+    tr: "Doluysa onay ve hatırlatmalar, e-posta adresi olan müşterilere e-postayla da gider.",
+    en: "When set, confirmations and reminders also go by email to customers who have an address.",
+    de: "Ist sie hinterlegt, gehen Bestätigungen und Erinnerungen zusätzlich per E-Mail an alle Kunden mit E-Mail-Adresse.",
   },
   "settings.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
   "settings.waConnected": { tr: "Bağlı", en: "Connected", de: "Verbunden" },

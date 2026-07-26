@@ -53,9 +53,10 @@ strategy documented in session notes, revisit post-launch).
   `no_show`, org toggle, same scheduler pattern.
 - **Quiet hours:** org-level send window for reminders (Türkiye default
   09:00–21:00); the tick already stamps offsets, it just holds dispatch.
-- **Email connector: BUILT (2026-07-25), delivery via n8n** (Serdar's call —
-  reuse the shared n8n send-email workflow, same infra as Nudge). Deployment
-  env `N8N_EMAIL_WEBHOOK_URL` + per-org `orgs.emailFrom`; sends ride alongside
+- **Email connector: BUILT (2026-07-25), delivery direct to Resend** (the n8n
+  hop was dropped 2026-07-26 — it forwarded one HTTP POST to another and bought
+  no retry or routing we used). Deployment env `RESEND_API_KEY` + per-org
+  `orgs.emailFrom` on a Resend-verified domain; sends ride alongside
   WhatsApp whenever the customer has an email, using the template row's text
   (no Meta approval applies to email). Channels attempt independently — an
   unconfigured WhatsApp no longer blocks the email.

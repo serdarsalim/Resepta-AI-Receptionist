@@ -38,12 +38,14 @@ npx convex env set --prod AUTH_GOOGLE_SECRET <same client>
 npx convex env set --prod RETELL_API_KEY <Retell dashboard>
 npx convex env set --prod WA_APP_SECRET <Meta app secret>
 npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <any random string, kept>
-npx convex env set --prod N8N_EMAIL_WEBHOOK_URL <the shared n8n send-email webhook>
+npx convex env set --prod RESEND_API_KEY <Resend dashboard, API keys>
 ```
 
 `RETELL_API_KEY` and `WA_APP_SECRET` are the two that close the fail-open holes.
-`N8N_EMAIL_WEBHOOK_URL` is what turns the email lane and the owner alerts on;
-unset means alerts are logged and dropped.
+`RESEND_API_KEY` is what turns the email lane and the owner alerts on; unset
+means alerts are logged and dropped. The domain in each org's `emailFrom` must
+also be verified in Resend (DNS: SPF + DKIM records it gives you), or sends come
+back 403 and land in the message row's error column.
 
 Google OAuth redirect URI, added in Google Cloud console:
 
