@@ -57,10 +57,15 @@ export function AppointmentsView({
   // The day the calendar is looking at. Day view steps it by one, week view
   // by seven, so one piece of state serves both.
   const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
-  // Only the list can be searched: filtering a week grid by name would
-  // leave holes in a layout whose whole job is showing the shape of the
-  // week, so the calendar views release the header's box entirely.
-  const search = useHeaderSearch(view === "list" ? t("appointments.search") : null);
+  // Search is offered on every view, but only the LIST can answer it: filtering
+  // a week grid by name would punch holes in a layout whose whole job is
+  // showing the shape of the week. So typing switches you to the view that can
+  // show results, rather than the box going missing on two views out of three
+  // and leaving you to work out why.
+  const search = useHeaderSearch(t("appointments.search"));
+  useEffect(() => {
+    if (search.active && view !== "list") setView("list");
+  }, [search.active, view]);
 
   // Two weeks back → six weeks forward covers the list AND every reachable
   // week-view page from one subscription.
@@ -199,10 +204,10 @@ export function AppointmentsView({
       }
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-        {/* Segmented control, not loose pills: three views of one thing read
-            as one control. Selected sits on --background so it stays visible
-            against the track in dark mode. */}
+        {/* View switch left, the one create action right. The switch is a
+            property of what you are looking at; the button makes something
+            new, and those are not the same kind of control to be stacked in
+            one cluster. */}
         <div className="inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
           {VIEW_MODES.map((mode) => (
             <button
@@ -220,7 +225,7 @@ export function AppointmentsView({
           ))}
         </div>
         <button
-          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
+          className="ml-auto rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => {
             setSheetError(undefined);
             setSheetCanForce(false);
@@ -232,7 +237,6 @@ export function AppointmentsView({
         >
           {t("appointments.new")}
         </button>
-        </div>
       </div>
 
       {appointments?.length === 0 && view === "list" && (
@@ -375,6 +379,10 @@ export function AppointmentsView({
           error={sheetError}
           canForce={sheetCanForce}
           onClose={() => setSheet(null)}
+          onOpenCustomer={(id) => {
+            setSheet(null);
+            onOpenContact(id);
+          }}
           onDelete={
             sheet.appointmentId
               ? () => {

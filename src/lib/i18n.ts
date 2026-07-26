@@ -49,7 +49,11 @@ const dictionary = {
   "theme.auto": { tr: "Otomatik", en: "Auto", de: "Automatisch" },
 
   "nav.today": { tr: "Bugün", en: "Today", de: "Heute" },
-  "nav.appointments": { tr: "Randevular", en: "Appointments", de: "Termine" },
+  // "Takvim"/"Calendar", not "Randevular": the destination is the calendar and
+  // three of its four views are a grid. The thing you CREATE there is still a
+  // randevu, so the button stays "Yeni randevu" — the place and the object do
+  // not have to share a name.
+  "nav.appointments": { tr: "Takvim", en: "Calendar", de: "Kalender" },
   "nav.customers": { tr: "Müşteriler", en: "Customers", de: "Kunden" },
   "nav.inbox": { tr: "Gelen Kutusu", en: "Inbox", de: "Posteingang" },
   "nav.collapse": {
