@@ -239,6 +239,19 @@ export function useTheme() {
 // "script tag inside a component" warning doesn't fire.
 export const NO_FOUC_SCRIPT = `(() => {
   try {
+    // The public request page belongs to whoever is looking at it, not to the
+    // salon's account. Embedded in someone's website it must follow THAT
+    // visitor's browser, or a light salon homepage gets a black block pasted
+    // into it — and the sun-based auto theme, which is right for staff working
+    // a late shift, is exactly wrong for a stranger filling in a form.
+    if (location.pathname.startsWith('/r/')) {
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      return;
+    }
     const stored = localStorage.getItem('${STORAGE_KEY}');
     const theme = stored === 'light' || stored === 'dark' ? stored : 'auto';
     let dark;

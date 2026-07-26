@@ -120,6 +120,48 @@ const TIMEZONES = [
   "UTC",
 ];
 
+// The paste-into-your-website snippet. Self-contained on purpose: no hosted
+// script to keep alive, nothing to version, and nothing that breaks a salon's
+// homepage the day we redeploy. The listener matches the iframe by its own
+// contentWindow rather than by URL, so a page carrying two of these sizes each
+// one correctly.
+function EmbedSnippet({ src }: { src: string }) {
+  const { t } = useLanguage();
+  const [copied, setCopied] = useState(false);
+  // The snippet is never shown. A salon owner does not read HTML, and a box
+  // of angle brackets in their settings is something to be afraid of breaking
+  // rather than something to use — they copy it and hand it to whoever built
+  // the site. Self-contained on purpose: no hosted script to keep alive, and
+  // the listener matches the iframe by its own contentWindow, so a page
+  // carrying two of these sizes each one correctly.
+  const snippet = [
+    `<iframe src="${src}" style="width:100%;border:0" height="620" title="Randevu"></iframe>`,
+    `<script>addEventListener("message",function(e){if(!e.data||e.data.type!=="randevu:height")return;document.querySelectorAll("iframe").forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})})</script>`,
+  ].join("\n");
+  return (
+    <span className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={async () => {
+          await navigator.clipboard.writeText(snippet);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 2000);
+        }}
+        className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+      >
+        {copied ? t("common.copied") : t("settings.formEmbedCopy")}
+      </button>
+      {/* Says what now happens, because "Copied" alone leaves someone holding
+          something without knowing what to do with it. */}
+      {copied && (
+        <span className="text-xs text-[var(--muted)]">
+          {t("settings.formEmbedCopied")}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // Name, timezone, language, sender address. This used to be Settings' first
 // chip, which put the business's own identity behind a page about
 // connections. It is not a connection, so it leads here instead.
@@ -189,6 +231,17 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </a>
             )}
           </span>
+          {settings.org.formEnabled && settings.org.publicSlug && (
+            <>
+              {/* The link is for a bio; this is for a website. Two different
+                  jobs, so both are offered rather than making the salon work
+                  out that one can be turned into the other. */}
+              <RowLabel label={t("settings.formEmbed")} hint={t("settings.formEmbedHint")} />
+              <EmbedSnippet
+                src={`${origin}/r/${settings.org.publicSlug}?embed=1`}
+              />
+            </>
+          )}
           <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
           <span className="flex items-center gap-1">
             <input

@@ -348,6 +348,26 @@ const dictionary = {
     en: "A public page customers fill in to reach you. Requests land in that customer's conversation; no appointment is created automatically.",
     de: "Eine öffentliche Seite, über die Kunden Sie erreichen. Anfragen landen im Gespräch des Kunden; ein Termin wird nicht automatisch angelegt.",
   },
+  "settings.formEmbed": {
+    tr: "Web sitesine ekle",
+    en: "Embed on your website",
+    de: "Auf Ihrer Website einbetten",
+  },
+  "settings.formEmbedHint": {
+    tr: "Formu kendi sitenizin içinde gösterir. Kodu kopyalayıp sitenizi yapan kişiye verin.",
+    en: "Shows the form inside your own website. Copy the code and give it to whoever built your site.",
+    de: "Zeigt das Formular in Ihrer eigenen Website. Code kopieren und an die Person geben, die Ihre Site gebaut hat.",
+  },
+  "settings.formEmbedCopy": {
+    tr: "Kodu kopyala",
+    en: "Copy embed code",
+    de: "Einbettungscode kopieren",
+  },
+  "settings.formEmbedCopied": {
+    tr: "Sitenizi yapan kişiye gönderin.",
+    en: "Send it to whoever looks after your website.",
+    de: "Schicken Sie ihn an die Person, die Ihre Website betreut.",
+  },
   "settings.inboundAddress": {
     tr: "Gelen e-posta adresi",
     en: "Incoming email address",

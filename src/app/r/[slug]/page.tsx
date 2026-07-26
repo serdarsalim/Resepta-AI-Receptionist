@@ -8,7 +8,8 @@
 // and asks the fewest questions that still let the salon call them back.
 
 import { useMutation, useQuery } from "convex/react";
-import { use, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { use, useEffect, useRef, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -21,6 +22,11 @@ export default function RequestFormPage({
 }) {
   const { slug } = use(params);
   const { t } = useLanguage();
+  // ?embed=1 strips the page down to the form itself: no centring, no min
+  // height, no card. Inside somebody's website the surrounding page IS the
+  // chrome, and a second card floating in a card is the tell that something
+  // was pasted in.
+  const embedded = useSearchParams().get("embed") === "1";
   const form = useQuery(api.forms.publicForm, { slug });
   const submit = useMutation(api.forms.submit);
 
@@ -33,17 +39,25 @@ export default function RequestFormPage({
   const [done, setDone] = useState(false);
 
   if (form === undefined) {
-    return <Shell><p className="text-sm text-[var(--muted)]">{t("common.loading")}</p></Shell>;
+    return (
+      <Shell embedded={embedded}>
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      </Shell>
+    );
   }
   // A disabled form and a wrong slug look identical, deliberately — see
   // forms.publicForm.
   if (form === null) {
-    return <Shell><p className="text-sm text-[var(--muted)]">{t("forms.notFound")}</p></Shell>;
+    return (
+      <Shell embedded={embedded}>
+        <p className="text-sm text-[var(--muted)]">{t("forms.notFound")}</p>
+      </Shell>
+    );
   }
 
   if (done) {
     return (
-      <Shell title={form.orgName}>
+      <Shell title={form.orgName} embedded={embedded}>
         {/* No "we'll call you within X" — that is a promise the app cannot
             keep on the salon's behalf. */}
         <p className="text-sm">{t("forms.thanks")}</p>
@@ -52,7 +66,7 @@ export default function RequestFormPage({
   }
 
   return (
-    <Shell title={form.orgName}>
+    <Shell title={form.orgName} embedded={embedded}>
       <form
         className="space-y-4"
         onSubmit={async (event) => {
@@ -168,12 +182,50 @@ export default function RequestFormPage({
   );
 }
 
-// One narrow column, centred, nothing else on the page. Whoever opens this
-// came from a link in a bio and is holding a phone.
-function Shell({ title, children }: { title?: string; children: React.ReactNode }) {
+// Standalone: one narrow column, centred, nothing else on the page — whoever
+// opens the link came from a bio and is holding a phone.
+//
+// Embedded: no centring, no card, no page height. The host page supplies all
+// of that, and the iframe reports its own height upward so the frame can be
+// sized to the content instead of guessing and leaving a scrollbar or a gap.
+function Shell({
+  title,
+  embedded,
+  children,
+}: {
+  title?: string;
+  embedded?: boolean;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!embedded) return;
+    const el = ref.current;
+    if (!el || window.parent === window) return;
+    const post = () =>
+      // Height only, so the wildcard target origin carries nothing worth
+      // protecting — and the host page cannot be made to prove who it is
+      // before it is allowed to size its own iframe.
+      window.parent.postMessage(
+        { type: "randevu:height", height: Math.ceil(el.getBoundingClientRect().height) },
+        "*",
+      );
+    post();
+    const observer = new ResizeObserver(post);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [embedded]);
+
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
-      <div className="card-raised p-5">
+    <main
+      ref={ref}
+      className={
+        embedded
+          ? "w-full"
+          : "mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10"
+      }
+    >
+      <div className={embedded ? "" : "card-raised p-5"}>
         {title && <h1 className="mb-4 text-lg font-semibold">{title}</h1>}
         {children}
       </div>
