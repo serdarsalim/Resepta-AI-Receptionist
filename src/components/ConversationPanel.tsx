@@ -1,12 +1,12 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, formatDayHeading, formatTime } from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject } from "../../convex/lib/emailInbound";
 
@@ -38,6 +38,45 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "no-from-address": "error.no-from-address",
   "email-not-configured": "error.email-not-configured",
 };
+
+// WhatsApp's own delivery language, because it is the one the salon already
+// reads on their phone: one tick left us, two ticks reached the handset, two
+// blue ticks were opened. The words stay in the title for a hover and for
+// screen readers — a tick is faster to scan but it is not self-explanatory.
+function DeliveryTicks({ status, label }: { status: string; label: string }) {
+  if (status === "queued") {
+    return (
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-label={label}>
+        <title>{label}</title>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+  if (status !== "sent" && status !== "delivered" && status !== "read") return null;
+  const read = status === "read";
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-label={label}
+      // Blue only once it has been READ. Delivered stays the muted colour it
+      // inherits, so "they have seen it" is the one state that changes hue —
+      // which is the only one the salon actually acts on.
+      className={read ? "text-sky-500" : ""}
+    >
+      <title>{label}</title>
+      <path d="M2 12.5 7 17.5 12 11.5" />
+      {status !== "sent" && <path d="M11 15.5 12.5 17 18 10.5" />}
+    </svg>
+  );
+}
 
 export type FeedFilter = Channel | "note" | "all";
 
@@ -351,24 +390,43 @@ export function ConversationPanel({
               </span>
             </button>
           ))}
-        {filter === "email" && !openThread ? null : thread.map((item) => {
+        {filter === "email" && !openThread ? null : thread.map((item, index) => {
           if (item.channel === "call") return <CallEntry key={item.id} item={item} />;
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
           const statusKey = outbound && item.status ? STATUS_KEY[item.status] : undefined;
           const errorKey = item.error ? ERROR_KEY[item.error] : undefined;
+          // A date band whenever the day changes. The bubbles then carry only
+          // a time, which is what makes a long history scannable: the date is
+          // said once per day instead of once per message.
+          const daySeparator =
+            chatOrder &&
+            (index === 0 ||
+              formatDayHeading(thread[index - 1].at, language) !==
+                formatDayHeading(item.at, language)) ? (
+              <li key={`day-${item.id}`} className="flex list-none justify-center py-1.5">
+                <span className="rounded-md bg-[var(--muted-bg)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--muted)]">
+                  {formatDayHeading(item.at, language)}
+                </span>
+              </li>
+            ) : null;
           return (
+            <Fragment key={item.id}>
+            {daySeparator}
             <div
-              key={item.id}
-              // A send that never left reads as a failure at a glance: red fill,
-              // not the same green as a delivered reply. Fill only, no border.
-              className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${
-                failed
-                  ? "ml-auto bg-red-500/10 dark:bg-red-500/15"
-                  : outbound
-                    ? "ml-auto bg-[var(--brand-soft)]"
-                    : "bg-[var(--muted-bg)]"
+              // Ours right and green, theirs left and white — the arrangement
+              // every WhatsApp user already reads without being taught. The
+              // squared-off corner is the tail: it points at whoever spoke.
+              className={`max-w-[78%] rounded-2xl px-2.5 py-2 text-sm shadow-sm ${
+                outbound
+                  ? "ml-auto rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
+                  : "rounded-bl-sm border border-[var(--border)] bg-[var(--card)]"
+              } ${
+                // A send that never left keeps its side and its colour and
+                // wears a red ring instead. Recolouring the whole bubble made
+                // a failure look like a different KIND of message.
+                failed ? "opacity-70 ring-1 ring-red-400/50" : ""
               }`}
             >
               {/* Email carries a subject and WhatsApp doesn't, so it leads
@@ -390,16 +448,29 @@ export function ConversationPanel({
                 )
               )}
               <p
-                className={`mt-0.5 flex flex-wrap items-center gap-1 text-[10px] ${
-                  failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"
-                }`}
+                className={`mt-0.5 flex flex-wrap items-center gap-1 text-[10.5px] ${
+                  outbound ? "justify-end" : ""
+                } ${failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"}`}
               >
-                <FeedIcon type={item.channel} size={11} />
-                <span>{formatDateTime(item.at, language)}</span>
-                {statusKey && <span>· {t(statusKey)}</span>}
+                {/* The channel glyph earns its place only in a mixed feed. On
+                    a single-channel tab every bubble would wear the same one,
+                    which is decoration rather than information. */}
+                {filter === "all" && <FeedIcon type={item.channel} size={11} />}
+                {/* Time only — the day band above already said the date. Full
+                    stamp on hover for anyone who needs to be sure. */}
+                <span title={formatDateTime(item.at, language)}>
+                  {chatOrder ? formatTime(item.at, language) : formatDateTime(item.at, language)}
+                </span>
+                {/* Ticks replace the status word on our own messages; a
+                    reply has no delivery state of ours to report. */}
+                {outbound && item.status && !failed && statusKey && (
+                  <DeliveryTicks status={item.status} label={t(statusKey)} />
+                )}
+                {failed && statusKey && <span>· {t(statusKey)}</span>}
                 {errorKey && <span>· {t(errorKey)}</span>}
               </p>
             </div>
+            </Fragment>
           );
         })}
       </div>
