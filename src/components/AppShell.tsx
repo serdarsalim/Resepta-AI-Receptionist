@@ -25,6 +25,7 @@ export type TabId =
   | "appointments"
   | "customers"
   | "inbox"
+  | "campaigns"
   | "revenue"
   | "business"
   | "settings"
@@ -107,6 +108,16 @@ const RevenueIcon = makeIcon(
   </>,
 );
 
+// A megaphone: one thing said to many people, which is exactly what separates
+// this from the Inbox above it.
+const CampaignsIcon = makeIcon(
+  <>
+    <path d="M3 11v2a1 1 0 0 0 1 1h2l4 3V7L6 10H4a1 1 0 0 0-1 1z" />
+    <path d="M14 8a4 4 0 0 1 0 8" />
+    <path d="M17 5a8 8 0 0 1 0 14" />
+  </>,
+);
+
 const NAV_TABS: {
   id: TabId;
   key: TranslationKey;
@@ -120,6 +131,14 @@ const NAV_TABS: {
     color: "#8b5cf6",
   },
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
+  // Beside Inbox, not under Business: both are places you send messages from,
+  // and a campaign is work rather than configuration.
+  {
+    id: "campaigns",
+    key: "campaign.title",
+    Icon: CampaignsIcon,
+    color: "#ec4899",
+  },
   {
     id: "revenue",
     key: "nav.revenue",

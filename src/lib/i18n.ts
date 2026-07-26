@@ -1131,6 +1131,89 @@ const dictionary = {
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
 
+  // Campaigns. "Kampanya" is what a Turkish salon already calls this, so the
+  // product uses their word rather than coining "toplu mesaj".
+  "campaign.title": { tr: "Kampanyalar", en: "Campaigns", de: "Kampagnen" },
+  "campaign.new": { tr: "Yeni kampanya", en: "New campaign", de: "Neue Kampagne" },
+  "campaign.name": { tr: "Ad", en: "Name", de: "Name" },
+  "campaign.nameHint": {
+    tr: "Sadece sizin listeniz için. Müşteriye gitmez.",
+    en: "For your list only. Never sent to anyone.",
+    de: "Nur für Ihre Liste. Wird nie versendet.",
+  },
+  "campaign.body": { tr: "Mesaj", en: "Message", de: "Nachricht" },
+  "campaign.bodyHint": {
+    tr: "WhatsApp'ta onaylı şablonunuzun {{3}} yerine geçer. [ad] yazarsanız müşterinin adı gelir.",
+    en: "This becomes {{3}} in your approved WhatsApp template. Write [ad] to drop in the customer's name.",
+    de: "Wird zu {{3}} in Ihrer genehmigten WhatsApp-Vorlage. Mit [ad] wird der Kundenname eingesetzt.",
+  },
+  "campaign.segment": { tr: "Kimlere", en: "Who gets it", de: "Wer es erhält" },
+  "campaign.notSeenFor": {
+    tr: "Şu kadar gündür gelmeyenler",
+    en: "Not seen for this many days",
+    de: "Seit so vielen Tagen nicht da gewesen",
+  },
+  "campaign.notSeenHint": {
+    tr: "Yaklaşan randevusu olanlar listeye girmez — zaten geliyorlar.",
+    en: "Anyone with an upcoming booking is left out — they're already coming back.",
+    de: "Wer bereits einen Termin hat, bleibt außen vor — er kommt ohnehin.",
+  },
+  "campaign.neverBooked": {
+    tr: "Hiç gelmemiş olanlar",
+    en: "Never actually came",
+    de: "War noch nie da",
+  },
+  "campaign.hadService": {
+    tr: "Şu hizmeti almış olanlar",
+    en: "Have had this service",
+    de: "Hatten diese Leistung",
+  },
+  "campaign.recipients": {
+    tr: "kişiye gidecek",
+    en: "people will get this",
+    de: "Personen erhalten dies",
+  },
+  "campaign.noRecipients": {
+    tr: "Bu filtreye uyan, izni olan müşteri yok.",
+    en: "Nobody with consent matches this.",
+    de: "Niemand mit Einwilligung passt darauf.",
+  },
+  "campaign.consentNote": {
+    tr: "Yalnızca WhatsApp izni vermiş müşterilere gönderilir.",
+    en: "Only customers who gave WhatsApp consent are included.",
+    de: "Nur Kunden mit WhatsApp-Einwilligung werden einbezogen.",
+  },
+  "campaign.send": { tr: "Gönder", en: "Send", de: "Senden" },
+  "campaign.sendConfirm": {
+    tr: "Gönderilsin mi? Geri alınamaz.",
+    en: "Send it? This can't be taken back.",
+    de: "Senden? Das lässt sich nicht rückgängig machen.",
+  },
+  "campaign.sent": { tr: "gönderildi", en: "sent", de: "gesendet" },
+  "campaign.pending": { tr: "sırada", en: "in the queue", de: "in der Warteschlange" },
+  "campaign.failed": { tr: "başarısız", en: "failed", de: "fehlgeschlagen" },
+  "campaign.draft": { tr: "Taslak", en: "Draft", de: "Entwurf" },
+  "campaign.empty": {
+    tr: "Henüz kampanya yok.",
+    en: "No campaigns yet.",
+    de: "Noch keine Kampagnen.",
+  },
+  "campaign.needsTemplate": {
+    tr: "Kampanya göndermek için Meta'nın onayladığı bir kampanya şablonu gerekir. Taslağı oluşturup Meta'ya onaylatın, sonra Ayarlar'da onaylandı olarak işaretleyin.",
+    en: "Sending campaigns needs a Meta-approved campaign template. Create the draft, get it approved by Meta, then mark it approved in Settings.",
+    de: "Für Kampagnen ist eine von Meta genehmigte Kampagnenvorlage nötig. Entwurf anlegen, von Meta genehmigen lassen, dann in den Einstellungen als genehmigt markieren.",
+  },
+  "campaign.createTemplate": {
+    tr: "Şablon taslağı oluştur",
+    en: "Create template draft",
+    de: "Vorlagenentwurf anlegen",
+  },
+  "campaign.whyTemplate": {
+    tr: "WhatsApp, size yazmamış birine serbest metin göndermenize izin vermez. Onaylı şablon bu yüzden gerekli — {{3}} kısmı her kampanyada değişebildiği için tek onay tüm kampanyalarınıza yeter.",
+    en: "WhatsApp won't let you send free text to someone who hasn't written to you. That's why an approved template is required — and because its {{3}} changes per campaign, one approval covers all of them.",
+    de: "WhatsApp erlaubt keinen freien Text an jemanden, der Ihnen nicht geschrieben hat. Darum ist eine genehmigte Vorlage nötig — und da sich {{3}} je Kampagne ändert, genügt eine Genehmigung für alle.",
+  },
+
   // Outbound images.
   "media.attach": { tr: "Görsel ekle", en: "Attach image", de: "Bild anhängen" },
   "media.library": { tr: "Görseller", en: "Images", de: "Bilder" },

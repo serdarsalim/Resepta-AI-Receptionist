@@ -135,6 +135,12 @@ export const claimForRetry = internalMutation({
       phoneNumberId: waAccount?.phoneNumberId,
       templateName: message.templateName,
       templateLanguage: template?.language ?? language,
+      // What the first attempt actually put in front of the customer. Used in
+      // preference to rebuilding: a reschedule or a rename between attempts
+      // would otherwise make the retry say something different from the send
+      // it is retrying.
+      templateParams: message.templateParams,
+      emailSubject: message.emailSubject,
       // Resolved here rather than in the action: a retry of an image send has
       // to go back out as an image, and getUrl needs the storage id from the
       // row we just read.
@@ -189,6 +195,8 @@ type RetryJob = {
   phoneNumberId?: string;
   templateName?: string;
   templateLanguage: string;
+  templateParams?: string[];
+  emailSubject?: string;
   when?: string;
   appointmentId?: string;
   mediaLink?: string | null;
@@ -206,9 +214,11 @@ async function attempt(
     const sent = await sendEmail({
       from: job.emailFrom,
       to: job.email,
-      // Rebuilt the same way the first attempt built it, so a retry does not
-      // arrive under a different subject and start a second thread.
-      subject: job.when ? `${job.orgName}, ${job.when}` : job.orgName,
+      // The stored subject when there is one, so a retry lands in the same
+      // thread rather than starting a second one. Older rows predate the
+      // field and are rebuilt the way the first attempt built them.
+      subject:
+        job.emailSubject ?? (job.when ? `${job.orgName}, ${job.when}` : job.orgName),
       html: `<p>${job.body.replace(/\n/g, "<br/>")}</p>`,
     });
     return sent.ok ? { ok: true } : { ok: false, reason: sent.reason };
@@ -225,7 +235,10 @@ async function attempt(
       to: job.to,
       templateName: job.templateName,
       languageCode: job.templateLanguage,
-      bodyParams: [job.firstName, job.orgName, job.when ?? ""],
+      bodyParams: job.templateParams ?? [job.firstName, job.orgName, job.when ?? ""],
+      // Only appointment sends carry the confirm/cancel buttons. A campaign
+      // template has none, and attaching payloads to buttons that were never
+      // registered is a 400 from Meta rather than a harmless extra.
       buttons: job.appointmentId
         ? [
             { index: 0, payload: `confirm:${job.appointmentId}` },

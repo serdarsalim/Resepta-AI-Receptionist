@@ -358,6 +358,7 @@ export const sendAppointmentMessage = internalAction({
         appointmentId: appointment._id,
         kind: messageKind,
         templateName: waTemplate.metaName,
+        templateParams: bodyParams,
         body,
       });
       const result = await sendWaCloudTemplate({

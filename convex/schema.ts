@@ -392,6 +392,10 @@ export default defineSchema({
       v.literal("confirmation"),
       v.literal("reminder"),
       v.literal("winback"),
+      // Campaigns. Its {{3}} is NOT an appointment time — it is whatever line
+      // the salon types for that campaign, which is what makes one approved
+      // template serve every campaign they will ever run. See convex/campaigns.ts.
+      v.literal("campaign"),
     ),
     metaName: v.string(),
     language: v.string(),
@@ -413,6 +417,14 @@ export default defineSchema({
     kind: v.string(),
     body: v.optional(v.string()),
     templateName: v.optional(v.string()),
+    // The {{1}}..{{n}} values this send used, in order. Stored rather than
+    // rebuilt: a retry has to put the SAME words in front of the customer, and
+    // reconstructing them later from the appointment and the org means a
+    // rename or a reschedule silently changes what the second attempt says.
+    templateParams: v.optional(v.array(v.string())),
+    // Set when this row belongs to a campaign, so a run can count its own
+    // outcome without scanning every message the org ever sent.
+    campaignId: v.optional(v.id("campaigns")),
     status: v.union(
       v.literal("queued"),
       v.literal("sent"),
@@ -498,7 +510,50 @@ export default defineSchema({
     // can ask exactly that, rather than scanning recent messages and hoping
     // the one that would break is among them.
     .index("by_media", ["mediaStorageId"])
+    .index("by_campaign", ["campaignId"])
     .index("by_wamid", ["wamid"]),
+
+  // A one-off message to a group of customers — "we're closed next Monday",
+  // "20% off colour in March", "we've moved".
+  //
+  // ── THE CONSTRAINT THAT SHAPES ALL OF THIS ────────────────────────────────
+  //
+  // A campaign is business-INITIATED: the customer did not just message us, so
+  // Meta's 24h session window is shut and free-form text is refused (131047).
+  // Cold WhatsApp must be a pre-approved template. That is not a limitation to
+  // engineer around; it is the rule that keeps the channel worth having.
+  //
+  // So the salon registers ONE approved campaign template whose third
+  // parameter is a free line — "Merhaba {{1}}! {{2}} olarak {{3}}" — and each
+  // campaign supplies that line. One approval, every campaign they will ever
+  // run. Email has no such rule and takes the same line as free-form text.
+  campaigns: defineTable({
+    orgId: v.id("orgs"),
+    // What the salon calls this run, for their own list. Never sent.
+    name: v.string(),
+    // The line that becomes {{3}} on WhatsApp and the body of the email.
+    // Tokens (lib/renderTokens) resolve per recipient.
+    body: v.string(),
+    segment: v.object({
+      // Nobody seen for this many days. The commonest campaign there is.
+      notSeenForDays: v.optional(v.number()),
+      // Customers with no completed appointment at all — enquired, never came.
+      neverBooked: v.optional(v.boolean()),
+      // Everyone who has had this service before.
+      serviceId: v.optional(v.id("services")),
+    }),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("sending"),
+      v.literal("done"),
+    ),
+    // Snapshotted when the run starts. The segment is re-evaluated at send
+    // time, so this is what it MEANT then, not a live count.
+    recipientCount: v.optional(v.number()),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    createdBy: v.optional(v.id("users")),
+  }).index("by_org", ["orgId"]),
 
   // Images the salon sends OUT — a price list, a before-and-after, the card
   // machine being broken today. Inbound images already land in Convex storage

@@ -7,6 +7,7 @@ import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
 import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
+import { CampaignsView } from "@/components/CampaignsView";
 import { SettingsView } from "@/components/SettingsView";
 import { BusinessView } from "@/components/BusinessView";
 import { AccountView } from "@/components/AccountView";
@@ -19,6 +20,7 @@ const TAB_IDS: TabId[] = [
   "appointments",
   "customers",
   "inbox",
+  "campaigns",
   "revenue",
   "business",
   "settings",
@@ -59,6 +61,7 @@ export default function Home() {
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
+          {tab === "campaigns" && <CampaignsView />}
           {tab === "revenue" && <RevenueView />}
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
               all call this Business, and a salon owner does not think of the

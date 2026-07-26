@@ -31,6 +31,9 @@ export const logOutQueued = internalMutation({
     appointmentId: v.optional(v.id("appointments")),
     kind: v.string(),
     templateName: v.optional(v.string()),
+    // The {{1}}..{{n}} values, in order. Stored so a retry replays the same
+    // words rather than rebuilding them from data that may have moved.
+    templateParams: v.optional(v.array(v.string())),
     body: v.optional(v.string()),
     // Email lane only. Carried here rather than patched afterwards so the row
     // is complete the moment it appears in the feed — a bubble that renders
@@ -51,6 +54,7 @@ export const logOutQueued = internalMutation({
       direction: "out",
       kind: args.kind,
       templateName: args.templateName,
+      templateParams: args.templateParams,
       body: args.body,
       emailSubject: args.emailSubject,
       emailFrom: args.emailFrom,

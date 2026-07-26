@@ -87,6 +87,7 @@ export const current = query({
           v.literal("confirmation"),
           v.literal("reminder"),
           v.literal("winback"),
+          v.literal("campaign"),
         ),
         metaName: v.string(),
         language: v.string(),
@@ -373,6 +374,49 @@ export const disconnectWhatsapp = mutation({
       .unique();
     if (existing) await ctx.db.delete(existing._id);
     return null;
+  },
+});
+
+// Creates the draft row for a template kind this org has none of, so the owner
+// has something to put their Meta-approved name onto.
+//
+// Only campaigns need this. The other three are seeded at signup because every
+// org wants them; a campaign template is worth a separate Meta approval only
+// once the salon decides to run campaigns at all, and asking every new signup
+// to get one approved on day one is how a setup checklist stops being finished.
+//
+// The suggested body is not decoration. Meta approves an exact string, and
+// {{3}} being a FREE line rather than an appointment time is the whole reason
+// one approval covers every campaign the salon will ever run — an owner who
+// registers a fixed offer instead has to go back to Meta for the next one.
+export const ensureCampaignTemplate = mutation({
+  args: {},
+  returns: v.id("waTemplates"),
+  handler: async (ctx) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    const language = org?.language ?? "tr";
+    const existing = (
+      await ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect()
+    ).find((t) => t.kind === "campaign" && t.language === language);
+    if (existing) return existing._id;
+
+    const preview: Record<string, string> = {
+      tr: "Merhaba {{1}}! {{2}} olarak {{3}}",
+      en: "Hello {{1}}! {{2}} here — {{3}}",
+      de: "Hallo {{1}}! {{2}} — {{3}}",
+    };
+    return await ctx.db.insert("waTemplates", {
+      orgId,
+      kind: "campaign",
+      metaName: "randevu_kampanya",
+      language,
+      status: "draft",
+      bodyPreview: preview[language] ?? preview.en,
+    });
   },
 });
 
