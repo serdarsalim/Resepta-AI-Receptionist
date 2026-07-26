@@ -99,10 +99,12 @@ export function ContactView({
         >
           ←
         </button>
+        {/* Name only. The number is a field on the record card directly below,
+            where it is editable — repeating it here read as a second, stale
+            copy of the same fact. */}
         <h2 className="min-w-0 truncate text-base font-semibold">
           {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
         </h2>
-        <span className="truncate text-sm text-[var(--muted)]">{customer.phone}</span>
         <div className="ml-auto flex shrink-0 items-center gap-1 lg:hidden">
           {(
             [

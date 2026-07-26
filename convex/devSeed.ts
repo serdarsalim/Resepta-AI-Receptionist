@@ -166,3 +166,31 @@ export const seed = internalMutation({
     return { customers: 20, appointments: appointmentCount, messages: messageCount };
   },
 });
+
+// Dev housekeeping. wa.ts used to write a failed row for EVERY send while
+// WhatsApp was unconfigured, so a deployment that has been running unconnected
+// accumulates one red line per reminder per customer — a conversation history
+// made entirely of the org's own setup state. The logging is fixed; this
+// clears what the old behaviour left behind.
+//
+// Scoped to that one cause on purpose. no-consent rows are the KVKK record
+// that we correctly did not message somebody and must survive; delivered and
+// received messages are the actual history.
+export const clearSetupFailures = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("messages").take(2000);
+    let removed = 0;
+    for (const row of rows) {
+      if (row.status !== "failed") continue;
+      const reason = row.error ?? "";
+      if (reason !== "wa-not-configured" && !reason.startsWith("no-approved-template")) {
+        continue;
+      }
+      await ctx.db.delete(row._id);
+      removed += 1;
+    }
+    return removed;
+  },
+});
