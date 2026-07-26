@@ -169,7 +169,7 @@ export function ContactView({
       <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Left: the record, everything ABOUT the customer. */}
         <div
-          className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-4 lg:flex`}
+          className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col lg:flex`}
         >
           {/* One record, not two forms: the built-in fields and the org's own
               fields read the same way and sit in the same card. Adding a field
@@ -234,6 +234,58 @@ export function ContactView({
                   }
                 />
               ))}
+
+              {/* Appointments close the record, under the same kind of ruled
+                  heading the field groups use — Nudge's Deals section on its
+                  contact card, which is the same idea: related records living
+                  INSIDE the record rather than in a card of their own.
+
+                  They were a second card below this one, and that was wrong in
+                  two ways. This card is flex-1, so a customer with four fields
+                  left a column of dead white above an appointments card that
+                  had been pushed half off the bottom of the screen. And the
+                  split implied the two were separate things to read, when
+                  "who they are" and "when they came" is one answer.
+
+                  Editable rows first, read-only history after: everything you
+                  can type into is above this rule, nothing below it is. */}
+              <FieldGroup label={t("appointments.title")} />
+              {appointments === undefined && (
+                <p className="py-1 text-sm text-[var(--muted)]">{t("common.loading")}</p>
+              )}
+              {appointments?.length === 0 && (
+                <p className="py-1 text-sm text-[var(--muted)]">{t("appointments.none")}</p>
+              )}
+              {!!appointments?.length && (
+                // Bled out to the card's edges (-mx-4) so the hover wash and
+                // the hairlines run the full width the way a list should,
+                // instead of floating inside the field inset. No nested scroll
+                // any more: this list is part of the record's one scroll now,
+                // and two scrollbars in one card is a trap.
+                <ul className="-mx-4 divide-y divide-[var(--border)] border-b border-[var(--border)]">
+                  {appointments.map((appointment) => (
+                    <li key={appointment._id}>
+                      {/* Flat row, hairline divider, wash on hover. No border
+                          per row, and nothing moves. */}
+                      <div className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">
+                            {formatDateTime(appointment.startAt, language)}
+                          </span>
+                          <span className="block truncate text-xs text-[var(--muted)]">
+                            {[appointment.serviceName, appointment.staffName]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs text-[var(--muted)]">
+                          {t(STATUS_KEY[appointment.status])}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Record meta, pinned under the fields the way Nudge's contact
@@ -280,49 +332,6 @@ export function ContactView({
                 </span>
               </FieldRow>
             </div>
-          </section>
-
-          {/* Appointments sit below the record, pinned: they're history, not a
-              property, and they must not ride along when the fields scroll. The
-              list caps its own height so a heavy customer can't squeeze the
-              record card out of the column. */}
-          <section className="flex shrink-0 flex-col overflow-hidden card-raised">
-            <h3 className="shrink-0 px-4 pt-4 pb-2 text-sm font-semibold">
-              {t("appointments.title")}
-            </h3>
-            {appointments === undefined && (
-              <p className="px-4 pb-4 text-sm text-[var(--muted)]">{t("common.loading")}</p>
-            )}
-            {appointments?.length === 0 && (
-              <p className="px-4 pb-4 text-sm text-[var(--muted)]">
-                {t("appointments.none")}
-              </p>
-            )}
-            {!!appointments?.length && (
-              <ul className="thin-scroll stable-gutter max-h-52 divide-y divide-[var(--border)] overflow-y-auto">
-                {appointments.map((appointment) => (
-                  <li key={appointment._id}>
-                    {/* Flat row, hairline divider, wash on hover. No border per
-                        row, and nothing moves. */}
-                    <div className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">
-                          {formatDateTime(appointment.startAt, language)}
-                        </span>
-                        <span className="block truncate text-xs text-[var(--muted)]">
-                          {[appointment.serviceName, appointment.staffName]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-xs text-[var(--muted)]">
-                        {t(STATUS_KEY[appointment.status])}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </section>
         </div>
 
