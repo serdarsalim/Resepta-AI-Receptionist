@@ -130,8 +130,8 @@ function EmbedSnippet({ src }: { src: string }) {
   const [copied, setCopied] = useState(false);
   // The snippet is never shown. A salon owner does not read HTML, and a box
   // of angle brackets in their settings is something to be afraid of breaking
-  // rather than something to use — they copy it and hand it to whoever built
-  // the site. Self-contained on purpose: no hosted script to keep alive, and
+  // rather than something to use. Self-contained on purpose: no hosted script
+  // to keep alive, and
   // the listener matches the iframe by its own contentWindow, so a page
   // carrying two of these sizes each one correctly.
   const snippet = [
@@ -139,7 +139,7 @@ function EmbedSnippet({ src }: { src: string }) {
     `<script>addEventListener("message",function(e){if(!e.data||e.data.type!=="randevu:height")return;document.querySelectorAll("iframe").forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})})</script>`,
   ].join("\n");
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center">
       <button
         type="button"
         onClick={async () => {
@@ -151,13 +151,6 @@ function EmbedSnippet({ src }: { src: string }) {
       >
         {copied ? t("common.copied") : t("settings.formEmbedCopy")}
       </button>
-      {/* Says what now happens, because "Copied" alone leaves someone holding
-          something without knowing what to do with it. */}
-      {copied && (
-        <span className="text-xs text-[var(--muted)]">
-          {t("settings.formEmbedCopied")}
-        </span>
-      )}
     </span>
   );
 }

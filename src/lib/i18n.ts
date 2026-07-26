@@ -354,19 +354,14 @@ const dictionary = {
     de: "Auf Ihrer Website einbetten",
   },
   "settings.formEmbedHint": {
-    tr: "Formu kendi sitenizin içinde gösterir. Kodu kopyalayıp sitenizi yapan kişiye verin.",
-    en: "Shows the form inside your own website. Copy the code and give it to whoever built your site.",
-    de: "Zeigt das Formular in Ihrer eigenen Website. Code kopieren und an die Person geben, die Ihre Site gebaut hat.",
+    tr: "Formu kendi sitenizin içinde gösterir.",
+    en: "Shows the form inside your own website.",
+    de: "Zeigt das Formular in Ihrer eigenen Website.",
   },
   "settings.formEmbedCopy": {
     tr: "Kodu kopyala",
     en: "Copy embed code",
     de: "Einbettungscode kopieren",
-  },
-  "settings.formEmbedCopied": {
-    tr: "Sitenizi yapan kişiye gönderin.",
-    en: "Send it to whoever looks after your website.",
-    de: "Schicken Sie ihn an die Person, die Ihre Website betreut.",
   },
   "settings.inboundAddress": {
     tr: "Gelen e-posta adresi",
