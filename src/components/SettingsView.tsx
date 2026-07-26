@@ -20,45 +20,228 @@ import { Card } from "./Card";
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
 // explanations behind InfoTips.
 
-// Reminder timing as toggle chips — a salon owner taps "1 gün önce", never
-// types "24, 2". Amber = selection (Nudge: amber selects, blue acts).
+// Reminder timing is picked from presets — a salon owner taps "1 gün önce",
+// never types "24, 2".
 const OFFSET_PRESETS = [48, 24, 3, 2, 1];
 
-function OffsetChips({
-  selected,
-  onChange,
+// The three columns left of the toggle. Stacked on mobile (the row reads as a
+// sentence), a grid from sm up (it reads as a table). The header uses the same
+// inner grid so the columns line up without a real <table>, which would need
+// its own mobile story.
+const RULE_COLUMNS =
+  "min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-3";
+
+type RuleKind = "confirmation" | "reminder" | "winback";
+
+type TemplateRow = {
+  kind: string;
+  language: string;
+  status: string;
+  bodyPreview?: string;
+};
+
+// What a rule can actually reach today, mirroring wa.sendAppointmentMessage:
+// WhatsApp needs a connected number AND an APPROVED template of this kind;
+// email needs a From on the org and a template row carrying body text (Meta
+// approval gates the WhatsApp send, not the email).
+//
+// Resolved against the ORG's language. A customer whose own language differs
+// is resolved per send, so no settings table can promise what they'll get —
+// this column answers "is this rule wired up at all", which is the question an
+// owner staring at a silent reminder actually has.
+function ruleChannels(
+  kind: RuleKind,
+  templates: TemplateRow[],
+  language: string,
+  waConnected: boolean,
+  emailFrom: string | undefined,
+  emailLabel: string,
+): string[] {
+  const template = templates.find((t) => t.kind === kind && t.language === language);
+  const channels: string[] = [];
+  if (waConnected && template?.status === "approved") channels.push("WhatsApp");
+  if (emailFrom && template?.bodyPreview) channels.push(emailLabel);
+  return channels;
+}
+
+function RuleRow({
+  when,
+  what,
+  channels,
+  enabled,
+  onToggle,
+  hint,
 }: {
-  selected: number[];
-  onChange: (next: number[]) => void;
+  when: React.ReactNode;
+  what: string;
+  channels: string[];
+  enabled: boolean;
+  onToggle: (next: boolean) => void;
+  hint?: string;
 }) {
-  const { language } = useLanguage();
-  const label = (h: number) => formatReminderOffset(h, language);
+  const { t } = useLanguage();
+  // Amber, not red: a rule with nowhere to send is a setup step the owner
+  // hasn't finished, not a failure. Same treatment as autoReplyInactive.
+  const silent = channels.length === 0;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {OFFSET_PRESETS.map((hours) => {
-        const active = selected.includes(hours);
-        return (
-          <button
-            key={hours}
-            type="button"
-            onClick={() =>
-              onChange(
-                active
-                  ? selected.filter((h) => h !== hours)
-                  : [...selected, hours].sort((a, b) => b - a),
-              )
-            }
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              active
-                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {label(hours)}
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-3 py-3">
+      <div className={RULE_COLUMNS}>
+        <span className="flex items-center gap-1.5 text-sm">
+          {when}
+          {hint && <InfoTip text={hint} />}
+        </span>
+        <span className="text-sm text-[var(--muted)]">{what}</span>
+        <span
+          className={`flex items-center gap-1.5 text-xs ${
+            silent ? "text-amber-700 dark:text-amber-400" : "text-[var(--muted)]"
+          }`}
+        >
+          {silent ? t("settings.ruleNoChannel") : channels.join(" · ")}
+          {silent && <InfoTip text={t("settings.ruleNoChannelHint")} />}
+        </span>
+      </div>
+      <Toggle checked={enabled} onChange={onToggle} label={what} />
     </div>
+  );
+}
+
+// The reminders section as a rules table: one row per automatic message, read
+// top to bottom in the order a customer meets them — confirmation at booking,
+// reminders counting down, win-back after a no-show. Because offsets are
+// stored furthest-first, that ordering falls out of the array as it is.
+//
+// Storage is still the flat org fields (reminderOffsetsHours + two booleans),
+// NOT a notificationRules table. The consequence to know before extending
+// this: a number[] cannot express "rule exists but is off", so a reminder
+// row's toggle IS add/remove — switching it off drops the offset and the row
+// leaves with it. Confirmation and win-back sit on real booleans and toggle
+// the way you'd expect. The day per-rule channels or a disabled-but-present
+// reminder is wanted, that's when rows become documents — and the real cost of
+// that migration isn't the table, it's re-keying appointments.
+// reminderSentOffsets from offset-hours to ruleId without breaking the
+// double-send guard in reminders.tick.
+function NotificationRulesCard({
+  isOwner,
+  org,
+  templates,
+  waConnected,
+  update,
+}: {
+  isOwner: boolean;
+  org: {
+    language: string;
+    reminderOffsetsHours: number[];
+    sendBookingConfirmation: boolean;
+    winbackEnabled: boolean;
+    winbackDaysAfter: number;
+    quietHoursStart: number;
+    quietHoursEnd: number;
+    emailFrom?: string;
+  };
+  templates: TemplateRow[];
+  waConnected: boolean;
+  update: (args: Record<string, unknown>) => void;
+}) {
+  const { t, language } = useLanguage();
+  const offsets = org.reminderOffsetsHours;
+  const unused = OFFSET_PRESETS.filter((h) => !offsets.includes(h));
+
+  const channelsFor = (kind: RuleKind) =>
+    ruleChannels(
+      kind,
+      templates,
+      org.language,
+      waConnected,
+      org.emailFrom,
+      t("settings.ruleEmail"),
+    );
+
+  const setOffsets = (next: number[]) =>
+    update({ reminderOffsetsHours: next.sort((a, b) => b - a) });
+
+  // Quiet hours have no UI of their own yet, and a win-back that looks stuck
+  // is usually just waiting for the window to open. Say so where it's asked.
+  const pad = (h: number) => String(h).padStart(2, "0");
+  const winbackHint = `${t("settings.ruleWinbackHint")}\n${t("settings.ruleSendWindow")}: ${pad(
+    org.quietHoursStart,
+  )}:00–${pad(org.quietHoursEnd)}:00`;
+
+  return (
+    <Card disabled={!isOwner}>
+      <div className="hidden items-center gap-3 pb-2 sm:flex">
+        <div className={RULE_COLUMNS}>
+          <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+            {t("settings.rulesWhen")}
+            <InfoTip text={t("settings.rulesHint")} />
+          </span>
+          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
+          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
+        </div>
+        {/* Spacer matching the toggle so the headers sit over their columns. */}
+        <span className="w-11" aria-hidden />
+      </div>
+
+      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        <RuleRow
+          when={t("settings.ruleWhenBooked")}
+          what={t("settings.ruleConfirmation")}
+          channels={channelsFor("confirmation")}
+          enabled={org.sendBookingConfirmation}
+          onToggle={(next) => update({ sendBookingConfirmation: next })}
+        />
+
+        {offsets.map((hours) => (
+          <RuleRow
+            key={hours}
+            when={formatReminderOffset(hours, language)}
+            what={t("settings.ruleReminder")}
+            channels={channelsFor("reminder")}
+            enabled
+            onToggle={() => setOffsets(offsets.filter((h) => h !== hours))}
+          />
+        ))}
+
+        <RuleRow
+          when={
+            <span className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                max={90}
+                className="w-16"
+                defaultValue={org.winbackDaysAfter}
+                onBlur={(e) => {
+                  const days = Number(e.target.value);
+                  if (Number.isFinite(days) && days > 0) update({ winbackDaysAfter: days });
+                }}
+              />
+              {t("settings.ruleDaysAfterNoShow")}
+            </span>
+          }
+          what={t("settings.ruleWinback")}
+          channels={channelsFor("winback")}
+          enabled={org.winbackEnabled}
+          onToggle={(next) => update({ winbackEnabled: next })}
+          hint={winbackHint}
+        />
+      </div>
+
+      {unused.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-3">
+          <span className="text-xs text-[var(--muted)]">{t("settings.ruleAdd")}</span>
+          {unused.map((hours) => (
+            <button
+              key={hours}
+              type="button"
+              onClick={() => setOffsets([...offsets, hours])}
+              className="rounded-full px-3 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {formatReminderOffset(hours, language)}
+            </button>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -334,23 +517,13 @@ export function SettingsView() {
       )}
 
       {section === "reminders" && (
-        <Card disabled={!isOwner}>
-          <div className={ROW_GRID}>
-            <RowLabel
-              label={t("settings.reminderOffsets")}
-              hint={t("settings.reminderOffsetsHint")}
-            />
-            <OffsetChips
-              selected={settings.org.reminderOffsetsHours}
-              onChange={(next) => void update({ reminderOffsetsHours: next })}
-            />
-            <RowLabel label={t("settings.sendConfirmation")} />
-            <Toggle
-              checked={settings.org.sendBookingConfirmation}
-              onChange={(next) => void update({ sendBookingConfirmation: next })}
-            />
-          </div>
-        </Card>
+        <NotificationRulesCard
+          isOwner={isOwner}
+          org={settings.org}
+          templates={settings.templates}
+          waConnected={settings.whatsapp.connected}
+          update={(args) => void update(args)}
+        />
       )}
 
       {section === "whatsapp" && (

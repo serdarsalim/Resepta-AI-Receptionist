@@ -392,20 +392,73 @@ const dictionary = {
     en: "Reminders",
     de: "Erinnerungen",
   },
-  "settings.reminderOffsets": {
-    tr: "Hatırlatma zamanları",
-    en: "Reminder times",
-    de: "Erinnerungszeiten",
-  },
-  "settings.reminderOffsetsHint": {
-    tr: "Her seçili zaman için ayrı bir hatırlatma mesajı gönderilir.",
-    en: "One reminder message is sent for each selected time.",
-    de: "Für jede ausgewählte Zeit wird eine eigene Erinnerung gesendet.",
-  },
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
     en: "Send a confirmation when a booking is made",
     de: "Bestätigung senden, sobald ein Termin gebucht wird",
+  },
+
+  // Notification rules table. Column headers stay one word each — they sit
+  // above a row that already reads as a sentence ("1 gün önce · Hatırlatma ·
+  // WhatsApp"), so a longer header would only compete with it.
+  "settings.rulesHint": {
+    tr: "Her satır bir kural: ne zaman gönderileceği, hangi mesaj, hangi kanal. Kapatılan hatırlatma satırı listeden çıkar.",
+    en: "Each row is a rule — when it fires, which message, which channel. Switching a reminder off removes its row.",
+    de: "Jede Zeile ist eine Regel: wann sie ausgelöst wird, welche Nachricht, welcher Kanal. Wird eine Erinnerung ausgeschaltet, verschwindet ihre Zeile.",
+  },
+  "settings.rulesWhen": { tr: "Ne zaman", en: "When", de: "Wann" },
+  "settings.rulesWhat": { tr: "Mesaj", en: "Message", de: "Nachricht" },
+  "settings.rulesWhere": { tr: "Kanal", en: "Channel", de: "Kanal" },
+  "settings.ruleConfirmation": {
+    tr: "Onay",
+    en: "Confirmation",
+    de: "Bestätigung",
+  },
+  "settings.ruleReminder": {
+    tr: "Hatırlatma",
+    en: "Reminder",
+    de: "Erinnerung",
+  },
+  "settings.ruleWinback": {
+    tr: "Geri kazanım",
+    en: "Win-back",
+    de: "Rückgewinnung",
+  },
+  "settings.ruleWhenBooked": {
+    tr: "Randevu alındığında",
+    en: "When booked",
+    de: "Bei der Buchung",
+  },
+  "settings.ruleDaysAfterNoShow": {
+    tr: "gün sonra, gelmeyen müşteriye",
+    en: "days after a no-show",
+    de: "Tage nach einem Nichterscheinen",
+  },
+  "settings.ruleWinbackHint": {
+    tr: "Randevusuna gelmeyen müşteriye tek bir mesaj gider. Zaten gönderilmiş bir geri kazanım tekrarlanmaz.",
+    en: "One message to a customer who didn't show up. A win-back already sent is never repeated.",
+    de: "Eine einzige Nachricht an Kundinnen und Kunden, die nicht erschienen sind. Eine bereits gesendete Rückgewinnung wird nicht wiederholt.",
+  },
+  "settings.ruleAdd": {
+    tr: "Hatırlatma ekle",
+    en: "Add reminder",
+    de: "Erinnerung hinzufügen",
+  },
+  "settings.ruleEmail": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  "settings.ruleNoChannel": {
+    tr: "Gönderilmiyor",
+    en: "Not sending",
+    de: "Kein Versand",
+  },
+  "settings.ruleNoChannelHint": {
+    tr: "Bu mesaj için onaylı bir WhatsApp şablonu yok ve gönderen e-posta adresi boş. Kural açık olsa bile hiçbir şey gitmez. Şablonlar WhatsApp bölümünde, e-posta adresi İşletme sayfasında.",
+    en: "There is no approved WhatsApp template for this message and no sender email address. The rule can be on and still send nothing. Templates live in the WhatsApp section, the email address on the Business page.",
+    de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage und keine Absenderadresse. Die Regel kann aktiv sein und trotzdem nichts senden. Vorlagen finden Sie im WhatsApp-Bereich, die Absenderadresse auf der Seite Betrieb.",
+  },
+  "settings.ruleSendWindow": {
+    tr: "Gönderim saatleri",
+    en: "Sending hours",
+    de: "Versandzeiten",
   },
   "settings.emailFrom": {
     tr: "E-posta gönderen adresi",
