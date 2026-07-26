@@ -63,6 +63,12 @@ style issue.
   before start). The tick stamps `reminderSentOffsets` BEFORE scheduling the
   send — that ordering is the double-send guard across overlapping ticks; keep
   it.
+- Status moves on its own in ONE direction: `appointments.completePast`
+  (hourly) marks `scheduled`/`confirmed` bookings `completed` once their day is
+  over in the ORG's timezone. `no_show` stays manual and that is the point —
+  `reminders.tick` sends a win-back only for `no_show`, so it is the one status
+  worth a tap, and the owner has until closing to mark it. Nothing ever moves a
+  booking back to live; `cancelled` and `no_show` are left alone.
 
 ## i18n — two layers, don't conflate them
 

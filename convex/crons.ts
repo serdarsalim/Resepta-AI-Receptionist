@@ -8,4 +8,10 @@ const crons = cronJobs();
 // anyone notices.
 crons.interval("send-due-reminders", { minutes: 5 }, internal.reminders.tick, {});
 
+// Yesterday's bookings are done. Hourly rather than daily because orgs sit in
+// different timezones and "the day is over" happens at a different UTC moment
+// for each of them; the mutation decides per org and does nothing the rest of
+// the time.
+crons.interval("complete-past", { hours: 1 }, internal.appointments.completePast, {});
+
 export default crons;

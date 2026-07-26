@@ -4,6 +4,7 @@ import { internalMutation, mutation, query, type MutationCtx } from "./_generate
 import type { Doc, Id } from "./_generated/dataModel";
 import { appointmentStatus } from "./schema";
 import { assertE164, requireOrg } from "./lib/orgAuth";
+import { getLocalPartsSafe } from "./lib/businessHours";
 
 const enrichedAppointment = v.object({
   _id: v.id("appointments"),
@@ -366,6 +367,52 @@ export const updateDetails = mutation({
     if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
     await ctx.db.patch(args.appointmentId, patch);
+    return null;
+  },
+});
+
+// Yesterday's bookings are done. Status used to move ONLY by hand, from a
+// hover menu that renders in list view alone — so a salon that never opened
+// that menu carried every past appointment as a live booking forever, and the
+// two greens on the calendar decayed into one colour that meant nothing.
+//
+// no_show survives as the deliberate exception, and it is not cosmetic:
+// reminders.tick sends a win-back only for no_show, so it is the one status
+// worth a tap. Completing is the boring 95% and the machine can do it.
+//
+// The cut is the END OF THE DAY in the ORG's timezone, not startAt + duration.
+// An owner has until closing to mark who didn't turn up; marking someone
+// completed while they are still in the chair would be worse than waiting.
+export const completePast = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const orgCache = new Map<Id<"orgs">, Doc<"orgs"> | null>();
+    // Bounded like reminders.tick: two weeks covers a salon that was away, and
+    // anything older is a backlog no cron should quietly rewrite.
+    const past = await ctx.db
+      .query("appointments")
+      .withIndex("by_start", (q) =>
+        q.gt("startAt", now - 14 * 24 * 3600_000).lt("startAt", now),
+      )
+      .take(500);
+    for (const appointment of past) {
+      if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+        continue;
+      }
+      let org = orgCache.get(appointment.orgId);
+      if (org === undefined) {
+        org = await ctx.db.get(appointment.orgId);
+        orgCache.set(appointment.orgId, org);
+      }
+      if (!org) continue;
+      const then = getLocalPartsSafe(appointment.startAt, org.timezone);
+      const today = getLocalPartsSafe(now, org.timezone);
+      const sameDay = then.y === today.y && then.m0 === today.m0 && then.d === today.d;
+      if (sameDay) continue;
+      await ctx.db.patch(appointment._id, { status: "completed" });
+    }
     return null;
   },
 });
