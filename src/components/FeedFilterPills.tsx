@@ -63,21 +63,26 @@ export function FeedFilterPills({
         onClick={() => onChange(tab)}
         aria-label={label}
         aria-pressed={active}
-        className={`flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors ${
+        // Geometry and the three states are Nudge's, read off its live DOM
+        // rather than eyeballed: no explicit height (the text sets it), no
+        // background on the resting pill, and ink that carries the weight —
+        // an empty tab drops to half-strength muted, one with rows in it sits
+        // at 75% foreground, the open one goes accent and semibold.
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
           active
-            ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
-            : // Explicit card bg — the pane behind is tinted, so an unset
-              // background reads as a grey chip. An empty tab dims further:
-              // "nothing in here" should be legible before you click it.
-              `border-[var(--border)] bg-[var(--card)] hover:text-[var(--foreground)] ${
-                count === 0 ? "text-[var(--muted)]/60" : "text-[var(--muted)]"
-              }`
+            ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
+            : count > 0
+              ? "border-[var(--border)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+              : "border-[var(--border)] text-[var(--muted)]/50"
         }`}
       >
         {/* Channels are icon-only — the glyphs are the ones customers know.
             Notes has no such glyph, so it carries its word: a bare pencil in a
             row of channels reads as "edit this contact". */}
-        {tab !== "all" && <FeedIcon type={tab} size={14} tinted={!active} />}
+        {/* Tinted in every state, open one included: the glyph's colour is how
+            you find the channel, and dropping it to accent on select means the
+            pill you're looking at is the one that stopped being recognizable. */}
+        {tab !== "all" && <FeedIcon type={tab} size={14} />}
         {(tab === "all" || tab === "note") && <span>{label}</span>}
         {/* Zero renders nothing. A row of noughts is noise, and the dimmed
             pill already says the tab is empty. */}

@@ -94,12 +94,28 @@ export function ContactView({
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       {/* One header row, never two: back, who, and the pane swap on phones. */}
       <div className="mb-3 flex items-center gap-3">
+        {/* The drawn arrow, same one the inbox uses. A "←" glyph is whatever
+            the reader's font decides it is, and next to a row of crisp SVG
+            channel icons it read as a stray character. */}
         <button
           onClick={onClose}
           aria-label={t("common.back")}
-          className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         >
-          ←
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+          </svg>
         </button>
         {/* Name only. The number is a field on the record card directly below,
             where it is editable — repeating it here read as a second, stale

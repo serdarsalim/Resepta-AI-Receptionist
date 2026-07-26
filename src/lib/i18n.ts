@@ -331,7 +331,7 @@ const dictionary = {
     de: "Noch keine Nachrichten",
   },
 
-  "notes.title": { tr: "Not", en: "Note", de: "Notiz" },
+  "notes.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
   "notes.none": {
     tr: "Henüz not yok",
     en: "No notes yet",
