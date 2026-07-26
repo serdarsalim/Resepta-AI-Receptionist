@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  COUNTRY_OPTIONS,
+  countryOptions,
   findCountryByCode,
   formatCountryLabel,
   type CountryOption,
@@ -159,11 +159,14 @@ export function CountryCodeSelect({
   }, [open, place]);
 
   const filtered = useMemo(() => {
-    const all: CountryOption[] = [NOT_SET, ...COUNTRY_OPTIONS];
+    const all: CountryOption[] = [NOT_SET, ...countryOptions(language)];
     const q = query.trim().toLowerCase();
     if (!q) return all;
-    return all.filter((c) => `${c.name} ${c.code}`.toLowerCase().includes(q));
-  }, [query]);
+    return all.filter((c) =>
+      (c.search ?? `${c.name} ${c.code}`.toLowerCase()).includes(q),
+    );
+    // language matters: the list is labelled AND sorted in it.
+  }, [query, language]);
 
   const select = (code: string) => {
     onChange(code ? `+${code}` : "");

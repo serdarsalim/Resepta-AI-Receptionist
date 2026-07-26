@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CountryCodeSelect, FlagByIso } from "./CountryCodeSelect";
-import { joinPhone, phoneCountry, splitPhone } from "@/lib/phone";
+import { absorbInternational, joinPhone, phoneCountry, splitPhone } from "@/lib/phone";
+import { useDetectedDialCode } from "@/lib/useDialCode";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { Language } from "@/lib/i18n";
 
@@ -52,6 +53,24 @@ const NATIONAL_PLACEHOLDER = "532 123 45 67";
 // Typing keeps spaces and dashes so a number can be entered the way it is read
 // out loud; joinPhone strips them on the way to storage.
 const cleanNational = (raw: string) => raw.replace(/[^\d\s-]/g, "");
+
+// One handler for both components. A number arriving with its country attached
+// — typed "+90…", or pasted "0090…" the way it is dialled from abroad — splits
+// itself: the code goes to the picker, the rest stays in the box. Anything
+// ordinary falls through to the plain clean.
+function applyNationalInput(
+  raw: string,
+  setCode: (next: string) => void,
+  setNational: (next: string) => void,
+) {
+  const absorbed = absorbInternational(raw);
+  if (absorbed) {
+    setCode(absorbed.code);
+    setNational(cleanNational(absorbed.national));
+    return;
+  }
+  setNational(cleanNational(raw));
+}
 
 const nationalCls =
   "min-w-[9rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-base";
@@ -178,7 +197,7 @@ export function PhoneField({
           inputMode="tel"
           aria-label={COPY.number[language]}
           value={national}
-          onChange={(e) => setNational(cleanNational(e.target.value))}
+          onChange={(e) => applyNationalInput(e.target.value, setCode, setNational)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void commit();
             if (e.key === "Escape") setEditing(false);
@@ -228,6 +247,23 @@ export function PhoneInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const missingCode = national.trim() !== "" && !code;
 
+  // Start on the visitor's own country instead of an empty picker: a Turkish
+  // salon should not pick Türkiye every single time. Applied ONCE, and only
+  // while the field is still untouched — a geo lookup landing late must never
+  // overwrite a code somebody already chose or typed. Detection failing leaves
+  // the picker empty on purpose; a wrong dial code looks answered.
+  const detectedCode = useDetectedDialCode();
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !detectedCode) return;
+    if (code || national) {
+      seeded.current = true; // user got there first
+      return;
+    }
+    seeded.current = true;
+    setCode(detectedCode);
+  }, [detectedCode, code, national]);
+
   // Blocks the native submit without a native bubble: the message below the
   // control is the humanised version, and setCustomValidity's default bubble
   // would say the same thing twice in the browser's voice.
@@ -247,7 +283,7 @@ export function PhoneInput({
           required={required}
           aria-label={COPY.number[language]}
           value={national}
-          onChange={(e) => setNational(cleanNational(e.target.value))}
+          onChange={(e) => applyNationalInput(e.target.value, setCode, setNational)}
           onInvalid={(e) => {
             if (missingCode) e.preventDefault();
           }}
