@@ -6,7 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { localeFor } from "@/lib/datetime";
+import { formatAge, localeFor } from "@/lib/datetime";
 import {
   compareCells,
   useSearch,
@@ -71,7 +71,10 @@ export function CustomersView({
   );
 
   // Dates read as day-level facts here: a salon owner scanning a list wants
-  // "when", not "at what minute".
+  // "when", not "at what minute". Kept for the CSV export and for custom date
+  // fields; the Added/Last activity CELLS render an age instead (formatAge).
+  // "Yesterday" down a whole column is twenty rows agreeing on nothing — an
+  // age column sorts by eye, which is the only reason to look at it.
   const dayFormat = useMemo(
     () =>
       new Intl.DateTimeFormat(localeFor(language), {
@@ -81,17 +84,6 @@ export function CustomersView({
       }),
     [language],
   );
-  const formatDay = useMemo(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const today = startOfToday.getTime();
-    const DAY = 86_400_000;
-    return (ms: number) => {
-      if (ms >= today) return t("time.today");
-      if (ms >= today - DAY) return t("time.yesterday");
-      return dayFormat.format(ms);
-    };
-  }, [dayFormat, t]);
 
   const customValue = (customer: Customer, fieldKey: string): string =>
     customer.custom?.[fieldKey] ?? "";
@@ -149,9 +141,9 @@ export function CustomersView({
         // only its absence is news.
         return customer.consentAt ? "" : t("customers.noConsent");
       case "added":
-        return formatDay(customer._creationTime);
+        return formatAge(customer._creationTime, language);
       case "lastActivity":
-        return customer.lastInboundAt ? formatDay(customer.lastInboundAt) : "";
+        return customer.lastInboundAt ? formatAge(customer.lastInboundAt, language) : "";
       default: {
         const fieldKey = key.slice(FIELD_PREFIX.length);
         const raw = customValue(customer, fieldKey);
@@ -245,22 +237,31 @@ export function CustomersView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, fieldByKey, search.active, search.matches, table.matchesFilters, table.sort]);
 
+  // The screen and the file disagree on purpose. A cell is read at a glance
+  // and wants an age ("3g"); a spreadsheet is filtered, pivoted and kept, and
+  // an age is worthless the day after it is exported. Consent already had to
+  // opt out of displayValue for the same reason — the cell says nothing when
+  // consent is on file, which would export as a blank that reads like missing
+  // data rather than the normal case.
+  const csvValue = (customer: Customer, key: string): string => {
+    switch (key) {
+      case "consent":
+        return customer.consentAt ? t("customers.consentGiven") : t("customers.noConsent");
+      case "added":
+        return dayFormat.format(customer._creationTime);
+      case "lastActivity":
+        return customer.lastInboundAt ? dayFormat.format(customer.lastInboundAt) : "";
+      default:
+        return displayValue(customer, key);
+    }
+  };
+
   const exportCsv = () => {
     const exported = [{ key: "name", label: t("customers.name") }, ...visibleColumns];
     const lines = [
       exported.map((column) => csvCell(column.label)).join(","),
       ...rows.map((customer) =>
-        exported
-          .map((column) =>
-            csvCell(
-              column.key === "consent"
-                ? customer.consentAt
-                  ? t("customers.consentGiven")
-                  : t("customers.noConsent")
-                : displayValue(customer, column.key),
-            ),
-          )
-          .join(","),
+        exported.map((column) => csvCell(csvValue(customer, column.key))).join(","),
       ),
     ];
     // The BOM is what makes Excel read the Turkish characters instead of

@@ -875,8 +875,6 @@ const dictionary = {
   },
   // Relative dates stop at yesterday; older rows read as a real date, so
   // nobody has to count back from "16 days ago".
-  "time.today": { tr: "Bugün", en: "Today", de: "Heute" },
-  "time.yesterday": { tr: "Dün", en: "Yesterday", de: "Gestern" },
 
   "common.save": { tr: "Kaydet", en: "Save", de: "Speichern" },
   "common.saving": {

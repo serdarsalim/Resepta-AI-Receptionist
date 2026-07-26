@@ -41,6 +41,47 @@ export function formatDayHeading(ms: number, language: Language, timezone?: stri
   }).format(new Date(ms));
 }
 
+// Compact age for table cells, Nudge's timeAgo with the units localised and
+// the "ago" dropped: in a column headed "Added", the word is already implied.
+//
+// Nudge could hardcode "3d" because Nudge is English-only. Turkish is this
+// app's default language and "d" is not a Turkish abbreviation of anything —
+// gün shortens to g, saat to sa, hafta to hf. Same reason formatReminderOffset
+// below branches per language instead of templating at the call site.
+//
+// Nudge stops at days, so a lead added last spring reads "412d". A customer
+// list only accumulates, so this carries on through weeks, months and years.
+const AGE_UNITS: Record<
+  Language,
+  { now: string; min: string; hour: string; day: string; week: string; month: string; year: string }
+> = {
+  tr: { now: "şimdi", min: "dk", hour: "sa", day: "g", week: "hf", month: "ay", year: "y" },
+  en: { now: "now", min: "min", hour: "h", day: "d", week: "w", month: "mo", year: "y" },
+  de: { now: "jetzt", min: "Min", hour: "Std", day: "T", week: "W", month: "Mon", year: "J" },
+};
+
+export function formatAge(ms: number, language: Language): string {
+  const unit = AGE_UNITS[language];
+  // Clamped at zero: clock skew between the client and Convex can date a row
+  // a few seconds into the future, and "-1dk" is a bug report waiting to
+  // happen. Everything this formats is in the past by nature.
+  const elapsed = Math.max(0, Date.now() - ms);
+  if (elapsed < 60_000) return unit.now;
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${minutes}${unit.min}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}${unit.hour}`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}${unit.day}`;
+  // Weeks run to 4, then months to 12, then years. Handing off on the calendar
+  // month (30d) rather than 4 weeks keeps "1ay" from arriving before "4hf".
+  const weeks = Math.floor(days / 7);
+  if (days < 30) return `${weeks}${unit.week}`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}${unit.month}`;
+  return `${Math.floor(days / 365)}${unit.year}`;
+}
+
 // Reminder offsets are stored as hours and read as human language: a salon
 // owner taps "1 gün önce", never "24". Largest unit that divides evenly, per
 // the house rule, and the plural suffix differs per language (Tag/Tage,
