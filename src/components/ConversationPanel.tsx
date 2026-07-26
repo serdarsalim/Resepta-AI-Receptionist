@@ -8,6 +8,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
+import { normalizeSubject } from "../../convex/lib/emailInbound";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -72,6 +73,13 @@ export function ConversationPanel({
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  // Which thread the email tab has open (null = the list). Owned HERE rather
+  // than inside the list so the header can carry back-arrow + subject on the
+  // same line as Reply, which is also what prefills the composer.
+  const [openThread, setOpenThread] = useState<{
+    key: string;
+    subject: string;
+  } | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
@@ -82,13 +90,66 @@ export function ConversationPanel({
   // that tab stays newest-first with its composer at the top, next to where
   // the note it writes will land.
   const chatOrder = filter !== "note";
-  const thread = chatOrder ? [...visible].reverse() : visible;
+
+  // Email groups into conversations by normalized subject — "Re: Randevunuz"
+  // and "Randevunuz" are one exchange however many clients prefixed it. The
+  // same helper the server uses, so both agree on what a thread is.
+  // Typed loosely on purpose: the feed is a union and only the message variant
+  // carries a subject, but this only ever runs over the email filter, where
+  // every row is one.
+  const threadKeyOf = (item: (typeof visible)[number]) =>
+    normalizeSubject(
+      ("emailSubject" in item ? item.emailSubject : undefined) ?? "",
+    );
+  const emailThreads =
+    filter === "email"
+      ? Array.from(
+          visible.reduce((acc, item) => {
+            const key = threadKeyOf(item);
+            const found = acc.get(key);
+            // `visible` is newest-first, so the FIRST row of a key is the
+            // latest — that is the one whose subject and date the list shows.
+            if (found) found.count += 1;
+            else
+              acc.set(key, {
+                key,
+                subject:
+                  ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
+                  t("email.noSubject"),
+                at: item.at,
+                snippet: ("body" in item ? item.body : undefined) ?? "",
+                inbound:
+                  ("direction" in item ? item.direction : undefined) === "in",
+                count: 1,
+              });
+            return acc;
+          }, new Map<string, {
+            key: string;
+            subject: string;
+            at: number;
+            snippet: string;
+            inbound: boolean;
+            count: number;
+          }>()).values(),
+        )
+      : [];
+
+  const inScope = openThread
+    ? visible.filter((item) => threadKeyOf(item) === openThread.key)
+    : visible;
+  const thread = chatOrder ? [...inScope].reverse() : inScope;
 
   useEffect(() => {
     threadRef.current?.scrollTo({
       top: chatOrder ? threadRef.current.scrollHeight : 0,
     });
   }, [thread.length, customerId, filter, chatOrder]);
+
+  // Leaving the tab closes the thread. Coming back to a stale detail view of a
+  // conversation you navigated away from reads as the app losing its place.
+  useEffect(() => {
+    if (filter !== "email") setOpenThread(null);
+  }, [filter]);
 
   const windowOpen =
     !!lastInboundAt && Date.now() - lastInboundAt < SESSION_WINDOW_MS;
@@ -180,14 +241,43 @@ export function ConversationPanel({
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setComposing(true)}
-              className="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
-            >
-              <FeedIcon type="email" size={14} tinted={false} />
-              {t("email.compose")}
-            </button>
+            <div className="flex items-center gap-2">
+              {openThread && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setOpenThread(null)}
+                    aria-label={t("common.back")}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M19 12H5" />
+                      <path d="m12 19-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <h3 className="min-w-0 truncate text-sm font-semibold">
+                    {openThread.subject}
+                  </h3>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  // Reply prefills the thread's subject so the customer's
+                  // client keeps the exchange together; the server threads on
+                  // the same normalized key, so "Re:" here is for THEIR inbox,
+                  // not ours.
+                  setEmailSubject(
+                    openThread ? `Re: ${openThread.subject}` : "",
+                  );
+                  setComposing(true);
+                }}
+                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+              >
+                <FeedIcon type="email" size={14} tinted={false} />
+                {openThread ? t("email.reply") : t("email.compose")}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -225,7 +315,43 @@ export function ConversationPanel({
             {filter === "note" ? t("notes.none") : t("messages.none")}
           </p>
         )}
-        {thread.map((item) => {
+        {/* Email index: one row per conversation, flush like a mail client
+            rather than a stack of bubbles. Bubbles are for a chat you are
+            having; a mailbox is something you scan. */}
+        {filter === "email" && !openThread &&
+          emailThreads.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              onClick={() => setOpenThread({ key: entry.key, subject: entry.subject })}
+              className="-mx-4 flex w-[calc(100%+2rem)] items-start gap-2 border-b border-[var(--border)] px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+            >
+              <FeedIcon type="email" size={13} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  {/* Unanswered inbound reads heavier, the same weight rule the
+                      inbox list uses for a conversation awaiting a reply. */}
+                  <span className={`min-w-0 truncate text-sm ${entry.inbound ? "font-semibold" : ""}`}>
+                    {entry.subject}
+                  </span>
+                  {entry.count > 1 && (
+                    <span className="shrink-0 rounded-full bg-[var(--muted-bg)] px-1.5 text-[11px] text-[var(--muted)]">
+                      {entry.count}
+                    </span>
+                  )}
+                </span>
+                {entry.snippet && (
+                  <span className="block truncate text-xs text-[var(--muted)]">
+                    {entry.snippet}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-xs text-[var(--muted)]">
+                {formatDateTime(entry.at, language)}
+              </span>
+            </button>
+          ))}
+        {filter === "email" && !openThread ? null : thread.map((item) => {
           if (item.channel === "call") return <CallEntry key={item.id} item={item} />;
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
           const outbound = item.direction === "out";

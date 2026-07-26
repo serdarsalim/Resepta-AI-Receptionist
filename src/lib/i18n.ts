@@ -360,6 +360,12 @@ const dictionary = {
     de: "Die Währung, in der Preise angezeigt werden. Ein Wechsel rechnet Beträge nicht um.",
   },
 
+  "email.noSubject": {
+    tr: "(konu yok)",
+    en: "(no subject)",
+    de: "(kein Betreff)",
+  },
+  "email.reply": { tr: "Yanıtla", en: "Reply", de: "Antworten" },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
   "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
   "email.bodyPlaceholder": {
