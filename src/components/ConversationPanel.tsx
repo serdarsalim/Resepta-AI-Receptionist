@@ -10,6 +10,7 @@ import {
   formatDateTime,
   formatDayHeading,
   formatTime,
+  fromDatetimeLocalValue,
   localeFor,
 } from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
@@ -117,8 +118,14 @@ export function ConversationPanel({
   const sendSession = useAction(api.wa.sendSession);
   const sendEmail = useAction(api.email.sendToCustomer);
   const addNote = useMutation(api.notes.add);
+  const cancelScheduled = useMutation(api.wa.cancelScheduled);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Empty = send now. A disclosure rather than a permanent field: almost every
+  // message goes immediately, and a datetime box sitting under the composer
+  // asks a question nobody usually has an answer to.
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [scheduling, setScheduling] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   // The email composer is a disclosure, not a permanent bar: unlike WhatsApp,
@@ -667,6 +674,29 @@ export function ConversationPanel({
               {item.emailSubject && (
                 <p className="font-medium">{item.emailSubject}</p>
               )}
+              {/* The picture IS the message when a customer sends one — "this
+                  is the colour I want" — so it leads, capped rather than
+                  stretched: a portrait photo blown to bubble width pushes
+                  everything else off the screen. */}
+              {item.mediaUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.mediaUrl}
+                  alt=""
+                  className="mb-1 max-h-52 w-auto max-w-[15rem] rounded-lg object-contain"
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                  }}
+                />
+              )}
+              {item.mediaPending && (
+                // The row exists before the bytes do. A placeholder says
+                // "there is a picture coming"; nothing at all says the
+                // customer sent an empty message.
+                <span className="mb-1 flex h-24 w-40 animate-pulse items-center justify-center rounded-lg bg-[var(--muted-bg)] text-[11px] text-[var(--muted)]">
+                  {t("message.imageLoading")}
+                </span>
+              )}
               {item.body ? (
                 <p className="whitespace-pre-wrap">{item.body}</p>
               ) : (
@@ -694,6 +724,22 @@ export function ConversationPanel({
                 )}
                 {failed && statusKey && <span>· {t(statusKey)}</span>}
                 {errorKey && <span>· {t(errorKey)}</span>}
+                {/* A parked send says WHEN, and offers the only action that
+                    still matters. Once it has gone the row loses both. */}
+                {item.scheduledFor !== undefined && (
+                  <>
+                    <span>· {formatDateTime(item.scheduledFor, language)}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void cancelScheduled({ messageId: item.id as Id<"messages"> })
+                      }
+                      className="hover:text-red-600 dark:hover:text-red-400"
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </>
+                )}
               </p>
             </div>
             </Fragment>
@@ -712,10 +758,22 @@ export function ConversationPanel({
               if (!body.trim()) return;
               setSending(true);
               setSendError(null);
-              const result = await sendSession({ customerId, body });
+              const when = scheduleAt ? fromDatetimeLocalValue(scheduleAt) : undefined;
+              const result = await sendSession({
+                customerId,
+                body,
+                // A moment already past is someone finishing a thought late,
+                // not a request to time-travel — send it now.
+                ...(when !== undefined && when > Date.now()
+                  ? { scheduledFor: when }
+                  : {}),
+              });
               setSending(false);
-              if (result.ok) formEl.reset();
-              else setSendError(result.reason ?? "error");
+              if (result.ok) {
+                formEl.reset();
+                setScheduleAt("");
+                setScheduling(false);
+              } else setSendError(result.reason ?? "error");
             }}
           >
             <textarea
@@ -728,6 +786,23 @@ export function ConversationPanel({
               className="flex-1 resize-none"
             />
             <button
+              type="button"
+              onClick={() => setScheduling((prev) => !prev)}
+              aria-label={t("message.scheduleAt")}
+              aria-pressed={scheduling}
+              disabled={!windowOpen || sending}
+              className={`shrink-0 rounded-lg px-2 py-2 transition-colors disabled:opacity-50 ${
+                scheduling || scheduleAt
+                  ? "text-[var(--accent)]"
+                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </button>
+            <button
               type="submit"
               disabled={!windowOpen || sending}
               className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
@@ -735,6 +810,19 @@ export function ConversationPanel({
               {t("contact.send")}
             </button>
           </form>
+          {scheduling && (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
+              <input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={(event) => setScheduleAt(event.target.value)}
+                className="w-auto"
+              />
+              <span className="text-xs text-[var(--muted)]">
+                {t("message.scheduleHint")}
+              </span>
+            </div>
+          )}
           {sendError && (
             // Same rule as the bubbles: a known reason gets its sentence, an
             // unknown one falls back to plain "not sent" rather than the slug.

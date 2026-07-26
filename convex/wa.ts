@@ -1,11 +1,17 @@
 import { v } from "convex/values";
 import type { Scheduler } from "convex/server";
 import { internal } from "./_generated/api";
-import { action, internalAction, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
 import { emailLaneConfigured, sendEmail } from "./lib/email";
-import { sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import { fetchWaMedia, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { queueOrgAlert } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
 import { requireOrg } from "./lib/orgAuth";
@@ -88,7 +94,14 @@ export const loadSessionContext = internalQuery({
 // inside the 24h window the customer's last inbound opened — outside it Meta
 // rejects with 131047, so we refuse locally with a readable reason instead.
 export const sendSession = action({
-  args: { customerId: v.id("customers"), body: v.string() },
+  args: {
+    customerId: v.id("customers"),
+    body: v.string(),
+    // Unset = send now. A moment in the future parks the row instead, for the
+    // cron to pick up — the salon writing tonight's follow-up at 23:00 and
+    // having it land at 10:00 tomorrow.
+    scheduledFor: v.optional(v.number()),
+  },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
     const body = args.body.trim();
@@ -104,14 +117,25 @@ export const sendSession = action({
       !customer.lastInboundAt ||
       Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
     ) {
-      return { ok: false, reason: "session-window-closed" };
+      // Checked for an immediate send only. A scheduled one is checked again
+      // at dispatch, because a window that is open now may be shut by then —
+      // and one that is shut now may have re-opened if the customer writes
+      // back in the meantime.
+      if (!args.scheduledFor) {
+        return { ok: false, reason: "session-window-closed" };
+      }
     }
     const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
       orgId: customer.orgId,
       customerId: customer._id,
       kind: "session",
       body,
+      scheduledFor: args.scheduledFor,
     });
+    // Parked. The row is visible in the thread immediately, counting down,
+    // which is the whole point: a scheduled message you cannot see is a
+    // message you will send twice.
+    if (args.scheduledFor) return { ok: true };
     const result = await sendWaCloudText({
       accessToken: waAccount.accessToken,
       phoneNumberId: waAccount.phoneNumberId,
@@ -407,6 +431,174 @@ export const sendAppointmentMessage = internalAction({
         });
       }
     }
+    return null;
+  },
+});
+
+// The org's WhatsApp credentials, for the media download below. Its own query
+// rather than reusing loadSendContext, which loads a customer this has no
+// business reading.
+export const accountForOrg = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.union(v.object({ accessToken: v.string() }), v.null()),
+  handler: async (ctx, args) => {
+    const account = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+    return account ? { accessToken: account.accessToken } : null;
+  },
+});
+
+// ---- Inbound image download ----
+//
+// Scheduled by the webhook, never awaited by it. Meta retries a webhook it
+// does not get a fast 200 for, so doing two network round-trips inside the
+// handler would turn one slow image into duplicate deliveries of the whole
+// message.
+export const downloadInboundMedia = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    messageId: v.id("messages"),
+    mediaId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const account = await ctx.runQuery(internal.wa.accountForOrg, {
+      orgId: args.orgId,
+    });
+    if (!account) {
+      // Clear the flag anyway. A row stuck "pending" forever shows a spinner
+      // that will never resolve, which is worse than a message with no image.
+      await ctx.runMutation(internal.messages.attachMedia, {
+        messageId: args.messageId,
+      });
+      return null;
+    }
+    const media = await fetchWaMedia({
+      accessToken: account.accessToken,
+      mediaId: args.mediaId,
+    });
+    if (!media) {
+      await ctx.runMutation(internal.messages.attachMedia, {
+        messageId: args.messageId,
+      });
+      return null;
+    }
+    const storageId = await ctx.storage.store(media.blob);
+    await ctx.runMutation(internal.messages.attachMedia, {
+      messageId: args.messageId,
+      storageId,
+    });
+    return null;
+  },
+});
+
+// ---- Scheduled sends ----
+
+export const dueScheduled = internalQuery({
+  args: {},
+  returns: v.array(
+    v.object({ messageId: v.id("messages"), customerId: v.id("customers"), body: v.string() }),
+  ),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_status_scheduled", (q) =>
+        q.eq("status", "queued").lte("scheduledFor", Date.now()),
+      )
+      .take(100);
+    return rows
+      .filter((row) => row.scheduledFor !== undefined && row.customerId && row.body)
+      .map((row) => ({
+        messageId: row._id,
+        customerId: row.customerId!,
+        body: row.body!,
+      }));
+  },
+});
+
+// Clears the parked marker the moment dispatch starts, BEFORE the send. Same
+// ordering the reminder cron uses, and for the same reason: two overlapping
+// ticks must not both decide a message is still due.
+export const claimScheduled = internalMutation({
+  args: { messageId: v.id("messages") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.messageId);
+    if (!row || row.status !== "queued" || row.scheduledFor === undefined) return false;
+    await ctx.db.patch(args.messageId, { scheduledFor: undefined });
+    return true;
+  },
+});
+
+export const sendDueScheduled = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const due = await ctx.runQuery(internal.wa.dueScheduled, {});
+    for (const item of due) {
+      const claimed = await ctx.runMutation(internal.wa.claimScheduled, {
+        messageId: item.messageId,
+      });
+      if (!claimed) continue;
+      const context = await ctx.runQuery(internal.wa.loadSessionContext, {
+        customerId: item.customerId,
+      });
+      if (!context?.waAccount) {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId: item.messageId,
+          ok: false,
+          error: "wa-not-configured",
+        });
+        continue;
+      }
+      const { customer, waAccount } = context;
+      // Re-checked HERE, not at scheduling time. The 24h window a message was
+      // written inside may have shut before its moment arrived, and Meta will
+      // reject the send rather than deliver it late.
+      if (
+        !customer.lastInboundAt ||
+        Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
+      ) {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId: item.messageId,
+          ok: false,
+          error: "session-window-closed",
+        });
+        continue;
+      }
+      const result = await sendWaCloudText({
+        accessToken: waAccount.accessToken,
+        phoneNumberId: waAccount.phoneNumberId,
+        to: customer.phone,
+        body: item.body,
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId: item.messageId,
+        ok: result.ok,
+        wamid: result.ok ? result.wamid : undefined,
+        error: result.ok ? undefined : result.reason,
+      });
+    }
+    return null;
+  },
+});
+
+// Cancel a parked send. Deletes the row rather than marking it cancelled: it
+// never reached anybody, so leaving a tombstone in the customer's thread
+// records a conversation that did not happen.
+export const cancelScheduled = mutation({
+  args: { messageId: v.id("messages") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const row = await ctx.db.get(args.messageId);
+    if (!row || row.orgId !== orgId) throw new Error("not-found");
+    // Already gone out — nothing to cancel, and pretending otherwise would be
+    // telling the salon a message was stopped when the customer has it.
+    if (row.scheduledFor === undefined || row.status !== "queued") return null;
+    await ctx.db.delete(args.messageId);
     return null;
   },
 });

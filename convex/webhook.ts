@@ -89,6 +89,12 @@ export const handleWhatsappEvent = internalMutation({
           )?.button_reply?.id;
           const text = (message.text as { body?: string } | undefined)?.body ?? "";
           const payload = buttonPayload ?? interactivePayload ?? "";
+          // An image arrives as an id plus an optional caption. A salon gets
+          // these constantly — "this is the colour I want" — and dropping
+          // them left a bubble saying nothing at all.
+          const image = message.image as
+            | { id?: string; caption?: string }
+            | undefined;
 
           // A number we have never seen is not noise, it is the new customer
           // this product exists to catch. It used to be logged with no
@@ -106,12 +112,23 @@ export const handleWhatsappEvent = internalMutation({
               phone,
             }));
 
-          await logInboundRow(ctx, {
+          const loggedId = await logInboundRow(ctx, {
             orgId,
             customerId: contactId,
-            body: payload || text,
+            body: payload || text || image?.caption || "",
             wamid: message.id as string | undefined,
+            mediaPending: Boolean(image?.id),
           });
+          // Scheduled, not awaited: Meta retries a webhook that does not get a
+          // fast 200, so two network round-trips inside this handler would
+          // turn one slow image into duplicate deliveries of the message.
+          if (image?.id) {
+            await ctx.scheduler.runAfter(0, internal.wa.downloadInboundMedia, {
+              orgId,
+              messageId: loggedId,
+              mediaId: image.id,
+            });
+          }
           // Opens Meta's 24h session window for any future free-form reply.
           await ctx.db.patch(contactId, { lastInboundAt: Date.now() });
 

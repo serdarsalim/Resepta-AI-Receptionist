@@ -35,6 +35,7 @@ export const logOutQueued = internalMutation({
     // subject-less for a second and then pops one is worse than either.
     emailSubject: v.optional(v.string()),
     emailFrom: v.optional(v.string()),
+    scheduledFor: v.optional(v.number()),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -48,6 +49,7 @@ export const logOutQueued = internalMutation({
       body: args.body,
       emailSubject: args.emailSubject,
       emailFrom: args.emailFrom,
+      scheduledFor: args.scheduledFor,
       status: "queued",
     });
   },
@@ -103,9 +105,13 @@ export async function logInboundRow(
     customerId?: Id<"customers">;
     body?: string;
     wamid?: string;
+    // Set when the message carried an image. The row lands immediately with
+    // the caption and a pending flag; the bytes follow from an action,
+    // because a mutation cannot reach Meta.
+    mediaPending?: boolean;
   },
-) {
-  await ctx.db.insert("messages", {
+): Promise<Id<"messages">> {
+  return await ctx.db.insert("messages", {
     orgId: args.orgId,
     customerId: args.customerId,
     direction: "in",
@@ -113,8 +119,26 @@ export async function logInboundRow(
     body: args.body,
     wamid: args.wamid,
     status: "received",
+    ...(args.mediaPending ? { mediaPending: true } : {}),
   });
 }
+
+// The image, once the action has it. Clears the pending flag in the same
+// write, so a row is never both pending and complete.
+export const attachMedia = internalMutation({
+  args: {
+    messageId: v.id("messages"),
+    storageId: v.optional(v.id("_storage")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.messageId, {
+      mediaStorageId: args.storageId,
+      mediaPending: undefined,
+    });
+    return null;
+  },
+});
 
 // ---- Unified conversation feed (WhatsApp + email + calls) ----
 //
@@ -176,6 +200,14 @@ const feedItem = v.object({
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
+  // A signed URL for the stored image, minted per read. The storage id itself
+  // never reaches the client — it is a handle to a file, and a URL is what a
+  // browser can actually render.
+  mediaUrl: v.optional(v.string()),
+  mediaPending: v.optional(v.boolean()),
+  // Set while a send is waiting for its moment. The bubble counts down to it
+  // and can be cancelled until the cron picks it up.
+  scheduledFor: v.optional(v.number()),
   // Note-only.
   authorName: v.optional(v.string()),
   editedAt: v.optional(v.number()),
@@ -215,6 +247,14 @@ export const feedForCustomer = query({
       authors.set(authorId, author?.name ?? author?.email ?? undefined);
     }
 
+    // Signed URLs resolved before the map so the loop stays synchronous.
+    const mediaUrls = new Map<string, string>();
+    for (const m of messages) {
+      if (!m.mediaStorageId) continue;
+      const url = await ctx.storage.getUrl(m.mediaStorageId);
+      if (url) mediaUrls.set(m._id as string, url);
+    }
+
     const items = [
       ...messages.map((m) => ({
         id: m._id as string,
@@ -226,6 +266,9 @@ export const feedForCustomer = query({
         status: m.status,
         error: m.error,
         emailSubject: m.emailSubject,
+        mediaUrl: mediaUrls.get(m._id as string),
+        mediaPending: m.mediaPending,
+        scheduledFor: m.scheduledFor,
       })),
       ...calls.map((c) => ({
         id: c._id as string,

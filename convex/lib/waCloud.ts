@@ -143,3 +143,35 @@ export async function sendWaCloudText(args: {
     waCloudTextPayload(args.to, args.body),
   );
 }
+
+// ---- Inbound media ----
+//
+// Meta hands the webhook a media ID, not the bytes, and the download is TWO
+// calls: the ID resolves to a short-lived URL, and that URL only serves to a
+// request carrying the access token. Both are why the image has to be pulled
+// into our own storage rather than linked — a Meta media URL is a broken
+// image by the next morning, and the token can never reach a browser.
+export async function fetchWaMedia(args: {
+  accessToken: string;
+  mediaId: string;
+}): Promise<{ blob: Blob; contentType: string } | null> {
+  try {
+    const lookup = await fetch(`${WA_CLOUD_GRAPH_BASE}/${args.mediaId}`, {
+      headers: { authorization: `Bearer ${args.accessToken}` },
+    });
+    if (!lookup.ok) return null;
+    const meta = (await lookup.json()) as { url?: string; mime_type?: string };
+    if (!meta.url) return null;
+    const file = await fetch(meta.url, {
+      headers: { authorization: `Bearer ${args.accessToken}` },
+    });
+    if (!file.ok) return null;
+    const blob = await file.blob();
+    return {
+      blob,
+      contentType: meta.mime_type ?? blob.type ?? "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+}

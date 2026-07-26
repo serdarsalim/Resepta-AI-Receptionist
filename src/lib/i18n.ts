@@ -488,6 +488,21 @@ const dictionary = {
     en: "not sent",
     de: "nicht gesendet",
   },
+  "message.imageLoading": {
+    tr: "Görsel yükleniyor…",
+    en: "Loading image…",
+    de: "Bild wird geladen…",
+  },
+  "message.scheduleAt": {
+    tr: "Sonra gönder",
+    en: "Send later",
+    de: "Später senden",
+  },
+  "message.scheduleHint": {
+    tr: "Boş bırakırsanız hemen gönderilir.",
+    en: "Leave empty to send now.",
+    de: "Leer lassen, um sofort zu senden.",
+  },
   "message.template": {
     tr: "Şablon mesajı",
     en: "Template message",

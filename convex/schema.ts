@@ -396,6 +396,19 @@ export default defineSchema({
       v.literal("received"),
     ),
     wamid: v.optional(v.string()),
+    // An image the customer sent — a photo of the colour they want is the
+    // single most common attachment a salon receives. Stored in Convex file
+    // storage rather than linked: Meta's media URLs are short-lived and
+    // token-gated, so a link would be a broken image by the next morning.
+    mediaStorageId: v.optional(v.id("_storage")),
+    // Set the moment the webhook sees an image and cleared when the download
+    // lands. A row that is waiting shows a placeholder instead of nothing,
+    // which is the difference between "loading" and "we lost it".
+    mediaPending: v.optional(v.boolean()),
+    // When this should go out. Unset = send now. A row that carries one sits
+    // at status "queued" until the cron reaches it, and can be cancelled up
+    // to the moment it does.
+    scheduledFor: v.optional(v.number()),
     // Email lane. Subject is what the thread groups on, from-address is who
     // actually wrote (a customer may reply from a different address than the
     // one on their record), and emailId is Resend's own id for the message.
@@ -411,6 +424,9 @@ export default defineSchema({
     .index("by_customer", ["customerId"])
     .index("by_appointment", ["appointmentId"])
     .index("by_email_id", ["emailId"])
+    // Due scheduled sends. Status first so the scan skips everything already
+    // sent, which is nearly the whole table.
+    .index("by_status_scheduled", ["status", "scheduledFor"])
     .index("by_wamid", ["wamid"]),
 
   // Staff-written notes on a customer — "allergic to ammonia", "always late,

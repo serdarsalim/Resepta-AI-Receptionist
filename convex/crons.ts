@@ -14,4 +14,9 @@ crons.interval("send-due-reminders", { minutes: 5 }, internal.reminders.tick, {}
 // the time.
 crons.interval("complete-past", { hours: 1 }, internal.appointments.completePast, {});
 
+// Parked WhatsApp messages. One minute rather than five: a person picked this
+// time deliberately, and "in five minutes, roughly" is not what they asked
+// for. The claim-then-send ordering inside makes overlapping ticks harmless.
+crons.interval("send-scheduled-messages", { minutes: 1 }, internal.wa.sendDueScheduled, {});
+
 export default crons;
