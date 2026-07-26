@@ -35,6 +35,8 @@ export const current = query({
       publicSlug: v.optional(v.string()),
       formEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
+      // Drives the banner that tells a visitor this salon is not real.
+      demoMode: v.optional(v.boolean()),
       // The domain half, from deployment env — the client needs it to show the
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
@@ -119,6 +121,7 @@ export const current = query({
         publicSlug: org.publicSlug,
         formEnabled: org.formEnabled,
         revenueEnabled: org.revenueEnabled,
+        demoMode: org.demoMode,
         inboundDomain: process.env.RESEND_INBOUND_DOMAIN,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,

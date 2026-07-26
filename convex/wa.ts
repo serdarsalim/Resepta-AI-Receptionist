@@ -7,7 +7,6 @@ import {
   internalQuery,
   mutation,
 } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { formatAppointmentTime } from "./lib/format";
 import { emailLaneConfigured, sendEmail } from "./lib/email";
 import {
@@ -19,6 +18,7 @@ import {
 import { isOrgSetupFailure } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
 import { renderTokens } from "./lib/renderTokens";
+import { isDemo } from "./demo";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -77,7 +77,9 @@ export const sendSession = action({
     });
     if (!context) return { ok: false, reason: "not-found" };
     const { customer, waAccount, org } = context;
-    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+    // Before the credential check, for the same reason as the template lane:
+    // the demo org has no waAccount by design.
+    if (!waAccount && !isDemo(org)) return { ok: false, reason: "wa-not-configured" };
     // Free-form session text, so named tokens work here — this is not a Meta
     // template and nothing about {{1}} applies. Rendered ONCE, at send time,
     // and the stored row keeps the rendered text: the thread has to show what
@@ -114,6 +116,18 @@ export const sendSession = action({
     // which is the whole point: a scheduled message you cannot see is a
     // message you will send twice.
     if (args.scheduledFor) return { ok: true };
+
+    if (isDemo(org)) {
+      await ctx.runMutation(internal.demo.landSimulated, {
+        messageId,
+        orgId: customer.orgId,
+        customerId: customer._id,
+      });
+      return { ok: true };
+    }
+    // Only a demo org reaches this far without one, and that path returned
+    // above — so this is narrowing for the compiler, not a real case.
+    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
 
     // Meta fetches the image from this URL itself, so it has to be reachable
     // from the outside. In DEV ctx.storage.getUrl returns a 127.0.0.1 address
@@ -343,6 +357,35 @@ export const sendAppointmentMessage = internalAction({
           .replace(/\{\{2\}\}/g, org.name)
           .replace(/\{\{3\}\}/g, when)
       : undefined;
+
+    // ---- Demo org: nothing leaves the building.
+    //
+    // Checked BEFORE the waAccount test, not after: the demo org deliberately
+    // has no credentials, so the ordinary path would fail it as
+    // "wa-not-configured" and the showroom would be a wall of red rows. The
+    // simulated send never constructs a request at all.
+    if (isDemo(org)) {
+      const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+        orgId: appointment.orgId,
+        customerId: customer._id,
+        appointmentId: appointment._id,
+        kind: messageKind,
+        templateName: contentTemplate?.metaName,
+        templateParams: bodyParams,
+        body,
+      });
+      await ctx.runMutation(internal.demo.landSimulated, {
+        messageId,
+        orgId: appointment.orgId,
+        customerId: customer._id,
+      });
+      if (args.kind === "confirmation") {
+        await ctx.runMutation(internal.appointments.stampConfirmationSent, {
+          appointmentId: appointment._id,
+        });
+      }
+      return null;
+    }
 
     // ---- WhatsApp attempt. Failures log a visible row and do NOT block the
     // email lane — an unconfigured number is exactly what the Messages tab

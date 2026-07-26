@@ -17,6 +17,7 @@ import type * as contactFields from "../contactFields.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as delivery from "../delivery.js";
+import type * as demo from "../demo.js";
 import type * as devSeed from "../devSeed.js";
 import type * as email from "../email.js";
 import type * as forms from "../forms.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customers: typeof customers;
   delivery: typeof delivery;
+  demo: typeof demo;
   devSeed: typeof devSeed;
   email: typeof email;
   forms: typeof forms;

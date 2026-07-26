@@ -39,4 +39,10 @@ crons.interval("retry-failed-sends", { minutes: 1 }, internal.delivery.retryDue,
 // that returns nothing on a healthy deployment.
 crons.interval("reap-stuck-sends", { minutes: 10 }, internal.delivery.reapStuck, {});
 
+// The showroom is a shared surface: whatever the last visitor did is what the
+// next one sees. Rebuilt from a fixed dataset overnight rather than asking
+// anyone to be careful with it. 02:00 UTC is the quiet hour for a Türkiye-first
+// product, and a no-op on any deployment with no demo org.
+crons.cron("reset-demo-org", "0 2 * * *", internal.demo.nightlyReset, {});
+
 export default crons;

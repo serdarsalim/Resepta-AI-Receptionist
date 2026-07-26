@@ -1079,6 +1079,16 @@ export function AppShell({
           onOpenAccount={() => onTab("account")}
         />
         <main className="thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+          {/* Above the content rather than in a corner: someone clicking
+              through a demo should never be a minute into it before working
+              out that the salon isn't real. Inside the scrolling pane so it
+              scrolls away once they've read it, rather than charging a strip
+              of vertical rent on every screen. */}
+          {settings?.org.demoMode && (
+            <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
+              {t("demo.banner")}
+            </p>
+          )}
           {children}
         </main>
         {/* Phone nav */}

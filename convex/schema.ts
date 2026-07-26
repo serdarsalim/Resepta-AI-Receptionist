@@ -160,6 +160,17 @@ export default defineSchema({
     // the dictionary ("Personel"/"Staff"/"Mitarbeiter"), which is correct for
     // most verticals and merely bland for the rest.
     staffLabel: v.optional(v.string()),
+    // The showroom. An org with this set never reaches a provider: sends are
+    // simulated, replies are invented, and a nightly cron wipes it back to a
+    // fixed dataset (convex/demo.ts).
+    //
+    // ⚠️ Unlike Nudge — where the demo is its own deployment with no
+    // credentials, so an empty env IS the safety boundary — this flag lives on
+    // a deployment that also holds real salons' customers. The boundary here
+    // is therefore the org scoping every query already does, plus the fact
+    // that a demo visitor's membership is for THIS org and no other. Do not
+    // set this on an org that has a waAccounts row.
+    demoMode: v.optional(v.boolean()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
 
   // Voice lane (spec Phase C): one Retell agent per org; function calls and

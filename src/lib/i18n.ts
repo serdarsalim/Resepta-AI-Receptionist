@@ -1131,6 +1131,23 @@ const dictionary = {
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
 
+  // The showroom.
+  "auth.tryDemo": {
+    tr: "Önce bir bakın",
+    en: "Have a look around first",
+    de: "Erst einmal umsehen",
+  },
+  "auth.tryDemoHint": {
+    tr: "Örnek bir kuaförün hesabı. Kayıt gerekmez, hiçbir mesaj gerçekten gönderilmez.",
+    en: "An example salon's account. No signup, and nothing is really sent.",
+    de: "Das Konto eines Beispielsalons. Ohne Anmeldung, es wird nichts wirklich gesendet.",
+  },
+  "demo.banner": {
+    tr: "Bu bir örnek hesap. Mesajlar gerçekten gönderilmez ve her gece sıfırlanır.",
+    en: "This is an example account. Nothing is really sent, and it resets each night.",
+    de: "Dies ist ein Beispielkonto. Es wird nichts wirklich gesendet, und es wird jede Nacht zurückgesetzt.",
+  },
+
   // Campaigns. "Kampanya" is what a Turkish salon already calls this, so the
   // product uses their word rather than coining "toplu mesaj".
   "campaign.title": { tr: "Kampanyalar", en: "Campaigns", de: "Kampagnen" },

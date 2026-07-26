@@ -1,6 +1,29 @@
 import Google from "@auth/core/providers/google";
+import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
 import { convexAuth } from "@convex-dev/auth/server";
 import type { DatabaseWriter } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+
+// ── Walk-in access to the demo org ──────────────────────────────────────────
+//
+// A prospect should be able to look around a working salon without signing up.
+// That needs anonymous sign-in — and anonymous sign-in on a deployment that
+// also holds real salons' customer records is a decision an operator makes on
+// purpose, never one that arrives with a deploy.
+//
+// So it is OFF unless DEMO_ORG_ID names the demo org:
+//
+//   npx convex env set DEMO_ORG_ID "<the demo org's _id>"
+//
+// With it unset the Anonymous provider is not registered at all, and the only
+// way in is Google. With it set, an anonymous visitor gets a membership for
+// THAT org and no other — which is what keeps them away from real customers,
+// because every query in the app is scoped through requireOrg. The demo org
+// must have demoMode set and no waAccounts row; see convex/demo.ts.
+function demoOrgId(): Id<"orgs"> | null {
+  const raw = process.env.DEMO_ORG_ID?.trim();
+  return raw ? (raw as Id<"orgs">) : null;
+}
 
 // Google OAuth only (Serdar's call, 2026-07-25): every salon owner in the
 // target market has a Google account on their phone, and one tap beats any
@@ -16,6 +39,10 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
     Google({
       authorization: { params: { prompt: "select_account" } },
     }),
+    // Present only when a demo org is configured. Registering it
+    // unconditionally would put an unauthenticated door on every deployment,
+    // including ones with nothing to demo.
+    ...(demoOrgId() ? [Anonymous()] : []),
   ],
   callbacks: {
     async createOrUpdateUser(ctx, args) {
@@ -38,6 +65,34 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       // `ctx.db` is typed against the generic auth data model; narrow it to
       // this app's schema to write org rows.
       const db = ctx.db as unknown as DatabaseWriter;
+
+      // ---- Walk-in visitor to the demo org. ----
+      //
+      // No email means the Anonymous provider, which is registered only when
+      // DEMO_ORG_ID is set. They get a staff membership for the demo org and
+      // nothing else — no new org is founded, and requireOrg will never resolve
+      // them to another business.
+      //
+      // Verified against the org row rather than trusting the env var alone: a
+      // DEMO_ORG_ID pointed at a real salon by mistake would otherwise hand
+      // every anonymous visitor a membership for it.
+      if (!email) {
+        const demoId = demoOrgId();
+        if (!demoId) throw new Error("anonymous-not-enabled");
+        const demoOrg = await db.get(demoId);
+        if (!demoOrg?.demoMode) throw new Error("not-a-demo-org");
+        const userId = await db.insert("users", {
+          name: "Demo",
+          orgId: demoId,
+          role: "staff",
+          isAnonymous: true,
+        });
+        // Staff, not owner: a visitor should be able to work the calendar and
+        // the inbox, which is the demo, without reshaping the business or
+        // reaching the settings that would be credentials on a real org.
+        await db.insert("memberships", { userId, orgId: demoId, role: "staff" });
+        return userId;
+      }
 
       // ---- Invite check FIRST (multi-user orgs). An open invite for this
       // address means this person JOINS that org instead of founding a new
