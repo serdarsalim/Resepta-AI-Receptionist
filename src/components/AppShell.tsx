@@ -854,6 +854,15 @@ export function AppShell({
   const navTabs = NAV_TABS.filter(
     (entry) => entry.id !== "revenue" || settings?.org.revenueEnabled,
   );
+  // ?tab=revenue on an org that has it switched off would render a tab with
+  // no way back to it — the sidebar entry it came from does not exist. Waits
+  // for settings to load so the redirect fires on a known answer, not on the
+  // undefined one render earlier.
+  useEffect(() => {
+    if (tab === "revenue" && settings && !settings.org.revenueEnabled) {
+      onTab("appointments");
+    }
+  }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
   // somebody still has to look at this.
