@@ -34,6 +34,21 @@ const STEADY_STATE_FAILURES = new Set([
   "session-window-closed",
 ]);
 
+// A narrower set: failures that say nothing about the customer or the message,
+// only that the ORG has not finished setting up. These get ONE row and then go
+// quiet, because otherwise every reminder for every customer writes another
+// red line into a conversation that is supposed to show what that person was
+// told. Settings already reports this state, in one place, loudly.
+//
+// no-consent is deliberately NOT in here even though it repeats forever: it is
+// a KVKK record that we correctly did not message somebody, and evidence is
+// the one kind of row worth keeping duplicated. session-window-closed stays
+// too — it depends on when THAT customer last wrote, so it belongs in THAT
+// thread.
+function isOrgSetupFailure(reason: string): boolean {
+  return reason === "wa-not-configured" || reason.startsWith("no-approved-template");
+}
+
 // Every failed row in this file routes through here. Scheduled by
 // queueOrgAlert, so a broken alert cannot roll back or delay the send path.
 async function alertFailedSend(
@@ -270,6 +285,17 @@ export const sendAppointmentMessage = internalAction({
     const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
 
     const fail = async (reason: string) => {
+      if (
+        isOrgSetupFailure(reason) &&
+        (await ctx.runQuery(internal.messages.hasRecentFailure, {
+          orgId: appointment.orgId,
+          error: reason,
+        }))
+      ) {
+        // Already on record for this org. The alert below is suppressed for
+        // these reasons anyway, so there is nothing else to do.
+        return;
+      }
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,

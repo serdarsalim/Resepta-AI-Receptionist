@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   internalMutation,
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -394,5 +395,30 @@ export const conversations = query({
       });
     }
     return out.sort((a, b) => b.lastAt - a.lastAt);
+  },
+});
+
+// Has this org already recorded this exact failure recently?
+//
+// Some failures are facts about the ORG, not about the customer or the
+// message: no WhatsApp number connected, no approved template. They are true
+// for every send until somebody opens Settings, so left alone they write a red
+// row into every customer's conversation, one per reminder, forever — and the
+// thread that should show what a customer was told becomes a log of what the
+// org has not configured yet. Settings already says it, loudly and once.
+//
+// Bounded to the recent window rather than "ever": if the org fixes WhatsApp
+// and it breaks again months later, that deserves a fresh row. So this is a
+// rate limit, not a one-time flag.
+export const hasRecentFailure = internalQuery({
+  args: { orgId: v.id("orgs"), error: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(40);
+    return recent.some((m) => m.status === "failed" && m.error === args.error);
   },
 });
