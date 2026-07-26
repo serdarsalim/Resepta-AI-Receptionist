@@ -9,6 +9,12 @@ import {
   getAvailableSlots,
   rescheduleBooking,
 } from "./lib/calcomApi";
+import {
+  fetchReceivedEmail,
+  htmlToText,
+  localPart,
+  verifyResendSignature,
+} from "./lib/emailInbound";
 import { formatAppointmentTime } from "./lib/format";
 import { localDayRangeUtc, todayInZone } from "./lib/businessHours";
 
@@ -67,6 +73,103 @@ http.route({
     } catch (err) {
       console.error("whatsapp webhook failed", err);
     }
+    return new Response("ok", { status: 200 });
+  }),
+});
+
+// Inbound email from Resend. TWO calls, because the `email.received` event
+// carries metadata only — id, from, to, subject — and the body has to be
+// fetched with that id afterwards (lib/emailInbound.fetchReceivedEmail).
+//
+// The org is resolved from the LOCAL PART of the address it was sent to, so
+// one verified domain serves every customer instead of burning a Resend
+// domain slot per salon.
+//
+// Always 200 on anything we have verified, even when we drop it. A 4xx makes
+// Resend retry, and retrying will not conjure the org row that was missing —
+// it just replays the same dead delivery until the attempts run out. The only
+// non-200s here are "we could not prove this came from Resend".
+http.route({
+  path: "/email/inbound",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    if (!secret) {
+      console.warn("inbound email dropped: RESEND_WEBHOOK_SECRET is unset");
+      return new Response("not configured", { status: 503 });
+    }
+    // Raw text, never a re-serialised object: the signature covers the exact
+    // bytes, and JSON.stringify(JSON.parse(body)) is not the same bytes.
+    const rawBody = await request.text();
+    const verified = await verifyResendSignature({
+      secret,
+      rawBody,
+      id: request.headers.get("svix-id"),
+      timestamp: request.headers.get("svix-timestamp"),
+      signature: request.headers.get("svix-signature"),
+    });
+    if (!verified) return new Response("bad signature", { status: 401 });
+
+    let event: {
+      type?: string;
+      data?: {
+        email_id?: string;
+        from?: string;
+        to?: string[];
+        received_for?: string[];
+        subject?: string;
+      };
+    };
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return new Response("ok", { status: 200 });
+    }
+    if (event.type !== "email.received") return new Response("ok", { status: 200 });
+
+    const data = event.data ?? {};
+    const emailId = data.email_id;
+    const from = data.from;
+    if (!emailId || !from) return new Response("ok", { status: 200 });
+
+    // `received_for` first: it is the address the mail was actually routed
+    // for, while `to` also carries anyone CC'd or a list address, so matching
+    // on `to` would file a customer's reply under whichever org happened to
+    // be copied.
+    const candidates = [...(data.received_for ?? []), ...(data.to ?? [])];
+    let orgId = null;
+    for (const candidate of candidates) {
+      orgId = await ctx.runQuery(internal.email.orgByInboundAddress, {
+        localPart: localPart(candidate),
+      });
+      if (orgId) break;
+    }
+    if (!orgId) {
+      console.warn(`inbound email ${emailId} dropped: no org for ${candidates.join(", ")}`);
+      return new Response("ok", { status: 200 });
+    }
+
+    // Checked BEFORE the body fetch, so a retry storm doesn't spend a call to
+    // Resend per duplicate. Re-checked inside the mutation for the real guard.
+    const seen = await ctx.runQuery(internal.email.emailAlreadyLogged, { emailId });
+    if (seen) return new Response("ok", { status: 200 });
+
+    const received = await fetchReceivedEmail(emailId);
+    // Plain text when the sender provided it; the HTML flattened when they
+    // did not. A bubble in a timeline wants the words, not a layout.
+    const body = received?.text?.trim()
+      ? received.text.trim()
+      : received?.html
+        ? htmlToText(received.html)
+        : undefined;
+
+    await ctx.runMutation(internal.email.recordInbound, {
+      orgId,
+      emailId,
+      from,
+      subject: data.subject,
+      body,
+    });
     return new Response("ok", { status: 200 });
   }),
 });

@@ -25,6 +25,10 @@ export const current = query({
       timezone: v.string(),
       language: v.string(),
       currency: v.string(),
+      inboundAddress: v.optional(v.string()),
+      // The domain half, from deployment env — the client needs it to show the
+      // org a full address it can hand to a customer.
+      inboundDomain: v.optional(v.string()),
       reminderOffsetsHours: v.array(v.number()),
       sendBookingConfirmation: v.boolean(),
       quietHoursStart: v.number(),
@@ -101,6 +105,8 @@ export const current = query({
         timezone: org.timezone,
         language: org.language,
         currency: org.currency ?? DEFAULT_CURRENCY,
+        inboundAddress: org.inboundAddress,
+        inboundDomain: process.env.RESEND_INBOUND_DOMAIN,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
         quietHoursStart: org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0],
@@ -150,6 +156,7 @@ export const update = mutation({
     timezone: v.optional(v.string()),
     language: v.optional(v.string()),
     currency: v.optional(v.string()),
+    inboundAddress: v.optional(v.string()),
     reminderOffsetsHours: v.optional(v.array(v.number())),
     sendBookingConfirmation: v.optional(v.boolean()),
     quietHoursStart: v.optional(v.number()),
@@ -182,6 +189,25 @@ export const update = mutation({
     // blank page on every screen that shows a price.
     if (args.currency !== undefined && isCurrency(args.currency)) {
       patch.currency = args.currency;
+    }
+    if (args.inboundAddress !== undefined) {
+      // Slugged, not trusted: this becomes the left side of a real address, so
+      // anything that isn't a-z0-9.- would bounce mail rather than route it.
+      const slug = args.inboundAddress
+        .toLowerCase()
+        .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
+        .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40);
+      if (!slug) throw new Error("address-required");
+      // Uniqueness is the whole routing contract: two orgs sharing a local
+      // part means one salon reading the other's customer mail.
+      const clash = (await ctx.db.query("orgs").collect()).find(
+        (other) => other._id !== orgId && other.inboundAddress === slug,
+      );
+      if (clash) throw new Error("address-taken");
+      patch.inboundAddress = slug;
     }
     if (args.reminderOffsetsHours !== undefined) {
       patch.reminderOffsetsHours = args.reminderOffsetsHours

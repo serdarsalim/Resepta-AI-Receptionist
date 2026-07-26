@@ -338,6 +338,21 @@ const dictionary = {
   },
   "appointments.total": { tr: "Toplam", en: "Total", de: "Gesamt" },
   "services.price": { tr: "Fiyat", en: "Price", de: "Preis" },
+  "settings.inboundAddress": {
+    tr: "Gelen e-posta adresi",
+    en: "Incoming email address",
+    de: "Eingangsadresse",
+  },
+  "settings.inboundAddressHint": {
+    tr: "Müşterilerin size yazacağı adres. Buraya gelen e-postalar müşterinin sohbetine düşer.",
+    en: "The address customers write to. Mail sent here lands in that customer's conversation.",
+    de: "Die Adresse, an die Kunden schreiben. Hier eingehende E-Mails landen im Gespräch des Kunden.",
+  },
+  "settings.inboundNoDomain": {
+    tr: "(alan adı henüz ayarlı değil)",
+    en: "(no domain configured yet)",
+    de: "(noch keine Domain eingerichtet)",
+  },
   "settings.currency": { tr: "Para birimi", en: "Currency", de: "Währung" },
   "settings.currencyHint": {
     tr: "Fiyatların gösterildiği para birimi. Değiştirmek tutarları çevirmez.",

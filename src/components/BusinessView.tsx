@@ -150,6 +150,22 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </option>
             ))}
           </select>
+          {/* The address customers write TO. One verified domain serves every
+              business; this left-hand part is what routes an incoming email to
+              THIS org, so it has to be unique and the save rejects a clash. */}
+          <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
+          <span className="flex items-center gap-1">
+            <input
+              defaultValue={settings.org.inboundAddress ?? ""}
+              placeholder="guzellik"
+              onBlur={(e) => void update({ inboundAddress: e.target.value })}
+            />
+            <span className="shrink-0 text-sm text-[var(--muted)]">
+              {settings.org.inboundDomain
+                ? `@${settings.org.inboundDomain}`
+                : t("settings.inboundNoDomain")}
+            </span>
+          </span>
           <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
           <input
             defaultValue={settings.org.emailFrom ?? ""}

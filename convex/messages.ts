@@ -154,6 +154,9 @@ const feedItem = v.object({
   summary: v.optional(v.string()),
   transcript: v.optional(v.string()),
   recordingUrl: v.optional(v.string()),
+  // Email-only. A subject is the one thing an email has that a WhatsApp
+  // message doesn't, and it is what the reader scans first.
+  emailSubject: v.optional(v.string()),
   // Note-only.
   authorName: v.optional(v.string()),
   editedAt: v.optional(v.number()),
@@ -203,6 +206,7 @@ export const feedForCustomer = query({
         body: m.body,
         status: m.status,
         error: m.error,
+        emailSubject: m.emailSubject,
       })),
       ...calls.map((c) => ({
         id: c._id as string,

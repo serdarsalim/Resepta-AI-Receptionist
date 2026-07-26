@@ -79,9 +79,10 @@ export function ConversationPanel({
 
   const windowOpen =
     !!lastInboundAt && Date.now() - lastInboundAt < SESSION_WINDOW_MS;
-  // Replies only exist on WhatsApp: email here is still one-way (template text
-  // out, no inbound lane yet) and a call isn't something you type back into.
-  // The notes tab has its own composer at the top and doesn't want this one.
+  // This composer is WhatsApp's, and only WhatsApp's: it sends into Meta's
+  // 24h session window, which no other channel has. Email receives now but
+  // still has no composer of its own (next), and a call isn't something you
+  // type back into. The notes tab has its own, at the top.
   const canCompose = filter === "all" || filter === "whatsapp";
 
   const saveNote = async () => {
@@ -152,13 +153,23 @@ export function ConversationPanel({
                     : "bg-[var(--muted-bg)]"
               }`}
             >
+              {/* Email carries a subject and WhatsApp doesn't, so it leads
+                  the bubble when there is one. It also rescues the case where
+                  the body never arrived: the provider hands us the metadata
+                  first and the body on a second call, and a fetch that fails
+                  must still leave a readable row. */}
+              {item.emailSubject && (
+                <p className="font-medium">{item.emailSubject}</p>
+              )}
               {item.body ? (
                 <p className="whitespace-pre-wrap">{item.body}</p>
               ) : (
-                // Template sends store no body (the text lives in Meta's
-                // approved template), so the bubble would otherwise be blank.
-                // Name what was sent instead of showing an empty box.
-                <p className="text-[var(--muted)]">{t("message.template")}</p>
+                !item.emailSubject && (
+                  // Template sends store no body (the text lives in Meta's
+                  // approved template), so the bubble would otherwise be blank.
+                  // Name what was sent instead of showing an empty box.
+                  <p className="text-[var(--muted)]">{t("message.template")}</p>
+                )
               )}
               <p
                 className={`mt-0.5 flex flex-wrap items-center gap-1 text-[10px] ${
