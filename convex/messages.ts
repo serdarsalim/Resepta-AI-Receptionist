@@ -200,6 +200,7 @@ const feedItem = v.object({
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
+  emailHtml: v.optional(v.string()),
   // A signed URL for the stored image, minted per read. The storage id itself
   // never reaches the client — it is a handle to a file, and a URL is what a
   // browser can actually render.
@@ -266,6 +267,7 @@ export const feedForCustomer = query({
         status: m.status,
         error: m.error,
         emailSubject: m.emailSubject,
+        emailHtml: m.emailHtml,
         mediaUrl: mediaUrls.get(m._id as string),
         mediaPending: m.mediaPending,
         scheduledFor: m.scheduledFor,

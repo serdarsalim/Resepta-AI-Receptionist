@@ -15,6 +15,7 @@ import {
 } from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject } from "../../convex/lib/emailInbound";
+import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -697,7 +698,12 @@ export function ConversationPanel({
                   {t("message.imageLoading")}
                 </span>
               )}
-              {item.body ? (
+              {/* The sender's own markup, sanitised, but ONLY inside an open
+                  thread. In a list a formatted email is a wall; the flattened
+                  text below is what belongs there. */}
+              {item.emailHtml && openThread ? (
+                <EmailBody html={item.emailHtml} />
+              ) : item.body ? (
                 <p className="whitespace-pre-wrap">{item.body}</p>
               ) : (
                 !item.emailSubject && (
@@ -833,6 +839,28 @@ export function ConversationPanel({
         </>
       )}
     </div>
+  );
+}
+
+// Sanitised email markup, rendered on white paper.
+//
+// dangerouslySetInnerHTML is the only way to render HTML, and the safety is
+// the sanitiser above it — never the absence of this call. Links are hardened
+// after mount rather than in the string, because rewriting attributes with a
+// regex is the same mistake as sanitising with one.
+function EmailBody({ html }: { html: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const clean = sanitizeEmailHtml(html);
+  useEffect(() => {
+    hardenEmailLinks(ref.current);
+  }, [clean]);
+  return (
+    <div
+      ref={ref}
+      className="email-paper -mx-1 rounded-md px-3 py-2 text-sm [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-2 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-4"
+      // Sanitised immediately above; see src/lib/sanitizeHtml.ts.
+      dangerouslySetInnerHTML={{ __html: clean }}
+    />
   );
 }
 

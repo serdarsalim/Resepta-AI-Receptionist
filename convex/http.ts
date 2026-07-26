@@ -169,6 +169,9 @@ http.route({
       from,
       subject: data.subject,
       body,
+      // Kept as sent. The flattened text above is what lists and indexes
+      // show; this is what the reader gets when they open the message.
+      html: received?.html,
     });
     return new Response("ok", { status: 200 });
   }),

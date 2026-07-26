@@ -53,6 +53,7 @@ export const recordInbound = internalMutation({
     from: v.string(),
     subject: v.optional(v.string()),
     body: v.optional(v.string()),
+    html: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -105,6 +106,7 @@ export const recordInbound = internalMutation({
       status: "received",
       emailId: args.emailId,
       emailFrom: from,
+      emailHtml: args.html,
       // Stored raw, normalized only when threading. The reader should see the
       // subject the customer actually sent, "Re:" and all.
       emailSubject: args.subject,

@@ -414,6 +414,10 @@ export default defineSchema({
     // one on their record), and emailId is Resend's own id for the message.
     emailSubject: v.optional(v.string()),
     emailFrom: v.optional(v.string()),
+    // The message as its sender wrote it. RAW and untrusted — every render
+    // path sanitises (src/lib/sanitizeHtml). `body` keeps the flattened text
+    // beside it, because a thread list and an index want words, not markup.
+    emailHtml: v.optional(v.string()),
     // Dedupe key, indexed. Webhooks retry — Resend will resend an event it
     // did not get a 2xx for, and a retried delivery must not become a second
     // copy of the same reply in the customer's timeline.

@@ -151,6 +151,26 @@ thead {
   }
 }
 
+/* Email bodies render as white "paper" whatever the app theme is. Real mail
+   carries inline colours that assume a mail client's white background — a
+   newsletter written as black-on-white turns black-on-black the moment the
+   salon switches to dark mode, and the message reads as blank. */
+.email-paper {
+  background: #fff;
+  color: #111;
+}
+.email-paper a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.email-paper img {
+  max-width: 100%;
+  height: auto;
+}
+.email-paper table {
+  max-width: 100%;
+}
+
 /* Base form controls on the shared tokens.
 
    Inside @layer base on purpose: un-layered CSS outranks every Tailwind layer,
