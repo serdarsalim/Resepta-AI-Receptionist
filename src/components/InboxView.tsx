@@ -39,7 +39,7 @@ export function InboxView({
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
   const setAttention = useMutation(api.messages.setAttention);
-  const search = useHeaderSearch(t("inbox.search"));
+  const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is

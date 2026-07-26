@@ -105,7 +105,7 @@ export function CustomersView({
   const [error, setError] = useState<string | null>(null);
 
   const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
-  const search = useHeaderSearch(t("customers.search"));
+  const search = useHeaderSearch(t("common.search"));
 
   const fields: ContactField[] = useMemo(() => contactFields ?? [], [contactFields]);
   const fieldByKey = useMemo(

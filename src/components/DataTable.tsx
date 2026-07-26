@@ -480,11 +480,16 @@ export function SearchInput({
   className = "",
   ref,
   onBlur,
+  fluid,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   className?: string;
+  // Fill the container instead of sizing to the text. The phone header's
+  // expanded state wants the whole row; everywhere else the box earns its
+  // width.
+  fluid?: boolean;
   // The header owns focus for the phone's expand-to-search, so it needs a
   // handle on the field and a say in when the field gives focus back.
   ref?: React.Ref<HTMLInputElement>;
@@ -516,8 +521,28 @@ export function SearchInput({
         onBlur={onBlur}
         placeholder={placeholder}
         aria-label={placeholder}
+        // Sized to its CONTENT, not to focus: compact at rest, growing as the
+        // query outgrows the placeholder, clamped so it can neither shrink
+        // below legible nor take over the header. Ported from Nudge's
+        // AppHeader. Growth pushes left — the avatar stays right-anchored.
+        //
+        // Only works if the placeholder is short. A 19-character
+        // "Search appointments" pins the box at the clamp ceiling forever,
+        // which is why the placeholder is now just "Ara…".
+        style={
+          fluid
+            ? undefined
+            : {
+                width: `clamp(8rem, ${Math.max(
+                  value.length,
+                  placeholder.length,
+                )}ch + 3.5rem, 20rem)`,
+              }
+        }
         // 16px floor below sm: iOS Safari zooms the viewport under it.
-        className="h-9 w-full py-0 pl-9 pr-3 text-[16px] sm:text-sm"
+        className={`h-9 py-0 pl-9 pr-3 text-[16px] transition-[width] duration-200 sm:text-sm ${
+          fluid ? "w-full" : ""
+        }`}
       />
       {value && (
         <button

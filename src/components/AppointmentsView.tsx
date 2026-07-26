@@ -62,7 +62,7 @@ export function AppointmentsView({
   // showing the shape of the week. So typing switches you to the view that can
   // show results, rather than the box going missing on two views out of three
   // and leaving you to work out why.
-  const search = useHeaderSearch(t("appointments.search"));
+  const search = useHeaderSearch(t("common.search"));
   useEffect(() => {
     if (search.active && view !== "list") setView("list");
   }, [search.active, view]);

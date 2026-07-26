@@ -947,6 +947,10 @@ const dictionary = {
   "common.copy": { tr: "Kopyala", en: "Copy", de: "Kopieren" },
   "common.copied": { tr: "Kopyalandı", en: "Copied", de: "Kopiert" },
   "common.loading": { tr: "Yükleniyor…", en: "Loading…", de: "Wird geladen…" },
+  // Deliberately short and generic. The box sizes itself to its longest text,
+  // so a 19-character "Randevu ara" would pin it at the clamp ceiling on every
+  // tab; the page title beside it already says what you are searching.
+  "common.search": { tr: "Ara…", en: "Search…", de: "Suchen…" },
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
 } as const;

@@ -291,16 +291,13 @@ function ShellHeader({
           </button>
         )}
         {placeholder && (
-          <div
-            className={
-              expanded ? "min-w-0 flex-1 sm:w-56 sm:flex-none" : "hidden sm:block sm:w-56"
-            }
-          >
+          <div className={expanded ? "min-w-0 flex-1 sm:flex-none" : "hidden sm:block"}>
             <SearchInput
               ref={searchRef}
               value={query}
               onChange={setQuery}
               placeholder={placeholder}
+              fluid={expanded}
               onBlur={() => {
                 // Collapse only when it would take nothing with it.
                 if (!query) setExpanded(false);
