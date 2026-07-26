@@ -360,6 +360,7 @@ export function ContactView({
             customerId={customerId}
             lastInboundAt={customer.lastInboundAt}
             filter={filter}
+            onFilterChange={setFilter}
             className="flex-1"
           />
         </section>

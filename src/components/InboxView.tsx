@@ -314,6 +314,7 @@ export function InboxView({
               customerId={active.customerId}
               lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
               filter={filter}
+              onFilterChange={setFilter}
               className="min-h-0 flex-1 overflow-hidden card-raised"
             />
           </section>

@@ -6,7 +6,12 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
-import { formatDateTime, formatDayHeading, formatTime } from "@/lib/datetime";
+import {
+  formatDateTime,
+  formatDayHeading,
+  formatTime,
+  localeFor,
+} from "@/lib/datetime";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject } from "../../convex/lib/emailInbound";
 
@@ -94,11 +99,17 @@ export function ConversationPanel({
   customerId,
   lastInboundAt,
   filter = "all",
+  onFilterChange,
   className,
 }: {
   customerId: Id<"customers">;
   lastInboundAt?: number;
   filter?: FeedFilter;
+  // The index ROUTES: an email or call row moves the whole pane to that
+  // channel's tab. The parent owns the filter (its header renders the pills),
+  // so the panel asks rather than sets. Without this the index can only
+  // expand things in place, which is exactly the flatness it exists to fix.
+  onFilterChange?: (next: FeedFilter) => void;
   className?: string;
 }) {
   const { t, language } = useLanguage();
@@ -128,6 +139,12 @@ export function ConversationPanel({
   // The call tab mirrors the email tab: a list you scan, then one call you
   // read. Same navigation, so learning one teaches the other.
   const [openCallId, setOpenCallId] = useState<string | null>(null);
+  // Where the All index was standing when a row jumped to its channel. The
+  // back arrow returns HERE, not to the top of a list the reader never chose.
+  const [returnScrollTop, setReturnScrollTop] = useState<number | null>(null);
+  // Rows expanded in place. All is a scan by default — one line each — and a
+  // WhatsApp message or a note opens where it sits rather than navigating.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
@@ -137,7 +154,10 @@ export function ConversationPanel({
   // bottom. Notes don't: nobody is having a conversation with themselves, so
   // that tab stays newest-first with its composer at the top, next to where
   // the note it writes will land.
-  const chatOrder = filter !== "note";
+  // Chat order is for a conversation you are HAVING: WhatsApp, and an email
+  // thread you have opened. The indexes — All, the call list, notes — read
+  // newest-first, because you are scanning them rather than talking.
+  const chatOrder = filter === "whatsapp" || (filter === "email" && !!openThread);
 
   // Email groups into conversations by normalized subject — "Re: Randevunuz"
   // and "Randevunuz" are one exchange however many clients prefixed it. The
@@ -195,9 +215,13 @@ export function ConversationPanel({
   const thread = chatOrder ? [...inScope].reverse() : inScope;
 
   useEffect(() => {
+    // Skipped while a return position is pending, or the restore below would
+    // be immediately overwritten by a jump to the top.
+    if (returnScrollTop !== null) return;
     threadRef.current?.scrollTo({
       top: chatOrder ? threadRef.current.scrollHeight : 0,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.length, customerId, filter, chatOrder]);
 
   // Leaving the tab closes the thread. Coming back to a stale detail view of a
@@ -205,7 +229,19 @@ export function ConversationPanel({
   useEffect(() => {
     if (filter !== "email") setOpenThread(null);
     if (filter !== "call") setOpenCallId(null);
+    setOpenRows(new Set());
   }, [filter]);
+
+  // Restore the index's position once a routed detail has navigated back.
+  // rAF because the rows have to be laid out before a scrollTop means anything.
+  useEffect(() => {
+    if (filter !== "all" || returnScrollTop === null) return;
+    const el = threadRef.current;
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop = returnScrollTop;
+    });
+    setReturnScrollTop(null);
+  }, [filter, returnScrollTop]);
 
   const windowOpen =
     !!lastInboundAt && Date.now() - lastInboundAt < SESSION_WINDOW_MS;
@@ -302,7 +338,13 @@ export function ConversationPanel({
                 <>
                   <button
                     type="button"
-                    onClick={() => setOpenThread(null)}
+                    onClick={() => {
+                      setOpenThread(null);
+                      // Back means "where I came FROM". Arriving here from the
+                      // All index and being dropped into the email list is the
+                      // app deciding you meant something you didn't.
+                      if (returnScrollTop !== null) onFilterChange?.("all");
+                    }}
                     aria-label={t("common.back")}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
                   >
@@ -345,7 +387,10 @@ export function ConversationPanel({
         <div className="flex shrink-0 items-center gap-2 px-3 pt-3">
           <button
             type="button"
-            onClick={() => setOpenCallId(null)}
+            onClick={() => {
+              setOpenCallId(null);
+              if (returnScrollTop !== null) onFilterChange?.("all");
+            }}
             aria-label={t("common.back")}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
           >
@@ -479,7 +524,100 @@ export function ConversationPanel({
               </span>
             </button>
           ))}
-        {(filter === "email" && !openThread) || (filter === "call" && !openCall)
+        {/* THE ACTIVITY INDEX. All is not a merged chat — it is the record of
+            everything that happened, one line each, oldest concern first:
+            "what has gone on with this customer". Bubbles are for a single
+            conversation; four channels stacked as bubbles read as noise.
+
+            Email and call rows ROUTE to their own tab, because both have a
+            detail worth a whole pane. WhatsApp and notes open in place. */}
+        {filter === "all" &&
+          thread.map((item, index) => {
+            const monthOf = (ms: number) =>
+              new Date(ms).toLocaleDateString(localeFor(language), {
+                month: "long",
+                year: "numeric",
+              });
+            const monthBand =
+              index === 0 || monthOf(thread[index - 1].at) !== monthOf(item.at) ? (
+                <li key={`month-${item.id}`} className="list-none pt-2 text-xs font-medium text-[var(--muted)]">
+                  {monthOf(item.at)}
+                </li>
+              ) : null;
+            const routes = item.channel === "email" || item.channel === "call";
+            const open = openRows.has(item.id);
+            const snippet =
+              item.channel === "call"
+                ? ("summary" in item ? item.summary : undefined) ?? ""
+                : item.channel === "email"
+                  ? ("emailSubject" in item ? item.emailSubject : undefined) ?? ""
+                  : ("body" in item ? item.body : undefined) ?? "";
+            return (
+              <Fragment key={item.id}>
+                {monthBand}
+                <div className="-mx-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.channel === "email") {
+                        setReturnScrollTop(threadRef.current?.scrollTop ?? 0);
+                        setOpenThread({
+                          key: threadKeyOf(item),
+                          subject:
+                            ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
+                            t("email.noSubject"),
+                        });
+                        onFilterChange?.("email");
+                        return;
+                      }
+                      if (item.channel === "call") {
+                        setReturnScrollTop(threadRef.current?.scrollTop ?? 0);
+                        setOpenCallId(item.id);
+                        onFilterChange?.("call");
+                        return;
+                      }
+                      setOpenRows((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
+                        return next;
+                      });
+                    }}
+                    className="flex w-full items-center gap-2 border-b border-[var(--border)] px-4 py-2 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+                  >
+                    <FeedIcon type={item.channel} size={13} />
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {snippet || t("message.template")}
+                    </span>
+                    {/* Which way it went, in one character. A row that says
+                        nothing about direction makes "did we answer?" —
+                        the question you open this for — unanswerable. */}
+                    {"direction" in item && item.direction && (
+                      <span className="shrink-0 text-xs text-[var(--muted)]">
+                        {item.direction === "in" ? "←" : "→"}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-xs text-[var(--muted)]">
+                      {formatDateTime(item.at, language)}
+                    </span>
+                    {routes && (
+                      <span aria-hidden className="shrink-0 text-xs text-[var(--muted)]">
+                        ›
+                      </span>
+                    )}
+                  </button>
+                  {open && "body" in item && item.body && (
+                    <div className="border-b border-[var(--border)] px-4 py-2 text-sm">
+                      <p className="whitespace-pre-wrap break-words">{item.body}</p>
+                    </div>
+                  )}
+                </div>
+              </Fragment>
+            );
+          })}
+        {filter === "all" ||
+        (filter === "email" && !openThread) ||
+        (filter === "call" && !openCall)
           ? null
           : thread.map((item, index) => {
           if (item.channel === "call")
@@ -544,10 +682,6 @@ export function ConversationPanel({
                   outbound ? "justify-end" : ""
                 } ${failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"}`}
               >
-                {/* The channel glyph earns its place only in a mixed feed. On
-                    a single-channel tab every bubble would wear the same one,
-                    which is decoration rather than information. */}
-                {filter === "all" && <FeedIcon type={item.channel} size={11} />}
                 {/* Time only — the day band above already said the date. Full
                     stamp on hover for anyone who needs to be sure. */}
                 <span title={formatDateTime(item.at, language)}>
