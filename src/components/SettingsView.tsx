@@ -68,6 +68,7 @@ function RuleRow({
   when,
   what,
   channels,
+  orgHasChannel,
   enabled,
   onToggle,
   hint,
@@ -75,6 +76,12 @@ function RuleRow({
   when: React.ReactNode;
   what: string;
   channels: string[];
+  // False when the org has connected nothing at all. Then every row would be
+  // silent for the same reason, and four identical amber tags carry no more
+  // information than one line under the table — so the cell goes quiet and
+  // the card says it once. The tag only earns its colour when it tells this
+  // row apart from the ones above it.
+  orgHasChannel: boolean;
   enabled: boolean;
   onToggle: (next: boolean) => void;
   hint?: string;
@@ -82,7 +89,7 @@ function RuleRow({
   const { t } = useLanguage();
   // Amber, not red: a rule with nowhere to send is a setup step the owner
   // hasn't finished, not a failure. Same treatment as autoReplyInactive.
-  const silent = channels.length === 0;
+  const silent = orgHasChannel && channels.length === 0;
   return (
     <div className="flex items-center gap-3 py-3">
       <div className={RULE_COLUMNS}>
@@ -96,8 +103,22 @@ function RuleRow({
             silent ? "text-amber-700 dark:text-amber-400" : "text-[var(--muted)]"
           }`}
         >
-          {silent ? t("settings.ruleNoChannel") : channels.join(" · ")}
-          {silent && <InfoTip text={t("settings.ruleNoChannelHint")} />}
+          {silent && (
+            <>
+              {t("settings.ruleNoChannel")}
+              <InfoTip text={t("settings.ruleNoChannelHint")} />
+            </>
+          )}
+          {!silent &&
+            (channels.length > 0 ? (
+              channels.join(" · ")
+            ) : (
+              // Desktop only. Under the Channel header a dash reads as "nothing
+              // here"; stacked on mobile there is no header above it and a lone
+              // dash is just a stray mark. The amber line below the table
+              // already explains the silence, and it explains it once.
+              <span className="hidden sm:inline">—</span>
+            ))}
         </span>
       </div>
       <Toggle checked={enabled} onChange={onToggle} label={what} />
@@ -145,6 +166,7 @@ function NotificationRulesCard({
   const { t, language } = useLanguage();
   const offsets = org.reminderOffsetsHours;
   const unused = OFFSET_PRESETS.filter((h) => !offsets.includes(h));
+  const orgHasChannel = waConnected || Boolean(org.emailFrom);
 
   const channelsFor = (kind: RuleKind) =>
     ruleChannels(
@@ -186,6 +208,7 @@ function NotificationRulesCard({
           when={t("settings.ruleWhenBooked")}
           what={t("settings.ruleConfirmation")}
           channels={channelsFor("confirmation")}
+          orgHasChannel={orgHasChannel}
           enabled={org.sendBookingConfirmation}
           onToggle={(next) => update({ sendBookingConfirmation: next })}
         />
@@ -196,6 +219,7 @@ function NotificationRulesCard({
             when={formatReminderOffset(hours, language)}
             what={t("settings.ruleReminder")}
             channels={channelsFor("reminder")}
+            orgHasChannel={orgHasChannel}
             enabled
             onToggle={() => setOffsets(offsets.filter((h) => h !== hours))}
           />
@@ -220,6 +244,7 @@ function NotificationRulesCard({
           }
           what={t("settings.ruleWinback")}
           channels={channelsFor("winback")}
+          orgHasChannel={orgHasChannel}
           enabled={org.winbackEnabled}
           onToggle={(next) => update({ winbackEnabled: next })}
           hint={winbackHint}
@@ -240,6 +265,12 @@ function NotificationRulesCard({
             </button>
           ))}
         </div>
+      )}
+
+      {!orgHasChannel && (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          {t("settings.rulesNoChannel")}
+        </p>
       )}
     </Card>
   );

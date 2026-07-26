@@ -450,10 +450,19 @@ const dictionary = {
     en: "Not sending",
     de: "Kein Versand",
   },
+  // Per-row, and only shown when OTHER rows are sending — otherwise the cause
+  // is the org having no channel at all and the line below says so once.
+  // Names the language rule because it is the trap nobody finds alone: a
+  // Turkish template on an English business matches nothing.
   "settings.ruleNoChannelHint": {
-    tr: "Bu mesaj için onaylı bir WhatsApp şablonu yok ve gönderen e-posta adresi boş. Kural açık olsa bile hiçbir şey gitmez. Şablonlar WhatsApp bölümünde, e-posta adresi İşletme sayfasında.",
-    en: "There is no approved WhatsApp template for this message and no sender email address. The rule can be on and still send nothing. Templates live in the WhatsApp section, the email address on the Business page.",
-    de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage und keine Absenderadresse. Die Regel kann aktiv sein und trotzdem nichts senden. Vorlagen finden Sie im WhatsApp-Bereich, die Absenderadresse auf der Seite Betrieb.",
+    tr: "Bu mesajın işletme dilinde onaylı bir WhatsApp şablonu yok. Şablonun dili işletme diliyle birebir eşleşmeli. Başka dildeki şablon yedek olarak kullanılmaz.",
+    en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
+    de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
+  },
+  "settings.rulesNoChannel": {
+    tr: "Ne WhatsApp bağlı ne de gönderen e-posta adresi var, bu yüzden listedeki hiçbir kural şu anda mesaj göndermiyor. WhatsApp'ı WhatsApp bölümünden bağlayın ya da İşletme sayfasında bir e-posta adresi girin.",
+    en: "No WhatsApp connection and no sender email address, so nothing on this list is going out yet. Connect WhatsApp in the WhatsApp section, or set an email address on the Business page.",
+    de: "Weder ist WhatsApp verbunden noch ist eine Absenderadresse hinterlegt, daher sendet derzeit keine dieser Regeln. Verbinden Sie WhatsApp im WhatsApp-Bereich oder hinterlegen Sie eine E-Mail-Adresse auf der Seite Betrieb.",
   },
   "settings.ruleSendWindow": {
     tr: "Gönderim saatleri",
