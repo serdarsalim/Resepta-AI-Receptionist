@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
+import { recordActivity } from "./lib/activity";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -284,6 +285,15 @@ export const update = mutation({
     }
     await ctx.db.patch(orgId, patch);
 
+    // One row per save, naming the fields rather than their values: a settings
+    // history that records what a token was set to is a settings history that
+    // leaks credentials to everyone who can read it.
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: Object.keys(patch).sort().join(", ") || undefined,
+    });
+
     // Reminder timing and the winback are baked into each appointment's
     // nextMessageAt (lib/reminderSchedule.ts), so changing them here leaves
     // every existing booking holding a due time derived from the OLD setting.
@@ -340,6 +350,14 @@ export const connectWhatsapp = mutation({
         displayNumber: args.displayNumber?.trim() || undefined,
       });
     }
+    // The displayed number, never the token. Reconnecting is also the usual
+    // fix for an expired token, so knowing when it last happened is the first
+    // question when sends start failing.
+    await recordActivity(ctx, {
+      orgId,
+      kind: "whatsapp_connected",
+      detail: args.displayNumber?.trim() || undefined,
+    });
     return null;
   },
 });

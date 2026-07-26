@@ -1130,6 +1130,72 @@ const dictionary = {
   "common.search": { tr: "Ara…", en: "Search…", de: "Suchen…" },
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
+
+  // Activity log. The kind labels are written as things that HAPPENED, not as
+  // commands — the reader is looking back at a record, so "Termin verschoben"
+  // rather than "Termin verschieben".
+  "activity.title": { tr: "Son işlemler", en: "Recent activity", de: "Letzte Aktivität" },
+  "activity.hint": {
+    tr: "Kim ne yaptı. Mesajlar burada değil — onlar müşterinin kendi yazışmasında.",
+    en: "Who did what. Messages are not here — they live in the customer's own thread.",
+    de: "Wer was getan hat. Nachrichten stehen nicht hier, sondern im Verlauf des Kunden.",
+  },
+  "activity.empty": {
+    tr: "Henüz kayıt yok.",
+    en: "Nothing recorded yet.",
+    de: "Noch nichts aufgezeichnet.",
+  },
+  "activity.system": { tr: "Sistem", en: "System", de: "System" },
+  "activity.appointment_created": {
+    tr: "Randevu oluşturuldu",
+    en: "Appointment created",
+    de: "Termin erstellt",
+  },
+  "activity.appointment_status": {
+    tr: "Randevu durumu değişti",
+    en: "Appointment status changed",
+    de: "Terminstatus geändert",
+  },
+  "activity.appointment_moved": {
+    tr: "Randevu taşındı",
+    en: "Appointment moved",
+    de: "Termin verschoben",
+  },
+  "activity.appointment_deleted": {
+    tr: "Randevu silindi",
+    en: "Appointment deleted",
+    de: "Termin gelöscht",
+  },
+  "activity.customer_created": {
+    tr: "Müşteri eklendi",
+    en: "Customer added",
+    de: "Kunde hinzugefügt",
+  },
+  "activity.customer_deleted": {
+    tr: "Müşteri silindi",
+    en: "Customer deleted",
+    de: "Kunde gelöscht",
+  },
+  "activity.settings_changed": {
+    tr: "Ayarlar değiştirildi",
+    en: "Settings changed",
+    de: "Einstellungen geändert",
+  },
+  "activity.member_invited": {
+    tr: "Ekibe kişi eklendi",
+    en: "Team member added",
+    de: "Teammitglied hinzugefügt",
+  },
+  "activity.member_removed": {
+    tr: "Ekipten kişi çıkarıldı",
+    en: "Team member removed",
+    de: "Teammitglied entfernt",
+  },
+  "activity.whatsapp_connected": {
+    tr: "WhatsApp bağlandı",
+    en: "WhatsApp connected",
+    de: "WhatsApp verbunden",
+  },
 } as const;
 
 export type TranslationKey = keyof typeof dictionary;

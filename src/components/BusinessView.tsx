@@ -33,16 +33,22 @@ import { FieldGroup, InlineEditValue } from "./RecordField";
 // a garage: services and contact fields are org data, so the vertical's own
 // vocabulary (plate number, last cleaning, insurance) never needs a schema
 // change or a second deployment.
-// Two chips, not four. Details, services and contact fields are all "set the
-// salon up once" — splitting them across three tabs turns setup into a
-// scavenger hunt, and each card already carries its own heading, so one scroll
-// reads fine. People is the one you come back to after setup (somebody is
-// hired, somebody leaves), so it gets its own chip and nothing else does.
-type Section = "business" | "people";
+// Details, services and contact fields are all "set the salon up once" —
+// splitting them across three tabs turns setup into a scavenger hunt, and each
+// card already carries its own heading, so one scroll reads fine. They share
+// the first chip.
+//
+// The other two earn their own because neither is setup. People is what you
+// come back to when somebody is hired or leaves. Activity is what you open
+// when something looks wrong and you need to know who did it — a question, not
+// a configuration, and burying it under a setup scroll would mean nobody ever
+// finds it at the moment they need it.
+type Section = "business" | "people" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "business", key: "settings.business" },
   { id: "people", key: "staff.title" },
+  { id: "activity", key: "activity.title" },
 ];
 
 function SectionChip({
@@ -104,9 +110,76 @@ export function BusinessView() {
         </>
       )}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
+      {section === "activity" && <ActivityCard />}
     </div>
   );
 }
+
+// Who did what, newest first. No owner gate: a stylist wondering who moved
+// their 14:00 has the same right to the answer as the owner does, and every
+// row here describes something that person could already see in the app.
+function ActivityCard() {
+  const { t, language } = useLanguage();
+  const rows = useQuery(api.activity.recent, {});
+  const when = new Intl.DateTimeFormat(language, {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <Card title={t("activity.title")} tip={t("activity.hint")}>
+      {rows === undefined ? (
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">{t("activity.empty")}</p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)]">
+          {rows.map((row) => (
+            // One line per entry: what happened, who it was about, who did it.
+            // Stacking these would make a morning's work three screens tall.
+            <li key={row._id} className="flex items-baseline gap-3 py-1.5 text-sm">
+              <span className="w-28 shrink-0 text-xs tabular-nums text-[var(--muted)]">
+                {when.format(row.at)}
+              </span>
+              <span className="min-w-0 flex-1 truncate">
+                {ACTIVITY_LABELS[row.kind] ? t(ACTIVITY_LABELS[row.kind]) : row.kind}
+                {row.customerName && (
+                  <span className="text-[var(--muted)]"> · {row.customerName}</span>
+                )}
+                {row.detail && (
+                  <span className="text-[var(--muted)]"> · {row.detail}</span>
+                )}
+              </span>
+              <span className="shrink-0 text-xs text-[var(--muted)]">
+                {row.actor ?? t("activity.system")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+// Explicit rather than a template cast: translate() throws on a key it does
+// not hold, so building the key from the kind string would turn one entry
+// written by a newer deploy than this bundle into a blank card. Unknown kinds
+// fall through to the raw value, which is ugly and readable and does not take
+// the rest of the history down with it.
+const ACTIVITY_LABELS: Record<string, TranslationKey> = {
+  appointment_created: "activity.appointment_created",
+  appointment_status: "activity.appointment_status",
+  appointment_moved: "activity.appointment_moved",
+  appointment_deleted: "activity.appointment_deleted",
+  customer_created: "activity.customer_created",
+  customer_deleted: "activity.customer_deleted",
+  settings_changed: "activity.settings_changed",
+  member_invited: "activity.member_invited",
+  member_removed: "activity.member_removed",
+  whatsapp_connected: "activity.whatsapp_connected",
+};
 
 // Rows use the shared ROW_GRID from RowLabel, the same string SettingsView and
 // AccountView import: the three surfaces must line up when you flip between

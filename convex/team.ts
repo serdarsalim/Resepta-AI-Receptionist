@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { recordActivity } from "./lib/activity";
 
 const role = v.union(v.literal("owner"), v.literal("staff"));
 
@@ -195,6 +196,12 @@ export const removeMember = mutation({
       }
     }
     await ctx.db.delete(membership._id);
+    const removed = await ctx.db.get(args.userId);
+    await recordActivity(ctx, {
+      orgId,
+      kind: "member_removed",
+      detail: removed?.email ?? removed?.name,
+    });
     return null;
   },
 });
@@ -258,6 +265,7 @@ export const invite = mutation({
         orgId,
         role: args.role,
       });
+      await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
       return null;
     }
     const open = (
@@ -273,6 +281,7 @@ export const invite = mutation({
       role: args.role,
       invitedBy: user._id,
     });
+    await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
     return null;
   },
 });

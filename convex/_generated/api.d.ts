@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activity from "../activity.js";
 import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
 import type * as calcom from "../calcom.js";
@@ -19,6 +20,7 @@ import type * as devSeed from "../devSeed.js";
 import type * as email from "../email.js";
 import type * as forms from "../forms.js";
 import type * as http from "../http.js";
+import type * as lib_activity from "../lib/activity.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
@@ -55,6 +57,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activity: typeof activity;
   appointments: typeof appointments;
   auth: typeof auth;
   calcom: typeof calcom;
@@ -66,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   email: typeof email;
   forms: typeof forms;
   http: typeof http;
+  "lib/activity": typeof lib_activity;
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;
   "lib/businessHours": typeof lib_businessHours;

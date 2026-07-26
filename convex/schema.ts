@@ -496,6 +496,45 @@ export default defineSchema({
     .index("by_org_status", ["orgId", "status"])
     .index("by_wamid", ["wamid"]),
 
+  // Who did what. Written for ONE question: a salon shares a login-per-person
+  // and an inbox, so "who cancelled Ayşe's appointment?" and "who marked that
+  // no-show?" currently have no answer at all — notes carry an author and
+  // nothing else does.
+  //
+  // Deliberately narrow. Message sends are NOT logged here: the customer's
+  // thread already shows every message with its time and status, and copying
+  // that into a second feed would bury the handful of entries anyone actually
+  // looks for. Nor is the hourly completePast sweep, which would write a row
+  // per appointment per day to say the machine did the boring thing.
+  //
+  // actorId unset means the system acted — a cron, a webhook, the voice agent.
+  // The display name resolves at read time (same as notes) so somebody
+  // changing their name does not leave stale attribution frozen into history.
+  activityLog: defineTable({
+    orgId: v.id("orgs"),
+    actorId: v.optional(v.id("users")),
+    kind: v.union(
+      v.literal("appointment_created"),
+      v.literal("appointment_status"),
+      v.literal("appointment_moved"),
+      v.literal("appointment_deleted"),
+      v.literal("customer_created"),
+      v.literal("customer_deleted"),
+      v.literal("settings_changed"),
+      v.literal("member_invited"),
+      v.literal("member_removed"),
+      v.literal("whatsapp_connected"),
+    ),
+    customerId: v.optional(v.id("customers")),
+    appointmentId: v.optional(v.id("appointments")),
+    // The specifics, already rendered: "scheduled → no_show", a new time, a
+    // settings field name. Free text because the alternative is a shape per
+    // kind, and nothing reads this except a human scanning a list.
+    detail: v.optional(v.string()),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_customer", ["customerId"]),
+
   // Staff-written notes on a customer — "allergic to ammonia", "always late,
   // book the 10:30". Their own table, NOT a row in `messages`: a note has no
   // direction, no delivery status, no wamid. Sharing that table would mean

@@ -6,6 +6,8 @@ import { appointmentStatus } from "./schema";
 import { requireOrg } from "./lib/orgAuth";
 import { getLocalPartsSafe } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { recordActivity, statusChange } from "./lib/activity";
+import { formatAppointmentTime } from "./lib/format";
 
 // A line as the client asks for it: which service, and optionally what it
 // actually cost this time. Everything else on the stored line — the name, the
@@ -223,6 +225,13 @@ export const setStatus = mutation({
     // Status decides what is owed: marking a no_show arms the winback,
     // cancelling disarms every reminder still queued behind it.
     await syncAppointmentSchedule(ctx, args.appointmentId);
+    await recordActivity(ctx, {
+      orgId,
+      kind: "appointment_status",
+      customerId: appointment.customerId,
+      appointmentId: args.appointmentId,
+      detail: statusChange(appointment.status, args.status),
+    });
     return null;
   },
 });
@@ -235,6 +244,14 @@ export const remove = mutation({
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
     await ctx.db.delete(args.appointmentId);
+    // Logged AFTER the delete but carrying the ids, because this is the one
+    // event where the row it describes no longer exists to be looked up.
+    await recordActivity(ctx, {
+      orgId,
+      kind: "appointment_deleted",
+      customerId: appointment.customerId,
+      appointmentId: args.appointmentId,
+    });
     return null;
   },
 });
@@ -297,6 +314,18 @@ export const markRescheduled = internalMutation({
     });
     // New time, cleared offsets — every reminder is owed again from scratch.
     await syncAppointmentSchedule(ctx, args.appointmentId);
+    const org = await ctx.db.get(appointment.orgId);
+    await recordActivity(ctx, {
+      orgId: appointment.orgId,
+      kind: "appointment_moved",
+      customerId: appointment.customerId,
+      appointmentId: args.appointmentId,
+      // Rendered in the org's own timezone and language: a reader checking who
+      // moved a booking wants the time the salon works in, not a UTC stamp.
+      detail: org
+        ? formatAppointmentTime(args.startAt, org.timezone, org.language)
+        : undefined,
+    });
     await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
     return null;
   },
@@ -350,7 +379,16 @@ export const updateDetails = mutation({
     if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
     if (args.status !== undefined) patch.status = args.status;
     await ctx.db.patch(args.appointmentId, patch);
-    if (args.status !== undefined) await syncAppointmentSchedule(ctx, args.appointmentId);
+    if (args.status !== undefined && args.status !== appointment.status) {
+      await syncAppointmentSchedule(ctx, args.appointmentId);
+      await recordActivity(ctx, {
+        orgId,
+        kind: "appointment_status",
+        customerId: appointment.customerId,
+        appointmentId: args.appointmentId,
+        detail: statusChange(appointment.status, args.status),
+      });
+    }
     return null;
   },
 });

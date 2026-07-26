@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
+import { recordActivity } from "./lib/activity";
 
 const customerDoc = v.object({
   _id: v.id("customers"),
@@ -81,7 +82,7 @@ export const create = mutation({
       .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
       .unique();
     if (dupe) throw new Error("phone-exists");
-    return await ctx.db.insert("customers", {
+    const customerId = await ctx.db.insert("customers", {
       orgId,
       firstName,
       lastName: args.lastName?.trim() || undefined,
@@ -90,6 +91,8 @@ export const create = mutation({
       notes: args.notes?.trim() || undefined,
       consentAt: args.consent ? Date.now() : undefined,
     });
+    await recordActivity(ctx, { orgId, kind: "customer_created", customerId });
+    return customerId;
   },
 });
 
@@ -150,6 +153,14 @@ export const remove = mutation({
       await ctx.db.delete(appointment._id);
     }
     await ctx.db.delete(args.customerId);
+    // The one deletion that takes appointments with it, so it is the one most
+    // worth being able to attribute afterwards. The name is carried in the
+    // detail because the row it pointed at is gone.
+    await recordActivity(ctx, {
+      orgId,
+      kind: "customer_deleted",
+      detail: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+    });
     return null;
   },
 });
