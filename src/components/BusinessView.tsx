@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useId, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { Card } from "./Card";
@@ -24,8 +25,46 @@ import { FieldGroup, InlineEditValue } from "./RecordField";
 // a garage: services and contact fields are org data, so the vertical's own
 // vocabulary (plate number, last cleaning, insurance) never needs a schema
 // change or a second deployment.
+// Sections rather than one long scroll of five cards, matching Settings next
+// door. The scroll is what made "put the team in Business" sound like burying
+// it; a chip row is the same real estate with a way in.
+type Section = "details" | "people" | "services" | "fields";
+
+const SECTIONS: { id: Section; key: TranslationKey }[] = [
+  { id: "details", key: "business.details" },
+  { id: "people", key: "staff.title" },
+  { id: "services", key: "services.title" },
+  { id: "fields", key: "business.fields" },
+];
+
+function SectionChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`rounded-full px-3 py-1 text-sm transition-colors ${
+        active
+          ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
+          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function BusinessView() {
   const { t } = useLanguage();
+  const [section, setSection] = useState<Section>("details");
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
@@ -33,16 +72,26 @@ export function BusinessView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <div className="flex flex-wrap items-center gap-1">
+        {SECTIONS.map((entry) => (
+          <SectionChip
+            key={entry.id}
+            active={section === entry.id}
+            label={t(entry.key)}
+            onClick={() => setSection(entry.id)}
+          />
+        ))}
+      </div>
+
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
         </p>
       )}
-      <DetailsCard isOwner={isOwner} />
-      <TeamCard isOwner={isOwner} />
-      <ServicesCard isOwner={isOwner} />
-      <StaffCard isOwner={isOwner} />
-      <FieldsCard isOwner={isOwner} />
+      {section === "details" && <DetailsCard isOwner={isOwner} />}
+      {section === "people" && <PeopleCard isOwner={isOwner} />}
+      {section === "services" && <ServicesCard isOwner={isOwner} />}
+      {section === "fields" && <FieldsCard isOwner={isOwner} />}
     </div>
   );
 }
@@ -106,109 +155,6 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </option>
             ))}
           </select>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function TeamCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
-  const team = useQuery(api.team.overview, {});
-  const invite = useMutation(api.team.invite);
-  const revokeInvite = useMutation(api.team.revokeInvite);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Card title={t("team.title")} tip={t("team.inviteHint")}>
-      {team === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : (
-        <div className="space-y-3">
-          <ul className="divide-y divide-[var(--border)]">
-            {team.members.map((member) => (
-              <li key={member._id} className="flex items-center gap-3 py-2 text-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="truncate font-medium">
-                    {member.name || member.email}
-                    {member.isMe && (
-                      <span className="ml-1 text-xs text-[var(--muted)]">
-                        ({t("team.you")})
-                      </span>
-                    )}
-                  </span>
-                  {member.name && member.email && (
-                    <span className="block truncate text-xs text-[var(--muted)]">
-                      {member.email}
-                    </span>
-                  )}
-                </span>
-                <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                  {member.role === "staff" ? t("role.staff") : t("role.owner")}
-                </span>
-              </li>
-            ))}
-            {team.pending.map((pendingInvite) => (
-              <li key={pendingInvite._id} className="flex items-center gap-3 py-2 text-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
-                  <span className="block text-xs text-[var(--muted)]">
-                    {t("team.pending")} ·{" "}
-                    {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
-                  </span>
-                </span>
-                {isOwner && (
-                  <button
-                    className="rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
-                    onClick={() => void revokeInvite({ inviteId: pendingInvite._id })}
-                  >
-                    {t("team.revoke")}
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {isOwner && (
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const formEl = event.currentTarget;
-                const form = new FormData(formEl);
-                setError(null);
-                try {
-                  await invite({
-                    email: String(form.get("email") ?? ""),
-                    role: form.get("role") === "owner" ? "owner" : "staff",
-                  });
-                  formEl.reset();
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "error");
-                }
-              }}
-            >
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder="ornek@gmail.com"
-                className="w-56"
-              />
-              <select name="role" defaultValue="staff" className="w-auto">
-                <option value="staff">{t("role.staff")}</option>
-                <option value="owner">{t("role.owner")}</option>
-              </select>
-              <button
-                type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("team.invite")}
-              </button>
-              {error && (
-                <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>
-              )}
-            </form>
-          )}
         </div>
       )}
     </Card>
@@ -633,88 +579,256 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 // Techniker, a Zahnarztpraxis has Hekim. Blank falls back to the dictionary's
 // generic word, which is right for most verticals and merely bland for the
 // rest — the point is that a new vertical needs no schema change.
-function StaffCard({ isOwner }: { isOwner: boolean }) {
+
+// Header and rows share one template, a grid from sm up. Below that the row
+// stacks, because three controls and a name do not fit a 390px line.
+const ROSTER_ROW =
+  "sm:grid sm:grid-cols-[minmax(0,1fr)_6rem_minmax(0,11rem)] sm:items-center sm:gap-3";
+
+// ONE list of people, which is how Fresha, Booksy and Square all show it. Two
+// cards used to split this: "Kullanıcılar" (who can log in) and "Ekip" (who can
+// be booked), both titled "Ekip" in Turkish, both labelling rows "Personel".
+// They describe the same humans from two angles — a barber is bookable and may
+// never log in, a bookkeeper logs in and is never booked — so they are two
+// COLUMNS here, not two lists.
+//
+// Rows are joined in team.roster on staff.userId. A bookable person with no
+// login gets a select listing whoever has a login and is not yet claimed; that
+// is how two rows become one.
+function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
-  const staff = useQuery(api.staff.list, {});
+  const roster = useQuery(api.team.roster, {});
+  const team = useQuery(api.team.overview, {});
   const settings = useQuery(api.orgs.current, {});
-  const add = useMutation(api.staff.add);
-  const rename = useMutation(api.staff.rename);
+  const invite = useMutation(api.team.invite);
+  const revokeInvite = useMutation(api.team.revokeInvite);
+  const setRole = useMutation(api.team.setRole);
+  const removeMember = useMutation(api.team.removeMember);
+  const linkStaff = useMutation(api.team.linkStaff);
+  const addStaff = useMutation(api.staff.add);
+  const renameStaff = useMutation(api.staff.rename);
   const setActive = useMutation(api.staff.setActive);
   const updateOrg = useMutation(api.orgs.update);
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  if (!isOwner && staff !== undefined && staff.length === 0) return null;
+  // The backend refuses to strip the last admin; this turns that into a
+  // sentence instead of a raw error string.
+  const guard = async (run: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await run();
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "error";
+      setError(reason.includes("last-admin") ? t("roster.lastAdmin") : reason);
+    }
+  };
+
+  if (roster === undefined || team === undefined) {
+    return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+  }
+
+  // Logins nobody has claimed as a bookable person yet. Offered on the rows
+  // that have no login, so the two halves of one human can be joined up.
+  const unclaimed = roster.filter((row) => row.userId && !row.staffId);
 
   return (
-    <Card title={t("staff.title")} tip={t("staff.hint")} disabled={!isOwner}>
-      {staff === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : (
-        <div className="space-y-3">
-          <label className="block text-xs text-[var(--muted)]">
-            {t("staff.label")}
-            <input
-              className="mt-1"
-              defaultValue={settings?.org.staffLabel ?? ""}
-              placeholder={t("appointments.staff")}
-              onBlur={(e) => void updateOrg({ staffLabel: e.target.value })}
-            />
-          </label>
+    <Card title={t("staff.title")} tip={t("roster.hint")} disabled={!isOwner}>
+      <div className="space-y-3">
+        <label className="block text-xs text-[var(--muted)]">
+          {t("staff.label")}
+          <input
+            className="mt-1"
+            defaultValue={settings?.org.staffLabel ?? ""}
+            placeholder={t("appointments.staff")}
+            onBlur={(e) => void updateOrg({ staffLabel: e.target.value })}
+          />
+        </label>
 
-          <ul className="divide-y divide-[var(--border)]">
-            {staff.map((person) => (
-              <li
-                key={person._id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm"
-              >
-                <span className="min-w-0 flex-1">
-                  <InlineEditValue
-                    value={person.name}
-                    onSave={(next) => next && rename({ staffId: person._id, name: next })}
-                  />
-                </span>
-                {/* Deactivated, never deleted: whoever left still did last
-                    month's work, and those appointments must keep a name. */}
-                <Toggle
-                  checked={person.active}
-                  label={t("services.active")}
-                  onChange={(next) =>
-                    void setActive({ staffId: person._id, active: next })
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-
-          {staff.length === 0 && (
-            <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
-          )}
-
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const name = draft.trim();
-              if (!name) return;
-              void add({ name });
-              setDraft("");
-            }}
-          >
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={t("staff.namePlaceholder")}
-              className="flex-1"
-            />
-            <button
-              type="submit"
-              className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            >
-              {t("staff.add")}
-            </button>
-          </form>
+        <div className={`hidden pb-1 text-xs text-[var(--muted)] sm:block ${ROSTER_ROW}`}>
+          <span>{t("roster.person")}</span>
+          <span>{t("roster.bookable")}</span>
+          <span>{t("roster.access")}</span>
         </div>
-      )}
+
+        <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+          {roster.map((row) => (
+            <li key={row.key} className={`py-2 text-sm ${ROSTER_ROW}`}>
+              <span className="min-w-0">
+                {row.staffId ? (
+                  <InlineEditValue
+                    value={row.name}
+                    onSave={(next) =>
+                      next && renameStaff({ staffId: row.staffId!, name: next })
+                    }
+                  />
+                ) : (
+                  <span className="truncate font-medium">{row.name}</span>
+                )}
+                {row.isMe && (
+                  <span className="ml-1 text-xs text-[var(--muted)]">({t("team.you")})</span>
+                )}
+                {row.email && (
+                  <span className="block truncate text-xs text-[var(--muted)]">
+                    {row.email}
+                  </span>
+                )}
+              </span>
+
+              {/* Deactivated, never deleted: whoever left still did last
+                  month's work and those appointments must keep a name. */}
+              <Toggle
+                checked={Boolean(row.staffId && row.active)}
+                label={t("roster.bookable")}
+                onChange={(next) =>
+                  void guard(async () => {
+                    if (row.staffId) {
+                      await setActive({ staffId: row.staffId, active: next });
+                      return;
+                    }
+                    // A login-only person becoming bookable gets a staff row
+                    // created and linked in one gesture, so they stay ONE row.
+                    const staffId = await addStaff({ name: row.name });
+                    if (staffId && row.userId) {
+                      await linkStaff({ staffId, userId: row.userId });
+                    }
+                  })
+                }
+              />
+
+              {row.userId ? (
+                <select
+                  value={row.role ?? "staff"}
+                  onChange={(event) =>
+                    void guard(() =>
+                      event.target.value === "remove"
+                        ? removeMember({ userId: row.userId! })
+                        : setRole({
+                            userId: row.userId!,
+                            role: event.target.value === "owner" ? "owner" : "staff",
+                          }),
+                    )
+                  }
+                >
+                  <option value="owner">{t("role.owner")}</option>
+                  <option value="staff">{t("role.staff")}</option>
+                  <option value="remove">{t("roster.removeAccess")}</option>
+                </select>
+              ) : (
+                <select
+                  value=""
+                  onChange={(event) =>
+                    void guard(() =>
+                      linkStaff({
+                        staffId: row.staffId!,
+                        userId: event.target.value
+                          ? (event.target.value as Id<"users">)
+                          : null,
+                      }),
+                    )
+                  }
+                >
+                  <option value="">{t("roster.noAccess")}</option>
+                  {unclaimed.map((candidate) => (
+                    <option key={candidate.key} value={candidate.userId}>
+                      {candidate.email ?? candidate.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </li>
+          ))}
+
+          {team.pending.map((pendingInvite) => (
+            <li key={pendingInvite._id} className={`py-2 text-sm ${ROSTER_ROW}`}>
+              <span className="min-w-0">
+                <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
+                <span className="block text-xs text-[var(--muted)]">
+                  {t("team.pending")} ·{" "}
+                  {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
+                </span>
+              </span>
+              <span />
+              {isOwner && (
+                <button
+                  className="justify-self-start rounded-md px-2 py-1 text-xs text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
+                  onClick={() => void revokeInvite({ inviteId: pendingInvite._id })}
+                >
+                  {t("team.revoke")}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {roster.length === 0 && (
+          <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
+        )}
+
+        {isOwner && (
+          <>
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const name = draft.trim();
+                if (!name) return;
+                void addStaff({ name });
+                setDraft("");
+              }}
+            >
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={t("staff.namePlaceholder")}
+                className="flex-1"
+              />
+              <button
+                type="submit"
+                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                {t("staff.add")}
+              </button>
+            </form>
+
+            <form
+              className="flex flex-wrap items-end gap-2 border-t border-[var(--border)] pt-3"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const formEl = event.currentTarget;
+                const form = new FormData(formEl);
+                await guard(async () => {
+                  await invite({
+                    email: String(form.get("email") ?? ""),
+                    role: form.get("role") === "owner" ? "owner" : "staff",
+                  });
+                  formEl.reset();
+                });
+              }}
+            >
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="ornek@gmail.com"
+                className="w-56"
+              />
+              <select name="role" defaultValue="staff" className="w-auto">
+                <option value="staff">{t("role.staff")}</option>
+                <option value="owner">{t("role.owner")}</option>
+              </select>
+              <button
+                type="submit"
+                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+              >
+                {t("team.invite")}
+              </button>
+            </form>
+          </>
+        )}
+
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      </div>
     </Card>
   );
 }

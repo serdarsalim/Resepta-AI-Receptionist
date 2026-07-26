@@ -249,6 +249,12 @@ export default defineSchema({
     active: v.boolean(),
     order: v.number(),
     calcomHostId: v.optional(v.string()),
+    // The login this bookable person signs in as, when they have one. Optional
+    // in both directions on purpose: a barber can be bookable and never log in,
+    // and a bookkeeper can log in and never be booked. Before this existed the
+    // two facts lived in unrelated tables and the UI showed them as two lists
+    // that both called themselves "Ekip".
+    userId: v.optional(v.id("users")),
   }).index("by_org", ["orgId"]),
 
   appointments: defineTable({

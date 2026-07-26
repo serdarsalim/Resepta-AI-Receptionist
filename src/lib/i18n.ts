@@ -837,6 +837,30 @@ const dictionary = {
     de: "Die eingeladene Person kommt in Ihr Team, sobald sie sich mit dieser E-Mail-Adresse über Google anmeldet. Es wird keine E-Mail verschickt, geben Sie die Adresse selbst weiter.",
   },
   "team.invite": { tr: "Davet et", en: "Invite", de: "Einladen" },
+  // One roster, the way Fresha, Booksy and Square all show it: a person is a
+  // row, and being bookable and being able to log in are two facts about that
+  // row rather than two separate lists.
+  "roster.person": { tr: "Kişi", en: "Person", de: "Person" },
+  "roster.bookable": { tr: "Randevu alır", en: "Bookable", de: "Buchbar" },
+  "roster.access": { tr: "Erişim", en: "Access", de: "Zugriff" },
+  "roster.noAccess": { tr: "Giriş yok", en: "No login", de: "Kein Zugang" },
+  "roster.removeAccess": {
+    tr: "Erişimi kaldır",
+    en: "Remove access",
+    de: "Zugriff entziehen",
+  },
+  "roster.hint": {
+    tr: "Randevu alan herkesin girişi olmak zorunda değil, giriş yapan herkes de randevu almaz. Muhasebeciniz giriş yapar ama takvimde yer almaz; çırağınız takvimdedir ama hiç giriş yapmaz.",
+    en: "Not everyone who takes appointments needs a login, and not everyone with a login takes appointments. Your bookkeeper signs in but is never booked; your apprentice is on the calendar but never signs in.",
+    de: "Nicht jede Person mit Terminen braucht einen Zugang, und nicht jede mit Zugang nimmt Termine an. Die Buchhaltung meldet sich an, steht aber nie im Kalender; der Lehrling steht im Kalender und meldet sich nie an.",
+  },
+  "roster.lastAdmin": {
+    tr: "Son yöneticiyi kaldıramazsınız. Önce başka birini yönetici yapın.",
+    en: "You can't remove the last admin. Make somebody else an admin first.",
+    de: "Die letzte Administratorin oder der letzte Administrator kann nicht entfernt werden. Machen Sie zuerst jemand anderen zum Administrator.",
+  },
+  "business.details": { tr: "İşletme", en: "Business", de: "Betrieb" },
+  "business.fields": { tr: "Alanlar", en: "Fields", de: "Felder" },
   "team.pending": {
     tr: "Bekleyen davetler",
     en: "Pending invites",
