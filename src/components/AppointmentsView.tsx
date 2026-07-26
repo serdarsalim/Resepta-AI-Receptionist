@@ -530,6 +530,16 @@ type CalendarAppointment = {
 
 // Fill per status. No left accent bars: the fill carries the state, and a
 // cancelled or missed booking should read quieter than a live one.
+// A cluster stands for several bookings that may hold several DIFFERENT
+// statuses, so it cannot wear one of them. What it can wear is the one fact
+// true of all of them at once: whether the day has been and gone. Past reads
+// grey like every other finished block on the row; upcoming keeps the live
+// tint. An outlined white chip was tried and read as a hole in the grid.
+const CLUSTER_STYLE = {
+  past: "bg-[var(--muted-bg)] text-[var(--muted)]",
+  upcoming: "bg-[var(--brand-soft)] text-[var(--foreground)]",
+};
+
 const BLOCK_STYLE: Record<string, string> = {
   // Booked but unconfirmed reads lighter than confirmed, so a glance down the
   // week shows who has answered.
@@ -1023,8 +1033,13 @@ function Calendar({
             return (
               <div
                 key={column.key}
-                className={`relative min-w-0 flex-1 ${
-                  columnIndex > 0 ? "border-l border-[var(--border)]" : ""
+                // Closed on BOTH edges, like Google Calendar: a rule down the
+                // left of the first day and the right of the last, so the week
+                // reads as a bounded grid instead of columns trailing off.
+                className={`relative min-w-0 flex-1 border-l border-[var(--border)] ${
+                  columnIndex === columns.length - 1
+                    ? "border-r border-[var(--border)]"
+                    : ""
                 }`}
                 // Hour rules as a background gradient: one hairline per hour
                 // without a div per row.
@@ -1081,6 +1096,7 @@ function Calendar({
                 )}
                 {placeColumn(column.rows, view === "week").map((item) => {
                   if (item.kind === "cluster") {
+                    const dayIsPast = column.day < startOfDay(now);
                     const top =
                       ((minutesInto(item.startAt) - dayStart * 60) / 60) * HOUR_PX;
                     const height = Math.max(
@@ -1094,7 +1110,9 @@ function Calendar({
                         onClick={() => onOpenDay(column.day)}
                         title={count}
                         style={{ top, height, left: 2, right: 2 }}
-                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 ${BLOCK_STYLE.scheduled}`}
+                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 ${
+                          dayIsPast ? CLUSTER_STYLE.past : CLUSTER_STYLE.upcoming
+                        }`}
                       >
                         {height < 40 ? (
                           <span className="block truncate">
