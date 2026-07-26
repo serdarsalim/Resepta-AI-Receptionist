@@ -331,6 +331,7 @@ const dictionary = {
     de: "Noch keine Nachrichten",
   },
 
+  "services.price": { tr: "Fiyat", en: "Price", de: "Preis" },
   "settings.currency": { tr: "Para birimi", en: "Currency", de: "Währung" },
   "settings.currencyHint": {
     tr: "Fiyatların gösterildiği para birimi. Değiştirmek tutarları çevirmez.",

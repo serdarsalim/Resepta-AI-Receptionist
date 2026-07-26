@@ -7,7 +7,13 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
-import { CURRENCIES, currencySymbol } from "@/lib/money";
+import {
+  CURRENCIES,
+  DEFAULT_CURRENCY,
+  currencySymbol,
+  moneyInputValue,
+  parseMoney,
+} from "@/lib/money";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -189,13 +195,15 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 // for the service name: the exact anti-pattern the design language names.
 // Below sm the row is a wrapping flex line instead, name on its own row.
 const SERVICE_ROW_GRID =
-  "sm:grid sm:grid-cols-[1fr_7rem_4rem_4rem] sm:items-center sm:gap-2";
+  "sm:grid sm:grid-cols-[1fr_7rem_7rem_4rem_4rem] sm:items-center sm:gap-2";
 
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
 // nothing to pick and every appointment falls back to 30 minutes.
 function ServicesCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const services = useQuery(api.services.list, {});
   const create = useMutation(api.services.create);
   const update = useMutation(api.services.update);
@@ -222,6 +230,7 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
             <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
               <span>{t("services.name")}</span>
               <span>{t("services.duration")}</span>
+              <span>{t("services.price")}</span>
               <span>{t("services.active")}</span>
               <span />
             </div>
@@ -254,6 +263,26 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                   />
                   <span className="shrink-0 text-xs text-[var(--muted)]">
                     {t("services.minutes")}
+                  </span>
+                </span>
+                {/* Same shape as duration — a number with its unit trailing.
+                    Blank means unpriced, and clearing the box says so rather
+                    than writing a zero, because zero is a real price a salon
+                    might charge and "I haven't decided" is not it. */}
+                <span className="flex items-center gap-0.5">
+                  <InlineEditValue
+                    value={moneyInputValue(service.price, currency, language)}
+                    type="number"
+                    compact
+                    onSave={(next) =>
+                      update({
+                        serviceId: service._id,
+                        price: parseMoney(next, currency, language) ?? null,
+                      })
+                    }
+                  />
+                  <span className="shrink-0 text-xs text-[var(--muted)]">
+                    {currencySymbol(currency, language)}
                   </span>
                 </span>
                 <span className="flex items-center gap-1.5">
@@ -289,9 +318,15 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                 const form = new FormData(event.currentTarget);
                 const name = String(form.get("name") ?? "").trim();
                 if (!name) return setAdding(false);
+                const price = parseMoney(
+                  String(form.get("price") ?? ""),
+                  currency,
+                  language,
+                );
                 await create({
                   name,
                   durationMinutes: Number(form.get("durationMinutes")) || 30,
+                  ...(price !== undefined ? { price } : {}),
                 });
                 setAdding(false);
               }}
@@ -309,6 +344,17 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                   step={5}
                   defaultValue={30}
                   className="mt-1 block w-24"
+                />
+              </label>
+              <label className="block text-sm">
+                {`${t("services.price")} (${currencySymbol(currency, language)})`}
+                <input
+                  name="price"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder={t("common.optional")}
+                  className="mt-1 block w-28"
                 />
               </label>
               <button

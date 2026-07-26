@@ -231,6 +231,11 @@ export default defineSchema({
     name: v.string(),
     durationMinutes: v.number(),
     active: v.boolean(),
+    // LIST price, in integer minor units of orgs.currency (40000 = ₺400,00).
+    // What this costs today — editable forever, and editing it must never
+    // change what a past appointment recorded. That is why appointments carry
+    // their own copy rather than a pointer here.
+    price: v.optional(v.number()),
   }).index("by_org", ["orgId"]),
 
   // Who delivers the appointment. A real row rather than the free-text

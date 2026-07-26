@@ -9,7 +9,18 @@ const serviceDoc = v.object({
   name: v.string(),
   durationMinutes: v.number(),
   active: v.boolean(),
+  // List price in minor units (40000 = 400,00 in the org's currency). Optional
+  // because "not priced" and "free" are different facts, and a salon that
+  // doesn't track money should never meet a form it can't submit.
+  price: v.optional(v.number()),
 });
+
+// Minor units are whole by definition — there is no half-kuruş — and negative
+// money is not a price. Clamped here rather than trusted from the client so a
+// stray keystroke can't poison a sum.
+function normalizePrice(value: number): number {
+  return Math.max(0, Math.round(value));
+}
 
 export const list = query({
   args: {},
@@ -24,7 +35,11 @@ export const list = query({
 });
 
 export const create = mutation({
-  args: { name: v.string(), durationMinutes: v.number() },
+  args: {
+    name: v.string(),
+    durationMinutes: v.number(),
+    price: v.optional(v.number()),
+  },
   returns: v.id("services"),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
@@ -35,6 +50,7 @@ export const create = mutation({
       name,
       durationMinutes: Math.max(5, Math.round(args.durationMinutes)),
       active: true,
+      ...(args.price !== undefined ? { price: normalizePrice(args.price) } : {}),
     });
   },
 });
@@ -45,6 +61,9 @@ export const update = mutation({
     name: v.optional(v.string()),
     durationMinutes: v.optional(v.number()),
     active: v.optional(v.boolean()),
+    // Null clears the price; a number sets it. Without the null case there is
+    // no way back to "not priced" once someone types a figure by mistake.
+    price: v.optional(v.union(v.number(), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -57,6 +76,9 @@ export const update = mutation({
       patch.durationMinutes = Math.max(5, Math.round(args.durationMinutes));
     }
     if (args.active !== undefined) patch.active = args.active;
+    if (args.price !== undefined) {
+      patch.price = args.price === null ? undefined : normalizePrice(args.price);
+    }
     await ctx.db.patch(args.serviceId, patch);
     return null;
   },

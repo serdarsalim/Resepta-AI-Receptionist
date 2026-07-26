@@ -35,9 +35,15 @@ export function formatMoney(
   locale: string,
 ): string {
   const digits = fractionDigits(currency, locale);
-  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(
-    minor / 10 ** digits,
-  );
+  // narrowSymbol, not the default: English renders TRY as the literal code
+  // ("TRY 400.00"), which is what you want in a table listing many currencies
+  // and wrong here. An org has exactly one currency, so the symbol is never
+  // ambiguous and "₺400.00" is what its staff actually recognise.
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+  }).format(minor / 10 ** digits);
 }
 
 // What a person typed → minor units. Accepts "400", "400,50", "400.50" and
@@ -86,6 +92,7 @@ export function currencySymbol(currency: string, locale: string): string {
   const parts = new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
+    currencyDisplay: "narrowSymbol",
   }).formatToParts(0);
   return parts.find((p) => p.type === "currency")?.value ?? currency;
 }
