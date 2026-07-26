@@ -66,6 +66,28 @@ export const seed = internalMutation({
       }
     }
 
+    // Staff rows, same idempotent shape as services. Seeded as real rows
+    // rather than names on the appointment: the week view lanes on staffId,
+    // and a seed that wrote free text would be seeding a bug.
+    const hasStaff = await ctx.db
+      .query("staff")
+      .withIndex("by_org", (q) => q.eq("orgId", org._id))
+      .first();
+    const staffIds: Id<"staff">[] = [];
+    if (!hasStaff) {
+      for (const [order, name] of STAFF.entries()) {
+        staffIds.push(
+          await ctx.db.insert("staff", { orgId: org._id, name, order, active: true }),
+        );
+      }
+    } else {
+      const existing = await ctx.db
+        .query("staff")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      staffIds.push(...existing.map((person) => person._id));
+    }
+
     const now = Date.now();
     const HOUR = 3600_000;
     const DAY = 24 * HOUR;
@@ -120,7 +142,9 @@ export const seed = internalMutation({
                 },
               ]
             : [],
-          staffName: STAFF[i % STAFF.length],
+          ...(staffIds.length
+            ? { staffId: staffIds[i % staffIds.length] }
+            : {}),
           startAt,
           durationMinutes: SERVICES[serviceIdx].durationMinutes,
           status,

@@ -238,11 +238,11 @@ export default defineSchema({
     price: v.optional(v.number()),
   }).index("by_org", ["orgId"]),
 
-  // Who delivers the appointment. A real row rather than the free-text
-  // appointments.staffName it replaces: the week view builds its columns by
-  // grouping on that string, so "Hülya" and "Hülya " were two different
-  // stylists with two different lanes, and nothing could rename a person
-  // without editing every appointment they had.
+  // Who delivers the appointment. A real row rather than free text on the
+  // appointment: the week view builds its columns by grouping on the stylist,
+  // so "Hülya" and "Hülya " were two different people with two different
+  // lanes, and nothing could rename someone without editing every appointment
+  // they had.
   //
   // Same reasoning as contactFields, applied to a relation instead of a
   // property: the vertical's own vocabulary is org data. What this row is
@@ -272,10 +272,6 @@ export default defineSchema({
   appointments: defineTable({
     orgId: v.id("orgs"),
     customerId: v.id("customers"),
-    // LEGACY, read-only after migrations:backfillItems. One appointment held
-    // one service; `items` replaced it. Delete the column once every org's
-    // rows carry items.
-    serviceId: v.optional(v.id("services")),
     // What was delivered in this session, as LINE ITEMS. A haircut plus a
     // beard trim is ONE appointment with two lines — one calendar block, one
     // reminder, one visit — not two bookings stacked on each other.
@@ -300,10 +296,6 @@ export default defineSchema({
       ),
     ),
     staffId: v.optional(v.id("staff")),
-    // LEGACY, read-only after migrations:backfillStaff. Kept so a deployment
-    // that has not run the migration still renders; new writes set staffId.
-    // Delete the column once every org's rows carry staffId.
-    staffName: v.optional(v.string()),
     startAt: v.number(),
     durationMinutes: v.optional(v.number()),
     status: appointmentStatus,

@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { appointmentStatus } from "./schema";
-import { assertE164, requireOrg } from "./lib/orgAuth";
+import { requireOrg } from "./lib/orgAuth";
 import { getLocalPartsSafe } from "./lib/businessHours";
 
 // A line as the client asks for it: which service, and optionally what it
@@ -61,15 +61,6 @@ export function itemsLabel(items: StoredItem[] | undefined): string | undefined 
   return items.map((i) => i.name).join(", ");
 }
 
-// The visit's length: what the services add up to. Only used as the DEFAULT at
-// create — once a row has a durationMinutes it is authoritative, because
-// somebody may have drawn the block by hand.
-function itemsDuration(items: StoredItem[]): number | undefined {
-  return items.length
-    ? items.reduce((sum, i) => sum + i.durationMinutes, 0)
-    : undefined;
-}
-
 // The visit's total. Undefined when NO line carries a price — "nothing was
 // priced" and "this visit was free" are different facts and a bare 0 says the
 // wrong one. Lines that are individually unpriced count as zero within a
@@ -88,9 +79,8 @@ const enrichedAppointment = v.object({
   durationMinutes: v.optional(v.number()),
   status: appointmentStatus,
   staffId: v.optional(v.id("staff")),
-  // Resolved from the staff row, falling back to the legacy free-text column
-  // for orgs that have not run migrations:backfillStaff yet. The calendar lanes
-  // on staffId; this is only what the block prints.
+  // Resolved from the staff row. The calendar lanes on staffId; this is only
+  // what the block prints.
   staffName: v.optional(v.string()),
   notes: v.optional(v.string()),
   externalUid: v.optional(v.string()),
@@ -141,7 +131,7 @@ export const listRange = query({
         durationMinutes: row.durationMinutes,
         status: row.status,
         staffId: row.staffId,
-        staffName: staff?.name ?? row.staffName,
+        staffName: staff?.name,
         notes: row.notes,
         externalUid: row.externalUid,
         source: row.source,
@@ -194,7 +184,7 @@ export const listForCustomer = query({
         startAt: row.startAt,
         status: row.status,
         serviceName: itemsLabel(row.items),
-        staffName: staff?.name ?? row.staffName,
+        staffName: staff?.name,
         total: itemsTotal(row.items),
       });
     }
@@ -221,71 +211,6 @@ export async function scheduleConfirmationIfConfigured(
   });
 }
 
-export const create = mutation({
-  args: {
-    customerId: v.optional(v.id("customers")),
-    // Quick-create straight from the booking form — the common path for a
-    // walk-in salon; names optional-lite, phone mandatory.
-    newCustomer: v.optional(
-      v.object({
-        firstName: v.string(),
-        lastName: v.optional(v.string()),
-        phone: v.string(),
-        consent: v.boolean(),
-      }),
-    ),
-    lines: v.optional(v.array(lineInput)),
-    startAt: v.number(),
-    staffName: v.optional(v.string()),
-    notes: v.optional(v.string()),
-  },
-  returns: v.id("appointments"),
-  handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
-
-    let customerId = args.customerId;
-    if (!customerId) {
-      if (!args.newCustomer) throw new Error("customer-required");
-      const phone = assertE164(args.newCustomer.phone);
-      // Same phone → same person; reuse the row instead of erroring, so
-      // booking a repeat customer by phone just works.
-      const existing = await ctx.db
-        .query("customers")
-        .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
-        .unique();
-      customerId =
-        existing?._id ??
-        (await ctx.db.insert("customers", {
-          orgId,
-          firstName: args.newCustomer.firstName.trim() || phone,
-          lastName: args.newCustomer.lastName?.trim() || undefined,
-          phone,
-          consentAt: args.newCustomer.consent ? Date.now() : undefined,
-        }));
-    } else {
-      const customer = await ctx.db.get(customerId);
-      if (!customer || customer.orgId !== orgId) throw new Error("not-found");
-    }
-
-    const items = await resolveLines(ctx, orgId, args.lines ?? []);
-
-    const appointmentId = await ctx.db.insert("appointments", {
-      orgId,
-      customerId,
-      items,
-      startAt: args.startAt,
-      // The block starts as long as the work takes; a drag can redraw it after.
-      durationMinutes: itemsDuration(items),
-      status: "scheduled",
-      staffName: args.staffName?.trim() || undefined,
-      notes: args.notes?.trim() || undefined,
-      source: "manual",
-    });
-    await scheduleConfirmationIfConfigured(ctx, orgId, appointmentId);
-    return appointmentId;
-  },
-});
-
 export const setStatus = mutation({
   args: { appointmentId: v.id("appointments"), status: appointmentStatus },
   returns: v.null(),
@@ -294,27 +219,6 @@ export const setStatus = mutation({
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
     await ctx.db.patch(args.appointmentId, { status: args.status });
-    return null;
-  },
-});
-
-export const reschedule = mutation({
-  args: { appointmentId: v.id("appointments"), startAt: v.number() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
-    const appointment = await ctx.db.get(args.appointmentId);
-    if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
-    // A new time means the old reminders never happened: reset the sent
-    // stamps, revive a cancelled row, and re-confirm.
-    await ctx.db.patch(args.appointmentId, {
-      startAt: args.startAt,
-      reminderSentOffsets: [],
-      confirmationSentAt: undefined,
-      status:
-        appointment.status === "cancelled" ? "scheduled" : appointment.status,
-    });
-    await scheduleConfirmationIfConfigured(ctx, orgId, args.appointmentId);
     return null;
   },
 });

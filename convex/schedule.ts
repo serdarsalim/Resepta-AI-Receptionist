@@ -54,10 +54,12 @@ async function resolveLines(
 // THE RULE, and the reason this module exists as actions rather than mutations:
 // cal.com owns the slot inventory, the salon's Google Calendar and the
 // notification emails, so it is told FIRST and our row moves only once it
-// agrees. A Convex mutation cannot reach the network, so `appointments.create`
-// and `appointments.reschedule` could never do this — they wrote locally and
-// left cal.com holding the old time. On a calendar that is worse than anywhere
-// else, because the grid is the thing that looks authoritative.
+// agrees. A Convex mutation cannot reach the network, so no mutation can ever
+// hold this contract — it would write locally and leave cal.com holding the
+// old time. On a calendar that is worse than anywhere else, because the grid
+// is the thing that looks authoritative. Booking and rescheduling therefore
+// have exactly one entry point each, here; there is deliberately no
+// mutation-shaped shortcut past them.
 //
 // Writes that CAN be refused on the merits (create, move, resize — the slot is
 // genuinely taken) are synchronous: the caller finds out now, because retrying

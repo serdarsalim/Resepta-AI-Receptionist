@@ -27,7 +27,6 @@ import type * as lib_money from "../lib/money.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as messages from "../messages.js";
-import type * as migrations from "../migrations.js";
 import type * as notes from "../notes.js";
 import type * as orgs from "../orgs.js";
 import type * as reminders from "../reminders.js";
@@ -66,7 +65,6 @@ declare const fullApi: ApiFromModules<{
   "lib/orgAuth": typeof lib_orgAuth;
   "lib/waCloud": typeof lib_waCloud;
   messages: typeof messages;
-  migrations: typeof migrations;
   notes: typeof notes;
   orgs: typeof orgs;
   reminders: typeof reminders;
