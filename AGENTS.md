@@ -70,6 +70,69 @@ style issue.
   worth a tap, and the owner has until closing to mark it. Nothing ever moves a
   booking back to live; `cancelled` and `no_show` are left alone.
 
+## Delivery is a queue, not a fire-and-forget
+
+`messages.applySendResult` is the ONE place a send outcome is decided — retry
+policy, dead-lettering and the failure alert all have to agree, and one
+function is the only way to guarantee they do. Never alert from a call site.
+
+- Failures are classified in [`lib/sendFailure.ts`](convex/lib/sendFailure.ts).
+  **Permanent** (no consent, no approved template, shut 24h window, bad token,
+  any other 4xx) fails terminally. **Transient** (5xx, 429, Meta's rate-limit
+  codes, a thrown fetch) backs off ~1m/5m/15m/1h/3h and then dead-letters.
+- **A retrying row keeps status `queued`, not `failed`.** A message still in
+  flight has not failed, and the health counts read status.
+- `convex/delivery.ts` re-POSTs the EXISTING row rather than re-running the
+  action that made it — re-running would log a second row for one message the
+  customer gets once. Rows store `templateParams` so a retry replays the same
+  words.
+- `sendingAt` marks a row in flight; the reaper FAILS rows stuck past 2h rather
+  than retrying them. There is no idempotency key on Meta's endpoint, so an
+  ambiguous outcome must not be re-sent. The retry queue takes the opposite
+  view deliberately — losing a reminder is worse than a duplicate, but a
+  claimed row may already have been delivered.
+
+## Cron cost must track work, not org count
+
+This is one deployment for every salon, so any cron that scans "all rows in a
+window" is work proportional to how many customers exist. `.take()` truncates
+in SILENCE, which is how the reminder sweep quietly stopped reminding whoever
+sorted last past ~15 orgs.
+
+`appointments.nextMessageAt` (see [`lib/reminderSchedule.ts`](convex/lib/reminderSchedule.ts))
+holds when a booking next owes the customer something — a reminder while live,
+a winback once it ends as a no_show. The cron reads an index range and gets
+back exactly the due rows.
+
+**Any mutation that changes `startAt`, `status`, `reminderSentOffsets` or
+`winbackSentAt` must call `syncAppointmentSchedule` after its patch.** It is
+idempotent, `reminders.reconcile` repairs what a write path forgets, and
+changing an org's offsets re-derives that org's calendar in the background.
+
+## Cross-org reads live in exactly one file
+
+Every query is scoped by `requireOrg`. The single exception is
+`convex/platform.ts`, gated by `requirePlatformAdmin`
+([`lib/platformAuth.ts`](convex/lib/platformAuth.ts)) — an env allowlist
+(`PLATFORM_ADMIN_EMAILS`), never an org role and never a DB flag, because a
+column is something an org-scoped mutation could reach. Unset denies everyone.
+Do not import `lib/platformAuth` anywhere else.
+
+## Two kinds of template, never conflate them
+
+- **Meta template messages** are business-initiated, registered with Meta and
+  filled BY POSITION: `{{1}}` first name, `{{2}}` business, `{{3}}` appointment
+  time. Meta approved that exact string; we do not rewrite it.
+- **Everything else** — away-reply, composer text, campaign line, email body —
+  is ours and takes NAMED tokens (`[ad]`, `[isletme]`, `[tarih]`) via
+  [`lib/renderTokens.ts`](convex/lib/renderTokens.ts). Token names deliberately
+  do not translate: the stored string cannot be right in three languages at
+  once. An unresolved token renders as nothing, never as itself.
+
+Campaigns are business-initiated, so they MUST ride an approved template. The
+campaign template's `{{3}}` is a free line the campaign supplies, which is what
+makes one Meta approval cover every campaign the salon will ever run.
+
 ## i18n — two layers, don't conflate them
 
 1. **Customer-facing (WhatsApp).** Language resolves per customer:
@@ -86,6 +149,20 @@ style issue.
    on its own without touching this.
    The signed-in app follows `orgs.language`; the sign-in screen falls back to
    localStorage then the browser language.
+
+## The demo org
+
+`orgs.demoMode` marks a showroom org: sends are simulated, replies invented,
+and a nightly cron rebuilds it from `devSeed`. **Its safety story is NOT
+Nudge's.** Nudge's demo is a separate deployment with no credentials, so an
+empty env is the boundary. Here the same deployment holds real salons, so the
+boundary is the org scoping every query already does, plus the demo org having
+no `waAccounts` row, plus every send path checking `demoMode` BEFORE it reaches
+a provider (which is why that check sits before the credentials check, not
+after).
+
+Walk-in anonymous sign-in exists only when `DEMO_ORG_ID` is set — the provider
+is not registered otherwise. Never set `demoMode` on an org with credentials.
 
 ## Open product questions (unresolved as of 2026-07-25)
 
