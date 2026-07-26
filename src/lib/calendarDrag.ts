@@ -26,6 +26,26 @@ export function snapMinute(minute: number): number {
   return Math.round(minute / SNAP_MINUTES) * SNAP_MINUTES;
 }
 
+// Which day column the pointer is over, as an index into the visible columns.
+// The hour gutter is not a day, so it comes off the width before dividing.
+//
+// Clamped rather than nullable on purpose: dragging a block past the left or
+// right edge of the week should park it on Monday or Sunday, not drop the
+// gesture. The pointer leaves the grid constantly during a real drag.
+export function columnIndexAt(
+  clientX: number,
+  gridLeftPx: number,
+  gutterPx: number,
+  gridWidthPx: number,
+  columnCount: number,
+): number {
+  if (columnCount <= 1) return 0;
+  const columnWidth = (gridWidthPx - gutterPx) / columnCount;
+  if (!(columnWidth > 0)) return 0;
+  const index = Math.floor((clientX - gridLeftPx - gutterPx) / columnWidth);
+  return Math.min(columnCount - 1, Math.max(0, index));
+}
+
 // Where the pointer is, in minutes since midnight, given the grid's own top.
 export function minuteAt(
   clientY: number,

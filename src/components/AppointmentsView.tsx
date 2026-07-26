@@ -16,6 +16,7 @@ import {
 import {
   SNAP_MINUTES,
   advanceDrag,
+  columnIndexAt,
   dragResult,
   minuteAt,
   type DragGeometry,
@@ -829,10 +830,28 @@ function Calendar({
   // button. Without this the sheet would open every time you moved something.
   const suppressClick = useRef(false);
 
+  const gutterRef = useRef<HTMLDivElement>(null);
+
   const minuteAtClientY = (clientY: number): number => {
     const body = gridRef.current;
     if (!body) return dayStart * 60;
     return minuteAt(clientY, body.getBoundingClientRect().top, dayStart, HOUR_PX);
+  };
+
+  // Measured, not assumed: the gutter's width is a Tailwind class today and a
+  // wrong constant here would land every drag one column off.
+  const dayAtClientX = (clientX: number, fallback: number): number => {
+    const body = gridRef.current;
+    if (!body || columns.length === 0) return fallback;
+    const rect = body.getBoundingClientRect();
+    const index = columnIndexAt(
+      clientX,
+      rect.left,
+      gutterRef.current?.offsetWidth ?? 0,
+      rect.width,
+      columns.length,
+    );
+    return columns[index].day;
   };
 
   const startDrag = (next: DragState, event: React.PointerEvent) => {
@@ -843,8 +862,18 @@ function Calendar({
   const onPointerMove = (event: React.PointerEvent) => {
     if (!drag) return;
     const minute = minuteAtClientY(event.clientY);
+    // Only a MOVE crosses days. Drawing a new slot and resizing an existing
+    // one both stay in the column they started in — an appointment that runs
+    // from Tuesday to Thursday is not something this calendar can draw, let
+    // alone something a salon means to book.
+    //
+    // `day` goes AFTER the spread: advanceDrag carries the whole object
+    // through, so putting it first would let the old day overwrite the new one
+    // on every single move.
+    const day =
+      drag.kind === "move" ? dayAtClientX(event.clientX, drag.day) : drag.day;
     setDrag((current) =>
-      current ? { ...current, ...advanceDrag(current, minute) } : current,
+      current ? { ...current, ...advanceDrag(current, minute), day } : current,
     );
   };
 
@@ -965,7 +994,7 @@ function Calendar({
         >
           {/* Hour gutter. Labels sit ON their line, so they read as the moment
               the line marks rather than as a band. */}
-          <div className="relative w-12 shrink-0">
+          <div ref={gutterRef} className="relative w-12 shrink-0">
             {hours.map((hour, i) => (
               <span
                 key={hour}
