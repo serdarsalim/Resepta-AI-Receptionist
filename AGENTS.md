@@ -107,6 +107,47 @@ These change what gets built next — don't paper over them:
   not inline paragraphs.
 - Small commits per logical unit.
 
+## Editing, adding, density (recurring, stop it)
+
+Three rules. They come up on every surface and they have had to be given more
+than once, so they live here now rather than in a review comment.
+
+**1. A value you can change is an inline edit, not a parked form control.**
+`InlineEditValue` (RecordField.tsx) handles free text AND picklists — pass
+`options` for a select, `labelFor` when the stored value is a slug the reader
+should never see (`"owner"` → `"Yönetici"`). A row of bordered inputs reads as
+a form somebody has to fill in; a value you click to correct reads as a fact.
+It also deletes a border per control, which is the other half of why the
+bordered version looks heavy. Reach for a bare `<input>`/`<select>` only in an
+actual form — a sheet, or a genuine filter bar.
+
+**2. Adding opens a sheet. Never a permanent empty field at the foot of a
+list.** Use `Sheet` (Sheet.tsx). An always-visible "name + Add" row is a
+question the page asks nobody, and it charges vertical rent on every visit to
+pay for a task done twice a year. The entry point is a button; the fields
+appear when you mean them. If one gesture could create two DIFFERENT kinds of
+thing, the sheet asks which — do not stack both forms and hope.
+
+**3. Vertical space is the scarce resource.** A row carrying a name and an
+email is ONE line, not three: identity reads across, controls sit in columns
+beside it. Before stacking anything, check it cannot read inline. This is the
+same instinct as the reminders table and the customers list — the complaint is
+always "why is this three rows tall".
+
+**4. Nothing shifts under the pointer.** Switching a tab, toggling a mode,
+revealing an error must not resize the container. Whatever the reader is
+reaching for has to still be where they saw it. In practice: give the variants
+equal height (put a second field BESIDE the first, not under it), reserve the
+line an error will occupy, keep the sort caret's space whether or not it shows.
+If two states genuinely cannot match, the taller one sets the height and the
+shorter one pads.
+
+**5. Never invent a word the UI already asks the user for.** The People card
+asks "what do you call these people?" and stores it as `staffLabel` — so the
+add sheet says "Personel"/"Berber"/"Stylist", not a coined term like "bookable
+person". Check whether the product already has the user's own word before
+naming something.
+
 ## Popovers NEVER position absolute inside a card (recurring, stop it)
 
 Every floating element — dropdown menu, tooltip, combobox list — renders

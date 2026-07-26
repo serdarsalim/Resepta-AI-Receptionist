@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { Card } from "./Card";
+import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { FieldGroup, InlineEditValue } from "./RecordField";
@@ -25,16 +26,16 @@ import { FieldGroup, InlineEditValue } from "./RecordField";
 // a garage: services and contact fields are org data, so the vertical's own
 // vocabulary (plate number, last cleaning, insurance) never needs a schema
 // change or a second deployment.
-// Sections rather than one long scroll of five cards, matching Settings next
-// door. The scroll is what made "put the team in Business" sound like burying
-// it; a chip row is the same real estate with a way in.
-type Section = "details" | "people" | "services" | "fields";
+// Two chips, not four. Details, services and contact fields are all "set the
+// salon up once" — splitting them across three tabs turns setup into a
+// scavenger hunt, and each card already carries its own heading, so one scroll
+// reads fine. People is the one you come back to after setup (somebody is
+// hired, somebody leaves), so it gets its own chip and nothing else does.
+type Section = "business" | "people";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "details", key: "business.details" },
+  { id: "business", key: "settings.business" },
   { id: "people", key: "staff.title" },
-  { id: "services", key: "services.title" },
-  { id: "fields", key: "business.fields" },
 ];
 
 function SectionChip({
@@ -64,7 +65,7 @@ function SectionChip({
 
 export function BusinessView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("details");
+  const [section, setSection] = useState<Section>("business");
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
@@ -88,10 +89,14 @@ export function BusinessView() {
           {t("settings.ownerOnly")}
         </p>
       )}
-      {section === "details" && <DetailsCard isOwner={isOwner} />}
+      {section === "business" && (
+        <>
+          <DetailsCard isOwner={isOwner} />
+          <ServicesCard isOwner={isOwner} />
+          <FieldsCard isOwner={isOwner} />
+        </>
+      )}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
-      {section === "services" && <ServicesCard isOwner={isOwner} />}
-      {section === "fields" && <FieldsCard isOwner={isOwner} />}
     </div>
   );
 }
@@ -580,27 +585,27 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 // generic word, which is right for most verticals and merely bland for the
 // rest — the point is that a new vertical needs no schema change.
 
-// Header and rows share one template, a grid from sm up. Below that the row
-// stacks, because three controls and a name do not fit a 390px line.
+// One line per person. It was three — name, "(you)", email stacked — which
+// spent a paragraph of height on a row carrying two facts. Everything that
+// identifies somebody now reads across, and the two controls sit in their
+// columns beside it.
 const ROSTER_ROW =
-  "sm:grid sm:grid-cols-[minmax(0,1fr)_6rem_minmax(0,11rem)] sm:items-center sm:gap-3";
+  "sm:grid sm:grid-cols-[minmax(0,1fr)_5rem_minmax(0,9rem)] sm:items-center sm:gap-3";
 
-// ONE list of people, which is how Fresha, Booksy and Square all show it. Two
-// cards used to split this: "Kullanıcılar" (who can log in) and "Ekip" (who can
-// be booked), both titled "Ekip" in Turkish, both labelling rows "Personel".
-// They describe the same humans from two angles — a barber is bookable and may
-// never log in, a bookkeeper logs in and is never booked — so they are two
-// COLUMNS here, not two lists.
+const ACCESS_REMOVE = "remove";
+
+// ONE list of people, the way Fresha, Booksy and Square all show it. Two cards
+// used to split this: who can log in, and who can be booked. They describe the
+// same humans from two angles, so they are two COLUMNS here, not two lists.
 //
-// Rows are joined in team.roster on staff.userId. A bookable person with no
-// login gets a select listing whoever has a login and is not yet claimed; that
-// is how two rows become one.
+// Both controls are inline edits, not parked form controls. A row of bordered
+// selects reads as a form you have to fill in; a value you click to change
+// reads as a fact you can correct. Same reason the name is an inline edit.
 function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const roster = useQuery(api.team.roster, {});
   const team = useQuery(api.team.overview, {});
   const settings = useQuery(api.orgs.current, {});
-  const invite = useMutation(api.team.invite);
   const revokeInvite = useMutation(api.team.revokeInvite);
   const setRole = useMutation(api.team.setRole);
   const removeMember = useMutation(api.team.removeMember);
@@ -609,7 +614,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const renameStaff = useMutation(api.staff.rename);
   const setActive = useMutation(api.staff.setActive);
   const updateOrg = useMutation(api.orgs.update);
-  const [draft, setDraft] = useState("");
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The backend refuses to strip the last admin; this turns that into a
@@ -628,9 +633,15 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
 
-  // Logins nobody has claimed as a bookable person yet. Offered on the rows
-  // that have no login, so the two halves of one human can be joined up.
+  // Logins nobody has claimed as a bookable person yet, offered on the rows
+  // that have no login so the two halves of one human can be joined up.
   const unclaimed = roster.filter((row) => row.userId && !row.staffId);
+  const accessLabel = (value: string) =>
+    value === "owner"
+      ? t("role.owner")
+      : value === "staff"
+        ? t("role.staff")
+        : t("roster.removeAccess");
 
   return (
     <Card title={t("staff.title")} tip={t("roster.hint")} disabled={!isOwner}>
@@ -653,10 +664,11 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
         <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {roster.map((row) => (
-            <li key={row.key} className={`py-2 text-sm ${ROSTER_ROW}`}>
-              <span className="min-w-0">
+            <li key={row.key} className={`py-1 text-sm ${ROSTER_ROW}`}>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {row.staffId ? (
                   <InlineEditValue
+                    compact
                     value={row.name}
                     onSave={(next) =>
                       next && renameStaff({ staffId: row.staffId!, name: next })
@@ -665,13 +677,11 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 ) : (
                   <span className="truncate font-medium">{row.name}</span>
                 )}
-                {row.isMe && (
-                  <span className="ml-1 text-xs text-[var(--muted)]">({t("team.you")})</span>
-                )}
                 {row.email && (
-                  <span className="block truncate text-xs text-[var(--muted)]">
-                    {row.email}
-                  </span>
+                  <span className="truncate text-xs text-[var(--muted)]">{row.email}</span>
+                )}
+                {row.isMe && (
+                  <span className="text-xs text-[var(--muted)]">({t("team.you")})</span>
                 )}
               </span>
 
@@ -697,53 +707,50 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               />
 
               {row.userId ? (
-                <select
+                <InlineEditValue
+                  compact
                   value={row.role ?? "staff"}
-                  onChange={(event) =>
-                    void guard(() =>
-                      event.target.value === "remove"
+                  options={["owner", "staff", ACCESS_REMOVE]}
+                  labelFor={accessLabel}
+                  onSave={(next) =>
+                    guard(() =>
+                      next === ACCESS_REMOVE
                         ? removeMember({ userId: row.userId! })
                         : setRole({
                             userId: row.userId!,
-                            role: event.target.value === "owner" ? "owner" : "staff",
+                            role: next === "owner" ? "owner" : "staff",
                           }),
                     )
                   }
-                >
-                  <option value="owner">{t("role.owner")}</option>
-                  <option value="staff">{t("role.staff")}</option>
-                  <option value="remove">{t("roster.removeAccess")}</option>
-                </select>
+                />
               ) : (
-                <select
+                <InlineEditValue
+                  compact
                   value=""
-                  onChange={(event) =>
-                    void guard(() =>
+                  placeholder={t("roster.noAccess")}
+                  options={unclaimed.map((candidate) => candidate.userId as string)}
+                  labelFor={(id) =>
+                    unclaimed.find((candidate) => candidate.userId === id)?.email ??
+                    t("roster.noAccess")
+                  }
+                  onSave={(next) =>
+                    guard(() =>
                       linkStaff({
                         staffId: row.staffId!,
-                        userId: event.target.value
-                          ? (event.target.value as Id<"users">)
-                          : null,
+                        userId: next ? (next as Id<"users">) : null,
                       }),
                     )
                   }
-                >
-                  <option value="">{t("roster.noAccess")}</option>
-                  {unclaimed.map((candidate) => (
-                    <option key={candidate.key} value={candidate.userId}>
-                      {candidate.email ?? candidate.name}
-                    </option>
-                  ))}
-                </select>
+                />
               )}
             </li>
           ))}
 
           {team.pending.map((pendingInvite) => (
-            <li key={pendingInvite._id} className={`py-2 text-sm ${ROSTER_ROW}`}>
-              <span className="min-w-0">
+            <li key={pendingInvite._id} className={`py-1 text-sm ${ROSTER_ROW}`}>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
-                <span className="block text-xs text-[var(--muted)]">
+                <span className="text-xs text-[var(--muted)]">
                   {t("team.pending")} ·{" "}
                   {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
                 </span>
@@ -765,70 +772,138 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
         )}
 
+        {/* A button, not a pair of empty inputs living at the foot of the list
+            forever. Adding somebody is a twice-a-year job and it should not
+            charge rent on every visit. */}
         {isOwner && (
-          <>
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const name = draft.trim();
-                if (!name) return;
-                void addStaff({ name });
-                setDraft("");
-              }}
-            >
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={t("staff.namePlaceholder")}
-                className="flex-1"
-              />
-              <button
-                type="submit"
-                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                {t("staff.add")}
-              </button>
-            </form>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            + {t("roster.add")}
+          </button>
+        )}
 
-            <form
-              className="flex flex-wrap items-end gap-2 border-t border-[var(--border)] pt-3"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const formEl = event.currentTarget;
-                const form = new FormData(formEl);
-                await guard(async () => {
-                  await invite({
-                    email: String(form.get("email") ?? ""),
-                    role: form.get("role") === "owner" ? "owner" : "staff",
-                  });
-                  formEl.reset();
-                });
-              }}
-            >
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      </div>
+
+      {adding && (
+        <AddPersonSheet
+          staffLabel={settings?.org.staffLabel?.trim() || t("appointments.staff")}
+          onClose={() => setAdding(false)}
+        />
+      )}
+    </Card>
+  );
+}
+
+// Two ways to add somebody and they produce different things, so the sheet
+// asks which rather than showing both forms at once: a bookable person is a
+// staff row, an invite is a login. Offering both fields together would let one
+// gesture create two rows for one human, which is the exact confusion the
+// merged list exists to remove.
+function AddPersonSheet({
+  staffLabel,
+  onClose,
+}: {
+  // The org's own word for the person who does the work — "Personel",
+  // "Berber", "Stylist". The card above literally asks what they call these
+  // people, so inventing a second term here ("bookable person") was jargon
+  // sitting next to the answer.
+  staffLabel: string;
+  onClose: () => void;
+}) {
+  const { t } = useLanguage();
+  const addStaff = useMutation(api.staff.add);
+  const invite = useMutation(api.team.invite);
+  const [mode, setMode] = useState<"bookable" | "login">("bookable");
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Sheet title={t("roster.add")} onClose={onClose}>
+      <div className="mb-3 inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
+        {(["bookable", "login"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setMode(option)}
+            className={`rounded-md px-3 py-1 transition-colors ${
+              mode === option
+                ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
+                : "text-[var(--muted)]"
+            }`}
+          >
+            {option === "bookable" ? staffLabel : t("team.invite")}
+          </button>
+        ))}
+      </div>
+
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setError(null);
+          try {
+            if (mode === "bookable") {
+              const name = String(form.get("name") ?? "").trim();
+              if (!name) return;
+              await addStaff({ name });
+            } else {
+              await invite({
+                email: String(form.get("email") ?? ""),
+                role: form.get("role") === "owner" ? "owner" : "staff",
+              });
+            }
+            onClose();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "error");
+          }
+        }}
+      >
+        {/* Both modes are ONE row tall, which is why the role select sits
+            beside the email instead of under it. Switching mode must not
+            resize the sheet: the buttons you are reaching for would move out
+            from under the pointer. */}
+        <div className="flex gap-2">
+          {mode === "bookable" ? (
+            <input name="name" required placeholder={t("staff.namePlaceholder")} />
+          ) : (
+            <>
               <input
                 name="email"
                 type="email"
                 required
                 placeholder="ornek@gmail.com"
-                className="w-56"
+                className="min-w-0 flex-1"
               />
-              <select name="role" defaultValue="staff" className="w-auto">
+              <select name="role" defaultValue="staff" className="w-auto shrink-0">
                 <option value="staff">{t("role.staff")}</option>
                 <option value="owner">{t("role.owner")}</option>
               </select>
-              <button
-                type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("team.invite")}
-              </button>
-            </form>
-          </>
-        )}
+            </>
+          )}
+        </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      </div>
-    </Card>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="submit"
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {mode === "bookable" ? t("staff.add") : t("team.invite")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

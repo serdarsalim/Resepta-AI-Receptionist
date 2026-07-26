@@ -63,6 +63,7 @@ function ChevronIcon() {
 export function InlineEditValue({
   value,
   options,
+  labelFor,
   type = "text",
   placeholder,
   compact,
@@ -71,6 +72,9 @@ export function InlineEditValue({
   value: string;
   // null → free text; array → picklist.
   options?: string[] | null;
+  // Display name for a picklist value, when the stored value is a slug the
+  // reader should never see ("owner" → "Yönetici").
+  labelFor?: (value: string) => string;
   type?: "text" | "number" | "date" | "email" | "tel";
   placeholder?: string;
   // Shrink-to-fit instead of filling its column. For values that read as one
@@ -124,7 +128,7 @@ export function InlineEditValue({
         }`}
       >
         <span className={`min-w-0 break-words ${value ? "" : "text-[var(--muted)]"}`}>
-          {value || placeholder || ""}
+          {(value && labelFor ? labelFor(value) : value) || placeholder || ""}
         </span>
         <span className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover/iv:opacity-100 group-focus-visible/iv:opacity-100">
           {options ? <ChevronIcon /> : <PencilIcon />}
@@ -149,7 +153,7 @@ export function InlineEditValue({
         <option value="" />
         {merged.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {labelFor ? labelFor(option) : option}
           </option>
         ))}
       </select>

@@ -859,8 +859,7 @@ const dictionary = {
     en: "You can't remove the last admin. Make somebody else an admin first.",
     de: "Die letzte Administratorin oder der letzte Administrator kann nicht entfernt werden. Machen Sie zuerst jemand anderen zum Administrator.",
   },
-  "business.details": { tr: "İşletme", en: "Business", de: "Betrieb" },
-  "business.fields": { tr: "Alanlar", en: "Fields", de: "Felder" },
+  "roster.add": { tr: "Kişi ekle", en: "Add person", de: "Person hinzufügen" },
   "team.pending": {
     tr: "Bekleyen davetler",
     en: "Pending invites",
