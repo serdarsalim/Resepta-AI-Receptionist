@@ -57,8 +57,8 @@ function fullName(customer: Customer): string {
 // consent gates MARKETING; under KVKK it gates everything, reminders included
 // (wa.sendAppointmentMessage), so a customer without it books on Friday and is
 // simply never reminded. That is a broken row, not a preference, and a broken
-// row earns a mark. Quiet per row, loud in the count above the table — the
-// same split as the notification rules card in Settings.
+// row earns a mark. Finding them is the Name column's funnel, which is where
+// every other filter in this table already lives.
 function NoConsentMark() {
   const t = useT();
   return (
@@ -321,14 +321,6 @@ export function CustomersView({
   };
 
   const hasCustomers = (customers?.length ?? 0) > 0;
-  // Counted across every customer, not the filtered rows: this is a standing
-  // fact about the book, and it should not drop to zero just because a search
-  // is narrowing the view.
-  const withoutConsent = (customers ?? []).filter(
-    (customer) => customer.consentAt === undefined,
-  ).length;
-  const showingWithoutConsent = table.filterFor("consent").includes(CONSENT_OFF);
-
   const widthOf = (column: Column) => table.widthFor(column.key, column.width);
   const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
@@ -342,26 +334,6 @@ export function CustomersView({
             placeholder={t("customers.search")}
             className="w-full sm:w-64"
           />
-        )}
-        {/* The segment, which is how every CRM in this category exposes
-            consent. It is also the only part of this that gets the problem
-            FIXED: a count you can click lands on the exact people to chase,
-            and each row from there opens the profile that records it. */}
-        {withoutConsent > 0 && (
-          <button
-            type="button"
-            aria-pressed={showingWithoutConsent}
-            onClick={() => table.toggleFilter("consent", CONSENT_OFF)}
-            className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm transition-colors ${
-              showingWithoutConsent
-                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                : "text-amber-700 hover:bg-[var(--muted-bg)] dark:text-amber-500"
-            }`}
-          >
-            <NoConsentMark />
-            <span className="tabular-nums">{withoutConsent}</span>
-            <span>{t("customers.withoutConsent")}</span>
-          </button>
         )}
         <div className="ml-auto flex items-center gap-2">
           {/* The picker belongs to the table, and below sm there is no table. */}
@@ -536,6 +508,22 @@ export function CustomersView({
                     label={t("customers.name")}
                     sortDir={table.sort.key === "name" ? table.sort.dir : null}
                     onSort={() => table.toggleSort("name")}
+                    // Consent has no column of its own any more, but the name
+                    // cell is where its mark shows — so the funnel that filters
+                    // on it belongs here, on the column it visibly affects.
+                    // Same rule as every other funnel in this table.
+                    filter={
+                      <HeaderFilter
+                        options={[CONSENT_ON, CONSENT_OFF]}
+                        selected={table.filterFor("consent")}
+                        onToggle={(value) => table.toggleFilter("consent", value)}
+                        labelFor={(value) =>
+                          value === CONSENT_ON
+                            ? t("customers.consentGiven")
+                            : t("customers.noConsent")
+                        }
+                      />
+                    }
                   />
                   {visibleColumns.map((column) => (
                     <Th

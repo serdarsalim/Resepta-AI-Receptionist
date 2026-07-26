@@ -309,14 +309,6 @@ const dictionary = {
   },
   // Record footer. "Last activity" rather than "last update": a salon cares
   // when the customer last got in touch, not when someone edited the row.
-  // Reads after a number in all three, and none of them inflect on it —
-  // "1 kişide mesaj izni yok" and "4 kişide mesaj izni yok" are both correct,
-  // which is why the count is not baked into the string.
-  "customers.withoutConsent": {
-    tr: "kişide mesaj izni yok",
-    en: "without messaging consent",
-    de: "ohne Nachrichten-Einwilligung",
-  },
   "customers.cannotBeMessaged": {
     tr: "Bu müşteriye mesaj izni verilmediği için onay, hatırlatma ve geri kazanım mesajlarının hiçbiri gitmiyor. İzni müşteri kartından işaretleyebilirsiniz.",
     en: "No messaging consent on file, so confirmations, reminders and win-backs all skip this customer. You can record consent on their profile.",
