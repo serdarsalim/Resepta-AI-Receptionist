@@ -521,10 +521,18 @@ export function SettingsView() {
 
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
 
-  const siteUrl = (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").replace(
-    ".convex.cloud",
-    ".convex.site",
-  );
+  // HTTP actions answer on the SITE url; the client talks to the cloud one.
+  // Swapping the domain is right in the cloud and wrong on a local deployment,
+  // where the two are PORTS — so the webhook URL this card hands you to paste
+  // into cal.com pointed at 3212 instead of 3213 and would never have fired.
+  // NEXT_PUBLIC_CONVEX_SITE_URL states it outright; prefer it, and keep the
+  // swap as the fallback for deployments that do not set it.
+  const siteUrl =
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL ||
+    (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").replace(
+      ".convex.cloud",
+      ".convex.site",
+    );
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
 
