@@ -126,7 +126,11 @@ const dictionary = {
     de: "Meldet, wenn eine Erinnerung oder Bestätigung nicht zugestellt werden konnte. So merken Sie es, bevor ein Kunde ohne Nachricht dasteht.",
   },
   "account.role": { tr: "Rolünüz", en: "Your role", de: "Ihre Rolle" },
-  "account.language": { tr: "Diliniz", en: "Your language", de: "Ihre Sprache" },
+  "account.language": {
+    tr: "Uygulama dili",
+    en: "App language",
+    de: "App-Sprache",
+  },
   // Says the thing an owner will otherwise fear: changing this does not change
   // what customers receive.
   "account.languageHint": {

@@ -4,7 +4,9 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES } from "@/lib/i18n";
+import { useToast } from "@/lib/ToastProvider";
 import { Card } from "./Card";
+import { InlineEditValue } from "./RecordField";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 
@@ -27,7 +29,17 @@ function StaticValue({ children }: { children: React.ReactNode }) {
 export function AccountView() {
   const { t } = useLanguage();
   const profile = useQuery(api.users.myProfile, {});
-  const save = useMutation(api.users.setMyProfile);
+  const saveProfile = useMutation(api.users.setMyProfile);
+  const toast = useToast();
+
+  // Every write on this page goes through here, so there is no way to add a
+  // field that saves silently. Autosave is right and it is also invisible —
+  // people who grew up with Save buttons do not trust a screen that says
+  // nothing back.
+  const save = async (patch: Parameters<typeof saveProfile>[0]) => {
+    await saveProfile(patch);
+    toast(t("common.saved"));
+  };
 
   if (!profile) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -39,23 +51,18 @@ export function AccountView() {
     <div className="mx-auto max-w-3xl space-y-4">
       <Card>
         <div className={ROW_GRID}>
+          {/* Values, not a form. Same pattern the contact record uses: read as
+              text, click to edit, commit on blur or Enter. A row of permanently
+              open input boxes reads as work waiting to be done, and this page
+              is mostly things you look at once. */}
           <RowLabel label={t("account.name")} hint={t("account.nameHint")} />
-          <input
-            defaultValue={storedName}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
+          <InlineEditValue
+            value={storedName}
+            onSave={(next) => {
               // Blanking the field is almost always a slip, and an empty name
-              // would leave the members list showing nobody. Put the stored
-              // value back rather than saving the wipe.
-              if (!next) {
-                e.target.value = storedName;
-                return;
-              }
-              if (next === storedName) return;
-              void save({ name: next });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
+              // would leave the members list showing nobody.
+              if (!next || next === storedName) return;
+              return save({ name: next });
             }}
           />
 
@@ -67,25 +74,22 @@ export function AccountView() {
             {t(profile.role === "owner" ? "role.owner" : "role.staff")}
           </StaticValue>
 
-          {/* Yours, not the salon's. Three languages and no fourth option for
-              "whatever the business picked" — that is a null in the column,
-              not a thing anybody chooses. Somebody who has never touched this
-              is shown the language they are actually reading, and follows the
-              business until the day they change it. */}
+          {/* "App language", not "Your language": in a business whose other
+              language setting decides what tongue customers are written in,
+              "your language" reads as the one you speak. This one only changes
+              what YOU see, and the label should be the thing that says so. */}
           <RowLabel
             label={t("account.language")}
             hint={t("account.languageHint")}
           />
-          <select
+          <InlineEditValue
             value={profile.language}
-            onChange={(e) => void save({ language: e.target.value })}
-          >
-            {LANGUAGES.map((entry) => (
-              <option key={entry.code} value={entry.code}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
+            options={LANGUAGES.map((entry) => entry.code)}
+            labelFor={(code) =>
+              LANGUAGES.find((entry) => entry.code === code)?.label ?? code
+            }
+            onSave={(next) => next && save({ language: next })}
+          />
         </div>
       </Card>
 

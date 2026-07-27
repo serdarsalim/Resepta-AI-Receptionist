@@ -204,3 +204,16 @@ thead {
     outline-offset: -1px;
   }
 }
+
+/* Toast entry. Small enough to read as "that landed", short enough that it is
+   over before it can be waited on. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

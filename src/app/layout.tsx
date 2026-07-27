@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import { LanguageProvider } from "@/lib/LanguageProvider";
+import { ToastProvider } from "@/lib/ToastProvider";
 import { NO_FOUC_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 // Country flags are flag-icons CSS sprites, never Unicode flag emoji: Windows
@@ -26,7 +27,10 @@ export default function RootLayout({
           {/* Correct .dark class before hydration — no theme flash. */}
           <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
           <ConvexClientProvider>
-            <LanguageProvider>{children}</LanguageProvider>
+            {/* Inside LanguageProvider: every toast is a translated string. */}
+            <LanguageProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </LanguageProvider>
           </ConvexClientProvider>
         </body>
       </html>
