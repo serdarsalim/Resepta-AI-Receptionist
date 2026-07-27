@@ -52,20 +52,33 @@ function fullName(customer: Customer): string {
 // person having arrived through the door on their own — a voice booking sends
 // no message at all, so the inbox alone would never show them.
 //
-// Not a button here, unlike the inbox. There the dot is the only way to say "I
-// have dealt with this" about a row you are not opening; here opening the
-// record IS the dismissal, so a second control would be a second way to do the
-// thing the click already does.
-function NewMark() {
+// A button, and it stops the click reaching the row underneath — the inbox's
+// own trick, and the reason the whole row can stay clickable. Taking row-click
+// away to protect this would cost a full-width target on every row to guard
+// against a mis-hit that undoes itself in one more click.
+//
+// It only ever DISMISSES here, because it is only rendered when lit: there is
+// nothing to press on a row that is already handled. Re-lighting one lives on
+// the record page, where the hollow ring gives the finger something to find.
+// One direction per surface, so neither is ambiguous.
+function NewMark({ onDismiss }: { onDismiss: () => void }) {
   const t = useT();
   return (
-    <span
-      title={t("customers.needsLook")}
-      aria-label={t("customers.needsLook")}
-      className="inline-flex shrink-0 items-center"
+    <button
+      type="button"
+      title={t("customers.dismissLook")}
+      aria-label={t("customers.dismissLook")}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDismiss();
+      }}
+      // The dot stays 8px; the box around it is 28 so it can be hit without
+      // being big enough to catch clicks aimed at the name beside it. -my-1
+      // keeps the taller box from setting the row height.
+      className="-my-1 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-black/[0.07] dark:hover:bg-white/[0.12]"
     >
       <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
-    </span>
+    </button>
   );
 }
 
@@ -458,7 +471,16 @@ export function CustomersView({
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate font-medium">{fullName(customer)}</span>
-                  {customer.needsAttention && <NewMark />}
+                  {customer.needsAttention && (
+                    <NewMark
+                      onDismiss={() =>
+                        void setAttention({
+                          customerId: customer._id,
+                          cleared: true,
+                        })
+                      }
+                    />
+                  )}
                   {customer.consentAt === undefined && <NoConsentMark />}
                 </span>
                 <span className="block text-xs tabular-nums text-[var(--muted)]">
@@ -563,7 +585,16 @@ export function CustomersView({
                     <td className="px-4 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate">{fullName(customer)}</span>
-                        {customer.needsAttention && <NewMark />}
+                        {customer.needsAttention && (
+                          <NewMark
+                            onDismiss={() =>
+                              void setAttention({
+                                customerId: customer._id,
+                                cleared: true,
+                              })
+                            }
+                          />
+                        )}
                         {customer.consentAt === undefined && <NoConsentMark />}
                       </span>
                     </td>

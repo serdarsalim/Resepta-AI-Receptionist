@@ -345,6 +345,13 @@ const dictionary = {
     en: "Nobody has looked at this yet",
     de: "Noch niemand hat sich das angesehen",
   },
+  // The table's dot is a button that only ever clears, so its label says so
+  // rather than describing the state the way the record page's toggle does.
+  "customers.dismissLook": {
+    tr: "Henüz kimse bakmadı. Bakıldı olarak işaretle",
+    en: "Nobody has looked at this yet. Mark as handled",
+    de: "Noch niemand hat sich das angesehen. Als erledigt markieren",
+  },
   "customers.cannotBeMessaged": {
     tr: "Bu müşteriye mesaj izni verilmediği için onay, hatırlatma ve geri kazanım mesajlarının hiçbiri gitmiyor. İzni müşteri kartından işaretleyebilirsiniz.",
     en: "No messaging consent on file, so confirmations, reminders and win-backs all skip this customer. You can record consent on their profile.",
