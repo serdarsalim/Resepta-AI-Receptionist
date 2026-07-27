@@ -188,6 +188,32 @@ export default defineSchema({
     demoMode: v.optional(v.boolean()),
   }).index("by_calcom_token", ["calcomWebhookToken"]),
 
+  // Per-org integration credentials. One row per (org, provider, field), which
+  // is Nudge's shape (convex/lib/connections.ts there) with the one change that
+  // matters: Nudge is instance-per-tenant so its rows are deployment-wide,
+  // while here every row carries orgId like everything else.
+  //
+  // Nudge falls back to an env var when a row is missing. THAT FALLBACK MUST
+  // NOT BE COPIED. One deployment serves every salon, so a shared env key means
+  // an org with no row of its own silently reads another business's provider
+  // account — a cross-org leak wearing the costume of a convenience default.
+  // Missing row = not configured. See lib/connections.ts.
+  //
+  // `label` is the operator's own note for the fleet console ("Kuafor Selin,
+  // Retell"), because each client gets their own provider account and a key
+  // fragment is not something a human can recognise.
+  connections: defineTable({
+    orgId: v.id("orgs"),
+    provider: v.string(),
+    field: v.string(),
+    value: v.string(),
+    label: v.optional(v.string()),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  })
+    .index("by_org_provider_field", ["orgId", "provider", "field"])
+    .index("by_org", ["orgId"]),
+
   // Voice lane (spec Phase C): one Retell agent per org; function calls and
   // the post-call webhook resolve the org by retellAgentId.
   retellAgents: defineTable({

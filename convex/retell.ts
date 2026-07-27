@@ -1,12 +1,15 @@
 import { v } from "convex/values";
 import {
+  action,
   internalMutation,
   internalQuery,
   mutation,
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 import { serviceKey } from "./services";
@@ -78,6 +81,194 @@ export const setConfig = mutation({
     return null;
   },
 });
+
+// ---- The live agent list ----
+
+// Each client gets their own Retell account, so the roster is whatever THEIR
+// key returns. Nothing is mirrored into our tables: Retell owns the agent, we
+// own only which one this org has connected (retellAgents.retellAgentId).
+// That is why the picker below is a live call and not a cached list — a stale
+// cache here means the operator wires an agent that was renamed or deleted.
+
+export const agentListContext = internalQuery({
+  args: {},
+  returns: v.union(
+    v.object({
+      demoMode: v.boolean(),
+      apiKey: v.union(v.string(), v.null()),
+      connectedAgentId: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .unique();
+    return {
+      demoMode: org.demoMode === true,
+      // Demo orgs hold no credentials by construction; resolve anyway so the
+      // shape is uniform, and let the caller's demo check win first.
+      apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
+      connectedAgentId: agent?.retellAgentId ?? null,
+    };
+  },
+});
+
+// Explicit, because listAgents' handler calls a query in this same file and
+// Convex's generated `internal` type is derived from these exports — without an
+// annotation the inference is circular and the WHOLE api type degrades to any,
+// which shows up as implicit-any errors in unrelated components.
+type AgentListResult = {
+  configured: boolean;
+  error: string | null;
+  connectedAgentId: string | null;
+  agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
+  phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+};
+
+const DEMO_AGENTS = [
+  {
+    id: "agent_demo_reception",
+    name: "Salon reception",
+    collects: ["customer_name", "service", "preferred_time"],
+    webhookUrl: null,
+  },
+];
+
+// Never throws on a provider failure. This renders inside a salon's own
+// Settings, and a red banner is not what an owner should get because a key was
+// rotated — `error` carries the reason so the surface can say which of "not
+// set up yet", "key rejected" and "Retell is down" it is looking at.
+export const listAgents = action({
+  args: {},
+  returns: v.object({
+    configured: v.boolean(),
+    error: v.union(v.string(), v.null()),
+    connectedAgentId: v.union(v.string(), v.null()),
+    agents: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        collects: v.array(v.string()),
+        webhookUrl: v.union(v.string(), v.null()),
+      }),
+    ),
+    phoneNumbers: v.array(
+      v.object({
+        number: v.string(),
+        nickname: v.string(),
+        agentId: v.union(v.string(), v.null()),
+      }),
+    ),
+  }),
+  handler: async (ctx): Promise<AgentListResult> => {
+    const context = await ctx.runQuery(internal.retell.agentListContext, {});
+    if (!context) return empty("no-org");
+
+    // demoMode is checked BEFORE credentials, matching every send path in this
+    // codebase: the showroom org shares a deployment with real salons, so the
+    // guard that keeps it off a provider has to sit in front of the code that
+    // reaches one, not behind it.
+    if (context.demoMode) {
+      return {
+        configured: true,
+        error: null,
+        connectedAgentId: context.connectedAgentId ?? DEMO_AGENTS[0].id,
+        agents: DEMO_AGENTS.map((a) => ({ ...a })),
+        phoneNumbers: [
+          { number: "+902121112233", nickname: "Salon line", agentId: DEMO_AGENTS[0].id },
+        ],
+      };
+    }
+
+    // No row means this org was never provisioned. It does NOT mean "fall back
+    // to a deployment-wide key" — see lib/connections.ts for why that fallback
+    // would be a cross-org leak here even though Nudge relies on it.
+    if (!context.apiKey) return empty(null, context.connectedAgentId);
+
+    const headers = { authorization: `Bearer ${context.apiKey}` };
+    let aRes: Response;
+    let nRes: Response;
+    try {
+      [aRes, nRes] = await Promise.all([
+        // is_latest=true or Retell returns one row per agent VERSION, which
+        // shows the same agent five times in the picker.
+        fetch("https://api.retellai.com/list-agents?is_latest=true", { headers }),
+        fetch("https://api.retellai.com/v2/list-phone-numbers", { headers }),
+      ]);
+    } catch {
+      return empty("unreachable", context.connectedAgentId);
+    }
+    if (aRes.status === 401 || nRes.status === 401)
+      return empty("unauthorized", context.connectedAgentId);
+    if (!aRes.ok) return empty(`list-agents-http-${aRes.status}`, context.connectedAgentId);
+    if (!nRes.ok) return empty(`list-numbers-http-${nRes.status}`, context.connectedAgentId);
+
+    const aData: unknown = await aRes.json();
+    const nData: unknown = await nRes.json();
+    const agentItems = (
+      Array.isArray(aData) ? aData : (aData as { items?: unknown[] })?.items ?? []
+    ) as Array<{
+      agent_id?: string;
+      agent_name?: string;
+      webhook_url?: string;
+      post_call_analysis_data?: Array<{ name?: string; type?: string }>;
+    }>;
+    const numItems = (
+      Array.isArray(nData) ? nData : (nData as { items?: unknown[] })?.items ?? []
+    ) as Array<{
+      phone_number?: string;
+      nickname?: string;
+      inbound_agent_id?: string;
+      outbound_agents?: Array<{ agent_id?: string }>;
+    }>;
+
+    const seen = new Set<string>();
+    const agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[] = [];
+    for (const a of agentItems) {
+      if (!a.agent_id || seen.has(a.agent_id)) continue;
+      seen.add(a.agent_id);
+      agents.push({
+        id: a.agent_id,
+        name: a.agent_name?.trim() || a.agent_id,
+        // What the agent captures on a call. Retell's system presets
+        // (call_summary and friends) arrive elsewhere in the payload and are
+        // not things the salon configured, so they are not "what it collects".
+        collects: (a.post_call_analysis_data ?? [])
+          .filter((f) => f.name && f.type !== "system-presets")
+          .map((f) => f.name!),
+        webhookUrl: a.webhook_url?.trim() || null,
+      });
+    }
+
+    const phoneNumbers = numItems
+      .filter((n) => n.phone_number)
+      .map((n) => ({
+        number: n.phone_number!,
+        nickname: n.nickname?.trim() || n.phone_number!,
+        agentId: n.inbound_agent_id ?? n.outbound_agents?.[0]?.agent_id ?? null,
+      }));
+
+    return {
+      configured: true,
+      error: null,
+      connectedAgentId: context.connectedAgentId,
+      agents,
+      phoneNumbers,
+    };
+  },
+});
+
+function empty(
+  error: string | null,
+  connectedAgentId: string | null = null,
+): AgentListResult {
+  return { configured: false, error, connectedAgentId, agents: [], phoneNumbers: [] };
+}
 
 // ---- Internal plumbing for the HTTP endpoints ----
 
