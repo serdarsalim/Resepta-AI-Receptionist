@@ -42,6 +42,8 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { formatAppointmentTime } from "./lib/format";
 import { sendEmail, emailLaneConfigured } from "./lib/email";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
+import { sendEvolutionText } from "./lib/evolution";
+import { loadEvolutionCreds } from "./lib/waLane";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
 // and the cron runs every minute — 50 is far more than a healthy deployment
@@ -122,8 +124,19 @@ export const claimForRetry = internalMutation({
     });
 
     const language = customer.language ?? org.language;
+    // A retry has to go back out the SAME number the first attempt used. The
+    // lane is read off the row rather than re-derived: an org that added a
+    // Cloud number between the two attempts would otherwise have its queued
+    // Evolution messages surface from a number the customer has never seen,
+    // mid-conversation.
+    const evolution =
+      message.lane === "evolution"
+        ? await loadEvolutionCreds(ctx, message.orgId, org.evolutionInstance)
+        : null;
     return {
       messageId: args.messageId,
+      lane: message.lane ?? "cloud",
+      evolution,
       isEmail: message.kind.startsWith("email_"),
       body: message.body,
       to: customer.phone,
@@ -185,6 +198,10 @@ export const retryDue = internalAction({
 
 type RetryJob = {
   isEmail: boolean;
+  // Which number the FIRST attempt went out on, read off the row rather than
+  // re-derived. See claimForRetry.
+  lane: "cloud" | "evolution";
+  evolution: { baseUrl: string; apiKey: string; instance: string } | null;
   body?: string;
   to: string;
   email?: string;
@@ -222,6 +239,28 @@ async function attempt(
       html: `<p>${job.body.replace(/\n/g, "<br/>")}</p>`,
     });
     return sent.ok ? { ok: true } : { ok: false, reason: sent.reason };
+  }
+
+  if (job.lane === "evolution") {
+    // The lane the row was sent on is gone — the instance was cleared or its
+    // credentials removed between attempts. Failing is right: silently
+    // re-routing to Cloud would put this in front of the customer from a
+    // different number, which is the one thing lib/waLane exists to prevent.
+    if (!job.evolution) return { ok: false, reason: "evolution-not-configured" };
+    if (!job.body) return { ok: false, reason: "no-body" };
+    // Text only. Templates are a Meta concept and a stored mediaLink is a
+    // short-lived signed URL that Evolution fetches server-side, so a retried
+    // image would arrive as a failed fetch rather than a photo.
+    const sent = await sendEvolutionText({
+      baseUrl: job.evolution.baseUrl,
+      apiKey: job.evolution.apiKey,
+      instance: job.evolution.instance,
+      to: job.to,
+      body: job.body,
+    });
+    return sent.ok
+      ? { ok: true, wamid: sent.messageId }
+      : { ok: false, reason: sent.reason };
   }
 
   if (!job.accessToken || !job.phoneNumberId) {

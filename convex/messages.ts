@@ -44,6 +44,8 @@ export const logOutQueued = internalMutation({
     // An outbound image from the library. Same field the inbound path uses, so
     // the thread renders both directions without knowing which is which.
     mediaStorageId: v.optional(v.id("_storage")),
+    // Which number this goes out on. Unset = cloud.
+    lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -60,6 +62,7 @@ export const logOutQueued = internalMutation({
       emailFrom: args.emailFrom,
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
+      lane: args.lane,
       status: "queued",
       // A row with no scheduledFor is being sent RIGHT NOW by the action that
       // just created it, so it is in flight from this moment. Stamping it here

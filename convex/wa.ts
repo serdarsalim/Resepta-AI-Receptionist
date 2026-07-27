@@ -18,6 +18,14 @@ import {
 import { isOrgSetupFailure } from "./lib/alerts";
 import { awayReplyText } from "./lib/awayReply";
 import { renderTokens } from "./lib/renderTokens";
+import { sendEvolutionText } from "./lib/evolution";
+import {
+  evolutionReplyHint,
+  laneAvailability,
+  laneForOutbound,
+  laneForReply,
+  loadEvolutionCreds,
+} from "./lib/waLane";
 import { isDemo } from "./demo";
 import { requireOrg } from "./lib/orgAuth";
 
@@ -41,7 +49,10 @@ export const loadSessionContext = internalQuery({
     ]);
     // org rides along for token rendering ([isletme]); the send itself needs
     // only the account.
-    return { customer, waAccount, org };
+    const evolution = org
+      ? await loadEvolutionCreds(ctx, orgId, org.evolutionInstance)
+      : null;
+    return { customer, waAccount, org, evolution };
   },
 });
 
@@ -76,10 +87,19 @@ export const sendSession = action({
       customerId: args.customerId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { customer, waAccount, org } = context;
+    const { customer, waAccount, org, evolution } = context;
+    // org is non-null for every real send here; the demo path below is the
+    // only caller that reaches this with one missing.
+    const available = org
+      ? laneAvailability({ org, waAccount, evolutionConfigured: Boolean(evolution) })
+      : { cloud: false, evolution: false };
+    // Rule 1: answer on the number they wrote to. A customer who messaged the
+    // shop phone and gets answered from the Cloud number sees an unknown
+    // number replying to a conversation they had somewhere else.
+    const lane = laneForReply(available, customer);
     // Before the credential check, for the same reason as the template lane:
     // the demo org has no waAccount by design.
-    if (!waAccount && !isDemo(org)) return { ok: false, reason: "wa-not-configured" };
+    if (!lane && !isDemo(org)) return { ok: false, reason: "wa-not-configured" };
     // Free-form session text, so named tokens work here — this is not a Meta
     // template and nothing about {{1}} applies. Rendered ONCE, at send time,
     // and the stored row keeps the rendered text: the thread has to show what
@@ -92,9 +112,14 @@ export const sendSession = action({
     });
     if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
     if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
+    // Meta's 24h session window is Meta's rule. Evolution is a linked handset
+    // and has no such window — the salon can answer an old message from their
+    // phone whenever they like, and refusing to do the same from inside
+    // Randevu would just teach them to pick the phone up instead.
     if (
-      !customer.lastInboundAt ||
-      Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
+      lane !== "evolution" &&
+      (!customer.lastInboundAt ||
+        Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS)
     ) {
       // Checked for an immediate send only. A scheduled one is checked again
       // at dispatch, because a window that is open now may be shut by then —
@@ -111,6 +136,7 @@ export const sendSession = action({
       body,
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
+      lane: lane ?? undefined,
     });
     // Parked. The row is visible in the thread immediately, counting down,
     // which is the whole point: a scheduled message you cannot see is a
@@ -124,6 +150,26 @@ export const sendSession = action({
         customerId: customer._id,
       });
       return { ok: true };
+    }
+    if (lane === "evolution" && evolution) {
+      // No image lane here. Evolution can send media, but it fetches the URL
+      // itself and Convex storage URLs are signed and short-lived, so a
+      // picture would arrive as a broken fetch rather than a photo. Text is
+      // what this lane is for.
+      const sent = await sendEvolutionText({
+        baseUrl: evolution.baseUrl,
+        apiKey: evolution.apiKey,
+        instance: evolution.instance,
+        to: customer.phone,
+        body,
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId,
+        ok: sent.ok,
+        wamid: sent.ok ? sent.messageId : undefined,
+        error: sent.ok ? undefined : sent.reason,
+      });
+      return sent.ok ? { ok: true } : { ok: false, reason: sent.reason };
     }
     // Only a demo org reaches this far without one, and that path returned
     // above — so this is narrowing for the compiler, not a real case.
@@ -258,7 +304,10 @@ export const loadSendContext = internalQuery({
         .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
         .collect(),
     ]);
-    return { appointment, customer, org, waAccount, templates };
+    const evolution = org
+      ? await loadEvolutionCreds(ctx, appointment.orgId, org.evolutionInstance)
+      : null;
+    return { appointment, customer, org, waAccount, templates, evolution };
   },
 });
 
@@ -281,7 +330,7 @@ export const sendAppointmentMessage = internalAction({
       appointmentId: args.appointmentId,
     });
     if (!context) return null;
-    const { appointment, customer, org, waAccount, templates } = context;
+    const { appointment, customer, org, waAccount, templates, evolution } = context;
     if (!customer || !org) return null;
 
     // Status gate per kind: confirmations/reminders ride live appointments; a
@@ -390,7 +439,49 @@ export const sendAppointmentMessage = internalAction({
     // ---- WhatsApp attempt. Failures log a visible row and do NOT block the
     // email lane — an unconfigured number is exactly what the Messages tab
     // needs to show the owner.
-    if (!waAccount) {
+    const available = laneAvailability({
+      org,
+      waAccount,
+      evolutionConfigured: Boolean(evolution),
+    });
+    // Rule 2: Cloud wins whenever it exists. A confirmation or a reminder is
+    // first contact after silence, which is precisely what Evolution drops
+    // silently (Reachout Timelock, ACK 463, while the send returns success).
+    const lane = laneForOutbound(available);
+
+    if (lane === "evolution" && evolution) {
+      // No Meta template here and none needed — this lane has no approval to
+      // satisfy. What it does need is the words the buttons would have been:
+      // Baileys never delivers quick replies, so the customer is told which
+      // words to type, and webhook.ts already understands every one of them.
+      const text = `${body}\n\n${evolutionReplyHint(language)}`;
+      const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+        orgId: appointment.orgId,
+        customerId: customer._id,
+        appointmentId: appointment._id,
+        kind: messageKind,
+        body: text,
+        lane: "evolution",
+      });
+      const result = await sendEvolutionText({
+        baseUrl: evolution.baseUrl,
+        apiKey: evolution.apiKey,
+        instance: evolution.instance,
+        to: customer.phone,
+        body: text,
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId,
+        ok: result.ok,
+        wamid: result.ok ? result.messageId : undefined,
+        error: result.ok ? undefined : result.reason,
+      });
+      if (result.ok && args.kind === "confirmation") {
+        await ctx.runMutation(internal.appointments.stampConfirmationSent, {
+          appointmentId: appointment._id,
+        });
+      }
+    } else if (!waAccount) {
       await fail("wa-not-configured");
     } else if (!waTemplate) {
       await fail(`no-approved-template-${language}`);
@@ -527,6 +618,8 @@ export const dueScheduled = internalQuery({
       // attached this is the caption.
       body: v.optional(v.string()),
       mediaStorageId: v.optional(v.id("_storage")),
+      // Which number this was written to go out on. Unset = cloud.
+      lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     }),
   ),
   handler: async (ctx) => {
@@ -546,6 +639,7 @@ export const dueScheduled = internalQuery({
         customerId: row.customerId!,
         body: row.body,
         mediaStorageId: row.mediaStorageId,
+        lane: row.lane,
       }));
   },
 });
@@ -583,21 +677,28 @@ export const sendDueScheduled = internalAction({
       const context = await ctx.runQuery(internal.wa.loadSessionContext, {
         customerId: item.customerId,
       });
-      if (!context?.waAccount) {
+      // The lane comes off the ROW, set when the salon wrote the message. A
+      // reply parked at 23:00 for 10:00 has to leave from the number the
+      // conversation is on, not from whatever the org has configured by then.
+      const lane = item.lane ?? "cloud";
+      if (!context || (lane === "cloud" ? !context.waAccount : !context.evolution)) {
         await ctx.runMutation(internal.messages.applySendResult, {
           messageId: item.messageId,
           ok: false,
-          error: "wa-not-configured",
+          error: lane === "cloud" ? "wa-not-configured" : "evolution-not-configured",
         });
         continue;
       }
-      const { customer, waAccount } = context;
+      const { customer, waAccount, evolution } = context;
       // Re-checked HERE, not at scheduling time. The 24h window a message was
       // written inside may have shut before its moment arrived, and Meta will
-      // reject the send rather than deliver it late.
+      // reject the send rather than deliver it late. Evolution is a linked
+      // handset with no such window, so it is exempt for the same reason the
+      // immediate path is.
       if (
-        !customer.lastInboundAt ||
-        Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
+        lane === "cloud" &&
+        (!customer.lastInboundAt ||
+          Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS)
       ) {
         await ctx.runMutation(internal.messages.applySendResult, {
           messageId: item.messageId,
@@ -606,11 +707,25 @@ export const sendDueScheduled = internalAction({
         });
         continue;
       }
-      const link = item.mediaStorageId
-        ? await ctx.storage.getUrl(item.mediaStorageId)
-        : null;
-      const result =
-        item.mediaStorageId && link
+      const link =
+        lane === "cloud" && item.mediaStorageId
+          ? await ctx.storage.getUrl(item.mediaStorageId)
+          : null;
+      const result = evolution && lane === "evolution"
+        ? await sendEvolutionText({
+            baseUrl: evolution.baseUrl,
+            apiKey: evolution.apiKey,
+            instance: evolution.instance,
+            to: customer.phone,
+            body: item.body ?? "",
+          }).then((sent) =>
+            sent.ok
+              ? ({ ok: true as const, wamid: sent.messageId })
+              : ({ ok: false as const, reason: sent.reason }),
+          )
+        : !waAccount
+          ? ({ ok: false as const, reason: "wa-not-configured" })
+          : item.mediaStorageId && link
           ? await sendWaCloudImage({
               accessToken: waAccount.accessToken,
               phoneNumberId: waAccount.phoneNumberId,
