@@ -142,27 +142,27 @@ export default defineSchema({
     // No-show winback: template send N days after a no_show.
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
-    // Which WhatsApp lane this org sends on. Unset = "cloud", the only lane
-    // that was ever supported and the only one fit for production.
+    // Evolution instance name for this org, when it runs one. Credentials
+    // (baseUrl, apiKey) live in `connections` like every other provider secret.
     //
-    // "evolution" is a DEMO AND TRIAL lane, and the word demo is doing real
-    // work there. docs/competitive-plan.md section 7 rejected Evolution as a
-    // product lane on findings that have not changed: its Baileys connector
-    // returns 201 for quick-reply buttons and never delivers them (issue
-    // #2404), and WhatsApp's Reachout Timelock drops cold outbound SILENTLY
-    // with ACK 463 while the instance still reports itself healthy. Randevu's
-    // confirm/cancel loop is buttons and its first reminder to a walk-in is
-    // always a cold reachout, so both findings land squarely on this product.
+    // THE TWO LANES RUN SIDE BY SIDE, and neither excludes the other, because
+    // they are two different phone numbers doing two different jobs. A number
+    // on Meta's Cloud API is deregistered from the consumer WhatsApp app, so
+    // one number can never be both — but a salon can perfectly well have a
+    // Cloud number that sends confirmations and reminders, and keep the shop
+    // phone it already gives customers on Evolution.
     //
-    // It exists anyway because a salon cannot see the product work until a
-    // number is sending, and a Meta WABA plus template approval is days. This
-    // lane is how a prospect watches a reminder arrive on their own phone in
-    // the room. Sends on it go out as TEXT carrying the reply words, never as
-    // buttons, and the org moves to "cloud" the day its WABA clears.
-    waLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
-    // Evolution instance name for this org. One instance per salon; the
-    // credentials (baseUrl, apiKey) live in `connections` like every other
-    // provider secret.
+    // That split plays to what each lane is actually good at. Cloud sends
+    // business-initiated templates without the silent Reachout Timelock drops
+    // that make Evolution unfit for reminders. Evolution is a linked device,
+    // so the shop phone stays an ordinary WhatsApp the staff use as they
+    // always have, and Randevu still sees every word of it — which Cloud
+    // cannot do at any price (see convex/webhook.ts handleEvolutionEvent).
+    //
+    // There is deliberately no lane SELECTOR. Which lanes an org has is read
+    // off what is configured: a waAccounts row means Cloud, an instance name
+    // here means Evolution, both means both. A selector would have been a
+    // third source of truth able to disagree with the two real ones.
     evolutionInstance: v.optional(v.string()),
     // From-address for customer emails; delivery goes straight to the email
     // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
@@ -293,6 +293,11 @@ export default defineSchema({
     consentAt: v.optional(v.number()),
     // Last inbound WhatsApp message — opens Meta's 24h session window.
     lastInboundAt: v.optional(v.number()),
+    // Which lane this customer last wrote in on. THE reply-routing fact: a
+    // free-form answer goes back out the way their message came in, or it
+    // arrives from a number they have never seen replying to a conversation
+    // they had somewhere else. Unset = cloud.
+    lastInboundLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     // Last out-of-hours away-reply. One per session window, or a customer
     // sending four messages in a row collects four identical bot replies.
     lastAutoReplyAt: v.optional(v.number()),
@@ -543,6 +548,12 @@ export default defineSchema({
       v.literal("received"),
     ),
     wamid: v.optional(v.string()),
+    // Which WhatsApp lane carried this. Unset = cloud, which every row
+    // predating the second lane was. Recorded rather than derived because a
+    // reply has to go back out the way the message came IN: a customer who
+    // wrote to the shop phone and gets answered from the Cloud number sees a
+    // stranger's number replying to a conversation they had somewhere else.
+    lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     // An image the customer sent — a photo of the colour they want is the
     // single most common attachment a salon receives. Stored in Convex file
     // storage rather than linked: Meta's media URLs are short-lived and

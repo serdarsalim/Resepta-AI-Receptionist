@@ -43,6 +43,7 @@ import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
+import type * as lib_waLane from "../lib/waLane.js";
 import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/waCloud": typeof lib_waCloud;
+  "lib/waLane": typeof lib_waLane;
   media: typeof media;
   messages: typeof messages;
   notes: typeof notes;

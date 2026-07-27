@@ -191,6 +191,8 @@ export async function logInboundRow(
     // the caption and a pending flag; the bytes follow from an action,
     // because a mutation cannot reach Meta.
     mediaPending?: boolean;
+    // Which lane carried it. Unset = cloud.
+    lane?: "cloud" | "evolution";
   },
 ): Promise<Id<"messages">> {
   return await ctx.db.insert("messages", {
@@ -201,6 +203,7 @@ export async function logInboundRow(
     body: args.body,
     wamid: args.wamid,
     status: "received",
+    ...(args.lane ? { lane: args.lane } : {}),
     ...(args.mediaPending ? { mediaPending: true } : {}),
   });
 }

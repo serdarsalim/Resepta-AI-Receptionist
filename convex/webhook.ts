@@ -128,6 +128,8 @@ export async function processInboundMessage(
     wamid?: string;
     imageId?: string;
     imageCaption?: string;
+    // Unset = cloud, which is what the Meta caller passes by omission.
+    lane?: "cloud" | "evolution";
   },
 ): Promise<void> {
   const { orgId, phone, text, payload } = args;
@@ -168,6 +170,7 @@ export async function processInboundMessage(
     body: payload || text || image?.caption || "",
     wamid: message.id as string | undefined,
     mediaPending: Boolean(image?.id),
+    lane: args.lane,
   });
   // Scheduled, not awaited: Meta retries a webhook that does not get a
   // fast 200, so two network round-trips inside this handler would
@@ -179,8 +182,12 @@ export async function processInboundMessage(
       mediaId: image.id,
     });
   }
-  // Opens Meta's 24h session window for any future free-form reply.
-  await ctx.db.patch(contactId, { lastInboundAt: Date.now() });
+  // Opens Meta's 24h session window for any future free-form reply, and
+  // records WHICH number they wrote to, so the answer goes back the same way.
+  await ctx.db.patch(contactId, {
+    lastInboundAt: Date.now(),
+    lastInboundLane: args.lane ?? "cloud",
+  });
 
   // Tell the staff who opted in. Scheduled, never inline: a broken
   // alert must not cost the salon the customer's actual message. The
@@ -335,11 +342,12 @@ export const handleEvolutionEvent = internalMutation({
       .query("orgs")
       .withIndex("by_evolution_instance", (q) => q.eq("evolutionInstance", instance))
       .unique();
+    // No lane check beyond this. The index lookup IS the guard: an org that
+    // has stopped running Evolution clears its instance name, and a stale
+    // linked phone then resolves to no org at all. Running Cloud as well is
+    // not a reason to reject this — the two lanes are two numbers and both
+    // are live (see schema.ts orgs.evolutionInstance).
     if (!org) return null;
-    // An org that has been moved to the Cloud lane must stop accepting events
-    // from an instance somebody left running, or a stale linked phone would
-    // keep writing into a live salon's timeline.
-    if ((org.waLane ?? "cloud") !== "evolution") return null;
 
     const items = Array.isArray(payload.data) ? payload.data : [payload.data ?? {}];
     for (const item of items) {
@@ -390,6 +398,7 @@ export const handleEvolutionEvent = internalMutation({
           body,
           wamid: key.id,
           status: "sent",
+          lane: "evolution",
         });
         continue;
       }
@@ -402,6 +411,7 @@ export const handleEvolutionEvent = internalMutation({
         // there is no button id to carry. The typed-text path handles it.
         payload: "",
         wamid: key.id,
+        lane: "evolution",
       });
     }
     return null;
