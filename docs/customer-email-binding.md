@@ -1,26 +1,39 @@
-# Binding a customer's real email address
+# Binding a customer to their email address
 
-**Status:** scoped, not started. Written 2026-07-27 for a fresh session to pick up.
+**Status:** scoped, not started. Rewritten 2026-07-27 after narrowing the scope.
 **Read first:** [`AGENTS.md`](../AGENTS.md), then this whole file before touching code.
 
 ---
 
-## The problem, concretely
+## Which email this is about
 
-A salon has Ayşe on file with her phone and her personal Gmail. She emails the
-salon from her work address about a colour appointment.
+There are two unrelated "email" problems in this product. This doc is only
+about the second one.
 
-What happens today: `email.recordInbound` matches the From address against
-`customers.email`, finds nothing, and **creates a second customer row** — with
-`phone: ""`, no consent, and her work address. The salon now has two Ayşes. Her
-WhatsApp history sits on one, her email thread on the other, and neither record
-shows the whole person. Nobody notices until someone opens the wrong one.
+**The salon's own address is already settled.** `orgs.inboundAddress` is what
+customers write to, `orgs.emailFrom` is what goes out, one of each per org.
+Staff sign in with Google and there can be five of them, but a login address is
+not a sending address and never becomes one — a five-chair salon still has one
+or two real mailboxes, not five. More addresses per org is a someday feature,
+not this one. Nothing here touches it.
 
-That is the bug. Everything below is in service of fixing it.
+**This doc is about the customer's address**: the one Ayşe writes to the salon
+*from*.
+
+## The problem
+
+A salon has Ayşe on file with her phone and her personal Gmail. She emails
+about a colour appointment from her work address.
+
+`email.recordInbound` matches the From address against `customers.email`, finds
+nothing, and creates a second customer — `phone: ""`, no consent, her work
+address. The salon now has two Ayşes. WhatsApp history on one, the email thread
+on the other, neither record showing the whole person. Nobody notices until
+someone opens the wrong one.
 
 ## What already works — don't rebuild it
 
-Inbound email → customer binding EXISTS and is basically right:
+Inbound email → customer binding exists and is mostly right:
 
 | Piece | Where |
 |---|---|
@@ -32,176 +45,142 @@ Inbound email → customer binding EXISTS and is basically right:
 | Thread grouping across `Re:`/`Yn:` | `normalizeSubject` |
 | Dedupe on Resend's `emailId` | `messages.by_email_id` |
 
-The transport, the routing and the threading are all fine. **The gap is that a
-customer can only hold ONE address.**
-
-## Where a customer's email is written today
-
-Any change has to keep all five of these working:
-
-- `customers.create` / `customers.update` — staff typing it
-- `forms.submit` — the public request form
-- `calcom.ts` (~line 163) — the cal.com attendee
-- `email.recordInbound` — an unknown sender
-- Voice does NOT capture email (`retell.applyVoiceContactValues` handles custom
-  contact fields and phone only). Worth adding later; out of scope here.
-
-And where it is read: `email.loadSendContext`, `delivery.claimForRetry`,
-`campaigns.fanOut`, `wa.sendAppointmentMessage`'s email lane, `schedule.ts`
-(passed to cal.com), `messages.ts` (~line 570).
-
-## Three defects, ranked
-
-### 1. One address per customer — the actual ask
-
-`customers.email` is a single optional string. Every additional address a
-person writes from becomes a new customer. **This is the whole reason this doc
-exists.**
-
-### 2. The lookup is a full table scan
-
-[`email.ts:69`](../convex/email.ts) does `.collect()` over every customer in
-the org and finds the match in JS. There is no `by_org_email` index. At 200
-customers that is invisible; at 5,000 it is 5,000 document reads per inbound
-email. Same shape as the cron bug fixed in `ee4ae5a` — cost tracking the
-customer base rather than the work.
-
-### 3. `phone: ""` is a lie in a required field
-
-`customers.phone` is `v.string()`, required, and `AGENTS.md` says a stored
-number carries a dial code or does not exist. `email.recordInbound` is the ONE
-place that writes `phone: ""` ([`email.ts:93`](../convex/email.ts)).
-
-It is currently harmless-by-luck: every path that queries `by_org_phone` runs
-`assertE164` or a regex first, so nothing ever looks up `""`. But two
-email-only customers in one org means two rows sharing `phone: ""`, and the
-first `.withIndex("by_org_phone", …).unique()` written against an unknown or
-empty phone will **throw**. It is a landmine, not a live bug.
+Transport, routing and threading are fine. What's missing is an identity model.
 
 ---
 
-## Decisions needed before coding
+## The decision: phone and email are both unique, phone wins ties
 
-Both are Serdar's call. Recommendations given; do not start until confirmed.
+One email per customer. No second table, no address list.
 
-### A. Addresses model — recommend the `customerEmails` table
+- **Both fields are unique within an org.** No two customers share a phone, no
+  two share an email. Phone already works this way — `customers.create` throws
+  `phone-exists` and `update` refuses a taken number. Email gets the same
+  treatment, same error shape (`email-exists`).
+- **Either one is enough.** At least one of the two must be present. Somebody
+  who phones in is never asked for an email, and a stranger who emails in still
+  gets a record.
+- **Phone wins a tie.** A form arrives with a phone on Ayşe and an email on
+  Zeynep. Match the phone, leave the email alone, don't try to be clever. Phone
+  is the channel that actually sends and the one we validate, so it's the
+  stronger key. This case only exists *because* both fields are unique.
+- **Email is the fallback lookup**, used when there's no phone match to be had:
+  an inbound email, or a form filled in with an address and no number.
 
-Options:
+### Why phone is primary
 
-1. **Separate `customerEmails` table** *(recommended)*. One row per address.
-   `customers.email` stays as the denormalised PRIMARY — the address we send
-   to — so nothing downstream changes. Same denormalisation trick Nudge uses
-   for `leads.phone`. Lookup becomes an indexed point read, which also kills
-   defect 2 for free.
-2. **An `emails: v.array(v.string())` on the customer.** Cheaper to write,
-   but Convex cannot index into an array, so the inbound lookup stays a scan
-   and defect 2 survives. Rejected for that reason.
+Every path that creates a customer already has a phone — voice, WhatsApp,
+cal.com, the public form, staff typing. Inbound email is the single exception.
+So phone is effectively mandatory by circumstance, and the schema shouldn't
+pretend otherwise by storing `""` for the one case that genuinely has none.
 
-### B. What to do about `phone: ""` — recommend making phone optional
+### A customer with no phone is half a customer
 
-1. **`customers.phone: v.optional(v.string())`** *(recommended)*. Honest: an
-   email-only contact genuinely has no phone. Costs a pass over ~8 read sites.
-2. Keep `""` as a sentinel and document it. Cheaper now, and every future
-   author has to know. This is how defect 3 became a landmine in the first
-   place.
+No WhatsApp, so no confirmation, no reminder, no campaign. That record should
+say so on its face rather than sitting there looking complete. The pattern
+already exists for missing consent (`customers.cannotBeMessaged` in
+`src/lib/i18n.ts`) — same treatment, new string.
 
-### C. Merge trigger — recommend manual only, no auto-merge
+This is also how the record heals itself: Ayşe emails, the salon replies,
+somebody types in her number during the conversation. No migration needed.
 
-Start with an explicit "this is the same person as…" action on the contact
-page. **Do not auto-merge on a name match.** Two customers called Mehmet
-Yılmaz is normal in a Turkish salon, and an incorrect merge destroys history
-that cannot be recovered. A "possible duplicate" *hint* is fine later; the
-merge itself stays a human decision.
-
----
-
-## Proposed design
+## What changes
 
 ### Schema
 
 ```ts
-// One address a customer can be reached at or writes from. Separate table
-// rather than an array on the customer because Convex cannot index into an
-// array, and the inbound lookup has to be a point read.
-customerEmails: defineTable({
-  orgId: v.id("orgs"),
-  customerId: v.id("customers"),
-  address: v.string(),            // always lowercased via bareAddress()
-  source: v.union(
-    v.literal("manual"), v.literal("form"),
-    v.literal("calcom"), v.literal("inbound"),
-  ),
+customers: defineTable({
+  // ...
+  // E.164 with dial code, or absent. Absent is legitimate for a customer who
+  // only ever emailed us — but it means no WhatsApp, so the UI flags it.
+  phone: v.optional(v.string()),
+  email: v.optional(v.string()),   // lowercased via bareAddress() on every write
+  // ...
 })
-  .index("by_org_address", ["orgId", "address"])   // the inbound lookup
-  .index("by_customer", ["customerId"]),           // the contact page + merge
+  .index("by_org", ["orgId"])
+  .index("by_org_phone", ["orgId", "phone"])
+  .index("by_org_email", ["orgId", "email"]),   // new
 ```
 
-`customers.email` **stays**, meaning "the address we send to". Keeping it is
-what makes this change small: every send path keeps working untouched.
+`by_org_email` is what kills the full-table scan at
+[`email.ts:69`](../convex/email.ts) — today that's `.collect()` over every
+customer in the org, so 5,000 document reads per inbound email once a salon
+grows. Same shape as the cron bug fixed in `ee4ae5a`: cost tracking the customer
+base rather than the work.
 
-### Behaviour
+### Capture points
 
-- **Inbound** looks up `by_org_address`. Hit → file on that customer. Miss →
-  create the customer as today AND write a `customerEmails` row.
-- **Adding an address** to an existing customer (staff, form, cal.com) writes a
-  `customerEmails` row and sets `customers.email` if it is the first one.
-- **An address belongs to at most one customer per org.** Writing one that is
-  already claimed is refused, not silently moved — that is what merge is for.
-- **No verification.** The salon typed it, or the customer emailed us from it,
-  which proves it more directly than a confirmation link would.
+Four places write a customer's email, and each needs the uniqueness check:
 
-### Merge
+- `customers.create` / `customers.update` — staff typing it
+- `forms.submit` — the public form
+- `calcom.ts` (~line 158) — the cal.com attendee
+- `email.recordInbound` — an unknown sender
 
-`customers.merge({ keepId, mergeId })`, owner-only:
+Voice doesn't capture email at all (`retell.applyVoiceContactValues` handles
+custom contact fields and phone). Out of scope, worth adding later.
 
-- Re-point `appointments`, `messages`, `notes`, `calls`, `activityLog`,
-  `customerEmails` from `mergeId` to `keepId`. **Page it** — a long-standing
-  customer can exceed one mutation's write limit; follow the
-  `reminders.backfillOrg` tail-reschedule pattern.
-- `consentAt` = the EARLIEST non-null of the two. It is evidence of when
-  someone agreed; the later stamp would overstate it.
-- `lastInboundAt` = the later of the two. `phone` = whichever is non-empty.
-- Delete the merged row, write an `activityLog` entry (`customer_deleted` or a
-  new `customer_merged` kind).
-- Irreversible, so the UI confirms with both names spelled out.
+## What we are deliberately not building
 
----
+- **A `customerEmails` table.** One address per customer is enough. A salon
+  writing back to the wrong one of Ayşe's two addresses is not a real problem.
+- **Merge.** The identity model above prevents most new duplicates but cannot
+  undo the ones already on disk — if the salon has Ayşe's Gmail and she writes
+  from work, that still makes a second record. Merge is the only cure, it's the
+  riskiest thing in the original plan (re-pointing appointments, messages,
+  notes, calls and activity log, paged), and it should wait until a real salon
+  actually reports the problem. When it comes: manual only, never auto-merge on
+  a name match. Two customers called Mehmet Yılmaz is normal, and a wrong merge
+  destroys history that can't be recovered.
+- **Address verification.** The salon typed it, or the customer wrote to us from
+  it. That's better evidence than a confirmation link.
 
 ## Work breakdown
 
 | # | Step | Notes |
 |---|---|---|
-| 1 | `customerEmails` table + indexes | schema only |
-| 2 | Backfill existing `customers.email` into it | one-shot internal mutation, per org, paged |
-| 3 | Rewrite `email.recordInbound` lookup to `by_org_address` | kills defect 2 |
-| 4 | Write a row from all four capture points | create/update, form, cal.com, inbound |
-| 5 | Contact-page UI: list addresses, add, remove, set primary | follow the `RecordField` inline-edit rule in AGENTS.md |
-| 6 | `customers.merge` + paged re-pointing | the risky one; write it carefully |
-| 7 | Merge UI + confirm dialog | contact page action |
-| 8 | Decision B: `phone` optional + fix read sites | separate commit; ~8 sites |
+| 1 | `phone` → `v.optional`, backfill `""` → unset | one commit, together — two representations of "no phone" is worse than one |
+| 2 | Fix the ~18 `customer.phone` read sites TypeScript now flags | `wa.ts`, `schedule.ts`, `delivery.ts`, `campaigns.ts`, `messages.ts`, `appointments.ts`, `reports.ts` |
+| 3 | Add `by_org_email`, rewrite the `recordInbound` lookup | kills the scan |
+| 4 | Uniqueness + at-least-one enforced at all four capture points | mirror the existing `phone-exists` shape |
+| 5 | Flag phone-less customers in the UI | new i18n key beside `customers.cannotBeMessaged` |
 
-**Effort:** steps 1–5 are a session. Steps 6–8 are a second. Do not try to land
-all of it in one commit — step 6 alone deserves its own review.
+Steps 1–2 are mechanical and want their own commit — the compiler finds every
+site, which is the whole reason to do this before anything else touches these
+files.
 
 ## How to verify
 
-There is no test suite in this repo, so verification is manual and the
-following cases are the ones that matter:
+No test suite, so this is manual. The cases that matter:
 
-1. Customer with phone + email A. Email arrives from A → lands on that customer,
-   no new row.
-2. Same customer, email arrives from B → creates a customer (expected). Merge
-   the two → one record holds both addresses, both threads, both appointments.
-3. Address B already on customer X; try to add it to customer Y → refused.
-4. Merge a customer with 500+ messages → completes, nothing orphaned.
-5. `npx tsc --noEmit` and `npm run build` clean before each commit.
+1. Customer with phone + email A. Mail from A lands on them, no new row.
+2. Mail from an unknown address creates a customer with an email and no phone,
+   and that record visibly reads as unmessageable.
+3. Mail from that same unknown address a second time lands on the row from (2).
+4. Email B is on customer X; try to put it on customer Y → refused, same way a
+   duplicate phone already is.
+5. Form filled in with a phone on one customer and an email on another → the
+   phone wins, the email is untouched.
+6. `npx tsc --noEmit` and `npm run build` clean before each commit.
 
 ## Watch out for
 
-- **`bareAddress()` on every write.** `"Ayşe <a@b.com>"` must never be stored
-  as an address. It already exists in `lib/emailInbound.ts`; use it.
-- **Lowercase on every write and every lookup.** A mixed-case row is a row the
-  index will never find.
-- **Do not touch the WhatsApp lane.** Phone binding works; this is email only.
+- **Never run the email lookup without an address.** Every customer with no
+  email shares `undefined` in `by_org_email`, so a `.unique()` there throws.
+  Exactly the landmine `phone: ""` is today, just moved — guard it at the call
+  site, the way `assertE164` already guards every `by_org_phone` read.
+- **`bareAddress()` and lowercase on every write.** `"Ayşe <a@b.com>"` must
+  never be stored. A mixed-case row is a row the index will never find. The
+  helper is in `lib/emailInbound.ts`.
+- **The synthetic cal.com address.** [`calcomApi.ts:91`](../convex/lib/calcomApi.ts)
+  sends `+905551234567@noemail.randevu.app` when a customer has no email, and
+  cal.com can echo it back into [`calcom.ts:163`](../convex/calcom.ts). Reject
+  that domain on write, or a stranger who guesses the pattern binds themselves
+  to a real customer. Making `phone` optional also breaks line 91 outright —
+  decide there what a cal.com booking sends for an email-only customer.
+- **Existing data may already break uniqueness.** Email has never been checked.
+  Query for orgs with two customers sharing an address before turning the rule
+  on.
+- **Don't touch the WhatsApp lane.** Phone binding works. This is email only.
 - **The org invariant.** Every new query filters by `orgId` and every new index
-  starts with it. `customerEmails` is no exception.
+  starts with it.
