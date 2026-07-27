@@ -938,6 +938,13 @@ const dictionary = {
     de: "Name der Leistung",
   },
   "services.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
+  // Same word the fields table uses for the same idea: the name an integration
+  // says, as opposed to the name a person reads.
+  "services.key": {
+    tr: "Hizmet anahtarı",
+    en: "Service key",
+    de: "Leistungsschlüssel",
+  },
   "services.add": {
     tr: "Hizmet ekle",
     en: "Add service",
@@ -1005,6 +1012,13 @@ const dictionary = {
     tr: "Bu işletmenin alanları:",
     en: "Fields this business collects:",
     de: "Felder dieses Betriebs:",
+  },
+  // Same job for the booking half of the block: the agent needs the salon's
+  // service keys, not its own guesses at what a nail appointment is called.
+  "fields.voiceSetupServices": {
+    tr: "Bu işletmenin hizmetleri:",
+    en: "Services this business offers:",
+    de: "Leistungen dieses Betriebs:",
   },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
   "fields.type.text": { tr: "Metin", en: "Text", de: "Text" },

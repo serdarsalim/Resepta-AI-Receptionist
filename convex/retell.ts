@@ -9,6 +9,7 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
+import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
 // Voice lane (spec Phase C): one Retell agent per org. Function calls and the
@@ -97,11 +98,13 @@ export const loadVoiceContext = internalQuery({
 
 // What the caller asked for, matched against what the salon actually sells.
 //
-// The caller says "manikur", "Manikür" or "manikür yaptıracaktım"; the org's
-// list says "Manikür". Folded exact match first, then containment either way,
-// longest name first so "Saç boyama" wins over a bare "Saç". Only active
-// services: a service the salon has switched off is not something the phone
-// should be able to book.
+// THE KEY WINS. An agent configured from the Services table sends `manikur`,
+// and that is an address the salon can rename "Manikür & pedikür" behind
+// without the agent noticing. Everything below the key check is a net for an
+// agent that was given a sentence instead: folded exact match, then
+// containment either way, longest name first so "Saç boyama" beats a bare
+// "Saç". Only active services — a service the salon switched off is not
+// something the phone should be able to book.
 //
 // A miss is NOT a booking failure. cal.com already holds the slot by the time
 // this runs, so refusing here would strand a reservation, and an appointment
@@ -130,6 +133,10 @@ async function matchService(
     .map((service) => ({ service, name: foldForMatch(service.name) }))
     .sort((a, b) => b.name.length - a.name.length);
   const hit =
+    // Keys are already folded snake_case, so the spoken string is compared
+    // raw-trimmed too: an agent sending `sac_boyama` must not have to survive
+    // a space-collapsing pass meant for sentences.
+    folded.find((row) => serviceKey(row.service) === spoken.trim()) ??
     folded.find((row) => row.name === wanted) ??
     // Two-character names would match almost any sentence, so containment
     // only applies once a name is long enough to mean something.

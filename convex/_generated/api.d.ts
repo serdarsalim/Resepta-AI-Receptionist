@@ -30,6 +30,7 @@ import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
 import type * as lib_format from "../lib/format.js";
+import type * as lib_keys from "../lib/keys.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "lib/email": typeof lib_email;
   "lib/emailInbound": typeof lib_emailInbound;
   "lib/format": typeof lib_format;
+  "lib/keys": typeof lib_keys;
   "lib/metaSig": typeof lib_metaSig;
   "lib/money": typeof lib_money;
   "lib/orgAuth": typeof lib_orgAuth;

@@ -1,12 +1,17 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { keyFromLabel, uniqueKey } from "./lib/keys";
 
 const serviceDoc = v.object({
   _id: v.id("services"),
   _creationTime: v.number(),
   orgId: v.id("orgs"),
   name: v.string(),
+  // Never optional on the way OUT, even though the column is: a caller has to
+  // be able to render and paste it without knowing which rows predate keys.
+  key: v.string(),
   durationMinutes: v.number(),
   active: v.boolean(),
   // List price in minor units (40000 = 400,00 in the org's currency). Optional
@@ -22,15 +27,37 @@ function normalizePrice(value: number): number {
   return Math.max(0, Math.round(value));
 }
 
+// What a row's key IS, stored or not. The fallback keeps pre-key services
+// addressable by the agent instead of unbookable, and it is the same string
+// they will be given permanently the first time somebody edits them.
+export function serviceKey(service: Doc<"services">): string {
+  return service.key ?? keyFromLabel(service.name) ?? "";
+}
+
+async function keysTakenBy(
+  ctx: QueryCtx,
+  orgId: Id<"orgs">,
+  except?: Id<"services">,
+): Promise<Set<string>> {
+  const rows = await ctx.db
+    .query("services")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+  return new Set(
+    rows.filter((row) => row._id !== except).map((row) => serviceKey(row)),
+  );
+}
+
 export const list = query({
   args: {},
   returns: v.array(serviceDoc),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    return await ctx.db
+    const rows = await ctx.db
       .query("services")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    return rows.map((row) => ({ ...row, key: serviceKey(row) }));
   },
 });
 
@@ -45,9 +72,14 @@ export const create = mutation({
     const { orgId } = await requireOrg(ctx);
     const name = args.name.trim();
     if (!name) throw new Error("name-required");
+    // A name of pure punctuation folds to nothing; fall back to a positional
+    // key rather than inserting a service the agent cannot address.
+    const taken = await keysTakenBy(ctx, orgId);
+    const base = keyFromLabel(name) || `service_${taken.size + 1}`;
     return await ctx.db.insert("services", {
       orgId,
       name,
+      key: uniqueKey(base, taken),
       durationMinutes: Math.max(5, Math.round(args.durationMinutes)),
       active: true,
       ...(args.price !== undefined ? { price: normalizePrice(args.price) } : {}),
@@ -72,6 +104,16 @@ export const update = mutation({
     if (!service || service.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
+    // Freeze the key on first edit. A pre-key row has been answering to its
+    // folded name all along, so storing exactly that changes nothing today and
+    // makes every rename after this one safe. Rows that already have a key are
+    // never re-derived — that is the whole point of having one.
+    if (service.key === undefined) {
+      patch.key = uniqueKey(
+        serviceKey(service) || `service_${Date.now()}`,
+        await keysTakenBy(ctx, orgId, args.serviceId),
+      );
+    }
     if (args.durationMinutes !== undefined) {
       patch.durationMinutes = Math.max(5, Math.round(args.durationMinutes));
     }

@@ -261,6 +261,16 @@ export default defineSchema({
   services: defineTable({
     orgId: v.id("orgs"),
     name: v.string(),
+    // The address the voice agent books by, exactly the job contactFields.key
+    // does for properties: derived from the name once, then fixed. A salon
+    // renaming "Manikür" to "Manikür & pedikür" must not break an agent
+    // configured last month, and matching on the display name means it would.
+    //
+    // Optional because services predate it. Unset rows fall back to the name
+    // (folded) on both read and match, and take a real key the first time
+    // anybody edits them — so nothing needs migrating and nothing stays
+    // unstable once it has been touched.
+    key: v.optional(v.string()),
     durationMinutes: v.number(),
     active: v.boolean(),
     // LIST price, in integer minor units of orgs.currency (40000 = ₺400,00).

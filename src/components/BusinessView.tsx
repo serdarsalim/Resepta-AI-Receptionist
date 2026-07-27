@@ -353,7 +353,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 // for the service name: the exact anti-pattern the design language names.
 // Below sm the row is a wrapping flex line instead, name on its own row.
 const SERVICE_ROW_GRID =
-  "sm:grid sm:grid-cols-[1fr_7rem_7rem_4rem_4rem] sm:items-center sm:gap-2";
+  "sm:grid sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:items-center sm:gap-2";
 
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
@@ -387,6 +387,7 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
             // its own label instead.
             <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
               <span>{t("services.name")}</span>
+              <span>{t("services.key")}</span>
               <span>{t("services.duration")}</span>
               <span>{t("services.price")}</span>
               <span>{t("services.active")}</span>
@@ -408,6 +409,15 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       next && update({ serviceId: service._id, name: next })
                     }
                   />
+                </span>
+                {/* Not editable, and deliberately so: this is the address the
+                    voice agent was configured with, and the one thing a rename
+                    must never move. Shown as code for the same reason the
+                    fields table does — it is a string to copy, not to read. */}
+                <span className="flex min-w-0 items-center">
+                  <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
+                    {service.key}
+                  </code>
                 </span>
                 <span className="flex items-center gap-0.5">
                   <InlineEditValue
@@ -563,6 +573,14 @@ const VOICE_ROW_GRID =
 function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
+  // Read here, not just in ServicesCard: one agent gets configured once, so
+  // the generated block below has to cover everything it can be asked for —
+  // the properties it may write AND the services it may book.
+  // Sorted the same way the table above sorts, because it is the same list:
+  // two orders for one set of services on one screen reads as two lists.
+  const activeServices = (useQuery(api.services.list, {}) ?? [])
+    .filter((service) => service.active)
+    .sort((a, b) => a.name.localeCompare(b.name));
   const createField = useMutation(api.contactFields.create);
   const removeField = useMutation(api.contactFields.remove);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
@@ -597,20 +615,53 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   // Keys that are not a contactFields row in this org are ignored by
   // retell.applyVoiceContactValues, so the key list IS the permission model.
   const voiceSetupBlock = [
-    "update_contact",
-    "",
-    "{",
-    '  "phone": "+905551112233",',
-    '  "values": {',
-    ...voiceFields.map(
-      (field, index) =>
-        `    "${field.key}": ""${index < voiceFields.length - 1 ? "," : ""}`,
-    ),
-    "  }",
-    "}",
-    "",
-    t("fields.voiceSetupFields"),
-    ...voiceFields.map((field) => `${field.key}: ${field.label} (${typeSummary(field)})`),
+    // Each half only appears when it has something to say. A business with
+    // services and no voice fields still needs the booking config, and
+    // `"values": {}` above an empty list would be a worked example of nothing.
+    ...(voiceFields.length === 0
+      ? []
+      : [
+          "update_contact",
+          "",
+          "{",
+          '  "phone": "+905551112233",',
+          '  "values": {',
+          ...voiceFields.map(
+            (field, index) =>
+              `    "${field.key}": ""${index < voiceFields.length - 1 ? "," : ""}`,
+          ),
+          "  }",
+          "}",
+          "",
+          t("fields.voiceSetupFields"),
+          ...voiceFields.map(
+            (field) => `${field.key}: ${field.label} (${typeSummary(field)})`,
+          ),
+        ]),
+    // The booking half. `service` is a key from this table, not a phrase the
+    // agent invents: sending `manikur` survives the salon renaming the service
+    // tomorrow, and sending "nail polish" was never going to match a list
+    // written in Turkish. voiceBook still falls back to name matching, so a
+    // sentence is not fatal — it is just not what this block asks for.
+    ...(activeServices.length === 0
+      ? []
+      : [
+          ...(voiceFields.length > 0 ? [""] : []),
+          "book_appointment",
+          "",
+          "{",
+          '  "name": "Ayşe Yılmaz",',
+          '  "phone": "+905551112233",',
+          '  "start": "2026-01-31T14:00:00Z",',
+          `  "service": "${activeServices[0].key}"`,
+          "}",
+          "",
+          t("fields.voiceSetupServices"),
+          ...activeServices.map(
+            (service) =>
+              `${service.key}: ${service.name} (${service.durationMinutes} ${t("services.minutes")})`,
+          ),
+        ]),
   ].join("\n");
 
   // Staff cannot add a field, so an empty list for them is a heading, an (i)
@@ -680,9 +731,16 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
 
-          {/* The half of the setup Randevu cannot do for you, generated from
-              your own fields so there is nothing left to translate by hand. */}
+      {/* The half of the setup Randevu cannot do for you, generated from your
+          own fields and services so there is nothing left to translate by
+          hand. Outside the voice-fields block on purpose: a salon that collects
+          no custom properties still has services to book, and the agent still
+          has to be told their keys. */}
+      {(voiceFields.length > 0 || activeServices.length > 0) && (
+        <div className="mb-3">
           <div className="mt-3 flex items-center gap-2">
             <span className="text-sm font-medium">{t("fields.voiceSetup")}</span>
             <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
