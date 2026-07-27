@@ -17,9 +17,10 @@
 // they phone up asking why nobody got reminded.
 
 import { v } from "convex/values";
-import { query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { isPlatformAdmin, requirePlatformAdmin } from "./lib/platformAuth";
+import { maskSecret } from "./lib/connections";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -205,4 +206,172 @@ export const amPlatformAdmin = query({
   args: {},
   returns: v.boolean(),
   handler: async (ctx) => await isPlatformAdmin(ctx),
+});
+
+// ---- One tenant's setup ----
+//
+// Everything an operator installs during onboarding, in one place, because
+// that is the shape of the job: a salon is wired once and then left alone.
+// Secrets come back masked for the same reason they do in convex/connections.ts
+// — the operator pasted them in and does not need them read back, and a console
+// that recites credentials makes one stolen session worth every client's
+// accounts at once.
+
+const maskedSecret = v.union(v.string(), v.null());
+
+export const orgDetail = query({
+  args: { orgId: v.id("orgs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      name: v.string(),
+      timezone: v.string(),
+      language: v.string(),
+      demoMode: v.boolean(),
+      emailFrom: v.union(v.string(), v.null()),
+      inboundAddress: v.union(v.string(), v.null()),
+      calcomApiKey: maskedSecret,
+      calcomEventTypeId: v.union(v.string(), v.null()),
+      calcomWebhookToken: v.union(v.string(), v.null()),
+      wa: v.union(
+        v.null(),
+        v.object({
+          phoneNumberId: v.string(),
+          wabaId: v.union(v.string(), v.null()),
+          displayNumber: v.union(v.string(), v.null()),
+          accessToken: maskedSecret,
+        }),
+      ),
+      agents: v.array(
+        v.object({
+          retellAgentId: v.string(),
+          inboundNumber: v.union(v.string(), v.null()),
+          transferNumber: v.union(v.string(), v.null()),
+          enabled: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return null;
+    const wa = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+    const agents = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    return {
+      name: org.name,
+      timezone: org.timezone,
+      language: org.language,
+      demoMode: org.demoMode === true,
+      emailFrom: org.emailFrom ?? null,
+      inboundAddress: org.inboundAddress ?? null,
+      calcomApiKey: org.calcomApiKey ? maskSecret(org.calcomApiKey) : null,
+      calcomEventTypeId: org.calcomEventTypeId ?? null,
+      calcomWebhookToken: org.calcomWebhookToken ?? null,
+      wa: wa
+        ? {
+            phoneNumberId: wa.phoneNumberId,
+            wabaId: wa.wabaId ?? null,
+            displayNumber: wa.displayNumber ?? null,
+            accessToken: wa.accessToken ? maskSecret(wa.accessToken) : null,
+          }
+        : null,
+      agents: agents.map((a) => ({
+        retellAgentId: a.retellAgentId,
+        inboundNumber: a.inboundNumber ?? null,
+        transferNumber: a.transferNumber ?? null,
+        enabled: a.enabled,
+      })),
+    };
+  },
+});
+
+// An absent field is "leave it alone"; an empty string is "clear it". Two
+// distinct intents that a single optional string would otherwise collapse into
+// one, which is how a form that submits every field wipes the three the
+// operator did not touch.
+function applied(next: string | undefined, current: string | undefined) {
+  if (next === undefined) return current;
+  return next.trim() || undefined;
+}
+
+export const setOrgConfig = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    emailFrom: v.optional(v.string()),
+    inboundAddress: v.optional(v.string()),
+    calcomApiKey: v.optional(v.string()),
+    calcomEventTypeId: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, {
+      emailFrom: applied(args.emailFrom, org.emailFrom),
+      inboundAddress: applied(args.inboundAddress, org.inboundAddress),
+      calcomApiKey: applied(args.calcomApiKey, org.calcomApiKey),
+      calcomEventTypeId: applied(args.calcomEventTypeId, org.calcomEventTypeId),
+    });
+    return null;
+  },
+});
+
+export const setWaAccount = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    phoneNumberId: v.string(),
+    wabaId: v.optional(v.string()),
+    accessToken: v.optional(v.string()),
+    displayNumber: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const phoneNumberId = args.phoneNumberId.trim();
+    if (!phoneNumberId) throw new Error("phone-number-id-required");
+    // Inbound WhatsApp resolves an org by metadata.phone_number_id through a
+    // .unique() lookup, so two orgs sharing one id does not degrade gracefully
+    // — it throws on every inbound message for BOTH of them. Refuse it here,
+    // where one operator is looking at the mistake, rather than at 2am.
+    const clash = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_phone_number_id", (q) => q.eq("phoneNumberId", phoneNumberId))
+      .unique();
+    if (clash && clash.orgId !== args.orgId) throw new Error("number-already-connected");
+    const existing = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+    if (!existing) {
+      if (!args.accessToken?.trim()) throw new Error("access-token-required");
+      await ctx.db.insert("waAccounts", {
+        orgId: args.orgId,
+        phoneNumberId,
+        wabaId: args.wabaId?.trim() || undefined,
+        accessToken: args.accessToken.trim(),
+        displayNumber: args.displayNumber?.trim() || undefined,
+      });
+      return null;
+    }
+    await ctx.db.patch(existing._id, {
+      phoneNumberId,
+      wabaId: applied(args.wabaId, existing.wabaId),
+      // Blank means "keep the token", not "clear it": the operator editing a
+      // display number should not have to re-paste a credential they cannot
+      // read back off the screen.
+      accessToken: args.accessToken?.trim() || existing.accessToken,
+      displayNumber: applied(args.displayNumber, existing.displayNumber),
+    });
+    return null;
+  },
 });
