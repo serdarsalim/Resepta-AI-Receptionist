@@ -569,6 +569,21 @@ const dictionary = {
     de: "Betriebsname",
   },
   "settings.timezone": { tr: "Saat dilimi", en: "Timezone", de: "Zeitzone" },
+  "settings.timezoneHint": {
+    tr: "Randevu saatleri, hatırlatmalar ve gün sonu bu saat dilimine göre hesaplanır.",
+    en: "Appointment times, reminders and the end of the day are all worked out in this zone.",
+    de: "Terminzeiten, Erinnerungen und das Tagesende richten sich nach dieser Zeitzone.",
+  },
+  "settings.timezoneSearch": {
+    tr: "Şehir veya bölge ara…",
+    en: "Search city or region…",
+    de: "Stadt oder Region suchen…",
+  },
+  "settings.timezoneNone": {
+    tr: "Eşleşen saat dilimi yok.",
+    en: "No timezones found.",
+    de: "Keine Zeitzonen gefunden.",
+  },
   "settings.language": { tr: "Dil", en: "Language", de: "Sprache" },
   "settings.reminders": {
     tr: "Hatırlatmalar",

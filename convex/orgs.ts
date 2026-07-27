@@ -13,6 +13,19 @@ export const DEFAULT_QUIET_HOURS = [9, 21] as const;
 // short enough that the salon is still the one they think of.
 export const DEFAULT_WINBACK_DAYS = 14;
 
+// Asked of the runtime rather than checked against a list we would have to
+// keep: IANA adds and renames zones, and the only opinion that matters is
+// whether the formatter the app actually uses accepts it.
+function isValidTimezone(tz: string): boolean {
+  if (!tz.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const templateStatus = v.union(
   v.literal("draft"),
   v.literal("pending"),
@@ -199,7 +212,15 @@ export const update = mutation({
     const { orgId } = await requireOwner(ctx);
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
-    if (args.timezone !== undefined) patch.timezone = args.timezone;
+    if (args.timezone !== undefined) {
+      // Rejected loudly rather than stored and shrugged at. Every dated thing
+      // in the product reads through this zone, and getLocalPartsSafe falls
+      // back to UTC on a value it cannot parse — so a typo here does not throw
+      // anywhere, it just makes every reminder for a Turkish salon three hours
+      // wrong with nothing on screen admitting it.
+      if (!isValidTimezone(args.timezone)) throw new Error("bad-timezone");
+      patch.timezone = args.timezone;
+    }
     if (args.language !== undefined) patch.language = args.language;
     // Allowlisted, not free text: an unknown code reaches Intl.NumberFormat at
     // render time and throws there, which turns a bad Settings save into a

@@ -15,6 +15,7 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
+import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
@@ -185,14 +186,6 @@ const ACTIVITY_LABELS: Record<string, TranslationKey> = {
 // AccountView import: the three surfaces must line up when you flip between
 // them, which they stop doing the moment the string exists in three places.
 
-const TIMEZONES = [
-  "Europe/Istanbul",
-  "Europe/Dublin",
-  "Europe/Berlin",
-  "Europe/London",
-  "UTC",
-];
-
 // The paste-into-your-website snippet. Self-contained on purpose: no hosted
 // script to keep alive, nothing to version, and nothing that breaks a salon's
 // homepage the day we redeploy. The listener matches the iframe by its own
@@ -252,17 +245,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             defaultValue={settings.org.name}
             onBlur={(e) => void update({ name: e.target.value })}
           />
-          <RowLabel label={t("settings.timezone")} />
-          <select
-            defaultValue={settings.org.timezone}
-            onChange={(e) => void update({ timezone: e.target.value })}
-          >
-            {TIMEZONES.map((zone) => (
-              <option key={zone} value={zone}>
-                {zone}
-              </option>
-            ))}
-          </select>
+          <RowLabel label={t("settings.timezone")} hint={t("settings.timezoneHint")} />
+          <TimezoneSelect
+            value={settings.org.timezone}
+            onChange={(zone) => void update({ timezone: zone })}
+          />
           {/* The address customers write TO. One verified domain serves every
               business; this left-hand part is what routes an incoming email to
               THIS org, so it has to be unique and the save rejects a clash. */}

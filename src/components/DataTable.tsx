@@ -1,72 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/lib/LanguageProvider";
 import { foldSearch, type SortDir } from "@/lib/useTableState";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // Shared table chrome: the quiet sort header, the funnel filter that lives ON
 // the column it filters, the column picker, and the search box. Ported from
 // Nudge's LeadsTable, kept to the parts that make a table readable.
 //
-// Every floating panel here goes through createPortal(document.body) with
-// position: fixed, measured from the trigger at open time and clamped to the
-// viewport. An absolute panel inside the table's horizontal scroll container
-// clips at the card edge, and z-index does not fix that. InfoTip is the same
-// pattern for tooltips.
-
-type PanelPos = { left: number; top?: number; bottom?: number };
-
-function useAnchoredPanel(width: number, maxHeight: number, align: "left" | "right" = "left") {
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<PanelPos | null>(null);
-  const open = pos !== null;
-
-  const close = useCallback(() => setPos(null), []);
-
-  const toggle = useCallback(() => {
-    setPos((current) => {
-      if (current) return null;
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return null;
-      const anchored = align === "right" ? rect.right - width : rect.left;
-      const left = Math.max(8, Math.min(anchored, window.innerWidth - width - 8));
-      // Flip above the trigger when the panel would run off the bottom and
-      // there is more room up there. Bottom-anchored, so a short list still
-      // hugs the trigger instead of floating away from it.
-      const roomBelow = window.innerHeight - rect.bottom;
-      if (roomBelow < maxHeight + 12 && rect.top > roomBelow) {
-        return { left, bottom: window.innerHeight - rect.top + 4 };
-      }
-      return { left, top: rect.bottom + 4 };
-    });
-  }, [align, maxHeight, width]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (panelRef.current?.contains(target)) return;
-      if (triggerRef.current?.contains(target)) return;
-      close();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    // Capture: the table's own overflow container scrolls without bubbling.
-    window.addEventListener("scroll", close, true);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [close, open]);
-
-  return { triggerRef, panelRef, pos, open, toggle, close };
-}
+// Every floating panel here goes through useAnchoredPanel (@/lib), which
+// portals to the body and positions fixed: an absolute panel inside the
+// table's horizontal scroll container clips at the card edge, and z-index does
+// not fix that. InfoTip is the same pattern for tooltips.
 
 // Checkmark box. A stock checkbox is outside the house style, and this one
 // reads the same in both panels.
@@ -179,7 +126,7 @@ export function HeaderFilter({
         createPortal(
           <div
             ref={panelRef}
-            style={{ position: "fixed", width: FILTER_W, maxHeight: FILTER_MAX_H, ...pos }}
+            style={{ position: "fixed", maxHeight: FILTER_MAX_H, ...pos }}
             className={PANEL_CLASS}
           >
             {options.length === 0 ? (
@@ -431,7 +378,7 @@ export function ColumnPicker({
         createPortal(
           <div
             ref={panelRef}
-            style={{ position: "fixed", width: PICKER_W, ...pos }}
+            style={{ position: "fixed", ...pos }}
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-[var(--foreground)] shadow-lg"
           >
             <div className="border-b border-[var(--border)] p-1.5">
