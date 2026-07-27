@@ -1006,20 +1006,16 @@ const dictionary = {
     en: "Retell configuration",
     de: "Retell-Konfiguration",
   },
-  // Heads the field list inside the pasteable block, so the block still makes
-  // sense once it is sitting in Retell with no Randevu around it.
-  "fields.voiceSetupFields": {
-    tr: "Bu işletmenin alanları:",
-    en: "Fields this business collects:",
-    de: "Felder dieses Betriebs:",
+  // The block is copied, never shown, so this is the only description of what
+  // lands on the clipboard. It has to say enough that the button is not a
+  // mystery: what the text is, and who it is for.
+  "fields.voiceSetupHint": {
+    tr: "Sesli ajanı kuran kişiye (veya ajana) verilecek metin: uç nokta adresi, çağrılabilir fonksiyonlar ve bu işletmenin hizmet ve alan anahtarları. Uygulamada gösterilmez, yalnızca kopyalanır.",
+    en: "The text to hand whoever — or whatever — builds your voice agent: the endpoint, every function it can call, and this business's own service and field keys. Copied, never shown here.",
+    de: "Der Text für die Person (oder den Agenten), die Ihren Sprachagenten einrichtet: Endpunkt, aufrufbare Funktionen und die Leistungs- und Feldschlüssel dieses Betriebs. Wird nur kopiert, nicht angezeigt.",
   },
-  // Same job for the booking half of the block: the agent needs the salon's
-  // service keys, not its own guesses at what a nail appointment is called.
-  "fields.voiceSetupServices": {
-    tr: "Bu işletmenin hizmetleri:",
-    en: "Services this business offers:",
-    de: "Leistungen dieses Betriebs:",
-  },
+  "common.show": { tr: "Göster", en: "Show", de: "Anzeigen" },
+  "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
   "fields.type.text": { tr: "Metin", en: "Text", de: "Text" },
   "fields.type.select": { tr: "Seçim", en: "Select", de: "Auswahl" },
