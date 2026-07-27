@@ -1124,27 +1124,51 @@ function NoteEntry({
   const [busy, setBusy] = useState(false);
 
   const body = item.body ?? "";
-  const snippetRef = useRef<HTMLSpanElement>(null);
+  // The measured node is STATE, not a ref, so the effect re-runs whenever the
+  // span is replaced. It gets replaced constantly: flipping `overflowing`
+  // swaps this row between a plain div and a button, and opening it swaps the
+  // snippet for a spacer — each one unmounts the old span and mounts a new one.
+  //
+  // This is what the bug was. `measure` closed over the span captured when the
+  // effect last ran, so the moment overflow was detected and the row re-rendered
+  // as a button, the ResizeObserver was left watching a DETACHED node. Detached
+  // elements report zero, the observer fired, the stale closure computed
+  // `0 > clientWidth + 1` as false, and the row went straight back to
+  // "not expandable" — permanently, because the effect's deps never changed so
+  // it never re-attached. A long note ellipsised with no chevron to open it.
+  const [snippet, setSnippet] = useState<HTMLSpanElement | null>(null);
   const [overflowing, setOverflowing] = useState(false);
   useEffect(() => {
-    const el = snippetRef.current;
     // Open or editing: keep the last measurement rather than resetting it, or
     // collapsing would decide the row is short and drop its own chevron.
-    if (!el) return;
-    const measure = () => setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    if (!snippet) return;
+    const measure = () => {
+      // A zero-width box is a node that is detached, or in a pane that has not
+      // been laid out yet. Neither is evidence that the text FITS, so record
+      // nothing — the old answer is better than a wrong new one, and the
+      // observer will call again once there is something real to measure.
+      if (snippet.clientWidth === 0) return;
+      setOverflowing(snippet.scrollWidth > snippet.clientWidth + 1);
+    };
     measure();
-    // Again after paint. The synchronous pass can run while the row still has
-    // no width — the pane it lives in was hidden a moment ago — and a zero
-    // measurement would otherwise stick: nothing resizes afterwards, so the
-    // observer never gets a second chance and a long note loses its chevron.
+    // Again after paint, for the case where the pane was hidden a moment ago.
     const raf = requestAnimationFrame(measure);
     const observer = new ResizeObserver(measure);
-    observer.observe(el);
+    observer.observe(snippet);
+    // And once more when webfonts land. Swapping from the fallback face changes
+    // the text's width WITHOUT changing this element's box — it is flex-sized
+    // by the row — so the observer never fires for it and a note that only
+    // overflows in the real font would keep the fallback's answer forever.
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) measure();
+    });
     return () => {
+      cancelled = true;
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
-  }, [body, open, editing]);
+  }, [snippet, body, open, editing]);
   const expandable = /\n/.test(body.trim()) || overflowing;
 
   const save = async () => {
@@ -1280,7 +1304,7 @@ function NoteEntry({
               // meta column where it was.
               <span className="min-w-0 flex-1" />
             ) : (
-              <span ref={snippetRef} className="min-w-0 flex-1 truncate text-sm">
+              <span ref={setSnippet} className="min-w-0 flex-1 truncate text-sm">
                 {body}
               </span>
             )}
@@ -1295,7 +1319,7 @@ function NoteEntry({
       ) : (
         <div className="group flex w-full items-center gap-2 px-4 py-2.5">
           <span aria-hidden className="w-3 shrink-0" />
-          <span ref={snippetRef} className="min-w-0 flex-1 truncate text-sm">
+          <span ref={setSnippet} className="min-w-0 flex-1 truncate text-sm">
             {body}
           </span>
           {meta}
