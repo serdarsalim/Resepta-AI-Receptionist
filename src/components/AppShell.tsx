@@ -1066,8 +1066,11 @@ export function AppShell({
         </nav>
       </aside>
 
-      {/* Floating content card; scrolls internally (min-h-0 is load-bearing). */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)] md:rounded-xl md:border md:border-[var(--border)]">
+      {/* Floating content card; scrolls internally (min-h-0 is load-bearing).
+          --pane, not --background: this is the plane the view's own cards sit
+          on, not a sheet of its own. White here meant card-raised was white on
+          white and had to buy its separation entirely with shadow. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--pane)] md:rounded-xl md:border md:border-[var(--border)]">
         <ShellHeader
           titleKey={titleKey}
           closable={tab === "settings" || tab === "business" || tab === "account"}
