@@ -216,7 +216,12 @@ export default defineSchema({
     // that a demo visitor's membership is for THIS org and no other. Do not
     // set this on an org that has a waAccounts row.
     demoMode: v.optional(v.boolean()),
-  }).index("by_calcom_token", ["calcomWebhookToken"]),
+  })
+    .index("by_calcom_token", ["calcomWebhookToken"])
+    // Evolution's webhook payload names its instance and nothing else, so this
+    // is how an inbound event finds its org — the same job phone_number_id
+    // does on the Cloud lane.
+    .index("by_evolution_instance", ["evolutionInstance"]),
 
   // Per-org integration credentials. One row per (org, provider, field), which
   // is Nudge's shape (convex/lib/connections.ts there) with the one change that

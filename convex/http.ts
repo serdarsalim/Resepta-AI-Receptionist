@@ -77,6 +77,38 @@ http.route({
   }),
 });
 
+// Inbound from the Evolution API lane (self-hosted Baileys).
+//
+// No signature to verify: Evolution posts a bare JSON body with no shared
+// secret and no HMAC. The org is resolved from the instance name in the
+// payload, and an instance name is a guessable string, so treat this endpoint
+// as UNAUTHENTICATED and size the blast radius accordingly — the handler mints
+// contacts and logs messages, which is the same reach a spoofed Cloud webhook
+// would have if WA_APP_SECRET were unset. Put the Evolution server behind a
+// funnel only this deployment can reach, and give each org an instance name
+// that is not its business name.
+//
+// Always 200. Evolution retries anything else, and a retry cannot conjure the
+// org row that was missing.
+http.route({
+  path: "/whatsapp/evolution",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response("ok", { status: 200 });
+    }
+    try {
+      await ctx.runMutation(internal.webhook.handleEvolutionEvent, { payload });
+    } catch (err) {
+      console.error("evolution webhook failed", err);
+    }
+    return new Response("ok", { status: 200 });
+  }),
+});
+
 // Inbound email from Resend. TWO calls, because the `email.received` event
 // carries metadata only — id, from, to, subject — and the body has to be
 // fetched with that id afterwards (lib/emailInbound.fetchReceivedEmail).
