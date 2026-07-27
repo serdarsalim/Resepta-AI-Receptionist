@@ -360,13 +360,17 @@ http.route({
         if (!booking.ok) return respond({ error: booking.reason });
         externalUid = booking.uid;
       }
+      let booking: { serviceName?: string };
       try {
-        await ctx.runMutation(internal.retell.voiceBook, {
+        booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
           name: customerName,
           phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
           startAt,
           externalUid,
+          // Whatever the caller called it. Matching against the org's own list
+          // happens in voiceBook, not here and not in the agent's prompt.
+          service: String(args.service ?? "").trim() || undefined,
         });
       } catch (err) {
         return respond({ error: err instanceof Error ? err.message : "book-failed" });
@@ -374,6 +378,10 @@ http.route({
       return respond({
         booked: true,
         spoken_time: formatAppointmentTime(startAt, org.timezone, org.language),
+        // Absent means the spoken service matched nothing the salon offers.
+        // The booking still stands; the agent can read this back to confirm,
+        // and its absence is the cue to ask again rather than assume.
+        service: booking.serviceName,
       });
     }
 

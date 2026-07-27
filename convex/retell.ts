@@ -95,6 +95,60 @@ export const loadVoiceContext = internalQuery({
   },
 });
 
+// What the caller asked for, matched against what the salon actually sells.
+//
+// The caller says "manikur", "Manikür" or "manikür yaptıracaktım"; the org's
+// list says "Manikür". Folded exact match first, then containment either way,
+// longest name first so "Saç boyama" wins over a bare "Saç". Only active
+// services: a service the salon has switched off is not something the phone
+// should be able to book.
+//
+// A miss is NOT a booking failure. cal.com already holds the slot by the time
+// this runs, so refusing here would strand a reservation, and an appointment
+// missing its service name is a great deal better than a caller told "sorry"
+// because the agent improvised a synonym. The salon sees an unnamed block and
+// fixes it in one click; the customer keeps their slot.
+async function matchService(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  spoken: string,
+): Promise<{
+  serviceId: Id<"services">;
+  name: string;
+  price?: number;
+  durationMinutes: number;
+} | undefined> {
+  const wanted = foldForMatch(spoken);
+  if (!wanted) return undefined;
+  const services = (
+    await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect()
+  ).filter((service) => service.active);
+  const folded = services
+    .map((service) => ({ service, name: foldForMatch(service.name) }))
+    .sort((a, b) => b.name.length - a.name.length);
+  const hit =
+    folded.find((row) => row.name === wanted) ??
+    // Two-character names would match almost any sentence, so containment
+    // only applies once a name is long enough to mean something.
+    folded.find(
+      (row) =>
+        row.name.length >= 3 &&
+        (row.name.includes(wanted) || wanted.includes(row.name)),
+    );
+  if (!hit) return undefined;
+  // Snapshotted, not referenced: raising the price in September must not
+  // rewrite what this booking recorded. See the items comment in schema.ts.
+  return {
+    serviceId: hit.service._id,
+    name: hit.service.name,
+    price: hit.service.price,
+    durationMinutes: hit.service.durationMinutes,
+  };
+}
+
 // Voice booking: find/create the customer by phone, insert the appointment.
 // externalUid (cal.com's uid when the booking went through cal.com) is what
 // dedupes the webhook echo via by_org_external.
@@ -106,8 +160,18 @@ export const voiceBook = internalMutation({
     startAt: v.number(),
     externalUid: v.optional(v.string()),
     durationMinutes: v.optional(v.number()),
+    // What the caller asked for, in their own words. Matched below rather
+    // than by the agent, so a salon renaming a service does not mean editing
+    // a prompt in Retell.
+    service: v.optional(v.string()),
   },
-  returns: v.id("appointments"),
+  // The matched name goes back to the agent so it can read the booking back
+  // to the caller in the salon's own vocabulary — and so a miss is visible to
+  // whoever is reading the call rather than silent.
+  returns: v.object({
+    appointmentId: v.id("appointments"),
+    serviceName: v.optional(v.string()),
+  }),
   handler: async (ctx, args) => {
     const phone = assertE164(args.phone);
     let customer = await ctx.db
@@ -128,18 +192,24 @@ export const voiceBook = internalMutation({
       customer = await ctx.db.get(customerId);
     }
     if (!customer) throw new Error("customer-failed");
+    const line = args.service
+      ? await matchService(ctx, args.orgId, args.service)
+      : undefined;
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: args.orgId,
       customerId: customer._id,
       startAt: args.startAt,
-      durationMinutes: args.durationMinutes,
+      // The service's own duration wins over anything the call reported: it is
+      // what the salon says the work takes, and the block staff read.
+      durationMinutes: line?.durationMinutes ?? args.durationMinutes,
+      items: line ? [line] : undefined,
       status: "scheduled",
       source: "voice",
       externalUid: args.externalUid,
     });
     await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
-    return appointmentId;
+    return { appointmentId, serviceName: line?.name };
   },
 });
 
