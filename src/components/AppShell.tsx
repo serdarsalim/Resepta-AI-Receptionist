@@ -888,20 +888,28 @@ export function AppShell({
 }) {
   const { t, language, setLanguage } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
-  // The takings tab is opt-in, so the nav is built from the org rather than
+  // Two tabs are conditional, so the nav is built from the org rather than
   // being a constant. Filtered rather than conditionally rendered so the
   // phone bar and the sidebar can never disagree about which tabs exist.
-  const navTabs = NAV_TABS.filter(
-    (entry) => entry.id !== "revenue" || settings?.org.revenueEnabled,
-  );
+  //
+  // Takings is opt-in. Campaigns is not a preference — it is earned by
+  // connecting a number, because until one is connected the tab is a heading
+  // over a disabled button, which reads as the product being broken rather
+  // than unconfigured. Settings is where the number gets connected, and the
+  // tab appearing afterwards is the reward for having done it.
+  const navTabs = NAV_TABS.filter((entry) => {
+    if (entry.id === "revenue") return Boolean(settings?.org.revenueEnabled);
+    if (entry.id === "campaigns") return Boolean(settings?.whatsapp.connected);
+    return true;
+  });
   // ?tab=revenue on an org that has it switched off would render a tab with
   // no way back to it — the sidebar entry it came from does not exist. Waits
   // for settings to load so the redirect fires on a known answer, not on the
   // undefined one render earlier.
   useEffect(() => {
-    if (tab === "revenue" && settings && !settings.org.revenueEnabled) {
-      onTab("appointments");
-    }
+    if (!settings) return;
+    if (tab === "revenue" && !settings.org.revenueEnabled) onTab("appointments");
+    if (tab === "campaigns" && !settings.whatsapp.connected) onTab("appointments");
   }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
