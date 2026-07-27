@@ -15,7 +15,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -119,6 +119,8 @@ export default function TenantPage() {
   const detail = useQuery(api.platform.orgDetail, allowed ? { orgId } : "skip");
   const setOrgConfig = useMutation(api.platform.setOrgConfig);
   const setWaAccount = useMutation(api.platform.setWaAccount);
+  const actAs = useMutation(api.platform.actAs);
+  const router = useRouter();
 
   if (allowed === undefined) {
     return <main className="mx-auto max-w-4xl p-6 text-sm text-[var(--muted)]">Loading…</main>;
@@ -171,6 +173,19 @@ export default function TenantPage() {
           {detail.timezone} · {detail.language} · {detail.agents.length}{" "}
           {detail.agents.length === 1 ? "agent" : "agents"}
         </p>
+        {/* Everything below this line is config the operator installs. This
+            button is for the rest: the things that only exist inside the
+            product, where the fix is three taps in their own Appointments
+            screen and no amount of admin fields would have reached it. */}
+        <button
+          type="button"
+          onClick={() => {
+            void actAs({ orgId }).then(() => router.push("/"));
+          }}
+          className="mt-2 rounded-lg border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--muted-bg)]"
+        >
+          Work in this account as Autotakt
+        </button>
       </header>
 
       <Section title="Voice">

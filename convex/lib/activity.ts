@@ -21,6 +21,13 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { actingAsOrg } from "./orgAuth";
+
+// What a salon sees when the platform operator changed something in their
+// business. A brand, never a person: the client bought a service, and the
+// name of whoever happened to be at the keyboard is not information they
+// asked for and not something to leak into a tenant's browser.
+export const OPERATOR_ACTOR_NAME = "Autotakt";
 
 type ActivityKind = Doc<"activityLog">["kind"];
 
@@ -46,9 +53,23 @@ export async function recordActivity(
     // agent, a cron. The reader sees "system" rather than a name that would
     // be a lie.
     const actorId = args.system ? null : await getAuthUserId(ctx);
+    // Was this written by the operator working inside this business? Derived
+    // here rather than threaded through every call site, so no mutation has to
+    // remember to pass it and none can forget. The actor row keeps the real
+    // user id either way; only the DISPLAY changes (convex/activity.ts).
+    let viaOperator: boolean | undefined;
+    if (actorId) {
+      const actor = await ctx.db.get(actorId);
+      // Both halves, same as the gate: the column names an org, the allowlist
+      // decides whether it counts. And it must be THIS org — an operator
+      // acting inside salon A writing to salon B is not a thing that should
+      // happen, and if it somehow does it is not "Autotakt" doing it.
+      if (actor && actingAsOrg(actor) === args.orgId) viaOperator = true;
+    }
     await ctx.db.insert("activityLog", {
       orgId: args.orgId,
       actorId: actorId ?? undefined,
+      viaOperator,
       kind: args.kind,
       customerId: args.customerId,
       appointmentId: args.appointmentId,

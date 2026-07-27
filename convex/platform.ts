@@ -19,6 +19,7 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { isPlatformAdmin, requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
 
@@ -372,6 +373,52 @@ export const setWaAccount = mutation({
       accessToken: args.accessToken?.trim() || existing.accessToken,
       displayNumber: applied(args.displayNumber, existing.displayNumber),
     });
+    return null;
+  },
+});
+
+// ---- Working inside a tenant ----
+//
+// Setting users.actingAsOrgId is what lib/orgAuth reads to resolve this caller
+// into the tenant. The column is inert on its own — orgAuth honours it only for
+// an address on PLATFORM_ADMIN_EMAILS — so this mutation is a convenience, not
+// the grant. Removing an address from the env var ends every session it opened,
+// with no cleanup and nothing to revoke.
+
+export const actingAs = query({
+  args: {},
+  returns: v.union(v.null(), v.object({ orgId: v.id("orgs"), name: v.string() })),
+  handler: async (ctx) => {
+    // Every signed-in user's shell calls this to decide whether to show the
+    // banner, so it returns null rather than throwing for a normal salon.
+    if (!(await isPlatformAdmin(ctx))) return null;
+    const userId = await getAuthUserId(ctx);
+    const user = userId ? await ctx.db.get(userId) : null;
+    if (!user?.actingAsOrgId) return null;
+    const org = await ctx.db.get(user.actingAsOrgId);
+    if (!org) return null;
+    return { orgId: user.actingAsOrgId, name: org.name };
+  },
+});
+
+export const actAs = mutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(admin._id, { actingAsOrgId: args.orgId });
+    return null;
+  },
+});
+
+export const stopActingAs = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const admin = await requirePlatformAdmin(ctx);
+    await ctx.db.patch(admin._id, { actingAsOrgId: undefined });
     return null;
   },
 });

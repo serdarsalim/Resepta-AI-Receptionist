@@ -8,6 +8,8 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
+import Link from "next/link";
+import { OperatorBanner } from "./OperatorBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { SearchInput } from "./DataTable";
 
@@ -689,7 +691,7 @@ function UserMenu({
                 the fleet page has one reader (see src/app/admin/page.tsx). */}
             {isPlatformAdmin && (
               <div className="border-t border-[var(--border)]">
-                <a
+                <Link
                   href="/admin"
                   role="menuitem"
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
@@ -698,7 +700,7 @@ function UserMenu({
                     <SettingsIcon />
                   </span>
                   Fleet
-                </a>
+                </Link>
               </div>
             )}
             <div className="border-t border-[var(--border)]">
@@ -1044,6 +1046,9 @@ export function AppShell({
     // filtering happens down there, so the query has to sit over the pair.
     <HeaderSearchProvider>
     <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
+      {/* Fixed overlay, so it costs the layout nothing and renders on every
+          screen rather than only the one the operator arrived on. */}
+      <OperatorBanner />
       {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
           keeps pointer-events off while closed so it never eats a tap. */}
       <button

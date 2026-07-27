@@ -28,6 +28,14 @@ export default defineSchema({
     isAnonymous: v.optional(v.boolean()),
     orgId: v.optional(v.id("orgs")),
     role: v.optional(v.union(v.literal("owner"), v.literal("staff"))),
+    // Set while a PLATFORM OPERATOR is working inside a tenant. It is not a
+    // grant on its own: lib/orgAuth only honours it for an address on the
+    // PLATFORM_ADMIN_EMAILS allowlist, so this column is inert for everyone
+    // else and a write to it by any org-scoped bug buys nothing. That is the
+    // whole reason the operator check stayed in an env var rather than moving
+    // into the database. Writes recorded while it is set attribute to the
+    // operator's brand, never to the person — see lib/activity.ts.
+    actingAsOrgId: v.optional(v.id("orgs")),
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
     ),
@@ -669,6 +677,12 @@ export default defineSchema({
   activityLog: defineTable({
     orgId: v.id("orgs"),
     actorId: v.optional(v.id("users")),
+    // Done by the platform operator working inside this business. actorId is
+    // still stored, so there is an internal record of WHICH operator, but the
+    // read path (convex/activity.ts) resolves the display name to the brand
+    // and never sends the person's name or id to the salon's browser. The
+    // salon is owed "Autotakt changed this", not an individual's name.
+    viaOperator: v.optional(v.boolean()),
     kind: v.union(
       v.literal("appointment_created"),
       v.literal("appointment_status"),

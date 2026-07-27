@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
+import { OPERATOR_ACTOR_NAME } from "./lib/activity";
 
 const entry = v.object({
   _id: v.id("activityLog"),
@@ -40,7 +41,12 @@ export const recent = query({
     const out = [];
     for (const row of rows) {
       let actor: string | undefined;
-      if (row.actorId) {
+      // The operator's brand wins over the person, and the lookup is SKIPPED
+      // rather than overwritten: the salon's browser never receives the
+      // operator's name or user id, only the fact that Autotakt did it.
+      if (row.viaOperator) {
+        actor = OPERATOR_ACTOR_NAME;
+      } else if (row.actorId) {
         if (!actorNames.has(row.actorId)) {
           const user = await ctx.db.get(row.actorId);
           actorNames.set(row.actorId, user?.name || user?.email || undefined);

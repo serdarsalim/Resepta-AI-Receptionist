@@ -12,6 +12,21 @@
 // convex/platform.ts and nowhere else. If you find yourself importing this
 // into a file a salon's browser can reach, stop: you want requireOrg.
 //
+// ── THE ONE AMENDMENT TO THAT RULE ──────────────────────────────────────────
+//
+// `emailIsPlatformAdmin` below — and ONLY that function — is also imported by
+// lib/orgAuth.ts and lib/activity.ts, to support an operator working inside a
+// tenant (users.actingAsOrgId). That is not a leak in the rule, it is the rule
+// applied: acting as a tenant is a cross-org capability, so the thing that
+// authorises it has to be the env allowlist rather than anything a salon's own
+// mutations could reach. Putting the check anywhere else would have meant a
+// database column deciding who can read every business on the deployment.
+//
+// It takes an email and touches no database, precisely so importing it cannot
+// widen anyone's read scope. requirePlatformAdmin and isPlatformAdmin stay
+// confined to convex/platform.ts. Do not add a third caller without the same
+// argument.
+//
 // ── WHY AN ENV ALLOWLIST AND NOT A FLAG ON THE USER ROW ─────────────────────
 //
 // A `platformAdmin: true` column would be a row in the same database every
@@ -42,16 +57,23 @@ function allowlist(): Set<string> {
   );
 }
 
+// The whole check, as a pure function of an address. No ctx, no database read,
+// so a caller that holds a user row already can ask without a second lookup —
+// and so importing it (see the header amendment) cannot widen a read scope.
+// Empty allowlist denies everyone; that default is deliberate.
+export function emailIsPlatformAdmin(email: string | undefined): boolean {
+  if (!email) return false;
+  const emails = allowlist();
+  if (emails.size === 0) return false;
+  return emails.has(email.toLowerCase());
+}
+
 export async function requirePlatformAdmin(ctx: Ctx): Promise<Doc<"users">> {
   const userId = await getAuthUserId(ctx);
   if (!userId) throw new Error("not-signed-in");
   const user = await ctx.db.get(userId);
-  if (!user?.email) throw new Error("not-platform-admin");
-  const emails = allowlist();
-  // Empty allowlist denies everyone. See the header.
-  if (emails.size === 0) throw new Error("not-platform-admin");
-  if (!emails.has(user.email.toLowerCase())) throw new Error("not-platform-admin");
-  return user;
+  if (!emailIsPlatformAdmin(user?.email)) throw new Error("not-platform-admin");
+  return user!;
 }
 
 // Whether the signed-in user may see the admin area at all — for the UI, which
