@@ -11,6 +11,7 @@ import { scheduleConfirmationIfConfigured } from "./appointments";
 import { cancelBooking } from "./lib/calcomApi";
 import { queueOrgAlert } from "./lib/alerts";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
 // themselves there); Randevu is the WhatsApp layer on top. The org is resolved
@@ -164,6 +165,11 @@ export const handleCalcomEvent = internalMutation({
         language: attendee.language,
         // Booking through the salon's own cal.com page IS the opt-in moment.
         consentAt: Date.now(),
+      });
+      await recordCustomerCreated(ctx, {
+        orgId: org._id,
+        customerId,
+        source: "calcom",
       });
       customer = await ctx.db.get(customerId);
     }

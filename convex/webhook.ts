@@ -7,6 +7,7 @@ import { nextUpcomingOf } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 // Meta's session window: one away-reply per window, not per message.
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -105,13 +106,19 @@ export const handleWhatsappEvent = internalMutation({
           // until a human types a name. Consent stays unset; them writing to
           // us opens Meta's session window, it is not KVKK consent for us to
           // start messaging them.
-          const contactId =
-            customer?._id ??
-            (await ctx.db.insert("customers", {
+          let contactId = customer?._id;
+          if (!contactId) {
+            contactId = await ctx.db.insert("customers", {
               orgId,
               firstName: "",
               phone,
-            }));
+            });
+            await recordCustomerCreated(ctx, {
+              orgId,
+              customerId: contactId,
+              source: "whatsapp",
+            });
+          }
 
           const loggedId = await logInboundRow(ctx, {
             orgId,

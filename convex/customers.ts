@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 const customerDoc = v.object({
   _id: v.id("customers"),
@@ -91,7 +92,7 @@ export const create = mutation({
       notes: args.notes?.trim() || undefined,
       consentAt: args.consent ? Date.now() : undefined,
     });
-    await recordActivity(ctx, { orgId, kind: "customer_created", customerId });
+    await recordCustomerCreated(ctx, { orgId, customerId, source: "staff" });
     return customerId;
   },
 });

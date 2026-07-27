@@ -22,6 +22,7 @@ export const myProfile = query({
     language: v.string(),
     notifyInbound: v.boolean(),
     notifyFailedSend: v.boolean(),
+    notifyNewContact: v.boolean(),
   }),
   handler: async (ctx) => {
     const { user, role, orgId } = await requireOrg(ctx);
@@ -38,6 +39,7 @@ export const myProfile = query({
       // same way when it decides who to email.
       notifyInbound: alertEnabled(user, "inbound"),
       notifyFailedSend: alertEnabled(user, "failed-send"),
+      notifyNewContact: alertEnabled(user, "new-contact"),
     };
   },
 });
@@ -51,6 +53,7 @@ export const setMyProfile = mutation({
     language: v.optional(v.string()),
     notifyInbound: v.optional(v.boolean()),
     notifyFailedSend: v.optional(v.boolean()),
+    notifyNewContact: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -67,6 +70,9 @@ export const setMyProfile = mutation({
     if (args.notifyInbound !== undefined) patch.notifyInbound = args.notifyInbound;
     if (args.notifyFailedSend !== undefined) {
       patch.notifyFailedSend = args.notifyFailedSend;
+    }
+    if (args.notifyNewContact !== undefined) {
+      patch.notifyNewContact = args.notifyNewContact;
     }
     if (Object.keys(patch).length === 0) return null;
     await ctx.db.patch(user._id, patch);

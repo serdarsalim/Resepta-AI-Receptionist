@@ -9,6 +9,7 @@ import {
   normalizeSubject,
   splitName,
 } from "./lib/emailInbound";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
 // wa.ts (the template lane that rides alongside WhatsApp); this file is what
@@ -92,6 +93,11 @@ export const recordInbound = internalMutation({
         ...(named.lastName ? { lastName: named.lastName } : {}),
         phone: "",
         email: from,
+      });
+      await recordCustomerCreated(ctx, {
+        orgId: args.orgId,
+        customerId,
+        source: "email",
       });
     }
 

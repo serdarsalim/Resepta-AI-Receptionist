@@ -42,11 +42,12 @@ import { requireOrg } from "./orgAuth";
 import { emailLaneConfigured, sendEmail } from "./email";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
-export type AlertKind = "inbound" | "failed-send";
+export type AlertKind = "inbound" | "failed-send" | "new-contact";
 
 export const alertKindValidator = v.union(
   v.literal("inbound"),
   v.literal("failed-send"),
+  v.literal("new-contact"),
 );
 
 // THE default that matters: unset reads as ON. A customer reply nobody sees is
@@ -54,10 +55,19 @@ export const alertKindValidator = v.union(
 // into, never defaulted into. users.myProfile resolves the same way — keep the
 // two reading through this one function so they can never drift apart.
 export function alertEnabled(
-  prefs: { notifyInbound?: boolean; notifyFailedSend?: boolean },
+  prefs: {
+    notifyInbound?: boolean;
+    notifyFailedSend?: boolean;
+    notifyNewContact?: boolean;
+  },
   kind: AlertKind,
 ): boolean {
-  const stored = kind === "inbound" ? prefs.notifyInbound : prefs.notifyFailedSend;
+  const stored =
+    kind === "inbound"
+      ? prefs.notifyInbound
+      : kind === "failed-send"
+        ? prefs.notifyFailedSend
+        : prefs.notifyNewContact;
   return stored ?? true;
 }
 
@@ -69,7 +79,7 @@ export function alertEnabled(
 // Turkish says KVKK. {who} is the customer, {detail} is whatever the template
 // needs (the message text, the provider's error).
 
-type AlertLanguage = "tr" | "en" | "de";
+export type AlertLanguage = "tr" | "en" | "de";
 
 export type AlertTemplate =
   | "inboundText"
@@ -78,7 +88,8 @@ export type AlertTemplate =
   | "inboundCancelled"
   | "failedNoTemplate"
   | "failedOther"
-  | "failedCalendarCancel";
+  | "failedCalendarCancel"
+  | "newContact";
 
 export const alertTemplateValidator = v.union(
   v.literal("inboundText"),
@@ -88,6 +99,7 @@ export const alertTemplateValidator = v.union(
   v.literal("failedNoTemplate"),
   v.literal("failedOther"),
   v.literal("failedCalendarCancel"),
+  v.literal("newContact"),
 );
 
 // One row per alert a salon can receive. `kind` is on the row, not on the call
@@ -179,6 +191,23 @@ const ALERT_COPY: Record<
   // Rides the failed-send toggle rather than introducing a third AlertKind,
   // because it is the same question for the owner: something did not land.
   // The slot is the actionable part, so the body leads with it.
+  // Somebody the salon had never heard of is now in the book, and no member of
+  // staff put them there. The interesting part is HOW they arrived, so the
+  // detail carries the door they came through — a caller the voice agent
+  // handled is a very different Monday morning from a website form.
+  newContact: {
+    kind: "new-contact",
+    subject: {
+      tr: "Yeni kişi: {who}",
+      en: "New contact: {who}",
+      de: "Neuer Kontakt: {who}",
+    },
+    body: {
+      tr: "{who} kayıtlara eklendi ({detail}). Kişi kartından geçmişi ve iletişim bilgileri görülebilir.",
+      en: "{who} was added to your contacts ({detail}). Their record has the history and contact details.",
+      de: "{who} wurde zu Ihren Kontakten hinzugefügt ({detail}). Der Datensatz enthält Verlauf und Kontaktdaten.",
+    },
+  },
   failedCalendarCancel: {
     kind: "failed-send",
     subject: {
@@ -196,7 +225,7 @@ const ALERT_COPY: Record<
 
 // orgs.language is a free-form short code; anything outside the three columns
 // falls back to English rather than shipping a missing string.
-function resolveAlertLanguage(raw: string | undefined): AlertLanguage {
+export function resolveAlertLanguage(raw: string | undefined): AlertLanguage {
   const code = (raw ?? "").slice(0, 2).toLowerCase();
   return code === "tr" || code === "de" ? code : "en";
 }

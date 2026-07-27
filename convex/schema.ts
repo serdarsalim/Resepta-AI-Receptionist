@@ -48,6 +48,11 @@ export default defineSchema({
     // different noise.
     notifyInbound: v.optional(v.boolean()),
     notifyFailedSend: v.optional(v.boolean()),
+    // A contact nobody in the salon typed in — the voice agent took a call,
+    // somebody filled the request form, a stranger wrote on WhatsApp. Only
+    // system-created contacts alert; see lib/newCustomer.ts for why an echo of
+    // your own typing is how a sender gets filtered into a folder.
+    notifyNewContact: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("by_org", ["orgId"]),

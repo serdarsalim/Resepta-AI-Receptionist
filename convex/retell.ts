@@ -11,6 +11,7 @@ import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 // Voice lane (spec Phase C): one Retell agent per org. Function calls and the
 // post-call webhook resolve the org by retellAgentId — never by caller number.
@@ -195,6 +196,11 @@ export const voiceBook = internalMutation({
         // Booking by calling the salon IS the opt-in moment (same reasoning
         // as the cal.com page).
         consentAt: Date.now(),
+      });
+      await recordCustomerCreated(ctx, {
+        orgId: args.orgId,
+        customerId,
+        source: "voice",
       });
       customer = await ctx.db.get(customerId);
     }
@@ -562,13 +568,19 @@ export const recordCall = internalMutation({
           q.eq("orgId", agent.orgId).eq("phone", callerPhone),
         )
         .unique();
-      customerId =
-        customer?._id ??
-        (await ctx.db.insert("customers", {
+      customerId = customer?._id;
+      if (!customerId) {
+        customerId = await ctx.db.insert("customers", {
           orgId: agent.orgId,
           firstName: "",
           phone: callerPhone,
-        }));
+        });
+        await recordCustomerCreated(ctx, {
+          orgId: agent.orgId,
+          customerId,
+          source: "voice",
+        });
+      }
     }
     await ctx.db.insert("calls", {
       orgId: agent.orgId,

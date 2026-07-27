@@ -32,13 +32,20 @@ export async function recordActivity(
     customerId?: Id<"customers">;
     appointmentId?: Id<"appointments">;
     detail?: string;
+    // Force "the system did this", for writes that are system writes no matter
+    // who is logged in. A PUBLIC endpoint is the case that matters: the request
+    // form answers to anyone, and if the salon owner happens to be signed in in
+    // that browser, the auth lookup below cheerfully credits THEM with the
+    // customer's own submission. The call site knows which door it is; the
+    // cookie does not.
+    system?: boolean;
   },
 ): Promise<void> {
   try {
     // Unset for anything the system did on its own — a webhook, the voice
     // agent, a cron. The reader sees "system" rather than a name that would
     // be a lie.
-    const actorId = await getAuthUserId(ctx);
+    const actorId = args.system ? null : await getAuthUserId(ctx);
     await ctx.db.insert("activityLog", {
       orgId: args.orgId,
       actorId: actorId ?? undefined,

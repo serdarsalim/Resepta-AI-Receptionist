@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertE164, requireOwner } from "./lib/orgAuth";
 import { splitName } from "./lib/emailInbound";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 // The public request form: the fourth way into this app, next to WhatsApp,
 // email and a phone call.
@@ -100,9 +101,9 @@ export const submit = mutation({
       .withIndex("by_org_phone", (q) => q.eq("orgId", org._id).eq("phone", phone))
       .unique();
     const named = splitName(name);
-    const customerId =
-      existing?._id ??
-      (await ctx.db.insert("customers", {
+    let customerId = existing?._id;
+    if (!customerId) {
+      customerId = await ctx.db.insert("customers", {
         orgId: org._id,
         firstName: named.firstName,
         ...(named.lastName ? { lastName: named.lastName } : {}),
@@ -111,7 +112,13 @@ export const submit = mutation({
         // Filling in a form asking to be contacted IS consent to be contacted
         // about it, and it is dated, which is what KVKK actually asks for.
         consentAt: Date.now(),
-      }));
+      });
+      await recordCustomerCreated(ctx, {
+        orgId: org._id,
+        customerId,
+        source: "form",
+      });
+    }
 
     // Names resolved HERE, not stored as ids: this row is a record of what
     // somebody asked for, and it has to still read correctly after the salon

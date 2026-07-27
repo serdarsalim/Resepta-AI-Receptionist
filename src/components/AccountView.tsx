@@ -114,6 +114,16 @@ export function AccountView() {
             label={t("account.notifyFailed")}
             onChange={(next) => void save({ notifyFailedSend: next })}
           />
+
+          <RowLabel
+            label={t("account.notifyNewContact")}
+            hint={t("account.notifyNewContactHint")}
+          />
+          <Toggle
+            checked={profile.notifyNewContact}
+            label={t("account.notifyNewContact")}
+            onChange={(next) => void save({ notifyNewContact: next })}
+          />
         </div>
       </Card>
     </div>

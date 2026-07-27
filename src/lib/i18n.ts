@@ -125,6 +125,19 @@ const dictionary = {
     en: "Tells you when a reminder or confirmation could not be delivered, so your business never goes quiet without anyone noticing.",
     de: "Meldet, wenn eine Erinnerung oder Bestätigung nicht zugestellt werden konnte. So merken Sie es, bevor ein Kunde ohne Nachricht dasteht.",
   },
+  "account.notifyNewContact": {
+    tr: "Yeni bir kişi eklendiğinde e-posta gönder",
+    en: "Email me when a new contact is added",
+    de: "E-Mail senden, wenn ein neuer Kontakt hinzukommt",
+  },
+  // The second sentence is the one that matters: without it the switch reads
+  // as "email me every time I type a customer in", which nobody wants and
+  // which is not what it does.
+  "account.notifyNewContactHint": {
+    tr: "Sesli asistan, talep formu, WhatsApp veya cal.com üzerinden yeni bir kişi eklendiğinde haber verilir. Ekipten biri kişiyi kendi eklediğinde e-posta gönderilmez.",
+    en: "Tells you when someone new arrives through the voice agent, your request form, WhatsApp or cal.com. Contacts you or your team type in yourselves never send an email.",
+    de: "Meldet neue Kontakte über den Sprachagenten, Ihr Anfrageformular, WhatsApp oder cal.com. Von Ihnen oder Ihrem Team selbst angelegte Kontakte lösen keine E-Mail aus.",
+  },
   "account.role": { tr: "Rolünüz", en: "Your role", de: "Ihre Rolle" },
   "account.language": {
     tr: "Uygulama dili",

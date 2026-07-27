@@ -13,6 +13,7 @@ import { scheduleConfirmationIfConfigured } from "./appointments";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity } from "./lib/activity";
 import { queueOrgAlert } from "./lib/alerts";
+import { recordCustomerCreated } from "./lib/newCustomer";
 
 const lineInput = v.object({
   serviceId: v.id("services"),
@@ -138,15 +139,18 @@ export const prepareCreate = internalMutation({
         .query("customers")
         .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
         .unique();
-      customerId =
-        existing?._id ??
-        (await ctx.db.insert("customers", {
+      customerId = existing?._id;
+      if (!customerId) {
+        customerId = await ctx.db.insert("customers", {
           orgId,
           firstName: args.newCustomer.firstName.trim() || phone,
           lastName: args.newCustomer.lastName?.trim() || undefined,
           phone,
           consentAt: args.newCustomer.consent ? Date.now() : undefined,
-        }));
+        });
+        // Typed into the booking sheet by somebody who is looking at it.
+        await recordCustomerCreated(ctx, { orgId, customerId, source: "staff" });
+      }
     } else {
       const customer = await ctx.db.get(customerId);
       if (!customer || customer.orgId !== orgId) throw new Error("not-found");
