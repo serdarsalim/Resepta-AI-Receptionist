@@ -95,7 +95,9 @@ export function InboxView({
                 {t("table.noMatches")}
               </p>
             ) : (
-              <ul>
+              // The last row's divider would land on the card's own bottom
+              // edge and read as a double rule.
+              <ul className="[&>li:last-child>div]:after:hidden">
                 {shown.map((c) => {
                   const isActive = c.customerId === selected;
                   const open = (next?: FeedFilter) => {
@@ -131,7 +133,12 @@ export function InboxView({
                         // shape, and --foreground gives it both without
                         // borrowing the status hue. This is the only left-bar
                         // selection in the app, so nothing else drifts.
-                        className={`group relative flex min-h-[3.875rem] w-full cursor-pointer items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] ${
+                        // The divider is INSET (after:inset-x-4) and starts
+                        // where the text does. A full-bleed rule cuts the card
+                        // into stacked boxes; an inset one reads as a list.
+                        // It stays on the row rather than the li so the hover
+                        // wash and the selection bar keep the full width.
+                        className={`group relative flex min-h-[2.75rem] w-full cursor-pointer items-center gap-2.5 px-4 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
                           isActive
                             ? "bg-[var(--row-hover-bg)] before:bg-[var(--foreground)]"
                             : "hover:bg-[var(--row-hover-bg)]"
@@ -144,44 +151,60 @@ export function InboxView({
                         >
                           {c.name || c.phone}
                         </span>
+                        {/* Channel strip. A channel with an unanswered inbound
+                            is PINNED open so the list stays scannable and so
+                            clicking it drops you straight into THAT thread;
+                            the rest fade in on row hover. All three always
+                            render and the strip is a fixed width, so nothing
+                            reflows when the row is hovered.
 
-                        {/* No gap: the attention button is a 40px tap box and
-                            already carries its own breathing room, so a gap
-                            on top of it just pushes the cluster wide. */}
-                        <span className="flex shrink-0 items-center gap-1">
-                          {/* Channel strip. A channel with an unanswered
-                              inbound is PINNED open and tinted so the list
-                              stays scannable; the rest fade in on row hover.
-                              All three always render — clicking one is how you
-                              START there. */}
-                          <span className="flex items-center gap-0.5">
-                            {CHANNELS.map((ch) => {
-                              const needsReply = c.awaitingChannels.includes(ch);
-                              const label = t(CHANNEL_LABEL[ch]);
-                              return (
-                                <button
-                                  key={ch}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    open(ch);
-                                  }}
-                                  aria-label={label}
-                                  // Hover bg is an ALPHA, not a solid: this
-                                  // button sits on three different row
-                                  // backgrounds and any solid would be wrong on
-                                  // at least two of them.
-                                  className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-[opacity,background-color] hover:bg-black/[0.07] dark:hover:bg-white/[0.12] ${
-                                    needsReply
-                                      ? "bg-[var(--brand)]/15 opacity-100"
-                                      : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
-                                  }`}
-                                >
-                                  <FeedIcon type={ch} size={17} />
-                                </button>
-                              );
-                            })}
-                          </span>
+                            LIT CHANNELS SORT LAST. That is the whole trick. A
+                            fixed slot per channel sounds tidy and reads as
+                            scatter: whether a glyph appears in slot 1, 2 or 3
+                            depends on the row, so the column fills with holes
+                            in a different place every line. Ordering the
+                            waiting ones to the end pins them against the
+                            attention dot, so however many there are they end
+                            on ONE edge and the eye follows a column instead of
+                            a constellation. The dark ones fade in to their
+                            left, into space that is empty at rest anyway.
+
+                            Colour, not a filled chip, marks the lit ones. The
+                            mint boxes this used to draw were the other half of
+                            why it read as noise. */}
+                        <span className="flex w-[5.25rem] shrink-0 items-center justify-end gap-0.5">
+                          {[...CHANNELS].sort(
+                            (a, b) =>
+                              Number(c.awaitingChannels.includes(a)) -
+                              Number(c.awaitingChannels.includes(b)),
+                          ).map((ch) => {
+                            const needsReply = c.awaitingChannels.includes(ch);
+                            return (
+                              <button
+                                key={ch}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  open(ch);
+                                }}
+                                aria-label={t(CHANNEL_LABEL[ch])}
+                                // Hover bg is an ALPHA, not a solid: this
+                                // button sits on three different row
+                                // backgrounds and any solid would be wrong on
+                                // at least two of them.
+                                className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-[opacity,background-color] hover:bg-black/[0.07] dark:hover:bg-white/[0.12] ${
+                                  needsReply
+                                    ? "opacity-100"
+                                    : "text-[var(--muted)] opacity-0 focus-visible:opacity-100 group-hover:opacity-60 hover:!opacity-100"
+                                }`}
+                              >
+                                <FeedIcon type={ch} size={16} tinted={needsReply} />
+                              </button>
+                            );
+                          })}
+                        </span>
+
+                        <span className="flex shrink-0 items-center">
                           {/* ONE dot, one colour, one meaning: this row still
                               needs somebody. A second hue only made the reader
                               learn a legend. What KIND of attention it is
@@ -249,9 +272,9 @@ export function InboxView({
                         </span>
 
                         {/* Last, so it pins to the row's right edge. The fixed
-                            width keeps the icon cluster from shuffling between
-                            a "5d" row and a "13d" one. */}
-                        <span className="w-8 shrink-0 text-right text-xs text-[var(--muted)]">
+                            width keeps the channel strip from shuffling
+                            between a "5d" row and a "13d" one. */}
+                        <span className="w-8 shrink-0 text-right text-xs tabular-nums text-[var(--muted)]">
                           {formatAgo(c.lastAt)}
                         </span>
                       </div>
