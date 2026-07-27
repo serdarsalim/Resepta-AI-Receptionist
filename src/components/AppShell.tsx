@@ -348,12 +348,17 @@ function ShellHeader({
             ×
           </button>
         )}
-        <UserMenu
-          name={name}
-          email={email}
-          remoteTheme={remoteTheme}
-          onOpenAccount={onOpenAccount}
-        />
+        {/* Phones only. On desktop this lives in the sidebar footer, and two
+            avatars on one screen would be two answers to "where is my
+            account". The phone has no sidebar showing, so it keeps one. */}
+        <span className="md:hidden">
+          <UserMenu
+            name={name}
+            email={email}
+            remoteTheme={remoteTheme}
+            onOpenAccount={onOpenAccount}
+          />
+        </span>
       </div>
     </header>
   );
@@ -457,16 +462,26 @@ function SignOutIcon() {
 // not. Business config is a sidebar destination, and phones reach it through
 // the drawer.
 const USER_MENU_WIDTH = 224; // w-56, used for the viewport clamp
+// Only decides WHICH side the menu opens on, never where it lands — the flip
+// pins the far edge, so this being approximate costs nothing.
+const USER_MENU_MIN_ROOM = 280;
 
 function UserMenu({
   name,
   email,
   remoteTheme,
   onOpenAccount,
+  // "avatar" is the bare circle the phone header wears. "row" is the sidebar
+  // footer: the same circle with the name beside it, because a sidebar has the
+  // width to say who is signed in and a header does not.
+  variant = "avatar",
+  collapsed = false,
 }: {
   name?: string;
   email?: string;
   remoteTheme?: Theme;
+  variant?: "avatar" | "row";
+  collapsed?: boolean;
   onOpenAccount: () => void;
 }) {
   const { t } = useLanguage();
@@ -480,7 +495,13 @@ function UserMenu({
   // Same mechanism as WorkspaceSwitcher below, deliberately: the header sits
   // inside `flex min-h-0 flex-1 flex-col overflow-hidden`, so an absolute
   // child gets clipped at the card edge and no z-index rescues it.
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  // Anchored by `top` OR by `bottom`, never both. Pinning the far edge is what
+  // lets the menu open upward from a sidebar footer without anybody having to
+  // guess its height first — a guessed height is a menu that drifts the moment
+  // somebody adds a row to it.
+  const [pos, setPos] = useState<
+    { top?: number; bottom?: number; left: number } | null
+  >(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = pos !== null;
@@ -532,14 +553,19 @@ function UserMenu({
     };
   }, [open]);
 
-  // Right-aligned under the avatar, then clamped so it can never hang off a
-  // 390px screen.
+  // Right-aligned on the trigger, then clamped so it can never hang off a
+  // 390px screen. Opens downward from the phone header and upward from the
+  // sidebar footer — decided by which side has the room, not by which caller
+  // it is, so neither placement has to know about the other.
   const toggle = () => {
     if (open) return setPos(null);
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
+    const roomBelow = window.innerHeight - r.bottom;
     setPos({
-      top: r.bottom + 8,
+      ...(roomBelow < USER_MENU_MIN_ROOM && r.top > roomBelow
+        ? { bottom: window.innerHeight - r.top + 8 }
+        : { top: r.bottom + 8 }),
       left: Math.max(
         8,
         Math.min(
@@ -565,9 +591,36 @@ function UserMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("menu.account")}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] hover:ring-[var(--muted)] transition-shadow"
+        className={
+          variant === "row" && !collapsed
+            ? "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.045] dark:hover:bg-white/[0.05]"
+            : "flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] transition-shadow hover:ring-[var(--muted)]"
+        }
       >
-        {initialsFrom(name, email)}
+        {variant === "row" && !collapsed ? (
+          <>
+            <span
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)]"
+            >
+              {initialsFrom(name, email)}
+            </span>
+            {/* Name over address, both truncating: a sidebar is 15rem wide and
+                an email is however long somebody's employer made it. */}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">
+                {name || email}
+              </span>
+              {name && email && (
+                <span className="block truncate text-xs text-[var(--muted)]">
+                  {email}
+                </span>
+              )}
+            </span>
+          </>
+        ) : (
+          initialsFrom(name, email)
+        )}
       </button>
       {/* Through a portal with fixed positioning, never an absolute child: the
           content card is overflow-hidden, so an in-flow menu gets clipped at
@@ -1065,11 +1118,20 @@ export function AppShell({
               />
             ))}
           </div>
-          {/* Config closes the nav, under a hairline. */}
-          {/* pb-4 lifts the group off the pane's bottom edge: flush against it
-              the two entries read as cut off, and on a Mac the dev-tools bubble
-              lands right on top of the last one. */}
-          <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pb-7 pt-2">
+          {/* Config sits with the work rather than pinned to the floor, under a
+              short rule that separates the two groups without drawing a line
+              across the whole pane. It moved up because the floor is spoken
+              for: the signed-in person lives down there now, and two things
+              anchored to the same edge compete instead of grouping.
+
+              A partial rule, not a full-width border: it is dividing two
+              stacks of left-aligned items, so it only has to be as wide as the
+              items are — a full bleed reads as the end of the sidebar. */}
+          <div
+            aria-hidden
+            className={`my-2 h-px w-1/2 bg-[var(--border)] ${showCollapsed ? "mx-auto" : "ml-2"}`}
+          />
+          <div className="space-y-0.5">
             {FOOT_TABS.map((entry) => (
               <SidebarButton
                 key={entry.id}
@@ -1079,6 +1141,22 @@ export function AppShell({
                 onClick={() => goTo(entry.id)}
               />
             ))}
+          </div>
+
+          {/* Who is signed in, at the bottom corner — where a decade of
+              dashboards has trained people to look for it, and where it stops
+              competing with the workspace name at the top for "whose is this".
+              pb-7 lifts it off the edge: flush against it the row reads as cut
+              off, and on a Mac the dev-tools bubble lands on top of it. */}
+          <div className={`mt-auto pb-7 pt-2 ${showCollapsed ? "flex justify-center" : ""}`}>
+            <UserMenu
+              variant="row"
+              collapsed={showCollapsed}
+              name={settings?.me.name}
+              email={settings?.me.email}
+              remoteTheme={settings?.me.themePreference}
+              onOpenAccount={() => goTo("account")}
+            />
           </div>
         </nav>
       </aside>
