@@ -1,9 +1,10 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
-import { conversationEntries, summariseEntries } from "./messages";
+import { conversationEntries, summariseEntries, type ConversationEntry } from "./messages";
 
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
@@ -28,8 +29,6 @@ const customerFields = {
   arrivedAt: v.optional(v.number()),
 };
 
-const customerDoc = v.object(customerFields);
-
 // Only the LIST carries the dot. Resolving it costs a scan of the org's recent
 // messages, which is the right price for the one screen that draws a dot per
 // row and the wrong one for reading a single record that never shows it.
@@ -41,14 +40,35 @@ const customerRow = v.object({
   needsAttention: v.boolean(),
 });
 
+// ONE dot, one meaning: nobody has looked at this person yet. It lights for an
+// unread message — the same arithmetic the inbox runs, imported rather than
+// reimplemented — and for somebody who arrived through the door on their own.
+// The second half is not redundant: a voice booking creates a customer and no
+// message at all, so an inbox-only dot leaves the arrivals most worth noticing
+// invisible everywhere.
+function resolveAttention(
+  customer: Doc<"customers">,
+  byCustomer: Map<string, ConversationEntry[]>,
+): boolean {
+  const entries = byCustomer.get(customer._id);
+  const messageAttentionAt = entries ? summariseEntries(entries).attentionAt : 0;
+  const wants = Math.max(messageAttentionAt, customer.arrivedAt ?? 0);
+  return wants > 0 && wants > (customer.attentionClearedAt ?? 0);
+}
+
 export const get = query({
   args: { customerId: v.id("customers") },
-  returns: v.union(customerDoc, v.null()),
+  returns: v.union(customerRow, v.null()),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) return null;
-    return customer;
+    // The record page carries the dot too, so it has to answer the same
+    // question the table does — and answer it the same way, through
+    // resolveAttention, rather than by looking at two of the three timestamps
+    // and guessing at the third.
+    const byCustomer = await conversationEntries(ctx, orgId);
+    return { ...customer, needsAttention: resolveAttention(customer, byCustomer) };
   },
 });
 
@@ -78,22 +98,11 @@ export const list = query({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(1000);
-    // ONE dot, one meaning: nobody has looked at this person yet. It lights
-    // for an unread message — the same arithmetic the inbox runs, imported
-    // rather than reimplemented — and for somebody who arrived through the
-    // door on their own. The second half is not redundant: a voice booking
-    // creates a customer and no message at all, so an inbox-only dot leaves
-    // the arrivals most worth noticing invisible everywhere.
     const byCustomer = await conversationEntries(ctx, orgId);
-    return rows.map((row) => {
-      const entries = byCustomer.get(row._id);
-      const messageAttentionAt = entries ? summariseEntries(entries).attentionAt : 0;
-      const wants = Math.max(messageAttentionAt, row.arrivedAt ?? 0);
-      return {
-        ...row,
-        needsAttention: wants > 0 && wants > (row.attentionClearedAt ?? 0),
-      };
-    });
+    return rows.map((row) => ({
+      ...row,
+      needsAttention: resolveAttention(row, byCustomer),
+    }));
   },
 });
 

@@ -72,6 +72,7 @@ export function ContactView({
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
+  const setAttention = useMutation(api.messages.setAttention);
   // Below lg the two panes swap instead of sharing the row (InboxView does the
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
@@ -126,6 +127,36 @@ export function ContactView({
         <h2 className="min-w-0 truncate text-base font-semibold">
           {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
         </h2>
+        {/* The same dot the table and the inbox draw, and here it is a
+            CONTROL. Opening the record clears it, which is right almost
+            always and wrong the once — you look, you cannot deal with it now,
+            and you want it to still be waiting later. Every mail client on
+            earth calls that mark as unread; this is the same button.
+
+            Not in the table: there, clicking a row already means read, so a
+            second affordance would be two ways to do one thing. Here the row
+            is already open and the click has nowhere else to go. */}
+        <button
+          type="button"
+          aria-pressed={customer.needsAttention}
+          aria-label={t("customers.needsLook")}
+          title={t("customers.needsLook")}
+          onClick={() =>
+            void setAttention({
+              customerId,
+              cleared: customer.needsAttention,
+            })
+          }
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--muted-bg)]"
+        >
+          <span
+            className={`h-2.5 w-2.5 rounded-full transition-colors ${
+              customer.needsAttention
+                ? "bg-[var(--brand)]"
+                : "border border-[var(--border)] bg-transparent"
+            }`}
+          />
+        </button>
         {/* Pills ride the header line so the record card and the conversation
             card start on the same line below it. On phones they only appear
             while the conversation pane is showing — filtering a feed you

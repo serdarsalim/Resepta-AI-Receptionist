@@ -388,7 +388,7 @@ export const feedForCustomer = query({
 // reasoning live here now, and each caller reads only what it needs from the
 // customers table on top.
 
-type ConversationEntry = {
+export type ConversationEntry = {
   // The inbox list's own strip, which answers "how can I reach this person" —
   // so a form intake counts as one more thing that happened, not as a way
   // back to them. Narrowed at the push below.
