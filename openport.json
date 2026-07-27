@@ -1,0 +1,6 @@
+{
+  "_comment": "Read by OpenPort. `npm run dev` is a launcher script, so the port it binds (3006, via dev:frontend) isn't visible to OpenPort's dev-script parser — declare it here or OpenPort watches an auto-assigned port and reports the app as crashed while it serves fine. scripts/dev.mjs starts the local Convex backend alongside Next.",
+  "run": [{ "name": "dev", "command": "npm run dev", "port": 3006 }],
+  "backend": { "kind": "convex", "bundled": true, "local": true },
+  "framework": "next"
+}
