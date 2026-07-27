@@ -126,6 +126,19 @@ const dictionary = {
     de: "Meldet, wenn eine Erinnerung oder Bestätigung nicht zugestellt werden konnte. So merken Sie es, bevor ein Kunde ohne Nachricht dasteht.",
   },
   "account.role": { tr: "Rolünüz", en: "Your role", de: "Ihre Rolle" },
+  "account.language": { tr: "Diliniz", en: "Your language", de: "Ihre Sprache" },
+  // Says the thing an owner will otherwise fear: changing this does not change
+  // what customers receive.
+  "account.languageHint": {
+    tr: "Uygulamayı yalnızca sizin için bu dilde gösterir. Müşterilere gönderilen mesajların dilini değiştirmez — onu İşletme > Genel altındaki mesaj dili belirler.",
+    en: "Shows the app in this language for you only. It does not change the language customers are messaged in — that is the message language under Business > General.",
+    de: "Zeigt die App nur für Sie in dieser Sprache. Die Sprache der Kundennachrichten ändert sich dadurch nicht — die steht unter Betrieb > Allgemein.",
+  },
+  "account.languageDefault": {
+    tr: "İşletmenin dili",
+    en: "Same as the business",
+    de: "Wie der Betrieb",
+  },
   "nav.signOut": { tr: "Çıkış", en: "Sign out", de: "Abmelden" },
 
   "auth.continueWithGoogle": {
@@ -598,7 +611,19 @@ const dictionary = {
     en: "No timezones found.",
     de: "Keine Zeitzonen gefunden.",
   },
-  "settings.language": { tr: "Dil", en: "Language", de: "Sprache" },
+  // Not "Language": that is what the account menu now calls the interface
+  // setting, and the two were indistinguishable while sharing a word. This one
+  // reaches customers.
+  "settings.language": {
+    tr: "Mesaj dili",
+    en: "Message language",
+    de: "Nachrichtensprache",
+  },
+  "settings.languageHint": {
+    tr: "Müşterilere gönderilen mesajların dili. Onaylı WhatsApp şablonunu da bu seçer — bu dilde onaylı şablon yoksa gönderim yapılamaz. Uygulamayı kendi dilinizde görmek için hesap menüsündeki dil ayarını kullanın.",
+    en: "The language customers are messaged in. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
+    de: "Die Sprache der Kundennachrichten. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
+  },
   "settings.reminders": {
     tr: "Hatırlatmalar",
     en: "Reminders",

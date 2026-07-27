@@ -15,6 +15,7 @@ export const myProfile = query({
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
     ),
+    language: v.optional(v.string()),
     notifyInbound: v.boolean(),
     notifyFailedSend: v.boolean(),
   }),
@@ -25,6 +26,7 @@ export const myProfile = query({
       email: user.email,
       role,
       themePreference: user.themePreference,
+      language: user.language,
       // Both default to TRUE when unset. A customer reply nobody sees is the
       // exact failure this product exists to prevent, so silence must be opted
       // into, never defaulted into. lib/alerts.ts reads the stored value the
@@ -41,6 +43,7 @@ export const myProfile = query({
 export const setMyProfile = mutation({
   args: {
     name: v.optional(v.string()),
+    language: v.optional(v.string()),
     notifyInbound: v.optional(v.boolean()),
     notifyFailedSend: v.optional(v.boolean()),
   },
@@ -50,6 +53,12 @@ export const setMyProfile = mutation({
     const patch: Record<string, unknown> = {};
     // An emptied name field is a slip, not an instruction to go nameless.
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
+    // Blank means "follow the business", which is a real choice and the
+    // default — so unlike name, an empty string clears rather than being
+    // ignored.
+    if (args.language !== undefined) {
+      patch.language = args.language.trim() || undefined;
+    }
     if (args.notifyInbound !== undefined) patch.notifyInbound = args.notifyInbound;
     if (args.notifyFailedSend !== undefined) {
       patch.notifyFailedSend = args.notifyFailedSend;

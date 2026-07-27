@@ -320,7 +320,10 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             placeholder="info@salonunuz.com"
             onBlur={(e) => void update({ emailFrom: e.target.value })}
           />
-          <RowLabel label={t("settings.language")} />
+          <RowLabel
+            label={t("settings.language")}
+            hint={t("settings.languageHint")}
+          />
           <select
             defaultValue={settings.org.language}
             onChange={(e) => void update({ language: e.target.value })}

@@ -84,6 +84,10 @@ export const current = query({
       themePreference: v.optional(
         v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
       ),
+      // Read here as well as in users.myProfile so the shell can pick the
+      // interface language on its existing query instead of opening a second
+      // one just to know what to render itself in.
+      language: v.optional(v.string()),
     }),
     whatsapp: v.union(
       v.object({
@@ -157,6 +161,7 @@ export const current = query({
         email: user.email,
         role,
         themePreference: user.themePreference,
+        language: user.language,
       },
       whatsapp: waAccount
         ? {

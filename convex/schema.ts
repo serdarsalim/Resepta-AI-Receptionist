@@ -31,6 +31,16 @@ export default defineSchema({
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
     ),
+    // What language this PERSON reads the app in — not what language the
+    // business writes to its customers in. orgs.language is that one, and it
+    // decides which approved WhatsApp template a send picks, so the two must
+    // never be the same setting: the moment a salon has two staff it has two
+    // readers, and a stylist preferring English is not an instruction to start
+    // messaging customers in English.
+    //
+    // Unset falls back to the org's language, which is what every existing
+    // account was already getting.
+    language: v.optional(v.string()),
     // Per-person alerts, set in the account menu. Unset means on for inbound
     // (a reply nobody sees is the whole failure mode this product exists to
     // prevent) and on for failed sends (a salon going quiet without anyone

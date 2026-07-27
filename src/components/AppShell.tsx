@@ -961,11 +961,20 @@ export function AppShell({
     setMobileOpen(false);
   };
 
-  // The org's language is the app's language — set in Settings, nowhere else.
-  const orgLanguage = settings?.org.language;
+  // The interface language is the READER's, falling back to the business's.
+  //
+  // It used to be the org's, full stop, which quietly made one salon-wide
+  // setting decide two unrelated things: what a stylist reads, and what
+  // language customers are messaged in. The second is org.language's real job
+  // — it selects the approved WhatsApp template, on exact match with no
+  // fallback — and it has no business changing because somebody prefers to
+  // work in German.
+  const preferredLanguage = settings?.me.language ?? settings?.org.language;
   useEffect(() => {
-    if (isLanguage(orgLanguage) && orgLanguage !== language) setLanguage(orgLanguage);
-  }, [orgLanguage, language, setLanguage]);
+    if (isLanguage(preferredLanguage) && preferredLanguage !== language) {
+      setLanguage(preferredLanguage);
+    }
+  }, [preferredLanguage, language, setLanguage]);
 
   // "account" has no sidebar entry to borrow a label from, so its title is
   // resolved directly.

@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { LANGUAGES } from "@/lib/i18n";
 import { Card } from "./Card";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
@@ -65,6 +66,25 @@ export function AccountView() {
           <StaticValue>
             {t(profile.role === "owner" ? "role.owner" : "role.staff")}
           </StaticValue>
+
+          {/* Yours, not the salon's. The empty option is the default and is
+              named after what it does rather than left blank, because "follow
+              the business" is a choice somebody might come back to. */}
+          <RowLabel
+            label={t("account.language")}
+            hint={t("account.languageHint")}
+          />
+          <select
+            value={profile.language ?? ""}
+            onChange={(e) => void save({ language: e.target.value })}
+          >
+            <option value="">{t("account.languageDefault")}</option>
+            {LANGUAGES.map((entry) => (
+              <option key={entry.code} value={entry.code}>
+                {entry.label}
+              </option>
+            ))}
+          </select>
         </div>
       </Card>
 
