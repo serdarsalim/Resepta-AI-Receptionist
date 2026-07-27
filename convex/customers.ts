@@ -3,8 +3,12 @@ import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { conversationEntries, summariseEntries } from "./messages";
 
-const customerDoc = v.object({
+// The row as stored. Built from a plain field map so the list validator can
+// extend it by one key without a second copy of nineteen columns drifting from
+// this one.
+const customerFields = {
   _id: v.id("customers"),
   _creationTime: v.number(),
   orgId: v.id("orgs"),
@@ -21,6 +25,20 @@ const customerDoc = v.object({
   // validates RETURNS as strictly as arguments, so a column added to the
   // schema and not added here makes every read of the table throw.
   attentionClearedAt: v.optional(v.number()),
+  arrivedAt: v.optional(v.number()),
+};
+
+const customerDoc = v.object(customerFields);
+
+// Only the LIST carries the dot. Resolving it costs a scan of the org's recent
+// messages, which is the right price for the one screen that draws a dot per
+// row and the wrong one for reading a single record that never shows it.
+const customerRow = v.object({
+  ...customerFields,
+  // Resolved server-side rather than shipped as three raw timestamps for the
+  // table to compare: the inbox already decides this exact question, and two
+  // places deciding it independently is how one dot becomes two answers.
+  needsAttention: v.boolean(),
 });
 
 export const get = query({
@@ -52,14 +70,30 @@ export const setCustomValue = mutation({
 
 export const list = query({
   args: {},
-  returns: v.array(customerDoc),
+  returns: v.array(customerRow),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    return await ctx.db
+    const rows = await ctx.db
       .query("customers")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(1000);
+    // ONE dot, one meaning: nobody has looked at this person yet. It lights
+    // for an unread message — the same arithmetic the inbox runs, imported
+    // rather than reimplemented — and for somebody who arrived through the
+    // door on their own. The second half is not redundant: a voice booking
+    // creates a customer and no message at all, so an inbox-only dot leaves
+    // the arrivals most worth noticing invisible everywhere.
+    const byCustomer = await conversationEntries(ctx, orgId);
+    return rows.map((row) => {
+      const entries = byCustomer.get(row._id);
+      const messageAttentionAt = entries ? summariseEntries(entries).attentionAt : 0;
+      const wants = Math.max(messageAttentionAt, row.arrivedAt ?? 0);
+      return {
+        ...row,
+        needsAttention: wants > 0 && wants > (row.attentionClearedAt ?? 0),
+      };
+    });
   },
 });
 

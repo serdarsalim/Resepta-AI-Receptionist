@@ -104,6 +104,10 @@ export async function recordCustomerCreated(
     system: args.source !== "staff",
   });
   if (args.source === "staff") return;
+  // Lights the dot in the customers table, and keeps it lit until somebody
+  // opens the record. See the schema comment on why this is not derived from
+  // messages: a voice booking sends none.
+  await ctx.db.patch(args.customerId, { arrivedAt: Date.now() });
 
   const customer = await ctx.db.get(args.customerId);
   if (!customer) return;

@@ -338,6 +338,13 @@ const dictionary = {
   },
   // Record footer. "Last activity" rather than "last update": a salon cares
   // when the customer last got in touch, not when someone edited the row.
+  // The dot's tooltip. Says what it wants, not what it is: "new" would be
+  // wrong for a customer of two years who has just written in.
+  "customers.needsLook": {
+    tr: "Henüz kimse bakmadı",
+    en: "Nobody has looked at this yet",
+    de: "Noch niemand hat sich das angesehen",
+  },
   "customers.cannotBeMessaged": {
     tr: "Bu müşteriye mesaj izni verilmediği için onay, hatırlatma ve geri kazanım mesajlarının hiçbiri gitmiyor. İzni müşteri kartından işaretleyebilirsiniz.",
     en: "No messaging consent on file, so confirmations, reminders and win-backs all skip this customer. You can record consent on their profile.",

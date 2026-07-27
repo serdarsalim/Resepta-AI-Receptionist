@@ -47,6 +47,28 @@ function fullName(customer: Customer): string {
   return `${customer.firstName} ${customer.lastName ?? ""}`.trim();
 }
 
+// The same green dot the inbox rows wear, because it is the same fact:
+// somebody still has to look at this. Lit by an unread message, or by the
+// person having arrived through the door on their own — a voice booking sends
+// no message at all, so the inbox alone would never show them.
+//
+// Not a button here, unlike the inbox. There the dot is the only way to say "I
+// have dealt with this" about a row you are not opening; here opening the
+// record IS the dismissal, so a second control would be a second way to do the
+// thing the click already does.
+function NewMark() {
+  const t = useT();
+  return (
+    <span
+      title={t("customers.needsLook")}
+      aria-label={t("customers.needsLook")}
+      className="inline-flex shrink-0 items-center"
+    >
+      <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
+    </span>
+  );
+}
+
 // A bell with a line through it: this person gets no messages. Consent used to
 // own a whole column that was blank for everyone who had it — 130px spent
 // saying nothing four rows in five, which is also what pushed Last activity
@@ -101,7 +123,20 @@ export function CustomersView({
   const { t, language } = useLanguage();
   const customers = useQuery(api.customers.list, {});
   const contactFields = useQuery(api.contactFields.list, {});
+  const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
+
+  // Opening the record IS reading it, so the dot goes out on the way in — the
+  // same stamp the inbox writes when somebody dismisses a row by hand, because
+  // it is the same fact being recorded and a second field would be a second
+  // answer. Fired only when it is lit: an unconditional write would touch
+  // every customer anyone ever clicked, for nothing.
+  const openContact = (customer: Customer) => {
+    if (customer.needsAttention) {
+      void setAttention({ customerId: customer._id, cleared: true });
+    }
+    onOpenContact(customer._id);
+  };
 
   const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
   const search = useHeaderSearch(t("common.search"));
@@ -418,10 +453,11 @@ export function CustomersView({
             <li
               key={customer._id}
               className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
-              onClick={() => onOpenContact(customer._id)}
+              onClick={() => openContact(customer)}
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
+                  {customer.needsAttention && <NewMark />}
                   <span className="truncate font-medium">{fullName(customer)}</span>
                   {customer.consentAt === undefined && <NoConsentMark />}
                 </span>
@@ -518,14 +554,15 @@ export function CustomersView({
                   <tr
                     key={customer._id}
                     tabIndex={0}
-                    onClick={() => onOpenContact(customer._id)}
+                    onClick={() => openContact(customer)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") onOpenContact(customer._id);
+                      if (event.key === "Enter") openContact(customer);
                     }}
                     className="cursor-pointer outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)]"
                   >
                     <td className="px-4 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
+                        {customer.needsAttention && <NewMark />}
                         <span className="truncate">{fullName(customer)}</span>
                         {customer.consentAt === undefined && <NoConsentMark />}
                       </span>

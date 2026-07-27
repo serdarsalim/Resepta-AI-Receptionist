@@ -401,7 +401,7 @@ type ConversationEntry = {
 
 // The expensive half: one window over messages and calls, grouped by customer.
 // Nothing from the customers table is touched here.
-async function conversationEntries(
+export async function conversationEntries(
   ctx: QueryCtx,
   orgId: Id<"orgs">,
 ): Promise<Map<string, ConversationEntry[]>> {
@@ -460,7 +460,7 @@ type ConversationSummary = {
 
 // Everything the entries alone decide. Sorts in place; the caller owns the
 // array.
-function summariseEntries(entries: ConversationEntry[]): ConversationSummary {
+export function summariseEntries(entries: ConversationEntry[]): ConversationSummary {
   entries.sort((a, b) => b.at - a.at);
   // Per channel, only the LATEST entry decides — an old unanswered reply that
   // was since answered on that channel is not still waiting.

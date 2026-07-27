@@ -244,6 +244,18 @@ export default defineSchema({
     // on the customer rather than per user because a salon shares one inbox:
     // once Hülya has handled it, the owner should not still see it waiting.
     attentionClearedAt: v.optional(v.number()),
+    // When this person turned up ON THEIR OWN — a call the voice agent took,
+    // the request form, a WhatsApp message from a number nobody knew. Unset
+    // for anybody a member of staff typed in, because the person who typed
+    // them has already looked at them.
+    //
+    // It exists so the attention dot can mean one thing in both places it
+    // appears. A contact who arrived through the door wants a look whether or
+    // not they also sent a message, and a voice booking sends none at all —
+    // so keying the dot purely off conversation entries left exactly the
+    // arrivals worth noticing invisible. Compared against
+    // attentionClearedAt like every other attention source.
+    arrivedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"]),
