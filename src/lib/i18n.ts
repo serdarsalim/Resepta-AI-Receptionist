@@ -894,6 +894,31 @@ const dictionary = {
     en: "What it collects",
     de: "Erfasste Angaben",
   },
+  "settings.waShopPhone": {
+    tr: "Dükkan telefonu",
+    en: "Shop phone",
+    de: "Betriebstelefon",
+  },
+  "settings.waLinkPhone": {
+    tr: "Telefonu bağla",
+    en: "Link phone",
+    de: "Telefon verbinden",
+  },
+  "settings.waScanHint": {
+    tr: "WhatsApp > Bağlı cihazlar > Cihaz bağla, sonra bu kodu okutun.",
+    en: "WhatsApp > Linked devices > Link a device, then scan this code.",
+    de: "WhatsApp > Verknüpfte Geräte > Gerät verknüpfen, dann diesen Code scannen.",
+  },
+  "settings.waWaitingScan": {
+    tr: "Okutulması bekleniyor…",
+    en: "Waiting for the scan…",
+    de: "Warten auf den Scan…",
+  },
+  "settings.waNotLinked": {
+    tr: "Bağlı değil",
+    en: "Not linked",
+    de: "Nicht verbunden",
+  },
   "settings.voiceRefresh": { tr: "Yenile", en: "Refresh", de: "Aktualisieren" },
   "settings.voiceConnect": {
     tr: "Asistan bağla",

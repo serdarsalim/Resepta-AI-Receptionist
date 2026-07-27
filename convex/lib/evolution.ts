@@ -102,6 +102,58 @@ export async function fetchEvolutionState(args: {
   }
 }
 
+export type EvolutionInstance =
+  | { ok: true; connected: boolean; state: string; number: string | null }
+  | { ok: false; reason: string };
+
+// State PLUS which number the instance is linked to. The number is the thing
+// the salon actually wants to see: "connected" tells them a scan worked,
+// "+90 532…" tells them it worked on the right handset, which is the mistake
+// somebody makes once per fleet by scanning with their personal phone.
+//
+// Evolution reports the owner as a JID (`4915…@s.whatsapp.net`) and only once
+// linked, so a disconnected instance returns null rather than a stale number.
+export async function fetchEvolutionInstance(args: {
+  baseUrl: string;
+  apiKey: string;
+  instance: string;
+}): Promise<EvolutionInstance> {
+  const url = `${trimBase(args.baseUrl)}/instance/fetchInstances?instanceName=${encodeURIComponent(args.instance)}`;
+  try {
+    const res = await fetch(url, { headers: { apikey: args.apiKey } });
+    if (!res.ok) return { ok: false, reason: `evolution-http-${res.status}` };
+    const out = (await res.json()) as unknown;
+    // Builds differ on whether this returns the instance or an array of one,
+    // and on whether the fields sit at the root or under `instance`.
+    const first = (Array.isArray(out) ? out[0] : out) as
+      | {
+          instance?: { state?: string; owner?: string; ownerJid?: string };
+          connectionStatus?: string;
+          state?: string;
+          ownerJid?: string;
+          owner?: string;
+        }
+      | undefined;
+    const state =
+      first?.instance?.state ?? first?.connectionStatus ?? first?.state ?? "unknown";
+    const jid =
+      first?.instance?.ownerJid ??
+      first?.instance?.owner ??
+      first?.ownerJid ??
+      first?.owner ??
+      null;
+    const digits = jid ? jid.split("@")[0].replace(/[^\d]/g, "") : "";
+    return {
+      ok: true,
+      state,
+      connected: state === "open",
+      number: digits ? `+${digits}` : null,
+    };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : "evolution-unreachable" };
+  }
+}
+
 export type EvolutionQr =
   | { ok: true; qr: string | null; connected: boolean }
   | { ok: false; reason: string };

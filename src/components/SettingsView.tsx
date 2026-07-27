@@ -406,6 +406,102 @@ function AwayReplyCard({
   );
 }
 
+// The salon's shop phone on the Evolution lane.
+//
+// Hidden entirely unless the operator has provisioned this org an instance:
+// a salon on Cloud only should never meet a QR code for a product nobody sold
+// them. The credentials that fetch all this are operator-installed and stay
+// server-side; what reaches this component is a picture, a state and a number.
+//
+// This is the one setup step that CANNOT be done from the admin console,
+// because it needs the handset in the salon's hand.
+function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const statusAction = useAction(api.evolution.status);
+  const qrAction = useAction(api.evolution.qr);
+  const [status, setStatus] = useState<{
+    enabled: boolean;
+    connected: boolean;
+    state: string;
+    number: string | null;
+    error: string | null;
+  } | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const next = await statusAction({});
+    setStatus(next);
+    // A completed scan retires the code it was scanned from.
+    if (next.connected) setQr(null);
+    return next;
+  }, [statusAction]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Only while a code is on screen. Evolution's QRs expire in well under a
+  // minute, so this is a short window by nature, and polling a salon's
+  // settings page forever to watch a phone that is already linked is work
+  // nobody asked for.
+  useEffect(() => {
+    if (!qr) return;
+    const timer = setInterval(() => void refresh(), 3000);
+    return () => clearInterval(timer);
+  }, [qr, refresh]);
+
+  if (!status?.enabled) return null;
+
+  const showQr = async () => {
+    const result = await qrAction({});
+    if (result.connected) {
+      void refresh();
+      return;
+    }
+    setQr(result.qr);
+  };
+
+  return (
+    <Card disabled={!isOwner}>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="font-medium">{t("settings.waShopPhone")}</span>
+        {status.connected ? (
+          <>
+            <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              {t("settings.waConnected")}
+            </span>
+            {/* The number matters as much as the state: it is how somebody
+                notices they linked their own phone instead of the shop's. */}
+            <span className="text-[var(--muted)]">{status.number ?? "—"}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-[var(--muted)]">{t("settings.waNotLinked")}</span>
+            <button
+              type="button"
+              onClick={() => void showQr()}
+              className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+            >
+              {t("settings.waLinkPhone")}
+            </button>
+          </>
+        )}
+      </div>
+      {qr && !status.connected && (
+        <div className="mt-3 flex flex-wrap items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a data: URI
+              from the Evolution server, not an asset next/image can optimise */}
+          <img src={qr} alt="" width={192} height={192} className="rounded-lg bg-white p-2" />
+          <div className="text-xs text-[var(--muted)]">
+            <p>{t("settings.waScanHint")}</p>
+            <p className="mt-1">{t("settings.waWaitingScan")}</p>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // The roster comes from the org's OWN Retell account (convex/retell.ts
 // listAgents), so this is a live call and not a query — there is nothing
 // mirrored into our tables to subscribe to. Deliberate: a cached list is how
@@ -805,6 +901,8 @@ export function SettingsView() {
       )}
 
       {section === "voice" && <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />}
+
+      {section === "whatsapp" && <ShopPhoneCard isOwner={isOwner} />}
 
       {section === "whatsapp" && (
         <AwayReplyCard
