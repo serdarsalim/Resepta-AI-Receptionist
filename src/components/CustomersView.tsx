@@ -113,10 +113,13 @@ export function CustomersView({
   );
 
   // Dates read as day-level facts here: a salon owner scanning a list wants
-  // "when", not "at what minute". Kept for the CSV export and for custom date
-  // fields; the Added/Last activity CELLS render an age instead (formatAge).
-  // "Yesterday" down a whole column is twenty rows agreeing on nothing — an
-  // age column sorts by eye, which is the only reason to look at it.
+  // "when", not "at what minute". Drives the Added column, custom date fields
+  // and the CSV export; only Last activity still renders an age (formatAge).
+  //
+  // Deliberately
+  // day/short-month/year ("20 Jul 2026") rather than a numeric date, because
+  // 07/08 is two different days depending on who is reading it and this app
+  // ships in three languages. Locale drives month name and word order.
   const dayFormat = useMemo(
     () =>
       new Intl.DateTimeFormat(localeFor(language), {
@@ -178,8 +181,14 @@ export function CustomersView({
         return customer.phone;
       case "email":
         return customer.email ?? "";
+      // Added is a FACT, not a recency: the day someone became a customer
+      // doesn't get more or less interesting as it ages, and "21d" makes the
+      // reader do arithmetic to answer "when did we get them". Last activity
+      // is the opposite — nobody cares which Tuesday it was, only whether it
+      // was recent — so it keeps the age treatment. Sorting reads
+      // _creationTime either way, so the column still sorts by time.
       case "added":
-        return formatAge(customer._creationTime, language);
+        return dayFormat.format(customer._creationTime);
       case "lastActivity":
         return customer.lastInboundAt ? formatAge(customer.lastInboundAt, language) : "";
       default: {
