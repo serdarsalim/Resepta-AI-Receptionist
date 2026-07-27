@@ -45,10 +45,15 @@ import { InfoTip } from "./InfoTip";
 // when something looks wrong and you need to know who did it — a question, not
 // a configuration, and burying it under a setup scroll would mean nobody ever
 // finds it at the moment they need it.
-type Section = "business" | "people" | "activity";
+// One chip, one job. They used to be three, with the first holding identity,
+// the service catalogue and the contact fields — three things an owner opens
+// on completely different schedules, stacked into one scroll, which is how
+// Services ended up below the fold on the screen it is most edited from.
+type Section = "general" | "catalogue" | "people" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "business", key: "settings.business" },
+  { id: "general", key: "settings.general" },
+  { id: "catalogue", key: "settings.catalogue" },
   { id: "people", key: "staff.title" },
   { id: "activity", key: "activity.title" },
 ];
@@ -80,7 +85,7 @@ function SectionChip({
 
 export function BusinessView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("business");
+  const [section, setSection] = useState<Section>("general");
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
@@ -104,9 +109,9 @@ export function BusinessView() {
           {t("settings.ownerOnly")}
         </p>
       )}
-      {section === "business" && (
+      {section === "general" && <DetailsCard isOwner={isOwner} />}
+      {section === "catalogue" && (
         <>
-          <DetailsCard isOwner={isOwner} />
           <ServicesCard isOwner={isOwner} />
           <FieldsCard isOwner={isOwner} />
         </>
@@ -236,7 +241,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   return (
-    <Card title={t("settings.business")} disabled={!isOwner}>
+    <Card title={t("settings.general")} disabled={!isOwner}>
       {settings === undefined ? (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       ) : (

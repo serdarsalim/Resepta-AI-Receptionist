@@ -562,6 +562,20 @@ const dictionary = {
   "settings.title": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   // Settings section chips reuse their card titles (Reminders, WhatsApp,
   // Bookings, Voice agent) so a chip and its card never disagree.
+  // The tab is already called Business, and the first field on the card is
+  // "Business name" — a chip and a card title saying it again put the word on
+  // screen four times for three different scopes. General is what the rest of
+  // the industry calls this card, and it leaves "Business" meaning one thing.
+  "settings.general": { tr: "Genel", en: "General", de: "Allgemein" },
+  // Services and contact fields under one chip because they are one surface:
+  // both are what this business's own vocabulary is, and both hand the voice
+  // agent a key it books or writes by. Splitting them would put half of the
+  // agent's contract on another screen.
+  "settings.catalogue": {
+    tr: "Hizmetler ve alanlar",
+    en: "Services & fields",
+    de: "Leistungen & Felder",
+  },
   "settings.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
   "settings.businessName": {
     tr: "İşletme adı",
