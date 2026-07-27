@@ -895,6 +895,16 @@ const dictionary = {
     de: "Erfasste Angaben",
   },
   "settings.voiceRefresh": { tr: "Yenile", en: "Refresh", de: "Aktualisieren" },
+  "settings.voiceConnect": {
+    tr: "Asistan bağla",
+    en: "Connect an agent",
+    de: "Assistent verbinden",
+  },
+  "settings.voiceDisconnect": {
+    tr: "Bağlantıyı kes",
+    en: "Disconnect",
+    de: "Trennen",
+  },
   "settings.voiceNotProvisioned": {
     tr: "Telefon asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
     en: "Your phone agent isn't set up yet. We handle setup.",

@@ -16,68 +16,120 @@ import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 
-// Voice lane (spec Phase C): one Retell agent per org. Function calls and the
-// post-call webhook resolve the org by retellAgentId — never by caller number.
+// Voice lane (spec Phase C). Function calls and the post-call webhook resolve
+// the org by retellAgentId — never by caller number.
+//
+// An org may connect MANY agents. A salon that greets in Turkish and German
+// runs one per language; a two-chair shop with two lines runs one per number.
+// Nothing on the inbound path had to change for that: every webhook reader
+// resolves through the `by_agent` index, and Retell's agent ids are globally
+// unique, so how many rows an org owns was never a question those paths asked.
+// Only this file's read/write surface assumed a single row.
+//
+// A CONNECTED AGENT IS A ROW. There is no hidden flag: an agent with no row
+// cannot resolve an org, so it cannot route a call, so a row that exists and a
+// row that is active are the same fact. Connecting and disconnecting is the
+// show/hide. `enabled` is the softer control on top — keep the wiring, stop
+// taking calls — which is what an owner wants when they close for a week.
 
-export const config = query({
+const agentRow = v.object({
+  _id: v.id("retellAgents"),
+  retellAgentId: v.string(),
+  inboundNumber: v.optional(v.string()),
+  transferNumber: v.optional(v.string()),
+  enabled: v.boolean(),
+});
+
+export const list = query({
   args: {},
-  returns: v.union(
-    v.object({
-      _id: v.id("retellAgents"),
-      retellAgentId: v.string(),
-      inboundNumber: v.optional(v.string()),
-      transferNumber: v.optional(v.string()),
-      enabled: v.boolean(),
-    }),
-    v.null(),
-  ),
+  returns: v.array(agentRow),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    const agent = await ctx.db
+    const rows = await ctx.db
       .query("retellAgents")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .unique();
-    if (!agent) return null;
-    return {
-      _id: agent._id,
-      retellAgentId: agent.retellAgentId,
-      inboundNumber: agent.inboundNumber,
-      transferNumber: agent.transferNumber,
-      enabled: agent.enabled,
-    };
+      .collect();
+    return rows.map((a) => ({
+      _id: a._id,
+      retellAgentId: a.retellAgentId,
+      inboundNumber: a.inboundNumber,
+      transferNumber: a.transferNumber,
+      enabled: a.enabled,
+    }));
   },
 });
 
-export const setConfig = mutation({
+// Every mutation below takes a document id from the browser, so each one
+// re-reads the row and checks its orgId. A caller can name any id they like;
+// the id is not the authorization.
+async function ownedAgent(ctx: MutationCtx, agentId: Id<"retellAgents">) {
+  const { orgId } = await requireOwner(ctx);
+  const row = await ctx.db.get(agentId);
+  if (!row || row.orgId !== orgId) throw new Error("no-such-agent");
+  return row;
+}
+
+export const connect = mutation({
   args: {
     retellAgentId: v.string(),
     inboundNumber: v.optional(v.string()),
-    transferNumber: v.optional(v.string()),
-    enabled: v.boolean(),
   },
-  returns: v.null(),
+  returns: v.id("retellAgents"),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
     const retellAgentId = args.retellAgentId.trim();
     if (!retellAgentId) throw new Error("agent-id-required");
-    // Agent ids are globally unique at Retell; refuse one another org claimed.
+    // Agent ids are globally unique at Retell, so one already claimed belongs
+    // to somebody. Another org's is refused; this org's is a no-op re-add
+    // rather than a duplicate row the webhook path would then find twice.
     const claimed = await ctx.db
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
       .unique();
-    if (claimed && claimed.orgId !== orgId) throw new Error("agent-already-connected");
-    const existing = await ctx.db
-      .query("retellAgents")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .unique();
-    const patch = {
+    if (claimed) {
+      if (claimed.orgId !== orgId) throw new Error("agent-already-connected");
+      return claimed._id;
+    }
+    return await ctx.db.insert("retellAgents", {
+      orgId,
       retellAgentId,
       inboundNumber: args.inboundNumber?.trim() || undefined,
-      transferNumber: args.transferNumber?.trim() || undefined,
-      enabled: args.enabled,
-    };
-    if (existing) await ctx.db.patch(existing._id, patch);
-    else await ctx.db.insert("retellAgents", { orgId, ...patch });
+      enabled: true,
+    });
+  },
+});
+
+export const disconnect = mutation({
+  args: { agentId: v.id("retellAgents") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ownedAgent(ctx, args.agentId);
+    await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
+export const update = mutation({
+  args: {
+    agentId: v.id("retellAgents"),
+    inboundNumber: v.optional(v.string()),
+    transferNumber: v.optional(v.string()),
+    enabled: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ownedAgent(ctx, args.agentId);
+    await ctx.db.patch(row._id, {
+      inboundNumber:
+        args.inboundNumber === undefined
+          ? row.inboundNumber
+          : args.inboundNumber.trim() || undefined,
+      transferNumber:
+        args.transferNumber === undefined
+          ? row.transferNumber
+          : args.transferNumber.trim() || undefined,
+      enabled: args.enabled ?? row.enabled,
+    });
     return null;
   },
 });

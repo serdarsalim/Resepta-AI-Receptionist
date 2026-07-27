@@ -15,6 +15,8 @@ import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
+import { InlineEditValue } from "./RecordField";
+import { Sheet } from "./Sheet";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -408,21 +410,29 @@ function AwayReplyCard({
 // listAgents), so this is a live call and not a query — there is nothing
 // mirrored into our tables to subscribe to. Deliberate: a cached list is how
 // you end up wiring an agent that was renamed or deleted in the provider.
+//
+// Two lists meet on this card and they answer different questions. `connected`
+// (api.retell.list) is what this salon has wired up and is the thing calls
+// route through. `roster` is everything sitting in their Retell account. An
+// agent in the roster and not in `connected` is one they could turn on; the
+// reverse is one whose row outlived the agent it named.
 type Roster = {
   configured: boolean;
   error: string | null;
-  connectedAgentId: string | null;
   agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
 };
 
 function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) {
   const { t } = useLanguage();
-  const config = useQuery(api.retell.config, {});
-  const setConfig = useMutation(api.retell.setConfig);
+  const connected = useQuery(api.retell.list, {});
+  const connect = useMutation(api.retell.connect);
+  const disconnect = useMutation(api.retell.disconnect);
+  const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -433,115 +443,168 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
 
   useEffect(() => load(), [load]);
 
-  if (config === undefined) {
+  if (connected === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
-  const commit = (patch: Partial<{ retellAgentId: string; inboundNumber: string; transferNumber: string; enabled: boolean }>) => {
-    void setConfig({
-      retellAgentId: patch.retellAgentId ?? config?.retellAgentId ?? "",
-      inboundNumber: patch.inboundNumber ?? config?.inboundNumber,
-      transferNumber: patch.transferNumber ?? config?.transferNumber,
-      enabled: patch.enabled ?? config?.enabled ?? false,
-    });
-  };
 
-  const selectedId = config?.retellAgentId ?? roster?.connectedAgentId ?? "";
-  const selected = roster?.agents.find((a) => a.id === selectedId) ?? null;
-  // A connected agent the account no longer lists — renamed, deleted, or the
-  // key now points at a different Retell account. Without its own option the
-  // select would just render blank, which reads as "nothing connected" when in
-  // fact calls are still routing to an id we hold. Show the id so the mismatch
-  // is visible rather than silent.
-  const orphaned = selectedId !== "" && roster !== null && selected === null;
+  const inRoster = (id: string) => roster?.agents.find((a) => a.id === id) ?? null;
+  const connectedIds = new Set(connected.map((row) => row.retellAgentId));
+  const available = (roster?.agents ?? []).filter((a) => !connectedIds.has(a.id));
 
-  // Picking an agent adopts the number Retell already has bound to it. The
-  // stored inboundNumber stays the field the rest of the backend reads; this
-  // just stops it being hand-typed into agreement with the provider.
-  const pick = (agentId: string) => {
-    if (!agentId) return;
+  // Connecting adopts whatever number Retell already has bound to that agent,
+  // so inboundNumber stops being hand-typed into agreement with the provider.
+  const add = (agentId: string) => {
     const bound = roster?.phoneNumbers.find((n) => n.agentId === agentId)?.number;
-    commit({ retellAgentId: agentId, inboundNumber: bound ?? config?.inboundNumber });
+    void connect({ retellAgentId: agentId, inboundNumber: bound });
+    setAdding(false);
   };
+
+  const status = !roster
+    ? null
+    : roster.configured
+      ? null
+      : roster.error
+        ? t("settings.voiceUnreachable")
+        : t("settings.voiceNotProvisioned");
 
   return (
     <Card disabled={!isOwner}>
-      <div className={ROW_GRID}>
-        <RowLabel label={t("settings.voiceAgent")} />
-        <div className="min-w-0">
-          {loading && roster === null ? (
-            <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-          ) : roster?.configured && roster.agents.length > 0 ? (
-            <select value={selectedId} onChange={(e) => pick(e.target.value)}>
-              <option value="" disabled>
-                {t("settings.voiceAgentChoose")}
-              </option>
-              {orphaned && <option value={selectedId}>{selectedId}</option>}
-              {roster.agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="text-sm text-[var(--muted)]">
-              {roster?.configured
-                ? t("settings.voiceNoAgents")
-                : roster?.error
-                  ? t("settings.voiceUnreachable")
-                  : t("settings.voiceNotProvisioned")}
-              {roster?.error && (
-                <code className="ml-2 text-xs opacity-60">{roster.error}</code>
-              )}
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="mt-1.5 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
-          >
-            {t("settings.voiceRefresh")}
-          </button>
+      {connected.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+              <tr>
+                <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.transferNumber")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.voiceEnabled")}</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {connected.map((row) => {
+                const agent = inRoster(row.retellAgentId);
+                return (
+                  <tr key={row._id} className="border-t border-[var(--border)]">
+                    {/* An agent the account no longer lists — renamed, deleted,
+                        or a key repointed at a different Retell account. Show
+                        the raw id rather than a blank cell: calls still route
+                        to it, so silence here would read as "nothing wired". */}
+                    <td className="whitespace-nowrap px-3 py-2">
+                      {agent ? (
+                        agent.name
+                      ) : (
+                        <span className="font-mono text-xs text-amber-600 dark:text-amber-400">
+                          {row.retellAgentId}
+                        </span>
+                      )}
+                    </td>
+                    <td className="max-w-[16rem] truncate px-3 py-2 text-xs text-[var(--muted)]">
+                      {agent && agent.collects.length > 0 ? agent.collects.join(", ") : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <InlineEditValue
+                        value={row.inboundNumber ?? ""}
+                        type="tel"
+                        compact
+                        placeholder="+902121234567"
+                        onSave={(value) => update({ agentId: row._id, inboundNumber: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <InlineEditValue
+                        value={row.transferNumber ?? ""}
+                        type="tel"
+                        compact
+                        placeholder="+905321234567"
+                        onSave={(value) => update({ agentId: row._id, transferNumber: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <Toggle
+                        checked={row.enabled}
+                        onChange={(next) => void update({ agentId: row._id, enabled: next })}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => void disconnect({ agentId: row._id })}
+                        className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+                      >
+                        {t("settings.voiceDisconnect")}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+      )}
 
-        <RowLabel label={t("settings.voiceCollects")} />
-        {/* Rendered whether or not anything is selected, so choosing an agent
-            does not grow the card under the pointer. */}
-        <p className="min-w-0 text-sm text-[var(--muted)]">
-          {selected && selected.collects.length > 0 ? selected.collects.join(", ") : "—"}
-        </p>
+      {/* Reserved whether or not it says anything, so refreshing into an error
+          does not push the buttons out from under the pointer. */}
+      <p className="min-h-[1.25rem] text-sm text-[var(--muted)]">
+        {status}
+        {roster?.error && <code className="ml-2 text-xs opacity-60">{roster.error}</code>}
+        {roster?.configured && connected.length === 0 && available.length === 0
+          ? t("settings.voiceNoAgents")
+          : null}
+      </p>
 
-        <RowLabel label={t("settings.inboundNumber")} />
-        <input
-          defaultValue={config?.inboundNumber ?? ""}
-          placeholder="+902121234567"
-          onBlur={(e) => config && commit({ inboundNumber: e.target.value })}
-        />
-        <RowLabel label={t("settings.transferNumber")} />
-        <input
-          defaultValue={config?.transferNumber ?? ""}
-          placeholder="+905321234567"
-          onBlur={(e) => config && commit({ transferNumber: e.target.value })}
-        />
-        <RowLabel label={t("settings.voiceEnabled")} />
-        <Toggle
-          checked={config?.enabled ?? false}
-          onChange={(next) => config && commit({ enabled: next })}
-          disabled={!config}
-        />
-        {config && (
-          <>
-            <RowLabel label={t("settings.voiceEndpoints")} hint={t("settings.voiceHint")} />
-            <div className="min-w-0 space-y-1 text-xs text-[var(--muted)]">
-              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-                {siteUrl}/retell/functions
-              </code>
-              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-                {siteUrl}/retell/call-ended
-              </code>
-            </div>
-          </>
-        )}
+      <div className="mt-2 flex items-center gap-1">
+        {/* Adding opens a sheet. A permanent picker under the table would be a
+            question the page asks on every visit to pay for a task done once. */}
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          disabled={available.length === 0}
+          className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-40"
+        >
+          {t("settings.voiceConnect")}
+        </button>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
+        >
+          {t("settings.voiceRefresh")}
+        </button>
+      </div>
+
+      {adding && (
+        <Sheet title={t("settings.voiceConnect")} onClose={() => setAdding(false)}>
+          <div className="space-y-1">
+            {available.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => add(agent.id)}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted-bg)]"
+              >
+                <div className="font-medium">{agent.name}</div>
+                {agent.collects.length > 0 && (
+                  <div className="text-xs text-[var(--muted)]">{agent.collects.join(", ")}</div>
+                )}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
+      <div className={`mt-4 ${ROW_GRID}`}>
+        <RowLabel label={t("settings.voiceEndpoints")} hint={t("settings.voiceHint")} />
+        <div className="min-w-0 space-y-1 text-xs text-[var(--muted)]">
+          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+            {siteUrl}/retell/functions
+          </code>
+          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+            {siteUrl}/retell/call-ended
+          </code>
+        </div>
       </div>
     </Card>
   );
