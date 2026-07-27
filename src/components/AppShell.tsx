@@ -1069,8 +1069,17 @@ export function AppShell({
       {/* Floating content card; scrolls internally (min-h-0 is load-bearing).
           --pane, not --background: this is the plane the view's own cards sit
           on, not a sheet of its own. White here meant card-raised was white on
-          white and had to buy its separation entirely with shadow. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--pane)] md:rounded-xl md:border md:border-[var(--border)]">
+          white and had to buy its separation entirely with shadow.
+
+          The calendar is the exception, and it earns it: it draws a full-bleed
+          grid of hairlines rather than floating cards, so there is nothing for
+          the plane to separate — grey just tints the whole grid and the day
+          columns stop reading as paper. */}
+      <div
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden md:rounded-xl md:border md:border-[var(--border)] ${
+          tab === "appointments" ? "bg-[var(--card)]" : "bg-[var(--pane)]"
+        }`}
+      >
         <ShellHeader
           titleKey={titleKey}
           closable={tab === "settings" || tab === "business" || tab === "account"}
