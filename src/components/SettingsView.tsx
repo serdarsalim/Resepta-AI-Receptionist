@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type TranslationKey } from "@/lib/i18n";
@@ -404,10 +404,35 @@ function AwayReplyCard({
   );
 }
 
+// The roster comes from the org's OWN Retell account (convex/retell.ts
+// listAgents), so this is a live call and not a query — there is nothing
+// mirrored into our tables to subscribe to. Deliberate: a cached list is how
+// you end up wiring an agent that was renamed or deleted in the provider.
+type Roster = {
+  configured: boolean;
+  error: string | null;
+  connectedAgentId: string | null;
+  agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
+  phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+};
+
 function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) {
   const { t } = useLanguage();
   const config = useQuery(api.retell.config, {});
   const setConfig = useMutation(api.retell.setConfig);
+  const listAgents = useAction(api.retell.listAgents);
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    void listAgents({})
+      .then(setRoster)
+      .finally(() => setLoading(false));
+  }, [listAgents]);
+
+  useEffect(() => load(), [load]);
+
   if (config === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
@@ -419,14 +444,73 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
       enabled: patch.enabled ?? config?.enabled ?? false,
     });
   };
+
+  const selectedId = config?.retellAgentId ?? roster?.connectedAgentId ?? "";
+  const selected = roster?.agents.find((a) => a.id === selectedId) ?? null;
+  // A connected agent the account no longer lists — renamed, deleted, or the
+  // key now points at a different Retell account. Without its own option the
+  // select would just render blank, which reads as "nothing connected" when in
+  // fact calls are still routing to an id we hold. Show the id so the mismatch
+  // is visible rather than silent.
+  const orphaned = selectedId !== "" && roster !== null && selected === null;
+
+  // Picking an agent adopts the number Retell already has bound to it. The
+  // stored inboundNumber stays the field the rest of the backend reads; this
+  // just stops it being hand-typed into agreement with the provider.
+  const pick = (agentId: string) => {
+    if (!agentId) return;
+    const bound = roster?.phoneNumbers.find((n) => n.agentId === agentId)?.number;
+    commit({ retellAgentId: agentId, inboundNumber: bound ?? config?.inboundNumber });
+  };
+
   return (
     <Card disabled={!isOwner}>
       <div className={ROW_GRID}>
-        <RowLabel label={t("settings.retellAgentId")} />
-        <input
-          defaultValue={config?.retellAgentId ?? ""}
-          onBlur={(e) => e.target.value.trim() && commit({ retellAgentId: e.target.value })}
-        />
+        <RowLabel label={t("settings.voiceAgent")} />
+        <div className="min-w-0">
+          {loading && roster === null ? (
+            <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+          ) : roster?.configured && roster.agents.length > 0 ? (
+            <select value={selectedId} onChange={(e) => pick(e.target.value)}>
+              <option value="" disabled>
+                {t("settings.voiceAgentChoose")}
+              </option>
+              {orphaned && <option value={selectedId}>{selectedId}</option>}
+              {roster.agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm text-[var(--muted)]">
+              {roster?.configured
+                ? t("settings.voiceNoAgents")
+                : roster?.error
+                  ? t("settings.voiceUnreachable")
+                  : t("settings.voiceNotProvisioned")}
+              {roster?.error && (
+                <code className="ml-2 text-xs opacity-60">{roster.error}</code>
+              )}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="mt-1.5 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
+          >
+            {t("settings.voiceRefresh")}
+          </button>
+        </div>
+
+        <RowLabel label={t("settings.voiceCollects")} />
+        {/* Rendered whether or not anything is selected, so choosing an agent
+            does not grow the card under the pointer. */}
+        <p className="min-w-0 text-sm text-[var(--muted)]">
+          {selected && selected.collects.length > 0 ? selected.collects.join(", ") : "—"}
+        </p>
+
         <RowLabel label={t("settings.inboundNumber")} />
         <input
           defaultValue={config?.inboundNumber ?? ""}

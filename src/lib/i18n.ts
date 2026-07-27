@@ -875,6 +875,41 @@ const dictionary = {
     en: "Retell agent ID",
     de: "Retell-Agent-ID",
   },
+  // The salon's word for the thing, not the vendor's. They bought a phone that
+  // gets answered; "Retell agent" is an implementation detail they never chose.
+  "settings.voiceAgent": {
+    tr: "Telefon asistanı",
+    en: "Phone agent",
+    de: "Telefonassistent",
+  },
+  "settings.voiceAgentChoose": {
+    tr: "Asistan seçin",
+    en: "Choose an agent",
+    de: "Assistent auswählen",
+  },
+  // Retell calls these post-call analysis variables. A salon owner reads the
+  // question "what does it write down", so ask that.
+  "settings.voiceCollects": {
+    tr: "Topladığı bilgiler",
+    en: "What it collects",
+    de: "Erfasste Angaben",
+  },
+  "settings.voiceRefresh": { tr: "Yenile", en: "Refresh", de: "Aktualisieren" },
+  "settings.voiceNotProvisioned": {
+    tr: "Telefon asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
+    en: "Your phone agent isn't set up yet. We handle setup.",
+    de: "Ihr Telefonassistent ist noch nicht eingerichtet. Die Einrichtung übernehmen wir.",
+  },
+  "settings.voiceUnreachable": {
+    tr: "Telefon asistanına şu anda ulaşılamıyor. Bizimle iletişime geçin.",
+    en: "Can't reach your phone agent right now. Get in touch with us.",
+    de: "Ihr Telefonassistent ist derzeit nicht erreichbar. Bitte wenden Sie sich an uns.",
+  },
+  "settings.voiceNoAgents": {
+    tr: "Bu hesapta asistan yok.",
+    en: "No agents in this account.",
+    de: "Keine Assistenten in diesem Konto.",
+  },
   "settings.inboundNumber": {
     tr: "Gelen arama numarası",
     en: "Inbound number",
