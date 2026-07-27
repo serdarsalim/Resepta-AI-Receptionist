@@ -134,11 +134,6 @@ const dictionary = {
     en: "Shows the app in this language for you only. It does not change the language customers are messaged in — that is the message language under Business > General.",
     de: "Zeigt die App nur für Sie in dieser Sprache. Die Sprache der Kundennachrichten ändert sich dadurch nicht — die steht unter Betrieb > Allgemein.",
   },
-  "account.languageDefault": {
-    tr: "İşletmenin dili",
-    en: "Same as the business",
-    de: "Wie der Betrieb",
-  },
   "nav.signOut": { tr: "Çıkış", en: "Sign out", de: "Abmelden" },
 
   "auth.continueWithGoogle": {

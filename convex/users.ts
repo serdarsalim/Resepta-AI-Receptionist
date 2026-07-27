@@ -15,18 +15,23 @@ export const myProfile = query({
     themePreference: v.optional(
       v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
     ),
-    language: v.optional(v.string()),
+    // Already resolved. A user who has never chosen is reading the app in the
+    // business's language, so that is the honest answer to "what language am I
+    // in" — the picker should not have to render the difference between
+    // choosing tr and inheriting tr, because there isn't one.
+    language: v.string(),
     notifyInbound: v.boolean(),
     notifyFailedSend: v.boolean(),
   }),
   handler: async (ctx) => {
-    const { user, role } = await requireOrg(ctx);
+    const { user, role, orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
     return {
       name: user.name,
       email: user.email,
       role,
       themePreference: user.themePreference,
-      language: user.language,
+      language: user.language ?? org?.language ?? "tr",
       // Both default to TRUE when unset. A customer reply nobody sees is the
       // exact failure this product exists to prevent, so silence must be opted
       // into, never defaulted into. lib/alerts.ts reads the stored value the
