@@ -31,6 +31,7 @@ import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_connections from "../lib/connections.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
+import type * as lib_evolution from "../lib/evolution.js";
 import type * as lib_format from "../lib/format.js";
 import type * as lib_keys from "../lib/keys.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   "lib/connections": typeof lib_connections;
   "lib/email": typeof lib_email;
   "lib/emailInbound": typeof lib_emailInbound;
+  "lib/evolution": typeof lib_evolution;
   "lib/format": typeof lib_format;
   "lib/keys": typeof lib_keys;
   "lib/metaSig": typeof lib_metaSig;

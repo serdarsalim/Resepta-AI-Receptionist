@@ -40,6 +40,24 @@ export const CONNECTION_SPECS: {
     label: "Retell",
     fields: [{ field: "apiKey", label: "API key", secret: true }],
   },
+  {
+    // Self-hosted Evolution API, a Dockerized Baileys REST wrapper. Randevu
+    // picks this lane PER ORG (orgs.waLane) rather than per number the way
+    // Nudge does, because here a salon is an org and has one number.
+    //
+    // baseUrl is per-org so a demo can point at your own server while a BYO
+    // client points at theirs. apiKey sends (per-instance token if the server
+    // issues one, else the global key). adminKey is optional and only buys the
+    // in-app provisioning and QR flow; without it you create the instance
+    // yourself and paste its token.
+    provider: "evolution",
+    label: "WhatsApp (Evolution API)",
+    fields: [
+      { field: "baseUrl", label: "API base URL", secret: false },
+      { field: "apiKey", label: "Send API key / instance token", secret: true },
+      { field: "adminKey", label: "Admin key (provisioning; optional)", secret: true },
+    ],
+  },
 ];
 
 export function connectionSpec(provider: string) {

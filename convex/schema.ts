@@ -142,6 +142,28 @@ export default defineSchema({
     // No-show winback: template send N days after a no_show.
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
+    // Which WhatsApp lane this org sends on. Unset = "cloud", the only lane
+    // that was ever supported and the only one fit for production.
+    //
+    // "evolution" is a DEMO AND TRIAL lane, and the word demo is doing real
+    // work there. docs/competitive-plan.md section 7 rejected Evolution as a
+    // product lane on findings that have not changed: its Baileys connector
+    // returns 201 for quick-reply buttons and never delivers them (issue
+    // #2404), and WhatsApp's Reachout Timelock drops cold outbound SILENTLY
+    // with ACK 463 while the instance still reports itself healthy. Randevu's
+    // confirm/cancel loop is buttons and its first reminder to a walk-in is
+    // always a cold reachout, so both findings land squarely on this product.
+    //
+    // It exists anyway because a salon cannot see the product work until a
+    // number is sending, and a Meta WABA plus template approval is days. This
+    // lane is how a prospect watches a reminder arrive on their own phone in
+    // the room. Sends on it go out as TEXT carrying the reply words, never as
+    // buttons, and the org moves to "cloud" the day its WABA clears.
+    waLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
+    // Evolution instance name for this org. One instance per salon; the
+    // credentials (baseUrl, apiKey) live in `connections` like every other
+    // provider secret.
+    evolutionInstance: v.optional(v.string()),
     // From-address for customer emails; delivery goes straight to the email
     // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
     // verified there or sends are rejected. Unset = email off.
