@@ -317,7 +317,10 @@ export function InboxView({
               <button
                 type="button"
                 onClick={() => onOpenContact(active.customerId)}
-                className="truncate text-sm font-semibold hover:underline"
+                // text-base, not text-sm: this is the heading for everything
+                // in the right column, and at text-sm it weighed exactly the
+                // same as a name in the list beside it.
+                className="truncate text-base font-semibold hover:underline"
                 title={t("inbox.openContact")}
               >
                 {active.name || active.phone}

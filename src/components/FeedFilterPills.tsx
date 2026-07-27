@@ -71,7 +71,12 @@ export function FeedFilterPills({
         // background on the resting pill, and ink that carries the weight —
         // an empty tab drops to half-strength muted, one with rows in it sits
         // at 75% foreground, the open one goes accent and semibold.
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+        // text-sm and the glyph at 15: the pills sit beside the conversation's
+        // name and were reading a size below everything around them. py-1 is
+        // unchanged — the row lives in a fixed h-9 track that the empty track
+        // over the list mirrors, and growing it breaks the two cards' shared
+        // top edge.
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors ${
           active
             ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
             : count > 0
@@ -85,7 +90,7 @@ export function FeedFilterPills({
         {/* Tinted in every state, open one included: the glyph's colour is how
             you find the channel, and dropping it to accent on select means the
             pill you're looking at is the one that stopped being recognizable. */}
-        {tab !== "all" && <FeedIcon type={tab} size={14} />}
+        {tab !== "all" && <FeedIcon type={tab} size={15} />}
         {(tab === "all" || tab === "note" || tab === "form") && (
           <span>{label}</span>
         )}
