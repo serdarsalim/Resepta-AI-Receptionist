@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Connections, Failures } from "../parts";
+import { Failures } from "../parts";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -64,6 +64,11 @@ function Row({
 // it; leaving it blank keeps what is there. An input pre-filled with a masked
 // string would submit the mask as the new value the first time somebody
 // tabbed through it.
+//
+// The masked tail sits UNDER THE LABEL rather than beside the input, so the
+// control column starts at the same x as every plain row. Three sections each
+// indenting their inputs differently is what it looked like otherwise, and the
+// eye reads that as three unrelated forms.
 function SecretRow({
   label,
   hint,
@@ -80,12 +85,10 @@ function SecretRow({
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       <div>
         <div className="text-sm font-medium">{label}</div>
+        <div className="font-mono text-xs text-[var(--muted)]">{masked ?? "not set"}</div>
         {hint && <div className="text-xs text-[var(--muted)]">{hint}</div>}
       </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="w-24 shrink-0 font-mono text-xs text-[var(--muted)]">
-          {masked ?? "not set"}
-        </span>
+      <div className="min-w-0">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -96,7 +99,7 @@ function SecretRow({
             setDraft("");
           }}
           placeholder={masked ? "replace…" : "paste…"}
-          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+          className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
         />
       </div>
     </div>
@@ -120,6 +123,8 @@ export default function TenantPage() {
   const setOrgConfig = useMutation(api.platform.setOrgConfig);
   const setWaAccount = useMutation(api.platform.setWaAccount);
   const actAs = useMutation(api.platform.actAs);
+  const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
+  const setField = useMutation(api.connections.setField);
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -189,10 +194,19 @@ export default function TenantPage() {
       </header>
 
       <Section title="Voice">
-        {/* The Retell key. Each client has their own account, so this is the
-            one field that decides whose agents the salon's own Settings will
-            list back to them. */}
-        <Connections orgId={orgId} />
+        {/* Each client has their own Retell account, so this key is what
+            decides whose agents the salon's own Settings lists back to them. */}
+        {(conns ?? []).map((row) => (
+          <SecretRow
+            key={`${row.provider}.${row.field}`}
+            label={`${row.providerLabel} ${row.fieldLabel}`}
+            hint={row.label ?? undefined}
+            masked={row.masked}
+            onSave={(value) =>
+              setField({ orgId, provider: row.provider, field: row.field, value })
+            }
+          />
+        ))}
         {detail.agents.length === 0 ? (
           <p className="py-2 text-xs text-[var(--muted)]">
             No agents connected. The salon picks theirs in Settings once the key is in.
