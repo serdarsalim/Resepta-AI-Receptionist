@@ -1482,6 +1482,14 @@ const dictionary = {
     en: "WhatsApp connected",
     de: "WhatsApp verbunden",
   },
+  // Says what the salon has to DO, not what the system did. "Booking dropped"
+  // is our word for it; the owner's problem is that somebody is coming and
+  // will not be reminded, and the number is right there in the detail.
+  "activity.booking_dropped": {
+    tr: "Randevu eklenemedi, numara okunamadı",
+    en: "Booking not added, number unreadable",
+    de: "Termin nicht übernommen, Nummer unlesbar",
+  },
 } as const;
 
 export type TranslationKey = keyof typeof dictionary;

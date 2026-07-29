@@ -11,6 +11,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
+import { normalisePhone } from "./lib/phone";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -681,10 +682,15 @@ export function coerceContactValue(
 
 // Lenient sibling of assertE164: the voice lane must never throw at Retell,
 // so a number we cannot read comes back as a reason instead of a 500.
+//
+// No dial code passed, deliberately. A caller ID arrives from the carrier
+// already international, and a number the caller SPELLS OUT mid-call is
+// transcribed speech that could be anything — neither is a case where
+// attaching the salon's country to a bare string is safe. The cal.com path
+// does pass one because there the digits came off a form the customer filled
+// in themselves (lib/phone.ts).
 function toE164(raw: string): string | null {
-  const trimmed = raw.replace(/[\s().-]/g, "");
-  const phone = trimmed.startsWith("+") ? trimmed : `+${trimmed}`;
-  return /^\+[1-9]\d{6,14}$/.test(phone) ? phone : null;
+  return normalisePhone(raw);
 }
 
 // The single mapping both voice write paths share: the mid-call function and

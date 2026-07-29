@@ -186,6 +186,7 @@ const ACTIVITY_LABELS: Record<string, TranslationKey> = {
   member_invited: "activity.member_invited",
   member_removed: "activity.member_removed",
   whatsapp_connected: "activity.whatsapp_connected",
+  booking_dropped: "activity.booking_dropped",
 };
 
 // Rows use the shared ROW_GRID from RowLabel, the same string SettingsView and

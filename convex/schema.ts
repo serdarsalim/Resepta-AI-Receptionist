@@ -732,6 +732,14 @@ export default defineSchema({
       v.literal("member_invited"),
       v.literal("member_removed"),
       v.literal("whatsapp_connected"),
+      // A booking that reached us and could not be stored — today only from
+      // cal.com, when the attendee's phone is not a number we can message.
+      // The odd one out in this union: every other kind records what somebody
+      // DID, and this one records what the product failed to do. It lives here
+      // anyway because the feed is the only per-org surface a salon already
+      // reads, and a failure nobody sees is the same as no failure at all.
+      // `detail` carries the name, the time and the number as typed.
+      v.literal("booking_dropped"),
     ),
     customerId: v.optional(v.id("customers")),
     appointmentId: v.optional(v.id("appointments")),

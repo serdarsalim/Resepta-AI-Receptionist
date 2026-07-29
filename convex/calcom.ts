@@ -12,6 +12,9 @@ import { cancelBooking } from "./lib/calcomApi";
 import { queueOrgAlert } from "./lib/alerts";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { recordActivity } from "./lib/activity";
+import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
+import { formatAppointmentTime } from "./lib/format";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
 // themselves there); Randevu is the WhatsApp layer on top. The org is resolved
@@ -69,7 +72,12 @@ function attendeeOf(payload: Record<string, unknown>) {
   return {
     firstName: firstName || name || "",
     lastName: rest.join(" ") || undefined,
-    phone: String(phone).replace(/[\s().-]/g, ""),
+    // RAW, exactly as the customer typed it. Normalising happens at the call
+    // site with the org's country in hand, and the untouched string is what
+    // the dropped-booking record shows the salon so they can read the number
+    // off the screen and phone the person.
+    phone: String(phone).trim(),
+    name,
     email: String(first.email ?? "").trim() || undefined,
     language: (first.language as string | undefined) ?? undefined,
   };
@@ -143,24 +151,58 @@ export const handleCalcomEvent = internalMutation({
     }
 
     const attendee = attendeeOf(booking);
-    // No phone means no WhatsApp — accept the webhook (a 4xx would make
-    // cal.com retry forever) but record why nothing was created.
-    if (!/^\+[1-9]\d{6,14}$/.test(attendee.phone)) {
+    // The customer wrote their number the way people write their own number.
+    // Nobody types +90 in a booking form, so the org's country turns
+    // "0532 123 45 67" into something Meta will accept (lib/phone.ts).
+    const attendeePhone = normalisePhone(
+      attendee.phone,
+      dialCodeForTimezone(org.timezone),
+    );
+    // No usable phone means no WhatsApp. Accept the webhook anyway (a 4xx makes
+    // cal.com retry forever) — but this booking EXISTS: it is on the salon's
+    // cal.com calendar, the customer has a confirmation email, and they are
+    // going to turn up. Returning the reason to cal.com's delivery log, which
+    // is what used to happen, tells the one party who will never read it.
+    // Nothing was written here, so no reminder, no confirmation, and no way
+    // for the salon to know the booking is missing until the chair sits empty.
+    // Hence a row they can actually see, carrying the number as typed so the
+    // failure is one phone call away from fixed.
+    if (!attendeePhone) {
+      await recordActivity(ctx, {
+        orgId: org._id,
+        kind: "booking_dropped",
+        // A webhook, not a person. Without this the salon owner happening to
+        // be signed in in some browser gets credited with the customer's
+        // booking (see lib/activity.ts).
+        system: true,
+        // Name, when they were coming, and the number as typed. The number is
+        // dropped from the line rather than replaced by a placeholder when the
+        // form came in blank: nothing typed is already what the label says,
+        // and a row reading "· ·" invites the reader to hunt for a value that
+        // was never there.
+        detail: [
+          attendee.name || "?",
+          formatAppointmentTime(startAt, org.timezone, org.language),
+          attendee.phone,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
       return { ok: false, reason: "attendee-phone-missing-or-not-e164" };
     }
 
     let customer = await ctx.db
       .query("customers")
       .withIndex("by_org_phone", (q) =>
-        q.eq("orgId", org._id).eq("phone", attendee.phone),
+        q.eq("orgId", org._id).eq("phone", attendeePhone),
       )
       .unique();
     if (!customer) {
       const customerId = await ctx.db.insert("customers", {
         orgId: org._id,
-        firstName: attendee.firstName || attendee.phone,
+        firstName: attendee.firstName || attendeePhone,
         lastName: attendee.lastName,
-        phone: attendee.phone,
+        phone: attendeePhone,
         email: attendee.email,
         language: attendee.language,
         // Booking through the salon's own cal.com page IS the opt-in moment.
