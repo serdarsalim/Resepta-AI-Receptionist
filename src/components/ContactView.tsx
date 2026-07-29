@@ -345,8 +345,42 @@ export function ContactView({
                   {appointments.map((appointment) => (
                     <li key={appointment._id}>
                       {/* Flat row, hairline divider, wash on hover. No border
-                          per row, and nothing moves. */}
-                      <div className="flex items-center gap-2 px-4 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
+                          per row, and nothing moves.
+                          
+                          A button, because the booking is editable from here.
+                          It used to be a div: you could read that Ebru has
+                          Giovanni at 15:15 on the one screen with Giovanni in
+                          front of you, and to move it by ten minutes you went
+                          to the calendar and found the block. Same sheet the
+                          grid opens, anchored to the row. */}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          const r = event.currentTarget.getBoundingClientRect();
+                          booking.open(
+                            {
+                              appointmentId: appointment._id,
+                              startAt: appointment.startAt,
+                              durationMinutes:
+                                appointment.durationMinutes ?? DEFAULT_DURATION,
+                              customerId,
+                              customerName: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+                              // Snapshotted lines, not ids resolved fresh: the
+                              // sheet shows what this visit recorded, not what
+                              // the service costs now.
+                              lines: (appointment.items ?? []).flatMap((item) =>
+                                item.serviceId
+                                  ? [{ serviceId: item.serviceId, price: item.price }]
+                                  : [],
+                              ),
+                              staffId: appointment.staffId ?? null,
+                              notes: appointment.notes,
+                              status: appointment.status,
+                            },
+                            { top: r.top, left: r.left, width: r.width, height: r.height },
+                          );
+                        }}
+                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">
                             {formatDateTime(appointment.startAt, language)}
@@ -372,7 +406,7 @@ export function ContactView({
                             {t(STATUS_KEY[appointment.status])}
                           </span>
                         </span>
-                      </div>
+                      </button>
                     </li>
                   ))}
                 </ul>

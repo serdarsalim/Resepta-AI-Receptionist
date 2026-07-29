@@ -168,6 +168,18 @@ export const listForCustomer = query({
       serviceName: v.optional(v.string()),
       staffName: v.optional(v.string()),
       total: v.optional(v.number()),
+      // Everything below is for EDITING rather than reading. The record used
+      // to return only what its list printed, so a booking on a contact card
+      // could be looked at and nothing else: no reschedule, no change of
+      // service, no cancel, on the one screen where you have the customer in
+      // front of you. The calendar's own listRange has always carried these;
+      // this is the same booking and it needs the same handles.
+      durationMinutes: v.optional(v.number()),
+      staffId: v.optional(v.id("staff")),
+      notes: v.optional(v.string()),
+      // Snapshotted lines, not ids resolved fresh: the sheet has to show what
+      // this visit recorded, not what the service costs today.
+      items: v.optional(v.array(storedItem)),
     }),
   ),
   handler: async (ctx, args) => {
@@ -189,6 +201,10 @@ export const listForCustomer = query({
         serviceName: itemsLabel(row.items),
         staffName: staff?.name,
         total: itemsTotal(row.items),
+        durationMinutes: row.durationMinutes,
+        staffId: row.staffId,
+        notes: row.notes,
+        items: row.items,
       });
     }
     return out;
