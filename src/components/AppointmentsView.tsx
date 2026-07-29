@@ -23,6 +23,7 @@ import {
   type DragGeometry,
 } from "@/lib/calendarDrag";
 import { useBookingSheet } from "./useBookingSheet";
+import type { Rect } from "@/lib/anchoredSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -41,6 +42,16 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 type ViewMode = "day" | "week" | "list";
+
+// A slot the sheet is currently open against: which day, and the minutes it
+// spans. Kept in calendar terms rather than pixels so it survives a scroll or
+// a resize, and the band is redrawn from it rather than frozen where it was.
+type SlotBand = { day: number; startMinute: number; endMinute: number };
+
+function rectOf(el: Element): Rect {
+  const r = el.getBoundingClientRect();
+  return { top: r.top, left: r.left, width: r.width, height: r.height };
+}
 
 const VIEW_MODES: { id: ViewMode; key: TranslationKey }[] = [
   { id: "day", key: "appointments.day" },
@@ -93,6 +104,12 @@ export function AppointmentsView({
     Map<string, { startAt: number; durationMinutes: number }>
   >(new Map());
   const [moveError, setMoveError] = useState<string | undefined>();
+  // The slot the open sheet was drawn against. Cleared the moment the sheet
+  // goes, so a dismissed booking leaves no ghost band behind on the grid.
+  const [provisional, setProvisional] = useState<SlotBand | null>(null);
+  useEffect(() => {
+    if (!booking.isOpen) setProvisional(null);
+  }, [booking.isOpen]);
 
   const clearOptimistic = (id: string) =>
     setOptimistic((current) => {
@@ -186,7 +203,8 @@ export function AppointmentsView({
           anchor={anchor}
           onAnchor={setAnchor}
           businessHours={settings?.org.businessHours}
-          onOpenBlock={(row) => {
+          provisional={provisional}
+          onOpenBlock={(row, anchor) => {
             booking.open({
               appointmentId: row._id,
               startAt: row.startAt,
@@ -205,10 +223,11 @@ export function AppointmentsView({
               staffId: row.staffId ?? null,
               notes: row.notes,
               status: row.status,
-            });
+            }, anchor);
           }}
-          onDraft={(startAt, durationMinutes) => {
-            booking.open({ startAt, durationMinutes });
+          onDraft={(startAt, durationMinutes, band, anchor) => {
+            setProvisional(band);
+            booking.open({ startAt, durationMinutes }, anchor);
           }}
           onMove={async (row, startAt, durationMinutes) => {
             // Paint first, ask second. A drag that waits for a cal.com round
@@ -618,6 +637,7 @@ function Calendar({
   anchor,
   onAnchor,
   onOpenBlock,
+  provisional,
   onOpenDay,
   onDraft,
   onMove,
@@ -627,11 +647,19 @@ function Calendar({
   view: "day" | "week";
   anchor: number;
   onAnchor: (next: number) => void;
-  onOpenBlock: (row: CalendarAppointment) => void;
+  onOpenBlock: (row: CalendarAppointment, anchor?: Rect) => void;
   onOpenDay: (dayMs: number) => void;
   // Click or drag on empty grid: hand the parent a start and a length and let
   // it open the sheet. The grid never creates anything itself.
-  onDraft: (startAt: number, durationMinutes: number) => void;
+  onDraft: (
+    startAt: number,
+    durationMinutes: number,
+    band: SlotBand,
+    anchor?: Rect,
+  ) => void;
+  // The slot an open sheet belongs to, drawn as a band so the sheet reads as
+  // attached to it.
+  provisional?: SlotBand | null;
   // Committed drag of an existing block. The parent owns the optimistic state
   // and the snap-back, because it also owns the mutation.
   onMove: (row: CalendarAppointment, startAt: number, durationMinutes: number) => void;
@@ -824,15 +852,37 @@ function Calendar({
     );
   };
 
+  // The drawn slot's rect, read while it is still on screen. setDrag(null)
+  // below schedules its removal, and a rect measured after that is a rect of
+  // nothing.
+  const rectOfDrawnSlot = (): Rect | undefined => {
+    const el = document.querySelector("[data-slot-band]");
+    if (!el) return undefined;
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, width: r.width, height: r.height };
+  };
+
   const endDrag = () => {
     if (!drag) return;
     const current = drag;
-    setDrag(null);
     const { startAt, durationMinutes } = dragResult(current, current.day, DEFAULT_DURATION);
     if (current.kind === "create" || !current.row) {
-      onDraft(startAt, durationMinutes);
+      const anchorRect = rectOfDrawnSlot();
+      setDrag(null);
+      // The band shows the BOOKING, not the gesture. A click is a gesture with
+      // no height at all, and dragResult turns it into a default-length
+      // appointment; drawing the gesture left a hairline on the grid next to a
+      // sheet offering to book half an hour.
+      const startedAt = new Date(startAt);
+      const startMinute = startedAt.getHours() * 60 + startedAt.getMinutes();
+      onDraft(startAt, durationMinutes, {
+        day: current.day,
+        startMinute,
+        endMinute: startMinute + durationMinutes,
+      }, anchorRect);
       return;
     }
+    setDrag(null);
     // A gesture that changed nothing is a click, and the block's own onClick
     // handles that — including for anyone arriving by keyboard.
     if (
@@ -1013,22 +1063,31 @@ function Calendar({
                     style={{ top: band.top, height: band.height }}
                   />
                 ))}
-                {/* The slot being drawn, or the block being dragged. */}
-                {drag && drag.day === column.day && (
-                  <div
-                    aria-hidden
-                    className="pointer-events-none absolute z-20 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] opacity-80"
-                    style={{
-                      top: ((drag.startMinute - dayStart * 60) / 60) * HOUR_PX,
-                      height: Math.max(
-                        ((drag.endMinute - drag.startMinute) / 60) * HOUR_PX - 2,
-                        14,
-                      ),
-                      left: 2,
-                      right: 2,
-                    }}
-                  />
-                )}
+                {/* The slot being drawn, the block being dragged, or the slot
+                    the open sheet belongs to. The third case is what makes an
+                    anchored sheet read as attached to the calendar instead of
+                    floating over it: Google keeps the block it just drew lit
+                    for exactly as long as its popover is up. */}
+                {(() => {
+                  const band = drag ?? provisional;
+                  if (!band || band.day !== column.day) return null;
+                  return (
+                    <div
+                      aria-hidden
+                      data-slot-band
+                      className="pointer-events-none absolute z-20 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] opacity-80"
+                      style={{
+                        top: ((band.startMinute - dayStart * 60) / 60) * HOUR_PX,
+                        height: Math.max(
+                          ((band.endMinute - band.startMinute) / 60) * HOUR_PX - 2,
+                          14,
+                        ),
+                        left: 2,
+                        right: 2,
+                      }}
+                    />
+                  );
+                })()}
                 {placeColumn(
                   column.rows,
                   view === "week" ? APPROX_GRID_PX / columns.length : 0,
@@ -1088,14 +1147,17 @@ function Calendar({
                   return (
                     <button
                       key={item.key}
-                      onClick={() => {
+                      onClick={(event) => {
                         // Swallow the click that trails a real drag; a genuine
                         // click (including from the keyboard) opens the sheet.
                         if (suppressClick.current) {
                           suppressClick.current = false;
                           return;
                         }
-                        onOpenBlock(row);
+                        // The block itself is the anchor: an existing booking
+                        // is already drawn on the grid, so the sheet has
+                        // something real to sit beside without a band.
+                        onOpenBlock(row, rectOf(event.currentTarget));
                       }}
                       onPointerDown={(event) => {
                         if (event.button !== 0) return;

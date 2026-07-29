@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { DEFAULT_CURRENCY } from "@/lib/money";
 import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
+import type { Rect } from "@/lib/anchoredSheet";
 
 // Everything it takes to put the booking sheet on screen and get an answer out
 // of it: the sheet's own state, the org data it renders from, and the
@@ -43,6 +44,9 @@ export function useBookingSheet({
   const updateDetails = useMutation(api.appointments.updateDetails);
 
   const [sheet, setSheet] = useState<ModalDraft | null>(null);
+  // What on screen this booking belongs to, when the caller knows. The contact
+  // record has nothing to point at, so it simply never passes one.
+  const [anchor, setAnchor] = useState<Rect | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [canForce, setCanForce] = useState(false);
   const [pending, setPending] = useState(false);
@@ -53,15 +57,17 @@ export function useBookingSheet({
 
   const close = () => {
     setSheet(null);
+    setAnchor(undefined);
     setError(undefined);
     setCanForce(false);
   };
 
   // Opening always starts from a clean slate. A conflict left over from the
   // last booking would otherwise greet the next one.
-  const open = (draft: ModalDraft) => {
+  const open = (draft: ModalDraft, anchorRect?: Rect) => {
     setError(undefined);
     setCanForce(false);
+    setAnchor(anchorRect);
     setSheet(draft);
   };
 
@@ -149,10 +155,11 @@ export function useBookingSheet({
               }
             : undefined
         }
+        anchor={anchor}
         onSubmit={(values) => void submit(values, false)}
         onForce={() => void submit(lastSubmit.current, true)}
       />
     ) : null;
 
-  return { open, close, render, isOpen: sheet !== null };
+  return { open, close, render, isOpen: sheet !== null, anchor };
 }

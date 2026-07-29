@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/money";
 import { toDatetimeLocalValue, fromDatetimeLocalValue } from "@/lib/datetime";
 import { PhoneInput } from "./PhoneField";
+import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
 import type { Id } from "../../convex/_generated/dataModel";
 
 // The appointment sheet, opened by clicking a slot or a block on the grid.
@@ -22,6 +23,12 @@ import type { Id } from "../../convex/_generated/dataModel";
 // would be clipped by the grid's own scroll container the moment it opened.
 // The modal also traps focus and closes on Escape, because the grid behind it
 // is a field of buttons and tabbing into them would be a trap of its own.
+
+// The same 32rem the centred sheet has always been (max-w-lg). Anchoring moved
+// the panel; it did not shrink the form. Google's popover is narrower because
+// it is a QUICK create with "More options" behind it, and a salon that has to
+// take a second step to name a service has not been helped.
+const PANEL_W = 512;
 
 export type ModalDraft = {
   appointmentId?: Id<"appointments">;
@@ -62,6 +69,7 @@ export function AppointmentModal({
   onDelete,
   onClose,
   onOpenCustomer,
+  anchor,
 }: {
   draft: ModalDraft;
   services: {
@@ -87,6 +95,10 @@ export function AppointmentModal({
   // link back to the page you are already on is a dead click. Absent, the name
   // renders as the plain fact it is.
   onOpenCustomer?: (id: Id<"customers">) => void;
+  // The thing on screen this sheet belongs to, in viewport coordinates. Given
+  // one, the sheet anchors beside it instead of taking the middle of the
+  // window. Absent (or on a narrow window) it stays the sheet it was.
+  anchor?: Rect;
 }) {
   const { t, language } = useLanguage();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -122,6 +134,35 @@ export function AppointmentModal({
   const [picked, setPicked] = useState<Id<"customers"> | undefined>();
   const [customerQuery, setCustomerQuery] = useState("");
   const [listOpen, setListOpen] = useState(false);
+
+  // Where to sit, when the caller told us what we belong to. Measured after
+  // layout so the panel's real height decides whether it has to slide up,
+  // rather than a guess baked in at design time — the sheet is a different
+  // height in Existing mode than in New, and different again in three
+  // languages.
+  const [placement, setPlacement] = useState<Placement | null>(null);
+  useLayoutEffect(() => {
+    if (!anchor) {
+      setPlacement(null);
+      return;
+    }
+    const measure = () => {
+      const height = panelRef.current?.offsetHeight ?? 0;
+      setPlacement(
+        placeBeside(anchor, { width: PANEL_W, height }, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }),
+      );
+    };
+    measure();
+    // A resize can turn a window that had room beside the block into one that
+    // does not, and the panel should move rather than hang off the edge.
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+    // mode and picked change the panel's height, so its placement is re-decided
+    // when they do.
+  }, [anchor, mode, picked]);
 
   // Only fetched once the picker is actually on screen. A booking that creates
   // its customer never loads the org's contact list at all.
@@ -262,7 +303,16 @@ export function AppointmentModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      // Anchored, the backdrop stops being a scrim and becomes only a place to
+      // click to dismiss. NO dim: the whole point of a popover on a calendar is
+      // that the week stays readable behind it, so you can see the slot you are
+      // booking against the ones around it. Dimming turns it back into a modal
+      // that happens to sit off-centre.
+      className={
+        placement
+          ? "fixed inset-0 z-50"
+          : "fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      }
       // Backdrop click closes. mousedown, not click, so a drag that started
       // inside the panel and ended on the backdrop does not close it.
       onMouseDown={(e) => {
@@ -273,11 +323,25 @@ export function AppointmentModal({
       <div
         ref={panelRef}
         role="dialog"
-        aria-modal="true"
+        // Anchored it is NOT modal: the calendar behind stays legible and
+        // meaningful, and claiming otherwise to a screen reader would be a lie
+        // about what is on screen.
+        aria-modal={placement ? undefined : true}
         aria-label={editing ? t("appointments.edit") : t("appointments.new")}
+        style={
+          placement
+            ? { position: "fixed", top: placement.top, left: placement.left, width: PANEL_W }
+            : undefined
+        }
         // Full-width sheet on a phone, centred card above it. A salon owner
-        // books from the counter phone more often than from a desk.
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl"
+        // books from the counter phone more often than from a desk. Anchored,
+        // it keeps the same width it always had: the form did not get smaller
+        // just because it moved.
+        className={
+          placement
+            ? "max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl"
+            : "max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl"
+        }
       >
         <h2 className="mb-3 text-sm font-semibold">
           {editing ? t("appointments.edit") : t("appointments.new")}
