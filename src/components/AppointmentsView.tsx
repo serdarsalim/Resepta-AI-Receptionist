@@ -1109,6 +1109,16 @@ function Calendar({
                     return (
                       <button
                         key={item.key}
+                        // Same guard the single blocks carry. Without it the
+                        // press reached the column, started drawing a new slot,
+                        // and the release opened the booking sheet before this
+                        // click could run: the one place already too full to
+                        // read was the one place that offered to add to it.
+                        //
+                        // No drag of its own. A cluster is several bookings at
+                        // once and there is nothing coherent to move; it is a
+                        // door into the day, not a block.
+                        onPointerDown={(event) => event.stopPropagation()}
                         onClick={() => onOpenDay(column.day)}
                         title={count}
                         style={{ top, height, left: 2, right: 2 }}
