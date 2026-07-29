@@ -172,22 +172,46 @@ export function AppointmentModal({
       return;
     }
     const measure = () => {
-      const height = panelRef.current?.offsetHeight ?? 0;
-      setPlacement(
-        placeBeside(anchor, { width: PANEL_W, height }, {
-          width: window.innerWidth,
-          height: window.innerHeight,
-        }),
+      const el = panelRef.current;
+      if (!el) return;
+      const next = placeBeside(
+        anchor,
+        { width: PANEL_W, height: el.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      // Compared before storing: the observer below fires on every size change
+      // and a fresh object each time would re-render for nothing.
+      setPlacement((current) =>
+        current &&
+        next &&
+        current.top === next.top &&
+        current.left === next.left &&
+        current.side === next.side
+          ? current
+          : next,
       );
     };
     measure();
-    // A resize can turn a window that had room beside the block into one that
-    // does not, and the panel should move rather than hang off the edge.
+    // A window resize can turn a window that had room beside the block into one
+    // that does not, and it does NOT re-render, so it needs its own listener.
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-    // mode and picked change the panel's height, so its placement is re-decided
-    // when they do.
-  }, [anchor, mode, picked]);
+    // EVERY dependency here is something that changes the panel's HEIGHT, which
+    // is what decides whether it has to slide up to stay on screen.
+    //
+    // This was [anchor, mode, picked] and adding a service line grew the sheet
+    // without re-placing it, so the bottom ran off the screen — the taller it
+    // got, the further past the edge. lines.length is the fix for that one;
+    // error and canForce are here because a conflict banner is the other thing
+    // that appears mid-edit and pushes Save down.
+    //
+    // A ResizeObserver on the panel would cover all of these and anything added
+    // later, and is the better design. It is not used because its callbacks are
+    // never delivered in this app: a fresh observer on this panel does not fire
+    // even the initial notification observe() guarantees, while offsetHeight
+    // demonstrably changes. That is worth understanding before relying on it.
+    // Until then this list must grow when anything new changes the height.
+  }, [anchor, mode, picked, lines.length, error, canForce]);
 
   // Only fetched once the picker is actually on screen. A booking that creates
   // its customer never loads the org's contact list at all.
