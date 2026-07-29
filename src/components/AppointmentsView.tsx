@@ -15,7 +15,6 @@ import {
 } from "@/lib/datetime";
 import {
   DEFAULT_DURATION,
-  SNAP_MINUTES,
   advanceDrag,
   columnIndexAt,
   dragResult,
@@ -1045,7 +1044,13 @@ function Calendar({
                       anchorMinute: minute,
                       grabOffset: 0,
                       startMinute: minute,
-                      endMinute: minute + SNAP_MINUTES,
+                      // Opens at the length a click actually books, not at one
+                      // snap step. dragResult gives an unmoved create
+                      // DEFAULT_DURATION, so starting at SNAP_MINUTES drew a
+                      // 15-minute band and then booked 30: the grid contradicted
+                      // the sheet before you had even let go. Dragging still
+                      // sizes it freely, down to one snap step.
+                      endMinute: minute + DEFAULT_DURATION,
                       moved: false,
                     },
                     event,
