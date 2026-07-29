@@ -121,6 +121,7 @@ export function AppointmentModal({
   const [mode, setMode] = useState<"existing" | "new">("new");
   const [picked, setPicked] = useState<Id<"customers"> | undefined>();
   const [customerQuery, setCustomerQuery] = useState("");
+  const [listOpen, setListOpen] = useState(false);
 
   // Only fetched once the picker is actually on screen. A booking that creates
   // its customer never loads the org's contact list at all.
@@ -136,7 +137,11 @@ export function AppointmentModal({
   const customerMatches = useMemo(() => {
     const all = customerOptions ?? [];
     const needle = customerQuery.trim().toLocaleLowerCase();
-    if (!needle) return all.slice(0, 8);
+    // Nothing typed, nothing listed. A booking is for ONE person, so opening
+    // on a scrolling roster of everybody is a list you have to dismiss rather
+    // than an answer: the first eight by creation date are eight people you
+    // had no reason to want. Type a letter and it becomes a search.
+    if (!needle) return [];
     return all
       .filter((c) => {
         const name = `${c.firstName} ${c.lastName ?? ""}`.toLocaleLowerCase();
@@ -144,6 +149,8 @@ export function AppointmentModal({
       })
       .slice(0, 8);
   }, [customerOptions, customerQuery]);
+
+  const pickedCustomer = customerOptions?.find((c) => c._id === picked);
 
   // Save is off until the picker has an answer. The submit handler refuses
   // this case anyway, but a button that silently does nothing reads as broken.
@@ -305,90 +312,192 @@ export function AppointmentModal({
                   either (schedule.prepareCreate accepts customerId OR
                   newCustomer, and dedupes the latter by phone); this is the
                   half that was missing. */}
-              <fieldset className="space-y-2">
-                <legend className="text-xs text-[var(--muted)]">
+              <div className="space-y-1.5">
+                <span className="block text-xs text-[var(--muted)]">
                   {t("appointments.customer")}
-                </legend>
-                <div className="flex gap-4 text-sm">
+                </span>
+                {/* The segmented control this app already uses, the same one
+                    the calendar switches views with. Two radios in a modal
+                    read as a question to answer before you may proceed; a
+                    segment reads as which of two things you are looking at,
+                    which is what this is. type="button" on both: inside a form
+                    a bare button submits it. */}
+                <div className="inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
                   {(["existing", "new"] as const).map((option) => (
-                    <label key={option} className="flex items-center gap-1.5">
-                      <input
-                        type="radio"
-                        name="customerMode"
-                        className="w-auto"
-                        checked={mode === option}
-                        onChange={() => setMode(option)}
-                      />
-                      <span>
-                        {option === "existing"
-                          ? t("appointments.existingCustomer")
-                          : t("appointments.newCustomer")}
-                      </span>
-                    </label>
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={mode === option}
+                      onClick={() => setMode(option)}
+                      className={`rounded-md px-3 py-1 transition-colors ${
+                        mode === option
+                          ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      {option === "existing"
+                        ? t("appointments.existingCustomer")
+                        : t("appointments.newCustomer")}
+                    </button>
                   ))}
                 </div>
-              </fieldset>
+              </div>
 
-              {mode === "existing" ? (
-                <div className="space-y-2">
-                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-customer">
+              {/* Both panels occupy ONE grid cell, so the region is always as
+                  tall as the taller of them and switching moves nothing below
+                  it. The modal is vertically centred, so a panel that grew on
+                  switch pushed every field down AND slid the whole dialog up:
+                  two movements from one click, on the control you just aimed
+                  at.
+
+                  Stacked rather than given a measured min-height, because the
+                  taller panel is not the same one in every language and a
+                  number tuned against English would be wrong in German. The
+                  grid measures whatever is actually there. */}
+              <div className="grid">
+                <div
+                  className={`col-start-1 row-start-1 space-y-2 ${
+                    mode === "existing" ? "" : "invisible"
+                  }`}
+                  // visibility:hidden already drops the inactive panel out of
+                  // the tab order, so the only thing left to disarm is the
+                  // required flags below.
+                  aria-hidden={mode !== "existing"}
+                >
+                  {/* The matches OVERLAY the form instead of sitting in it. An
+                      always-open list is a control that charges ~300px of
+                      permanent modal height to show five names you are going
+                      to scroll past anyway, and it pushed Save below the fold
+                      on a laptop. As a dropdown it costs one field's height
+                      until the moment you are actually reading it.
+
+                      `absolute` inside the modal's own scroll box, not a
+                      portal. This field is the first thing in the sheet and
+                      the panel is far taller than the input plus 14rem, so the
+                      list cannot reach an edge to be clipped by. */}
+                  <label className="relative block text-xs text-[var(--muted)]" htmlFor="modal-customer">
                     {t("appointments.findCustomer")}
                     <input
                       id="modal-customer"
                       type="search"
                       autoComplete="off"
+                      role="combobox"
+                      aria-expanded={listOpen}
+                      aria-controls="modal-customer-list"
                       className="mt-1"
                       placeholder={t("appointments.findCustomerHint")}
                       value={customerQuery}
+                      onFocus={() => setListOpen(true)}
+                      // Closing on blur would fire before a click on an option
+                      // lands, so the options refuse to take focus at all (see
+                      // onMouseDown below) and this only ever runs on a real
+                      // move away from the field.
+                      onBlur={() => setListOpen(false)}
+                      onKeyDown={(e) => {
+                        // Escape shuts the list, not the whole sheet. The
+                        // modal's own handler is on the document in the
+                        // capture phase, so this has to say so explicitly.
+                        if (e.key === "Escape" && listOpen) {
+                          e.stopPropagation();
+                          setListOpen(false);
+                        }
+                      }}
                       onChange={(e) => {
                         setCustomerQuery(e.target.value);
+                        setListOpen(true);
                         // Typing again abandons the previous pick. Leaving it
                         // set would let the sheet book a person whose name is
                         // no longer anywhere on screen.
                         if (picked) setPicked(undefined);
                       }}
                     />
-                  </label>
-                  {/* Radio rows, not a listbox: the choice is one of a handful
-                      and it has to survive being read back before Save. */}
-                  <ul className="max-h-44 overflow-y-auto rounded-lg border border-[var(--border)]">
-                    {customerOptions === undefined ? (
-                      <li className="px-3 py-2 text-xs text-[var(--muted)]">
-                        {t("common.loading")}
-                      </li>
-                    ) : customerMatches.length === 0 ? (
-                      <li className="px-3 py-2 text-xs text-[var(--muted)]">
-                        {t("customers.noMatches")}
-                      </li>
-                    ) : (
-                      customerMatches.map((customer) => (
-                        <li key={customer._id} className="border-b border-[var(--border)] last:border-b-0">
-                          <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
-                            <input
-                              type="radio"
-                              name="existingCustomer"
-                              className="w-auto"
-                              checked={picked === customer._id}
-                              onChange={() => setPicked(customer._id)}
-                            />
-                            <span className="min-w-0 flex-1 truncate">
-                              {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
-                            </span>
-                            <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
-                              {customer.phone}
-                            </span>
-                          </label>
-                        </li>
-                      ))
+                    {listOpen && customerQuery.trim() !== "" && (
+                      <ul
+                        id="modal-customer-list"
+                        className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+                      >
+                        {customerOptions === undefined ? (
+                          <li className="px-3 py-2 text-xs text-[var(--muted)]">
+                            {t("common.loading")}
+                          </li>
+                        ) : customerMatches.length === 0 ? (
+                          <li className="px-3 py-2 text-xs text-[var(--muted)]">
+                            {t("customers.noMatches")}
+                          </li>
+                        ) : (
+                          customerMatches.map((customer) => (
+                            <li key={customer._id}>
+                              <button
+                                type="button"
+                                // Keeps focus in the input so onBlur does not
+                                // tear the list down before the click lands.
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setPicked(customer._id);
+                                  setCustomerQuery(
+                                    `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+                                  );
+                                  setListOpen(false);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
+                              >
+                                <span className="min-w-0 flex-1 truncate">
+                                  {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
+                                </span>
+                                <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
+                                  {customer.phone}
+                                </span>
+                              </button>
+                            </li>
+                          ))
+                        )}
+                      </ul>
                     )}
-                  </ul>
+                  </label>
+
+                  {/* Who you actually picked, read back. It is not decoration:
+                      the search box shows a name you typed, which is not proof
+                      the sheet resolved it to anybody, and two customers can
+                      share one. It also answers the same three questions the
+                      New panel asks — name, number, consent — so the two modes
+                      are the same shape and switching moves nothing. */}
+                  <dl className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-[var(--muted)]">{t("customers.phone")}</dt>
+                      <dd className="tabular-nums">{pickedCustomer?.phone ?? "—"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-[var(--muted)]">{t("customers.consentShort")}</dt>
+                      <dd>
+                        {picked === undefined
+                          ? "—"
+                          : pickedCustomer?.consented
+                            ? t("customers.consentGiven")
+                            : t("customers.noConsent")}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
-              ) : (
-                <>
+
+                <div
+                  className={`col-start-1 row-start-1 space-y-3 ${
+                    mode === "new" ? "" : "invisible"
+                  }`}
+                  aria-hidden={mode !== "new"}
+                >
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block text-xs text-[var(--muted)]">
                       {t("customers.firstName")}
-                      <input ref={firstFieldRef} name="firstName" required className="mt-1" />
+                      <input
+                        ref={firstFieldRef}
+                        name="firstName"
+                        // Required only while this panel IS the panel. The
+                        // hidden one is still in the DOM to hold the height
+                        // open, and a required field nobody can see refuses
+                        // the form with nothing on screen to fix.
+                        required={mode === "new"}
+                        className="mt-1"
+                      />
                     </label>
                     <label className="block text-xs text-[var(--muted)]">
                       {t("customers.lastName")}
@@ -397,14 +506,19 @@ export function AppointmentModal({
                   </div>
                   <label className="block text-xs text-[var(--muted)]" htmlFor="modal-phone">
                     {t("customers.phone")}
-                    <PhoneInput id="modal-phone" name="phone" required className="mt-1" />
+                    <PhoneInput
+                      id="modal-phone"
+                      name="phone"
+                      required={mode === "new"}
+                      className="mt-1"
+                    />
                   </label>
                   <label className="flex items-start gap-2 text-xs text-[var(--muted)]">
                     <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
                     <span>{t("customers.consent")}</span>
                   </label>
-                </>
-              )}
+                </div>
+              </div>
             </>
           )}
 
@@ -502,6 +616,10 @@ export function AppointmentModal({
             </div>
           </div>
 
+          {/* Paired, the way When and Duration are. Member was a half-width
+              select sitting alone on a full-width row, so the sheet spent two
+              rows and a whole textarea's worth of height on two fields that
+              are each one line of answer. */}
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs text-[var(--muted)]">
               {staffLabel}
@@ -520,17 +638,19 @@ export function AppointmentModal({
                   ))}
               </select>
             </label>
+            <label className="block text-xs text-[var(--muted)]">
+              {t("appointments.notes")}
+              {/* One row, and it grows as you type rather than reserving space
+                  for words nobody has written. Most bookings carry no note at
+                  all. */}
+              <textarea
+                rows={1}
+                className="mt-1 resize-y"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
           </div>
-
-          <label className="block text-xs text-[var(--muted)]">
-            {t("appointments.notes")}
-            <textarea
-              rows={2}
-              className="mt-1"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
           {/* Enter submits, which is what a booking form should do. */}
           <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
         </form>

@@ -131,6 +131,11 @@ export const options = query({
       firstName: v.string(),
       lastName: v.optional(v.string()),
       phone: v.string(),
+      // Whether they can be messaged at all. Booking somebody without consent
+      // is allowed and sometimes right, but under KVKK it means they will get
+      // no reminder and no confirmation, so the sheet says it at the moment
+      // the choice is made rather than leaving it to be discovered later.
+      consented: v.boolean(),
     }),
   ),
   handler: async (ctx) => {
@@ -145,6 +150,7 @@ export const options = query({
       firstName: row.firstName,
       lastName: row.lastName,
       phone: row.phone,
+      consented: row.consentAt !== undefined,
     }));
   },
 });
