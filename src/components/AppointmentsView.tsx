@@ -78,12 +78,28 @@ export function AppointmentsView({
     if (search.active && view !== "list") setView("list");
   }, [search.active, view]);
 
-  // Two weeks back → six weeks forward covers the list AND every reachable
-  // week-view page from one subscription.
+  // The window follows what you are LOOKING at, not what time it is now.
+  //
+  // It used to be a fixed two-weeks-back to six-weeks-forward around page load,
+  // which meant paging the week view past six weeks out showed an empty grid:
+  // not "no bookings that week", but a query that never asked. A salon taking
+  // bookings two months ahead hits that on an ordinary Tuesday.
+  //
+  // Padded a fortnight either side of the visible period so stepping one page
+  // usually lands inside what is already subscribed, and the grid does not
+  // blank between pages.
   const range = useMemo(() => {
-    const now = Date.now();
-    return { fromMs: now - 14 * 86_400_000, toMs: now + 42 * 86_400_000 };
-  }, []);
+    const pad = 14 * DAY_MS;
+    const from = view === "week" ? startOfWeek(anchor) : startOfDay(anchor);
+    const span = view === "week" ? 7 * DAY_MS : DAY_MS;
+    // The list is a rolling read of what is coming, so it stays keyed to now
+    // rather than to a day nobody navigated to.
+    if (view === "list") {
+      const now = Date.now();
+      return { fromMs: now - pad, toMs: now + 42 * DAY_MS };
+    }
+    return { fromMs: from - pad, toMs: from + span + pad };
+  }, [anchor, view]);
   const appointments = useQuery(api.appointments.listRange, range);
   const settings = useQuery(api.orgs.current, {});
   const setStatus = useMutation(api.appointments.setStatus);
