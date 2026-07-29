@@ -215,6 +215,44 @@ export function AppointmentsView({
     return () => document.removeEventListener("keydown", onKey);
   }, [booking.isOpen]);
 
+  const heading = useMemo(() => {
+    const locale = localeFor(language);
+    const day = (ms: number) =>
+      new Intl.DateTimeFormat(locale, { day: "numeric" }).format(new Date(ms));
+    switch (view) {
+      case "day":
+        return formatDayHeading(anchor, language);
+      case "week": {
+        const from = startOfWeek(anchor);
+        const to = from + 6 * DAY_MS;
+        // Only the closing date carries the month: "27-2 August" reads as one
+        // span, where naming both months twice would read as two.
+        return `${day(from)}-${new Intl.DateTimeFormat(locale, {
+          day: "numeric",
+          month: "long",
+        }).format(new Date(to))}`;
+      }
+      case "month":
+        return new Intl.DateTimeFormat(locale, {
+          month: "long",
+          year: "numeric",
+        }).format(new Date(anchor));
+      case "year":
+        return String(new Date(anchor).getFullYear());
+      case "list":
+        return "";
+    }
+  }, [view, anchor, language]);
+
+  // A step is a different distance in every view, and in two of them it is not
+  // a fixed number of days at all: months and years have to be walked by the
+  // calendar, not by arithmetic.
+  const stepPeriod = (direction: 1 | -1) => {
+    if (view === "month") return setAnchor(addMonths(anchor, direction));
+    if (view === "year") return setAnchor(addYears(anchor, direction));
+    setAnchor(anchor + direction * (view === "day" ? 1 : 7) * DAY_MS);
+  };
+
   const clearOptimistic = (id: string) =>
     setOptimistic((current) => {
       if (!current.has(id)) return current;
@@ -262,23 +300,57 @@ export function AppointmentsView({
         view === "list" ? "space-y-4" : "flex h-full min-h-0 flex-col gap-4"
       }
     >
+      {/* One row: which view, where in it, and the way out. The period nav
+          used to sit on its own line inside each view, which cost a whole row
+          of grid to show two arrows and a date — on the screen where vertical
+          space IS the product, since every pixel here is a bookable minute.
+          Lifted out, it also stops each view carrying its own copy. */}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {/* View switch left, the one create action right. The switch is a
-            property of what you are looking at; the button makes something
-            new, and those are not the same kind of control to be stacked in
-            one cluster. */}
         <ViewMenu view={view} onView={setView} />
-        <button
-          className="ml-auto rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
-          onClick={() => {
-            // No slot was clicked, so open on the next round hour — which is
-            // what "new appointment" from a toolbar means.
-            const next = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
-            booking.open({ startAt: next, durationMinutes: DEFAULT_DURATION });
-          }}
-        >
-          {t("appointments.new")}
-        </button>
+        {view !== "list" && (
+          <>
+            <button
+              aria-label={t("appointments.previous")}
+              className="rounded-md px-1.5 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              onClick={() => stepPeriod(-1)}
+            >
+              <ChevronLeft />
+            </button>
+            <button
+              aria-label={t("appointments.next")}
+              className="rounded-md px-1.5 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              onClick={() => stepPeriod(1)}
+            >
+              <ChevronRight />
+            </button>
+            <h3 className="ml-1 text-sm font-medium">{heading}</h3>
+          </>
+        )}
+        {/* Right cluster. Today can be rendered conditionally now rather than
+            merely hidden: it sits at the end of a right-aligned group, so its
+            coming and going moves nothing — the arrows are at the other end of
+            the row, and New appointment is pinned to the edge. */}
+        <div className="ml-auto flex items-center gap-2">
+          {view !== "list" && !periodHasToday(view, anchor) && (
+            <button
+              className="rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              onClick={() => setAnchor(startOfDay(Date.now()))}
+            >
+              {t("appointments.today")}
+            </button>
+          )}
+          <button
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
+            onClick={() => {
+              // No slot was clicked, so open on the next round hour — which is
+              // what "new appointment" from a toolbar means.
+              const next = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
+              booking.open({ startAt: next, durationMinutes: DEFAULT_DURATION });
+            }}
+          >
+            {t("appointments.new")}
+          </button>
+        </div>
       </div>
 
       {appointments?.length === 0 && view === "list" && (
@@ -286,9 +358,8 @@ export function AppointmentsView({
       )}
 
       {view === "month" && appointments !== undefined && (
-        <MonthView
+        <MonthGrid
           anchor={anchor}
-          onAnchor={setAnchor}
           rows={withOptimistic}
           onOpenDay={(dayMs) => {
             setAnchor(dayMs);
@@ -330,7 +401,7 @@ export function AppointmentsView({
       )}
 
       {view === "year" && (
-        <YearView
+        <YearGrid
           anchor={anchor}
           bookedDays={bookedDays}
           onOpenDay={(dayMs) => {
@@ -341,7 +412,6 @@ export function AppointmentsView({
             setAnchor(monthMs);
             setView("month");
           }}
-          onAnchor={setAnchor}
         />
       )}
 
@@ -350,7 +420,6 @@ export function AppointmentsView({
           appointments={withOptimistic}
           view={view}
           anchor={anchor}
-          onAnchor={setAnchor}
           businessHours={settings?.org.businessHours}
           provisional={provisional}
           onOpenBlock={(row, anchor) => {
@@ -722,138 +791,6 @@ function ViewMenu({
   );
 }
 
-// Previous / next / where-you-are / today. Shared by the time grid and the
-// month grid: the stepping differs (a day, a week, a month) but the control
-// does not, and two copies would be two sets of paddings drifting apart.
-function PeriodNav({
-  heading,
-  onPrev,
-  onNext,
-  onToday,
-  showToday,
-}: {
-  heading: string;
-  onPrev: () => void;
-  onNext: () => void;
-  onToday: () => void;
-  // Offered only when you are somewhere else. Hidden with `invisible` rather
-  // than removed: dropping it from the flow would slide the arrows sideways
-  // every time you navigated onto or off today, and the arrows are what you
-  // are aiming at when it happens.
-  showToday: boolean;
-}) {
-  const { t } = useLanguage();
-  return (
-    <div className="mb-2 flex items-center gap-1">
-      <button
-        aria-label={t("appointments.previous")}
-        className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        onClick={onPrev}
-      >
-        <ChevronLeft />
-      </button>
-      <button
-        aria-label={t("appointments.next")}
-        className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        onClick={onNext}
-      >
-        <ChevronRight />
-      </button>
-      <h3 className="ml-1 text-sm font-medium">{heading}</h3>
-      <button
-        className={`ml-auto rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
-          showToday ? "" : "invisible"
-        }`}
-        tabIndex={showToday ? undefined : -1}
-        aria-hidden={!showToday}
-        onClick={() => onToday()}
-      >
-        {t("appointments.today")}
-      </button>
-    </div>
-  );
-}
-
-// The month's frame: the shared header, then the grid. Kept out of Calendar
-// because Calendar is the TIME grid — hours, lanes, drag geometry, business
-// hours — and a month needs none of it. Sharing the shell would mean computing
-// all of that to draw squares.
-// The year's frame. Its data comes from its own query rather than the shared
-// appointment window: a year of enriched rows would be thousands of customer
-// and staff reads to place dots nobody clicks.
-function YearView({
-  anchor,
-  bookedDays,
-  onAnchor,
-  onOpenDay,
-  onOpenMonth,
-}: {
-  anchor: number;
-  bookedDays: Set<number>;
-  onAnchor: (next: number) => void;
-  onOpenDay: (dayMs: number) => void;
-  onOpenMonth: (monthMs: number) => void;
-}) {
-  const year = new Date(anchor).getFullYear();
-  return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <PeriodNav
-        heading={String(year)}
-        onPrev={() => onAnchor(addYears(anchor, -1))}
-        onNext={() => onAnchor(addYears(anchor, 1))}
-        onToday={() => onAnchor(startOfDay(Date.now()))}
-        showToday={!periodHasToday("year", anchor)}
-      />
-      <YearGrid
-        anchor={anchor}
-        bookedDays={bookedDays}
-        onOpenDay={onOpenDay}
-        onOpenMonth={onOpenMonth}
-      />
-    </section>
-  );
-}
-
-function MonthView({
-  anchor,
-  onAnchor,
-  rows,
-  onOpenDay,
-  onOpenBlock,
-  onDraftDay,
-}: {
-  anchor: number;
-  onAnchor: (next: number) => void;
-  rows: CalendarAppointment[];
-  onOpenDay: (dayMs: number) => void;
-  onOpenBlock: (id: string, anchorRect?: Rect) => void;
-  onDraftDay: (dayMs: number) => void;
-}) {
-  const { language } = useLanguage();
-  const heading = new Intl.DateTimeFormat(localeFor(language), {
-    month: "long",
-    year: "numeric",
-  }).format(new Date(anchor));
-  return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <PeriodNav
-        heading={heading}
-        onPrev={() => onAnchor(addMonths(anchor, -1))}
-        onNext={() => onAnchor(addMonths(anchor, 1))}
-        onToday={() => onAnchor(startOfDay(Date.now()))}
-        showToday={!periodHasToday("month", anchor)}
-      />
-      <MonthGrid
-        anchor={anchor}
-        rows={rows}
-        onOpenDay={onOpenDay}
-        onOpenBlock={onOpenBlock}
-        onDraftDay={onDraftDay}
-      />
-    </section>
-  );
-}
-
 function startOfWeek(ms: number): number {
   const d = new Date(startOfDay(ms));
   return d.getTime() - ((d.getDay() + 6) % 7) * DAY_MS; // Monday-start
@@ -994,7 +931,6 @@ function Calendar({
   appointments,
   view,
   anchor,
-  onAnchor,
   onOpenBlock,
   provisional,
   onOpenDay,
@@ -1005,7 +941,6 @@ function Calendar({
   appointments: CalendarAppointment[];
   view: "day" | "week";
   anchor: number;
-  onAnchor: (next: number) => void;
   onOpenBlock: (row: CalendarAppointment, anchor?: Rect) => void;
   onOpenDay: (dayMs: number) => void;
   // Click or drag on empty grid: hand the parent a start and a length and let
@@ -1139,15 +1074,6 @@ function Calendar({
     );
   }, [periodStart, dayStart, firstBookingMinute]);
 
-  const step = view === "day" ? 1 : 7;
-  const heading =
-    view === "day"
-      ? formatDayHeading(days[0], language)
-      : `${new Intl.DateTimeFormat(locale, { day: "numeric" }).format(new Date(days[0]))}-${new Intl.DateTimeFormat(
-          locale,
-          { day: "numeric", month: "long" },
-        ).format(new Date(days[6]))}`;
-
   const staffColumns = columns.some((column) => column.label !== undefined);
   const columnPx = APPROX_GRID_PX / columns.length;
 
@@ -1279,13 +1205,6 @@ function Calendar({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <PeriodNav
-        heading={heading}
-        onPrev={() => onAnchor(anchor - step * DAY_MS)}
-        onNext={() => onAnchor(anchor + step * DAY_MS)}
-        onToday={() => onAnchor(startOfDay(Date.now()))}
-        showToday={!periodHasToday(view, anchor)}
-      />
 
       {/* Column headers stay put while the hours scroll under them. With staff
           columns the names take this row over: the date is already in the
