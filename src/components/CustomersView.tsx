@@ -258,8 +258,12 @@ export function CustomersView({
       { key: "email", label: t("customers.email"), width: 210, sortable: true },
       { key: "added", label: t("customers.added"), width: 140, sortable: true, numeric: true },
       {
+        // The key stays "lastActivity" while the label reads "Last reply":
+        // column keys are persisted in the saved table state, so renaming this
+        // one would quietly drop every user's sort, filters and column order
+        // to fix a word they only ever see in the header.
         key: "lastActivity",
-        label: t("customers.lastActivity"),
+        label: t("customers.lastReply"),
         width: 155,
         sortable: true,
         numeric: true,

@@ -24,6 +24,19 @@ export function formatDateTime(ms: number, language: Language, timezone?: string
   }).format(new Date(ms));
 }
 
+// A date with no time on it, for facts that are day-level however precisely
+// they were recorded. Deliberately day/short-month/year ("20 Jul 2026") rather
+// than a numeric date, because 07/08 is two different days depending on who is
+// reading it and this app ships in three languages.
+export function formatDay(ms: number, language: Language, timezone?: string): string {
+  return new Intl.DateTimeFormat(LOCALE[language], {
+    timeZone: timezone,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(ms));
+}
+
 export function formatTime(ms: number, language: Language, timezone?: string): string {
   return new Intl.DateTimeFormat(LOCALE[language], {
     timeZone: timezone,

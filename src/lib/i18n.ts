@@ -311,6 +311,16 @@ const dictionary = {
     en: "The customer's KVKK consent to WhatsApp and email messages. Without it, no channel sends anything.",
     de: "Die Einwilligung des Kunden nach DSGVO für Nachrichten über WhatsApp und E-Mail. Ohne sie sendet kein Kanal etwas.",
   },
+  "customers.mute": {
+    tr: "Sessize al",
+    en: "Mute",
+    de: "Stummschalten",
+  },
+  "customers.muteHint": {
+    tr: "Sessize alınan müşteri gelen kutusunda görünmez ve hiçbir yerde bildirim noktası yakmaz. Mesaj göndermeye devam edebilirsiniz; kişi listenin sonuna iner.",
+    en: "A muted customer stays out of the inbox and never lights an attention dot. You can still message them; they sit at the bottom of Contacts.",
+    de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
+  },
   "customers.noConsent": {
     tr: "İzin yok",
     en: "No consent",
@@ -358,10 +368,13 @@ const dictionary = {
     de: "Keine Einwilligung hinterlegt, daher entfallen Bestätigungen, Erinnerungen und Rückgewinnungen für diese Person. Sie können die Einwilligung im Kundenprofil eintragen.",
   },
   "customers.added": { tr: "Eklendi", en: "Added", de: "Angelegt" },
-  "customers.lastActivity": {
-    tr: "Son hareket",
-    en: "Last activity",
-    de: "Letzter Kontakt",
+  // "Last reply", not "Last activity": activity is ambiguous in an app where a
+  // booking, a reminder we sent and a note a staff member typed are all
+  // activity. This column only ever means the last time the CUSTOMER wrote.
+  "customers.lastReply": {
+    tr: "Son yanıt",
+    en: "Last reply",
+    de: "Letzte Antwort",
   },
 
   "messages.none": {

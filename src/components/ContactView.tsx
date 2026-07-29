@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
-import { formatDateTime } from "@/lib/datetime";
+import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
@@ -73,6 +73,7 @@ export function ContactView({
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setAttention = useMutation(api.messages.setAttention);
+  const setMuted = useMutation(api.customers.setMuted);
   // Below lg the two panes swap instead of sharing the row (InboxView does the
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
@@ -334,47 +335,90 @@ export function ContactView({
               )}
             </div>
 
-            {/* Record meta, pinned under the fields the way Nudge's contact
-                footer works: when this customer arrived, when they last got in
-                touch, and their consent.
+            {/* Record meta, the way Nudge's contact footer works: when this
+                customer arrived, when they last wrote, their consent, and
+                whether they are muted.
+
+                Two by two, and directly under the last field rather than
+                pinned to the bottom of the panel. Pinned, it floated away from
+                the fields on a tall screen and read as a separate thing the
+                panel happened to be carrying. Sitting where the fields end, it
+                reads as what it is: the last four facts on the record.
 
                 Consent sits HERE rather than up among the identity fields on
                 purpose. It is not a detail somebody types, it is a legal fact
                 about this one customer, and a stray tap next to the email box
-                either mutes them or marks them as having agreed to something
-                they never agreed to. Down here it reads as the record it is,
-                dated, and it cannot move to Settings: one org-wide switch
-                standing in for every customer's consent is the thing KVKK
-                exists to forbid. */}
-            <div className="shrink-0 space-y-1.5 border-t border-[var(--border)] px-4 py-3">
+                marks them as having agreed to something they never agreed to.
+                Down here it reads as the record it is, dated, and it cannot
+                move to Settings: one org-wide switch standing in for every
+                customer's consent is the thing KVKK exists to forbid.
+
+                Mute sits beside it because they look alike and are not, which
+                is exactly why they belong where the difference is visible: one
+                governs what the salon may send, the other what this person may
+                put in front of the salon. */}
+            <div className="grid shrink-0 grid-cols-2 gap-x-5 gap-y-1.5 border-t border-[var(--border)] px-4 py-3">
+              {/* Added keeps a date and Last reply takes an age, the same split
+                  the Contacts table already makes. When somebody joined is a
+                  fact you look up; when they last wrote is a fact you feel, and
+                  it stops being interesting long before the date does. */}
               <FieldRow label={t("customers.added")}>
                 <span className="block py-1 text-sm text-[var(--muted)]">
-                  {formatDateTime(customer._creationTime, language)}
+                  {formatDay(customer._creationTime, language)}
                 </span>
               </FieldRow>
-              {/* Blank over zero: a customer who has never written gets no row
-                  rather than a dash. */}
-              {customer.lastInboundAt !== undefined && (
-                <FieldRow label={t("customers.lastActivity")}>
-                  <span className="block py-1 text-sm text-[var(--muted)]">
-                    {formatDateTime(customer.lastInboundAt, language)}
-                  </span>
-                </FieldRow>
-              )}
+              {/* An age, not a timestamp. "27 Jul, 22:25" is a precision nobody
+                  reads at a glance and it will not fit half a column anyway;
+                  "2d" answers the question actually being asked. The exact
+                  moment is still one hover away. */}
+              <FieldRow label={t("customers.lastReply")}>
+                <span
+                  className="block py-1 text-sm text-[var(--muted)]"
+                  title={
+                    customer.lastInboundAt !== undefined
+                      ? formatDateTime(customer.lastInboundAt, language)
+                      : undefined
+                  }
+                >
+                  {/* Blank over zero, never a dash: the cell keeps its place in
+                      the grid, it just has nothing to report yet. */}
+                  {customer.lastInboundAt !== undefined
+                    ? formatAge(customer.lastInboundAt, language)
+                    : ""}
+                </span>
+              </FieldRow>
               <FieldRow label={t("customers.consent")} hint={t("customers.consentHint")}>
                 <span className="flex h-7 items-center gap-2">
                   <Toggle
+                    size="sm"
                     checked={customer.consentAt !== undefined}
                     onChange={(next) => void updateCustomer({ customerId, consent: next })}
                   />
                   {/* The date is what makes this a record instead of a switch:
                       "consented" with no when is not worth much if anyone ever
-                      asks. */}
+                      asks. A date and not an age, for the same reason: "3mo" is
+                      not an answer you can hand to a regulator. */}
                   {customer.consentAt !== undefined && (
-                    <span className="text-xs text-[var(--muted)]">
-                      {formatDateTime(customer.consentAt, language)}
+                    <span
+                      className="text-xs text-[var(--muted)]"
+                      title={formatDateTime(customer.consentAt, language)}
+                    >
+                      {formatDay(customer.consentAt, language)}
                     </span>
                   )}
+                </span>
+              </FieldRow>
+              <FieldRow label={t("customers.mute")} hint={t("customers.muteHint")}>
+                <span className="flex h-7 items-center">
+                  <Toggle
+                    size="sm"
+                    checked={customer.mutedAt !== undefined}
+                    onChange={(next) => void setMuted({ customerId, muted: next })}
+                  />
+                  {/* No date beside this one, on purpose. Consent's timestamp
+                      is evidence somebody may have to produce; mute's is
+                      housekeeping, and printing it would suggest the two rows
+                      carry the same kind of weight. */}
                 </span>
               </FieldRow>
             </div>
