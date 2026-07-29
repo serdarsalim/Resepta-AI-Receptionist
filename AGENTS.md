@@ -33,13 +33,33 @@ style issue.
   (An agency/partner-operated admin surface is the likely next layer — note
   that Google-only means the partner can't pre-provision credentials; if that
   model wins, add a second provider then. See "Open product questions".)
-- **Appointment intake is cal.com, not a calendar we own.** The salon keeps
-  booking where it already books; Randevu is the WhatsApp layer on top.
-  `convex/calcom.ts` handles BOOKING_CREATED / RESCHEDULED / CANCELLED, and the
-  org is resolved from a per-org token in the webhook URL
-  (`orgs.calcomWebhookToken`) because cal.com's payload carries no tenant
-  identity. Manual entry in the app stays for walk-ins; `appointments.source`
+- **Appointment intake is cal.com by design, but cal.com IS NOT WIRED YET.**
+  Read this before designing anything around availability. The integration
+  exists in code and is entirely gated on `org.calcomApiKey &&
+  org.calcomEventTypeId`: `convex/calcom.ts` handles BOOKING_CREATED /
+  RESCHEDULED / CANCELLED, and the org is resolved from a per-org token in the
+  webhook URL (`orgs.calcomWebhookToken`) because cal.com's payload carries no
+  tenant identity. `getAvailableSlots` is called from `convex/http.ts` for the
+  public booking page only.
+
+  With no key configured, `schedule.create` takes its documented no-key path
+  and the appointment is Randevu's alone. **Consequence: today nothing checks
+  for conflicts in the salon-facing calendar.** Double-booking a slot is
+  possible and is caught only by a human looking at the grid; the `force` /
+  `canForce` "book anyway" flow only ever fires when a key exists. Do not
+  assume the guardrail is there.
+
+  Manual entry in the app stays for walk-ins; `appointments.source`
   distinguishes them and `externalUid` is cal.com's booking uid.
+- **Blocked time is deliberately not modelled.** `appointments.customerId` is
+  required, so there is no way to put a lunch break, a training day or a
+  closure on the calendar without inventing a fake customer. This was weighed
+  (optional `customerId` across ~41 dereference sites vs a separate `blocks`
+  table) and PARKED, on the reasoning that breaks are *availability* rather
+  than appointments and belong to cal.com once it is wired. Note
+  `enrichedAppointment.customer` is already `v.union(object, v.null())`, so the
+  read path would tolerate it. Do not build a parallel blocked-time system
+  without revisiting that call with Serdar.
 - WhatsApp is the wa_cloud lane ONLY (Meta Cloud API). Business-initiated sends
   (reminders, confirmations) use pre-approved **template messages** — that is
   the core send path here, unlike Nudge where template sends are unbuilt. Each
@@ -230,6 +250,42 @@ asks "what do you call these people?" and stores it as `staffLabel` — so the
 add sheet says "Personel"/"Berber"/"Stylist", not a coined term like "bookable
 person". Check whether the product already has the user's own word before
 naming something.
+
+## The calendar (rebuilt 2026-07-29)
+
+Four views behind one dropdown — Day, Week, Month, Year, plus List — with
+shortcut letters `D W M Y L` bound on the document and `T` for today. The
+letters are PRINTED in the menu, so they must stay bound: a hint beside a dead
+shortcut is worse than no hint. Both stand down while a field has focus or the
+booking sheet is open.
+
+- **The toolbar owns navigation.** Heading, prev/next and Today live in
+  `AppointmentsView`'s one toolbar row, not inside each view. All three are
+  derivable from `anchor` alone. Stepping is not a fixed number of days —
+  months and years are walked with `addMonths` / `addYears`, both of which pin
+  the date before moving the unit (31 Jan + 1 month is otherwise 3 March).
+- **Today shows only when you are elsewhere** (`periodHasToday`). It sits at the
+  end of a right-aligned cluster so its appearing moves nothing.
+- **The query window follows the anchor**, padded a fortnight. It used to be a
+  fixed window around page load, which silently returned nothing past six weeks
+  out — indistinguishable from "no bookings". If you add a view, extend `range`
+  with it or that view will look empty.
+- **The booking sheet anchors beside its slot** (`lib/anchoredSheet.ts`, pure
+  arithmetic, no DOM). It never covers the block it belongs to, draws no
+  backdrop dim — the week must stay readable — and keeps the slot's band painted
+  while open, which is what makes it read as attached. Under 900px there is no
+  "beside", so `placeBeside` returns null and the full-width sheet is used.
+- **Week folds crowded clusters, day never does.** A cluster block is a door
+  into the day, not a booking: it has no drag and it stops its own pointerdown,
+  or the press reaches the column and offers to add to the fullest slot on
+  screen.
+- **The year reads from `appointments.startsInRange`**, not `listRange`.
+  `listRange` resolves a customer and staff row per appointment, which is
+  thousands of document reads to place dots. Bucket to local midnight on the
+  client: which day a booking falls on is a question about the reader's clock.
+- **The half-hour rule line matters here.** Almost every booking is 30 minutes.
+  Grid rules use `--grid-line` / `--grid-line-soft`, not `--border`, which is
+  tuned for card edges and reads as a spreadsheet at grid density.
 
 ## Popovers NEVER position absolute inside a card (recurring, stop it)
 
