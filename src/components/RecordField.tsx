@@ -34,12 +34,25 @@ export function FieldRow({
 // `hint` is where a group earns an explanation without spending a paragraph on
 // it: the (i) sits inside the heading's own gap-2 row, so the copy is one hover
 // away and the visible line stays a heading.
-export function FieldGroup({ label, hint }: { label: string; hint?: string }) {
+// `action` sits after the rule, at the right edge, for the one control that
+// belongs to a whole group rather than to any row in it. It goes there rather
+// than under the list because a group you can add to should say so before you
+// have read to the bottom of it, and an empty group has no bottom to read to.
+export function FieldGroup({
+  label,
+  hint,
+  action,
+}: {
+  label: string;
+  hint?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-2 pt-2">
       <span className="text-sm font-medium">{label}</span>
       {hint && <InfoTip text={hint} />}
       <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
+      {action}
     </div>
   );
 }

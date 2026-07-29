@@ -14,6 +14,7 @@ import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
+import { DEFAULT_DURATION, useBookingSheet } from "./useBookingSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -87,6 +88,9 @@ export function ContactView({
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setAttention = useMutation(api.messages.setAttention);
   const setMuted = useMutation(api.customers.setMuted);
+  // Same sheet the calendar opens, same conflict handling. No onOpenContact:
+  // the record it would navigate to is the one you are reading.
+  const booking = useBookingSheet({});
   // Below lg the two panes swap instead of sharing the row (InboxView does the
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
@@ -297,7 +301,33 @@ export function ContactView({
 
                   Editable rows first, read-only history after: everything you
                   can type into is above this rule, nothing below it is. */}
-              <FieldGroup label={t("appointments.title")} />
+              {/* Booking from the record, with this customer already decided.
+                  The calendar was the only way in, which meant the one screen
+                  that knows who you are talking about could not act on it: you
+                  read their history here, then went to the grid and named them
+                  again. Same sheet, same conflict handling, customer prefilled
+                  so the picker never appears. */}
+              <FieldGroup
+                label={t("appointments.title")}
+                action={
+                  <button
+                    type="button"
+                    onClick={() =>
+                      booking.open({
+                        // Next round hour, the same default the calendar's own
+                        // toolbar button uses when no slot was clicked.
+                        startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
+                        durationMinutes: DEFAULT_DURATION,
+                        customerId,
+                        customerName: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+                      })
+                    }
+                    className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--muted-bg)]"
+                  >
+                    {t("appointments.addForCustomer")}
+                  </button>
+                }
+              />
               {appointments === undefined && (
                 <p className="py-1 text-sm text-[var(--muted)]">{t("common.loading")}</p>
               )}
@@ -473,6 +503,8 @@ export function ContactView({
           />
         </section>
       </div>
+
+      {booking.render()}
     </div>
   );
 }

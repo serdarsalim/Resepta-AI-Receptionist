@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { DEFAULT_CURRENCY } from "@/lib/money";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import type { TranslationKey } from "@/lib/i18n";
 import {
@@ -22,7 +21,7 @@ import {
   minuteAt,
   type DragGeometry,
 } from "@/lib/calendarDrag";
-import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
+import { DEFAULT_DURATION, useBookingSheet } from "./useBookingSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -75,20 +74,17 @@ export function AppointmentsView({
     return { fromMs: now - 14 * 86_400_000, toMs: now + 42 * 86_400_000 };
   }, []);
   const appointments = useQuery(api.appointments.listRange, range);
-  const services = useQuery(api.services.list, {});
-  const staff = useQuery(api.staff.list, {});
   const settings = useQuery(api.orgs.current, {});
   const setStatus = useMutation(api.appointments.setStatus);
-  // Actions, not mutations: every one of these has to hear back from cal.com
-  // before our own row moves. See convex/schedule.ts.
-  const createBooking = useAction(api.schedule.create);
+  // An action, not a mutation: a move has to hear back from cal.com before our
+  // own row moves. See convex/schedule.ts. Held here as well as in the booking
+  // sheet because a DRAG moves a block without ever opening the sheet.
   const moveBooking = useAction(api.schedule.move);
-  const updateDetails = useMutation(api.appointments.updateDetails);
 
-  const [sheet, setSheet] = useState<ModalDraft | null>(null);
-  const [sheetError, setSheetError] = useState<string | undefined>();
-  const [sheetCanForce, setSheetCanForce] = useState(false);
-  const [pending, setPending] = useState(false);
+  // The sheet owns its own state and every call behind Save; this view only
+  // says when it opens and with what.
+  const booking = useBookingSheet({ onOpenContact });
+
   // Optimistic positions, keyed by appointment. A drag paints here first and
   // the entry is dropped the moment the server agrees (the query row catches
   // up) or refuses (the block snaps back to where it was).
@@ -96,66 +92,6 @@ export function AppointmentsView({
     Map<string, { startAt: number; durationMinutes: number }>
   >(new Map());
   const [moveError, setMoveError] = useState<string | undefined>();
-
-  const staffLabel = settings?.org.staffLabel?.trim() || t("appointments.staff");
-
-  // Held so "book anyway" can replay the exact same values with force set,
-  // rather than asking the owner to retype anything.
-  const lastSubmit = useRef<ModalSubmit | null>(null);
-
-  const submitSheet = async (values: ModalSubmit | null, force: boolean) => {
-    if (!values || !sheet) return;
-    lastSubmit.current = values;
-    setPending(true);
-    setSheetError(undefined);
-    try {
-      if (sheet.appointmentId) {
-        // Details cal.com has no opinion about go straight in; time and length
-        // have to be agreed with cal.com first, so they ride schedule.move.
-        await updateDetails({
-          appointmentId: sheet.appointmentId,
-          lines: values.lines,
-          staffId: values.staffId ?? null,
-          notes: values.notes,
-        });
-        const timeChanged =
-          values.startAt !== sheet.startAt ||
-          values.durationMinutes !== sheet.durationMinutes;
-        if (timeChanged) {
-          const result = await moveBooking({
-            appointmentId: sheet.appointmentId,
-            startAt: values.startAt,
-            durationMinutes: values.durationMinutes,
-            force,
-          });
-          if (!result.ok) {
-            setSheetError(result.reason ?? t("appointments.moveFailed"));
-            setSheetCanForce(Boolean(result.canForce));
-            return;
-          }
-        }
-      } else {
-        const result = await createBooking({
-          customerId: values.customerId,
-          newCustomer: values.newCustomer,
-          lines: values.lines,
-          staffId: values.staffId ?? undefined,
-          startAt: values.startAt,
-          durationMinutes: values.durationMinutes,
-          notes: values.notes,
-          force,
-        });
-        if (!result.ok) {
-          setSheetError(result.reason ?? t("appointments.moveFailed"));
-          setSheetCanForce(Boolean(result.canForce));
-          return;
-        }
-      }
-      setSheet(null);
-    } finally {
-      setPending(false);
-    }
-  };
 
   const clearOptimistic = (id: string) =>
     setOptimistic((current) => {
@@ -228,12 +164,10 @@ export function AppointmentsView({
         <button
           className="ml-auto rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => {
-            setSheetError(undefined);
-            setSheetCanForce(false);
             // No slot was clicked, so open on the next round hour — which is
             // what "new appointment" from a toolbar means.
             const next = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
-            setSheet({ startAt: next, durationMinutes: DEFAULT_DURATION });
+            booking.open({ startAt: next, durationMinutes: DEFAULT_DURATION });
           }}
         >
           {t("appointments.new")}
@@ -252,9 +186,7 @@ export function AppointmentsView({
           onAnchor={setAnchor}
           businessHours={settings?.org.businessHours}
           onOpenBlock={(row) => {
-            setSheetError(undefined);
-            setSheetCanForce(false);
-            setSheet({
+            booking.open({
               appointmentId: row._id,
               startAt: row.startAt,
               durationMinutes: row.durationMinutes ?? 30,
@@ -275,9 +207,7 @@ export function AppointmentsView({
             });
           }}
           onDraft={(startAt, durationMinutes) => {
-            setSheetError(undefined);
-            setSheetCanForce(false);
-            setSheet({ startAt, durationMinutes });
+            booking.open({ startAt, durationMinutes });
           }}
           onMove={async (row, startAt, durationMinutes) => {
             // Paint first, ask second. A drag that waits for a cal.com round
@@ -377,35 +307,7 @@ export function AppointmentsView({
         </div>
       )}
 
-      {sheet && (
-        <AppointmentModal
-          draft={sheet}
-          services={(services ?? []).filter((service) => service.active)}
-          currency={settings?.org.currency ?? DEFAULT_CURRENCY}
-          staff={staff ?? []}
-          staffLabel={staffLabel}
-          pending={pending}
-          error={sheetError}
-          canForce={sheetCanForce}
-          onClose={() => setSheet(null)}
-          onOpenCustomer={(id) => {
-            setSheet(null);
-            onOpenContact(id);
-          }}
-          onDelete={
-            sheet.appointmentId
-              ? () => {
-                  const id = sheet.appointmentId;
-                  if (!id) return;
-                  void setStatus({ appointmentId: id, status: "cancelled" });
-                  setSheet(null);
-                }
-              : undefined
-          }
-          onSubmit={(values) => void submitSheet(values, false)}
-          onForce={() => void submitSheet(lastSubmit.current, true)}
-        />
-      )}
+      {booking.render()}
     </div>
   );
 }
@@ -523,7 +425,6 @@ const HOUR_PX = 56; // one hour of column height; a 30-min booking is 28px
 // the view SCROLLS to when a period holds no bookings, so an empty week opens
 // on the working morning instead of on midnight.
 const DEFAULT_DAY_START = 8;
-const DEFAULT_DURATION = 30;
 const DAY_MS = 86_400_000;
 
 type CalendarAppointment = {

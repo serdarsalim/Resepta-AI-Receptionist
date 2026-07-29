@@ -82,7 +82,11 @@ export function AppointmentModal({
   onClose: () => void;
   // Opening the record replaces this sheet rather than stacking on it: the
   // caller closes us first, so there is never a modal behind a modal.
-  onOpenCustomer: (id: Id<"customers">) => void;
+  //
+  // Optional, because the sheet can be opened FROM a contact record, and a
+  // link back to the page you are already on is a dead click. Absent, the name
+  // renders as the plain fact it is.
+  onOpenCustomer?: (id: Id<"customers">) => void;
 }) {
   const { t, language } = useLanguage();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -280,13 +284,17 @@ export function AppointmentModal({
                   that only reveals itself on hover is a link nobody finds —
                   and this is the one route from a booking to the person's
                   history, consent and contact details. */}
-              <button
-                type="button"
-                onClick={() => onOpenCustomer(draft.customerId!)}
-                className="font-medium underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
-              >
-                {draft.customerName}
-              </button>
+              {onOpenCustomer ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenCustomer(draft.customerId!)}
+                  className="font-medium underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
+                >
+                  {draft.customerName}
+                </button>
+              ) : (
+                <span className="font-medium">{draft.customerName}</span>
+              )}
             </div>
           ) : (
             <>
