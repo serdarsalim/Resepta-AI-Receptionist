@@ -306,15 +306,27 @@ const dictionary = {
     en: "Messaging consent",
     de: "Einwilligung",
   },
+  // The record footer's one-word form. Same fact as customers.consent, in a
+  // grid column narrow enough that "Messaging consent" would wrap and drag the
+  // cell beside it out of shape. Unambiguous where it appears: it sits next to
+  // Mute on a contact record, and there is nothing else it could be consent to.
+  "customers.consentShort": {
+    tr: "İzin",
+    en: "Consent",
+    de: "Einwilligung",
+  },
   "customers.consentHint": {
     tr: "Müşterinin WhatsApp ve e-posta mesajlarına KVKK onayı. İzin kaydı olmadan hiçbir kanaldan mesaj gönderilmez.",
     en: "The customer's KVKK consent to WhatsApp and email messages. Without it, no channel sends anything.",
     de: "Die Einwilligung des Kunden nach DSGVO für Nachrichten über WhatsApp und E-Mail. Ohne sie sendet kein Kanal etwas.",
   },
+  // "Stumm", not "Stummschalten": this is a label on a switch in a four-column
+  // footer, and the extra eight characters were the widest single thing in the
+  // German layout. The switch itself supplies the verb.
   "customers.mute": {
     tr: "Sessize al",
     en: "Mute",
-    de: "Stummschalten",
+    de: "Stumm",
   },
   "customers.muteHint": {
     tr: "Sessize alınan müşteri gelen kutusunda görünmez ve hiçbir yerde bildirim noktası yakmaz. Mesaj göndermeye devam edebilirsiniz; kişi listenin sonuna iner.",

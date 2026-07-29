@@ -12,6 +12,7 @@ import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
+import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
@@ -52,6 +53,18 @@ function CustomFieldRow({
         onSave={onSave}
       />
     </FieldRow>
+  );
+}
+
+// A label in the record footer. Its whole job is to stay on one line: it sits
+// in an `auto` grid column, so a label that wraps does not just look wrong, it
+// sets the column width for the pair beside it too.
+function MetaLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <span className="flex items-center gap-1.5 whitespace-nowrap">
+      {label}
+      {hint && <InfoTip text={hint} />}
+    </span>
   );
 }
 
@@ -356,71 +369,91 @@ export function ContactView({
                 Mute sits beside it because they look alike and are not, which
                 is exactly why they belong where the difference is visible: one
                 governs what the salon may send, the other what this person may
-                put in front of the salon. */}
-            <div className="grid shrink-0 grid-cols-2 gap-x-5 gap-y-1.5 border-t border-[var(--border)] px-4 py-3">
+                put in front of the salon.
+
+                NOT built from FieldRow, which is the identity form's row and
+                reserves a 7.5rem label track so every field above lines up. At
+                half width that track is most of the cell, and the values it
+                left behind wrapped: a date broke across three lines to say "26
+                Jul 2026". These four pairs FLOW through one 4-column grid with
+                `auto` label columns instead, so each label column sizes to its
+                own widest label and the two halves still line up with each
+                other.
+
+                The fallback to one pair per row is a CONTAINER query, not a
+                viewport one. This panel is 2fr of a 2fr/3fr split, so it is
+                narrow on exactly the wide screens a `sm:` breakpoint calls
+                roomy: asking the viewport how much space this grid has is the
+                same mistake that made the values wrap in the first place.
+                20rem is measured, not guessed. German is the widest of the
+                three languages and needs 315px for four columns; below that it
+                stacks rather than overflow. */}
+            <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
+            <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)] @min-[20rem]:grid-cols-[auto_1fr_auto_1fr]">
               {/* Added keeps a date and Last reply takes an age, the same split
                   the Contacts table already makes. When somebody joined is a
                   fact you look up; when they last wrote is a fact you feel, and
                   it stops being interesting long before the date does. */}
-              <FieldRow label={t("customers.added")}>
-                <span className="block py-1 text-sm text-[var(--muted)]">
-                  {formatDay(customer._creationTime, language)}
-                </span>
-              </FieldRow>
+              <MetaLabel label={t("customers.added")} />
+              <span className="whitespace-nowrap" title={formatDateTime(customer._creationTime, language)}>
+                {formatDay(customer._creationTime, language)}
+              </span>
               {/* An age, not a timestamp. "27 Jul, 22:25" is a precision nobody
                   reads at a glance and it will not fit half a column anyway;
                   "2d" answers the question actually being asked. The exact
-                  moment is still one hover away. */}
-              <FieldRow label={t("customers.lastReply")}>
-                <span
-                  className="block py-1 text-sm text-[var(--muted)]"
-                  title={
-                    customer.lastInboundAt !== undefined
-                      ? formatDateTime(customer.lastInboundAt, language)
-                      : undefined
-                  }
-                >
-                  {/* Blank over zero, never a dash: the cell keeps its place in
-                      the grid, it just has nothing to report yet. */}
-                  {customer.lastInboundAt !== undefined
-                    ? formatAge(customer.lastInboundAt, language)
-                    : ""}
-                </span>
-              </FieldRow>
-              <FieldRow label={t("customers.consent")} hint={t("customers.consentHint")}>
-                <span className="flex h-7 items-center gap-2">
-                  <Toggle
-                    size="sm"
-                    checked={customer.consentAt !== undefined}
-                    onChange={(next) => void updateCustomer({ customerId, consent: next })}
-                  />
-                  {/* The date is what makes this a record instead of a switch:
-                      "consented" with no when is not worth much if anyone ever
-                      asks. A date and not an age, for the same reason: "3mo" is
-                      not an answer you can hand to a regulator. */}
-                  {customer.consentAt !== undefined && (
-                    <span
-                      className="text-xs text-[var(--muted)]"
-                      title={formatDateTime(customer.consentAt, language)}
-                    >
-                      {formatDay(customer.consentAt, language)}
-                    </span>
-                  )}
-                </span>
-              </FieldRow>
-              <FieldRow label={t("customers.mute")} hint={t("customers.muteHint")}>
-                <span className="flex h-7 items-center">
-                  <Toggle
-                    size="sm"
-                    checked={customer.mutedAt !== undefined}
-                    onChange={(next) => void setMuted({ customerId, muted: next })}
-                  />
-                  {/* No date beside this one, on purpose. Consent's timestamp
-                      is evidence somebody may have to produce; mute's is
-                      housekeeping, and printing it would suggest the two rows
-                      carry the same kind of weight. */}
-                </span>
-              </FieldRow>
+                  moment is still one hover away.
+
+                  Blank over zero, never a dash: the cell keeps its place in the
+                  grid, it just has nothing to report yet. */}
+              <MetaLabel label={t("customers.lastReply")} />
+              <span
+                className="whitespace-nowrap"
+                title={
+                  customer.lastInboundAt !== undefined
+                    ? formatDateTime(customer.lastInboundAt, language)
+                    : undefined
+                }
+              >
+                {customer.lastInboundAt !== undefined
+                  ? formatAge(customer.lastInboundAt, language)
+                  : ""}
+              </span>
+              {/* "Consent" here, not the table's "Messaging consent". Two words
+                  set an `auto` label column wide enough to squeeze the date out
+                  of the cell beside it, and down here, next to Mute, there is
+                  nothing else it could be consent TO. */}
+              {/* Both switches render bare, the way Nudge's footer does. The
+                  consent date used to sit beside its toggle, and it was the
+                  single widest thing in the grid: carrying it cost 87px, which
+                  is the difference between this footer fitting the panel in
+                  German and not. It is still on the toggle's title, still a
+                  column in Contacts, and still exported in the CSV, so nothing
+                  about the record got quieter, it just stopped being the reason
+                  the other three cells had nowhere to go. */}
+              <MetaLabel label={t("customers.consentShort")} hint={t("customers.consentHint")} />
+              <span
+                className="flex items-center"
+                title={
+                  customer.consentAt !== undefined
+                    ? formatDateTime(customer.consentAt, language)
+                    : undefined
+                }
+              >
+                <Toggle
+                  size="sm"
+                  checked={customer.consentAt !== undefined}
+                  onChange={(next) => void updateCustomer({ customerId, consent: next })}
+                />
+              </span>
+              <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
+              <span className="flex items-center">
+                <Toggle
+                  size="sm"
+                  checked={customer.mutedAt !== undefined}
+                  onChange={(next) => void setMuted({ customerId, muted: next })}
+                />
+              </span>
+            </div>
             </div>
           </section>
         </div>
