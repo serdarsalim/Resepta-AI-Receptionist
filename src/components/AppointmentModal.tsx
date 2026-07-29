@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
   currencySymbol,
@@ -103,6 +105,46 @@ export function AppointmentModal({
 
   const editing = draft.appointmentId !== undefined;
 
+  // A booking whose customer is already decided: an edit, or the sheet opened
+  // from somebody's contact record. The customer is a fact here, not a field,
+  // so it renders as a link and the picker never appears.
+  const customerFixed = draft.customerId !== undefined;
+
+  // Existing or new, for the bookings where it is still open. "new" first
+  // because the counter phone case is somebody standing there who has never
+  // been here before; a regular is more often booked from their own record,
+  // which takes the customerFixed path above and never sees this.
+  const [mode, setMode] = useState<"existing" | "new">("new");
+  const [picked, setPicked] = useState<Id<"customers"> | undefined>();
+  const [customerQuery, setCustomerQuery] = useState("");
+
+  // Only fetched once the picker is actually on screen. A booking that creates
+  // its customer never loads the org's contact list at all.
+  const customerOptions = useQuery(
+    api.customers.options,
+    customerFixed || mode !== "existing" ? "skip" : {},
+  );
+
+  // Name first, then number, because somebody typing "534" is looking up a
+  // phone and somebody typing "ker" is looking up a person. Capped at eight:
+  // past that the list is a scrolling surface inside a modal, and the answer
+  // is to type another letter.
+  const customerMatches = useMemo(() => {
+    const all = customerOptions ?? [];
+    const needle = customerQuery.trim().toLocaleLowerCase();
+    if (!needle) return all.slice(0, 8);
+    return all
+      .filter((c) => {
+        const name = `${c.firstName} ${c.lastName ?? ""}`.toLocaleLowerCase();
+        return name.includes(needle) || c.phone.includes(needle);
+      })
+      .slice(0, 8);
+  }, [customerOptions, customerQuery]);
+
+  // Save is off until the picker has an answer. The submit handler refuses
+  // this case anyway, but a button that silently does nothing reads as broken.
+  const customerIncomplete = !customerFixed && mode === "existing" && !picked;
+
   // Picking a service fills its list price and, on a NEW booking, restretches
   // the block to what the work adds up to. On an existing one it leaves the
   // length alone: a block drawn by hand meant that length on purpose, and
@@ -186,7 +228,13 @@ export function AppointmentModal({
       notes,
     };
     if (draft.customerId) values.customerId = draft.customerId;
-    else {
+    else if (mode === "existing") {
+      // No silent fallback to creating somebody: a picker with nothing picked
+      // is an unfinished form, and guessing here is how you get a duplicate
+      // contact named after a half-typed search.
+      if (!picked) return;
+      values.customerId = picked;
+    } else {
       const form = formRef.current;
       if (!form) return;
       const data = new FormData(form);
@@ -242,24 +290,113 @@ export function AppointmentModal({
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-[var(--muted)]">
-                  {t("customers.firstName")}
-                  <input ref={firstFieldRef} name="firstName" required className="mt-1" />
-                </label>
-                <label className="block text-xs text-[var(--muted)]">
-                  {t("customers.lastName")}
-                  <input name="lastName" className="mt-1" />
-                </label>
-              </div>
-              <label className="block text-xs text-[var(--muted)]" htmlFor="modal-phone">
-                {t("customers.phone")}
-                <PhoneInput id="modal-phone" name="phone" required className="mt-1" />
-              </label>
-              <label className="flex items-start gap-2 text-xs text-[var(--muted)]">
-                <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
-                <span>{t("customers.consent")}</span>
-              </label>
+              {/* Existing or new, stated rather than inferred. The sheet used
+                  to offer only the new-customer fields, so booking a regular
+                  meant retyping somebody already on file and finding them
+                  again by phone number afterwards. The backend always took
+                  either (schedule.prepareCreate accepts customerId OR
+                  newCustomer, and dedupes the latter by phone); this is the
+                  half that was missing. */}
+              <fieldset className="space-y-2">
+                <legend className="text-xs text-[var(--muted)]">
+                  {t("appointments.customer")}
+                </legend>
+                <div className="flex gap-4 text-sm">
+                  {(["existing", "new"] as const).map((option) => (
+                    <label key={option} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="customerMode"
+                        className="w-auto"
+                        checked={mode === option}
+                        onChange={() => setMode(option)}
+                      />
+                      <span>
+                        {option === "existing"
+                          ? t("appointments.existingCustomer")
+                          : t("appointments.newCustomer")}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {mode === "existing" ? (
+                <div className="space-y-2">
+                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-customer">
+                    {t("appointments.findCustomer")}
+                    <input
+                      id="modal-customer"
+                      type="search"
+                      autoComplete="off"
+                      className="mt-1"
+                      placeholder={t("appointments.findCustomerHint")}
+                      value={customerQuery}
+                      onChange={(e) => {
+                        setCustomerQuery(e.target.value);
+                        // Typing again abandons the previous pick. Leaving it
+                        // set would let the sheet book a person whose name is
+                        // no longer anywhere on screen.
+                        if (picked) setPicked(undefined);
+                      }}
+                    />
+                  </label>
+                  {/* Radio rows, not a listbox: the choice is one of a handful
+                      and it has to survive being read back before Save. */}
+                  <ul className="max-h-44 overflow-y-auto rounded-lg border border-[var(--border)]">
+                    {customerOptions === undefined ? (
+                      <li className="px-3 py-2 text-xs text-[var(--muted)]">
+                        {t("common.loading")}
+                      </li>
+                    ) : customerMatches.length === 0 ? (
+                      <li className="px-3 py-2 text-xs text-[var(--muted)]">
+                        {t("customers.noMatches")}
+                      </li>
+                    ) : (
+                      customerMatches.map((customer) => (
+                        <li key={customer._id} className="border-b border-[var(--border)] last:border-b-0">
+                          <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
+                            <input
+                              type="radio"
+                              name="existingCustomer"
+                              className="w-auto"
+                              checked={picked === customer._id}
+                              onChange={() => setPicked(customer._id)}
+                            />
+                            <span className="min-w-0 flex-1 truncate">
+                              {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
+                            </span>
+                            <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
+                              {customer.phone}
+                            </span>
+                          </label>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-xs text-[var(--muted)]">
+                      {t("customers.firstName")}
+                      <input ref={firstFieldRef} name="firstName" required className="mt-1" />
+                    </label>
+                    <label className="block text-xs text-[var(--muted)]">
+                      {t("customers.lastName")}
+                      <input name="lastName" className="mt-1" />
+                    </label>
+                  </div>
+                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-phone">
+                    {t("customers.phone")}
+                    <PhoneInput id="modal-phone" name="phone" required className="mt-1" />
+                  </label>
+                  <label className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                    <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
+                    <span>{t("customers.consent")}</span>
+                  </label>
+                </>
+              )}
             </>
           )}
 
@@ -433,7 +570,7 @@ export function AppointmentModal({
             <button
               type="button"
               onClick={submit}
-              disabled={pending}
+              disabled={pending || customerIncomplete}
               className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
             >
               {pending ? t("common.loading") : t("common.save")}

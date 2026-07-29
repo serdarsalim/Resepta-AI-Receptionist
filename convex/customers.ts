@@ -118,6 +118,37 @@ export const list = query({
   },
 });
 
+// Name and number, nothing else. The booking sheet's customer picker needs to
+// answer "who is this" and no more, and list() pays for a scan of the org's
+// recent messages to resolve the attention dot that a dropdown never draws.
+// That is the right price for the Contacts table and the wrong one for opening
+// a modal.
+export const options = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("customers"),
+      firstName: v.string(),
+      lastName: v.optional(v.string()),
+      phone: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const rows = await ctx.db
+      .query("customers")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(1000);
+    return rows.map((row) => ({
+      _id: row._id,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      phone: row.phone,
+    }));
+  },
+});
+
 export const create = mutation({
   args: {
     firstName: v.string(),
