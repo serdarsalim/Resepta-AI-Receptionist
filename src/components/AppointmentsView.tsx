@@ -14,6 +14,7 @@ import {
   localeFor,
 } from "@/lib/datetime";
 import {
+  DEFAULT_DURATION,
   SNAP_MINUTES,
   advanceDrag,
   columnIndexAt,
@@ -21,7 +22,7 @@ import {
   minuteAt,
   type DragGeometry,
 } from "@/lib/calendarDrag";
-import { DEFAULT_DURATION, useBookingSheet } from "./useBookingSheet";
+import { useBookingSheet } from "./useBookingSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",

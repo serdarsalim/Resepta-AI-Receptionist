@@ -14,7 +14,8 @@ import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
-import { DEFAULT_DURATION, useBookingSheet } from "./useBookingSheet";
+import { DEFAULT_DURATION } from "@/lib/calendarDrag";
+import { useBookingSheet } from "./useBookingSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",

@@ -7,6 +7,12 @@
 // hand than a counter phone allows.
 export const SNAP_MINUTES = 15;
 
+// How long a booking is when nobody has said: what a new one opens at, and what
+// a stored row is drawn as when it carries no length of its own. A plain number
+// with no React in it, so it lives beside the other calendar constants rather
+// than in the "use client" hook that happens to open the sheet.
+export const DEFAULT_DURATION = 30;
+
 export type DragKind = "create" | "move" | "resize";
 
 export type DragGeometry = {

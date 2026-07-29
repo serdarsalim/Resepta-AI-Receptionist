@@ -8,12 +8,6 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { DEFAULT_CURRENCY } from "@/lib/money";
 import { AppointmentModal, type ModalDraft, type ModalSubmit } from "./AppointmentModal";
 
-// How long a booking is when nobody has said: what a new one opens at, and
-// what a stored row is drawn as when it carries no length of its own. Lives
-// here because every surface that opens the sheet needs it, and the calendar
-// that used to own it is now only one of them.
-export const DEFAULT_DURATION = 30;
-
 // Everything it takes to put the booking sheet on screen and get an answer out
 // of it: the sheet's own state, the org data it renders from, and the
 // create/move/update calls behind Save.
