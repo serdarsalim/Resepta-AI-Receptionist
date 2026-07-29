@@ -21,6 +21,7 @@ import {
   minuteAt,
   type DragGeometry,
 } from "@/lib/calendarDrag";
+import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -40,7 +41,7 @@ const STATUS_STYLE: Record<string, string> = {
   no_show: "bg-transparent text-red-600 dark:text-red-400",
 };
 
-type ViewMode = "day" | "week" | "list";
+type ViewMode = "day" | "week" | "month" | "list";
 
 // A slot the sheet is currently open against: which day, and the minutes it
 // spans. Kept in calendar terms rather than pixels so it survives a scroll or
@@ -55,6 +56,7 @@ function rectOf(el: Element): Rect {
 const VIEW_MODES: { id: ViewMode; key: TranslationKey }[] = [
   { id: "day", key: "appointments.day" },
   { id: "week", key: "appointments.week" },
+  { id: "month", key: "appointments.month" },
   { id: "list", key: "appointments.list" },
 ];
 
@@ -90,8 +92,16 @@ export function AppointmentsView({
   // blank between pages.
   const range = useMemo(() => {
     const pad = 14 * DAY_MS;
-    const from = view === "week" ? startOfWeek(anchor) : startOfDay(anchor);
-    const span = view === "week" ? 7 * DAY_MS : DAY_MS;
+    // The month grid draws six weeks starting from the Monday on or before the
+    // first, so the window is that, not the calendar month.
+    const from =
+      view === "month"
+        ? startOfWeek(startOfMonth(anchor))
+        : view === "week"
+          ? startOfWeek(anchor)
+          : startOfDay(anchor);
+    const span =
+      view === "month" ? 42 * DAY_MS : view === "week" ? 7 * DAY_MS : DAY_MS;
     // The list is a rolling read of what is coming, so it stays keyed to now
     // rather than to a day nobody navigated to.
     if (view === "list") {
@@ -211,7 +221,51 @@ export function AppointmentsView({
         <p className="text-sm text-[var(--muted)]">{t("appointments.none")}</p>
       )}
 
-      {view !== "list" && appointments !== undefined && (
+      {view === "month" && appointments !== undefined && (
+        <MonthView
+          anchor={anchor}
+          onAnchor={setAnchor}
+          rows={withOptimistic}
+          onOpenDay={(dayMs) => {
+            setAnchor(dayMs);
+            setView("day");
+          }}
+          onDraftDay={(dayMs) => {
+            // A month cell has no minute in it. Opening on the next round hour
+            // would be today's clock applied to a day in November; the working
+            // morning is the honest default for a day nobody has named a time
+            // in yet.
+            booking.open({
+              startAt: dayMs + DEFAULT_DAY_START * 3_600_000,
+              durationMinutes: DEFAULT_DURATION,
+            });
+          }}
+          onOpenBlock={(id, anchorRect) => {
+            const row = withOptimistic.find((r) => r._id === id);
+            if (!row) return;
+            booking.open(
+              {
+                appointmentId: row._id,
+                startAt: row.startAt,
+                durationMinutes: row.durationMinutes ?? DEFAULT_DURATION,
+                customerId: row.customerId,
+                customerName: row.customer
+                  ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                  : undefined,
+                lines: (row.items ?? []).flatMap((item) =>
+                  item.serviceId ? [{ serviceId: item.serviceId, price: item.price }] : [],
+                ),
+                staffId: row.staffId ?? null,
+                notes: row.notes,
+                status: row.status,
+              },
+              anchorRect,
+            );
+          }}
+        />
+      )}
+
+      {view !== "list" && view !== "month" && appointments !== undefined && (
         <Calendar
           appointments={withOptimistic}
           view={view}
@@ -508,6 +562,91 @@ function startOfDay(ms: number): number {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+// Previous / next / where-you-are / today. Shared by the time grid and the
+// month grid: the stepping differs (a day, a week, a month) but the control
+// does not, and two copies would be two sets of paddings drifting apart.
+function PeriodNav({
+  heading,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  heading: string;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div className="mb-2 flex items-center gap-1">
+      <button
+        aria-label={t("appointments.previous")}
+        className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        onClick={onPrev}
+      >
+        <ChevronLeft />
+      </button>
+      <button
+        aria-label={t("appointments.next")}
+        className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        onClick={onNext}
+      >
+        <ChevronRight />
+      </button>
+      <h3 className="ml-1 text-sm font-medium">{heading}</h3>
+      <button
+        className="ml-auto rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        onClick={() => onToday()}
+      >
+        {t("appointments.today")}
+      </button>
+    </div>
+  );
+}
+
+// The month's frame: the shared header, then the grid. Kept out of Calendar
+// because Calendar is the TIME grid — hours, lanes, drag geometry, business
+// hours — and a month needs none of it. Sharing the shell would mean computing
+// all of that to draw squares.
+function MonthView({
+  anchor,
+  onAnchor,
+  rows,
+  onOpenDay,
+  onOpenBlock,
+  onDraftDay,
+}: {
+  anchor: number;
+  onAnchor: (next: number) => void;
+  rows: CalendarAppointment[];
+  onOpenDay: (dayMs: number) => void;
+  onOpenBlock: (id: string, anchorRect?: Rect) => void;
+  onDraftDay: (dayMs: number) => void;
+}) {
+  const { language } = useLanguage();
+  const heading = new Intl.DateTimeFormat(localeFor(language), {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(anchor));
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <PeriodNav
+        heading={heading}
+        onPrev={() => onAnchor(addMonths(anchor, -1))}
+        onNext={() => onAnchor(addMonths(anchor, 1))}
+        onToday={() => onAnchor(startOfDay(Date.now()))}
+      />
+      <MonthGrid
+        anchor={anchor}
+        rows={rows}
+        onOpenDay={onOpenDay}
+        onOpenBlock={onOpenBlock}
+        onDraftDay={onDraftDay}
+      />
+    </section>
+  );
 }
 
 function startOfWeek(ms: number): number {
@@ -935,29 +1074,12 @@ function Calendar({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-2 flex items-center gap-1">
-        <button
-          aria-label={t("appointments.previous")}
-          className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          onClick={() => onAnchor(anchor - step * DAY_MS)}
-        >
-          <ChevronLeft />
-        </button>
-        <button
-          aria-label={t("appointments.next")}
-          className="rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          onClick={() => onAnchor(anchor + step * DAY_MS)}
-        >
-          <ChevronRight />
-        </button>
-        <h3 className="ml-1 text-sm font-medium">{heading}</h3>
-        <button
-          className="ml-auto rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          onClick={() => onAnchor(startOfDay(Date.now()))}
-        >
-          {t("appointments.today")}
-        </button>
-      </div>
+      <PeriodNav
+        heading={heading}
+        onPrev={() => onAnchor(anchor - step * DAY_MS)}
+        onNext={() => onAnchor(anchor + step * DAY_MS)}
+        onToday={() => onAnchor(startOfDay(Date.now()))}
+      />
 
       {/* Column headers stay put while the hours scroll under them. With staff
           columns the names take this row over: the date is already in the
