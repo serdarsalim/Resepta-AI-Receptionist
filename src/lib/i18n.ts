@@ -328,6 +328,14 @@ const dictionary = {
     en: "Mute",
     de: "Stumm",
   },
+  // The row indicator's tooltip. States the consequence, not the setting: the
+  // icon already says "muted", what somebody hovering wants is why this row is
+  // at the bottom and silent.
+  "customers.mutedMark": {
+    tr: "Sessize alındı: gelen kutusunda görünmez, bildirim vermez",
+    en: "Muted: no inbox row, no notifications",
+    de: "Stummgeschaltet: nicht im Posteingang, keine Benachrichtigungen",
+  },
   "customers.muteHint": {
     tr: "Sessize alınan müşteri gelen kutusunda görünmez ve hiçbir yerde bildirim noktası yakmaz. Mesaj göndermeye devam edebilirsiniz; kişi listenin sonuna iner.",
     en: "A muted customer stays out of the inbox and never lights an attention dot. You can still message them; they sit at the bottom of Contacts.",

@@ -124,6 +124,41 @@ function NoConsentMark() {
   );
 }
 
+// Indicator, not a control: mute is set on the contact record. Without it a
+// muted row just looks like it sorts oddly, with nothing on screen saying why
+// it sits at the bottom and never lights a dot.
+//
+// A speaker with a cross, deliberately NOT the bell NoConsentMark just used.
+// The two can appear on the same row and mean different things, so they cannot
+// share a glyph. Grey rather than amber for the same reason: no consent is a
+// problem the salon has to fix, mute is a choice somebody already made.
+function MutedMark() {
+  const t = useT();
+  return (
+    <span
+      title={t("customers.mutedMark")}
+      aria-label={t("customers.mute")}
+      className="inline-flex shrink-0 items-center text-[var(--muted)]"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+        <line x1="23" y1="9" x2="17" y2="15" />
+        <line x1="17" y1="9" x2="23" y2="15" />
+      </svg>
+    </span>
+  );
+}
+
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
@@ -502,6 +537,7 @@ export function CustomersView({
                     />
                   )}
                   {customer.consentAt === undefined && <NoConsentMark />}
+                  {customer.mutedAt !== undefined && <MutedMark />}
                 </span>
                 <span className="block text-xs tabular-nums text-[var(--muted)]">
                   {customer.phone}
@@ -616,6 +652,7 @@ export function CustomersView({
                           />
                         )}
                         {customer.consentAt === undefined && <NoConsentMark />}
+                        {customer.mutedAt !== undefined && <MutedMark />}
                       </span>
                     </td>
                     {visibleColumns.map((column) => (
