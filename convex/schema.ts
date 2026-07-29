@@ -322,6 +322,18 @@ export default defineSchema({
     // arrivals worth noticing invisible. Compared against
     // attentionClearedAt like every other attention source.
     arrivedAt: v.optional(v.number()),
+    // Mute — the ATTENTION switch, and only that. A muted customer stays fully
+    // live: you can send to them, they still appear in search, their timeline
+    // still records everything. What changes is that they stop asking for a
+    // look. No dot on the contact, no row in the inbox, nothing added to the
+    // sidebar count. Set = muted; the timestamp is only when.
+    //
+    // It is not consent and it is not a block. Consent is a legal fact about
+    // what the salon may send; mute is a working preference about what this
+    // person may put in front of the salon. Conflating them would mean muting
+    // someone silently revoked their consent, which is exactly the sort of
+    // quiet state change KVKK punishes.
+    mutedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"]),

@@ -27,6 +27,7 @@ const customerFields = {
   // schema and not added here makes every read of the table throw.
   attentionClearedAt: v.optional(v.number()),
   arrivedAt: v.optional(v.number()),
+  mutedAt: v.optional(v.number()),
 };
 
 // Only the LIST carries the dot. Resolving it costs a scan of the org's recent
@@ -50,6 +51,10 @@ function resolveAttention(
   customer: Doc<"customers">,
   byCustomer: Map<string, ConversationEntry[]>,
 ): boolean {
+  // Mute answers first, and answers for every caller: the table, the record
+  // page, and anything else that ever asks. A muted customer cannot light the
+  // dot, which is the whole of what mute means.
+  if (customer.mutedAt) return false;
   const entries = byCustomer.get(customer._id);
   const messageAttentionAt = entries ? summariseEntries(entries).attentionAt : 0;
   const wants = Math.max(messageAttentionAt, customer.arrivedAt ?? 0);
@@ -99,6 +104,13 @@ export const list = query({
       .order("desc")
       .take(1000);
     const byCustomer = await conversationEntries(ctx, orgId);
+    // mutedAt ships raw and the table decides where muted rows land. Nudge
+    // sinks them server-side, through a second query and a by_muted index,
+    // because its Contacts table is paginated: a muted row can only sort late
+    // within the page it happens to land in, so the tail has to be assembled
+    // before the page is. This list is one unpaginated take that the table
+    // re-sorts by whichever column is active, so a server-side order would be
+    // thrown away on arrival. One place decides, and it is the sort.
     return rows.map((row) => ({
       ...row,
       needsAttention: resolveAttention(row, byCustomer),
@@ -178,6 +190,25 @@ export const update = mutation({
       patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
     }
     await ctx.db.patch(args.customerId, patch);
+    return null;
+  },
+});
+
+// Mute / unmute. Deliberately its own mutation rather than a flag on update():
+// update() is the identity form saving a batch of edited fields, and mute is a
+// switch somebody flips on its own and expects to take effect immediately.
+// Folding it in would also mean every save of a phone number had to have an
+// opinion about mute.
+export const setMuted = mutation({
+  args: { customerId: v.id("customers"), muted: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    await ctx.db.patch(args.customerId, {
+      mutedAt: args.muted ? Date.now() : undefined,
+    });
     return null;
   },
 });

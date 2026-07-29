@@ -323,9 +323,25 @@ export function CustomersView({
       : matched.filter((customer) =>
           table.matchesFilters((column) => filterValue(customer, column)),
         );
-    return [...kept].sort((a, b) =>
-      compareCells(sortValue(a, table.sort.key), sortValue(b, table.sort.key), table.sort.dir),
-    );
+    // Muted contacts sink below every unmuted row, whatever column is sorted
+    // and whichever direction. Mute is not a value in a column, it is a
+    // statement about how much of the list this person deserves, so it ranks
+    // ahead of the sort rather than inside it.
+    //
+    // A search is the exception, for the reason stated above: someone typing a
+    // name is asking whether this person is in here, and burying the one match
+    // under everybody else answers a question they did not ask.
+    return [...kept].sort((a, b) => {
+      if (!search.active) {
+        const muted = Number(a.mutedAt !== undefined) - Number(b.mutedAt !== undefined);
+        if (muted !== 0) return muted;
+      }
+      return compareCells(
+        sortValue(a, table.sort.key),
+        sortValue(b, table.sort.key),
+        table.sort.dir,
+      );
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, fieldByKey, search.active, search.matches, table.matchesFilters, table.sort]);
 

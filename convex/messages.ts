@@ -507,6 +507,9 @@ export const attentionCount = query({
       if (attentionAt === 0) continue;
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
+      // A muted customer is not in the inbox at all, so counting them here
+      // would leave a badge pointing at rows that aren't there.
+      if (customer.mutedAt) continue;
       if (attentionAt > (customer.attentionClearedAt ?? 0)) count += 1;
     }
     return count;
@@ -568,6 +571,12 @@ export const conversations = query({
     for (const [customerId, entries] of byCustomer) {
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
+      // Muted contacts leave the inbox entirely. The conversation stays whole
+      // and readable from the contact record, which is where you go when you
+      // actually want to look; what mute buys is that it stops arriving here
+      // unasked. Dropping the row rather than only dimming its dot is the
+      // point: a quiet row in a list of forty is still forty rows to read.
+      if (customer.mutedAt) continue;
       const summary = summariseEntries(entries);
       out.push({
         customerId: customer._id,
