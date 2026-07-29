@@ -22,6 +22,7 @@ import {
   type DragGeometry,
 } from "@/lib/calendarDrag";
 import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
+import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -41,7 +42,7 @@ const STATUS_STYLE: Record<string, string> = {
   no_show: "bg-transparent text-red-600 dark:text-red-400",
 };
 
-type ViewMode = "day" | "week" | "month" | "list";
+type ViewMode = "day" | "week" | "month" | "year" | "list";
 
 // A slot the sheet is currently open against: which day, and the minutes it
 // spans. Kept in calendar terms rather than pixels so it survives a scroll or
@@ -57,8 +58,42 @@ const VIEW_MODES: { id: ViewMode; key: TranslationKey }[] = [
   { id: "day", key: "appointments.day" },
   { id: "week", key: "appointments.week" },
   { id: "month", key: "appointments.month" },
+  { id: "year", key: "appointments.year" },
   { id: "list", key: "appointments.list" },
 ];
+
+// The letter that switches to each view, shown in the menu and bound on the
+// document. Shown BECAUSE it is bound: a hint next to a shortcut that does
+// nothing is worse than no hint.
+const VIEW_KEY: Record<ViewMode, string> = {
+  day: "D",
+  week: "W",
+  month: "M",
+  year: "Y",
+  list: "L",
+};
+
+// Does the period on screen contain today? Drives whether Today is offered at
+// all — a button that jumps you to where you already are is a control with
+// nothing to do.
+function periodHasToday(view: ViewMode, anchor: number): boolean {
+  const today = startOfDay(Date.now());
+  const here = new Date(anchor);
+  const now = new Date(today);
+  switch (view) {
+    case "day":
+      return startOfDay(anchor) === today;
+    case "week":
+      return startOfWeek(anchor) === startOfWeek(today);
+    case "month":
+      return here.getFullYear() === now.getFullYear() && here.getMonth() === now.getMonth();
+    case "year":
+      return here.getFullYear() === now.getFullYear();
+    // The list already reads forward from now, so it is never anywhere else.
+    case "list":
+      return true;
+  }
+}
 
 export function AppointmentsView({
   onOpenContact,
@@ -111,6 +146,19 @@ export function AppointmentsView({
     return { fromMs: from - pad, toMs: from + span + pad };
   }, [anchor, view]);
   const appointments = useQuery(api.appointments.listRange, range);
+  // Start times for the whole year, only while the year is being looked at.
+  const yearStarts = useQuery(
+    api.appointments.startsInRange,
+    view === "year"
+      ? { fromMs: startOfYear(anchor), toMs: addYears(startOfYear(anchor), 1) }
+      : "skip",
+  );
+  // Bucketed to local midnight here rather than on the server, because "which
+  // day" is a question about the reader's clock.
+  const bookedDays = useMemo(
+    () => new Set((yearStarts ?? []).map((ms) => startOfDay(ms))),
+    [yearStarts],
+  );
   const settings = useQuery(api.orgs.current, {});
   const setStatus = useMutation(api.appointments.setStatus);
   // An action, not a mutation: a move has to hear back from cal.com before our
@@ -134,6 +182,37 @@ export function AppointmentsView({
   const [provisional, setProvisional] = useState<SlotBand | null>(null);
   useEffect(() => {
     if (!booking.isOpen) setProvisional(null);
+  }, [booking.isOpen]);
+
+  // D / W / M / Y / L switch views, T jumps to today. Bound because the menu
+  // PRINTS these letters: a hint beside a shortcut that does nothing is worse
+  // than no hint at all.
+  //
+  // Skipped while typing, and while the booking sheet is open. Otherwise
+  // entering "Wednesday" in a note would walk the calendar through four views,
+  // and a customer named Deniz would jump you to the day grid on the D.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (booking.isOpen) return;
+      const el = event.target as HTMLElement | null;
+      if (
+        el &&
+        (el.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
+      ) {
+        return;
+      }
+      const key = event.key.toUpperCase();
+      if (key === "T") {
+        setAnchor(startOfDay(Date.now()));
+        return;
+      }
+      const mode = VIEW_MODES.find((entry) => VIEW_KEY[entry.id] === key);
+      if (mode) setView(mode.id);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [booking.isOpen]);
 
   const clearOptimistic = (id: string) =>
@@ -188,22 +267,7 @@ export function AppointmentsView({
             property of what you are looking at; the button makes something
             new, and those are not the same kind of control to be stacked in
             one cluster. */}
-        <div className="inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.id}
-              onClick={() => setView(mode.id)}
-              aria-current={view === mode.id ? "page" : undefined}
-              className={`rounded-md px-3 py-1 transition-colors ${
-                view === mode.id
-                  ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t(mode.key)}
-            </button>
-          ))}
-        </div>
+        <ViewMenu view={view} onView={setView} />
         <button
           className="ml-auto rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
           onClick={() => {
@@ -265,7 +329,23 @@ export function AppointmentsView({
         />
       )}
 
-      {view !== "list" && view !== "month" && appointments !== undefined && (
+      {view === "year" && (
+        <YearView
+          anchor={anchor}
+          bookedDays={bookedDays}
+          onOpenDay={(dayMs) => {
+            setAnchor(dayMs);
+            setView("day");
+          }}
+          onOpenMonth={(monthMs) => {
+            setAnchor(monthMs);
+            setView("month");
+          }}
+          onAnchor={setAnchor}
+        />
+      )}
+
+      {view !== "list" && view !== "month" && view !== "year" && appointments !== undefined && (
         <Calendar
           appointments={withOptimistic}
           view={view}
@@ -564,6 +644,84 @@ function startOfDay(ms: number): number {
   return d.getTime();
 }
 
+// The view picker. A dropdown rather than five segments, because five segments
+// is a row of buttons four of which are wrong, and the set will keep growing.
+// The shortcut letter rides each row: it teaches the keyboard without a help
+// screen, which is the only reason anybody learns these.
+function ViewMenu({
+  view,
+  onView,
+}: {
+  view: ViewMode;
+  onView: (next: ViewMode) => void;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Outside click and Escape both close. Pointerdown rather than click so the
+  // menu is gone before whatever was clicked underneath reacts.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => {
+      if (!boxRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const current = VIEW_MODES.find((mode) => mode.id === view);
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--muted-bg)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--border)]"
+      >
+        {current ? t(current.key) : ""}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-40 mt-1 min-w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+        >
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={view === mode.id}
+              onClick={() => {
+                onView(mode.id);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] ${
+                view === mode.id ? "font-medium" : ""
+              }`}
+            >
+              <span>{t(mode.key)}</span>
+              <span className="text-xs text-[var(--muted)]">{VIEW_KEY[mode.id]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Previous / next / where-you-are / today. Shared by the time grid and the
 // month grid: the stepping differs (a day, a week, a month) but the control
 // does not, and two copies would be two sets of paddings drifting apart.
@@ -572,11 +730,17 @@ function PeriodNav({
   onPrev,
   onNext,
   onToday,
+  showToday,
 }: {
   heading: string;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
+  // Offered only when you are somewhere else. Hidden with `invisible` rather
+  // than removed: dropping it from the flow would slide the arrows sideways
+  // every time you navigated onto or off today, and the arrows are what you
+  // are aiming at when it happens.
+  showToday: boolean;
 }) {
   const { t } = useLanguage();
   return (
@@ -597,7 +761,11 @@ function PeriodNav({
       </button>
       <h3 className="ml-1 text-sm font-medium">{heading}</h3>
       <button
-        className="ml-auto rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        className={`ml-auto rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+          showToday ? "" : "invisible"
+        }`}
+        tabIndex={showToday ? undefined : -1}
+        aria-hidden={!showToday}
         onClick={() => onToday()}
       >
         {t("appointments.today")}
@@ -610,6 +778,42 @@ function PeriodNav({
 // because Calendar is the TIME grid — hours, lanes, drag geometry, business
 // hours — and a month needs none of it. Sharing the shell would mean computing
 // all of that to draw squares.
+// The year's frame. Its data comes from its own query rather than the shared
+// appointment window: a year of enriched rows would be thousands of customer
+// and staff reads to place dots nobody clicks.
+function YearView({
+  anchor,
+  bookedDays,
+  onAnchor,
+  onOpenDay,
+  onOpenMonth,
+}: {
+  anchor: number;
+  bookedDays: Set<number>;
+  onAnchor: (next: number) => void;
+  onOpenDay: (dayMs: number) => void;
+  onOpenMonth: (monthMs: number) => void;
+}) {
+  const year = new Date(anchor).getFullYear();
+  return (
+    <section className="flex min-h-0 flex-1 flex-col">
+      <PeriodNav
+        heading={String(year)}
+        onPrev={() => onAnchor(addYears(anchor, -1))}
+        onNext={() => onAnchor(addYears(anchor, 1))}
+        onToday={() => onAnchor(startOfDay(Date.now()))}
+        showToday={!periodHasToday("year", anchor)}
+      />
+      <YearGrid
+        anchor={anchor}
+        bookedDays={bookedDays}
+        onOpenDay={onOpenDay}
+        onOpenMonth={onOpenMonth}
+      />
+    </section>
+  );
+}
+
 function MonthView({
   anchor,
   onAnchor,
@@ -637,6 +841,7 @@ function MonthView({
         onPrev={() => onAnchor(addMonths(anchor, -1))}
         onNext={() => onAnchor(addMonths(anchor, 1))}
         onToday={() => onAnchor(startOfDay(Date.now()))}
+        showToday={!periodHasToday("month", anchor)}
       />
       <MonthGrid
         anchor={anchor}
@@ -1079,6 +1284,7 @@ function Calendar({
         onPrev={() => onAnchor(anchor - step * DAY_MS)}
         onNext={() => onAnchor(anchor + step * DAY_MS)}
         onToday={() => onAnchor(startOfDay(Date.now()))}
+        showToday={!periodHasToday(view, anchor)}
       />
 
       {/* Column headers stay put while the hours scroll under them. With staff

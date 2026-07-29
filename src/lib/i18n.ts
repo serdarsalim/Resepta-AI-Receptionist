@@ -230,6 +230,7 @@ const dictionary = {
   },
   "appointments.customer": { tr: "Müşteri", en: "Customer", de: "Kunde" },
   "appointments.month": { tr: "Ay", en: "Month", de: "Monat" },
+  "appointments.year": { tr: "Yıl", en: "Year", de: "Jahr" },
   // {n} is how many more bookings that day holds than the cell can show.
   "appointments.more": { tr: "+{n} daha", en: "+{n} more", de: "+{n} weitere" },
   "appointments.existingCustomer": { tr: "Kayıtlı", en: "Existing", de: "Vorhanden" },

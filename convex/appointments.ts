@@ -111,6 +111,34 @@ const enrichedAppointment = v.object({
   total: v.optional(v.number()),
 });
 
+// Just the start times, for the year grid's dots.
+//
+// listRange resolves a customer and a staff row per appointment, which is right
+// for a grid that prints names and wrong for one asking "is anything booked on
+// this day" 366 times: a year of bookings would be thousands of document reads
+// to draw a 4px circle. This is one index scan and nothing else.
+//
+// Bucketed to local midnight on the CLIENT rather than here, because "which
+// day" is a question about the reader's clock and the server does not have it.
+export const startsInRange = query({
+  args: { fromMs: v.number(), toMs: v.number() },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const rows = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) =>
+        q.eq("orgId", orgId).gte("startAt", args.fromMs).lt("startAt", args.toMs),
+      )
+      // A year of a busy salon, with room. Past this the dots stop being the
+      // interesting part and the month view is the honest answer.
+      .take(5000);
+    // Cancelled bookings leave no dot: the point of the year is where the shop
+    // is committed, and a cancellation is the opposite of a commitment.
+    return rows.filter((row) => row.status !== "cancelled").map((row) => row.startAt);
+  },
+});
+
 export const listRange = query({
   args: { fromMs: v.number(), toMs: v.number() },
   returns: v.array(enrichedAppointment),
