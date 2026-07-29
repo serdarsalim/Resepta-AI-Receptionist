@@ -1004,6 +1004,20 @@ function Calendar({
                 {`${String(hour).padStart(2, "0")}:00`}
               </span>
             ))}
+            {/* The clock, level with the now-line. In the GUTTER rather than in
+                today's column, because the gutter is the one strip on the grid
+                with nothing to cover: over the column it would sit on whatever
+                is booked at this minute, which on a busy afternoon is exactly
+                when you are looking. It hides the hour label it lands on, which
+                is correct — the current time is the more useful of the two. */}
+            {columns.some((column) => startOfDay(now) === column.day) && (
+              <span
+                className="absolute right-1 z-30 -translate-y-1/2 rounded bg-[var(--brand)] px-1 text-[10px] font-medium tabular-nums leading-4 text-white"
+                style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
+              >
+                {formatTime(now, language)}
+              </span>
+            )}
           </div>
 
           {columns.map((column, columnIndex) => {
@@ -1020,16 +1034,29 @@ function Calendar({
                 // holds them — the row also contains the hour gutter, and a
                 // border there hangs a stray line under the last time label
                 // where no column exists.
-                className={`relative min-w-0 flex-1 border-b border-l border-[var(--border)] ${
+                className={`relative min-w-0 flex-1 border-b border-l border-[var(--grid-line)] ${
                   columnIndex === columns.length - 1
-                    ? "border-r border-[var(--border)]"
+                    ? "border-r border-[var(--grid-line)]"
                     : ""
                 }`}
-                // Hour rules as a background gradient: one hairline per hour
-                // without a div per row.
+                // Hour and half-hour rules as background gradients: two
+                // hairlines per hour without a div per row.
+                //
+                // The half-hour line is the one that makes a 30-minute booking
+                // readable. Without it, judging whether a block starts at the
+                // hour or halfway through it means measuring by eye against a
+                // 56px gap, on a screen where almost every appointment is
+                // exactly half of one. It is drawn much fainter than the hour
+                // so the hour still reads as the structure.
+                //
+                // The half-hour gradient carries its own full-hour period with
+                // the line placed midway, rather than a half-hour period, which
+                // would redraw over every hour line at the wrong weight.
                 style={{
-                  backgroundImage:
-                    "repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px var(--hour))",
+                  backgroundImage: [
+                    "repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--hour))",
+                    "repeating-linear-gradient(to bottom, transparent 0 calc(var(--hour) / 2), var(--grid-line-soft) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour))",
+                  ].join(", "),
                   ["--hour" as string]: `${HOUR_PX}px`,
                 }}
                 // Pointer down on the column ITSELF (never on a block, which
@@ -1270,7 +1297,7 @@ function Calendar({
                 {showNow && (
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 border-t border-[var(--brand)]"
+                    className="pointer-events-none absolute inset-x-0 z-30 border-t border-[var(--brand)]"
                     style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
                   >
                     <span className="absolute -left-0.5 -top-[3px] h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
