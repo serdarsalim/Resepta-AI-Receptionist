@@ -275,6 +275,13 @@ booking sheet is open.
   backdrop dim — the week must stay readable — and keeps the slot's band painted
   while open, which is what makes it read as attached. Under 900px there is no
   "beside", so `placeBeside` returns null and the full-width sheet is used.
+- **If you add anything that changes the booking sheet's HEIGHT, add it to the
+  placement effect's dependency list** (`AppointmentModal`, the
+  `useLayoutEffect` around `placeBeside`). Anchored low in the grid, a sheet
+  that grows without re-placing slides off the bottom of the window. A
+  ResizeObserver would make the list unnecessary and does not work here — its
+  callbacks are never delivered in this app, not even the initial one
+  `observe()` guarantees. Worth diagnosing; until then the list is manual.
 - **Week folds crowded clusters, day never does.** A cluster block is a door
   into the day, not a booking: it has no drag and it stops its own pointerdown,
   or the press reaches the column and offers to add to the fullest slot on
