@@ -333,7 +333,7 @@ export function AppointmentsView({
         <div className="ml-auto flex items-center gap-2">
           {view !== "list" && !periodHasToday(view, anchor) && (
             <button
-              className="rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
               onClick={() => setAnchor(startOfDay(Date.now()))}
             >
               {t("appointments.today")}
@@ -725,69 +725,96 @@ function ViewMenu({
   onView: (next: ViewMode) => void;
 }) {
   const { t } = useLanguage();
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+  // Portal + fixed, measured at open time, closed on outside-mousedown AND on
+  // scroll. Not `absolute`: the shell's main pane scrolls, so an absolute child
+  // clips there — the rule in AGENTS.md that this repo keeps re-learning.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
 
-  // Outside click and Escape both close. Pointerdown rather than click so the
-  // menu is gone before whatever was clicked underneath reacts.
   useEffect(() => {
     if (!open) return;
-    const onDown = (event: PointerEvent) => {
-      if (!boxRef.current?.contains(event.target as Node)) setOpen(false);
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setPos(null);
+      }
     };
+    const onScroll = () => setPos(null); // fixed coords go stale on scroll
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") setPos(null);
     };
-    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("scroll", onScroll, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
+  const MENU_W = 176;
+  const toggle = () => {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({
+      top: r.bottom + 4,
+      left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_W - 8)),
+    });
+  };
+
   const current = VIEW_MODES.find((mode) => mode.id === view);
 
   return (
-    <div ref={boxRef} className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--muted-bg)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--border)]"
+        onClick={toggle}
+        // Ghost, not bordered: borders belong to containers here, and a
+        // bordered control beside a solid primary reads as a third weight.
+        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
       >
         {current ? t(current.key) : ""}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 top-full z-40 mt-1 min-w-44 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
-        >
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={view === mode.id}
-              onClick={() => {
-                onView(mode.id);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] ${
-                view === mode.id ? "font-medium" : ""
-              }`}
-            >
-              <span>{t(mode.key)}</span>
-              <span className="text-xs text-[var(--muted)]">{VIEW_KEY[mode.id]}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: MENU_W }}
+            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+          >
+            {VIEW_MODES.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={view === mode.id}
+                onClick={() => {
+                  onView(mode.id);
+                  setPos(null);
+                }}
+                className={`flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] ${
+                  view === mode.id ? "font-medium" : ""
+                }`}
+              >
+                <span>{t(mode.key)}</span>
+                <span className="text-xs text-[var(--muted)]">{VIEW_KEY[mode.id]}</span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

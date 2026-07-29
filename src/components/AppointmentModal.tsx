@@ -134,6 +134,31 @@ export function AppointmentModal({
   const [picked, setPicked] = useState<Id<"customers"> | undefined>();
   const [customerQuery, setCustomerQuery] = useState("");
   const [listOpen, setListOpen] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  // The list is portalled, so it needs the search box's viewport rect. Measured
+  // while open and re-measured on scroll and resize: fixed coordinates go stale
+  // the moment anything underneath moves.
+  const [listPos, setListPos] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    if (!listOpen) {
+      setListPos(null);
+      return;
+    }
+    const measure = () => {
+      const r = searchRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setListPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    document.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      document.removeEventListener("scroll", measure, true);
+    };
+  }, [listOpen]);
 
   // Where to sit, when the caller told us what we belong to. Measured after
   // layout so the panel's real height decides whether it has to slide up,
@@ -435,11 +460,13 @@ export function AppointmentModal({
                       on a laptop. As a dropdown it costs one field's height
                       until the moment you are actually reading it.
 
-                      `absolute` inside the modal's own scroll box, not a
-                      portal. This field is the first thing in the sheet and
-                      the panel is far taller than the input plus 14rem, so the
-                      list cannot reach an edge to be clipped by. */}
-                  <label className="relative block text-xs text-[var(--muted)]" htmlFor="modal-customer">
+                      Portalled and fixed, not absolute. The panel is
+                      overflow-y-auto, so an absolute child clips against it the
+                      moment the sheet is tall enough to scroll — which it is on
+                      a short window, or with a conflict banner showing. It
+                      currently happens not to clip, and "happens not to" is
+                      what this repo keeps shipping and regretting. */}
+                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-customer">
                     {t("appointments.findCustomer")}
                     <input
                       id="modal-customer"
@@ -451,6 +478,7 @@ export function AppointmentModal({
                       className="mt-1"
                       placeholder={t("appointments.findCustomerHint")}
                       value={customerQuery}
+                      ref={searchRef}
                       onFocus={() => setListOpen(true)}
                       // Closing on blur would fire before a click on an option
                       // lands, so the options refuse to take focus at all (see
@@ -475,10 +503,16 @@ export function AppointmentModal({
                         if (picked) setPicked(undefined);
                       }}
                     />
-                    {listOpen && customerQuery.trim() !== "" && (
+                    {listOpen && customerQuery.trim() !== "" && listPos && createPortal(
                       <ul
                         id="modal-customer-list"
-                        className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+                        style={{
+                          position: "fixed",
+                          top: listPos.top,
+                          left: listPos.left,
+                          width: listPos.width,
+                        }}
+                        className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
                       >
                         {customerOptions === undefined ? (
                           <li className="px-3 py-2 text-xs text-[var(--muted)]">
@@ -515,7 +549,8 @@ export function AppointmentModal({
                             </li>
                           ))
                         )}
-                      </ul>
+                      </ul>,
+                      document.body,
                     )}
                   </label>
 
