@@ -27,7 +27,14 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // have to be public for a harder reason than politeness, though. Google's OAuth
 // consent screen and Meta's app review both fetch these URLs anonymously, and a
 // redirect to /signin reads to them as a missing policy.
-const isPublicPage = createRouteMatcher(["/r/(.*)", "/privacy", "/terms"]);
+//
+// `/` joins them because it is now the landing page for anyone signed out. It
+// clears the bar differently from the others: the route is public but the APP
+// still is not. src/app/page.tsx renders marketing copy under <Unauthenticated>
+// and the real thing under <Authenticated>, and every Convex function behind
+// the app half still goes through requireOrg. Letting the request past this
+// redirect exposes a page, not a tenant.
+const isPublicPage = createRouteMatcher(["/r/(.*)", "/privacy", "/terms", "/"]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   // First, and before the auth lookup: a stranger loading an embedded form

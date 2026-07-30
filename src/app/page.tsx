@@ -1,7 +1,9 @@
 "use client";
 
+import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { useEffect, useState } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
+import { Landing } from "@/components/Landing";
 import { AppShell, type TabId } from "@/components/AppShell";
 import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
@@ -27,7 +29,32 @@ const TAB_IDS: TabId[] = [
   "account",
 ];
 
+// `/` is now two pages behind one URL: the landing page for a stranger, the app
+// for someone signed in. Doing it this way rather than moving the app to /app
+// means no existing link, bookmark, or post-login redirect changes.
+//
+// AuthLoading renders nothing rather than a spinner or a guess. The wrong guess
+// here is expensive in both directions: an owner who lands on marketing copy
+// every morning, or a stranger who sees the app frame flash before it is
+// replaced. The check resolves in a round trip, and a blank moment reads as
+// loading where a wrong screen reads as broken.
 export default function Home() {
+  return (
+    <>
+      <AuthLoading>
+        <div className="min-h-dvh" />
+      </AuthLoading>
+      <Unauthenticated>
+        <Landing />
+      </Unauthenticated>
+      <Authenticated>
+        <AppHome />
+      </Authenticated>
+    </>
+  );
+}
+
+function AppHome() {
   const [tab, setTabState] = useState<TabId>("appointments");
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
 
