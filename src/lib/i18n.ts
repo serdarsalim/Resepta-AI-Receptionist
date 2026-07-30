@@ -1218,14 +1218,25 @@ const dictionary = {
     de: "Betrieb wechseln",
   },
 
+  // Shown when somebody else added this login to a workspace. The business name
+  // is rendered beside these rather than interpolated, so no string here has to
+  // carry a placeholder.
+  "workspace.added": {
+    tr: "Şu işletmeye eklendiniz:",
+    en: "You were added to:",
+    de: "Sie wurden hinzugefügt zu:",
+  },
+  "workspace.open": { tr: "Aç", en: "Open", de: "Öffnen" },
+  "workspace.dismiss": { tr: "Tamam", en: "Got it", de: "Verstanden" },
+
   // Not "Ekip": staff.title already is, one card below on the same page, and
   // two cards with one title is how the two concepts got confused in the first
   // place. This card is logins; Ekip is the people you can book.
   "team.title": { tr: "Kullanıcılar", en: "Users", de: "Benutzer" },
   "team.inviteHint": {
-    tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. E-posta gönderilmez, adresi siz iletin.",
-    en: "The invitee joins your team when they sign in with Google using this email. No email is sent, so share the address yourself.",
-    de: "Die eingeladene Person kommt in Ihr Team, sobald sie sich mit dieser E-Mail-Adresse über Google anmeldet. Es wird keine E-Mail verschickt, geben Sie die Adresse selbst weiter.",
+    tr: "Davet edilen kişi bu e-posta adresiyle Google üzerinden giriş yaptığında ekibinize katılır. Hesabı zaten varsa hemen eklenir. Bilgilendirme e-postası gönderilir.",
+    en: "The invitee joins your team when they sign in with Google using this email. If they already have an account they are added right away. They get an email letting them know.",
+    de: "Die eingeladene Person kommt in Ihr Team, sobald sie sich mit dieser E-Mail-Adresse über Google anmeldet. Hat sie bereits ein Konto, wird sie sofort hinzugefügt. Sie erhält eine Benachrichtigung per E-Mail.",
   },
   "team.invite": { tr: "Davet et", en: "Invite", de: "Einladen" },
   // One roster, the way Fresha, Booksy and Square all show it: a person is a

@@ -90,7 +90,13 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         // Staff, not owner: a visitor should be able to work the calendar and
         // the inbox, which is the demo, without reshaping the business or
         // reaching the settings that would be credentials on a real org.
-        await db.insert("memberships", { userId, orgId: demoId, role: "staff" });
+        // Stamped: a walk-in asked to be here, so there is nothing to announce.
+        await db.insert("memberships", {
+          userId,
+          orgId: demoId,
+          role: "staff",
+          seenAt: Date.now(),
+        });
         return userId;
       }
 
@@ -113,6 +119,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           orgId: invite.orgId,
           role: invite.role,
         });
+        // Deliberately NOT stamped. They were invited before they had an
+        // account, so this is the first they are hearing of the workspace and
+        // the shell should say so once they land.
         await db.insert("memberships", {
           userId,
           orgId: invite.orgId,
@@ -175,8 +184,14 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         role: "owner",
       });
       // Membership is what grants access (requireOrg verifies it) — the
-      // founding sign-in gets one exactly like an invited user.
-      await db.insert("memberships", { userId, orgId, role: "owner" });
+      // founding sign-in gets one exactly like an invited user. Stamped,
+      // because nobody needs telling about the business they just founded.
+      await db.insert("memberships", {
+        userId,
+        orgId,
+        role: "owner",
+        seenAt: Date.now(),
+      });
       return userId;
     },
   },

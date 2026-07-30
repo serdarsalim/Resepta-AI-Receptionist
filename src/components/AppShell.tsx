@@ -10,6 +10,7 @@ import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
 import Link from "next/link";
 import { OperatorBanner } from "./OperatorBanner";
+import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { SearchInput } from "./DataTable";
 
@@ -1051,6 +1052,10 @@ export function AppShell({
       {/* Fixed overlay, so it costs the layout nothing and renders on every
           screen rather than only the one the operator arrived on. */}
       <OperatorBanner />
+      {/* Same treatment, same reason. Only one of the two can be showing at
+          once in practice: an operator impersonating an org is not someone who
+          was just invited to it. */}
+      <WorkspaceInviteBanner />
       {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
           keeps pointer-events off while closed so it never eats a tap. */}
       <button

@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
 import { sendEmail } from "./lib/email";
@@ -216,6 +221,71 @@ export const sendToCustomer = action({
       error: result.ok ? undefined : result.reason,
     });
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+// ── Team invite notice ──────────────────────────────────────────────────────
+//
+// Fire and forget, scheduled by team.invite. It is a courtesy, not the
+// mechanism: the membership or invite row is already written by the time this
+// runs, so the person is in the workspace whether or not the mail arrives.
+// That is why nothing here throws and why a failure is logged rather than
+// surfaced. An owner who added a colleague should not see a red error because
+// a Resend domain is not verified yet.
+//
+// Sent from the product, not from the salon. An invite is Randevu writing to
+// you about your account; it is not the salon mailing its customer.
+const INVITE_COPY = {
+  tr: {
+    subject: (org: string) => `${org} sizi Randevu'ya ekledi`,
+    line: (org: string, by: string) =>
+      `${by}, sizi <strong>${org}</strong> işletmesine ekledi.`,
+    action: "Google hesabınızla giriş yapın:",
+  },
+  en: {
+    subject: (org: string) => `${org} added you on Randevu`,
+    line: (org: string, by: string) =>
+      `${by} added you to <strong>${org}</strong>.`,
+    action: "Sign in with your Google account:",
+  },
+  de: {
+    subject: (org: string) => `${org} hat Sie bei Randevu hinzugefügt`,
+    line: (org: string, by: string) =>
+      `${by} hat Sie zu <strong>${org}</strong> hinzugefügt.`,
+    action: "Melden Sie sich mit Ihrem Google-Konto an:",
+  },
+} as const;
+
+export const sendInvite = internalAction({
+  args: {
+    to: v.string(),
+    orgName: v.string(),
+    invitedByName: v.string(),
+    language: v.string(),
+  },
+  returns: v.null(),
+  handler: async (_ctx, args) => {
+    const domain = process.env.RESEND_INBOUND_DOMAIN;
+    const siteUrl = process.env.SITE_URL;
+    // Both are deployment config the owner cannot fix from inside the app, so
+    // the only sane response is to skip quietly. The invite still stands.
+    if (!domain || !siteUrl) return null;
+
+    const copy =
+      INVITE_COPY[args.language as keyof typeof INVITE_COPY] ?? INVITE_COPY.tr;
+    const org = escapeHtml(args.orgName);
+    const by = escapeHtml(args.invitedByName);
+
+    const result = await sendEmail({
+      from: `Randevu <noreply@${domain}>`,
+      to: args.to,
+      subject: copy.subject(args.orgName),
+      html: `<p>${copy.line(org, by)}</p><p>${copy.action}<br/><a href="${siteUrl}">${siteUrl}</a></p>`,
+    });
+    if (!result.ok) {
+      console.warn(`invite email not sent to ${args.to}: ${result.reason}`);
+    }
+    return null;
   },
 });
 

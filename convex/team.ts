@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
@@ -245,6 +246,17 @@ export const invite = mutation({
     const { user, orgId } = await requireOwner(ctx);
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("bad-email");
+    const org = await ctx.db.get(orgId);
+    // Scheduled at the end of whichever branch takes, never before: the mail
+    // says "you have been added", and an invite that then failed validation
+    // would make that a lie. Fire and forget by design, see email.sendInvite.
+    const notify = () =>
+      ctx.scheduler.runAfter(0, internal.email.sendInvite, {
+        to: email,
+        orgName: org?.name || "Randevu",
+        invitedByName: user.name?.trim() || user.email || "Randevu",
+        language: org?.language ?? "tr",
+      });
     // Workspace model: an EXISTING account joins immediately as a membership
     // (Retell/Slack behavior) — invite rows are only for addresses with no
     // account yet.
@@ -266,6 +278,7 @@ export const invite = mutation({
         role: args.role,
       });
       await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
+      await notify();
       return null;
     }
     const open = (
@@ -282,6 +295,7 @@ export const invite = mutation({
       invitedBy: user._id,
     });
     await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
+    await notify();
     return null;
   },
 });

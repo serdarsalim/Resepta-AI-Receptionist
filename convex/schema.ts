@@ -72,6 +72,16 @@ export default defineSchema({
     userId: v.id("users"),
     orgId: v.id("orgs"),
     role: v.union(v.literal("owner"), v.literal("staff")),
+    // When this person first knew the workspace existed. Unset means somebody
+    // ELSE put them here and they have not been told: an owner adding them from
+    // the team list, or an invite consumed at first sign-in. The app surfaces
+    // exactly those and stamps the field once it has.
+    //
+    // Memberships you make for yourself are stamped at creation, because there
+    // is nothing to announce to someone about the salon they just founded. Same
+    // for a demo walk-in. Leaving those unset would greet every new owner with
+    // a notice about their own business.
+    seenAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["orgId"])

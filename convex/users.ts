@@ -122,6 +122,60 @@ export const myWorkspaces = query({
   },
 });
 
+// Workspaces somebody else put this login into and never told them about.
+//
+// Uses requireUser rather than requireOrg on purpose: a person whose ONLY
+// membership is one they were just given has no settled active workspace yet,
+// and requireOrg's fallback would quietly make the surprise workspace the
+// active one before they had been told it existed.
+export const unseenWorkspaces = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      orgId: v.id("orgs"),
+      name: v.string(),
+      role: v.union(v.literal("owner"), v.literal("staff")),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const rows = await ctx.db
+      .query("memberships")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const out = [];
+    for (const row of rows) {
+      if (row.seenAt !== undefined) continue;
+      const org = await ctx.db.get(row.orgId);
+      // An unnamed org is one whose owner has not finished onboarding. Naming
+      // it "" in a notice reads as a bug, so skip it until it has a name.
+      if (org?.name) out.push({ orgId: row.orgId, name: org.name, role: row.role });
+    }
+    return out;
+  },
+});
+
+// Acknowledge one. Called both when they switch to it and when they dismiss:
+// either way they now know it exists, which is all the flag records.
+export const markWorkspaceSeen = mutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) =>
+        q.eq("userId", user._id).eq("orgId", args.orgId),
+      )
+      .unique();
+    if (!membership) throw new Error("not-a-member");
+    if (membership.seenAt === undefined) {
+      await ctx.db.patch(membership._id, { seenAt: Date.now() });
+    }
+    return null;
+  },
+});
+
 export const setActiveOrg = mutation({
   args: { orgId: v.id("orgs") },
   returns: v.null(),
