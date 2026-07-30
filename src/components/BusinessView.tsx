@@ -1126,10 +1126,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
       </div>
 
       {adding && (
-        <AddPersonSheet
-          staffLabel={settings?.org.staffLabel?.trim() || t("appointments.staff")}
-          onClose={() => setAdding(false)}
-        />
+        <AddPersonSheet onClose={() => setAdding(false)} />
       )}
     </Card>
   );
@@ -1140,17 +1137,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 // staff row, an invite is a login. Offering both fields together would let one
 // gesture create two rows for one human, which is the exact confusion the
 // merged list exists to remove.
-function AddPersonSheet({
-  staffLabel,
-  onClose,
-}: {
-  // The org's own word for the person who does the work — "Personel",
-  // "Berber", "Stylist". The card above literally asks what they call these
-  // people, so inventing a second term here ("bookable person") was jargon
-  // sitting next to the answer.
-  staffLabel: string;
-  onClose: () => void;
-}) {
+// The tabs used to read as the org's own word for the job ("Kuaför") against
+// the verb "Davet et". Avoiding jargon was the right instinct, but a category
+// beside an action reads as two ways to do one thing rather than two different
+// things, and nobody could tell which one they wanted. Both are verb phrases
+// now, "takes bookings" and "signs in", which is the question actually being
+// asked and still nobody's jargon. That is why this no longer needs the org's
+// staff label passed in.
+function AddPersonSheet({ onClose }: { onClose: () => void }) {
   const { t } = useLanguage();
   const addStaff = useMutation(api.staff.add);
   const invite = useMutation(api.team.invite);
@@ -1171,7 +1165,7 @@ function AddPersonSheet({
                 : "text-[var(--muted)]"
             }`}
           >
-            {option === "bookable" ? staffLabel : t("team.invite")}
+            {option === "bookable" ? t("roster.tabBookable") : t("roster.tabLogin")}
           </button>
         ))}
       </div>

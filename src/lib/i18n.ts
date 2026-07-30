@@ -1262,6 +1262,23 @@ const dictionary = {
     de: "Die letzte Administratorin oder der letzte Administrator kann nicht entfernt werden. Machen Sie zuerst jemand anderen zum Administrator.",
   },
   "roster.add": { tr: "Kişi ekle", en: "Add person", de: "Person hinzufügen" },
+
+  // The two tabs in Add person. Previously the org's staff label ("Kuaför")
+  // against the verb "Davet et", which is a category next to an action and
+  // reads as two ways of doing one thing rather than two different things.
+  // Both are now verb phrases describing what the person will DO, which is the
+  // question the owner is actually answering. Neither mentions logins: "takes
+  // bookings" and "signs in" is the distinction in the owner's own terms.
+  "roster.tabBookable": {
+    tr: "Randevu alır",
+    en: "Takes bookings",
+    de: "Nimmt Termine an",
+  },
+  "roster.tabLogin": {
+    tr: "Giriş yapar",
+    en: "Signs in",
+    de: "Meldet sich an",
+  },
   "team.pending": {
     tr: "Bekleyen davetler",
     en: "Pending invites",
