@@ -2,14 +2,15 @@
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
+import Link from "next/link";
 import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANGUAGES, isLanguage } from "@/lib/i18n";
+import { LEGAL_UI } from "@/lib/legal";
 
 export default function SignInPage() {
   const { signIn } = useAuthActions();
-  const { t, language, setLanguage } = useLanguage();
+  const { t, language } = useLanguage();
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   // False on any deployment without a demo org configured, which is most of
@@ -19,28 +20,13 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-baseline justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">{t("app.name")}</h1>
-            <p className="text-sm text-[var(--muted)]">{t("app.tagline")}</p>
-          </div>
-          <select
-            aria-label={t("settings.language")}
-            className="w-auto text-sm"
-            value={language}
-            // Narrow through the type guard rather than casting: the option
-            // list and the Language union come from the same LANGUAGES array,
-            // and a cast would quietly survive them drifting apart.
-            onChange={(e) => {
-              if (isLanguage(e.target.value)) setLanguage(e.target.value);
-            }}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
+        {/* No language picker here. LanguageProvider already resolves the
+            language from localStorage, then navigator.language, so a Turkish
+            browser lands on Turkish without being asked. The control belongs in
+            Settings, where a choice is what the page is for. */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold">{t("app.name")}</h1>
+          <p className="text-sm text-[var(--muted)]">{t("app.tagline")}</p>
         </div>
 
         <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
@@ -91,6 +77,23 @@ export default function SignInPage() {
             </div>
           )}
         </div>
+
+        {/* Google's consent screen review looks for these two links on the page
+            that starts the OAuth flow, and Meta's app review does the same. */}
+        <nav className="mt-4 flex justify-center gap-x-5 text-xs text-[var(--muted)]">
+          <Link
+            href="/privacy"
+            className="transition-colors duration-[120ms] hover:text-[var(--foreground)]"
+          >
+            {LEGAL_UI[language].privacy}
+          </Link>
+          <Link
+            href="/terms"
+            className="transition-colors duration-[120ms] hover:text-[var(--foreground)]"
+          >
+            {LEGAL_UI[language].terms}
+          </Link>
+        </nav>
       </div>
     </div>
   );
