@@ -179,9 +179,11 @@ const FOOT_TABS: typeof NAV_TABS = [
   },
 ];
 
-// Nudge's mark, drawn inline rather than shipped as a file: the square takes
-// --brand, so it follows Randevu's own green (and any future theming) instead
-// of hardcoding the sibling product's hex.
+// Nudge's mark, drawn inline rather than shipped as a file. The square takes
+// --logo, which is red: same glyph as the sibling product, different colour, so
+// the two are told apart at a glance in a tab strip. Deliberately NOT --brand,
+// which stays green because it also paints row hover and selection, and red
+// there would read as danger on every hover.
 function BrandMark({ size = 26 }: { size?: number }) {
   return (
     <svg
@@ -191,7 +193,7 @@ function BrandMark({ size = 26 }: { size?: number }) {
       className="shrink-0"
       aria-hidden
     >
-      <rect width="64" height="64" rx="14" fill="var(--brand)" />
+      <rect width="64" height="64" rx="14" fill="var(--logo)" />
       <path
         d="M18 20 L32 32 L18 44"
         stroke="#ffffff"

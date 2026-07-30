@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Favicon: the same mark as AppShell's BrandMark, hardcoded red because a
+       file served as /icon.svg has no access to the app's CSS variables. If
+       --logo changes in globals.css, change it here too. -->
+  <rect width="64" height="64" rx="14" fill="#e11d48"/>
+  <path d="M18 20 L32 32 L18 44" stroke="#ffffff" stroke-width="6.5" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M33 20 L47 32 L33 44" stroke="#ffffff" stroke-width="6.5" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

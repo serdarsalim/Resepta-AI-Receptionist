@@ -191,7 +191,7 @@ export function Landing() {
 // module graph back into this route. See src/app/page.tsx for why that matters.
 function Mark() {
   return (
-    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand)]">
+    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--logo)]">
       <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
         <path
           d="M4 6l6 6-6 6M13 6l6 6-6 6"

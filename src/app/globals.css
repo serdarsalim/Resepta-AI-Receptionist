@@ -15,6 +15,11 @@
   --muted-bg: #f5f5f5;
   --page-title: #334155;
   --brand: #10b981;
+  /* Identity only: the logo tile and the favicon. Separate from --brand on
+     purpose. --brand drives row hover, selection wash and table headers, and
+     red there would read as danger on every hover. This is what tells Randevu
+     apart from Nudge at a glance; --brand is what makes the app legible. */
+  --logo: #e11d48;
   --table-header-bg: color-mix(in srgb, var(--brand) 8%, var(--card));
   --row-hover-bg: color-mix(in srgb, var(--brand) 4%, var(--card));
   /* Recessed surface the sidebar + floating content card sit on */
@@ -42,6 +47,8 @@
   --muted-bg: #171717;
   --page-title: #cbd5e1;
   --brand: #10b981;
+  /* Lifted a little for dark backgrounds; #e11d48 goes muddy on #0a0a0a. */
+  --logo: #f43f5e;
   --table-header-bg: color-mix(in srgb, var(--brand) 12%, var(--card));
   --row-hover-bg: color-mix(in srgb, var(--brand) 7%, var(--card));
   --pane: #0c0c0c;

@@ -965,7 +965,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
   // Logins nobody has claimed as a bookable person yet, offered on the rows
   // that have no login so the two halves of one human can be joined up.
-  const unclaimed = roster.filter((row) => row.userId && !row.staffId);
+  //
+  // Emailless logins are excluded, and that is the whole fix for a menu that
+  // read "No login" twice. Anonymous demo visitors get a users row with no
+  // email, so every one of them fell through labelFor's fallback and rendered
+  // as the placeholder string. Two visitors, two identical options, neither
+  // meaning anything. They should never have been offered regardless: a
+  // walk-in with no email is not a person you staff the salon with.
+  const unclaimed = roster.filter((row) => row.userId && !row.staffId && row.email);
   const accessLabel = (value: string) =>
     value === "owner"
       ? t("role.owner")
