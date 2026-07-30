@@ -21,7 +21,13 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // Anything added to this matcher must clear the same bar. A route is public
 // when the functions behind it are public; making one reachable without
 // checking that is how a tenancy boundary gets deleted by a routing change.
-const isPublicPage = createRouteMatcher(["/r/(.*)"]);
+//
+// /privacy and /terms clear that bar the easy way: they call no Convex
+// functions at all. Their content is static prose from src/lib/legal.ts. They
+// have to be public for a harder reason than politeness, though. Google's OAuth
+// consent screen and Meta's app review both fetch these URLs anonymously, and a
+// redirect to /signin reads to them as a missing policy.
+const isPublicPage = createRouteMatcher(["/r/(.*)", "/privacy", "/terms"]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   // First, and before the auth lookup: a stranger loading an embedded form
