@@ -9,6 +9,7 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as agentTools from "../agentTools.js";
 import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
 import type * as calcom from "../calcom.js";
@@ -46,6 +47,8 @@ import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as lib_waLane from "../lib/waLane.js";
+import type * as mcp from "../mcp.js";
+import type * as mcpKeys from "../mcpKeys.js";
 import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
@@ -70,6 +73,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  agentTools: typeof agentTools;
   appointments: typeof appointments;
   auth: typeof auth;
   calcom: typeof calcom;
@@ -107,6 +111,8 @@ declare const fullApi: ApiFromModules<{
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/waCloud": typeof lib_waCloud;
   "lib/waLane": typeof lib_waLane;
+  mcp: typeof mcp;
+  mcpKeys: typeof mcpKeys;
   media: typeof media;
   messages: typeof messages;
   notes: typeof notes;

@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
+import { handler as mcpHandler } from "./mcp";
 import {
   cancelBooking,
   createBooking,
@@ -602,5 +603,13 @@ http.route({
     return new Response("ok", { status: 200 });
   }),
 });
+
+// The MCP control surface — this URL is what gets pasted into Claude or
+// ChatGPT as a custom connector. An exact path, not a prefix: MCP is a single
+// JSON-RPC endpoint, not a REST tree. GET is routed so the handler can explain
+// itself to a client probing for the deprecated SSE transport.
+for (const method of ["GET", "POST"] as const) {
+  http.route({ path: "/mcp", method, handler: mcpHandler });
+}
 
 export default http;

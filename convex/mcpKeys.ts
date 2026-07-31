@@ -178,6 +178,28 @@ export const verify = internalQuery({
   },
 });
 
+// Revoking without a UI session. Exists because `revoke` above goes through
+// requireOrg, so there was no way to kill a connector from the CLI — and
+// "revoke the key you just leaked" is exactly the moment you do not want to be
+// hunting for the right browser tab.
+export const revokeFromCli = internalMutation({
+  args: { key: v.optional(v.string()), id: v.optional(v.id("mcpConnections")) },
+  returns: v.string(),
+  handler: async (ctx, { key, id }) => {
+    const row = id
+      ? await ctx.db.get(id)
+      : key
+        ? await ctx.db
+            .query("mcpConnections")
+            .withIndex("by_key", (q) => q.eq("key", key))
+            .unique()
+        : null;
+    if (!row) throw new Error("no such connection");
+    await ctx.db.patch(row._id, { revoked: true });
+    return `revoked ${row.name} (${mask(row.key)})`;
+  },
+});
+
 export const stampUsed = internalMutation({
   args: { connectionId: v.id("mcpConnections") },
   returns: v.null(),
