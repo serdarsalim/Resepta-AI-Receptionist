@@ -16,7 +16,6 @@ import { Toggle } from "./Toggle";
 import { ActionTip, InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { McpCard } from "./McpCard";
-import { InlineEditValue } from "./RecordField";
 import { Sheet } from "./Sheet";
 import { VoiceAgentDetail } from "./VoiceAgentDetail";
 import { resolveSiteUrl, type SiteUrl } from "@/lib/siteUrl";
@@ -525,10 +524,13 @@ type Roster = {
 function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const { t } = useLanguage();
   const connected = useQuery(api.retell.list, {});
+  const callsToday = useQuery(api.retell.callsToday, {});
   const connect = useMutation(api.retell.connect);
   const disconnect = useMutation(api.retell.disconnect);
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
+  const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const [wiring, setWiring] = useState<string | null>(null);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -585,15 +587,25 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
-                <th className="px-3 py-2 font-medium">{t("settings.voiceEnabled")}</th>
-                <th className="px-3 py-2" />
+                <th className="px-2 py-2 font-medium">{t("settings.voiceWebhook")}</th>
+                <th className="px-2 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    {t("settings.voiceCallsToday")}
+                    <InfoTip text={t("settings.voiceCallsTodayHint")} />
+                  </span>
+                </th>
+                <th className="px-2 py-2 font-medium">{t("settings.voiceEnabled")}</th>
+                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
               {connected.map((row) => {
                 const agent = inRoster(row.retellAgentId);
+                const wired = Boolean(
+                  agent && expectedHook && agent.webhookUrl === expectedHook,
+                );
                 return (
-                  <tr key={row._id} className="border-t border-[var(--border)]">
+                  <tr key={row._id} className="group border-t border-[var(--border)]">
                     {/* An agent the account no longer lists — renamed, deleted,
                         or a key repointed at a different Retell account. Show
                         the raw id rather than a blank cell: calls still route
@@ -615,16 +627,6 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                           </span>
                         )}
                       </button>
-                      {/* The sheet's webhook warning, shrunk to a glance. An
-                          agent can answer calls for weeks while its results go
-                          nowhere; that state should not need the sheet opened
-                          to be seen. */}
-                      {agent && expectedHook && agent.webhookUrl !== expectedHook && (
-                        <span
-                          title={t("settings.voiceUnwired")}
-                          className="ml-2 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle"
-                        />
-                      )}
                     </td>
                     {/* Truncating with no way to see the rest made this cell
                         decorative — "business_type_confirmed, decision_mak…"
@@ -649,13 +651,61 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <InlineEditValue
+                      {/* The account's real numbers, not a text field. Free
+                          text here was how inboundNumber drifted out of
+                          agreement with Retell — and an empty field rendered
+                          its placeholder in a way that read as a value. */}
+                      <select
                         value={row.inboundNumber ?? ""}
-                        type="tel"
-                        compact
-                        placeholder="+902121234567"
-                        onSave={(value) => update({ agentId: row._id, inboundNumber: value })}
-                      />
+                        onChange={(e) =>
+                          void update({ agentId: row._id, inboundNumber: e.target.value })
+                        }
+                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+                      >
+                        <option value="">{t("settings.voiceNoNumber")}</option>
+                        {(roster?.phoneNumbers ?? []).map((n) => (
+                          <option key={n.number} value={n.number}>
+                            {n.number}
+                            {n.nickname ? ` · ${n.nickname}` : ""}
+                          </option>
+                        ))}
+                        {/* A stored number the account no longer lists still
+                            renders, so the row shows the truth rather than
+                            silently snapping to None. */}
+                        {row.inboundNumber &&
+                          !roster?.phoneNumbers.some((n) => n.number === row.inboundNumber) && (
+                            <option value={row.inboundNumber}>{row.inboundNumber}</option>
+                          )}
+                      </select>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-xs">
+                      {!agent || !expectedHook ? (
+                        <span className="text-[var(--muted)]">—</span>
+                      ) : wired ? (
+                        <span className="text-emerald-700 dark:text-emerald-400">
+                          ✓ {t("settings.voiceWired")}
+                        </span>
+                      ) : wiring === row.retellAgentId ? (
+                        <span className="animate-pulse text-[var(--muted)]">
+                          {t("voiceDetail.wiring")}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWiring(row.retellAgentId);
+                            void wireWebhook({ agentId: row.retellAgentId })
+                              .then(() => load())
+                              .finally(() => setWiring(null));
+                          }}
+                          className="rounded-lg border border-amber-300 px-2 py-0.5 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                        >
+                          {t("voiceDetail.webhookFix")}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-xs text-[var(--muted)]">
+                      {callsToday?.[row.retellAgentId] || ""}
                     </td>
                     <td className="px-3 py-2">
                       <Toggle
@@ -666,6 +716,7 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                     <td className="px-3 py-2 text-right">
                       <ActionTip
                         label={t("settings.voiceDisconnect")}
+                        className="transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                         onClick={() => {
                           // An icon button has no label to slow the hand down,
                           // so the confirm carries the reassurance: the agent

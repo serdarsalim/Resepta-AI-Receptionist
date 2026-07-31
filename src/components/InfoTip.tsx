@@ -29,11 +29,15 @@ export function ActionTip({
   label,
   onClick,
   disabled,
+  className,
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  // Appended, not replacing: callers add visibility tricks (hover-only in
+  // table rows), never their own button styling.
+  className?: string;
   children: React.ReactNode;
 }) {
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -61,7 +65,7 @@ export function ActionTip({
           hide();
           onClick();
         }}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-40"
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-40 ${className ?? ""}`}
       >
         {children}
       </button>

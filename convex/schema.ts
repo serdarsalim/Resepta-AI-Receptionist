@@ -284,8 +284,13 @@ export default defineSchema({
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
     retellCallId: v.optional(v.string()),
+    // Which agent took it. The webhook resolves the org FROM this id and then
+    // used to drop it, which made "calls per agent today" unanswerable. Only
+    // stamped on rows written since this field landed.
+    retellAgentId: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
+    .index("by_org_started", ["orgId", "startedAt"])
     .index("by_customer", ["customerId"])
     .index("by_retell_call", ["retellCallId"]),
 

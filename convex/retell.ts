@@ -16,6 +16,7 @@ import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -132,6 +133,35 @@ export const update = mutation({
       enabled: args.enabled ?? row.enabled,
     });
     return null;
+  },
+});
+
+// How many calls each connected agent took since midnight, org's wall clock.
+// "Today" deliberately means the salon's today: a call at 23:50 Istanbul time
+// should not survive into tomorrow's count because the server thinks in UTC.
+// Rows older than the retellAgentId stamp have no agent and count nowhere.
+export const callsToday = query({
+  args: {},
+  returns: v.record(v.string(), v.number()),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    const tz = org?.timezone || "UTC";
+    const now = Date.now();
+    const local = getLocalPartsSafe(now, tz);
+    const dayStart = localWallTimeToUtcMs(local.y, local.m0, local.d, 0, 0, tz);
+    const rows = await ctx.db
+      .query("calls")
+      .withIndex("by_org_started", (q) =>
+        q.eq("orgId", orgId).gte("startedAt", dayStart),
+      )
+      .collect();
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      if (!row.retellAgentId) continue;
+      counts[row.retellAgentId] = (counts[row.retellAgentId] ?? 0) + 1;
+    }
+    return counts;
   },
 });
 
@@ -843,6 +873,7 @@ export const recordCall = internalMutation({
       orgId: agent.orgId,
       customerId,
       direction: "inbound",
+      retellAgentId: args.retellAgentId,
       fromNumber: args.fromNumber,
       startedAt: args.startedAt,
       durationSec: args.durationSec,

@@ -998,13 +998,6 @@ const dictionary = {
     en: "Disconnect {name}? The agent stays in your Retell account; only its link to this app is removed.",
     de: "{name} trennen? Der Assistent bleibt in Ihrem Retell-Konto; nur die Verbindung zu dieser App wird entfernt.",
   },
-  // The at-a-glance version of the sheet's webhook warning. The dot sits next
-  // to the agent's name; the sheet has the one-click fix.
-  "settings.voiceUnwired": {
-    tr: "Arama sonuçları henüz bu uygulamaya ulaşmıyor. Düzeltmek için asistanın adına tıklayın.",
-    en: "Call results are not reaching this app yet. Click the agent's name to fix it.",
-    de: "Anrufergebnisse erreichen diese App noch nicht. Zum Beheben auf den Namen des Assistenten klicken.",
-  },
   "settings.voiceNotProvisioned": {
     tr: "Telefon asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
     en: "Your phone agent isn't set up yet. We handle setup.",
@@ -1031,6 +1024,15 @@ const dictionary = {
     de: "Weiterleitungsnummer",
   },
   "settings.voiceEnabled": { tr: "Etkin", en: "Enabled", de: "Aktiv" },
+  "settings.voiceWebhook": { tr: "Webhook", en: "Webhook", de: "Webhook" },
+  "settings.voiceWired": { tr: "Bağlı", en: "Wired", de: "Verbunden" },
+  "settings.voiceCallsToday": { tr: "Bugün", en: "Today", de: "Heute" },
+  "settings.voiceCallsTodayHint": {
+    tr: "Bu asistanın bugün aldığı aramalar, işletmenizin saat dilimine göre.",
+    en: "Calls this agent took today, in your business's timezone.",
+    de: "Anrufe dieses Assistenten heute, in der Zeitzone Ihres Betriebs.",
+  },
+  "settings.voiceNoNumber": { tr: "— Yok —", en: "— None —", de: "— Keine —" },
 
   // The agent detail sheet. Same register as the rest of settings: the salon's
   // words, not Retell's. "Prompt" stays untranslated jargon nowhere: it is
