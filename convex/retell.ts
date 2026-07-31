@@ -115,6 +115,35 @@ export const disconnect = mutation({
   },
 });
 
+// How many phone agents reference each customer field. The Business fields
+// card reads this so "used by a phone agent" is visible where fields are
+// managed — and deleting a field an agent still writes to stops being a
+// silent break.
+export const fieldUsage = query({
+  args: {},
+  returns: v.record(v.string(), v.number()),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const rows = await ctx.db
+      .query("voiceAgentVariables")
+      .withIndex("by_org_agent", (q) => q.eq("orgId", orgId))
+      .collect();
+    const byField = new Map<string, Set<string>>();
+    for (const row of rows) {
+      for (const fieldId of [row.contactFieldId, row.beforeFieldId]) {
+        if (!fieldId) continue;
+        const key = String(fieldId);
+        const agents = byField.get(key) ?? new Set<string>();
+        agents.add(row.retellAgentId);
+        byField.set(key, agents);
+      }
+    }
+    return Object.fromEntries(
+      [...byField.entries()].map(([key, agents]) => [key, agents.size]),
+    );
+  },
+});
+
 // Deliberately no inboundNumber here: the line is provider routing, not a
 // note, so it only moves through retellAgent.assignLine, which rebinds it at
 // Retell before the database adopts the change.

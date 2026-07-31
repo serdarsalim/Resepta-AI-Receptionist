@@ -221,6 +221,23 @@ export function VoiceVariablesEditor({
         ? t("voiceVariables.confirm")
         : "";
 
+  // A voice-enabled customer field the org configured in Business becomes a
+  // capture row here in one click, pre-linked to its field.
+  const adoptField = (field: VoiceContactField) => {
+    setDraft((rows) => [
+      ...rows,
+      {
+        ...blankVariable(),
+        key: field.key,
+        label: field.label,
+        type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
+        choices: field.type === "select" ? field.options : undefined,
+        destination: "contact",
+        contactFieldId: field.id,
+      },
+    ]);
+  };
+
   const openEdit = (index: number) => {
     setForm({ ...draft[index], choices: draft[index].choices?.slice() });
     setEditing(index);
@@ -371,6 +388,42 @@ export function VoiceVariablesEditor({
                     {t("voiceVariables.callOnly")}
                   </td>
                   <td className="px-2 py-2" />
+                </tr>
+              ))}
+            {/* Voice-enabled customer fields the agent doesn't capture yet.
+                Configured in Business, offered here: the owner who just added
+                a field must find it where variables live, with one click to
+                start collecting it. */}
+            {voiceFields
+              .filter(
+                (field) =>
+                  !draft.some(
+                    (row) => row.contactFieldId === field.id || row.key === field.key,
+                  ),
+              )
+              .map((field) => (
+                <tr key={`field:${field.id}`} className="border-t border-[var(--border)]">
+                  <td className="px-3 py-2 text-[var(--muted)]">
+                    {field.label}
+                    <code className="ml-2 text-[10px]">{field.key}</code>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                    {t("voiceVariables.customerCard")}
+                  </td>
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                    {field.label}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => adoptField(field)}
+                      className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+                    >
+                      {t("voiceVariables.use")}
+                    </button>
+                  </td>
                 </tr>
               ))}
             {/* No empty state: the built-ins above mean the list is never

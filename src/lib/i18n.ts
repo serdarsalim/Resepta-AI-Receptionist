@@ -1783,6 +1783,23 @@ const dictionary = {
     de: "Kundenfelder, die es nur in Ihrem Betrieb gibt (z. B. Haartyp, Allergiehinweis). Sie stehen links auf der Kundenseite.",
   },
   "fields.add": { tr: "Alan ekle", en: "Add field", de: "Feld hinzufügen" },
+  "fields.system": { tr: "Sistem", en: "System", de: "System" },
+  "fields.systemHint": {
+    tr: "Her müşteride hazır olan kimlik alanları. Telefon asistanı bunları okuyabilir ama değiştiremez.",
+    en: "Identity fields every customer has. The phone agent can read them but never change them.",
+    de: "Identitätsfelder, die jeder Kunde hat. Der Telefonassistent kann sie lesen, aber nie ändern.",
+  },
+  "fields.usedByAgents": {
+    tr: "{n} telefon asistanı kullanıyor",
+    en: "Used by {n} phone agent(s)",
+    de: "Von {n} Telefonassistenten genutzt",
+  },
+  "voiceVariables.customerCard": {
+    tr: "Müşteri kartı",
+    en: "Customer card",
+    de: "Kundenprofil",
+  },
+  "voiceVariables.use": { tr: "Kullan", en: "Use", de: "Verwenden" },
   "fields.label": { tr: "Etiket", en: "Label", de: "Bezeichnung" },
   "fields.typeLabel": { tr: "Tür", en: "Type", de: "Typ" },
   // Org-defined fields are how one deployment fits a salon, a dentist and a

@@ -589,8 +589,10 @@ const VOICE_ROW_GRID =
 function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
+  const usage = useQuery(api.retell.fieldUsage, {});
   const createField = useMutation(api.contactFields.create);
   const removeField = useMutation(api.contactFields.remove);
+  const [adding, setAdding] = useState(false);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
   const [source, setSource] = useState<FieldSource>("manual");
   const [error, setError] = useState<string | null>(null);
@@ -606,6 +608,16 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
     `${t(`fields.type.${field.type}` as "fields.type.text")}${
       field.options?.length ? ` · ${field.options.join(", ")}` : ""
     }`;
+
+  const usedBy = (field: ContactField) => {
+    const count = usage?.[String(field._id)] ?? 0;
+    if (count === 0) return null;
+    return (
+      <span className="ml-2 text-xs text-[var(--muted)]">
+        {t("fields.usedByAgents").replace("{n}", String(count))}
+      </span>
+    );
+  };
 
   // Staff cannot add a field, so an empty list for them is a heading, an (i)
   // and an empty fieldset. Don't render the frame.
@@ -623,7 +635,30 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 
   return (
     <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
-      {/* Staff-filled first, then whatever the agent collects on a call. Each
+      {/* Identity first: every customer has these, nothing here can edit or
+          delete them, and the phone agent may read but never write them.
+          Listing them makes this card the complete answer to "what
+          information do we hold about a customer" instead of the custom
+          remainder. */}
+      <div className="mb-3">
+        <FieldGroup label={t("fields.system")} hint={t("fields.systemHint")} />
+        <ul className="divide-y divide-[var(--border)]">
+          {(
+            [
+              t("customers.firstName"),
+              t("customers.lastName"),
+              t("customers.phone"),
+              t("customers.email"),
+            ]
+          ).map((label) => (
+            <li key={label} className="flex items-center gap-3 py-2 text-sm text-[var(--muted)]">
+              <span className="min-w-0 flex-1">{label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Staff-filled next, then whatever the agent collects on a call. Each
           group is skipped whole when it is empty rather than left as a heading
           over nothing. */}
       {manualFields.length > 0 && (
@@ -635,6 +670,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                 <span className="ml-2 text-xs text-[var(--muted)]">
                   {typeSummary(field)}
                 </span>
+                {usedBy(field)}
               </span>
               {deleteButton(field, "")}
             </li>
@@ -664,6 +700,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   <span className="ml-2 text-xs text-[var(--muted)]">
                     {typeSummary(field)}
                   </span>
+                  {usedBy(field)}
                 </span>
                 <span className="flex min-w-0 items-center">
                   <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
@@ -677,7 +714,18 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
         </div>
       )}
 
-      {isOwner && (
+      {/* Adding appears on demand, mirroring "+ Add service" above: a
+          permanently open form charged this card a row of empty inputs on
+          every visit for a task done a few times a year. */}
+      {isOwner && !adding && (
+        <button
+          onClick={() => setAdding(true)}
+          className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        >
+          + {t("fields.add")}
+        </button>
+      )}
+      {isOwner && adding && (
         <form
           className="flex flex-wrap items-end gap-2"
           onSubmit={async (event) => {
@@ -701,6 +749,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               formEl.reset();
               setType("text");
               setSource("manual");
+              setAdding(false);
             } catch (err) {
               setError(err instanceof Error ? err.message : "error");
             }
@@ -763,6 +812,16 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
           >
             {t("fields.add")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAdding(false);
+              setError(null);
+            }}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            {t("common.cancel")}
           </button>
           {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
         </form>
