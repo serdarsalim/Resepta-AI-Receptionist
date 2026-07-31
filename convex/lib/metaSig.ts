@@ -32,16 +32,31 @@ export async function hmacSha256Hex(secret: string, body: string): Promise<strin
   return hexOf(mac);
 }
 
-// Retell signs webhook/function bodies with the API key (x-retell-signature,
-// bare hex or "v1=<hex>"). Same fail-open-in-dev policy as the Meta check.
+// Retell signs webhooks as "v=<ms timestamp>,d=<hex>" where the digest is
+// HMAC-SHA256 of rawBody + timestamp with the workspace's webhook signing
+// key — the SCHEME IS NOT hmac(body): the timestamp is concatenated into the
+// MAC input, and a stale timestamp is rejected outright (their SDK uses five
+// minutes; mirrored here). This matches retell-sdk's webhook_auth exactly —
+// a bare hex digest of the body alone never validates a real Retell webhook.
+const RETELL_SIGNATURE_TIMEOUT_MS = 5 * 60 * 1000;
+
 export async function verifyRetellSignature(
   apiKey: string,
   rawBody: string,
   signatureHeader: string | null,
 ): Promise<boolean> {
   if (!signatureHeader) return false;
-  const expected = signatureHeader.replace(/^v1=/, "").toLowerCase();
-  return safeEqual(await hmacSha256Hex(apiKey, rawBody), expected);
+  const match = /^v=(\d+),d=([0-9a-f]{64})$/i.exec(signatureHeader.trim());
+  if (!match) return false;
+  const timestamp = Number(match[1]);
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(Date.now() - timestamp) > RETELL_SIGNATURE_TIMEOUT_MS
+  ) {
+    return false;
+  }
+  const expected = match[2].toLowerCase();
+  return safeEqual(await hmacSha256Hex(apiKey, rawBody + timestamp), expected);
 }
 
 export async function verifyMetaSignature(
