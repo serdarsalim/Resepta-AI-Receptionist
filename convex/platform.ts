@@ -17,6 +17,7 @@
 // they phone up asking why nobody got reminded.
 
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -175,38 +176,46 @@ async function healthFor(
 // The operator's answer to "is this org's messaging alive": the latest
 // traffic in both directions with its outcome, not only the wrecks. A feed
 // that shows failures alone reads as either "all broken" or "no data", and
-// the operator cannot tell which.
+// the operator cannot tell which. Paginated with an optional status filter —
+// this table grows with every reminder ever sent, so the page must not.
+const messageStatus = v.union(
+  v.literal("queued"),
+  v.literal("sent"),
+  v.literal("failed"),
+  v.literal("delivered"),
+  v.literal("read"),
+  v.literal("received"),
+);
+
 export const orgActivity = query({
-  args: { orgId: v.id("orgs") },
-  returns: v.array(
-    v.object({
-      _id: v.id("messages"),
-      at: v.number(),
-      kind: v.string(),
-      direction: v.union(v.literal("out"), v.literal("in")),
-      status: v.string(),
-      error: v.optional(v.string()),
-      attempts: v.optional(v.number()),
-      deadLettered: v.boolean(),
-    }),
-  ),
-  handler: async (ctx, args) => {
+  args: {
+    orgId: v.id("orgs"),
+    status: v.optional(messageStatus),
+    paginationOpts: paginationOptsValidator,
+  },
+  // Paginated: the page shape is convex's, the items are ours.
+  returns: v.any(),
+  handler: async (ctx, { orgId, status, paginationOpts }) => {
     await requirePlatformAdmin(ctx);
-    const rows = await ctx.db
-      .query("messages")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .order("desc")
-      .take(50);
-    return rows.map((row) => ({
-      _id: row._id,
-      at: row._creationTime,
-      kind: row.kind,
-      direction: row.direction,
-      status: row.status,
-      error: row.error,
-      attempts: row.attempts,
-      deadLettered: row.deadLetteredAt !== undefined,
-    }));
+    const base = status
+      ? ctx.db
+          .query("messages")
+          .withIndex("by_org_status", (q) => q.eq("orgId", orgId).eq("status", status))
+      : ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId));
+    const result = await base.order("desc").paginate(paginationOpts);
+    return {
+      ...result,
+      page: result.page.map((row) => ({
+        _id: row._id,
+        at: row._creationTime,
+        kind: row.kind,
+        direction: row.direction,
+        status: row.status,
+        error: row.error,
+        attempts: row.attempts,
+        deadLettered: row.deadLetteredAt !== undefined,
+      })),
+    };
   },
 });
 

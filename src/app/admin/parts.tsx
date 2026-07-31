@@ -7,7 +7,8 @@
 // staff read the product in their own language, and this surface has exactly
 // one reader.
 
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -80,14 +81,75 @@ function StatusPill({ status, deadLettered }: { status: string; deadLettered: bo
   );
 }
 
+const MESSAGE_STATUSES = [
+  "failed",
+  "queued",
+  "sent",
+  "delivered",
+  "read",
+  "received",
+] as const;
+type MessageStatus = (typeof MESSAGE_STATUSES)[number];
+
+type ActivityRow = {
+  _id: string;
+  at: number;
+  kind: string;
+  direction: "out" | "in";
+  status: string;
+  error?: string;
+  attempts?: number;
+  deadLettered: boolean;
+};
+
 export function Activity({ orgId }: { orgId: Id<"orgs"> }) {
-  const rows = useQuery(api.platform.orgActivity, { orgId });
-  if (rows === undefined) {
-    return <div className="px-3 py-2 text-xs text-[var(--muted)]">Loading…</div>;
-  }
-  if (rows.length === 0) {
-    return <div className="px-3 py-2 text-xs text-[var(--muted)]">No messages yet.</div>;
-  }
+  const [filter, setFilter] = useState<MessageStatus | "">("");
+  const { results, status: loadStatus, loadMore } = usePaginatedQuery(
+    api.platform.orgActivity,
+    { orgId, status: filter || undefined },
+    { initialNumItems: 25 },
+  );
+  const rows = results as ActivityRow[];
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-end">
+        <select
+          value={filter}
+          onChange={(event) => setFilter(event.target.value as MessageStatus | "")}
+          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+        >
+          <option value="">All statuses</option>
+          {MESSAGE_STATUSES.map((entry) => (
+            <option key={entry} value={entry}>
+              {entry}
+            </option>
+          ))}
+        </select>
+      </div>
+      {loadStatus !== "LoadingFirstPage" && rows.length === 0 ? (
+        <div className="px-3 py-2 text-xs text-[var(--muted)]">
+          {filter ? `No ${filter} messages.` : "No messages yet."}
+        </div>
+      ) : (
+        <ActivityTable rows={rows} />
+      )}
+      {loadStatus === "CanLoadMore" && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => loadMore(50)}
+            className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+          >
+            Load more
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivityTable({ rows }: { rows: ActivityRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">

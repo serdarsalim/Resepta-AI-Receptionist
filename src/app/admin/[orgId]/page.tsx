@@ -215,6 +215,10 @@ export default function TenantPage() {
   const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
   const setField = useMutation(api.connections.setField);
   const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
+  // Setup is the install-once config; Activity is an unbounded feed. One page
+  // holding both scrolled forever, so the feed lives behind its own tab with
+  // a filter and pagination.
+  const [tab, setTab] = useState<"setup" | "activity">("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
@@ -287,6 +291,40 @@ export default function TenantPage() {
         </button>
       </header>
 
+      <div className="flex gap-1">
+        {(
+          [
+            { id: "setup" as const, label: "Setup" },
+            { id: "activity" as const, label: "Activity" },
+          ]
+        ).map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setTab(entry.id)}
+            aria-current={tab === entry.id ? "page" : undefined}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              tab === entry.id
+                ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
+                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "activity" && (
+        <Section
+          title="Recent activity"
+          description="The org's latest messages in both directions with their delivery outcome, newest first."
+        >
+          <Activity orgId={orgId} />
+        </Section>
+      )}
+
+      {tab === "setup" && (
+      <>
       <Section
         title="Voice"
         description="The client's own Retell account. The key decides whose agents Phone agent lists, and it must be the account's webhook signing key."
@@ -507,12 +545,8 @@ export default function TenantPage() {
         />
       </Section>
 
-      <Section
-        title="Recent activity"
-        description="The org's latest messages in both directions with their delivery outcome, newest first."
-      >
-        <Activity orgId={orgId} />
-      </Section>
+      </>
+      )}
     </main>
   );
 }
