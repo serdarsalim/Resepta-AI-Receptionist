@@ -228,7 +228,13 @@ type AgentListResult = {
   configured: boolean;
   error: string | null;
   connectedAgentId: string | null;
-  agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
+  agents: {
+    id: string;
+    name: string;
+    languages: string[];
+    collects: string[];
+    webhookUrl: string | null;
+  }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
   hiddenAgentIds: string[];
 };
@@ -237,6 +243,7 @@ const DEMO_AGENTS = [
   {
     id: "agent_demo_reception",
     name: "Salon reception",
+    languages: ["tr-TR"],
     collects: ["customer_name", "service", "preferred_time"],
     webhookUrl: null,
   },
@@ -256,6 +263,7 @@ export const listAgents = action({
       v.object({
         id: v.string(),
         name: v.string(),
+        languages: v.array(v.string()),
         collects: v.array(v.string()),
         webhookUrl: v.union(v.string(), v.null()),
       }),
@@ -328,6 +336,7 @@ export const listAgents = action({
     ) as Array<{
       agent_id?: string;
       agent_name?: string;
+      language?: string | string[];
       webhook_url?: string;
       post_call_analysis_data?: Array<{ name?: string; type?: string }>;
     }>;
@@ -341,13 +350,18 @@ export const listAgents = action({
     }>;
 
     const seen = new Set<string>();
-    const agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[] = [];
+    const agents: AgentListResult["agents"] = [];
     for (const a of agentItems) {
       if (!a.agent_id || seen.has(a.agent_id)) continue;
       seen.add(a.agent_id);
       agents.push({
         id: a.agent_id,
         name: a.agent_name?.trim() || a.agent_id,
+        languages: Array.isArray(a.language)
+          ? a.language
+          : a.language
+            ? [a.language]
+            : [],
         // What the agent captures on a call. Retell's system presets
         // (call_summary and friends) arrive elsewhere in the payload and are
         // not things the salon configured, so they are not "what it collects".

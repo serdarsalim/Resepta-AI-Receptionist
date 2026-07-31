@@ -1013,6 +1013,18 @@ const dictionary = {
     en: "Add agent",
     de: "Assistent hinzufügen",
   },
+  "settings.voiceConnectHint": {
+    tr: "Bunlar Retell hesabınızda zaten bulunan asistanlardır. Ekle düğmesi asistanı Randevu'ya bağlar. Arşivle yalnızca bu listede gizler. Retell'de hiçbir şey oluşturulmaz, değiştirilmez veya silinmez.",
+    en: "These agents already exist in your Retell account. Add connects an agent to Randevu. Archive only hides it from this list. Nothing is created, changed, or deleted in Retell.",
+    de: "Diese Assistenten bestehen bereits in Ihrem Retell-Konto. Hinzufügen verbindet einen Assistenten mit Randevu. Archivieren blendet ihn nur in dieser Liste aus. In Retell wird nichts erstellt, geändert oder gelöscht.",
+  },
+  "settings.voiceLanguage": { tr: "Dil", en: "Language", de: "Sprache" },
+  "settings.voiceLine": { tr: "Telefon hattı", en: "Phone line", de: "Telefonleitung" },
+  "settings.voiceMultipleLanguages": {
+    tr: "Birden fazla dil",
+    en: "Multiple languages",
+    de: "Mehrere Sprachen",
+  },
   "settings.voiceDisconnect": {
     tr: "Bağlantıyı kes",
     en: "Disconnect",

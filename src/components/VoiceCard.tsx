@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useState, Fragment } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { ActionTip, InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
@@ -24,7 +25,13 @@ import { VoiceAgentDetail } from "./VoiceAgentDetail";
 type Roster = {
   configured: boolean;
   error: string | null;
-  agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
+  agents: {
+    id: string;
+    name: string;
+    languages: string[];
+    collects: string[];
+    webhookUrl: string | null;
+  }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
   hiddenAgentIds: string[];
 };
@@ -51,8 +58,26 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
+function humanizeField(name: string): string {
+  const words = name.replace(/_/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "";
+}
+
+function languageLabel(tag: string, locale: string, multiple: string): string {
+  if (tag === "multi") return multiple;
+  try {
+    const [language, region] = tag.split("-");
+    const languageName = new Intl.DisplayNames([locale], { type: "language" }).of(language);
+    if (!region) return languageName ?? tag;
+    const regionName = new Intl.DisplayNames([locale], { type: "region" }).of(region);
+    return `${languageName ?? language} (${regionName ?? region})`;
+  } catch {
+    return tag;
+  }
+}
+
 export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const connected = useQuery(api.retell.list, {});
   const callStats = useQuery(api.retell.agentCallStats, {});
   const connect = useMutation(api.retell.connect);
@@ -98,6 +123,14 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const archived = (roster?.agents ?? []).filter(
     (a) => !connectedIds.has(a.id) && hidden.has(a.id),
   );
+  const pickerRows = [
+    ...available.map((agent) => ({ agent, archived: false })),
+    ...(showArchived ? archived.map((agent) => ({ agent, archived: true })) : []),
+  ];
+  const pickerHasLines = pickerRows.some(({ agent }) =>
+    roster?.phoneNumbers.some((number) => number.agentId === agent.id),
+  );
+  const displayLocale = localeFor(language);
 
   // Connecting adopts whatever number Retell already has bound to that agent,
   // so inboundNumber stops being hand-typed into agreement with the provider.
@@ -391,70 +424,126 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
       {detailId && <VoiceAgentDetail agentId={detailId} onClose={() => setDetailId(null)} />}
 
       {adding && (
-        <Sheet title={t("settings.voiceConnect")} onClose={() => setAdding(false)}>
-          <div className="space-y-1">
-            {available.map((agent) => (
-              <div key={agent.id} className="group/pick flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => add(agent.id)}
-                  className="block min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted-bg)]"
-                >
-                  <div className="font-medium">{agent.name}</div>
-                  {agent.collects.length > 0 && (
-                    <div className="text-xs text-[var(--muted)]">{agent.collects.join(", ")}</div>
+        <Sheet
+          title={t("settings.voiceConnect")}
+          hint={t("settings.voiceConnectHint")}
+          wide
+          onClose={() => setAdding(false)}
+        >
+          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="min-w-[680px] text-sm">
+              <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+                <tr>
+                  <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
+                  <th className="px-3 py-2 font-medium">{t("settings.voiceLanguage")}</th>
+                  <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
+                  {pickerHasLines && (
+                    <th className="px-3 py-2 font-medium">{t("settings.voiceLine")}</th>
                   )}
-                </button>
-                {/* Our bookkeeping, not Retell's: the agent survives, it just
-                    stops cluttering this picker. */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    void setAgentArchived({ retellAgentId: agent.id, archived: true }).then(
-                      load,
-                    )
-                  }
-                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
-                >
-                  {t("settings.voiceArchive")}
-                </button>
-              </div>
-            ))}
-            {archived.length > 0 && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowArchived((s) => !s)}
-                  className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
-                >
-                  {showArchived
-                    ? t("settings.voiceHideArchived")
-                    : t("settings.voiceShowArchived").replace("{n}", String(archived.length))}
-                </button>
-                {showArchived &&
-                  archived.map((agent) => (
-                    <div
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {pickerRows.map(({ agent, archived: isArchived }) => {
+                  const line = roster?.phoneNumbers.find((number) => number.agentId === agent.id);
+                  return (
+                    <tr
                       key={agent.id}
-                      className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-[var(--muted)]"
+                      className={`group/pick border-t border-[var(--border)] ${
+                        isArchived ? "text-[var(--muted)]" : ""
+                      }`}
                     >
-                      <span className="truncate">{agent.name}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void setAgentArchived({
-                            retellAgentId: agent.id,
-                            archived: false,
-                          }).then(load)
-                        }
-                        className="shrink-0 rounded-lg px-2 py-1 text-xs hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                      >
-                        {t("settings.voiceRestore")}
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            )}
+                      <td className="whitespace-nowrap px-3 py-2 font-medium">{agent.name}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                        {agent.languages
+                          .map((tag) =>
+                            languageLabel(
+                              tag,
+                              displayLocale,
+                              t("settings.voiceMultipleLanguages"),
+                            ),
+                          )
+                          .join(", ")}
+                      </td>
+                      <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted)]">
+                        {agent.collects.length > 0 && (
+                          <span className="inline-flex items-center gap-2">
+                            {t("settings.voiceCollectsCount").replace(
+                              "{n}",
+                              String(agent.collects.length),
+                            )}
+                            <InfoTip
+                              text={agent.collects.map(humanizeField).join("\n")}
+                              placement="above"
+                            />
+                          </span>
+                        )}
+                      </td>
+                      {pickerHasLines && (
+                        <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                          {line
+                            ? line.nickname === line.number
+                              ? line.number
+                              : `${line.nickname} · ${line.number}`
+                            : ""}
+                        </td>
+                      )}
+                      <td className="whitespace-nowrap px-3 py-2 text-right">
+                        {isArchived ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void setAgentArchived({
+                                retellAgentId: agent.id,
+                                archived: false,
+                              }).then(load)
+                            }
+                            className="rounded-lg px-2 py-1 text-xs hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                          >
+                            {t("settings.voiceRestore")}
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void setAgentArchived({
+                                  retellAgentId: agent.id,
+                                  archived: true,
+                                }).then(load)
+                              }
+                              className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
+                            >
+                              {t("settings.voiceArchive")}
+                            </button>
+                            <button
+                              type="button"
+                              data-sheet-autofocus
+                              onClick={() => add(agent.id)}
+                              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
+                            >
+                              {t("common.add")}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          {archived.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowArchived((shown) => !shown)}
+              className="mt-2 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {showArchived
+                ? t("settings.voiceHideArchived")
+                : t("settings.voiceShowArchived").replace("{n}", String(archived.length))}
+            </button>
+          )}
         </Sheet>
       )}
 

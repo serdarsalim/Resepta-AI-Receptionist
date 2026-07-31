@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { InfoTip } from "./InfoTip";
 
 // The one modal shell. Adding something is a sheet you open, never a pair of
 // empty inputs parked at the foot of a list waiting for somebody to notice
@@ -15,10 +16,14 @@ import { createPortal } from "react-dom";
 // markup and should be moved onto this component next time it is touched.
 export function Sheet({
   title,
+  hint,
+  wide = false,
   onClose,
   children,
 }: {
   title: string;
+  hint?: string;
+  wide?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -31,7 +36,9 @@ export function Sheet({
     window.addEventListener("keydown", onKey);
     // Focus lands inside the sheet so the first tab stays in it and a screen
     // reader starts where the sheet does.
-    panelRef.current?.querySelector<HTMLElement>("input, select, button")?.focus();
+    const preferred = panelRef.current?.querySelector<HTMLElement>("[data-sheet-autofocus]");
+    const fallback = panelRef.current?.querySelector<HTMLElement>("input, select, button");
+    (preferred ?? fallback)?.focus();
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
@@ -50,9 +57,14 @@ export function Sheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl"
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl ${
+          wide ? "sm:max-w-3xl" : "sm:max-w-md"
+        }`}
       >
-        <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {hint && <InfoTip text={hint} />}
+        </div>
         {children}
       </div>
     </div>,
