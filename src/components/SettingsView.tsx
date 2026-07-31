@@ -13,7 +13,7 @@ import {
 } from "@/lib/datetime";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
-import { InfoTip } from "./InfoTip";
+import { ActionTip, InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { InlineEditValue } from "./RecordField";
 import { Sheet } from "./Sheet";
@@ -581,7 +581,6 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
-                <th className="px-3 py-2 font-medium">{t("settings.transferNumber")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceEnabled")}</th>
                 <th className="px-3 py-2" />
               </tr>
@@ -645,28 +644,18 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <InlineEditValue
-                        value={row.transferNumber ?? ""}
-                        type="tel"
-                        compact
-                        placeholder="+905321234567"
-                        onSave={(value) => update({ agentId: row._id, transferNumber: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
                       <Toggle
                         checked={row.enabled}
                         onChange={(next) => void update({ agentId: row._id, enabled: next })}
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
+                      <ActionTip
+                        label={t("settings.voiceDisconnect")}
                         onClick={() => void disconnect({ agentId: row._id })}
-                        className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
                       >
-                        {t("settings.voiceDisconnect")}
-                      </button>
+                        ✕
+                      </ActionTip>
                     </td>
                   </tr>
                 );

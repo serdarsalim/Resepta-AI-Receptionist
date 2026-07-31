@@ -18,6 +18,68 @@ import { createPortal } from "react-dom";
 // phantom-scrollbar note in AGENTS.md).
 const TIP_WIDTH = 288; // w-72, used for the viewport clamp
 
+// An action button whose label lives in a tooltip instead of text. For icon
+// buttons in dense rows (the voice table's disconnect ✕): a text label widens
+// the row, an unlabeled glyph is a guess. The tip shows immediately on
+// hover/focus and renders through the same portal trick as InfoTip, because
+// these buttons tend to sit inside overflow containers that would clip an
+// in-flow tooltip. Anchored to the button's right edge: these buttons sit at
+// row ends, so growing leftward is the direction with room.
+export function ActionTip({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+
+  const show = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+  };
+  const hide = () => setPos(null);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        onClick={() => {
+          hide();
+          onClick();
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-40"
+      >
+        {children}
+      </button>
+      {pos &&
+        createPortal(
+          <span
+            role="tooltip"
+            style={{ position: "fixed", ...pos }}
+            className="pointer-events-none z-[100] whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg"
+          >
+            {label}
+          </span>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function InfoTip({
   text,
   placement = "below",
