@@ -6,6 +6,11 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
+import {
+  VoiceVariablesEditor,
+  type VoiceContactField,
+  type VoiceVariable,
+} from "./VoiceVariablesEditor";
 
 // Everything about one voice agent that couples to this salon's data: the
 // prompt it speaks from, the variables it uses before/during/after a call,
@@ -31,51 +36,12 @@ type Detail = {
     wired: boolean;
     pointsElsewhere: boolean;
   };
-  variables: {
-    preCall: { name: string; value: string }[];
-    duringCall: { name: string; type: string; description: string }[];
-    postCall: { name: string; type: string; description: string }[];
+  variableConfig: {
+    managed: boolean;
+    items: VoiceVariable[];
   };
+  contactFields: VoiceContactField[];
 };
-
-function VarList({
-  title,
-  hint,
-  rows,
-  empty,
-}: {
-  title: string;
-  hint: string;
-  rows: { name: string; description?: string; value?: string; type?: string }[];
-  empty: string;
-}) {
-  return (
-    <div className="min-w-0">
-      <div className="mb-1.5 flex items-center gap-1.5">
-        <h4 className="text-xs font-medium">{title}</h4>
-        <InfoTip text={hint} />
-        <span className="text-xs text-[var(--muted)]">{rows.length || ""}</span>
-      </div>
-      {rows.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">{empty}</p>
-      ) : (
-        <ul className="space-y-1">
-          {rows.map((r) => (
-            <li key={r.name} className="min-w-0 text-xs">
-              <code className="text-[var(--fg)]">{r.name}</code>
-              {r.value ? <span className="text-[var(--muted)]"> = {r.value}</span> : null}
-              {r.description ? (
-                <span className="block truncate text-[var(--muted)]" title={r.description}>
-                  {r.description}
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export function VoiceAgentDetail({
   agentId,
@@ -142,7 +108,7 @@ export function VoiceAgentDetail({
         : t("voiceDetail.noPrompt");
 
   return (
-    <Sheet title={detail?.name ?? t("settings.voiceAgent")} onClose={onClose}>
+    <Sheet title={detail?.name ?? t("settings.voiceAgent")} wide onClose={onClose}>
       {error && <p className="text-sm text-amber-700 dark:text-amber-400">{error}</p>}
       {!detail && !error && <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>}
 
@@ -269,28 +235,15 @@ export function VoiceAgentDetail({
             </div>
           )}
 
-          {/* The three phases, together, because that is the whole reason to
-              read this here rather than in Retell. */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <VarList
-              title={t("voiceDetail.before")}
-              hint={t("voiceDetail.beforeHint")}
-              rows={detail.variables.preCall}
-              empty={t("voiceDetail.beforeEmpty")}
-            />
-            <VarList
-              title={t("voiceDetail.during")}
-              hint={t("voiceDetail.duringHint")}
-              rows={detail.variables.duringCall}
-              empty={t("voiceDetail.duringEmpty")}
-            />
-            <VarList
-              title={t("voiceDetail.after")}
-              hint={t("voiceDetail.afterHint")}
-              rows={detail.variables.postCall}
-              empty={t("voiceDetail.afterEmpty")}
-            />
-          </div>
+          <VoiceVariablesEditor
+            agentId={agentId}
+            version={detail.version}
+            engineType={detail.engineType}
+            managed={detail.variableConfig.managed}
+            initial={detail.variableConfig.items}
+            contactFields={detail.contactFields}
+            onPublished={load}
+          />
 
           {/* Test call */}
           <div className="rounded-lg border border-[var(--border)] p-3">

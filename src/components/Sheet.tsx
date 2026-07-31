@@ -31,7 +31,12 @@ export function Sheet({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // Sheets can open another sheet (for example an agent detail opening a
+      // variable editor). Only the topmost dialog owns Escape; otherwise one
+      // keypress closes both layers because both listeners live on window.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs[dialogs.length - 1] === panelRef.current) onClose();
     };
     window.addEventListener("keydown", onKey);
     // Focus lands inside the sheet so the first tab stays in it and a screen
