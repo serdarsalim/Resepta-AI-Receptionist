@@ -259,6 +259,7 @@ export const agentEditorContext = internalQuery({
       variables: variables.sort((a, b) => a.order - b.order),
       variablesSyncedAt: agent.variablesSyncedAt ?? null,
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
+      runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       fields: fields.sort((a, b) => a.order - b.order),
     };
   },
@@ -653,6 +654,122 @@ export const webhookAuthContext = internalQuery({
     return {
       orgId: agent.orgId,
       apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
+    };
+  },
+});
+
+export const setRuntimeToken = internalMutation({
+  args: { retellAgentId: v.string(), tokenHash: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, tokenHash }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, {
+      runtimeTokenHash: tokenHash,
+      runtimeConnectedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const verifyRuntimeToken = internalQuery({
+  args: { retellAgentId: v.string(), tokenHash: v.string() },
+  returns: v.union(
+    v.object({ orgId: v.id("orgs"), retellAgentId: v.string() }),
+    v.null(),
+  ),
+  handler: async (ctx, { retellAgentId, tokenHash }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || !agent.enabled || agent.runtimeTokenHash !== tokenHash) return null;
+    return { orgId: agent.orgId, retellAgentId };
+  },
+});
+
+export const runtimeCallContext = internalQuery({
+  args: {
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    phone: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent || !agent.enabled || agent.orgId !== args.orgId) {
+      throw new Error("agent-not-available");
+    }
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("business-not-found");
+    const phone = toE164(args.phone);
+    const customer = phone
+      ? await ctx.db
+          .query("customers")
+          .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
+          .unique()
+      : null;
+    const [variables, fields, services] = await Promise.all([
+      ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org_agent", (q) =>
+          q.eq("orgId", args.orgId).eq("retellAgentId", args.retellAgentId),
+        )
+        .collect(),
+      ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
+      ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
+    ]);
+    const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
+    return {
+      business: {
+        name: org.name,
+        timezone: org.timezone,
+        language: org.language,
+      },
+      caller: customer
+        ? {
+            known: true,
+            name: [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim(),
+            phone: customer.phone,
+            language: customer.language ?? org.language,
+          }
+        : { known: false, phone: phone ?? args.phone },
+      information: variables
+        .sort((a, b) => a.order - b.order)
+        .filter((variable) => variable.destination === "contact")
+        .map((variable) => {
+          const field = variable.contactFieldId
+            ? fieldsById.get(String(variable.contactFieldId))
+            : null;
+          return {
+            key: variable.key,
+            label: variable.label,
+            description: variable.description,
+            type: variable.type,
+            choices: variable.choices ?? [],
+            required: variable.required,
+            collect:
+              variable.duringMode === "confirm"
+                ? "confirm explicitly"
+                : variable.duringMode === "if_missing"
+                  ? "ask when missing"
+                  : "do not ask",
+            currentValue: field && customer ? customer.custom?.[field.key] ?? null : null,
+          };
+        }),
+      services: services
+        .filter((service) => service.active)
+        .map((service) => ({
+          key: serviceKey(service),
+          name: service.name,
+          durationMinutes: service.durationMinutes,
+        })),
     };
   },
 });
@@ -1092,9 +1209,27 @@ export const updateContactFromVoice = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent || !agent.enabled) return contactUpdateFailure("agent-not-configured");
+    const phone = toE164(args.phone);
+    if (!phone) return contactUpdateFailure("phone-not-recognised");
+    const existing = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", agent.orgId).eq("phone", phone))
+      .unique();
+    if (!existing) {
+      const customerId = await ctx.db.insert("customers", {
+        orgId: agent.orgId,
+        firstName: "",
+        phone,
+      });
+      await recordCustomerCreated(ctx, {
+        orgId: agent.orgId,
+        customerId,
+        source: "voice",
+      });
+    }
     return await applyVoiceContactValues(ctx, {
       orgId: agent.orgId,
-      phone: args.phone,
+      phone,
       values: args.values,
       fillOnlyMissing: args.fillOnlyMissing,
     });

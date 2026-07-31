@@ -14,6 +14,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
+import {
+  createVoiceRuntimeToken,
+  hashVoiceRuntimeToken,
+} from "./lib/voiceRuntime";
 
 const API = "https://api.retellai.com";
 
@@ -58,6 +62,14 @@ type LlmDoc = {
   general_tools?: Record<string, unknown>[];
   default_dynamic_variables?: Record<string, string>;
   states?: { name?: string }[];
+  mcps?: Array<{
+    name?: string;
+    url?: string;
+    headers?: Record<string, string>;
+    query_params?: Record<string, string>;
+    timeout_ms?: number;
+    [key: string]: unknown;
+  }>;
 };
 
 // This deployment's own HTTP origin. Read from the environment rather than
@@ -73,6 +85,7 @@ type EditorContext = {
   variables: Array<VoiceVariableInput & { order: number }>;
   variablesSyncedAt: number | null;
   variablesRetellVersion: number | null;
+  runtimeConnectedAt: number | null;
   fields: Array<{
     _id: string;
     key: string;
@@ -98,6 +111,97 @@ async function editorContext(
     throw new Error("No Retell API key for this workspace yet.");
   }
   return context;
+}
+
+async function runtimeMcpConfig(
+  ctx: Pick<ActionCtx, "runMutation">,
+  agentId: string,
+  context: EditorContext,
+  llm: LlmDoc,
+): Promise<LlmDoc["mcps"]> {
+  const site = siteUrl();
+  if (!site) return llm.mcps;
+  const expectedUrl = `${site}/retell/mcp`;
+  const current = llm.mcps ?? [];
+  const existing = current.find(
+    (entry) => entry.name === "randevu" || entry.url === expectedUrl,
+  );
+  if (existing && context.runtimeConnectedAt !== null) return current;
+
+  // The clear credential lives only in the provider configuration. Randevu
+  // stores its digest, so a database read cannot recover a live runtime key.
+  const token = createVoiceRuntimeToken(agentId);
+  await ctx.runMutation(internal.retell.setRuntimeToken, {
+    retellAgentId: agentId,
+    tokenHash: await hashVoiceRuntimeToken(token),
+  });
+  return [
+    ...current.filter(
+      (entry) => entry.name !== "randevu" && entry.url !== expectedUrl,
+    ),
+    {
+      name: "randevu",
+      url: expectedUrl,
+      headers: { Authorization: `Bearer ${token}` },
+      timeout_ms: 5000,
+    },
+  ];
+}
+
+const RUNTIME_MCP_TOOLS = [
+  {
+    type: "mcp",
+    mcp_id: "randevu",
+    name: "get_call_context",
+    description:
+      "Read the latest Randevu customer record, configured information and active services for the caller. Call this before asking for customer details and pass {{user_number}} as phone.",
+    input_schema: {
+      type: "object",
+      properties: { phone: { type: "string" } },
+      required: ["phone"],
+      additionalProperties: false,
+    },
+    speak_during_execution: false,
+    speak_after_execution: false,
+  },
+  {
+    type: "mcp",
+    mcp_id: "randevu",
+    name: "save_customer_details",
+    description:
+      "Save information immediately after the caller provides or explicitly confirms it. Use only configured keys, never guess, and pass {{user_number}} as phone.",
+    input_schema: {
+      type: "object",
+      properties: {
+        phone: { type: "string" },
+        values: {
+          type: "object",
+          additionalProperties: {
+            anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }],
+          },
+        },
+      },
+      required: ["phone", "values"],
+      additionalProperties: false,
+    },
+    speak_during_execution: false,
+    speak_after_execution: false,
+  },
+] satisfies Record<string, unknown>[];
+
+function withRuntimeMcpTools(tools: Record<string, unknown>[] | undefined) {
+  const managedNames = new Set(RUNTIME_MCP_TOOLS.map((tool) => tool.name));
+  return [
+    ...(tools ?? []).filter(
+      (tool) =>
+        !(
+          tool.type === "mcp" &&
+          tool.mcp_id === "randevu" &&
+          managedNames.has(String(tool.name ?? ""))
+        ),
+    ),
+    ...RUNTIME_MCP_TOOLS,
+  ];
 }
 
 type VariableRow = VoiceVariableInput;
@@ -344,7 +448,8 @@ export const publishPrompt = action({
     previousPrompt: v.string(),
   }),
   handler: async (ctx, { agentId, generalPrompt, beginMessage }) => {
-    const key = (await editorContext(ctx, agentId)).apiKey!;
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
     const agent = (await (
       await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
     ).json()) as AgentDoc;
@@ -358,6 +463,8 @@ export const publishPrompt = action({
     const version = await publishViaDraft(key, agentId, llmId, {
       general_prompt: generalPrompt,
       ...(beginMessage !== undefined ? { begin_message: beginMessage } : {}),
+      mcps: await runtimeMcpConfig(ctx, agentId, context, before),
+      general_tools: withRuntimeMcpTools(before.general_tools),
     });
     // Returned so the caller can offer "undo" without a second round trip. The
     // LLM is patched in place, so there is no earlier version to point at.
@@ -463,7 +570,7 @@ export const publishVariables = action({
       (tool) => tool.type !== "extract_dynamic_variable",
     );
     const during = next.filter((variable) => variable.duringMode !== "none");
-    const generalTools = [
+    const generalTools = withRuntimeMcpTools([
       ...preservedTools,
       ...(during.length > 0
         ? [
@@ -484,7 +591,7 @@ export const publishVariables = action({
             },
           ]
         : []),
-    ];
+    ]);
     const defaultDynamicVariables: Record<string, string> = {};
     for (const variable of next) {
       if (variable.beforeSource === "static" && variable.beforeValue) {
@@ -515,6 +622,7 @@ export const publishVariables = action({
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
         default_dynamic_variables: defaultDynamicVariables,
         general_tools: generalTools,
+        mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {}),
       });
     }
     await call(key, "PATCH", `update-agent/${id}`, {
@@ -537,7 +645,8 @@ export const wireWebhook = action({
   args: { agentId: v.string() },
   returns: v.object({ ok: v.boolean(), url: v.string(), version: v.union(v.number(), v.null()) }),
   handler: async (ctx, { agentId }) => {
-    const key = (await editorContext(ctx, agentId)).apiKey!;
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
     const site = siteUrl();
     if (!site) {
       throw new Error("This deployment exposes no site URL, so there is nothing to point at.");
@@ -550,6 +659,21 @@ export const wireWebhook = action({
       await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
     ).json()) as { version?: number };
     if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    const draftAgent = (await (
+      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+    ).json()) as AgentDoc;
+    const llmId = draftAgent.response_engine?.llm_id;
+    if (llmId) {
+      const liveLlm = (await (
+        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      ).json()) as LlmDoc;
+      const llmVersion = draftAgent.response_engine?.version;
+      await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+        ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+        mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
+        general_tools: withRuntimeMcpTools(liveLlm.general_tools),
+      });
+    }
     await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
     await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
 

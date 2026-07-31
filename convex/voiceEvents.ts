@@ -57,6 +57,7 @@ export const enqueue = internalMutation({
         await ctx.db.patch(existing._id, {
           payload: args.payload,
           status: "queued",
+          attempts: existing.status === "failed" ? 0 : existing.attempts,
           receivedAt: Date.now(),
           error: undefined,
           nextAttemptAt: undefined,
@@ -132,6 +133,24 @@ export const complete = internalMutation({
       nextAttemptAt: undefined,
       error: undefined,
     });
+    // The provider may deliver its analysis after our recovery window. A real
+    // analyzed event supersedes that earlier warning for the same call.
+    if (row.eventType === "call_analyzed") {
+      const sameCall = await ctx.db
+        .query("voiceEvents")
+        .withIndex("by_org_call", (q) =>
+          q.eq("orgId", row.orgId).eq("retellCallId", row.retellCallId),
+        )
+        .collect();
+      for (const recovery of sameCall) {
+        if (recovery.eventType !== "analysis_recovery" || recovery.status !== "failed") continue;
+        await ctx.db.patch(recovery._id, {
+          status: "processed",
+          processedAt: now,
+          error: undefined,
+        });
+      }
+    }
     const agent = await ctx.db
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", row.retellAgentId))

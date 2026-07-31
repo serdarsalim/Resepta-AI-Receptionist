@@ -48,6 +48,7 @@ import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_voicePayload from "../lib/voicePayload.js";
+import type * as lib_voiceRuntime from "../lib/voiceRuntime.js";
 import type * as lib_voiceVariables from "../lib/voiceVariables.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as lib_waLane from "../lib/waLane.js";
@@ -68,6 +69,7 @@ import type * as staff from "../staff.js";
 import type * as team from "../team.js";
 import type * as users from "../users.js";
 import type * as voiceEvents from "../voiceEvents.js";
+import type * as voiceMcp from "../voiceMcp.js";
 import type * as wa from "../wa.js";
 import type * as webhook from "../webhook.js";
 
@@ -118,6 +120,7 @@ declare const fullApi: ApiFromModules<{
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/voicePayload": typeof lib_voicePayload;
+  "lib/voiceRuntime": typeof lib_voiceRuntime;
   "lib/voiceVariables": typeof lib_voiceVariables;
   "lib/waCloud": typeof lib_waCloud;
   "lib/waLane": typeof lib_waLane;
@@ -138,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   team: typeof team;
   users: typeof users;
   voiceEvents: typeof voiceEvents;
+  voiceMcp: typeof voiceMcp;
   wa: typeof wa;
   webhook: typeof webhook;
 }>;

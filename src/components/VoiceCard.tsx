@@ -134,10 +134,22 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
 
   // Connecting adopts whatever number Retell already has bound to that agent,
   // so inboundNumber stops being hand-typed into agreement with the provider.
-  const add = (agentId: string) => {
+  const add = async (agentId: string) => {
     const bound = roster?.phoneNumbers.find((n) => n.agentId === agentId)?.number;
-    void connect({ retellAgentId: agentId, inboundNumber: bound });
     setAdding(false);
+    setWiring(agentId);
+    setWireError(null);
+    try {
+      await connect({ retellAgentId: agentId, inboundNumber: bound });
+      // One operation from the owner's point of view: adding an agent also
+      // connects call results, pre-call context and the Randevu runtime tools.
+      await wireWebhook({ agentId });
+      load();
+    } catch {
+      setWireError(t("settings.voiceActionFailed"));
+    } finally {
+      setWiring(null);
+    }
   };
 
   const status = !roster
@@ -503,7 +515,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                             <button
                               type="button"
                               data-sheet-autofocus
-                              onClick={() => add(agent.id)}
+                              onClick={() => void add(agent.id)}
                               className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
                             >
                               {t("common.add")}

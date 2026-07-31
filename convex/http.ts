@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
 import { handler as mcpHandler } from "./mcp";
+import { handler as voiceMcpHandler } from "./voiceMcp";
 import {
   cancelBooking,
   createBooking,
@@ -600,6 +601,7 @@ http.route({
 // itself to a client probing for the deprecated SSE transport.
 for (const method of ["GET", "POST"] as const) {
   http.route({ path: "/mcp", method, handler: mcpHandler });
+  http.route({ path: "/retell/mcp", method, handler: voiceMcpHandler });
 }
 
 export default http;
