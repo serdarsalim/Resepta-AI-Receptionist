@@ -70,6 +70,7 @@ type LlmDoc = {
   default_dynamic_variables?: Record<string, string>;
   states?: { name?: string }[];
   mcps?: Array<{
+    id?: string;
     name?: string;
     url?: string;
     headers?: Record<string, string>;
@@ -131,7 +132,9 @@ async function runtimeMcpConfig(
   const expectedUrl = `${site}/retell/mcp`;
   const current = llm.mcps ?? [];
   const existing = current.find(
-    (entry) => entry.name === "randevu" && entry.url === expectedUrl,
+    (entry) =>
+      (entry.id === "randevu" || entry.name === "randevu") &&
+      entry.url === expectedUrl,
   );
   // Omitting the field preserves the provider's stored secret. Re-sending a
   // masked header returned by a read API could replace the usable credential.
@@ -146,9 +149,14 @@ async function runtimeMcpConfig(
   });
   return [
     ...current.filter(
-      (entry) => entry.name !== "randevu" && entry.url !== expectedUrl,
+      (entry) =>
+        entry.id !== "randevu" && entry.name !== "randevu" && entry.url !== expectedUrl,
     ),
     {
+      // The deployed update-retell-llm endpoint keys MCP servers by `id` and
+      // rejects entries without one ("MCP id cannot be empty or null"); the
+      // SDK docs omit the field. general_tools entries reference it as mcp_id.
+      id: "randevu",
       name: "randevu",
       url: expectedUrl,
       headers: { Authorization: `Bearer ${token}` },
@@ -157,6 +165,9 @@ async function runtimeMcpConfig(
   ];
 }
 
+// No input_schema on these: the deployed general_tools validator only accepts
+// string-valued input_schema.properties/required and 400s on object schemas,
+// while tool discovery pulls the real schemas from /retell/mcp anyway.
 const RUNTIME_MCP_TOOLS = [
   {
     type: "mcp",
@@ -164,12 +175,6 @@ const RUNTIME_MCP_TOOLS = [
     name: "get_call_context",
     description:
       "Read the latest Randevu customer record, configured information and active services for the caller. Call this before asking for customer details and pass {{user_number}} as phone.",
-    input_schema: {
-      type: "object",
-      properties: { phone: { type: "string" } },
-      required: ["phone"],
-      additionalProperties: false,
-    },
     speak_during_execution: false,
     speak_after_execution: false,
   },
@@ -179,20 +184,6 @@ const RUNTIME_MCP_TOOLS = [
     name: "save_customer_details",
     description:
       "Save information immediately after the caller provides or explicitly confirms it. Use only configured keys, never guess, and pass {{user_number}} as phone.",
-    input_schema: {
-      type: "object",
-      properties: {
-        phone: { type: "string" },
-        values: {
-          type: "object",
-          additionalProperties: {
-            anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }],
-          },
-        },
-      },
-      required: ["phone", "values"],
-      additionalProperties: false,
-    },
     speak_during_execution: false,
     speak_after_execution: false,
   },
