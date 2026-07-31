@@ -267,13 +267,24 @@ export const orgDetail = query({
           ),
         }),
       ),
+      voiceProvisioning: v.array(
+        v.object({
+          name: v.string(),
+          status: v.string(),
+          template: v.string(),
+          updatedAt: v.number(),
+          retellLlmId: v.union(v.string(), v.null()),
+          retellAgentId: v.union(v.string(), v.null()),
+          error: v.union(v.string(), v.null()),
+        }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const [wa, agents, voiceEvents] = await Promise.all([
+    const [wa, agents, voiceEvents, voiceProvisioning] = await Promise.all([
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -287,6 +298,11 @@ export const orgDetail = query({
         .withIndex("by_org_received", (q) => q.eq("orgId", args.orgId))
         .order("desc")
         .take(SCAN_CAP),
+      ctx.db
+        .query("voiceAgentProvisioning")
+        .withIndex("by_org_updated", (q) => q.eq("orgId", args.orgId))
+        .order("desc")
+        .take(10),
     ]);
     return {
       name: org.name,
@@ -337,6 +353,15 @@ export const orgDetail = query({
             : null,
         };
       }),
+      voiceProvisioning: voiceProvisioning.map((job) => ({
+        name: job.name,
+        status: job.status,
+        template: `${job.templateKey}@${job.templateVersion}`,
+        updatedAt: job.updatedAt,
+        retellLlmId: job.retellLlmId ?? null,
+        retellAgentId: job.retellAgentId ?? null,
+        error: job.error ?? null,
+      })),
     };
   },
 });

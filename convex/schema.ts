@@ -290,6 +290,40 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"]),
 
+  // Creating a provider agent spans several non-transactional API calls. This
+  // row checkpoints each resource as soon as it exists, so a retry resumes the
+  // same setup instead of deliberately creating another agent. A short lease
+  // also makes two browser submissions serialize onto one job.
+  voiceAgentProvisioning: defineTable({
+    orgId: v.id("orgs"),
+    requestId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("creating_engine"),
+      v.literal("creating_agent"),
+      v.literal("publishing"),
+      v.literal("connecting"),
+      v.literal("complete"),
+      v.literal("failed"),
+    ),
+    templateKey: v.string(),
+    templateVersion: v.number(),
+    name: v.string(),
+    language: v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE")),
+    voiceId: v.string(),
+    inboundNumber: v.optional(v.string()),
+    retellLlmId: v.optional(v.string()),
+    retellAgentId: v.optional(v.string()),
+    retellVersion: v.optional(v.number()),
+    error: v.optional(v.string()),
+    leaseToken: v.optional(v.string()),
+    leaseUntil: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org_request", ["orgId", "requestId"])
+    .index("by_org_updated", ["orgId", "updatedAt"]),
+
   // Randevu's provider-neutral definition of the information a phone agent
   // knows and collects. One row owns the whole lifecycle of one value: where
   // its pre-call value comes from, whether the caller is asked for it, whether

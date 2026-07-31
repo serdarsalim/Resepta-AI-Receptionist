@@ -47,6 +47,7 @@ import type * as lib_platformAuth from "../lib/platformAuth.js";
 import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
+import type * as lib_voiceAgentTemplate from "../lib/voiceAgentTemplate.js";
 import type * as lib_voicePayload from "../lib/voicePayload.js";
 import type * as lib_voiceRuntime from "../lib/voiceRuntime.js";
 import type * as lib_voiceVariables from "../lib/voiceVariables.js";
@@ -70,6 +71,7 @@ import type * as team from "../team.js";
 import type * as users from "../users.js";
 import type * as voiceEvents from "../voiceEvents.js";
 import type * as voiceMcp from "../voiceMcp.js";
+import type * as voiceProvisioning from "../voiceProvisioning.js";
 import type * as wa from "../wa.js";
 import type * as webhook from "../webhook.js";
 
@@ -119,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   "lib/reminderSchedule": typeof lib_reminderSchedule;
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;
+  "lib/voiceAgentTemplate": typeof lib_voiceAgentTemplate;
   "lib/voicePayload": typeof lib_voicePayload;
   "lib/voiceRuntime": typeof lib_voiceRuntime;
   "lib/voiceVariables": typeof lib_voiceVariables;
@@ -142,6 +145,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   voiceEvents: typeof voiceEvents;
   voiceMcp: typeof voiceMcp;
+  voiceProvisioning: typeof voiceProvisioning;
   wa: typeof wa;
   webhook: typeof webhook;
 }>;

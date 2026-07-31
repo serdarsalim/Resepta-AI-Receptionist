@@ -210,6 +210,32 @@ export default function TenantPage() {
             }
           />
         ))}
+        {detail.voiceProvisioning.length > 0 && (
+          <div className="py-2 text-xs">
+            <div className="mb-1 font-medium">Agent setup</div>
+            {detail.voiceProvisioning.map((job, index) => (
+              <div
+                key={`${job.updatedAt}-${index}`}
+                className={`grid gap-x-3 gap-y-1 py-1.5 text-[var(--muted)] sm:grid-cols-[minmax(0,1fr)_auto] ${
+                  job.status === "failed" ? "text-amber-700 dark:text-amber-400" : ""
+                }`}
+              >
+                <span>
+                  {job.name} · {job.template} · {job.status}
+                </span>
+                <span>{new Date(job.updatedAt).toLocaleString()}</span>
+                {(job.retellAgentId || job.retellLlmId) && (
+                  <span className="break-all font-mono sm:col-span-2">
+                    {job.retellAgentId ?? "no agent id"} · {job.retellLlmId ?? "no engine id"}
+                  </span>
+                )}
+                {job.error && (
+                  <span className="break-words font-mono sm:col-span-2">{job.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {detail.agents.length === 0 ? (
           <p className="py-2 text-xs text-[var(--muted)]">
             No agents connected. The business can add one in Phone agent once the key is in.

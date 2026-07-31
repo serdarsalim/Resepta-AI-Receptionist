@@ -13,11 +13,17 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
 import {
   createVoiceRuntimeToken,
   hashVoiceRuntimeToken,
 } from "./lib/voiceRuntime";
+import {
+  appointmentReceptionistTemplate,
+  VOICE_AGENT_TEMPLATE_VERSION,
+  type VoiceAgentLanguage,
+} from "./lib/voiceAgentTemplate";
 
 const API = "https://api.retellai.com";
 
@@ -43,6 +49,7 @@ type AgentDoc = {
   agent_id: string;
   agent_name?: string;
   version?: number;
+  is_published?: boolean;
   webhook_url?: string;
   voice_id?: string;
   language?: string;
@@ -654,75 +661,268 @@ export const publishVariables = action({
 
 // ── Webhook ──────────────────────────────────────────────────────────────────
 
+async function wireAgent(
+  ctx: ActionCtx,
+  agentId: string,
+  context: EditorContext,
+): Promise<{ ok: true; url: string; version: number | null }> {
+  const key = context.apiKey!;
+  const site = siteUrl();
+  if (!site) {
+    throw new Error("This deployment exposes no site URL, so there is nothing to point at.");
+  }
+  const url = `${site}/retell/call-ended`;
+  const id = encodeURIComponent(agentId);
+  const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+  if (live.version === undefined) throw new Error("Agent has no version to clone.");
+  const draft = (await (
+    await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+  ).json()) as { version?: number };
+  if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+  const draftAgent = (await (
+    await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+  ).json()) as AgentDoc;
+  const llmId = draftAgent.response_engine?.llm_id;
+  if (llmId) {
+    const liveLlm = (await (
+      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+    ).json()) as LlmDoc;
+    const llmVersion = draftAgent.response_engine?.version;
+    await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+      ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+      mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
+      general_tools: withRuntimeMcpTools(liveLlm.general_tools),
+    });
+  }
+  await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
+  await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+
+  // Agent webhooks deliver the result. Number-level inbound webhooks run
+  // before the call is answered and are the only point where caller-specific
+  // context can be injected. Wire every number currently routed to this
+  // agent; PATCHing only this field preserves Retell's routing weights.
+  const numberData: unknown = await (
+    await call(key, "GET", "v2/list-phone-numbers")
+  ).json();
+  const numbers = (
+    Array.isArray(numberData)
+      ? numberData
+      : (numberData as { items?: unknown[] })?.items ?? []
+  ) as Array<{
+    phone_number?: string;
+    inbound_agent_id?: string;
+    inbound_agents?: Array<{ agent_id?: string }>;
+  }>;
+  const inboundUrl = `${site}/retell/inbound`;
+  for (const number of numbers) {
+    const belongs =
+      number.inbound_agent_id === agentId ||
+      number.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
+    if (!belongs || !number.phone_number) continue;
+    await call(
+      key,
+      "PATCH",
+      `update-phone-number/${encodeURIComponent(number.phone_number)}`,
+      { inbound_webhook_url: inboundUrl },
+    );
+  }
+  await ctx.runMutation(internal.retell.markRuntimeConnected, {
+    retellAgentId: agentId,
+  });
+  return { ok: true, url, version: draft.version };
+}
+
+async function bindInboundNumber(
+  key: string,
+  site: string,
+  number: string,
+  agentId: string,
+) {
+  const numberData: unknown = await (
+    await call(key, "GET", "v2/list-phone-numbers")
+  ).json();
+  const numbers = (
+    Array.isArray(numberData)
+      ? numberData
+      : (numberData as { items?: unknown[] })?.items ?? []
+  ) as Array<{
+    phone_number?: string;
+    inbound_agent_id?: string;
+    inbound_agents?: Array<{ agent_id?: string }>;
+  }>;
+  const target = numbers.find((candidate) => candidate.phone_number === number);
+  if (!target) throw new Error("phone-line-not-found");
+  const assigned = [
+    target.inbound_agent_id,
+    ...(target.inbound_agents ?? []).map((candidate) => candidate.agent_id),
+  ].filter(Boolean);
+  if (assigned.some((assignedId) => assignedId !== agentId)) {
+    throw new Error("phone-line-already-assigned");
+  }
+  await call(key, "PATCH", `update-phone-number/${encodeURIComponent(number)}`, {
+    inbound_agents: [
+      { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+    ],
+    inbound_webhook_url: `${site}/retell/inbound`,
+  });
+}
+
+// Native creation is a durable orchestration, not a browser sequence. The
+// job table checkpoints every external id and leases one worker so a retry,
+// refresh or double-click continues the same setup.
+export const createAgent = action({
+  args: {
+    requestId: v.string(),
+    name: v.string(),
+    language: v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE")),
+    voiceId: v.string(),
+    inboundNumber: v.optional(v.string()),
+  },
+  returns: v.object({
+    status: v.union(v.literal("working"), v.literal("complete")),
+    agentId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args): Promise<{
+    status: "working" | "complete";
+    agentId: string | null;
+  }> => {
+    const leaseToken = crypto.randomUUID();
+    const started = (await ctx.runMutation(internal.voiceProvisioning.begin, {
+      ...args,
+      leaseToken,
+    })) as {
+      claimed: boolean;
+      complete: boolean;
+      apiKey: string;
+      orgName: string;
+      row: {
+        _id: string;
+        status: string;
+        name: string;
+        language: VoiceAgentLanguage;
+        voiceId: string;
+        inboundNumber?: string;
+        retellLlmId?: string;
+        retellAgentId?: string;
+        retellVersion?: number;
+      };
+    };
+    if (started.complete) {
+      return { status: "complete", agentId: started.row.retellAgentId ?? null };
+    }
+    if (!started.claimed) {
+      return { status: "working", agentId: started.row.retellAgentId ?? null };
+    }
+
+    const jobId = started.row._id as Id<"voiceAgentProvisioning">;
+    const key = started.apiKey;
+    try {
+      const site = siteUrl();
+      if (!site) throw new Error("deployment-site-url-missing");
+      const template = appointmentReceptionistTemplate({
+        language: started.row.language,
+        businessName: started.orgName,
+        site,
+      });
+
+      let llmId = started.row.retellLlmId;
+      if (!llmId) {
+        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+          jobId,
+          leaseToken,
+          status: "creating_engine",
+        });
+        const createdLlm = (await (
+          await call(key, "POST", "create-retell-llm", template.llm)
+        ).json()) as { llm_id?: string };
+        if (!createdLlm.llm_id) throw new Error("provider-returned-no-response-engine");
+        llmId = createdLlm.llm_id;
+        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+          jobId,
+          leaseToken,
+          status: "creating_agent",
+          retellLlmId: llmId,
+        });
+      }
+
+      let agentId = started.row.retellAgentId;
+      let initialVersion = started.row.retellVersion;
+      if (!agentId) {
+        const createdAgent = (await (
+          await call(key, "POST", "create-agent", {
+            response_engine: { type: "retell-llm", llm_id: llmId },
+            voice_id: started.row.voiceId,
+            agent_name: started.row.name,
+            ...template.agent,
+          })
+        ).json()) as AgentDoc;
+        if (!createdAgent.agent_id) throw new Error("provider-returned-no-agent");
+        agentId = createdAgent.agent_id;
+        initialVersion = createdAgent.version ?? 0;
+        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+          jobId,
+          leaseToken,
+          status: "publishing",
+          retellAgentId: agentId,
+          retellVersion: initialVersion,
+        });
+      }
+
+      if (initialVersion === undefined) initialVersion = 0;
+      const initial = (await (
+        await call(
+          key,
+          "GET",
+          `get-agent/${encodeURIComponent(agentId)}?version=${initialVersion}`,
+        )
+      ).json()) as AgentDoc;
+      if (!initial.is_published) {
+        await call(key, "POST", `publish-agent-version/${encodeURIComponent(agentId)}`, {
+          version: initialVersion,
+          version_title: `Randevu template v${VOICE_AGENT_TEMPLATE_VERSION}`,
+        });
+      }
+      await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+        jobId,
+        leaseToken,
+        status: "connecting",
+        retellVersion: initialVersion,
+      });
+      await ctx.runMutation(internal.voiceProvisioning.connect, {
+        jobId,
+        leaseToken,
+        retellAgentId: agentId,
+        inboundNumber: started.row.inboundNumber,
+      });
+      if (started.row.inboundNumber) {
+        await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
+      }
+      const context = await editorContext(ctx, agentId);
+      const wired = await wireAgent(ctx, agentId, context);
+      await ctx.runMutation(internal.voiceProvisioning.complete, {
+        jobId,
+        leaseToken,
+        retellVersion: wired.version ?? undefined,
+      });
+      return { status: "complete", agentId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "phone-agent-setup-failed";
+      await ctx.runMutation(internal.voiceProvisioning.fail, {
+        jobId,
+        leaseToken,
+        error: message,
+      });
+      throw error;
+    }
+  },
+});
+
 export const wireWebhook = action({
   args: { agentId: v.string() },
   returns: v.object({ ok: v.boolean(), url: v.string(), version: v.union(v.number(), v.null()) }),
   handler: async (ctx, { agentId }) => {
     const context = await editorContext(ctx, agentId);
-    const key = context.apiKey!;
-    const site = siteUrl();
-    if (!site) {
-      throw new Error("This deployment exposes no site URL, so there is nothing to point at.");
-    }
-    const url = `${site}/retell/call-ended`;
-    const id = encodeURIComponent(agentId);
-    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
-    if (live.version === undefined) throw new Error("Agent has no version to clone.");
-    const draft = (await (
-      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
-    ).json()) as { version?: number };
-    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
-    const draftAgent = (await (
-      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
-    ).json()) as AgentDoc;
-    const llmId = draftAgent.response_engine?.llm_id;
-    if (llmId) {
-      const liveLlm = (await (
-        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
-      ).json()) as LlmDoc;
-      const llmVersion = draftAgent.response_engine?.version;
-      await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
-        ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-        mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
-        general_tools: withRuntimeMcpTools(liveLlm.general_tools),
-      });
-    }
-    await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
-    await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
-
-    // Agent webhooks deliver the result. Number-level inbound webhooks run
-    // before the call is answered and are the only point where caller-specific
-    // context can be injected. Wire every number currently routed to this
-    // agent; PATCHing only this field preserves Retell's routing weights.
-    const numberData: unknown = await (
-      await call(key, "GET", "v2/list-phone-numbers")
-    ).json();
-    const numbers = (
-      Array.isArray(numberData)
-        ? numberData
-        : (numberData as { items?: unknown[] })?.items ?? []
-    ) as Array<{
-      phone_number?: string;
-      inbound_agent_id?: string;
-      inbound_agents?: Array<{ agent_id?: string }>;
-    }>;
-    const inboundUrl = `${site}/retell/inbound`;
-    for (const number of numbers) {
-      const belongs =
-        number.inbound_agent_id === agentId ||
-        number.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
-      if (!belongs || !number.phone_number) continue;
-      await call(
-        key,
-        "PATCH",
-        `update-phone-number/${encodeURIComponent(number.phone_number)}`,
-        { inbound_webhook_url: inboundUrl },
-      );
-    }
-    await ctx.runMutation(internal.retell.markRuntimeConnected, {
-      retellAgentId: agentId,
-    });
-    return { ok: true, url, version: draft.version };
+    return await wireAgent(ctx, agentId, context);
   },
 });
 

@@ -427,6 +427,13 @@ type AgentListResult = {
     webhookUrl: string | null;
   }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  voices: {
+    id: string;
+    name: string;
+    gender: string;
+    accent: string;
+    previewUrl: string | null;
+  }[];
   hiddenAgentIds: string[];
 };
 
@@ -466,6 +473,15 @@ export const listAgents = action({
         agentId: v.union(v.string(), v.null()),
       }),
     ),
+    voices: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        gender: v.string(),
+        accent: v.string(),
+        previewUrl: v.union(v.string(), v.null()),
+      }),
+    ),
     hiddenAgentIds: v.array(v.string()),
   }),
   handler: async (ctx): Promise<AgentListResult> => {
@@ -493,6 +509,7 @@ export const listAgents = action({
         phoneNumbers: [
           { number: "+902121112233", nickname: "Salon line", agentId: DEMO_AGENTS[0].id },
         ],
+        voices: [],
         hiddenAgentIds: [],
       };
     }
@@ -505,12 +522,17 @@ export const listAgents = action({
     const headers = { authorization: `Bearer ${context.apiKey}` };
     let aRes: Response;
     let nRes: Response;
+    let vRes: Response | null = null;
     try {
-      [aRes, nRes] = await Promise.all([
+      [aRes, nRes, vRes] = await Promise.all([
         // is_latest=true or Retell returns one row per agent VERSION, which
         // shows the same agent five times in the picker.
         fetch("https://api.retellai.com/list-agents?is_latest=true", { headers }),
         fetch("https://api.retellai.com/v2/list-phone-numbers", { headers }),
+        // Voice names and previews are customer-facing, but provider names are
+        // intentionally discarded below. A voice-list outage must not take
+        // down the existing-agent connect flow.
+        fetch("https://api.retellai.com/list-voices", { headers }).catch(() => null),
       ]);
     } catch {
       return empty("unreachable", context.connectedAgentId);
@@ -522,6 +544,7 @@ export const listAgents = action({
 
     const aData: unknown = await aRes.json();
     const nData: unknown = await nRes.json();
+    const vData: unknown = vRes?.ok ? await vRes.json() : [];
     const agentItems = (
       Array.isArray(aData) ? aData : (aData as { items?: unknown[] })?.items ?? []
     ) as Array<{
@@ -537,7 +560,15 @@ export const listAgents = action({
       phone_number?: string;
       nickname?: string;
       inbound_agent_id?: string;
+      inbound_agents?: Array<{ agent_id?: string }>;
       outbound_agents?: Array<{ agent_id?: string }>;
+    }>;
+    const voiceItems = (Array.isArray(vData) ? vData : []) as Array<{
+      voice_id?: string;
+      voice_name?: string;
+      gender?: string;
+      accent?: string;
+      preview_audio_url?: string;
     }>;
 
     const seen = new Set<string>();
@@ -568,8 +599,23 @@ export const listAgents = action({
       .map((n) => ({
         number: n.phone_number!,
         nickname: n.nickname?.trim() || n.phone_number!,
-        agentId: n.inbound_agent_id ?? n.outbound_agents?.[0]?.agent_id ?? null,
+        agentId:
+          n.inbound_agent_id ??
+          n.inbound_agents?.[0]?.agent_id ??
+          n.outbound_agents?.[0]?.agent_id ??
+          null,
       }));
+
+    const voices = voiceItems
+      .filter((voice) => voice.voice_id && voice.voice_name)
+      .map((voice) => ({
+        id: voice.voice_id!,
+        name: voice.voice_name!.trim(),
+        gender: voice.gender?.trim() || "",
+        accent: voice.accent?.trim() || "",
+        previewUrl: voice.preview_audio_url?.trim() || null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return {
       configured: true,
@@ -577,6 +623,7 @@ export const listAgents = action({
       connectedAgentId: context.connectedAgentId,
       agents,
       phoneNumbers,
+      voices,
       hiddenAgentIds: context.hiddenAgentIds,
     };
   },
@@ -610,6 +657,7 @@ function empty(
     connectedAgentId,
     agents: [],
     phoneNumbers: [],
+    voices: [],
     hiddenAgentIds: [],
   };
 }
