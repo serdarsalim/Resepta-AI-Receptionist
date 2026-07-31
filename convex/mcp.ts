@@ -15,14 +15,17 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { httpAction, internalQuery, type ActionCtx } from "./_generated/server";
+import {
+  bearer,
+  jsonResponse,
+  num,
+  serveMcp,
+  str,
+  NOT_STREAMABLE_HTTP,
+  type ToolDef as ProtocolToolDef,
+} from "./lib/mcpProtocol";
 
-const PROTOCOL_VERSION = "2025-06-18";
 const SERVER_INFO = { name: "randevu", version: "1.0.0" };
-
-// Claude.ai/Desktop cuts a tool result near 150k characters, Claude Code at 25k
-// tokens. Blowing the cap mangles the result rather than failing loudly, so
-// clamping happens here instead of each tool being trusted to behave.
-const MAX_RESULT_CHARS = 100_000;
 
 type Who = {
   connectionId: string;
@@ -36,23 +39,7 @@ type Who = {
   label: string;
 };
 
-type ToolDef = {
-  name: string;
-  title: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  annotations: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
-  handler: (ctx: ActionCtx, args: Record<string, unknown>, who: Who) => Promise<unknown>;
-};
-
-const str = (a: Record<string, unknown>, k: string): string | undefined => {
-  const val = a[k];
-  return typeof val === "string" && val.trim() ? val.trim() : undefined;
-};
-const num = (a: Record<string, unknown>, k: string): number | undefined => {
-  const val = a[k];
-  return typeof val === "number" && Number.isFinite(val) ? val : undefined;
-};
+type ToolDef = ProtocolToolDef<ActionCtx, Who>;
 
 const TOOLS: ToolDef[] = [
   {
@@ -264,157 +251,30 @@ const TOOLS: ToolDef[] = [
   },
 ];
 
-const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
-
-type RpcId = string | number | null;
-const rpcResult = (id: RpcId, result: unknown) => ({ jsonrpc: "2.0", id, result }) as const;
-const rpcError = (id: RpcId, code: number, message: string) =>
-  ({ jsonrpc: "2.0", id, error: { code, message } }) as const;
-
-// Convex wraps a throw as "Uncaught Error: <msg>\n    at handler (…)". The model
-// reads all of it and starts reasoning about our file paths, burying the
-// sentence the tool wrote on purpose. Keep the sentence, drop the frame.
-function cleanError(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e);
-  return (
-    raw
-      .replace(/^\s*Uncaught\s+(ConvexError|Error):\s*/i, "")
-      .split(/\n\s*at\s/)[0]
-      .trim() || "The request failed."
-  );
-}
-
-function toolContent(value: unknown) {
-  let text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  if (text.length > MAX_RESULT_CHARS) {
-    text =
-      text.slice(0, MAX_RESULT_CHARS) +
-      `\n\n[truncated at ${MAX_RESULT_CHARS} characters — narrow the query and ask again; this is not the complete result]`;
-  }
-  return { content: [{ type: "text", text }] };
-}
-
-async function handleRpc(
-  ctx: ActionCtx,
-  msg: Record<string, unknown>,
-  who: Who,
-): Promise<object | null> {
-  const id = (msg.id ?? null) as RpcId;
-  const method = String(msg.method ?? "");
-  if (method.startsWith("notifications/")) return null;
-
-  switch (method) {
-    case "initialize":
-      return rpcResult(id, {
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: { tools: { listChanged: false } },
-        serverInfo: SERVER_INFO,
-        instructions: `You are connected to ${who.orgName}, an appointment business. Everything you do is recorded in their activity feed against ${who.userName}, and reversible actions can be undone. Read before you write — check a customer's history before logging a note about it. Never invent a customer id; search first.`,
-      });
-    case "ping":
-      return rpcResult(id, {});
-    case "tools/list":
-      return rpcResult(id, {
-        tools: TOOLS.map((t) => ({
-          name: t.name,
-          title: t.title,
-          description: t.description,
-          inputSchema: t.inputSchema,
-          annotations: t.annotations,
-        })),
-      });
-    case "tools/call": {
-      const params = (msg.params ?? {}) as Record<string, unknown>;
-      const name = String(params.name ?? "");
-      const tool = TOOL_BY_NAME.get(name);
-      // A result, not a transport error: a JSON-RPC error reads to the model as
-      // "the server broke", where this reads as "that name does not exist, here
-      // are the ones that do" — actionable in the same turn.
-      if (!tool) {
-        return rpcResult(id, {
-          content: [
-            {
-              type: "text",
-              text: `Error: no tool named "${name}". Available: ${TOOLS.map((t) => t.name).join(", ")}`,
-            },
-          ],
-          isError: true,
-        });
-      }
-      try {
-        const out = await tool.handler(ctx, (params.arguments ?? {}) as Record<string, unknown>, who);
-        return rpcResult(id, toolContent(out));
-      } catch (e: unknown) {
-        return rpcResult(id, {
-          content: [{ type: "text", text: `Error: ${cleanError(e)}` }],
-          isError: true,
-        });
-      }
-    }
-    default:
-      return rpcError(id, -32601, `Method not found: ${method}`);
-  }
-}
-
-function bearer(req: Request): string {
-  const auth = req.headers.get("authorization") ?? "";
-  if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
-  // Claude's request-header auth allowlists x-api-key, and it is what a curl
-  // smoke test reaches for first.
-  return req.headers.get("x-api-key")?.trim() ?? "";
-}
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json",
-      ...(status === 401
-        ? { "www-authenticate": 'Bearer realm="randevu", error="invalid_token"' }
-        : {}),
-    },
-  });
-
 export const handler = httpAction(async (ctx, req) => {
-  if (req.method === "GET") {
-    // A bare GET is a client probing for the deprecated SSE transport. Say so,
-    // rather than 404ing, which reads as a wrong URL.
-    return json(
-      { error: "This endpoint speaks Streamable HTTP. POST JSON-RPC 2.0 here." },
-      405,
-    );
-  }
-  if (req.method !== "POST") return json({ error: "method-not-allowed" }, 405);
+  if (req.method === "GET") return jsonResponse(NOT_STREAMABLE_HTTP, 405);
+  if (req.method !== "POST") return jsonResponse({ error: "method-not-allowed" }, 405);
 
   const key = bearer(req);
-  if (!key) return json({ error: "missing-key" }, 401);
+  if (!key) return jsonResponse({ error: "missing-key" }, 401, "randevu");
+  // verify re-checks `memberships`, so a removed team member's connector stops
+  // working without anyone having to remember it exists.
   const who = await ctx.runQuery(internal.mcpKeys.verify, { key });
-  if (!who) return json({ error: "invalid-key" }, 401);
+  if (!who) return jsonResponse({ error: "invalid-key" }, 401, "randevu");
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return json(rpcError(null, -32700, "Parse error"), 400);
-  }
-
-  // Fire-and-forget so logging never delays the response.
+  // Scheduled so logging never delays the response.
   await ctx.scheduler.runAfter(0, internal.mcpKeys.stampUsed, {
     connectionId: who.connectionId,
   });
 
-  if (Array.isArray(body)) {
-    const out = (
-      await Promise.all(body.map((m) => handleRpc(ctx, m as Record<string, unknown>, who)))
-    ).filter(Boolean);
-    return out.length ? json(out) : new Response(null, { status: 202 });
-  }
-  const res = await handleRpc(ctx, body as Record<string, unknown>, who);
-  return res ? json(res) : new Response(null, { status: 202 });
+  return await serveMcp<ActionCtx, Who>(ctx, req, who, {
+    tools: TOOLS,
+    serverInfo: SERVER_INFO,
+    instructions: `You are connected to ${who.orgName}, an appointment business. Everything you do is recorded in their activity feed against ${who.userName}, and reversible actions can be undone. Read before you write — check a customer's history before logging a note about it. Never invent a customer id; search first.`,
+  });
 });
 
-// So the settings UI can show what a connected client can do without keeping a
-// second copy of the registry in the frontend.
+
 export const listTools = internalQuery({
   args: {},
   returns: v.array(
