@@ -188,16 +188,20 @@ export const agentListContext = internalQuery({
     const { orgId } = await requireOrg(ctx);
     const org = await ctx.db.get(orgId);
     if (!org) return null;
-    const agent = await ctx.db
+    // collect(), never unique(): an org may connect many agents (see the file
+    // header), and unique() here threw the moment a second one was connected —
+    // taking listAgents and every retellAgent action down with it.
+    const agents = await ctx.db
       .query("retellAgents")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .unique();
+      .collect();
     return {
       demoMode: org.demoMode === true,
       // Demo orgs hold no credentials by construction; resolve anyway so the
       // shape is uniform, and let the caller's demo check win first.
       apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
-      connectedAgentId: agent?.retellAgentId ?? null,
+      // Legacy singular: the demo seed and error paths want one id to name.
+      connectedAgentId: agents[0]?.retellAgentId ?? null,
       hiddenAgentIds: org.hiddenRetellAgentIds ?? [],
     };
   },

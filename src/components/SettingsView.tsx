@@ -533,6 +533,10 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
   const setAgentArchived = useMutation(api.retell.setAgentArchived);
   const [wiring, setWiring] = useState<string | null>(null);
+  // Fix can fail (provider down, key revoked mid-session). Swallowing that
+  // rejection made the button look dead — the exact bug that hid the
+  // unique()-crash in prod. Whatever goes wrong renders in the notice row.
+  const [wireError, setWireError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
@@ -737,14 +741,19 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                               type="button"
                               onClick={() => {
                                 setWiring(row.retellAgentId);
+                                setWireError(null);
                                 void wireWebhook({ agentId: row.retellAgentId })
                                   .then(() => load())
+                                  .catch((e: Error) => setWireError(e.message))
                                   .finally(() => setWiring(null));
                               }}
                               className="rounded-lg border border-amber-300 px-2 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-950/60"
                             >
                               {t("settings.voiceFix")}
                             </button>
+                          )}
+                          {wireError && wiring === null && (
+                            <code className="text-[11px] opacity-70">{wireError}</code>
                           )}
                         </span>
                       </td>
