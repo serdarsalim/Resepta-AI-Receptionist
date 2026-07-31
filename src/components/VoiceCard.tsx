@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useState, Fragment } from "react";
+import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { localeFor } from "@/lib/datetime";
@@ -33,8 +33,17 @@ type Roster = {
     webhookUrl: string | null;
   }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  voices: {
+    id: string;
+    name: string;
+    gender: string;
+    accent: string;
+    previewUrl: string | null;
+  }[];
   hiddenAgentIds: string[];
 };
+
+type CreateLanguage = "tr-TR" | "en-US" | "de-DE";
 
 function RefreshIcon({ spinning }: { spinning: boolean }) {
   return (
@@ -81,11 +90,16 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const connected = useQuery(api.retell.list, {});
   const callStats = useQuery(api.retell.agentCallStats, {});
   const callHealth = useQuery(api.voiceEvents.health, {});
+  const activeProvisioning = useQuery(
+    api.voiceProvisioning.active,
+    isOwner ? {} : "skip",
+  );
   const connect = useMutation(api.retell.connect);
   const disconnect = useMutation(api.retell.disconnect);
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const createAgent = useAction(api.retellAgent.createAgent);
   const setAgentArchived = useMutation(api.retell.setAgentArchived);
   const [wiring, setWiring] = useState<string | null>(null);
   // Fix can fail (provider down, key revoked mid-session). Swallowing that
@@ -98,6 +112,16 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [addMode, setAddMode] = useState<"create" | "connect">("create");
+  const [createName, setCreateName] = useState("");
+  const [createLanguage, setCreateLanguage] = useState<CreateLanguage>("en-US");
+  const [createVoiceId, setCreateVoiceId] = useState("");
+  const [createLine, setCreateLine] = useState("");
+  const [createRequestId, setCreateRequestId] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -107,6 +131,24 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   }, [listAgents]);
 
   useEffect(() => load(), [load]);
+
+  useEffect(() => {
+    if (!adding || !activeProvisioning) return;
+    setAddMode("create");
+    setCreateRequestId(activeProvisioning.requestId);
+    setCreateName(activeProvisioning.name);
+    setCreateLanguage(activeProvisioning.language);
+    setCreateVoiceId(activeProvisioning.voiceId);
+    setCreateLine(activeProvisioning.inboundNumber ?? "");
+  }, [adding, activeProvisioning]);
+
+  useEffect(
+    () => () => {
+      audioRef.current?.pause();
+      audioRef.current = null;
+    },
+    [],
+  );
 
   if (connected === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -132,12 +174,104 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
     roster?.phoneNumbers.some((number) => number.agentId === agent.id),
   );
   const displayLocale = localeFor(language);
+  const availableLines = (roster?.phoneNumbers ?? []).filter((number) => !number.agentId);
+  const canCreate = Boolean((roster?.voices.length ?? 0) > 0 || activeProvisioning);
+  const canConnect = available.length + archived.length > 0;
+  const provisioningReady = !isOwner || activeProvisioning !== undefined;
+  const selectedVoice = roster?.voices.find((voice) => voice.id === createVoiceId) ?? null;
+  const setupWorking = creating || activeProvisioning?.working === true;
+  const createFieldsLocked = setupWorking || Boolean(activeProvisioning?.agentId);
+  const createMessage = createError
+    ? createError
+    : activeProvisioning?.status === "failed"
+      ? activeProvisioning.agentId
+        ? t("voiceCreate.resume")
+        : t("voiceCreate.failed")
+      : setupWorking
+        ? t("voiceCreate.creating")
+        : null;
+
+  const closeAdd = () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPreviewingVoice(null);
+    setAdding(false);
+  };
+
+  const openAdd = () => {
+    setCreateError(null);
+    if (activeProvisioning) {
+      setAddMode("create");
+      setCreateRequestId(activeProvisioning.requestId);
+      setCreateName(activeProvisioning.name);
+      setCreateLanguage(activeProvisioning.language);
+      setCreateVoiceId(activeProvisioning.voiceId);
+      setCreateLine(activeProvisioning.inboundNumber ?? "");
+    } else {
+      const preferredLanguage: CreateLanguage =
+        language === "tr" ? "tr-TR" : language === "de" ? "de-DE" : "en-US";
+      setAddMode(canCreate ? "create" : "connect");
+      setCreateRequestId(crypto.randomUUID());
+      setCreateName(t("voiceCreate.defaultName"));
+      setCreateLanguage(preferredLanguage);
+      setCreateVoiceId(
+        roster?.voices.find((voice) => voice.name.toLocaleLowerCase() === "cimo")?.id ??
+          roster?.voices[0]?.id ??
+          "",
+      );
+      setCreateLine("");
+    }
+    setAdding(true);
+  };
+
+  const previewVoice = (voiceId: string, url: string) => {
+    if (previewingVoice === voiceId) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setPreviewingVoice(null);
+      return;
+    }
+    audioRef.current?.pause();
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    setPreviewingVoice(voiceId);
+    audio.addEventListener("ended", () => setPreviewingVoice(null), { once: true });
+    void audio.play().catch(() => setPreviewingVoice(null));
+  };
+
+  const submitCreate = async () => {
+    if (!createName.trim() || !createVoiceId || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const requestId = createRequestId || crypto.randomUUID();
+      setCreateRequestId(requestId);
+      const result = await createAgent({
+        requestId,
+        name: createName,
+        language: createLanguage,
+        voiceId: createVoiceId,
+        inboundNumber: createLine || undefined,
+      });
+      if (result.status === "working") {
+        setCreateError(t("voiceCreate.inProgress"));
+        return;
+      }
+      closeAdd();
+      load();
+      if (result.agentId) setDetailId(result.agentId);
+    } catch {
+      setCreateError(t("voiceCreate.failed"));
+    } finally {
+      setCreating(false);
+    }
+  };
 
   // Connecting adopts whatever number Retell already has bound to that agent,
   // so inboundNumber stops being hand-typed into agreement with the provider.
   const add = async (agentId: string) => {
     const bound = roster?.phoneNumbers.find((n) => n.agentId === agentId)?.number;
-    setAdding(false);
+    closeAdd();
     setWiring(agentId);
     setWireError(null);
     try {
@@ -167,8 +301,12 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           question the page asks on every visit to pay for a task done once. */}
       <button
         type="button"
-        onClick={() => setAdding(true)}
-        disabled={available.length === 0}
+        onClick={openAdd}
+        disabled={
+          !roster?.configured ||
+          !provisioningReady ||
+          (!canCreate && !canConnect)
+        }
         className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
       >
         {t("settings.voiceConnect")}
@@ -443,7 +581,10 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           does not push the buttons out from under the pointer. */}
       <p className="min-h-[1.25rem] text-sm text-[var(--muted)]">
         {status}
-        {roster?.configured && connected.length === 0 && available.length === 0
+        {roster?.configured &&
+        connected.length === 0 &&
+        available.length === 0 &&
+        !canCreate
           ? t("settings.voiceNoAgents")
           : null}
       </p>
@@ -455,122 +596,318 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           title={t("settings.voiceConnect")}
           hint={t("settings.voiceConnectHint")}
           wide
-          onClose={() => setAdding(false)}
+          onClose={closeAdd}
         >
-          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
-                <tr>
-                  <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
-                  <th className="px-3 py-2 font-medium">{t("settings.voiceLanguage")}</th>
-                  <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
-                  {pickerHasLines && (
-                    <th className="px-3 py-2 font-medium">{t("settings.voiceLine")}</th>
-                  )}
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {pickerRows.map(({ agent, archived: isArchived }) => {
-                  const line = roster?.phoneNumbers.find((number) => number.agentId === agent.id);
-                  return (
-                    <tr
-                      key={agent.id}
-                      className={`group/pick border-t border-[var(--border)] ${
-                        isArchived ? "text-[var(--muted)]" : ""
-                      }`}
-                    >
-                      <td className="whitespace-nowrap px-3 py-2 font-medium">{agent.name}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                        {agent.languages
-                          .map((tag) =>
-                            languageLabel(
-                              tag,
-                              displayLocale,
-                              t("settings.voiceMultipleLanguages"),
-                            ),
-                          )
-                          .join(", ")}
-                      </td>
-                      <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted)]">
-                        {agent.collects.length > 0 && (
-                          <span className="inline-flex items-center gap-2">
-                            {t("settings.voiceCollectsCount").replace(
-                              "{n}",
-                              String(agent.collects.length),
-                            )}
-                            <InfoTip
-                              text={agent.collects.map(humanizeField).join("\n")}
-                              placement="above"
-                            />
-                          </span>
-                        )}
-                      </td>
-                      {pickerHasLines && (
-                        <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                          {line
-                            ? line.nickname === line.number
-                              ? line.number
-                              : `${line.nickname} · ${line.number}`
-                            : ""}
-                        </td>
-                      )}
-                      <td className="whitespace-nowrap px-3 py-2 text-right">
-                        {isArchived ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void setAgentArchived({
-                                retellAgentId: agent.id,
-                                archived: false,
-                              }).then(load)
-                            }
-                            className="rounded-lg px-2 py-1 text-xs hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                          >
-                            {t("settings.voiceRestore")}
-                          </button>
-                        ) : (
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              data-sheet-autofocus
-                              onClick={() => void add(agent.id)}
-                              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
-                            >
-                              {t("common.add")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void setAgentArchived({
-                                  retellAgentId: agent.id,
-                                  archived: true,
-                                }).then(load)
-                              }
-                              className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
-                            >
-                              {t("settings.voiceArchive")}
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {archived.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowArchived((shown) => !shown)}
-              className="mt-2 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          {canCreate && canConnect && !activeProvisioning && (
+            <div
+              role="tablist"
+              className="mb-4 inline-flex rounded-lg bg-[var(--muted-bg)] p-1 text-xs"
             >
-              {showArchived
-                ? t("settings.voiceHideArchived")
-                : t("settings.voiceShowArchived").replace("{n}", String(archived.length))}
-            </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={addMode === "create"}
+                onClick={() => setAddMode("create")}
+                className={`rounded-md px-3 py-1.5 font-medium ${
+                  addMode === "create"
+                    ? "bg-[var(--card)] shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {t("voiceCreate.new")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={addMode === "connect"}
+                onClick={() => setAddMode("connect")}
+                className={`rounded-md px-3 py-1.5 font-medium ${
+                  addMode === "connect"
+                    ? "bg-[var(--card)] shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {t("voiceCreate.existing")}
+              </button>
+            </div>
           )}
+
+          <div className="min-h-[18rem]">
+            {addMode === "create" && canCreate ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitCreate();
+                }}
+                className="flex min-h-[18rem] flex-col"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="sm:col-span-2">
+                    <span className="mb-1 block text-xs font-medium">
+                      {t("voiceCreate.name")}
+                    </span>
+                    <input
+                      data-sheet-autofocus
+                      value={createName}
+                      maxLength={80}
+                      disabled={createFieldsLocked}
+                      onChange={(event) => setCreateName(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--accent)] disabled:opacity-60 sm:text-sm"
+                    />
+                  </label>
+
+                  <label>
+                    <span className="mb-1 block text-xs font-medium">
+                      {t("settings.voiceLanguage")}
+                    </span>
+                    <select
+                      value={createLanguage}
+                      disabled={createFieldsLocked}
+                      onChange={(event) =>
+                        setCreateLanguage(event.target.value as CreateLanguage)
+                      }
+                      className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--accent)] disabled:opacity-60 sm:text-sm"
+                    >
+                      <option value="tr-TR">Türkçe</option>
+                      <option value="en-US">English</option>
+                      <option value="de-DE">Deutsch</option>
+                    </select>
+                  </label>
+
+                  <div>
+                    <label
+                      htmlFor="voice-create-voice"
+                      className="mb-1 block text-xs font-medium"
+                    >
+                      {t("voiceCreate.voice")}
+                    </label>
+                    <span className="flex items-center gap-1">
+                      <select
+                        id="voice-create-voice"
+                        value={createVoiceId}
+                        disabled={createFieldsLocked}
+                        onChange={(event) => {
+                          audioRef.current?.pause();
+                          setPreviewingVoice(null);
+                          setCreateVoiceId(event.target.value);
+                        }}
+                        className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--accent)] disabled:opacity-60 sm:text-sm"
+                      >
+                        {(roster?.voices ?? []).map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {[voice.name, voice.accent, voice.gender]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </option>
+                        ))}
+                        {createVoiceId &&
+                          !roster?.voices.some((voice) => voice.id === createVoiceId) && (
+                            <option value={createVoiceId}>{t("voiceCreate.savedVoice")}</option>
+                          )}
+                      </select>
+                      {selectedVoice?.previewUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            previewVoice(selectedVoice.id, selectedVoice.previewUrl!)
+                          }
+                          aria-label={
+                            previewingVoice === selectedVoice.id
+                              ? t("voiceCreate.stopPreview")
+                              : t("voiceCreate.preview")
+                          }
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                        >
+                          {previewingVoice === selectedVoice.id ? "■" : "▶"}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <span className="mb-1 flex items-center gap-1">
+                      <label htmlFor="voice-create-line" className="text-xs font-medium">
+                      {t("settings.voiceLine")}
+                      </label>
+                      <InfoTip text={t("voiceCreate.lineHint")} />
+                    </span>
+                    <select
+                      id="voice-create-line"
+                      value={createLine}
+                      disabled={createFieldsLocked}
+                      onChange={(event) => setCreateLine(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--accent)] disabled:opacity-60 sm:text-sm"
+                    >
+                      <option value="">{t("voiceCreate.noLine")}</option>
+                      {availableLines.map((line) => (
+                        <option key={line.number} value={line.number}>
+                          {line.nickname === line.number
+                            ? line.number
+                            : `${line.nickname} · ${line.number}`}
+                        </option>
+                      ))}
+                      {createLine &&
+                        !availableLines.some((line) => line.number === createLine) && (
+                          <option value={createLine}>{createLine}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-6">
+                  <p className="min-h-5 text-xs text-[var(--muted)]" aria-live="polite">
+                    {createMessage}
+                  </p>
+                  <div className="mt-2 flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={closeAdd}
+                      className="h-9 rounded-lg px-3 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    >
+                      {t("common.cancel")}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={
+                        setupWorking || !createName.trim() || !createVoiceId
+                      }
+                      className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
+                    >
+                      {setupWorking
+                        ? t("voiceCreate.creating")
+                        : activeProvisioning?.status === "failed"
+                          ? t("voiceCreate.retry")
+                          : t("voiceCreate.submit")}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
+                        <th className="px-3 py-2 font-medium">{t("settings.voiceLanguage")}</th>
+                        <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
+                        {pickerHasLines && (
+                          <th className="px-3 py-2 font-medium">{t("settings.voiceLine")}</th>
+                        )}
+                        <th className="px-3 py-2" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pickerRows.map(({ agent, archived: isArchived }) => {
+                        const line = roster?.phoneNumbers.find(
+                          (number) => number.agentId === agent.id,
+                        );
+                        return (
+                          <tr
+                            key={agent.id}
+                            className={`group/pick border-t border-[var(--border)] ${
+                              isArchived ? "text-[var(--muted)]" : ""
+                            }`}
+                          >
+                            <td className="whitespace-nowrap px-3 py-2 font-medium">
+                              {agent.name}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                              {agent.languages
+                                .map((tag) =>
+                                  languageLabel(
+                                    tag,
+                                    displayLocale,
+                                    t("settings.voiceMultipleLanguages"),
+                                  ),
+                                )
+                                .join(", ")}
+                            </td>
+                            <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted)]">
+                              {agent.collects.length > 0 && (
+                                <span className="inline-flex items-center gap-2">
+                                  {t("settings.voiceCollectsCount").replace(
+                                    "{n}",
+                                    String(agent.collects.length),
+                                  )}
+                                  <InfoTip
+                                    text={agent.collects.map(humanizeField).join("\n")}
+                                    placement="above"
+                                  />
+                                </span>
+                              )}
+                            </td>
+                            {pickerHasLines && (
+                              <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                                {line
+                                  ? line.nickname === line.number
+                                    ? line.number
+                                    : `${line.nickname} · ${line.number}`
+                                  : ""}
+                              </td>
+                            )}
+                            <td className="whitespace-nowrap px-3 py-2 text-right">
+                              {isArchived ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void setAgentArchived({
+                                      retellAgentId: agent.id,
+                                      archived: false,
+                                    }).then(load)
+                                  }
+                                  className="rounded-lg px-2 py-1 text-xs hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                                >
+                                  {t("settings.voiceRestore")}
+                                </button>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    data-sheet-autofocus
+                                    onClick={() => void add(agent.id)}
+                                    className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
+                                  >
+                                    {t("common.add")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void setAgentArchived({
+                                        retellAgentId: agent.id,
+                                        archived: true,
+                                      }).then(load)
+                                    }
+                                    className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
+                                  >
+                                    {t("settings.voiceArchive")}
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {archived.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowArchived((shown) => !shown)}
+                    className="mt-2 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  >
+                    {showArchived
+                      ? t("settings.voiceHideArchived")
+                      : t("settings.voiceShowArchived").replace(
+                          "{n}",
+                          String(archived.length),
+                        )}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </Sheet>
       )}
 

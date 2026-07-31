@@ -250,6 +250,16 @@ points at dev OR prod, so a dev workspace sharing prod's agent truthfully
 shows "results not reaching the app" — do not "fix" it from dev, that steals
 the webhook from prod.
 
+Native phone-agent creation is Randevu-owned. **Add agent** defaults to creating
+an appointment receptionist from the versioned template in
+`convex/lib/voiceAgentTemplate.ts`; connecting an existing agent is the second
+path in that same sheet. `voiceAgentProvisioning` checkpoints the response
+engine, agent, publication and connection behind a short lease, so retries
+resume the same job instead of intentionally creating another one. The app may
+assign an already-provisioned, unclaimed phone line but never buys numbers.
+Provider names, ids, models and plumbing errors stay out of the salon UI; raw
+setup state is visible only in platform admin.
+
 ### Phone-agent variable lifecycle (decided 2026-07-31, Serdar)
 
 Randevu is the source of truth for a phone agent's variables; Retell is the
