@@ -920,6 +920,19 @@ const dictionary = {
     en: "Your Retell agent answers your business phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
     de: "Ihr Retell-Agent nimmt die Anrufe im Betrieb entgegen und vergibt Termine. Richten Sie die Funktions-URL und den Webhook für beendete Anrufe im Retell-Dashboard auf diese Adressen.",
   },
+  "settings.voiceCollectsCount": {
+    tr: "{n} alan",
+    en: "{n} fields",
+    de: "{n} Felder",
+  },
+  // Shown INSTEAD of the endpoints when the resolved site URL is a loopback
+  // address on a deployed page. Printing the URL would look like it worked and
+  // fail silently the moment a customer pasted it into Retell.
+  "settings.voiceEndpointsBroken": {
+    tr: "Bu dağıtımda adresler çözümlenemiyor (yerel adrese işaret ediyor). NEXT_PUBLIC_CONVEX_SITE_URL ayarlanmalı.",
+    en: "These URLs can't be resolved on this deployment — they point at a local address. NEXT_PUBLIC_CONVEX_SITE_URL needs to be set.",
+    de: "Diese URLs lassen sich in dieser Umgebung nicht auflösen — sie zeigen auf eine lokale Adresse. NEXT_PUBLIC_CONVEX_SITE_URL muss gesetzt werden.",
+  },
   "settings.retellAgentId": {
     tr: "Retell agent ID",
     en: "Retell agent ID",

@@ -17,6 +17,7 @@ import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { InlineEditValue } from "./RecordField";
 import { Sheet } from "./Sheet";
+import { resolveSiteUrl, type SiteUrl } from "@/lib/siteUrl";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -519,7 +520,7 @@ type Roster = {
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
 };
 
-function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) {
+function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const { t } = useLanguage();
   const connected = useQuery(api.retell.list, {});
   const connect = useMutation(api.retell.connect);
@@ -567,7 +568,12 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
     <Card disabled={!isOwner}>
       {connected.length > 0 && (
         <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)]">
-          <table className="w-full text-sm">
+          {/* min-w-full, not w-full. w-full pins the table to the container and
+              the cells overflow it anyway — the Enabled toggle and the
+              disconnect button were clipped at the card edge with nothing to
+              grab. min-w-full lets the table size to its content so the
+              overflow-x-auto above actually has something to scroll. */}
+          <table className="min-w-full text-sm">
             <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
@@ -596,8 +602,27 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
                         </span>
                       )}
                     </td>
-                    <td className="max-w-[16rem] truncate px-3 py-2 text-xs text-[var(--muted)]">
-                      {agent && agent.collects.length > 0 ? agent.collects.join(", ") : "—"}
+                    {/* Truncating with no way to see the rest made this cell
+                        decorative — "business_type_confirmed, decision_mak…"
+                        tells you a list exists and nothing about it. The count
+                        is the useful summary at a glance, and the full list is
+                        one hover away. */}
+                    <td className="px-3 py-2 text-xs text-[var(--muted)]">
+                      {agent && agent.collects.length > 0 ? (
+                        <span
+                          className="cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2"
+                          title={agent.collects.join("\n")}
+                        >
+                          {agent.collects.length === 1
+                            ? agent.collects[0]
+                            : t("settings.voiceCollectsCount").replace(
+                                "{n}",
+                                String(agent.collects.length),
+                              )}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <InlineEditValue
@@ -694,12 +719,23 @@ function VoiceCard({ isOwner, siteUrl }: { isOwner: boolean; siteUrl: string }) 
       <div className={`mt-4 ${ROW_GRID}`}>
         <RowLabel label={t("settings.voiceEndpoints")} hint={t("settings.voiceHint")} />
         <div className="min-w-0 space-y-1 text-xs text-[var(--muted)]">
-          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-            {siteUrl}/retell/functions
-          </code>
-          <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-            {siteUrl}/retell/call-ended
-          </code>
+          {site.isMisconfigured ? (
+            // Refusing to print the URL rather than printing a loopback address
+            // onto a page whose entire job is to be copied into Retell. Showing
+            // it would look like it worked and fail silently in production.
+            <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              {t("settings.voiceEndpointsBroken")}
+            </p>
+          ) : (
+            <>
+              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+                {site.url}/retell/functions
+              </code>
+              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
+                {site.url}/retell/call-ended
+              </code>
+            </>
+          )}
         </div>
       </div>
     </Card>
@@ -770,12 +806,7 @@ export function SettingsView() {
   // into cal.com pointed at 3212 instead of 3213 and would never have fired.
   // NEXT_PUBLIC_CONVEX_SITE_URL states it outright; prefer it, and keep the
   // swap as the fallback for deployments that do not set it.
-  const siteUrl =
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL ||
-    (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").replace(
-      ".convex.cloud",
-      ".convex.site",
-    );
+  const site = resolveSiteUrl();
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
 
@@ -900,7 +931,7 @@ export function SettingsView() {
         </>
       )}
 
-      {section === "voice" && <VoiceCard isOwner={isOwner} siteUrl={siteUrl} />}
+      {section === "voice" && <VoiceCard isOwner={isOwner} site={site} />}
 
       {section === "whatsapp" && <ShopPhoneCard isOwner={isOwner} />}
 
@@ -936,7 +967,7 @@ export function SettingsView() {
                 className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
                 onClick={async () => {
                   const token = await rotateToken({});
-                  setCalcomUrl(`${siteUrl}/calcom/webhook?token=${token}`);
+                  setCalcomUrl(`${site.url}/calcom/webhook?token=${token}`);
                   setCopied(false);
                 }}
               >

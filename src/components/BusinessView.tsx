@@ -21,6 +21,7 @@ import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { FieldGroup, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
+import { resolveSiteUrl } from "@/lib/siteUrl";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -588,12 +589,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   // Deriving that by swapping the domain works in the cloud and quietly fails
   // on a local deployment, where the two are ports and not domains — so take
   // the env var that states it outright when there is one.
-  const siteUrl =
-    process.env.NEXT_PUBLIC_CONVEX_SITE_URL ||
-    (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").replace(
-      ".convex.cloud",
-      ".convex.site",
-    );
+  const siteUrl = resolveSiteUrl().url;
   // Read here, not just in ServicesCard: one agent gets configured once, so
   // the generated block below has to cover everything it can be asked for —
   // the properties it may write AND the services it may book.
