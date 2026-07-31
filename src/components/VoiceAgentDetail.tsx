@@ -179,6 +179,11 @@ export function VoiceAgentDetail({
             ))}
           </div>
 
+          {/* One fixed-height pane for both tabs, scrolling inside. The sheet
+              is vertically centered, so if the content height changed on tab
+              switch the whole panel would recenter and the pills would move
+              under the pointer mid-click. */}
+          <div className="h-[55vh] max-h-[34rem] overflow-y-auto pr-1">
           {/* Prompt */}
           {tab === "instructions" && (unsupported ? (
             <p className="text-sm text-[var(--muted)]">{unsupported}</p>
@@ -269,6 +274,7 @@ export function VoiceAgentDetail({
               onPublished={load}
             />
           )}
+          </div>
 
           {/* Test call */}
           <div className="rounded-lg border border-[var(--border)] p-3">
