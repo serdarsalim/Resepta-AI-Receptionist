@@ -17,6 +17,7 @@ import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { InlineEditValue } from "./RecordField";
 import { Sheet } from "./Sheet";
+import { VoiceAgentDetail } from "./VoiceAgentDetail";
 import { resolveSiteUrl, type SiteUrl } from "@/lib/siteUrl";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
@@ -530,6 +531,7 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -594,13 +596,22 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                         the raw id rather than a blank cell: calls still route
                         to it, so silence here would read as "nothing wired". */}
                     <td className="whitespace-nowrap px-3 py-2">
-                      {agent ? (
-                        agent.name
-                      ) : (
-                        <span className="font-mono text-xs text-amber-600 dark:text-amber-400">
-                          {row.retellAgentId}
-                        </span>
-                      )}
+                      {/* The name opens the agent itself — prompt, webhook,
+                          variables, test call. A ghost row opens too: the
+                          detail is where you find out what the id points at. */}
+                      <button
+                        type="button"
+                        onClick={() => setDetailId(row.retellAgentId)}
+                        className="underline-offset-2 hover:underline"
+                      >
+                        {agent ? (
+                          agent.name
+                        ) : (
+                          <span className="font-mono text-xs text-amber-600 dark:text-amber-400">
+                            {row.retellAgentId}
+                          </span>
+                        )}
+                      </button>
                     </td>
                     {/* Truncating with no way to see the rest made this cell
                         decorative — "business_type_confirmed, decision_mak…"
@@ -695,6 +706,8 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
           {t("settings.voiceRefresh")}
         </button>
       </div>
+
+      {detailId && <VoiceAgentDetail agentId={detailId} onClose={() => setDetailId(null)} />}
 
       {adding && (
         <Sheet title={t("settings.voiceConnect")} onClose={() => setAdding(false)}>

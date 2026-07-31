@@ -58,6 +58,7 @@ import type * as platform from "../platform.js";
 import type * as reminders from "../reminders.js";
 import type * as reports from "../reports.js";
 import type * as retell from "../retell.js";
+import type * as retellAgent from "../retellAgent.js";
 import type * as schedule from "../schedule.js";
 import type * as services from "../services.js";
 import type * as staff from "../staff.js";
@@ -123,6 +124,7 @@ declare const fullApi: ApiFromModules<{
   reminders: typeof reminders;
   reports: typeof reports;
   retell: typeof retell;
+  retellAgent: typeof retellAgent;
   schedule: typeof schedule;
   services: typeof services;
   staff: typeof staff;
