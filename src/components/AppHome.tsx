@@ -9,6 +9,7 @@ import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
 import { CampaignsView } from "@/components/CampaignsView";
 import { SettingsView } from "@/components/SettingsView";
+import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
 import { AccountView } from "@/components/AccountView";
 import { ContactView } from "@/components/ContactView";
@@ -70,6 +71,7 @@ export function AppHome() {
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
           {tab === "campaigns" && <CampaignsView />}
+          {tab === "voice" && <VoiceView />}
           {tab === "revenue" && <RevenueView />}
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
               all call this Business, and a salon owner does not think of the
@@ -94,6 +96,7 @@ const TAB_IDS: TabId[] = [
   "customers",
   "inbox",
   "campaigns",
+  "voice",
   "revenue",
   "business",
   "settings",

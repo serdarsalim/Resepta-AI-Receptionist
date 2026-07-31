@@ -13,6 +13,7 @@ import type * as agentTools from "../agentTools.js";
 import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
 import type * as calcom from "../calcom.js";
+import type * as calls from "../calls.js";
 import type * as campaigns from "../campaigns.js";
 import type * as connections from "../connections.js";
 import type * as contactFields from "../contactFields.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   appointments: typeof appointments;
   auth: typeof auth;
   calcom: typeof calcom;
+  calls: typeof calls;
   campaigns: typeof campaigns;
   connections: typeof connections;
   contactFields: typeof contactFields;

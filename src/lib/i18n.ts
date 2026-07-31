@@ -904,6 +904,26 @@ const dictionary = {
     de: "Transkript",
   },
   "calls.recording": { tr: "Kayıt", en: "Recording", de: "Aufnahme" },
+  "calls.summary": { tr: "Özet", en: "Summary", de: "Zusammenfassung" },
+  "calls.unknown": {
+    tr: "Bilinmeyen numara",
+    en: "Unknown number",
+    de: "Unbekannte Nummer",
+  },
+  "calls.loadMore": { tr: "Daha fazla", en: "Load more", de: "Mehr laden" },
+  "calls.nothingCaptured": {
+    tr: "Bu arama için kayıt veya döküm yok.",
+    en: "No recording or transcript for this call.",
+    de: "Keine Aufnahme oder kein Transkript für diesen Anruf.",
+  },
+  // The sidebar destination and its two sections. "Phone agent", the salon's
+  // word, never "voice"/"Retell".
+  "nav.voice": {
+    tr: "Telefon asistanı",
+    en: "Phone agent",
+    de: "Telefonassistent",
+  },
+  "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
 
   "settings.voice": {
     tr: "Sesli asistan",
