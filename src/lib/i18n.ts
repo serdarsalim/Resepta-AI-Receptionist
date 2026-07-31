@@ -303,9 +303,9 @@ const dictionary = {
 
   "customers.title": { tr: "Müşteriler", en: "Customers", de: "Kunden" },
   "customers.new": {
-    tr: "Yeni müşteri",
-    en: "New customer",
-    de: "Neuer Kunde",
+    tr: "Müşteri ekle",
+    en: "Add customer",
+    de: "Kunden hinzufügen",
   },
   "customers.none": {
     tr: "Müşteri yok",
