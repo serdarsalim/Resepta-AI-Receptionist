@@ -871,6 +871,7 @@ export const recordCall = internalMutation({
     summary: v.optional(v.string()),
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
+    collected: v.optional(v.record(v.string(), v.any())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -883,7 +884,22 @@ export const recordCall = internalMutation({
       .query("calls")
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))
       .unique();
-    if (existing) return null; // Retell retries webhooks; first write wins
+    if (existing) {
+      // Not a plain retry-dedupe: Retell sends call_ended first and the
+      // ANALYSIS on a later call_analyzed event. Pure first-write-wins locked
+      // the row in before the summary, outcome and collected values existed —
+      // so the second event fills exactly the fields the first one could not
+      // know, and never overwrites one it did.
+      await ctx.db.patch(existing._id, {
+        durationSec: existing.durationSec ?? args.durationSec,
+        outcome: existing.outcome ?? args.outcome,
+        summary: existing.summary ?? args.summary,
+        transcript: existing.transcript ?? args.transcript,
+        recordingUrl: existing.recordingUrl ?? args.recordingUrl,
+        collected: existing.collected ?? args.collected,
+      });
+      return null;
+    }
     // A caller the salon has never seen is the normal case, not the edge: it is
     // every first-time caller, and it is every demo. This row used to be
     // written with customerId undefined, and the inbox groups by customer (the
@@ -930,6 +946,7 @@ export const recordCall = internalMutation({
       transcript: args.transcript,
       recordingUrl: args.recordingUrl,
       retellCallId: args.retellCallId,
+      collected: args.collected,
     });
     return null;
   },

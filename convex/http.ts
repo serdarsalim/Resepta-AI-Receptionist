@@ -559,6 +559,14 @@ http.route({
     const endedAt = Number(call.end_timestamp ?? 0);
     const callId = String(call.call_id ?? "");
     const agentId = String(call.agent_id ?? "");
+    // Everything the agent collected, merged the same way the contact update
+    // uses it below. Also stored raw on the call row, because "what did they
+    // answer on THIS call" belongs next to that call's recording.
+    const collected: Record<string, unknown> = {
+      ...(call.retell_llm_dynamic_variables as Record<string, unknown> | undefined),
+      ...(call.collected_dynamic_variables as Record<string, unknown> | undefined),
+      ...(analysis.custom_analysis_data as Record<string, unknown> | undefined),
+    };
     if (callId && agentId) {
       await ctx.runMutation(internal.retell.recordCall, {
         retellAgentId: agentId,
@@ -570,6 +578,7 @@ http.route({
         summary: String(analysis.call_summary ?? "") || undefined,
         transcript: String(call.transcript ?? "") || undefined,
         recordingUrl: String(call.recording_url ?? "") || undefined,
+        collected: Object.keys(collected).length > 0 ? collected : undefined,
       });
     }
 
@@ -581,11 +590,6 @@ http.route({
     // exists. Both call_ended and call_analyzed reach here (the gate above
     // dropped call_started); writing the same values twice is a no-op.
     if (agentId) {
-      const collected: Record<string, unknown> = {
-        ...(call.retell_llm_dynamic_variables as Record<string, unknown> | undefined),
-        ...(call.collected_dynamic_variables as Record<string, unknown> | undefined),
-        ...(analysis.custom_analysis_data as Record<string, unknown> | undefined),
-      };
       const values = coerceContactValues(collected);
       const fromNumber = String(call.from_number ?? "");
       if (fromNumber && Object.keys(values).length > 0) {

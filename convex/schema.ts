@@ -292,6 +292,11 @@ export default defineSchema({
     // used to drop it, which made "calls per agent today" unanswerable. Only
     // stamped on rows written since this field landed.
     retellAgentId: v.optional(v.string()),
+    // What the agent collected on THIS call, as Retell reported it. The values
+    // also flow onto the customer record (coerced, gated by field config); this
+    // copy is the raw per-call answer to "what did they say", kept with the
+    // recording and transcript it belongs to.
+    collected: v.optional(v.record(v.string(), v.any())),
   })
     .index("by_org", ["orgId"])
     .index("by_org_started", ["orgId", "startedAt"])

@@ -911,6 +911,16 @@ const dictionary = {
     de: "Unbekannte Nummer",
   },
   "calls.loadMore": { tr: "Daha fazla", en: "Load more", de: "Mehr laden" },
+  "calls.caller": { tr: "Arayan", en: "Caller", de: "Anrufer" },
+  "calls.when": { tr: "Zaman", en: "When", de: "Zeit" },
+  "calls.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
+  "calls.outcome": { tr: "Sonuç", en: "Outcome", de: "Ergebnis" },
+  // Per-call, so "what was collected", not the agent card's "what it collects".
+  "calls.collected": {
+    tr: "Toplanan bilgiler",
+    en: "Collected",
+    de: "Erfasste Angaben",
+  },
   "calls.nothingCaptured": {
     tr: "Bu arama için kayıt veya döküm yok.",
     en: "No recording or transcript for this call.",

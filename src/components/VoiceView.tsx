@@ -1,7 +1,7 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { resolveSiteUrl } from "@/lib/siteUrl";
@@ -42,6 +42,7 @@ function CallHistory() {
     summary: string | null;
     transcript: string | null;
     recordingUrl: string | null;
+    collected: Record<string, unknown> | null;
     customerName: string | null;
   };
   const calls = results as CallRow[];
@@ -52,63 +53,107 @@ function CallHistory() {
 
   return (
     <div className="space-y-2">
-      {calls.map((c) => {
-        const isOpen = open === c._id;
-        return (
-          <Card key={c._id}>
-            <button
-              type="button"
-              onClick={() => setOpen(isOpen ? null : c._id)}
-              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-left"
-            >
-              <span className="text-sm font-medium">
-                {c.customerName || c.fromNumber || t("calls.unknown")}
-              </span>
-              <span className="text-xs text-[var(--muted)]">
-                {new Date(c.startedAt).toLocaleString()}
-              </span>
-              {c.durationSec !== null && (
-                <span className="text-xs text-[var(--muted)]">
-                  {fmtDuration(c.durationSec)}
-                </span>
-              )}
-              {c.outcome && (
-                <span className="ml-auto rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                  {c.outcome}
-                </span>
-              )}
-            </button>
-
-            {isOpen && (
-              <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
-                {c.recordingUrl && (
-                  <div>
-                    <div className="mb-1 text-xs font-medium">{t("calls.recording")}</div>
-                    <audio controls src={c.recordingUrl} className="h-9 w-full" />
-                  </div>
-                )}
-                {c.summary && (
-                  <div>
-                    <div className="mb-1 text-xs font-medium">{t("calls.summary")}</div>
-                    <p className="text-sm text-[var(--muted)]">{c.summary}</p>
-                  </div>
-                )}
-                {c.transcript && (
-                  <div>
-                    <div className="mb-1 text-xs font-medium">{t("calls.transcript")}</div>
-                    <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-[var(--muted-bg)] p-3 font-sans text-xs leading-relaxed">
-                      {c.transcript}
-                    </pre>
-                  </div>
-                )}
-                {!c.recordingUrl && !c.summary && !c.transcript && (
-                  <p className="text-xs text-[var(--muted)]">{t("calls.nothingCaptured")}</p>
-                )}
-              </div>
-            )}
-          </Card>
-        );
-      })}
+      <Card>
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+          <table className="min-w-full text-sm">
+            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+              <tr>
+                <th className="px-3 py-2 font-medium">{t("calls.caller")}</th>
+                <th className="px-3 py-2 font-medium">{t("calls.when")}</th>
+                <th className="px-3 py-2 font-medium">{t("calls.duration")}</th>
+                <th className="px-3 py-2 font-medium">{t("calls.outcome")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calls.map((c) => {
+                const isOpen = open === c._id;
+                return (
+                  <Fragment key={c._id}>
+                    <tr
+                      onClick={() => setOpen(isOpen ? null : c._id)}
+                      className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--muted-bg)]"
+                    >
+                      <td className="whitespace-nowrap px-3 py-2 font-medium">
+                        {c.customerName || c.fromNumber || t("calls.unknown")}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                        {new Date(c.startedAt).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-[var(--muted)]">
+                        {fmtDuration(c.durationSec)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {c.outcome && (
+                          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                            {c.outcome}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-t border-[var(--border)] bg-[var(--muted-bg)]">
+                        <td colSpan={4} className="px-3 pb-4 pt-2">
+                          <div className="space-y-3">
+                            {c.recordingUrl && (
+                              <div>
+                                <div className="mb-1 text-xs font-medium">
+                                  {t("calls.recording")}
+                                </div>
+                                <audio controls src={c.recordingUrl} className="h-9 w-full" />
+                              </div>
+                            )}
+                            {c.collected && Object.keys(c.collected).length > 0 && (
+                              <div>
+                                <div className="mb-1 text-xs font-medium">
+                                  {t("calls.collected")}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Object.entries(c.collected).map(([k, v]) => (
+                                    <span
+                                      key={k}
+                                      className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs"
+                                    >
+                                      {k.replace(/_/g, " ")}
+                                      <span className="text-[var(--muted)]"> · {String(v)}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {c.summary && (
+                              <div>
+                                <div className="mb-1 text-xs font-medium">
+                                  {t("calls.summary")}
+                                </div>
+                                <p className="text-sm text-[var(--muted)]">{c.summary}</p>
+                              </div>
+                            )}
+                            {c.transcript && (
+                              <div>
+                                <div className="mb-1 text-xs font-medium">
+                                  {t("calls.transcript")}
+                                </div>
+                                <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-[var(--card)] p-3 font-sans text-xs leading-relaxed">
+                                  {c.transcript}
+                                </pre>
+                              </div>
+                            )}
+                            {!c.recordingUrl && !c.summary && !c.transcript && (
+                              <p className="text-xs text-[var(--muted)]">
+                                {t("calls.nothingCaptured")}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {status === "CanLoadMore" && (
         <button

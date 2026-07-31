@@ -42,6 +42,7 @@ export const list = query({
         summary: c.summary ?? null,
         transcript: c.transcript ?? null,
         recordingUrl: c.recordingUrl ?? null,
+        collected: c.collected ?? null,
         customerName: (c.customerId && names.get(c.customerId)) || null,
       })),
     };
