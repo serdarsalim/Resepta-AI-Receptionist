@@ -1009,9 +1009,9 @@ const dictionary = {
   },
   "settings.voiceRefresh": { tr: "Yenile", en: "Refresh", de: "Aktualisieren" },
   "settings.voiceConnect": {
-    tr: "Asistan bağla",
-    en: "Connect an agent",
-    de: "Assistent verbinden",
+    tr: "Asistan ekle",
+    en: "Add agent",
+    de: "Assistent hinzufügen",
   },
   "settings.voiceDisconnect": {
     tr: "Bağlantıyı kes",

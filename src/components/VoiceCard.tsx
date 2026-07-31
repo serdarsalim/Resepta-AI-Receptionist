@@ -29,6 +29,28 @@ type Roster = {
   hiddenAgentIds: string[];
 };
 
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={spinning ? "animate-spin" : undefined}
+      aria-hidden
+    >
+      <path d="M21 12a9 9 0 0 0-15-6.7L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 15 6.7l3-2.7" />
+      <path d="M21 21v-5h-5" />
+    </svg>
+  );
+}
+
 export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const { t } = useLanguage();
   const connected = useQuery(api.retell.list, {});
@@ -93,18 +115,46 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
         ? t("settings.voiceUnreachable")
         : t("settings.voiceNotProvisioned");
 
+  const agentActions = (
+    <>
+      {/* Adding opens a sheet. A permanent picker under the table would be a
+          question the page asks on every visit to pay for a task done once. */}
+      <button
+        type="button"
+        onClick={() => setAdding(true)}
+        disabled={available.length === 0}
+        className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-40"
+      >
+        {t("settings.voiceConnect")}
+      </button>
+      <button
+        type="button"
+        onClick={load}
+        disabled={loading}
+        aria-label={t("settings.voiceRefresh")}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
+      >
+        <RefreshIcon spinning={loading} />
+      </button>
+    </>
+  );
+
   return (
     // Not a Card: the table is the main actor and frames itself. The fieldset
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
-      {connected.length > 0 && (
-        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
+      {connected.length > 0 ? (
+        <div className="mb-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <div className="flex items-center justify-end gap-1 px-2 py-1.5">
+            {agentActions}
+          </div>
+          <div className="overflow-x-auto">
           {/* min-w-full, not w-full. w-full pins the table to the container and
               the cells overflow it anyway — the Enabled toggle and the
               disconnect button were clipped at the card edge with nothing to
-              grab. min-w-full lets the table size to its content so the
-              overflow-x-auto above actually has something to scroll. */}
+              grab. min-w-full lets the table size to its content so the inner
+              overflow-x-auto actually has something to scroll. */}
           <table className="min-w-full text-sm">
             <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
               <tr>
@@ -327,7 +377,10 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
               })}
             </tbody>
           </table>
+          </div>
         </div>
+      ) : (
+        <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
       )}
 
       {/* Reserved whether or not it says anything, so refreshing into an error
@@ -339,27 +392,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           ? t("settings.voiceNoAgents")
           : null}
       </p>
-
-      <div className="mt-2 flex items-center gap-1">
-        {/* Adding opens a sheet. A permanent picker under the table would be a
-            question the page asks on every visit to pay for a task done once. */}
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          disabled={available.length === 0}
-          className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-40"
-        >
-          {t("settings.voiceConnect")}
-        </button>
-        <button
-          type="button"
-          onClick={load}
-          disabled={loading}
-          className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
-        >
-          {t("settings.voiceRefresh")}
-        </button>
-      </div>
 
       {detailId && <VoiceAgentDetail agentId={detailId} onClose={() => setDetailId(null)} />}
 
