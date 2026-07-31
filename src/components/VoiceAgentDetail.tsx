@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
+import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import {
   VoiceVariablesEditor,
@@ -67,6 +68,10 @@ export function VoiceAgentDetail({
   // about state nobody checked.
   const [previous, setPrevious] = useState<string | null>(null);
   const [testTo, setTestTo] = useState("");
+  // Instructions and Variables are one system (the prompt references the
+  // variables), but stacked they made the sheet a scroll. Two tabs, and the
+  // @-picker bridges them: the prompt can reach every variable by label.
+  const [tab, setTab] = useState<"instructions" | "variables">("instructions");
 
   const load = useCallback(() => {
     setError(null);
@@ -151,8 +156,31 @@ export function VoiceAgentDetail({
             )}
           </div>
 
+          <div className="flex gap-1">
+            {(
+              [
+                { id: "instructions" as const, label: t("voiceDetail.prompt") },
+                { id: "variables" as const, label: t("voiceVariables.title") },
+              ]
+            ).map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => setTab(entry.id)}
+                aria-current={tab === entry.id ? "page" : undefined}
+                className={`rounded-full px-3 py-1 text-xs transition-colors ${
+                  tab === entry.id
+                    ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+
           {/* Prompt */}
-          {unsupported ? (
+          {tab === "instructions" && (unsupported ? (
             <p className="text-sm text-[var(--muted)]">{unsupported}</p>
           ) : (
             <div>
@@ -163,12 +191,13 @@ export function VoiceAgentDetail({
                   <span className="text-xs text-[var(--muted)]">v{detail.version}</span>
                 )}
               </div>
-              <textarea
+              <PromptEditor
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={14}
-                spellCheck={false}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 font-mono text-xs leading-relaxed"
+                onChange={setDraft}
+                variables={detail.variableConfig.items.map((row) => ({
+                  key: row.key,
+                  label: row.label,
+                }))}
               />
               <label className="mt-2 block">
                 <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
@@ -227,17 +256,19 @@ export function VoiceAgentDetail({
                 {status && <span className="text-xs text-[var(--muted)]">{status}</span>}
               </div>
             </div>
-          )}
+          ))}
 
-          <VoiceVariablesEditor
-            agentId={agentId}
-            version={detail.version}
-            engineType={detail.engineType}
-            managed={detail.variableConfig.managed}
-            initial={detail.variableConfig.items}
-            contactFields={detail.contactFields}
-            onPublished={load}
-          />
+          {tab === "variables" && (
+            <VoiceVariablesEditor
+              agentId={agentId}
+              version={detail.version}
+              engineType={detail.engineType}
+              managed={detail.variableConfig.managed}
+              initial={detail.variableConfig.items}
+              contactFields={detail.contactFields}
+              onPublished={load}
+            />
+          )}
 
           {/* Test call */}
           <div className="rounded-lg border border-[var(--border)] p-3">

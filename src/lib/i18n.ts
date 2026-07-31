@@ -1394,6 +1394,26 @@ const dictionary = {
     en: "Call only",
     de: "Nur Anruf",
   },
+  "voiceDetail.atHint": {
+    tr: "Değişken eklemek için @ yazın",
+    en: "Type @ to insert a variable",
+    de: "Tippe @, um eine Variable einzufügen",
+  },
+  "voiceVariables.notConfigured": {
+    tr: "Henüz tanımlı değil",
+    en: "Not set up yet",
+    de: "Noch nicht eingerichtet",
+  },
+  "voiceVariables.saveToCustomer": {
+    tr: "Müşteri kartına da kaydet",
+    en: "Also save to the customer card",
+    de: "Auch im Kundenprofil speichern",
+  },
+  "voiceVariables.fieldExists": {
+    tr: "Bu adla bir müşteri alanı zaten var.",
+    en: "A customer field with this name already exists.",
+    de: "Ein Kundenfeld mit diesem Namen existiert bereits.",
+  },
   "voiceVariables.noFieldsHint": {
     tr: "Aramayla birlikte kaydedilir. Müşteri kartına da yazması için İşletme bölümünde bir alanı telefon asistanına açın.",
     en: "Saved with the call. To also write into the customer card, allow a field for the phone agent under Business.",

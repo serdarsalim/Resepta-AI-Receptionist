@@ -1,7 +1,7 @@
 "use client";
 
-import { useAction } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useAction, useMutation } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -88,19 +88,83 @@ export function VoiceVariablesEditor({
 }) {
   const { t } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
+  const createContactField = useMutation(api.contactFields.create);
   const [draft, setDraft] = useState(initial);
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [form, setForm] = useState<VoiceVariable>(blankVariable);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [previous, setPrevious] = useState<VoiceVariable[] | null>(null);
+  // Quick add: a row that appears under the header, not a sheet. Name plus
+  // one decision (customer card or not); everything else gets the defaults
+  // and the full sheet stays one click away on the row.
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickToCustomer, setQuickToCustomer] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+  const quickRef = useRef<HTMLInputElement>(null);
+  // Customer fields created from quick add, so their labels resolve before
+  // the parent reloads. Reloading here would reset the unpublished draft.
+  const [createdFields, setCreatedFields] = useState<VoiceContactField[]>([]);
 
   useEffect(() => setDraft(initial), [initial]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
-  const voiceFields = contactFields.filter((field) => field.voice);
-  const fieldById = new Map(contactFields.map((field) => [field.id, field]));
+  const allFields = useMemo(
+    () => [...contactFields, ...createdFields],
+    [contactFields, createdFields],
+  );
+  const voiceFields = allFields.filter((field) => field.voice);
+  const fieldById = new Map(allFields.map((field) => [field.id, field]));
   const supportsLive = engineType === "retell-llm";
+
+  const quickAdd = async () => {
+    const label = quickName.trim();
+    if (!label) return;
+    const key = keyFromLabel(label);
+    if (!key) return;
+    setQuickError(null);
+    if (draft.some((row) => row.key === key)) {
+      setQuickError(t("voiceVariables.fieldExists"));
+      return;
+    }
+    let contactFieldId: string | undefined;
+    if (quickToCustomer) {
+      // An already-configured voice field with this key is the same intent —
+      // link it instead of failing on the duplicate.
+      const existing = voiceFields.find((field) => field.key === key);
+      if (existing) {
+        contactFieldId = existing.id;
+      } else {
+        try {
+          contactFieldId = (await createContactField({
+            label,
+            type: "text",
+            source: "voice",
+          })) as string;
+          setCreatedFields((rows) => [
+            ...rows,
+            { id: contactFieldId!, key, label, type: "text", options: [], voice: true },
+          ]);
+        } catch {
+          setQuickError(t("voiceVariables.fieldExists"));
+          return;
+        }
+      }
+    }
+    setDraft((rows) => [
+      ...rows,
+      {
+        ...blankVariable(),
+        key,
+        label,
+        destination: contactFieldId ? "contact" : "call",
+        contactFieldId,
+      },
+    ]);
+    setQuickName("");
+    quickRef.current?.focus();
+  };
 
   const beforeLabel = (row: VoiceVariable) => {
     switch (row.beforeSource) {
@@ -131,11 +195,6 @@ export function VoiceVariablesEditor({
       : row.duringMode === "confirm"
         ? t("voiceVariables.confirm")
         : "";
-
-  const openNew = () => {
-    setForm(blankVariable());
-    setEditing("new");
-  };
 
   const openEdit = (index: number) => {
     setForm({ ...draft[index], choices: draft[index].choices?.slice() });
@@ -209,12 +268,52 @@ export function VoiceVariablesEditor({
         </div>
         <button
           type="button"
-          onClick={openNew}
+          onClick={() => {
+            setQuickOpen((open) => !open);
+            setQuickError(null);
+            requestAnimationFrame(() => quickRef.current?.focus());
+          }}
           className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
         >
           {t("voiceVariables.add")}
         </button>
       </div>
+
+      {quickOpen && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--muted-bg)] p-2">
+          <input
+            ref={quickRef}
+            value={quickName}
+            onChange={(event) => setQuickName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void quickAdd();
+              if (event.key === "Escape") setQuickOpen(false);
+            }}
+            placeholder={t("voiceVariables.label")}
+            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
+          />
+          <label className="inline-flex items-center gap-1.5 text-xs">
+            <input
+              type="checkbox"
+              checked={quickToCustomer}
+              onChange={(event) => setQuickToCustomer(event.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            {t("voiceVariables.saveToCustomer")}
+          </label>
+          <button
+            type="button"
+            disabled={!quickName.trim()}
+            onClick={() => void quickAdd()}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
+          >
+            {t("common.add")}
+          </button>
+          {quickError && (
+            <span className="text-xs text-amber-700 dark:text-amber-400">{quickError}</span>
+          )}
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
         <table className="w-full min-w-[760px] text-sm">

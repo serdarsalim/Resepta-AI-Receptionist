@@ -48,7 +48,10 @@ export const create = mutation({
     options: v.optional(v.array(v.string())),
     source: v.optional(fieldSource),
   },
-  returns: v.null(),
+  // Returns the new row's id so a caller wiring the field somewhere else
+  // (e.g. a voice variable destination) doesn't have to re-derive the key
+  // and search for it.
+  returns: v.id("contactFields"),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
     const label = args.label.trim();
@@ -67,7 +70,7 @@ export const create = mutation({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
     if (existing.some((field) => field.key === key)) throw new Error("field-exists");
-    await ctx.db.insert("contactFields", {
+    return await ctx.db.insert("contactFields", {
       orgId,
       key,
       label,
@@ -81,7 +84,6 @@ export const create = mutation({
       // meaning: a field nobody marked is a field staff fill in.
       source: args.source === "voice" ? "voice" : undefined,
     });
-    return null;
   },
 });
 
