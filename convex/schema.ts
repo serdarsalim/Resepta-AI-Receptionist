@@ -743,6 +743,20 @@ export default defineSchema({
     // and never sends the person's name or id to the salon's browser. The
     // salon is owed "Autotakt changed this", not an individual's name.
     viaOperator: v.optional(v.boolean()),
+    // How this happened, not who. The same person is "user" when they click in
+    // the app and "agent" when they ask Claude to do it from their phone.
+    // Unset reads as "user", so every row written before this keeps its
+    // meaning. Sits alongside viaOperator rather than inside it: an operator
+    // acting through an agent is both, and collapsing them would hide one.
+    actorKind: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
+    // Which MCP connection did it, so the feed can filter to one client and
+    // offer a per-connector revoke.
+    connectionId: v.optional(v.id("mcpConnections")),
+    // The journal row backing an agent write, so a feed line can offer Undo
+    // without re-deriving what changed.
+    agentActionId: v.optional(v.id("agentActions")),
     kind: v.union(
       v.literal("appointment_created"),
       v.literal("appointment_status"),
@@ -762,6 +776,18 @@ export default defineSchema({
       // reads, and a failure nobody sees is the same as no failure at all.
       // `detail` carries the name, the time and the number as typed.
       v.literal("booking_dropped"),
+      // A note written on a customer. Notes have existed since long before the
+      // feed recorded them; an agent logging "she asked to move to Thursday"
+      // from a phone is the first thing that needs it visible to the salon.
+      v.literal("note_added"),
+      // Customer details edited. customer_created and customer_deleted were
+      // enough while only a human could type; an agent editing a phone number
+      // is exactly the change an owner wants to see and be able to take back.
+      v.literal("customer_updated"),
+      // An agent action reversed. Its own row rather than deleting the
+      // original: "changed, then put back" is the honest history, and erasing
+      // half of it would be a lie told to whoever reads the feed next.
+      v.literal("agent_undo"),
     ),
     customerId: v.optional(v.id("customers")),
     appointmentId: v.optional(v.id("appointments")),
@@ -772,6 +798,70 @@ export default defineSchema({
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"]),
+
+  // A chat client (Claude, ChatGPT) holding a key that lets it read and act on
+  // ONE workspace as ONE person. The key pins both, because this product is a
+  // single deployment where every row carries an orgId — a key that only knew
+  // the person would have to guess which salon they meant, and guessing wrong
+  // writes a stylist's note into someone else's business.
+  //
+  // Pinning the org is not the same as trusting it: `memberships` stays the
+  // authority, exactly as in lib/orgAuth.ts, and is re-checked on every call.
+  // An owner removing someone from the team has to kill that person's connector
+  // too, and they will not think to. Re-checking is what makes the removal
+  // enough on its own.
+  mcpConnections: defineTable({
+    orgId: v.id("orgs"),
+    userId: v.id("users"),
+    // The label a human chose, shown in the feed as "Ayşe · Claude".
+    name: v.string(),
+    key: v.string(),
+    // The client's SELF-REPORTED identity. A label for reading the feed, never
+    // a permission — anything can claim to be Claude during setup. Gate on this
+    // row's own id if you ever need to restrict a client.
+    client: v.union(
+      v.literal("claude"),
+      v.literal("chatgpt"),
+      v.literal("other"),
+    ),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    // Revoked rather than deleted, so lastUsedAt and the journal rows pointing
+    // at this connection survive someone asking what it did.
+    revoked: v.optional(v.boolean()),
+  })
+    .index("by_key", ["key"])
+    .index("by_org", ["orgId", "createdAt"])
+    .index("by_user", ["userId"]),
+
+  // Every mutating tool call a connection makes, with enough prior state to
+  // reverse it. Field-level, NOT whole-document: an undo that restored a
+  // snapshot would quietly revert whatever a stylist edited in between, and the
+  // person who lost their work would have no idea why.
+  agentActions: defineTable({
+    orgId: v.id("orgs"),
+    connectionId: v.id("mcpConnections"),
+    userId: v.id("users"),
+    tool: v.string(),
+    // JSON. What the model asked for, so the feed shows intent and not just
+    // outcome.
+    args: v.string(),
+    targetTable: v.string(),
+    targetId: v.string(),
+    // JSON of ONLY the keys the tool wrote.
+    before: v.string(),
+    after: v.string(),
+    at: v.number(),
+    // Irreversible by nature — a sent WhatsApp, a placed call. Journaled all
+    // the same, so one query answers "what did this connection do", and undo
+    // refuses rather than pretending.
+    reversible: v.boolean(),
+    undoneAt: v.optional(v.number()),
+    undoneByActionId: v.optional(v.id("agentActions")),
+  })
+    .index("by_org", ["orgId", "at"])
+    .index("by_connection", ["connectionId", "at"])
+    .index("by_target", ["targetTable", "targetId", "at"]),
 
   // Staff-written notes on a customer — "allergic to ammonia", "always late,
   // book the 10:30". Their own table, NOT a row in `messages`: a note has no

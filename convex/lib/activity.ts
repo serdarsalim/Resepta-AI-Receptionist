@@ -46,13 +46,27 @@ export async function recordActivity(
     // customer's own submission. The call site knows which door it is; the
     // cookie does not.
     system?: boolean;
+    // An MCP client acting for someone. There is no session cookie on that
+    // door either — the person comes from the key, not from auth — so the
+    // actor is passed in rather than looked up. Supplying this also marks the
+    // row "agent", which is how the feed tells Ayşe clicking apart from Ayşe
+    // asking Claude to do it from the bus.
+    agent?: {
+      actorId: Id<"users">;
+      connectionId: Id<"mcpConnections">;
+      agentActionId?: Id<"agentActions">;
+    };
   },
 ): Promise<void> {
   try {
     // Unset for anything the system did on its own — a webhook, the voice
     // agent, a cron. The reader sees "system" rather than a name that would
     // be a lie.
-    const actorId = args.system ? null : await getAuthUserId(ctx);
+    const actorId = args.agent
+      ? args.agent.actorId
+      : args.system
+        ? null
+        : await getAuthUserId(ctx);
     // Was this written by the operator working inside this business? Derived
     // here rather than threaded through every call site, so no mutation has to
     // remember to pass it and none can forget. The actor row keeps the real
@@ -70,6 +84,9 @@ export async function recordActivity(
       orgId: args.orgId,
       actorId: actorId ?? undefined,
       viaOperator,
+      actorKind: args.agent ? "agent" : args.system ? "system" : undefined,
+      connectionId: args.agent?.connectionId,
+      agentActionId: args.agent?.agentActionId,
       kind: args.kind,
       customerId: args.customerId,
       appointmentId: args.appointmentId,
