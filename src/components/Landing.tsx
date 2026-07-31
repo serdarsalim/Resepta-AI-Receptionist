@@ -377,12 +377,22 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
               </span>
             </div>
             <div className="mt-4 grid grid-cols-[3rem_1fr] gap-x-3 gap-y-3 text-xs sm:grid-cols-[4rem_1fr]">
-              <span className="py-2 text-[var(--muted)]">09:30</span>
-              <span className="rounded-lg bg-[color-mix(in_srgb,var(--brand)_10%,var(--card))] px-3 py-2 font-medium">Elif · 09:30</span>
-              <span className="py-2 text-[var(--muted)]">11:00</span>
-              <span className="rounded-lg bg-[color-mix(in_srgb,var(--accent)_9%,var(--card))] px-3 py-2 font-medium">Mert · 11:00</span>
-              <span className="py-2 text-[var(--muted)]">14:30</span>
-              <span className="rounded-lg bg-[color-mix(in_srgb,var(--brand)_16%,var(--card))] px-3 py-2 font-medium">Derya · 14:30</span>
+              {hero.calendarEntries.map((entry, index) => (
+                <div key={`${entry.time}-${entry.name}`} className="contents">
+                  <span className="py-2 text-[var(--muted)]">{entry.time}</span>
+                  <span
+                    className={`rounded-lg px-3 py-2 font-medium ${
+                      index === 1
+                        ? "bg-[color-mix(in_srgb,var(--accent)_9%,var(--card))]"
+                        : index === 2
+                          ? "bg-[color-mix(in_srgb,var(--brand)_16%,var(--card))]"
+                          : "bg-[color-mix(in_srgb,var(--brand)_10%,var(--card))]"
+                    }`}
+                  >
+                    {entry.name} · {entry.time}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

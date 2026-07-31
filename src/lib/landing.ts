@@ -45,6 +45,7 @@ export type LandingCopy = {
     confirmed: string;
     today: string;
     calendar: string;
+    calendarEntries: Array<{ time: string; name: string }>;
   };
   workflowEyebrow: string;
   workflowTitle: string;
@@ -100,7 +101,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     hero: {
       incoming: "Gelen arama",
       answered: "Yanıtlandı",
-      caller: "Elif Demir",
+      caller: "Derya Akın",
       request: "Perşembe öğleden sonra için randevu istiyor",
       booked: "Randevu oluşturuldu",
       appointment: "Perşembe · 14:30",
@@ -108,6 +109,11 @@ export const LANDING: Record<Language, LandingCopy> = {
       confirmed: "Müşteri onayladı",
       today: "Bugün",
       calendar: "Takvim",
+      calendarEntries: [
+        { time: "09:30", name: "Elif" },
+        { time: "11:00", name: "Mert" },
+        { time: "14:30", name: "Derya" },
+      ],
     },
     workflowEyebrow: "Tek bir akış",
     workflowTitle: "Telefon çalar. Takvim dolar. Müşteri haberdar olur.",
@@ -239,7 +245,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     hero: {
       incoming: "Incoming call",
       answered: "Answered",
-      caller: "Elif Demir",
+      caller: "Olivia Reed",
       request: "Looking for an appointment on Thursday afternoon",
       booked: "Appointment booked",
       appointment: "Thursday · 14:30",
@@ -247,6 +253,11 @@ export const LANDING: Record<Language, LandingCopy> = {
       confirmed: "Customer confirmed",
       today: "Today",
       calendar: "Calendar",
+      calendarEntries: [
+        { time: "09:30", name: "Emily" },
+        { time: "11:00", name: "James" },
+        { time: "14:30", name: "Olivia" },
+      ],
     },
     workflowEyebrow: "One joined-up workflow",
     workflowTitle: "The phone rings. The calendar fills. The customer stays informed.",
@@ -284,12 +295,12 @@ export const LANDING: Record<Language, LandingCopy> = {
       calls: "4 calls",
       customers: "3 new customers",
       appointments: [
-        { time: "09:30", name: "Elif Demir", service: "First visit", status: "Confirmed" },
-        { time: "11:00", name: "Mert Kaya", service: "Follow-up", status: "Reminder sent" },
-        { time: "14:30", name: "Derya Akın", service: "Appointment", status: "New" },
+        { time: "09:30", name: "Emily Carter", service: "First visit", status: "Confirmed" },
+        { time: "11:00", name: "James Wilson", service: "Follow-up", status: "Reminder sent" },
+        { time: "14:30", name: "Olivia Reed", service: "Appointment", status: "New" },
       ],
       callTitle: "New call record",
-      callSummary: "Derya booked an appointment for Thursday afternoon.",
+      callSummary: "Olivia booked an appointment for Thursday afternoon.",
       customerTitle: "Customer record updated",
       customerDetail: "Preferred time · Afternoon",
     },
@@ -378,7 +389,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     hero: {
       incoming: "Eingehender Anruf",
       answered: "Angenommen",
-      caller: "Elif Demir",
+      caller: "Sophie Hartmann",
       request: "Möchte am Donnerstagnachmittag einen Termin",
       booked: "Termin eingetragen",
       appointment: "Donnerstag · 14:30",
@@ -386,6 +397,11 @@ export const LANDING: Record<Language, LandingCopy> = {
       confirmed: "Kundin hat bestätigt",
       today: "Heute",
       calendar: "Kalender",
+      calendarEntries: [
+        { time: "09:30", name: "Anna" },
+        { time: "11:00", name: "Lukas" },
+        { time: "14:30", name: "Sophie" },
+      ],
     },
     workflowEyebrow: "Ein durchgängiger Ablauf",
     workflowTitle: "Das Telefon klingelt. Der Kalender füllt sich. Der Kunde bleibt informiert.",
@@ -423,12 +439,12 @@ export const LANDING: Record<Language, LandingCopy> = {
       calls: "4 Anrufe",
       customers: "3 neue Kunden",
       appointments: [
-        { time: "09:30", name: "Elif Demir", service: "Ersttermin", status: "Bestätigt" },
-        { time: "11:00", name: "Mert Kaya", service: "Kontrolle", status: "Erinnert" },
-        { time: "14:30", name: "Derya Akın", service: "Termin", status: "Neu" },
+        { time: "09:30", name: "Anna Keller", service: "Ersttermin", status: "Bestätigt" },
+        { time: "11:00", name: "Lukas Weber", service: "Kontrolle", status: "Erinnert" },
+        { time: "14:30", name: "Sophie Hartmann", service: "Termin", status: "Neu" },
       ],
       callTitle: "Neuer Anruf erfasst",
-      callSummary: "Derya hat einen Termin am Donnerstagnachmittag vereinbart.",
+      callSummary: "Sophie hat einen Termin am Donnerstagnachmittag vereinbart.",
       customerTitle: "Kundenprofil aktualisiert",
       customerDetail: "Bevorzugte Zeit · Nachmittag",
     },
