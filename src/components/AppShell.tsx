@@ -30,9 +30,9 @@ export type TabId =
   | "inbox"
   | "campaigns"
   | "voice"
+  | "messages"
   | "revenue"
   | "business"
-  | "settings"
   | "account";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
@@ -122,6 +122,13 @@ const CampaignsIcon = makeIcon(
   </>,
 );
 
+const BellIcon = makeIcon(
+  <>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </>,
+);
+
 // The handset without a person: the agent answers, nobody is held to the desk.
 const VoicePhoneIcon = makeIcon(
   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
@@ -155,6 +162,14 @@ const NAV_TABS: {
     Icon: VoicePhoneIcon,
     color: "#10b981",
   },
+  // The last of Settings: reminder rules and the WhatsApp connection, i.e.
+  // the messaging half of the product, below the phone half of it.
+  {
+    id: "messages",
+    key: "nav.reminders",
+    Icon: BellIcon,
+    color: "#6366f1",
+  },
   {
     id: "revenue",
     key: "nav.revenue",
@@ -178,17 +193,13 @@ const NAV_TABS: {
 // all call this Business, and a salon owner does not think of the salon as a
 // workspace. "Workspace" stays only where it means the switcher between
 // several client businesses on one login.
+// Settings is gone — dissolved into the tabs above (voice, messages) and into
+// Business (AI connectors). One config destination remains.
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
     key: "nav.business",
     Icon: BusinessIcon,
-    color: "var(--foreground)",
-  },
-  {
-    id: "settings",
-    key: "nav.settings",
-    Icon: SettingsIcon,
     color: "var(--foreground)",
   },
 ];
@@ -1202,7 +1213,7 @@ export function AppShell({
       >
         <ShellHeader
           titleKey={titleKey}
-          closable={tab === "settings" || tab === "business" || tab === "account"}
+          closable={tab === "business" || tab === "account"}
           onClose={() => onTab("appointments")}
           onOpenMenu={() => setMobileOpen(true)}
           name={settings?.me.name}

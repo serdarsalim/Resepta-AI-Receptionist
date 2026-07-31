@@ -15,8 +15,6 @@ import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
-import { McpCard } from "./McpCard";
-import { resolveSiteUrl } from "@/lib/siteUrl";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -509,15 +507,16 @@ function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
 // timezone are not a connection.
 //
 // Sections rather than one long scroll of cards.
-// Voice moved to its own sidebar tab (it is work, not configuration), and
-// bookings moved to the operator's admin console — cal.com keys are installed
-// for the client, not by them. What remains is genuinely the salon's to touch.
-type Section = "reminders" | "whatsapp" | "ai";
+// What used to be Settings, whittled down until the name stopped being true:
+// voice became its own tab, bookings went to the operator's admin console, AI
+// connectors joined Business next to People. Reminder rules and the WhatsApp
+// connection are what remained — the messaging half of the product — and they
+// are a work destination now, not a configuration page.
+type Section = "reminders" | "whatsapp";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "reminders", key: "settings.reminders" },
   { id: "whatsapp", key: "settings.whatsapp" },
-  { id: "ai", key: "settings.ai" },
 ];
 
 // Active section is a solid accent fill; the rest are text + hover wash. No
@@ -547,9 +546,9 @@ function SectionChip({
   );
 }
 
-const SECTION_STORAGE_KEY = "randevu.settings-section";
+const SECTION_STORAGE_KEY = "randevu.reminders-section";
 
-export function SettingsView() {
+export function RemindersView() {
   const { t } = useLanguage();
   const [section, setSectionState] = useState<Section>("reminders");
 
@@ -580,13 +579,6 @@ export function SettingsView() {
 
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
 
-  // HTTP actions answer on the SITE url; the client talks to the cloud one.
-  // Swapping the domain is right in the cloud and wrong on a local deployment,
-  // where the two are PORTS — so the webhook URL this card hands you to paste
-  // into cal.com pointed at 3212 instead of 3213 and would never have fired.
-  // NEXT_PUBLIC_CONVEX_SITE_URL states it outright; prefer it, and keep the
-  // swap as the fallback for deployments that do not set it.
-  const site = resolveSiteUrl();
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
 
@@ -710,10 +702,6 @@ export function SettingsView() {
           </Card>
         </>
       )}
-
-      {/* Not behind isOwner: connector keys are per person, and the backend
-          scopes create to self and revoke-others to owners. */}
-      {section === "ai" && <McpCard site={site} />}
 
       {section === "whatsapp" && <ShopPhoneCard isOwner={isOwner} />}
 

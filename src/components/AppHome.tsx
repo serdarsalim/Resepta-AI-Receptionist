@@ -8,7 +8,7 @@ import { CustomersView } from "@/components/CustomersView";
 import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
 import { CampaignsView } from "@/components/CampaignsView";
-import { SettingsView } from "@/components/SettingsView";
+import { RemindersView } from "@/components/RemindersView";
 import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
 import { AccountView } from "@/components/AccountView";
@@ -77,7 +77,7 @@ export function AppHome() {
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
           {tab === "business" && <BusinessView />}
-          {tab === "settings" && <SettingsView />}
+          {tab === "messages" && <RemindersView />}
           {/* Personal, not org config. Only the avatar menu routes here. */}
           {tab === "account" && <AccountView />}
         </>
@@ -97,8 +97,8 @@ const TAB_IDS: TabId[] = [
   "inbox",
   "campaigns",
   "voice",
+  "messages",
   "revenue",
   "business",
-  "settings",
   "account",
 ];

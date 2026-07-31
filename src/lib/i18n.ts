@@ -934,6 +934,11 @@ const dictionary = {
     de: "Telefonassistent",
   },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
+  "nav.reminders": {
+    tr: "Hatırlatmalar",
+    en: "Reminders",
+    de: "Erinnerungen",
+  },
 
   "settings.voice": {
     tr: "Sesli asistan",

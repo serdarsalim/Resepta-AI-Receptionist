@@ -15,13 +15,14 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
+import { McpCard } from "./McpCard";
+import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { FieldGroup, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
-import { resolveSiteUrl } from "@/lib/siteUrl";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -50,12 +51,16 @@ import { resolveSiteUrl } from "@/lib/siteUrl";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "catalogue" | "people" | "activity";
+type Section = "general" | "catalogue" | "people" | "ai" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
   { id: "catalogue", key: "settings.catalogue" },
   { id: "people", key: "staff.title" },
+  // AI connectors live with the business, not in Settings: like People, a key
+  // is a member of the team — it acts as a person and shows up in the feed
+  // under their name.
+  { id: "ai", key: "settings.ai" },
   { id: "activity", key: "activity.title" },
 ];
 
@@ -118,6 +123,7 @@ export function BusinessView() {
         </>
       )}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
+      {section === "ai" && <McpCard site={resolveSiteUrl()} />}
       {section === "activity" && <ActivityCard />}
     </div>
   );
