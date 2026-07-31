@@ -151,6 +151,10 @@ export default defineSchema({
     quietHoursEnd: v.optional(v.number()),
     // No-show winback: template send N days after a no_show.
     winbackEnabled: v.optional(v.boolean()),
+    // Retell agent ids hidden from the connect picker. Old drafts and test
+    // agents accumulate in a client's account; archiving keeps the picker to
+    // agents that are real without touching anything in Retell.
+    hiddenRetellAgentIds: v.optional(v.array(v.string())),
     winbackDaysAfter: v.optional(v.number()),
     // Evolution instance name for this org, when it runs one. Credentials
     // (baseUrl, apiKey) live in `connections` like every other provider secret.

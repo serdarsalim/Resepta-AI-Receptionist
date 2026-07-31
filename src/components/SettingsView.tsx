@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type TranslationKey } from "@/lib/i18n";
@@ -519,6 +519,7 @@ type Roster = {
   error: string | null;
   agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  hiddenAgentIds: string[];
 };
 
 function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
@@ -530,7 +531,9 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const setAgentArchived = useMutation(api.retell.setAgentArchived);
   const [wiring, setWiring] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -554,7 +557,13 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   // deployment — no point flagging rows against a URL that is itself wrong.
   const expectedHook = site.isMisconfigured ? null : `${site.url}/retell/call-ended`;
   const connectedIds = new Set(connected.map((row) => row.retellAgentId));
-  const available = (roster?.agents ?? []).filter((a) => !connectedIds.has(a.id));
+  const hidden = new Set(roster?.hiddenAgentIds ?? []);
+  const available = (roster?.agents ?? []).filter(
+    (a) => !connectedIds.has(a.id) && !hidden.has(a.id),
+  );
+  const archived = (roster?.agents ?? []).filter(
+    (a) => !connectedIds.has(a.id) && hidden.has(a.id),
+  );
 
   // Connecting adopts whatever number Retell already has bound to that agent,
   // so inboundNumber stops being hand-typed into agreement with the provider.
@@ -587,14 +596,18 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
-                <th className="px-2 py-2 font-medium">{t("settings.voiceWebhook")}</th>
                 <th className="px-2 py-2 font-medium">
                   <span className="inline-flex items-center gap-1">
                     {t("settings.voiceCallsToday")}
                     <InfoTip text={t("settings.voiceCallsTodayHint")} />
                   </span>
                 </th>
-                <th className="px-2 py-2 font-medium">{t("settings.voiceEnabled")}</th>
+                <th className="px-2 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    {t("settings.voiceEnabled")}
+                    <InfoTip text={t("settings.voiceEnabledHint")} />
+                  </span>
+                </th>
                 <th className="px-2 py-2" />
               </tr>
             </thead>
@@ -605,7 +618,8 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                   agent && expectedHook && agent.webhookUrl === expectedHook,
                 );
                 return (
-                  <tr key={row._id} className="group border-t border-[var(--border)]">
+                  <Fragment key={row._id}>
+                  <tr className="group border-t border-[var(--border)]">
                     {/* An agent the account no longer lists — renamed, deleted,
                         or a key repointed at a different Retell account. Show
                         the raw id rather than a blank cell: calls still route
@@ -677,32 +691,6 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                           )}
                       </select>
                     </td>
-                    <td className="whitespace-nowrap px-2 py-2 text-xs">
-                      {!agent || !expectedHook ? (
-                        <span className="text-[var(--muted)]">—</span>
-                      ) : wired ? (
-                        <span className="text-emerald-700 dark:text-emerald-400">
-                          ✓ {t("settings.voiceWired")}
-                        </span>
-                      ) : wiring === row.retellAgentId ? (
-                        <span className="animate-pulse text-[var(--muted)]">
-                          {t("voiceDetail.wiring")}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWiring(row.retellAgentId);
-                            void wireWebhook({ agentId: row.retellAgentId })
-                              .then(() => load())
-                              .finally(() => setWiring(null));
-                          }}
-                          className="rounded-lg border border-amber-300 px-2 py-0.5 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40"
-                        >
-                          {t("voiceDetail.webhookFix")}
-                        </button>
-                      )}
-                    </td>
                     <td className="px-2 py-2 text-xs text-[var(--muted)]">
                       {callsToday?.[row.retellAgentId] || ""}
                     </td>
@@ -734,6 +722,35 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                       </ActionTip>
                     </td>
                   </tr>
+                  {/* Broken plumbing, said as a symptom. The owner reads
+                      "results are not arriving" and presses Fix; the word
+                      webhook stays our problem. */}
+                  {agent && expectedHook && !wired && (
+                    <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
+                      <td colSpan={6} className="px-3 py-2">
+                        <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                          {t("settings.voiceNotReceiving")}
+                          {wiring === row.retellAgentId ? (
+                            <span className="animate-pulse">{t("voiceDetail.wiring")}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWiring(row.retellAgentId);
+                                void wireWebhook({ agentId: row.retellAgentId })
+                                  .then(() => load())
+                                  .finally(() => setWiring(null));
+                              }}
+                              className="rounded-lg border border-amber-300 px-2 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-950/60"
+                            >
+                              {t("settings.voiceFix")}
+                            </button>
+                          )}
+                        </span>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -778,44 +795,70 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
         <Sheet title={t("settings.voiceConnect")} onClose={() => setAdding(false)}>
           <div className="space-y-1">
             {available.map((agent) => (
-              <button
-                key={agent.id}
-                type="button"
-                onClick={() => add(agent.id)}
-                className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted-bg)]"
-              >
-                <div className="font-medium">{agent.name}</div>
-                {agent.collects.length > 0 && (
-                  <div className="text-xs text-[var(--muted)]">{agent.collects.join(", ")}</div>
-                )}
-              </button>
+              <div key={agent.id} className="group/pick flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => add(agent.id)}
+                  className="block min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted-bg)]"
+                >
+                  <div className="font-medium">{agent.name}</div>
+                  {agent.collects.length > 0 && (
+                    <div className="text-xs text-[var(--muted)]">{agent.collects.join(", ")}</div>
+                  )}
+                </button>
+                {/* Our bookkeeping, not Retell's: the agent survives, it just
+                    stops cluttering this picker. */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    void setAgentArchived({ retellAgentId: agent.id, archived: true }).then(
+                      load,
+                    )
+                  }
+                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
+                >
+                  {t("settings.voiceArchive")}
+                </button>
+              </div>
             ))}
+            {archived.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((s) => !s)}
+                  className="rounded-lg px-3 py-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+                >
+                  {showArchived
+                    ? t("settings.voiceHideArchived")
+                    : t("settings.voiceShowArchived").replace("{n}", String(archived.length))}
+                </button>
+                {showArchived &&
+                  archived.map((agent) => (
+                    <div
+                      key={agent.id}
+                      className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-[var(--muted)]"
+                    >
+                      <span className="truncate">{agent.name}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void setAgentArchived({
+                            retellAgentId: agent.id,
+                            archived: false,
+                          }).then(load)
+                        }
+                        className="shrink-0 rounded-lg px-2 py-1 text-xs hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      >
+                        {t("settings.voiceRestore")}
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </Sheet>
       )}
 
-      <div className={`mt-4 ${ROW_GRID}`}>
-        <RowLabel label={t("settings.voiceEndpoints")} hint={t("settings.voiceHint")} />
-        <div className="min-w-0 space-y-1 text-xs text-[var(--muted)]">
-          {site.isMisconfigured ? (
-            // Refusing to print the URL rather than printing a loopback address
-            // onto a page whose entire job is to be copied into Retell. Showing
-            // it would look like it worked and fail silently in production.
-            <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
-              {t("settings.voiceEndpointsBroken")}
-            </p>
-          ) : (
-            <>
-              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-                {site.url}/retell/functions
-              </code>
-              <code className="block overflow-x-auto rounded-lg bg-[var(--muted-bg)] px-2 py-1.5">
-                {site.url}/retell/call-ended
-              </code>
-            </>
-          )}
-        </div>
-      </div>
     </Card>
   );
 }
@@ -912,7 +955,10 @@ export function SettingsView() {
   const isOwner = settings.me.role !== "staff";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    // The voice section holds a table; the rest are label/input forms. One
+    // container width for both meant the table decided everyone's width or
+    // looked crammed — so the voice section alone gets the wide one.
+    <div className={`mx-auto space-y-4 ${section === "voice" ? "max-w-5xl" : "max-w-3xl"}`}>
       <div className="flex flex-wrap items-center gap-1">
         {SECTIONS.map((entry) => (
           <SectionChip

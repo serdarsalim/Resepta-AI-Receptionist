@@ -910,16 +910,6 @@ const dictionary = {
     en: "Voice agent",
     de: "Sprachassistent",
   },
-  "settings.voiceEndpoints": {
-    tr: "Webhook adresleri",
-    en: "Webhook URLs",
-    de: "Webhook-Adressen",
-  },
-  "settings.voiceHint": {
-    tr: "Retell agent'ınız işletmenin telefonunu yanıtlar ve randevu alır. Fonksiyon adresi ve arama-sonu webhook'unu Retell panosunda bu URL'lere yönlendirin.",
-    en: "Your Retell agent answers your business phone and books appointments. Point the function URL and call-ended webhook at these endpoints in the Retell dashboard.",
-    de: "Ihr Retell-Agent nimmt die Anrufe im Betrieb entgegen und vergibt Termine. Richten Sie die Funktions-URL und den Webhook für beendete Anrufe im Retell-Dashboard auf diese Adressen.",
-  },
   "settings.voiceCollectsCount": {
     tr: "{n} alan",
     en: "{n} fields",
@@ -1024,8 +1014,6 @@ const dictionary = {
     de: "Weiterleitungsnummer",
   },
   "settings.voiceEnabled": { tr: "Etkin", en: "Enabled", de: "Aktiv" },
-  "settings.voiceWebhook": { tr: "Webhook", en: "Webhook", de: "Webhook" },
-  "settings.voiceWired": { tr: "Bağlı", en: "Wired", de: "Verbunden" },
   "settings.voiceCallsToday": { tr: "Bugün", en: "Today", de: "Heute" },
   "settings.voiceCallsTodayHint": {
     tr: "Bu asistanın bugün aldığı aramalar, işletmenizin saat dilimine göre.",
@@ -1033,6 +1021,40 @@ const dictionary = {
     de: "Anrufe dieses Assistenten heute, in der Zeitzone Ihres Betriebs.",
   },
   "settings.voiceNoNumber": { tr: "— Yok —", en: "— None —", de: "— Keine —" },
+  // Broken-plumbing notice in the salon's words. Deliberately no "webhook":
+  // the owner should read a symptom and a fix, not our vocabulary.
+  "settings.voiceNotReceiving": {
+    tr: "Bu asistanın arama sonuçları uygulamaya ulaşmıyor.",
+    en: "This agent's call results are not reaching the app.",
+    de: "Die Anrufergebnisse dieses Assistenten erreichen die App nicht.",
+  },
+  "settings.voiceFix": { tr: "Düzelt", en: "Fix", de: "Beheben" },
+  "settings.voiceFixed": {
+    tr: "Düzeltildi.",
+    en: "Fixed.",
+    de: "Behoben.",
+  },
+  "settings.voiceEnabledHint": {
+    tr: "Açıkken asistan aramaları yanıtlar ve randevu alır. Kapatınca bağlantı korunur ama randevu alamaz; tatile çıkarken kapatmanız yeterli.",
+    en: "On, the agent answers and books. Off keeps the connection but stops bookings; just switch it off for holidays.",
+    de: "Eingeschaltet nimmt der Assistent Anrufe an und vergibt Termine. Ausgeschaltet bleibt die Verbindung bestehen, aber es wird nichts gebucht; für den Urlaub einfach ausschalten.",
+  },
+  "settings.voiceArchive": { tr: "Arşivle", en: "Archive", de: "Archivieren" },
+  "settings.voiceRestore": {
+    tr: "Geri getir",
+    en: "Restore",
+    de: "Wiederherstellen",
+  },
+  "settings.voiceShowArchived": {
+    tr: "Arşivlenenleri göster ({n})",
+    en: "Show archived ({n})",
+    de: "Archivierte anzeigen ({n})",
+  },
+  "settings.voiceHideArchived": {
+    tr: "Arşivlenenleri gizle",
+    en: "Hide archived",
+    de: "Archivierte ausblenden",
+  },
 
   // The agent detail sheet. Same register as the rest of settings: the salon's
   // words, not Retell's. "Prompt" stays untranslated jargon nowhere: it is

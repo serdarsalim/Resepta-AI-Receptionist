@@ -180,6 +180,7 @@ export const agentListContext = internalQuery({
       demoMode: v.boolean(),
       apiKey: v.union(v.string(), v.null()),
       connectedAgentId: v.union(v.string(), v.null()),
+      hiddenAgentIds: v.array(v.string()),
     }),
     v.null(),
   ),
@@ -197,6 +198,7 @@ export const agentListContext = internalQuery({
       // shape is uniform, and let the caller's demo check win first.
       apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
       connectedAgentId: agent?.retellAgentId ?? null,
+      hiddenAgentIds: org.hiddenRetellAgentIds ?? [],
     };
   },
 });
@@ -211,6 +213,7 @@ type AgentListResult = {
   connectedAgentId: string | null;
   agents: { id: string; name: string; collects: string[]; webhookUrl: string | null }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  hiddenAgentIds: string[];
 };
 
 const DEMO_AGENTS = [
@@ -247,6 +250,7 @@ export const listAgents = action({
         agentId: v.union(v.string(), v.null()),
       }),
     ),
+    hiddenAgentIds: v.array(v.string()),
   }),
   handler: async (ctx): Promise<AgentListResult> => {
     const context = await ctx.runQuery(internal.retell.agentListContext, {});
@@ -273,6 +277,7 @@ export const listAgents = action({
         phoneNumbers: [
           { number: "+902121112233", nickname: "Salon line", agentId: DEMO_AGENTS[0].id },
         ],
+        hiddenAgentIds: [],
       };
     }
 
@@ -350,7 +355,26 @@ export const listAgents = action({
       connectedAgentId: context.connectedAgentId,
       agents,
       phoneNumbers,
+      hiddenAgentIds: context.hiddenAgentIds,
     };
+  },
+});
+
+// Archive is OUR bookkeeping, not Retell's: the agent keeps existing and
+// keeps taking calls if wired; it just stops cluttering the connect picker.
+export const setAgentArchived = mutation({
+  args: { retellAgentId: v.string(), archived: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, archived }) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    const current = org.hiddenRetellAgentIds ?? [];
+    const next = archived
+      ? [...new Set([...current, retellAgentId])]
+      : current.filter((id) => id !== retellAgentId);
+    await ctx.db.patch(orgId, { hiddenRetellAgentIds: next });
+    return null;
   },
 });
 
@@ -358,7 +382,14 @@ function empty(
   error: string | null,
   connectedAgentId: string | null = null,
 ): AgentListResult {
-  return { configured: false, error, connectedAgentId, agents: [], phoneNumbers: [] };
+  return {
+    configured: false,
+    error,
+    connectedAgentId,
+    agents: [],
+    phoneNumbers: [],
+    hiddenAgentIds: [],
+  };
 }
 
 // ---- Internal plumbing for the HTTP endpoints ----
