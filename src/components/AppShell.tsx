@@ -405,11 +405,22 @@ function initialsFrom(name?: string | null, email?: string | null): string {
 // onboarding.
 function OnboardingGate() {
   const { t } = useLanguage();
+  const { signOut } = useAuthActions();
   const update = useMutation(api.orgs.update);
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-[var(--pane)] p-6">
       <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-        <h2 className="text-lg font-semibold">{t("onboarding.title")}</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold">{t("onboarding.title")}</h2>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            <SignOutIcon />
+            {t("nav.signOut")}
+          </button>
+        </div>
         <p className="mt-1 text-sm text-[var(--muted)]">{t("onboarding.prompt")}</p>
         <form
           className="mt-4 space-y-3"
