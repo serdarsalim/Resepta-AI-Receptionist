@@ -1394,6 +1394,16 @@ const dictionary = {
     en: "Call only",
     de: "Nur Anruf",
   },
+  "voiceVariables.builtin": {
+    tr: "Otomatik",
+    en: "Automatic",
+    de: "Automatisch",
+  },
+  "voiceVariables.builtinHint": {
+    tr: "Bu bilgiler her aramada kendiliğinden hazırdır. Yeni değişken, aramada toplanacak bilgiler içindir.",
+    en: "This information is ready on every call by itself. Add a variable for information the call should collect.",
+    de: "Diese Angaben stehen bei jedem Anruf automatisch bereit. Neue Variablen sind für Angaben, die der Anruf erfassen soll.",
+  },
   "voiceVariables.servicesList": {
     tr: "Hizmet listesi",
     en: "Service list",

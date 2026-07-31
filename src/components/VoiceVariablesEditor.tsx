@@ -41,6 +41,31 @@ export type VoiceContactField = {
   voice: boolean;
 };
 
+// The context the runtime injects on every call without any configuration.
+// One list, exported so the @ picker in the instructions and the Variables
+// table show the SAME variables — two surfaces disagreeing about what a
+// variable is was the confusion this replaces.
+export function builtinVoiceVariables(
+  t: (
+    key:
+      | "voiceVariables.customerName"
+      | "voiceVariables.customerPhone"
+      | "voiceVariables.customerLanguage"
+      | "voiceVariables.nextAppointment"
+      | "voiceVariables.businessName"
+      | "voiceVariables.servicesList",
+  ) => string,
+): { key: string; label: string }[] {
+  return [
+    { key: "customer_name", label: t("voiceVariables.customerName") },
+    { key: "customer_phone", label: t("voiceVariables.customerPhone") },
+    { key: "customer_language", label: t("voiceVariables.customerLanguage") },
+    { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
+    { key: "business_name", label: t("voiceVariables.businessName") },
+    { key: "services", label: t("voiceVariables.servicesList") },
+  ];
+}
+
 function keyFromLabel(label: string): string {
   return label
     .toLowerCase()
@@ -260,9 +285,7 @@ export function VoiceVariablesEditor({
         <div className="flex items-center gap-1.5">
           <h4 className="text-xs font-medium">{t("voiceVariables.title")}</h4>
           <InfoTip
-            text={
-              managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")
-            }
+            text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.builtinHint")}`}
           />
           <span className="text-xs text-[var(--muted)]">{draft.length || ""}</span>
         </div>
@@ -328,14 +351,31 @@ export function VoiceVariablesEditor({
             </tr>
           </thead>
           <tbody>
-            {draft.length === 0 ? (
-              <tr className="border-t border-[var(--border)]">
-                <td colSpan={6} className="px-3 py-4 text-xs text-[var(--muted)]">
-                  {t("voiceVariables.empty")}
-                </td>
-              </tr>
-            ) : (
-              draft.map((row, index) => (
+            {/* Built-ins first: always present, never editable, so the list
+                here matches the @ picker exactly. A registry row with the
+                same key replaces its built-in. */}
+            {builtinVoiceVariables(t)
+              .filter((builtin) => !draft.some((row) => row.key === builtin.key))
+              .map((builtin) => (
+                <tr key={`builtin:${builtin.key}`} className="border-t border-[var(--border)]">
+                  <td className="px-3 py-2 text-[var(--muted)]">
+                    {builtin.label}
+                    <code className="ml-2 text-[10px]">{builtin.key}</code>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                    {t("voiceVariables.builtin")}
+                  </td>
+                  <td className="px-3 py-2" />
+                  <td className="px-3 py-2" />
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                    {t("voiceVariables.callOnly")}
+                  </td>
+                  <td className="px-2 py-2" />
+                </tr>
+              ))}
+            {/* No empty state: the built-ins above mean the list is never
+                empty, and "no variables yet" over a list of variables lies. */}
+            {draft.map((row, index) => (
                 <tr key={`${row.key}:${index}`} className="group border-t border-[var(--border)]">
                   <td className="px-3 py-2">
                     <button
@@ -372,8 +412,7 @@ export function VoiceVariablesEditor({
                     </button>
                   </td>
                 </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>

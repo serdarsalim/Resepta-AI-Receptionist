@@ -9,6 +9,7 @@ import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import {
   VoiceVariablesEditor,
+  builtinVoiceVariables,
   type VoiceContactField,
   type VoiceVariable,
 } from "./VoiceVariablesEditor";
@@ -209,15 +210,10 @@ export function VoiceAgentDetail({
                     label: row.label,
                   }));
                   const seen = new Set(rows.map((row) => row.key));
-                  const builtins = [
-                    { key: "customer_name", label: t("voiceVariables.customerName") },
-                    { key: "customer_phone", label: t("voiceVariables.customerPhone") },
-                    { key: "customer_language", label: t("voiceVariables.customerLanguage") },
-                    { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
-                    { key: "business_name", label: t("voiceVariables.businessName") },
-                    { key: "services", label: t("voiceVariables.servicesList") },
+                  return [
+                    ...rows,
+                    ...builtinVoiceVariables(t).filter((row) => !seen.has(row.key)),
                   ];
-                  return [...rows, ...builtins.filter((row) => !seen.has(row.key))];
                 })()}
               />
               <label className="mt-2 block">

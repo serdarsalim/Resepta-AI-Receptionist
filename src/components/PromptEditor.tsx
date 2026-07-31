@@ -92,6 +92,7 @@ export function PromptEditor({
 }) {
   const { t } = useLanguage();
   const ref = useRef<HTMLTextAreaElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [active, setActive] = useState(0);
 
@@ -132,12 +133,19 @@ export function PromptEditor({
 
   useEffect(() => {
     if (!menu) return;
-    const onAway = () => close();
-    window.addEventListener("scroll", onAway, true);
-    window.addEventListener("resize", onAway);
+    // Capture-phase so scrolls inside any ancestor close the menu (the
+    // anchor moves with them) — but the menu's OWN scrollbar must not:
+    // scrolling the list is using it, not leaving it.
+    const onScroll = (event: Event) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      close();
+    };
+    const onResize = () => close();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("scroll", onAway, true);
-      window.removeEventListener("resize", onAway);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, [menu, close]);
 
@@ -219,6 +227,7 @@ export function PromptEditor({
       {menu &&
         createPortal(
           <div
+            ref={menuRef}
             style={{ left: menu.anchor.left, top: menu.anchor.top }}
             className="fixed z-[60] max-h-48 w-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
           >
