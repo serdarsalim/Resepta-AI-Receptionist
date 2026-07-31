@@ -64,7 +64,8 @@ style issue.
   (reminders, confirmations) use pre-approved **template messages** — that is
   the core send path here, unlike Nudge where template sends are unbuilt. Each
   org connects its own WABA number (`waAccounts`); the org enters its approved
-  template names in Settings.
+  template names in the Reminders tab (WhatsApp section — Settings no longer
+  exists, see the IA section below).
 
 ## Message model
 
@@ -194,8 +195,45 @@ These change what gets built next — don't paper over them:
   the partner hold numbers as a Tech Provider? This is the real onboarding
   bottleneck and it is unvalidated.
 - **Template approval.** Every org currently types its own Meta-approved
-  template names into Settings. If the partner owns the WABA, templates are
-  approved once centrally and this UI gets much smaller.
+  template names into the Reminders tab. If the partner owns the WABA,
+  templates are approved once centrally and this UI gets much smaller.
+
+## The IA after 2026-07-31 (Settings is gone — don't reintroduce it)
+
+Sidebar: Customers · Inbox · Campaigns · **Phone agent** · **Reminders** ·
+Calendar · Revenue (flag) · Business. There is no Settings tab. Where things
+went, and the reasoning to preserve:
+
+- **Phone agent** (`VoiceView`, tab id `voice`): work, not config. Two
+  sections. *Agents* is `VoiceCard` — connect/archive agents, pick the inbound
+  number from the account's real numbers (never free text), enabled toggle
+  (keeps the wiring, stops bookings), per-row details expansion (collected
+  fields, call counts, connected date), and the `VoiceAgentDetail` sheet
+  (click the name): prompt publish with session undo, webhook truth with
+  one-click fix, test call. *Calls* is a paginated table over the `calls`
+  table — recording player, per-call collected variables, summary, transcript
+  in a row expansion. The word "webhook" never reaches the client; broken
+  plumbing renders as "call results are not reaching the app" + Fix.
+- **Reminders** (`RemindersView`, tab id `messages`): the old SettingsView,
+  renamed. Reminder rules + the WhatsApp connection.
+- **Business → AI**: `McpCard`, self-serve MCP connector keys (Claude/ChatGPT
+  paste-once flow). Lives beside People on purpose: a connector key acts as a
+  person and lands in the activity feed under their name. Not owner-gated —
+  keys are per person; the backend scopes create-to-self / revoke-others-to-
+  owner.
+- **Bookings (cal.com) config**: operator-only, admin console
+  (`platform.setOrgConfig`). Never show a salon a cal.com key field again.
+
+Retell facts that keep getting relearned (also encoded in `convex/retellAgent.ts`
+comments): a published agent/LLM refuses PATCH — every publish is
+clone-draft → patch the LLM version THE DRAFT points at → publish the draft.
+Retell sends `call_ended` first and analysis on a later `call_analyzed`;
+`recordCall` merges the second event into fields the first couldn't know.
+`calls` rows carry `retellAgentId` and `collected` since 2026-07-31 — older
+rows have neither. One agent can serve only one deployment: the webhook URL
+points at dev OR prod, so a dev workspace sharing prod's agent truthfully
+shows "results not reaching the app" — do not "fix" it from dev, that steals
+the webhook from prod.
 
 ## Conventions carried over from Nudge
 
