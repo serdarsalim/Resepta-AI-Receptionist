@@ -1019,6 +1019,198 @@ const dictionary = {
     de: "Weiterleitungsnummer",
   },
   "settings.voiceEnabled": { tr: "Etkin", en: "Enabled", de: "Aktiv" },
+
+  // The agent detail sheet. Same register as the rest of settings: the salon's
+  // words, not Retell's. "Prompt" stays untranslated jargon nowhere: it is
+  // "talimat"/"Anweisung", what the agent is told to do.
+  "voiceDetail.webhook": {
+    tr: "Sonuç webhook'u",
+    en: "Results webhook",
+    de: "Ergebnis-Webhook",
+  },
+  "voiceDetail.webhookHint": {
+    tr: "Arama bittiğinde Retell sonucu buraya gönderir. Bu olmadan asistan yine yanıt verir ama topladığı hiçbir bilgi bu uygulamaya ulaşmaz.",
+    en: "Where Retell sends the outcome when a call ends. Without it the agent still answers, but nothing it collects reaches this app.",
+    de: "Hierhin sendet Retell das Ergebnis nach jedem Anruf. Ohne diesen Webhook nimmt der Assistent zwar ab, aber nichts von dem, was er erfasst, erreicht diese App.",
+  },
+  "voiceDetail.webhookWired": {
+    tr: "Bu uygulamaya bağlı.",
+    en: "Wired to this app.",
+    de: "Mit dieser App verbunden.",
+  },
+  "voiceDetail.webhookElsewhere": {
+    tr: "Başka bir adrese işaret ediyor. Arama sonuçları bu uygulamaya ulaşmıyor.",
+    en: "Points somewhere else, so call results are not reaching this app.",
+    de: "Zeigt auf eine andere Adresse. Anrufergebnisse erreichen diese App nicht.",
+  },
+  "voiceDetail.webhookMissing": {
+    tr: "Ayarlanmamış. Arama sonuçları bu uygulamaya ulaşmıyor.",
+    en: "Not set, so call results are not reaching this app.",
+    de: "Nicht gesetzt. Anrufergebnisse erreichen diese App nicht.",
+  },
+  "voiceDetail.webhookCurrent": {
+    tr: "şu an: {url}",
+    en: "now: {url}",
+    de: "aktuell: {url}",
+  },
+  "voiceDetail.webhookFix": {
+    tr: "Buraya yönlendir",
+    en: "Point it here",
+    de: "Hierhin umleiten",
+  },
+  "voiceDetail.wiring": {
+    tr: "Bağlanıyor…",
+    en: "Wiring…",
+    de: "Wird verbunden…",
+  },
+  "voiceDetail.wired": {
+    tr: "Webhook bağlandı.",
+    en: "Webhook wired.",
+    de: "Webhook verbunden.",
+  },
+  "voiceDetail.prompt": {
+    tr: "Talimat",
+    en: "Prompt",
+    de: "Anweisung",
+  },
+  "voiceDetail.promptHint": {
+    tr: "Asistana ne yapması söylendiği. Yayınladığınızda bir sonraki aramadan itibaren geçerli olur.",
+    en: "What the agent is told to do. Publishing takes effect on the very next call.",
+    de: "Was dem Assistenten vorgegeben wird. Nach dem Veröffentlichen gilt es ab dem nächsten Anruf.",
+  },
+  "voiceDetail.opening": {
+    tr: "Açılış cümlesi",
+    en: "Opening line",
+    de: "Begrüßungssatz",
+  },
+  "voiceDetail.openingHint": {
+    tr: "İlk söylediği cümle. Boş bırakırsanız asistan kendi açılışını yapar.",
+    en: "What it says first. Leave empty to have the agent open on its own.",
+    de: "Der erste Satz. Leer lassen, damit der Assistent selbst eröffnet.",
+  },
+  "voiceDetail.publish": {
+    tr: "Yayınla",
+    en: "Publish",
+    de: "Veröffentlichen",
+  },
+  "voiceDetail.publishing": {
+    tr: "Yayınlanıyor…",
+    en: "Publishing…",
+    de: "Wird veröffentlicht…",
+  },
+  "voiceDetail.published": {
+    tr: "v{n} yayınlandı, bir sonraki aramada geçerli.",
+    en: "Published v{n}, live on the next call.",
+    de: "v{n} veröffentlicht, gilt ab dem nächsten Anruf.",
+  },
+  "voiceDetail.undo": {
+    tr: "Yayını geri al",
+    en: "Undo publish",
+    de: "Veröffentlichung rückgängig",
+  },
+  "voiceDetail.reverting": {
+    tr: "Geri alınıyor…",
+    en: "Reverting…",
+    de: "Wird zurückgesetzt…",
+  },
+  "voiceDetail.reverted": {
+    tr: "Önceki talimata geri dönüldü.",
+    en: "Reverted to the previous prompt.",
+    de: "Auf die vorherige Anweisung zurückgesetzt.",
+  },
+  // The two agent shapes this sheet cannot edit, said in the owner's terms.
+  // Derived from engineType client-side so the copy translates; the backend
+  // sends no English for these.
+  "voiceDetail.flowAgent": {
+    tr: "Bu asistan bir konuşma akışıyla çalışıyor; senaryosu Retell'in akış editöründe ve buradan düzenlenemiyor.",
+    en: "This agent runs a conversation flow, so its script lives in Retell's flow editor and cannot be edited here.",
+    de: "Dieser Assistent läuft über einen Gesprächsablauf; sein Skript liegt im Flow-Editor von Retell und lässt sich hier nicht bearbeiten.",
+  },
+  "voiceDetail.noPrompt": {
+    tr: "Bu asistanın buradan düzenlenebilecek bir talimatı yok.",
+    en: "This agent has no prompt that can be edited here.",
+    de: "Dieser Assistent hat keine Anweisung, die sich hier bearbeiten lässt.",
+  },
+  "voiceDetail.before": {
+    tr: "Arama öncesi",
+    en: "Before the call",
+    de: "Vor dem Anruf",
+  },
+  "voiceDetail.beforeHint": {
+    tr: "Arama başlarken asistana verilen bilgiler; kimi aradığını böylece önceden bilir.",
+    en: "Values handed to the agent when the call is placed, so it already knows who it is calling.",
+    de: "Angaben, die der Assistent beim Start des Anrufs erhält, damit er schon weiß, wen er anruft.",
+  },
+  "voiceDetail.beforeEmpty": {
+    tr: "Bilgi verilmiyor.",
+    en: "Nothing injected.",
+    de: "Keine Angaben.",
+  },
+  "voiceDetail.during": {
+    tr: "Arama sırasında",
+    en: "During the call",
+    de: "Während des Anrufs",
+  },
+  "voiceDetail.duringHint": {
+    tr: "Asistanın konuşma sırasında çağırabildiği fonksiyonlar. Takvime bakıp randevu almasını bunlar sağlar.",
+    en: "Functions the agent can call mid-conversation. This is how it checks the diary and books.",
+    de: "Funktionen, die der Assistent im Gespräch aufrufen kann. Damit prüft er den Kalender und vergibt Termine.",
+  },
+  "voiceDetail.duringEmpty": {
+    tr: "Fonksiyon yok. Konuşabilir ama randevu alamaz.",
+    en: "No functions. It can talk, but not book.",
+    de: "Keine Funktionen. Er kann sprechen, aber keine Termine vergeben.",
+  },
+  "voiceDetail.after": {
+    tr: "Arama sonrası",
+    en: "After the call",
+    de: "Nach dem Anruf",
+  },
+  "voiceDetail.afterHint": {
+    tr: "Arama bittiğinde Retell'in konuşma dökümünden çıkardığı bilgiler.",
+    en: "What Retell extracts from the transcript once the call ends.",
+    de: "Was Retell nach dem Anruf aus dem Transkript zieht.",
+  },
+  "voiceDetail.afterEmpty": {
+    tr: "Bilgi çıkarılmıyor.",
+    en: "Nothing extracted.",
+    de: "Nichts erfasst.",
+  },
+  "voiceDetail.test": {
+    tr: "Deneme araması",
+    en: "Test call",
+    de: "Testanruf",
+  },
+  "voiceDetail.testHint": {
+    tr: "Girdiğiniz numarayı bu asistanla gerçekten arar. Telefon gerçekten çalar ve dakikalar ücretlendirilir.",
+    en: "Places a real call to the number you enter, using this agent. The phone genuinely rings and the minutes are billed.",
+    de: "Ruft die eingegebene Nummer mit diesem Assistenten wirklich an. Das Telefon klingelt tatsächlich, und die Minuten werden berechnet.",
+  },
+  "voiceDetail.callMe": {
+    tr: "Beni ara",
+    en: "Call me",
+    de: "Mich anrufen",
+  },
+  "voiceDetail.calling": {
+    tr: "Aranıyor…",
+    en: "Calling…",
+    de: "Wird angerufen…",
+  },
+  "voiceDetail.confirmCall": {
+    tr: "{to} şimdi {name} ile aransın mı?",
+    en: "Call {to} now with {name}?",
+    de: "{to} jetzt mit {name} anrufen?",
+  },
+  "voiceDetail.callingFromTo": {
+    tr: "{from} numarasından {to} aranıyor…",
+    en: "Calling {to} from {from}…",
+    de: "{to} wird von {from} angerufen…",
+  },
+  "voiceDetail.badNumber": {
+    tr: "Numarayı uluslararası biçimde girin, örn. +905321234567.",
+    en: "Enter the number in full international form, e.g. +905321234567.",
+    de: "Geben Sie die Nummer im internationalen Format ein, z. B. +4915123456789.",
+  },
   "settings.businessHours": {
     tr: "Açık olduğunuz günler",
     en: "Days you're open",

@@ -3,6 +3,7 @@
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 
@@ -24,7 +25,6 @@ type Detail = {
   engineType: string | null;
   llmId: string | null;
   prompt: { general: string; beginMessage: string } | null;
-  unsupportedReason: string | null;
   webhook: {
     expected: string | null;
     actual: string | null;
@@ -84,6 +84,7 @@ export function VoiceAgentDetail({
   agentId: string;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const read = useAction(api.retellAgent.read);
   const publishPrompt = useAction(api.retellAgent.publishPrompt);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
@@ -130,10 +131,20 @@ export function VoiceAgentDetail({
     setBusy(false);
   };
 
+  // Not from the backend: the backend would have to pick a language. Which of
+  // the two unsupported shapes this is, the client can tell from engineType.
+  const unsupported = !detail
+    ? null
+    : detail.engineType === "conversation-flow"
+      ? t("voiceDetail.flowAgent")
+      : detail.prompt
+        ? null
+        : t("voiceDetail.noPrompt");
+
   return (
-    <Sheet title={detail?.name ?? "Voice agent"} onClose={onClose}>
+    <Sheet title={detail?.name ?? t("settings.voiceAgent")} onClose={onClose}>
       {error && <p className="text-sm text-amber-700 dark:text-amber-400">{error}</p>}
-      {!detail && !error && <p className="text-sm text-[var(--muted)]">Loading…</p>}
+      {!detail && !error && <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>}
 
       {detail && (
         <div className="space-y-5">
@@ -143,51 +154,51 @@ export function VoiceAgentDetail({
               were in. */}
           <div className="rounded-lg border border-[var(--border)] p-3">
             <div className="mb-1 flex items-center gap-2">
-              <h4 className="text-xs font-medium">Results webhook</h4>
-              <InfoTip text="Where Retell sends the outcome when a call ends. Without it the agent still answers, but nothing it collects reaches this app." />
+              <h4 className="text-xs font-medium">{t("voiceDetail.webhook")}</h4>
+              <InfoTip text={t("voiceDetail.webhookHint")} />
             </div>
             {detail.webhook.wired ? (
               <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                Wired to this workspace.
+                {t("voiceDetail.webhookWired")}
               </p>
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   {detail.webhook.pointsElsewhere
-                    ? "Points somewhere else, so call results are not reaching this app."
-                    : "Not set, so call results are not reaching this app."}
+                    ? t("voiceDetail.webhookElsewhere")
+                    : t("voiceDetail.webhookMissing")}
                 </p>
                 {detail.webhook.actual && (
                   <code className="block truncate text-xs text-[var(--muted)]">
-                    now: {detail.webhook.actual}
+                    {t("voiceDetail.webhookCurrent").replace("{url}", detail.webhook.actual)}
                   </code>
                 )}
                 <button
                   type="button"
                   disabled={busy || !detail.webhook.expected}
                   onClick={() =>
-                    void run("Wiring…", async () => {
+                    void run(t("voiceDetail.wiring"), async () => {
                       await wireWebhook({ agentId });
-                      setStatus("Webhook wired.");
+                      setStatus(t("voiceDetail.wired"));
                       load();
                     })
                   }
                   className="rounded-lg bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
                 >
-                  Point it here
+                  {t("voiceDetail.webhookFix")}
                 </button>
               </div>
             )}
           </div>
 
           {/* Prompt */}
-          {detail.unsupportedReason ? (
-            <p className="text-sm text-[var(--muted)]">{detail.unsupportedReason}</p>
+          {unsupported ? (
+            <p className="text-sm text-[var(--muted)]">{unsupported}</p>
           ) : (
             <div>
               <div className="mb-1.5 flex items-center gap-2">
-                <h4 className="text-xs font-medium">Prompt</h4>
-                <InfoTip text="What the agent is told to do. Publishing takes effect on the very next call." />
+                <h4 className="text-xs font-medium">{t("voiceDetail.prompt")}</h4>
+                <InfoTip text={t("voiceDetail.promptHint")} />
                 {detail.version !== null && (
                   <span className="text-xs text-[var(--muted)]">v{detail.version}</span>
                 )}
@@ -201,8 +212,8 @@ export function VoiceAgentDetail({
               />
               <label className="mt-2 block">
                 <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
-                  Opening line
-                  <InfoTip text="What it says first. Leave empty to have the agent open on its own." />
+                  {t("voiceDetail.opening")}
+                  <InfoTip text={t("voiceDetail.openingHint")} />
                 </span>
                 <input
                   value={begin}
@@ -219,36 +230,38 @@ export function VoiceAgentDetail({
                   type="button"
                   disabled={!dirty || busy}
                   onClick={() =>
-                    void run("Publishing…", async () => {
+                    void run(t("voiceDetail.publishing"), async () => {
                       const res = (await publishPrompt({
                         agentId,
                         generalPrompt: draft,
                         beginMessage: begin,
                       })) as { previousPrompt: string; version: number | null };
                       setPrevious(res.previousPrompt);
-                      setStatus(`Published v${res.version ?? "?"}, live on the next call.`);
+                      setStatus(
+                        t("voiceDetail.published").replace("{n}", String(res.version ?? "?")),
+                      );
                       load();
                     })
                   }
                   className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
                 >
-                  Publish
+                  {t("voiceDetail.publish")}
                 </button>
                 {previous !== null && (
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() =>
-                      void run("Reverting…", async () => {
+                      void run(t("voiceDetail.reverting"), async () => {
                         await publishPrompt({ agentId, generalPrompt: previous });
                         setPrevious(null);
-                        setStatus("Reverted to the previous prompt.");
+                        setStatus(t("voiceDetail.reverted"));
                         load();
                       })
                     }
                     className="rounded-lg px-2 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
                   >
-                    Undo publish
+                    {t("voiceDetail.undo")}
                   </button>
                 )}
                 {status && <span className="text-xs text-[var(--muted)]">{status}</span>}
@@ -260,30 +273,30 @@ export function VoiceAgentDetail({
               read this here rather than in Retell. */}
           <div className="grid gap-4 sm:grid-cols-3">
             <VarList
-              title="Before the call"
-              hint="Values handed to the agent when the call is placed, so it already knows who it is calling."
+              title={t("voiceDetail.before")}
+              hint={t("voiceDetail.beforeHint")}
               rows={detail.variables.preCall}
-              empty="Nothing injected."
+              empty={t("voiceDetail.beforeEmpty")}
             />
             <VarList
-              title="During the call"
-              hint="Functions the agent can call mid-conversation. This is how it checks the diary and books."
+              title={t("voiceDetail.during")}
+              hint={t("voiceDetail.duringHint")}
               rows={detail.variables.duringCall}
-              empty="No functions. It can talk, but not book."
+              empty={t("voiceDetail.duringEmpty")}
             />
             <VarList
-              title="After the call"
-              hint="What Retell extracts from the transcript once the call ends."
+              title={t("voiceDetail.after")}
+              hint={t("voiceDetail.afterHint")}
               rows={detail.variables.postCall}
-              empty="Nothing extracted."
+              empty={t("voiceDetail.afterEmpty")}
             />
           </div>
 
           {/* Test call */}
           <div className="rounded-lg border border-[var(--border)] p-3">
             <div className="mb-1.5 flex items-center gap-2">
-              <h4 className="text-xs font-medium">Test call</h4>
-              <InfoTip text="Places a real call to the number you enter, using this agent. The phone genuinely rings and the minutes are billed." />
+              <h4 className="text-xs font-medium">{t("voiceDetail.test")}</h4>
+              <InfoTip text={t("voiceDetail.testHint")} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -296,23 +309,40 @@ export function VoiceAgentDetail({
                 type="button"
                 disabled={busy || !testTo.trim()}
                 onClick={() =>
-                  void run("Calling…", async () => {
+                  void run(t("voiceDetail.calling"), async () => {
+                    const to = testTo.trim();
+                    // Checked here too, not only in the action: the action's
+                    // error is English, this one speaks the org's language.
+                    if (!/^\+[1-9]\d{6,14}$/.test(to)) {
+                      setStatus(t("voiceDetail.badNumber"));
+                      return;
+                    }
                     // Confirmed here rather than in the action: the phone rings
                     // for a real person, and a mis-click should cost nothing.
-                    if (!window.confirm(`Call ${testTo.trim()} now with ${detail.name}?`)) {
+                    if (
+                      !window.confirm(
+                        t("voiceDetail.confirmCall")
+                          .replace("{to}", to)
+                          .replace("{name}", detail.name),
+                      )
+                    ) {
                       setStatus(null);
                       return;
                     }
-                    const res = (await testCall({ agentId, toNumber: testTo.trim() })) as {
+                    const res = (await testCall({ agentId, toNumber: to })) as {
                       from: string;
                       to: string;
                     };
-                    setStatus(`Calling ${res.to} from ${res.from}…`);
+                    setStatus(
+                      t("voiceDetail.callingFromTo")
+                        .replace("{to}", res.to)
+                        .replace("{from}", res.from),
+                    );
                   })
                 }
                 className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--muted-bg)] disabled:opacity-40"
               >
-                Call me
+                {t("voiceDetail.callMe")}
               </button>
             </div>
           </div>

@@ -109,17 +109,12 @@ export const read = action({
       language: agent.language ?? null,
       engineType: engine.type ?? null,
       llmId: engine.llm_id ?? null,
+      // A null prompt is not "it has none": conversation-flow and custom-llm
+      // agents keep their script elsewhere. The client says which from
+      // engineType, in the org's language, so no English copy is baked here.
       prompt: llm
         ? { general: llm.general_prompt ?? "", beginMessage: llm.begin_message ?? "" }
         : null,
-      // A conversation-flow agent is drawn in Retell's visual editor. Saying so
-      // beats returning an empty prompt, which reads as "it has none".
-      unsupportedReason:
-        engine.type === "conversation-flow"
-          ? "This agent runs a conversation flow, so its script lives in Retell's flow editor and cannot be edited here."
-          : engine.type === "custom-llm"
-            ? "This agent runs a custom LLM over a websocket, so there is no prompt to edit here."
-            : null,
       webhook: {
         expected,
         actual,
