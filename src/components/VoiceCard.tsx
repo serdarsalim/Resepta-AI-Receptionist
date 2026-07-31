@@ -431,7 +431,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           onClose={() => setAdding(false)}
         >
           <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="min-w-[680px] text-sm">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
                 <tr>
                   <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
