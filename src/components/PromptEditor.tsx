@@ -112,12 +112,15 @@ export function PromptEditor({
   }, []);
 
   // The @ trigger: an @ at a word boundary with the caret still on its line.
+  // Reads the textarea directly, never the value prop: inside an input event
+  // the prop still holds the previous render's text, which made the menu lag
+  // one keystroke behind and miss the "@" itself.
   const detect = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const caret = el.selectionStart ?? 0;
     if (el.selectionEnd !== caret) return close();
-    const before = value.slice(0, caret);
+    const before = el.value.slice(0, caret);
     const at = before.lastIndexOf("@");
     if (at < 0) return close();
     if (at > 0 && /[\w{}@]/.test(before[at - 1])) return close();
@@ -125,7 +128,7 @@ export function PromptEditor({
     if (fragment.length > 40 || fragment.includes("\n")) return close();
     setMenu({ anchor: caretViewportPos(el), start: at, fragment });
     setActive(0);
-  }, [value, close]);
+  }, [close]);
 
   useEffect(() => {
     if (!menu) return;
@@ -173,8 +176,7 @@ export function PromptEditor({
         value={value}
         onChange={(event) => {
           onChange(event.target.value);
-          // Detect on the next frame so selectionStart reflects this edit.
-          requestAnimationFrame(detect);
+          detect();
         }}
         onClick={detect}
         onBlur={() => setTimeout(close, 150)}
@@ -215,12 +217,18 @@ export function PromptEditor({
         ))}
       </div>
       {menu &&
-        matches.length > 0 &&
         createPortal(
           <div
             style={{ left: menu.anchor.left, top: menu.anchor.top }}
-            className="fixed z-[60] max-h-48 w-56 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            className="fixed z-[60] max-h-48 w-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
           >
+            {/* An empty menu still renders: silence after typing @ reads as
+                broken. The row says where variables come from instead. */}
+            {matches.length === 0 && (
+              <div className="px-2.5 py-1.5 text-xs text-[var(--muted)]">
+                {t("voiceDetail.atEmpty")}
+              </div>
+            )}
             {matches.map((row, index) => (
               <button
                 key={row.key}

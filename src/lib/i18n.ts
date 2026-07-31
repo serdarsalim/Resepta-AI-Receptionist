@@ -1394,10 +1394,20 @@ const dictionary = {
     en: "Call only",
     de: "Nur Anruf",
   },
+  "voiceVariables.servicesList": {
+    tr: "Hizmet listesi",
+    en: "Service list",
+    de: "Leistungsliste",
+  },
   "voiceDetail.atHint": {
     tr: "Değişken eklemek için @ yazın",
     en: "Type @ to insert a variable",
     de: "Tippe @, um eine Variable einzufügen",
+  },
+  "voiceDetail.atEmpty": {
+    tr: "Eşleşen değişken yok. Değişkenler sekmesinden ekleyin.",
+    en: "No matching variable. Add it in the Variables tab.",
+    de: "Keine passende Variable. Füge sie im Tab Variablen hinzu.",
   },
   "voiceVariables.notConfigured": {
     tr: "Henüz tanımlı değil",

@@ -199,10 +199,26 @@ export function VoiceAgentDetail({
               <PromptEditor
                 value={draft}
                 onChange={setDraft}
-                variables={detail.variableConfig.items.map((row) => ({
-                  key: row.key,
-                  label: row.label,
-                }))}
+                // The registry's rows plus the built-ins the runtime always
+                // injects (customer, business, next appointment, services).
+                // A registry row with the same key wins, mirroring the
+                // injection's precedence.
+                variables={(() => {
+                  const rows = detail.variableConfig.items.map((row) => ({
+                    key: row.key,
+                    label: row.label,
+                  }));
+                  const seen = new Set(rows.map((row) => row.key));
+                  const builtins = [
+                    { key: "customer_name", label: t("voiceVariables.customerName") },
+                    { key: "customer_phone", label: t("voiceVariables.customerPhone") },
+                    { key: "customer_language", label: t("voiceVariables.customerLanguage") },
+                    { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
+                    { key: "business_name", label: t("voiceVariables.businessName") },
+                    { key: "services", label: t("voiceVariables.servicesList") },
+                  ];
+                  return [...rows, ...builtins.filter((row) => !seen.has(row.key))];
+                })()}
               />
               <label className="mt-2 block">
                 <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">

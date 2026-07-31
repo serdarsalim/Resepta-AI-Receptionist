@@ -378,7 +378,7 @@ export const beforeCallContext = internalQuery({
           )
           .unique()
       : null;
-    const [variables, fields, appointments] = await Promise.all([
+    const [variables, fields, appointments, services] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -395,6 +395,10 @@ export const beforeCallContext = internalQuery({
             .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
             .collect()
         : Promise.resolve([]),
+      ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+        .collect(),
     ]);
     const next = nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"]);
     const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
@@ -433,6 +437,44 @@ export const beforeCallContext = internalQuery({
         }
       }
       if (value) dynamicVariables[variable.key] = String(value);
+    }
+    // Well-known context every agent may reference without configuring a
+    // registry row first — the @ picker offers these as built-ins, so the
+    // injection must not depend on the owner having added them. A registry
+    // row with the same key is deliberate configuration and wins.
+    const lang = customer?.language ?? org.language;
+    const currency = org.currency ?? "TRY";
+    const priceDigits =
+      new Intl.NumberFormat(lang, { style: "currency", currency }).resolvedOptions()
+        .minimumFractionDigits ?? 2;
+    const priceOf = (minor: number) =>
+      new Intl.NumberFormat(lang, {
+        style: "currency",
+        currency,
+        currencyDisplay: "narrowSymbol",
+      }).format(minor / 10 ** priceDigits);
+    const builtins: Record<string, string> = {
+      business_name: org.name,
+      customer_name: customer
+        ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
+        : "",
+      customer_phone: customer?.phone ?? normalised ?? "",
+      customer_language: lang,
+      next_appointment: next
+        ? formatAppointmentTime(next.startAt, org.timezone, lang)
+        : "",
+      services: services
+        .filter((service) => service.active)
+        .map((service) => {
+          const duration = `${service.durationMinutes} ${lang === "tr" ? "dk" : "min"}`;
+          return service.price !== undefined
+            ? `${service.name} (${duration}, ${priceOf(service.price)})`
+            : `${service.name} (${duration})`;
+        })
+        .join("; "),
+    };
+    for (const [key, value] of Object.entries(builtins)) {
+      if (!(key in dynamicVariables)) dynamicVariables[key] = value;
     }
     return {
       apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
