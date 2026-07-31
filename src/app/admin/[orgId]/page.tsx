@@ -38,7 +38,7 @@ function Row({
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   return (
-    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       <div>
         <div className="text-sm font-medium">{label}</div>
         {hint && <div className="text-xs text-[var(--muted)]">{hint}</div>}
@@ -82,7 +82,7 @@ function SecretRow({
 }) {
   const [draft, setDraft] = useState("");
   return (
-    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       <div>
         <div className="text-sm font-medium">{label}</div>
         <div className="font-mono text-xs text-[var(--muted)]">{masked ?? "not set"}</div>
@@ -106,13 +106,102 @@ function SecretRow({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// A titled card with an optional one-line description, the pattern every
+// business settings surface (Vercel, Stripe) uses: the reader should know
+// what a section governs without reading its rows.
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <h2 className="mb-1 text-sm font-semibold">{title}</h2>
-      <div className="divide-y divide-[var(--border)]">{children}</div>
+      <h2 className="text-sm font-semibold">{title}</h2>
+      {description && (
+        <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>
+      )}
+      <div className="mt-2 divide-y divide-[var(--border)]">{children}</div>
     </section>
   );
+}
+
+// Status is a dot plus a word, never a bare lowercase token floating in a
+// row. Tones map to the app's existing palette: green for healthy, amber for
+// needs-attention, muted for off/none.
+function Pill({
+  tone,
+  children,
+}: {
+  tone: "ok" | "warn" | "muted";
+  children: React.ReactNode;
+}) {
+  const dot =
+    tone === "ok"
+      ? "bg-emerald-500"
+      : tone === "warn"
+        ? "bg-amber-500"
+        : "bg-[var(--border)]";
+  const text =
+    tone === "warn"
+      ? "text-amber-700 dark:text-amber-400"
+      : tone === "muted"
+        ? "text-[var(--muted)]"
+        : "";
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs ${text}`}>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+      {children}
+    </span>
+  );
+}
+
+// Provider ids are reference data the operator pastes into dashboards and
+// support tickets, so every id is one click to copy. The confirmation
+// replaces the text inside a fixed-width slot: nothing shifts.
+function CopyId({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+      title="Copy"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-[11px] hover:opacity-80"
+    >
+      <span className="truncate">{value}</span>
+      <span className="w-8 shrink-0 text-left text-[var(--muted)]">
+        {copied ? "copied" : "copy"}
+      </span>
+    </button>
+  );
+}
+
+// A labeled data value. Every fact carries its label — a timestamp or a
+// count with no name is the exact mess this page had before.
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</div>
+      <div className="mt-0.5 truncate text-xs">{children}</div>
+    </div>
+  );
+}
+
+function shortDate(ms: number): string {
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function TenantPage() {
@@ -165,22 +254,24 @@ export default function TenantPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-6">
-      <header>
-        <Link href="/admin" className="text-xs text-[var(--muted)] hover:underline">
-          ← Fleet
-        </Link>
-        <h1 className="mt-1 text-lg font-semibold">
-          {detail.name}
-          {detail.demoMode && (
-            <span className="ml-2 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
-              demo
-            </span>
-          )}
-        </h1>
-        <p className="text-xs text-[var(--muted)]">
-          {detail.timezone} · {detail.language} · {detail.agents.length}{" "}
-          {detail.agents.length === 1 ? "agent" : "agents"}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link href="/admin" className="text-xs text-[var(--muted)] hover:underline">
+            ← Fleet
+          </Link>
+          <h1 className="mt-1 text-lg font-semibold">
+            {detail.name}
+            {detail.demoMode && (
+              <span className="ml-2 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
+                demo
+              </span>
+            )}
+          </h1>
+          <p className="text-xs text-[var(--muted)]">
+            {detail.timezone} · {detail.language} · {detail.agents.length}{" "}
+            {detail.agents.length === 1 ? "agent" : "agents"}
+          </p>
+        </div>
         {/* Everything below this line is config the operator installs. This
             button is for the rest: the things that only exist inside the
             product, where the fix is three taps in their own Appointments
@@ -190,15 +281,16 @@ export default function TenantPage() {
           onClick={() => {
             void actAs({ orgId }).then(() => router.push("/"));
           }}
-          className="mt-2 rounded-lg border border-[var(--border)] px-2 py-1 text-xs hover:bg-[var(--muted-bg)]"
+          className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
         >
-          Work in this account as Autotakt
+          Work in this account as {detail.name} →
         </button>
       </header>
 
-      <Section title="Voice">
-        {/* Each client has their own Retell account, so this key is what
-            decides whose agents the business sees under Phone agent. */}
+      <Section
+        title="Voice"
+        description="The client's own Retell account. The key decides whose agents Phone agent lists, and it must be the account's webhook signing key."
+      >
         {(conns ?? []).filter((row) => row.provider === "retell").map((row) => (
           <SecretRow
             key={`${row.provider}.${row.field}`}
@@ -210,79 +302,93 @@ export default function TenantPage() {
             }
           />
         ))}
+
         {detail.voiceProvisioning.length > 0 && (
-          <div className="py-2 text-xs">
-            <div className="mb-1 font-medium">Agent setup</div>
-            {detail.voiceProvisioning.map((job, index) => (
-              <div
-                key={`${job.updatedAt}-${index}`}
-                className={`grid gap-x-3 gap-y-1 py-1.5 text-[var(--muted)] sm:grid-cols-[minmax(0,1fr)_auto] ${
-                  job.status === "failed" ? "text-amber-700 dark:text-amber-400" : ""
-                }`}
-              >
-                <span>
-                  {job.name} · {job.template} · {job.status}
-                </span>
-                <span>{new Date(job.updatedAt).toLocaleString()}</span>
-                {(job.retellAgentId || job.retellLlmId) && (
-                  <span className="break-all font-mono sm:col-span-2">
-                    {job.retellAgentId ?? "no agent id"} · {job.retellLlmId ?? "no engine id"}
-                  </span>
-                )}
-                {job.error && (
-                  <span className="break-words font-mono sm:col-span-2">{job.error}</span>
-                )}
-              </div>
-            ))}
+          <div className="py-2.5">
+            <div className="text-sm font-medium">Agent setup</div>
+            <div className="mt-1 space-y-2">
+              {detail.voiceProvisioning.map((job, index) => (
+                <div key={`${job.updatedAt}-${index}`} className="text-xs">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <Pill tone={job.status === "failed" ? "warn" : job.status === "complete" ? "ok" : "muted"}>
+                      {job.status}
+                    </Pill>
+                    <span className="font-medium">{job.name}</span>
+                    <span className="text-[var(--muted)]">{job.template}</span>
+                    <span className="ml-auto text-[var(--muted)]">{shortDate(job.updatedAt)}</span>
+                  </div>
+                  {(job.retellAgentId || job.retellLlmId) && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {job.retellAgentId && <CopyId value={job.retellAgentId} />}
+                      {job.retellLlmId && <CopyId value={job.retellLlmId} />}
+                    </div>
+                  )}
+                  {job.error && (
+                    <div className="mt-1 break-words rounded-lg bg-amber-50 px-2 py-1.5 font-mono text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                      {job.error}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
         {detail.agents.length === 0 ? (
-          <p className="py-2 text-xs text-[var(--muted)]">
+          <p className="py-2.5 text-xs text-[var(--muted)]">
             No agents connected. The business can add one in Phone agent once the key is in.
           </p>
         ) : (
           detail.agents.map((agent) => (
-            <div key={agent.retellAgentId} className="space-y-2 py-3 text-xs">
-              <div className="flex flex-wrap items-center gap-x-3">
-                <span className="font-mono">{agent.retellAgentId}</span>
-                <span className="text-[var(--muted)]">
-                  {agent.inboundNumber ?? "no number"}
+            <div key={agent.retellAgentId} className="space-y-2 py-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <CopyId value={agent.retellAgentId} />
+                <span className="text-xs text-[var(--muted)]">
+                  {agent.inboundNumber ?? "No line"}
                 </span>
-                <span
-                  className={
-                    agent.enabled
-                      ? "text-[var(--muted)]"
-                      : "text-amber-600 dark:text-amber-400"
-                  }
-                >
-                  {agent.enabled ? "on" : "off"}
+                <span className="ml-auto">
+                  <Pill tone={agent.enabled ? "ok" : "warn"}>
+                    {agent.enabled ? "Enabled" : "Disabled"}
+                  </Pill>
                 </span>
               </div>
-              <div className="grid gap-x-5 gap-y-1 text-[var(--muted)] sm:grid-cols-2">
-                <span>
-                  Randevu runtime: {agent.runtimeConnectedAt
-                    ? `connected ${new Date(agent.runtimeConnectedAt).toLocaleString()}`
-                    : "not connected"}
-                </span>
-                <span>
-                  Last call result: {agent.lastCallEventAt
-                    ? new Date(agent.lastCallEventAt).toLocaleString()
-                    : "none"}
-                </span>
-                <span>
-                  Last analysis: {agent.lastAnalyzedEventAt
-                    ? new Date(agent.lastAnalyzedEventAt).toLocaleString()
-                    : "none"}
-                </span>
-                <span>
-                  Inbox: {agent.pendingEvents} pending · {agent.failedEvents} failed
-                </span>
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
+                <Fact label="Randevu runtime">
+                  {agent.runtimeConnectedAt ? (
+                    <Pill tone="ok">{shortDate(agent.runtimeConnectedAt)}</Pill>
+                  ) : (
+                    <Pill tone="warn">Not connected</Pill>
+                  )}
+                </Fact>
+                <Fact label="Last call result">
+                  {agent.lastCallEventAt ? (
+                    shortDate(agent.lastCallEventAt)
+                  ) : (
+                    <span className="text-[var(--muted)]">None yet</span>
+                  )}
+                </Fact>
+                <Fact label="Last analysis">
+                  {agent.lastAnalyzedEventAt ? (
+                    shortDate(agent.lastAnalyzedEventAt)
+                  ) : (
+                    <span className="text-[var(--muted)]">None yet</span>
+                  )}
+                </Fact>
+                <Fact label="Event inbox">
+                  {agent.pendingEvents === 0 && agent.failedEvents === 0 ? (
+                    <span className="text-[var(--muted)]">Clear</span>
+                  ) : (
+                    <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
+                      {agent.pendingEvents} pending · {agent.failedEvents} failed
+                    </Pill>
+                  )}
+                </Fact>
               </div>
               {agent.latestFailure && (
-                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
-                      {agent.latestFailure.eventType} · {new Date(agent.latestFailure.receivedAt).toLocaleString()} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
+                      {agent.latestFailure.eventType} · {shortDate(agent.latestFailure.receivedAt)} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
                     </span>
                     <button
                       type="button"
@@ -322,7 +428,10 @@ export default function TenantPage() {
         )}
       </Section>
 
-      <Section title="WhatsApp">
+      <Section
+        title="WhatsApp"
+        description="The org's own Meta Cloud API number. Inbound messages resolve the org by phone number ID."
+      >
         <Row
           label="Phone number ID"
           hint="Meta's phone_number_id. Inbound resolves the org by this."
@@ -349,7 +458,10 @@ export default function TenantPage() {
         />
       </Section>
 
-      <Section title="Bookings">
+      <Section
+        title="Bookings"
+        description="cal.com powers availability and conflict checks. Without a key, voice bookings record without checking the calendar."
+      >
         <SecretRow
           label="cal.com API key"
           masked={detail.calcomApiKey}
@@ -360,20 +472,25 @@ export default function TenantPage() {
           current={detail.calcomEventTypeId}
           onSave={(value) => org({ calcomEventTypeId: value })}
         />
-        <div className="py-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Webhook URL</div>
-          <div className="text-xs text-[var(--muted)]">
+          <div className="min-w-0 text-xs text-[var(--muted)]">
             {/* cal.com's payload carries no tenant identity, so the org is
                 resolved from this token in the path. It is generated, not
                 typed, which is why this is text and not a field. */}
-            {detail.calcomWebhookToken
-              ? `/calcom/webhook/${detail.calcomWebhookToken}`
-              : "No token generated yet."}
+            {detail.calcomWebhookToken ? (
+              <CopyId value={`/calcom/webhook/${detail.calcomWebhookToken}`} />
+            ) : (
+              "No token generated yet."
+            )}
           </div>
         </div>
       </Section>
 
-      <Section title="Email">
+      <Section
+        title="Email"
+        description="Resend sender identity for reminder and campaign mail."
+      >
         <Row
           label="From address"
           hint="Domain must be verified in Resend or sends are rejected."
@@ -390,7 +507,10 @@ export default function TenantPage() {
         />
       </Section>
 
-      <Section title="Recent failures">
+      <Section
+        title="Recent failures"
+        description="Delivery problems across every channel of this org, newest first."
+      >
         <Failures orgId={orgId} />
       </Section>
     </main>
