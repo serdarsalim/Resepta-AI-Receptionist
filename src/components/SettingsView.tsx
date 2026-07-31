@@ -547,6 +547,9 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   }
 
   const inRoster = (id: string) => roster?.agents.find((a) => a.id === id) ?? null;
+  // What every connected agent's webhook should say. Null on a misconfigured
+  // deployment — no point flagging rows against a URL that is itself wrong.
+  const expectedHook = site.isMisconfigured ? null : `${site.url}/retell/call-ended`;
   const connectedIds = new Set(connected.map((row) => row.retellAgentId));
   const available = (roster?.agents ?? []).filter((a) => !connectedIds.has(a.id));
 
@@ -611,6 +614,16 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                           </span>
                         )}
                       </button>
+                      {/* The sheet's webhook warning, shrunk to a glance. An
+                          agent can answer calls for weeks while its results go
+                          nowhere; that state should not need the sheet opened
+                          to be seen. */}
+                      {agent && expectedHook && agent.webhookUrl !== expectedHook && (
+                        <span
+                          title={t("settings.voiceUnwired")}
+                          className="ml-2 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle"
+                        />
+                      )}
                     </td>
                     {/* Truncating with no way to see the rest made this cell
                         decorative — "business_type_confirmed, decision_mak…"
@@ -652,7 +665,19 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                     <td className="px-3 py-2 text-right">
                       <ActionTip
                         label={t("settings.voiceDisconnect")}
-                        onClick={() => void disconnect({ agentId: row._id })}
+                        onClick={() => {
+                          // An icon button has no label to slow the hand down,
+                          // so the confirm carries the reassurance: the agent
+                          // itself survives, only the link goes.
+                          const name = agent?.name ?? row.retellAgentId;
+                          if (
+                            window.confirm(
+                              t("settings.voiceDisconnectConfirm").replace("{name}", name),
+                            )
+                          ) {
+                            void disconnect({ agentId: row._id });
+                          }
+                        }}
                       >
                         ✕
                       </ActionTip>
@@ -787,9 +812,31 @@ function SectionChip({
   );
 }
 
+const SECTION_STORAGE_KEY = "randevu.settings-section";
+
 export function SettingsView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("reminders");
+  const [section, setSectionState] = useState<Section>("reminders");
+
+  // Same deal as the main tabs in AppHome: the section lives in the URL so a
+  // refresh stays put, and the last-used one is the fallback for a bare URL.
+  // Before this, every refresh dumped you back on Reminders.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("section");
+    const stored = window.localStorage.getItem(SECTION_STORAGE_KEY);
+    const next = [wanted, stored].find(
+      (id): id is Section => id !== null && SECTIONS.some((s) => s.id === id),
+    );
+    if (next) setSectionState(next);
+  }, []);
+
+  const setSection = (next: Section) => {
+    setSectionState(next);
+    window.localStorage.setItem(SECTION_STORAGE_KEY, next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", next);
+    window.history.replaceState(null, "", url);
+  };
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
   const connectWhatsapp = useMutation(api.orgs.connectWhatsapp);

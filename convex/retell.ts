@@ -231,7 +231,15 @@ export const listAgents = action({
         configured: true,
         error: null,
         connectedAgentId: context.connectedAgentId ?? DEMO_AGENTS[0].id,
-        agents: DEMO_AGENTS.map((a) => ({ ...a })),
+        // The demo agent reads as wired: the showroom exists to look healthy,
+        // and an amber "results not arriving" dot on a fake agent would be
+        // a defect tour, not a demo.
+        agents: DEMO_AGENTS.map((a) => ({
+          ...a,
+          webhookUrl: process.env.CONVEX_SITE_URL
+            ? `${process.env.CONVEX_SITE_URL}/retell/call-ended`
+            : null,
+        })),
         phoneNumbers: [
           { number: "+902121112233", nickname: "Salon line", agentId: DEMO_AGENTS[0].id },
         ],
