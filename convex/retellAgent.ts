@@ -69,7 +69,7 @@ async function orgKey(ctx: Pick<ActionCtx, "runQuery">): Promise<string> {
   const context = await ctx.runQuery(internal.retell.agentListContext, {});
   if (!context) throw new Error("No workspace.");
   if (context.demoMode) {
-    throw new Error("This is the demo workspace — it holds no Retell credentials.");
+    throw new Error("This is the demo workspace. It holds no Retell credentials.");
   }
   if (!context.apiKey) {
     throw new Error("No Retell API key for this workspace yet.");

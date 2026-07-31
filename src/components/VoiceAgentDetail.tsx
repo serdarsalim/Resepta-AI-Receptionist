@@ -154,8 +154,8 @@ export function VoiceAgentDetail({
               <div className="space-y-2">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
                   {detail.webhook.pointsElsewhere
-                    ? "Points somewhere else — call results are not reaching this app."
-                    : "Not set — call results are not reaching this app."}
+                    ? "Points somewhere else, so call results are not reaching this app."
+                    : "Not set, so call results are not reaching this app."}
                 </p>
                 {detail.webhook.actual && (
                   <code className="block truncate text-xs text-[var(--muted)]">
@@ -226,7 +226,7 @@ export function VoiceAgentDetail({
                         beginMessage: begin,
                       })) as { previousPrompt: string; version: number | null };
                       setPrevious(res.previousPrompt);
-                      setStatus(`Published v${res.version ?? "?"} — live on the next call.`);
+                      setStatus(`Published v${res.version ?? "?"}, live on the next call.`);
                       load();
                     })
                   }
@@ -267,9 +267,9 @@ export function VoiceAgentDetail({
             />
             <VarList
               title="During the call"
-              hint="Functions the agent can call mid-conversation — this is how it checks the diary and books."
+              hint="Functions the agent can call mid-conversation. This is how it checks the diary and books."
               rows={detail.variables.duringCall}
-              empty="No functions — it can talk, but not book."
+              empty="No functions. It can talk, but not book."
             />
             <VarList
               title="After the call"
