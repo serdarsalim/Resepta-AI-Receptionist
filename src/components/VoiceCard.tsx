@@ -123,7 +123,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
         type="button"
         onClick={() => setAdding(true)}
         disabled={available.length === 0}
-        className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] disabled:opacity-40"
+        className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
       >
         {t("settings.voiceConnect")}
       </button>
