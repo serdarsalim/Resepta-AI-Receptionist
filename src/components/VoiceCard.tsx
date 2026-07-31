@@ -6,7 +6,6 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { ActionTip, InfoTip } from "./InfoTip";
-import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { VoiceAgentDetail } from "./VoiceAgentDetail";
@@ -95,9 +94,12 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
         : t("settings.voiceNotProvisioned");
 
   return (
-    <Card disabled={!isOwner}>
+    // Not a Card: the table is the main actor and frames itself. The fieldset
+    // is the one job the card chrome was doing — staff see all of this
+    // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
+    <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
       {connected.length > 0 && (
-        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)]">
+        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           {/* min-w-full, not w-full. w-full pins the table to the container and
               the cells overflow it anyway — the Enabled toggle and the
               disconnect button were clipped at the card edge with nothing to
@@ -429,6 +431,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
         </Sheet>
       )}
 
-    </Card>
+    </fieldset>
   );
 }

@@ -6,7 +6,6 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
-import { Card } from "./Card";
 import { VoiceCard } from "./VoiceCard";
 
 // The phone agent's own sidebar destination. Settings is where a salon
@@ -53,8 +52,9 @@ function CallHistory() {
 
   return (
     <div className="space-y-2">
-      <Card>
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      {/* The table frames itself; a card around it was a border around a
+          border. */}
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="min-w-full text-sm">
             <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
               <tr>
@@ -152,8 +152,7 @@ function CallHistory() {
               })}
             </tbody>
           </table>
-        </div>
-      </Card>
+      </div>
 
       {status === "CanLoadMore" && (
         <button
