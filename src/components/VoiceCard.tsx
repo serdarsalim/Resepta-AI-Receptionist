@@ -506,6 +506,14 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
+                              data-sheet-autofocus
+                              onClick={() => add(agent.id)}
+                              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
+                            >
+                              {t("common.add")}
+                            </button>
+                            <button
+                              type="button"
                               onClick={() =>
                                 void setAgentArchived({
                                   retellAgentId: agent.id,
@@ -515,14 +523,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                               className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover/pick:opacity-100"
                             >
                               {t("settings.voiceArchive")}
-                            </button>
-                            <button
-                              type="button"
-                              data-sheet-autofocus
-                              onClick={() => add(agent.id)}
-                              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
-                            >
-                              {t("common.add")}
                             </button>
                           </div>
                         )}
