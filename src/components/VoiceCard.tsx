@@ -209,10 +209,9 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                 return (
                   <Fragment key={row._id}>
                   <tr className="group border-t border-[var(--border)]">
-                    {/* An agent the account no longer lists — renamed, deleted,
-                        or a key repointed at a different Retell account. Show
-                        the raw id rather than a blank cell: calls still route
-                        to it, so silence here would read as "nothing wired". */}
+                    {/* An agent the account no longer lists still gets an honest
+                        native label. Provider identifiers belong in platform
+                        admin, never in the salon-facing product. */}
                     <td className="whitespace-nowrap px-3 py-2">
                       {/* The name opens the agent itself — prompt, webhook,
                           variables, test call. A ghost row opens too: the
@@ -225,8 +224,8 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                         {agent ? (
                           agent.name
                         ) : (
-                          <span className="font-mono text-xs text-amber-600 dark:text-amber-400">
-                            {row.retellAgentId}
+                          <span className="text-xs text-amber-600 dark:text-amber-400">
+                            {t("settings.voiceUnavailable")}
                           </span>
                         )}
                       </button>
@@ -290,7 +289,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                           // An icon button has no label to slow the hand down,
                           // so the confirm carries the reassurance: the agent
                           // itself survives, only the link goes.
-                          const name = agent?.name ?? row.retellAgentId;
+                          const name = agent?.name ?? t("settings.voiceUnavailable");
                           if (
                             window.confirm(
                               t("settings.voiceDisconnectConfirm").replace("{name}", name),
@@ -388,7 +387,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                                 setWireError(null);
                                 void wireWebhook({ agentId: row.retellAgentId })
                                   .then(() => load())
-                                  .catch((e: Error) => setWireError(e.message))
+                                  .catch(() => setWireError(t("settings.voiceActionFailed")))
                                   .finally(() => setWiring(null));
                               }}
                               className="rounded-lg border border-amber-300 px-2 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-950/60"
@@ -396,9 +395,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                               {t("settings.voiceFix")}
                             </button>
                           )}
-                          {wireError && wiring === null && (
-                            <code className="text-[11px] opacity-70">{wireError}</code>
-                          )}
+                          {wireError && wiring === null && <span>{wireError}</span>}
                         </span>
                       </td>
                     </tr>
@@ -415,7 +412,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           does not push the buttons out from under the pointer. */}
       <p className="min-h-[1.25rem] text-sm text-[var(--muted)]">
         {status}
-        {roster?.error && <code className="ml-2 text-xs opacity-60">{roster.error}</code>}
         {roster?.configured && connected.length === 0 && available.length === 0
           ? t("settings.voiceNoAgents")
           : null}

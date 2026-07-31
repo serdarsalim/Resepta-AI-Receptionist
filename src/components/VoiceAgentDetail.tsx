@@ -77,8 +77,8 @@ export function VoiceAgentDetail({
         setDraft(detail.prompt?.general ?? "");
         setBegin(detail.prompt?.beginMessage ?? "");
       })
-      .catch((e: Error) => setError(e.message));
-  }, [read, agentId]);
+      .catch(() => setError(t("settings.voiceActionFailed")));
+  }, [read, agentId, t]);
 
   useEffect(() => load(), [load]);
 
@@ -89,8 +89,8 @@ export function VoiceAgentDetail({
     setStatus(label);
     try {
       await fn();
-    } catch (e) {
-      setStatus((e as Error).message);
+    } catch {
+      setStatus(t("settings.voiceActionFailed"));
       setBusy(false);
       return;
     }
@@ -114,10 +114,9 @@ export function VoiceAgentDetail({
 
       {detail && (
         <div className="space-y-5">
-          {/* Webhook first. It is the difference between an agent that works and
-              one that answers the phone and quietly drops every result — and
-              the old card showed two URLs without ever saying which state you
-              were in. */}
+          {/* Results first. It is the difference between an agent that works and
+              one that answers the phone and quietly drops every result. The
+              provider connection stays behind the native status and fix. */}
           <div className="rounded-lg border border-[var(--border)] p-3">
             <div className="mb-1 flex items-center gap-2">
               <h4 className="text-xs font-medium">{t("voiceDetail.webhook")}</h4>
@@ -134,11 +133,6 @@ export function VoiceAgentDetail({
                     ? t("voiceDetail.webhookElsewhere")
                     : t("voiceDetail.webhookMissing")}
                 </p>
-                {detail.webhook.actual && (
-                  <code className="block truncate text-xs text-[var(--muted)]">
-                    {t("voiceDetail.webhookCurrent").replace("{url}", detail.webhook.actual)}
-                  </code>
-                )}
                 <button
                   type="button"
                   disabled={busy || !detail.webhook.expected}

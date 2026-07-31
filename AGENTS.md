@@ -214,6 +214,12 @@ went, and the reasoning to preserve:
   table — recording player, per-call collected variables, summary, transcript
   in a row expansion. The word "webhook" never reaches the client; broken
   plumbing renders as "call results are not reaching the app" + Fix.
+  **Retell is an implementation detail.** Salon-facing UI never names Retell,
+  exposes provider IDs or URLs, or asks the owner to copy provider
+  configuration. Use native Randevu language such as Phone agent, Call
+  results, Instructions and Variables. Provider identity and diagnostics stay
+  in platform admin and backend code; existing configuration is imported
+  silently into the Randevu editor.
 - **Reminders** (`RemindersView`, tab id `messages`): the old SettingsView,
   renamed. Reminder rules + the WhatsApp connection.
 - **Business → AI**: `McpCard`, self-serve MCP connector keys (Claude/ChatGPT

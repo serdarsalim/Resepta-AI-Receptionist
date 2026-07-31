@@ -179,8 +179,8 @@ export function VoiceVariablesEditor({
       else setPrevious(null);
       setStatus(t("voiceVariables.published").replace("{n}", String(result.version ?? "")));
       onPublished();
-    } catch (error) {
-      setStatus((error as Error).message);
+    } catch {
+      setStatus(t("settings.voiceActionFailed"));
     } finally {
       setBusy(false);
     }

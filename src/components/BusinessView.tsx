@@ -22,7 +22,6 @@ import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { FieldGroup, InlineEditValue } from "./RecordField";
-import { InfoTip } from "./InfoTip";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -590,30 +589,11 @@ const VOICE_ROW_GRID =
 function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
-  const settings = useQuery(api.orgs.current, {});
-  // HTTP actions answer on the SITE url; the client talks to the cloud one.
-  // Deriving that by swapping the domain works in the cloud and quietly fails
-  // on a local deployment, where the two are ports and not domains — so take
-  // the env var that states it outright when there is one.
-  const siteUrl = resolveSiteUrl().url;
-  // Read here, not just in ServicesCard: one agent gets configured once, so
-  // the generated block below has to cover everything it can be asked for —
-  // the properties it may write AND the services it may book.
-  // Sorted the same way the table above sorts, because it is the same list:
-  // two orders for one set of services on one screen reads as two lists.
-  const activeServices = (useQuery(api.services.list, {}) ?? [])
-    .filter((service) => service.active)
-    .sort((a, b) => a.name.localeCompare(b.name));
   const createField = useMutation(api.contactFields.create);
   const removeField = useMutation(api.contactFields.remove);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
   const [source, setSource] = useState<FieldSource>("manual");
   const [error, setError] = useState<string | null>(null);
-  // What was copied, not whether something was: add a field after copying and
-  // the button has to stop claiming the clipboard holds the current block.
-  const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
-  // Collapsed by default: the copy button is the job, the text is the audit.
-  const [showVoiceSetup, setShowVoiceSetup] = useState(false);
   const sourceLabelId = useId();
 
   // Unset reads as "manual": fields defined before the voice agent existed are
@@ -626,83 +606,6 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
     `${t(`fields.type.${field.type}` as "fields.type.text")}${
       field.options?.length ? ` · ${field.options.join(", ")}` : ""
     }`;
-
-  // Randevu does not write the agent's prompt or its function schema, so the
-  // second half of setting up voice is work somebody does in Retell. This is
-  // that work, handed over: every function the endpoint answers, the argument
-  // shapes it parses (convex/http.ts), and THIS org's keys.
-  //
-  // Never rendered — only copied. The reader is whoever builds the Retell
-  // agent, increasingly an agent rather than a person, so it is written to be
-  // pasted into that job whole. Screen space stopped being the constraint the
-  // moment it stopped being displayed, which is why it is a full reference and
-  // not the two-line sample it used to be. English throughout for the same
-  // reason: it documents an API whose argument names are English, and nobody
-  // reads it in the app.
-  //
-  // The key lists ARE the permission model, not a convenience. Keys that are
-  // not a contactFields row in this org are dropped by
-  // retell.applyVoiceContactValues, and services resolve through
-  // retell.matchService.
-  const voiceSetupBlock = [
-    `Randevu voice agent configuration — ${settings?.org.name || "this business"}`,
-    "",
-    "Every function below is a Retell custom function POSTing to:",
-    `  ${siteUrl}/retell/functions`,
-    "",
-    "The request carries Retell's call object. `phone` falls back to",
-    "call.from_number when the argument is omitted, and the org is resolved",
-    "from call.agent_id — which must match the Retell agent ID saved in",
-    "Randevu under Settings.",
-    "",
-    "check_availability",
-    '  args:    { "date": "2026-01-31" }',
-    '  returns: { "available_slots": [{ "start": <ISO>, "spoken": <text> }] }',
-    "  Requires cal.com connected; errors with no-calendar-connected otherwise.",
-    "",
-    "book_appointment",
-    '  args:    { "name": <text>, "phone": "+90...", "start": <ISO>,',
-    `             "service": <service key below> }`,
-    '  returns: { "booked": true, "spoken_time": <text>, "service": <name> }',
-    "  A missing `service` in the RESPONSE means nothing matched — the booking",
-    "  still stands, so ask the caller again rather than rebooking.",
-    "",
-    "find_appointment",
-    '  args:    { "phone": "+90..." }',
-    '  returns: { "found": true, "spoken_time": <text> } | { "found": false }',
-    "  Name the appointment before acting on it — a caller with two bookings",
-    "  should not have the next one cancelled by guess.",
-    "",
-    "cancel_appointment",
-    '  args:    { "phone": "+90..." }',
-    '  returns: { "cancelled": true }',
-    "",
-    "reschedule_appointment",
-    '  args:    { "phone": "+90...", "start": <ISO> }',
-    '  returns: { "rescheduled": true, "spoken_time": <text> }',
-    "",
-    "update_contact",
-    '  args:    { "phone": "+90...", "values": { <field key below>: <text> } }',
-    "  Only the keys listed under Writable fields are accepted. Anything else",
-    "  is ignored, including every staff-filled field — that refusal is the",
-    "  point, not a bug to work around.",
-    "",
-    "Services this business offers (send the key, not the spoken name — the",
-    "key survives the business renaming the service):",
-    ...(activeServices.length === 0
-      ? ["  (none configured yet)"]
-      : activeServices.map(
-          (service) =>
-            `  ${service.key}: ${service.name} (${service.durationMinutes} min)`,
-        )),
-    "",
-    "Writable fields (update_contact accepts these and nothing else):",
-    ...(voiceFields.length === 0
-      ? ["  (none — no contact field is marked voice-filled)"]
-      : voiceFields.map(
-          (field) => `  ${field.key}: ${field.label} (${typeSummary(field)})`,
-        )),
-  ].join("\n");
 
   // Staff cannot add a field, so an empty list for them is a heading, an (i)
   // and an empty fieldset. Don't render the frame.
@@ -745,9 +648,9 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               fields stacked six identical icons carrying the same two
               sentences down the column. */}
           <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
-          {/* The key is what the owner pastes into Retell's update_contact
-              config, so it is a real column with a real label, not a
-              decoration on the end of the row. */}
+          {/* The key is a stable internal name for using this value across the
+              phone agent and customer records, so it is a real column with a
+              real label rather than decoration on the end of the row. */}
           <div className={`${VOICE_ROW_GRID} pt-2 text-xs text-[var(--muted)]`}>
             <span>{t("fields.label")}</span>
             <span>{t("fields.key")}</span>
@@ -773,45 +676,6 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
           </ul>
         </div>
       )}
-
-      {/* The half of the setup Randevu cannot do for you, generated from your
-          own fields and services so there is nothing left to translate by
-          hand. Outside the voice-fields block on purpose: a salon that collects
-          no custom properties still has services to book, and the agent still
-          has to be told their keys. */}
-      {/* Copy first, read only if you want to. Nobody configuring a phone
-          agent reads an API reference off a settings page — they paste it into
-          the thing that does the configuring — but hiding it outright asks the
-          owner to trust a button that says nothing about what it copied. */}
-      <div className="mb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">{t("fields.voiceSetup")}</span>
-          <InfoTip text={t("fields.voiceSetupHint")} />
-          <button
-            type="button"
-            aria-expanded={showVoiceSetup}
-            onClick={() => setShowVoiceSetup((prev) => !prev)}
-            className="rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            {showVoiceSetup ? t("common.hide") : t("common.show")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard.writeText(voiceSetupBlock);
-              setCopiedBlock(voiceSetupBlock);
-            }}
-            className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            {copiedBlock === voiceSetupBlock ? t("common.copied") : t("common.copy")}
-          </button>
-        </div>
-        {showVoiceSetup && (
-          <pre className="mt-2 max-h-80 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--foreground)]">
-            {voiceSetupBlock}
-          </pre>
-        )}
-      </div>
 
       {isOwner && (
         <form

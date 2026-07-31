@@ -950,18 +950,12 @@ const dictionary = {
     en: "{n} fields",
     de: "{n} Felder",
   },
-  // Shown INSTEAD of the endpoints when the resolved site URL is a loopback
-  // address on a deployed page. Printing the URL would look like it worked and
-  // fail silently the moment a customer pasted it into Retell.
+  // Shown instead of connector details when the resolved site URL is a
+  // loopback address on a deployed page.
   "settings.voiceEndpointsBroken": {
     tr: "Bu dağıtımda adresler çözümlenemiyor (yerel adrese işaret ediyor). NEXT_PUBLIC_CONVEX_SITE_URL ayarlanmalı.",
     en: "These URLs can't be resolved on this deployment — they point at a local address. NEXT_PUBLIC_CONVEX_SITE_URL needs to be set.",
     de: "Diese URLs lassen sich in dieser Umgebung nicht auflösen — sie zeigen auf eine lokale Adresse. NEXT_PUBLIC_CONVEX_SITE_URL muss gesetzt werden.",
-  },
-  "settings.retellAgentId": {
-    tr: "Retell agent ID",
-    en: "Retell agent ID",
-    de: "Retell-Agent-ID",
   },
   // The salon's word for the thing, not the vendor's. They bought a phone that
   // gets answered; "Retell agent" is an implementation detail they never chose.
@@ -1014,9 +1008,9 @@ const dictionary = {
     de: "Assistent hinzufügen",
   },
   "settings.voiceConnectHint": {
-    tr: "Bunlar Retell hesabınızda zaten bulunan asistanlardır. Ekle düğmesi asistanı Randevu'ya bağlar. Arşivle yalnızca bu listede gizler. Retell'de hiçbir şey oluşturulmaz, değiştirilmez veya silinmez.",
-    en: "These agents already exist in your Retell account. Add connects an agent to Randevu. Archive only hides it from this list. Nothing is created, changed, or deleted in Retell.",
-    de: "Diese Assistenten bestehen bereits in Ihrem Retell-Konto. Hinzufügen verbindet einen Assistenten mit Randevu. Archivieren blendet ihn nur in dieser Liste aus. In Retell wird nichts erstellt, geändert oder gelöscht.",
+    tr: "Bu işletmede kullanılabilecek telefon asistanlarından birini seçin. Ekle asistanı Randevu'da kullanıma açar; Arşivle yalnızca bu listede gizler.",
+    en: "Choose a phone agent available to this business. Add makes it available in Randevu; Archive only hides it from this list.",
+    de: "Wählen Sie einen für diesen Betrieb verfügbaren Telefonassistenten. Hinzufügen macht ihn in Randevu verfügbar; Archivieren blendet ihn nur in dieser Liste aus.",
   },
   "settings.voiceLanguage": { tr: "Dil", en: "Language", de: "Sprache" },
   "settings.voiceLine": { tr: "Telefon hattı", en: "Phone line", de: "Telefonleitung" },
@@ -1031,9 +1025,9 @@ const dictionary = {
     de: "Trennen",
   },
   "settings.voiceDisconnectConfirm": {
-    tr: "{name} bağlantısı kesilsin mi? Asistan Retell hesabınızda kalır; yalnızca bu uygulamayla bağlantısı kaldırılır.",
-    en: "Disconnect {name}? The agent stays in your Retell account; only its link to this app is removed.",
-    de: "{name} trennen? Der Assistent bleibt in Ihrem Retell-Konto; nur die Verbindung zu dieser App wird entfernt.",
+    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Randevu'da kalır, ancak asistan artık bu işletmede görünmez.",
+    en: "Disconnect {name}? Its call history stays in Randevu, but the agent will no longer appear for this business.",
+    de: "{name} trennen? Der Anrufverlauf bleibt in Randevu, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
   "settings.voiceNotProvisioned": {
     tr: "Telefon asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
@@ -1044,6 +1038,16 @@ const dictionary = {
     tr: "Telefon asistanına şu anda ulaşılamıyor. Bizimle iletişime geçin.",
     en: "Can't reach your phone agent right now. Get in touch with us.",
     de: "Ihr Telefonassistent ist derzeit nicht erreichbar. Bitte wenden Sie sich an uns.",
+  },
+  "settings.voiceUnavailable": {
+    tr: "Kullanılamayan asistan",
+    en: "Unavailable agent",
+    de: "Nicht verfügbarer Assistent",
+  },
+  "settings.voiceActionFailed": {
+    tr: "Telefon asistanı güncellenemedi. Lütfen tekrar deneyin.",
+    en: "The phone agent could not be updated. Please try again.",
+    de: "Der Telefonassistent konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
   },
   "settings.voiceNoAgents": {
     tr: "Bu hesapta asistan yok.",
@@ -1120,19 +1124,19 @@ const dictionary = {
   // words, not Retell's. "Prompt" stays untranslated jargon nowhere: it is
   // "talimat"/"Anweisung", what the agent is told to do.
   "voiceDetail.webhook": {
-    tr: "Sonuç webhook'u",
-    en: "Results webhook",
-    de: "Ergebnis-Webhook",
+    tr: "Arama sonuçları",
+    en: "Call results",
+    de: "Anrufergebnisse",
   },
   "voiceDetail.webhookHint": {
-    tr: "Arama bittiğinde Retell sonucu buraya gönderir. Bu olmadan asistan yine yanıt verir ama topladığı hiçbir bilgi bu uygulamaya ulaşmaz.",
-    en: "Where Retell sends the outcome when a call ends. Without it the agent still answers, but nothing it collects reaches this app.",
-    de: "Hierhin sendet Retell das Ergebnis nach jedem Anruf. Ohne diesen Webhook nimmt der Assistent zwar ab, aber nichts von dem, was er erfasst, erreicht diese App.",
+    tr: "Her aramadan sonra kayıtların, özetlerin ve toplanan bilgilerin Randevu'ya ulaşmasını sağlar.",
+    en: "Keeps recordings, summaries and collected details in Randevu after every call.",
+    de: "Sorgt dafür, dass Aufzeichnungen, Zusammenfassungen und erfasste Angaben nach jedem Anruf in Randevu ankommen.",
   },
   "voiceDetail.webhookWired": {
-    tr: "Bu uygulamaya bağlı.",
-    en: "Wired to this app.",
-    de: "Mit dieser App verbunden.",
+    tr: "Sonuçlar Randevu'ya ulaşıyor.",
+    en: "Results are reaching Randevu.",
+    de: "Ergebnisse erreichen Randevu.",
   },
   "voiceDetail.webhookElsewhere": {
     tr: "Başka bir adrese işaret ediyor. Arama sonuçları bu uygulamaya ulaşmıyor.",
@@ -1144,29 +1148,24 @@ const dictionary = {
     en: "Not set, so call results are not reaching this app.",
     de: "Nicht gesetzt. Anrufergebnisse erreichen diese App nicht.",
   },
-  "voiceDetail.webhookCurrent": {
-    tr: "şu an: {url}",
-    en: "now: {url}",
-    de: "aktuell: {url}",
-  },
   "voiceDetail.webhookFix": {
-    tr: "Buraya yönlendir",
-    en: "Point it here",
-    de: "Hierhin umleiten",
+    tr: "Düzelt",
+    en: "Fix",
+    de: "Beheben",
   },
   "voiceDetail.wiring": {
-    tr: "Bağlanıyor…",
-    en: "Wiring…",
-    de: "Wird verbunden…",
+    tr: "Düzeltiliyor…",
+    en: "Fixing…",
+    de: "Wird behoben…",
   },
   "voiceDetail.wired": {
-    tr: "Webhook bağlandı.",
-    en: "Webhook wired.",
-    de: "Webhook verbunden.",
+    tr: "Bağlantı düzeltildi.",
+    en: "Connection fixed.",
+    de: "Verbindung behoben.",
   },
   "voiceDetail.prompt": {
     tr: "Talimat",
-    en: "Prompt",
+    en: "Instructions",
     de: "Anweisung",
   },
   "voiceDetail.promptHint": {
@@ -1218,9 +1217,9 @@ const dictionary = {
   // Derived from engineType client-side so the copy translates; the backend
   // sends no English for these.
   "voiceDetail.flowAgent": {
-    tr: "Bu asistan bir konuşma akışıyla çalışıyor; senaryosu Retell'in akış editöründe ve buradan düzenlenemiyor.",
-    en: "This agent runs a conversation flow, so its script lives in Retell's flow editor and cannot be edited here.",
-    de: "Dieser Assistent läuft über einen Gesprächsablauf; sein Skript liegt im Flow-Editor von Retell und lässt sich hier nicht bearbeiten.",
+    tr: "Bu asistan yönlendirilmiş bir konuşma akışıyla çalışıyor. Senaryosu henüz Randevu'dan düzenlenemiyor.",
+    en: "This agent uses a guided call flow. Its script cannot be edited from Randevu yet.",
+    de: "Dieser Assistent nutzt einen geführten Gesprächsablauf. Sein Skript kann noch nicht in Randevu bearbeitet werden.",
   },
   "voiceDetail.noPrompt": {
     tr: "Bu asistanın buradan düzenlenebilecek bir talimatı yok.",
@@ -1263,9 +1262,9 @@ const dictionary = {
     de: "Nach dem Anruf",
   },
   "voiceDetail.afterHint": {
-    tr: "Arama bittiğinde Retell'in konuşma dökümünden çıkardığı bilgiler.",
-    en: "What Retell extracts from the transcript once the call ends.",
-    de: "Was Retell nach dem Anruf aus dem Transkript zieht.",
+    tr: "Arama bittiğinde konuşmadan tamamlanan bilgiler.",
+    en: "Information recovered from the conversation once the call ends.",
+    de: "Angaben, die nach dem Anruf aus dem Gespräch ergänzt werden.",
   },
   "voiceDetail.afterEmpty": {
     tr: "Bilgi çıkarılmıyor.",
@@ -1283,9 +1282,9 @@ const dictionary = {
     de: "Jede Zeile zeigt den gesamten Weg eines Werts: woher er vor dem Anruf kommt, wie er im Gespräch erfasst wird, ob er danach ergänzt wird und wo er gespeichert wird.",
   },
   "voiceVariables.importedHint": {
-    tr: "Bu ayarlar mevcut Retell asistanından içe aktarıldı. Yayınladığınızda Randevu bunları yönetmeye başlar; diğer Retell araçlarına dokunulmaz.",
-    en: "These settings were imported from the existing Retell agent. Publishing adopts them into Randevu while leaving unrelated Retell tools untouched.",
-    de: "Diese Einstellungen wurden aus dem bestehenden Retell-Assistenten importiert. Beim Veröffentlichen übernimmt Randevu sie, ohne andere Retell-Werkzeuge zu verändern.",
+    tr: "Bunlar asistanın mevcut ayarlarıdır. Yayınladığınızda diğer yetenekleri değişmeden Randevu tarafından yönetilmeye başlar.",
+    en: "These are the agent's current settings. Publishing brings them under Randevu management without changing its other abilities.",
+    de: "Dies sind die aktuellen Einstellungen des Assistenten. Beim Veröffentlichen übernimmt Randevu ihre Verwaltung, ohne andere Fähigkeiten zu ändern.",
   },
   "voiceVariables.variable": { tr: "Bilgi", en: "Variable", de: "Angabe" },
   "voiceVariables.add": {
@@ -1677,14 +1676,10 @@ const dictionary = {
     en: "From calls",
     de: "Aus Anrufen",
   },
-  // Honest version. Randevu does not own the Retell agent's prompt, so marking
-  // a field "voice" cannot make the agent ask for it. What Randevu does own is
-  // the endpoint that accepts the answer, so the copy says exactly that and the
-  // block below the list is the configuration the owner still has to paste in.
   "fields.voiceHint": {
-    tr: "Randevu, sesli asistanın konuşma metnini yazmaz. Bu alanlar ancak anahtarlarını Retell'deki update_contact fonksiyonuna verdiğinizde dolar. Aşağıdaki bloğu kopyalayıp agent yapılandırmanıza yapıştırın.",
-    en: "Randevu does not write your voice agent's prompt. These fields only get filled once you give their keys to the update_contact function in Retell. Copy the block below into your agent configuration.",
-    de: "Randevu schreibt den Prompt Ihres Sprachassistenten nicht. Diese Felder werden erst befüllt, wenn Sie ihre Schlüssel in Retell bei der Funktion update_contact hinterlegen. Kopieren Sie den Block unten in Ihre Agent-Konfiguration.",
+    tr: "Bu bilgileri telefon asistanının Değişkenler tablosundan seçin. Aramada doğrulanan değerler otomatik olarak buraya kaydedilir.",
+    en: "Choose these fields from the phone agent's Variables table. Values confirmed during a call are saved here automatically.",
+    de: "Wählen Sie diese Felder in der Variablen-Tabelle des Telefonassistenten. Im Anruf bestätigte Werte werden hier automatisch gespeichert.",
   },
   // Same group heading, different reader. On the customer record nobody is
   // configuring anything; they want to know why this value is here and whether
@@ -1693,19 +1688,6 @@ const dictionary = {
     tr: "Bu alanları sesli asistan arama sırasında doldurur. Yanlış duyulmuşsa elle düzeltebilirsiniz.",
     en: "The voice agent fills these during a call. Correct any of them by hand if it misheard.",
     de: "Diese Felder füllt der Sprachassistent während eines Anrufs. Bei einem Hörfehler können Sie sie von Hand korrigieren.",
-  },
-  "fields.voiceSetup": {
-    tr: "Retell yapılandırması",
-    en: "Retell configuration",
-    de: "Retell-Konfiguration",
-  },
-  // The block is copied, never shown, so this is the only description of what
-  // lands on the clipboard. It has to say enough that the button is not a
-  // mystery: what the text is, and who it is for.
-  "fields.voiceSetupHint": {
-    tr: "Sesli ajanı kuran kişiye (veya ajana) verilecek metin: uç nokta adresi, çağrılabilir fonksiyonlar ve bu işletmenin hizmet ve alan anahtarları. Uygulamada gösterilmez, yalnızca kopyalanır.",
-    en: "The text to hand whoever — or whatever — builds your voice agent: the endpoint, every function it can call, and this business's own service and field keys. Copied, never shown here.",
-    de: "Der Text für die Person (oder den Agenten), die Ihren Sprachagenten einrichtet: Endpunkt, aufrufbare Funktionen und die Leistungs- und Feldschlüssel dieses Betriebs. Wird nur kopiert, nicht angezeigt.",
   },
   "common.show": { tr: "Göster", en: "Show", de: "Anzeigen" },
   "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
