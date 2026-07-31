@@ -244,6 +244,8 @@ the webhook from prod.
 - During refinement work across every feature area, commit each logical unit
   directly to `main` and never push until Serdar explicitly asks
   (Serdar, 2026-07-31).
+- Use Serdar's signed-in Chrome browser for UI previews and visual verification,
+  never the internal browser (Serdar, 2026-07-31).
 - The user runs dev servers, not the agent.
 - Phone numbers are E.164 with dial code or they don't exist (`+905...`);
   backend rejects anything else.
