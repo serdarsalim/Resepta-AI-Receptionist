@@ -248,7 +248,13 @@ Retell sends `call_ended` first and analysis on a later `call_analyzed`;
 rows have neither. One agent can serve only one deployment: the webhook URL
 points at dev OR prod, so a dev workspace sharing prod's agent truthfully
 shows "results not reaching the app" — do not "fix" it from dev, that steals
-the webhook from prod.
+the webhook from prod. The live update-retell-llm endpoint disagrees with the
+SDK docs on MCP payloads (learned 2026-07-31 from a failed prod provisioning):
+each `mcps` entry needs an `id` field ("MCP id cannot be empty or null"
+otherwise; docs don't list it), and `type: "mcp"` general_tools must NOT carry
+an object `input_schema` — the validator wants string-valued
+properties/required and 400s on objects, so omit it and let tool discovery
+read the schema from `/retell/mcp`.
 
 Native phone-agent creation is Randevu-owned. **Add agent** defaults to creating
 an appointment receptionist from the versioned template in
