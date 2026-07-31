@@ -125,6 +125,9 @@ export default function TenantPage() {
   const actAs = useMutation(api.platform.actAs);
   const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
   const setField = useMutation(api.connections.setField);
+  const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
+  const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -195,8 +198,8 @@ export default function TenantPage() {
 
       <Section title="Voice">
         {/* Each client has their own Retell account, so this key is what
-            decides whose agents the salon's own Settings lists back to them. */}
-        {(conns ?? []).map((row) => (
+            decides whose agents the business sees under Phone agent. */}
+        {(conns ?? []).filter((row) => row.provider === "retell").map((row) => (
           <SecretRow
             key={`${row.provider}.${row.field}`}
             label={`${row.providerLabel} ${row.fieldLabel}`}
@@ -209,19 +212,85 @@ export default function TenantPage() {
         ))}
         {detail.agents.length === 0 ? (
           <p className="py-2 text-xs text-[var(--muted)]">
-            No agents connected. The salon picks theirs in Settings once the key is in.
+            No agents connected. The business can add one in Phone agent once the key is in.
           </p>
         ) : (
           detail.agents.map((agent) => (
-            <div
-              key={agent.retellAgentId}
-              className="flex flex-wrap items-center gap-x-3 py-2 text-xs"
-            >
-              <span className="font-mono">{agent.retellAgentId}</span>
-              <span className="text-[var(--muted)]">{agent.inboundNumber ?? "no number"}</span>
-              <span className={agent.enabled ? "text-[var(--muted)]" : "text-amber-600 dark:text-amber-400"}>
-                {agent.enabled ? "on" : "off"}
-              </span>
+            <div key={agent.retellAgentId} className="space-y-2 py-3 text-xs">
+              <div className="flex flex-wrap items-center gap-x-3">
+                <span className="font-mono">{agent.retellAgentId}</span>
+                <span className="text-[var(--muted)]">
+                  {agent.inboundNumber ?? "no number"}
+                </span>
+                <span
+                  className={
+                    agent.enabled
+                      ? "text-[var(--muted)]"
+                      : "text-amber-600 dark:text-amber-400"
+                  }
+                >
+                  {agent.enabled ? "on" : "off"}
+                </span>
+              </div>
+              <div className="grid gap-x-5 gap-y-1 text-[var(--muted)] sm:grid-cols-2">
+                <span>
+                  Randevu runtime: {agent.runtimeConnectedAt
+                    ? `connected ${new Date(agent.runtimeConnectedAt).toLocaleString()}`
+                    : "not connected"}
+                </span>
+                <span>
+                  Last call result: {agent.lastCallEventAt
+                    ? new Date(agent.lastCallEventAt).toLocaleString()
+                    : "none"}
+                </span>
+                <span>
+                  Last analysis: {agent.lastAnalyzedEventAt
+                    ? new Date(agent.lastAnalyzedEventAt).toLocaleString()
+                    : "none"}
+                </span>
+                <span>
+                  Inbox: {agent.pendingEvents} pending · {agent.failedEvents} failed
+                </span>
+              </div>
+              {agent.latestFailure && (
+                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {agent.latestFailure.eventType} · {new Date(agent.latestFailure.receivedAt).toLocaleString()} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
+                    </span>
+                    <button
+                      type="button"
+                      disabled={retryingAgent === agent.retellAgentId}
+                      onClick={() => {
+                        setRetryingAgent(agent.retellAgentId);
+                        setRetryError(null);
+                        void retryVoiceEvents({
+                          orgId,
+                          retellAgentId: agent.retellAgentId,
+                        })
+                          .catch((error: unknown) =>
+                            setRetryError({
+                              agentId: agent.retellAgentId,
+                              message: error instanceof Error ? error.message : "Retry failed.",
+                            }),
+                          )
+                          .finally(() => setRetryingAgent(null));
+                      }}
+                      className="rounded-lg px-2 py-1 font-medium hover:bg-amber-100 disabled:opacity-50 dark:hover:bg-amber-950/60"
+                    >
+                      {retryingAgent === agent.retellAgentId ? "Retrying…" : "Retry failed updates"}
+                    </button>
+                  </div>
+                  {agent.latestFailure.error && (
+                    <div className="mt-1 break-words font-mono">
+                      {agent.latestFailure.error}
+                    </div>
+                  )}
+                  {retryError?.agentId === agent.retellAgentId && (
+                    <div className="mt-1">{retryError.message}</div>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

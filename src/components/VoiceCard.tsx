@@ -80,6 +80,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const { t, language } = useLanguage();
   const connected = useQuery(api.retell.list, {});
   const callStats = useQuery(api.retell.agentCallStats, {});
+  const callHealth = useQuery(api.voiceEvents.health, {});
   const connect = useMutation(api.retell.connect);
   const disconnect = useMutation(api.retell.disconnect);
   const update = useMutation(api.retell.update);
@@ -217,6 +218,14 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                 const agent = inRoster(row.retellAgentId);
                 const wired = Boolean(
                   agent && expectedHook && agent.webhookUrl === expectedHook,
+                );
+                const health = callHealth?.find(
+                  (item) => item.retellAgentId === row.retellAgentId,
+                );
+                const connectionNeedsFix = Boolean(
+                  agent &&
+                    expectedHook &&
+                    (!wired || health?.runtimeConnected === false),
                 );
                 return (
                   <Fragment key={row._id}>
@@ -381,32 +390,42 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                       </td>
                     </tr>
                   )}
-                  {/* Broken plumbing, said as a symptom. The owner reads
-                      "results are not arriving" and presses Fix; the word
-                      webhook stays our problem. */}
-                  {agent && expectedHook && !wired && (
+                  {/* Connection and delivery health, said as symptoms. Raw
+                      provider errors stay in platform admin; the owner gets
+                      either one safe Fix or an honest data warning. */}
+                  {(connectionNeedsFix || health?.needsAttention) && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
                       <td colSpan={4} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-                          {t("settings.voiceNotReceiving")}
-                          {wiring === row.retellAgentId ? (
-                            <span className="animate-pulse">{t("voiceDetail.wiring")}</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWiring(row.retellAgentId);
-                                setWireError(null);
-                                void wireWebhook({ agentId: row.retellAgentId })
-                                  .then(() => load())
-                                  .catch(() => setWireError(t("settings.voiceActionFailed")))
-                                  .finally(() => setWiring(null));
-                              }}
-                              className="rounded-lg border border-amber-300 px-2 py-0.5 font-medium hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-950/60"
-                            >
-                              {t("settings.voiceFix")}
-                            </button>
+                          {connectionNeedsFix && (
+                            <span>
+                              {wired
+                                ? t("settings.voiceNotFullyConnected")
+                                : t("settings.voiceNotReceiving")}
+                            </span>
                           )}
+                          {health?.needsAttention && (
+                            <span>{t("settings.voiceUpdateIncomplete")}</span>
+                          )}
+                          {connectionNeedsFix &&
+                            (wiring === row.retellAgentId ? (
+                              <span className="animate-pulse">{t("voiceDetail.wiring")}</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWiring(row.retellAgentId);
+                                  setWireError(null);
+                                  void wireWebhook({ agentId: row.retellAgentId })
+                                    .then(() => load())
+                                    .catch(() => setWireError(t("settings.voiceActionFailed")))
+                                    .finally(() => setWiring(null));
+                                }}
+                                className="rounded-lg px-2 py-0.5 font-medium hover:bg-amber-100 dark:hover:bg-amber-950/60"
+                              >
+                                {t("settings.voiceFix")}
+                              </button>
+                            ))}
                           {wireError && wiring === null && <span>{wireError}</span>}
                         </span>
                       </td>

@@ -669,8 +669,24 @@ export const setRuntimeToken = internalMutation({
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, {
       runtimeTokenHash: tokenHash,
-      runtimeConnectedAt: Date.now(),
+      // The provider must be able to authenticate while it discovers the
+      // tools, but this is not "connected" until its draft publishes.
+      runtimeConnectedAt: undefined,
     });
+    return null;
+  },
+});
+
+export const markRuntimeConnected = internalMutation({
+  args: { retellAgentId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { runtimeConnectedAt: Date.now() });
     return null;
   },
 });

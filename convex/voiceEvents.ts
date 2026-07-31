@@ -142,11 +142,13 @@ export const complete = internalMutation({
           q.eq("orgId", row.orgId).eq("retellCallId", row.retellCallId),
         )
         .collect();
-      for (const recovery of sameCall) {
-        if (recovery.eventType !== "analysis_recovery" || recovery.status !== "failed") continue;
-        await ctx.db.patch(recovery._id, {
+      for (const superseded of sameCall) {
+        if (superseded.eventType === "call_analyzed" || superseded.status === "processed") continue;
+        await ctx.db.patch(superseded._id, {
           status: "processed",
           processedAt: now,
+          processingAt: undefined,
+          nextAttemptAt: undefined,
           error: undefined,
         });
       }
@@ -173,8 +175,8 @@ export const fail = internalMutation({
   handler: async (ctx, { eventId, error }) => {
     const row = await ctx.db.get(eventId);
     if (!row) return { retry: false, delayMs: 0 };
-    const delayMs = PROCESS_BACKOFF[row.attempts - 1] ?? 0;
-    const retry = row.attempts < PROCESS_BACKOFF.length;
+    const retry = row.attempts <= PROCESS_BACKOFF.length;
+    const delayMs = retry ? (PROCESS_BACKOFF[row.attempts - 1] ?? 0) : 0;
     await ctx.db.patch(eventId, {
       status: retry ? "retrying" : "failed",
       processingAt: undefined,
@@ -422,6 +424,7 @@ export const health = query({
   returns: v.array(
     v.object({
       retellAgentId: v.string(),
+      runtimeConnected: v.boolean(),
       needsAttention: v.boolean(),
       retrying: v.number(),
       failed: v.number(),
@@ -445,6 +448,7 @@ export const health = query({
       ).length;
       return {
         retellAgentId: agent.retellAgentId,
+        runtimeConnected: agent.runtimeConnectedAt !== undefined,
         needsAttention: failed > 0,
         retrying,
         failed,

@@ -17,6 +17,7 @@
 // they phone up asking why nobody got reminded.
 
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -249,6 +250,21 @@ export const orgDetail = query({
           inboundNumber: v.union(v.string(), v.null()),
           transferNumber: v.union(v.string(), v.null()),
           enabled: v.boolean(),
+          runtimeConnectedAt: v.union(v.number(), v.null()),
+          lastCallEventAt: v.union(v.number(), v.null()),
+          lastAnalyzedEventAt: v.union(v.number(), v.null()),
+          pendingEvents: v.number(),
+          failedEvents: v.number(),
+          latestFailure: v.union(
+            v.null(),
+            v.object({
+              callId: v.string(),
+              eventType: v.string(),
+              receivedAt: v.number(),
+              attempts: v.number(),
+              error: v.union(v.string(), v.null()),
+            }),
+          ),
         }),
       ),
     }),
@@ -257,14 +273,21 @@ export const orgDetail = query({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const wa = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .unique();
-    const agents = await ctx.db
-      .query("retellAgents")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .collect();
+    const [wa, agents, voiceEvents] = await Promise.all([
+      ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .unique(),
+      ctx.db
+        .query("retellAgents")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .collect(),
+      ctx.db
+        .query("voiceEvents")
+        .withIndex("by_org_received", (q) => q.eq("orgId", args.orgId))
+        .order("desc")
+        .take(SCAN_CAP),
+    ]);
     return {
       name: org.name,
       timezone: org.timezone,
@@ -283,13 +306,98 @@ export const orgDetail = query({
             accessToken: wa.accessToken ? maskSecret(wa.accessToken) : null,
           }
         : null,
-      agents: agents.map((a) => ({
-        retellAgentId: a.retellAgentId,
-        inboundNumber: a.inboundNumber ?? null,
-        transferNumber: a.transferNumber ?? null,
-        enabled: a.enabled,
-      })),
+      agents: agents.map((a) => {
+        const ownEvents = voiceEvents.filter(
+          (event) => event.retellAgentId === a.retellAgentId,
+        );
+        const latestFailure = ownEvents.find((event) => event.status === "failed");
+        return {
+          retellAgentId: a.retellAgentId,
+          inboundNumber: a.inboundNumber ?? null,
+          transferNumber: a.transferNumber ?? null,
+          enabled: a.enabled,
+          runtimeConnectedAt: a.runtimeConnectedAt ?? null,
+          lastCallEventAt: a.lastCallEventAt ?? null,
+          lastAnalyzedEventAt: a.lastAnalyzedEventAt ?? null,
+          pendingEvents: ownEvents.filter(
+            (event) =>
+              event.status === "queued" ||
+              event.status === "processing" ||
+              event.status === "retrying",
+          ).length,
+          failedEvents: ownEvents.filter((event) => event.status === "failed").length,
+          latestFailure: latestFailure
+            ? {
+                callId: latestFailure.retellCallId,
+                eventType: latestFailure.eventType,
+                receivedAt: latestFailure.receivedAt,
+                attempts: latestFailure.attempts,
+                error: latestFailure.error ?? null,
+              }
+            : null,
+        };
+      }),
     };
+  },
+});
+
+// A failed inbox row is still the durable source payload, so an operator can
+// safely retry it without asking the provider to send the event again.
+export const retryVoiceEvents = mutation({
+  args: { orgId: v.id("orgs"), retellAgentId: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent || agent.orgId !== args.orgId) throw new Error("no-such-agent");
+    const failed = (
+      await ctx.db
+        .query("voiceEvents")
+        .withIndex("by_org_status", (q) =>
+          q.eq("orgId", args.orgId).eq("status", "failed"),
+        )
+        .order("desc")
+        .take(SCAN_CAP)
+    )
+      .filter((event) => event.retellAgentId === args.retellAgentId)
+      .slice(0, 50);
+    for (const event of failed) {
+      if (event.eventType === "analysis_recovery") {
+        await ctx.db.patch(event._id, {
+          status: "retrying",
+          attempts: 0,
+          error: undefined,
+          nextAttemptAt: Date.now(),
+        });
+        await ctx.scheduler.runAfter(0, internal.voiceEvents.recoverAnalysis, {
+          orgId: args.orgId,
+          retellAgentId: args.retellAgentId,
+          retellCallId: event.retellCallId,
+          attempt: 0,
+        });
+      } else {
+        await ctx.db.patch(event._id, {
+          status: "queued",
+          attempts: 0,
+          processingAt: undefined,
+          error: undefined,
+          nextAttemptAt: undefined,
+        });
+        await ctx.scheduler.runAfter(0, internal.voiceEvents.process, {
+          eventId: event._id,
+        });
+      }
+    }
+    if (failed.length > 0) {
+      await ctx.db.patch(agent._id, {
+        lastEventErrorAt: undefined,
+        lastEventError: undefined,
+      });
+    }
+    return failed.length;
   },
 });
 

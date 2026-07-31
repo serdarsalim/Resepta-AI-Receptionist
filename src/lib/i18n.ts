@@ -1092,6 +1092,16 @@ const dictionary = {
     en: "This agent's call results are not reaching the app.",
     de: "Die Anrufergebnisse dieses Assistenten erreichen die App nicht.",
   },
+  "settings.voiceNotFullyConnected": {
+    tr: "Bu asistan Randevu'ya tam olarak bağlı değil.",
+    en: "This agent is not fully connected to Randevu.",
+    de: "Dieser Assistent ist nicht vollständig mit Randevu verbunden.",
+  },
+  "settings.voiceUpdateIncomplete": {
+    tr: "Yakın tarihli bir aramanın verileri güvende, ancak bazı müşteri bilgileri eksik olabilir.",
+    en: "A recent call is safely stored, but some customer details may still be missing.",
+    de: "Ein kürzliches Gespräch ist sicher gespeichert, aber einige Kundendaten könnten noch fehlen.",
+  },
   "settings.voiceFix": { tr: "Düzelt", en: "Fix", de: "Beheben" },
   "settings.voiceFixed": {
     tr: "Düzeltildi.",

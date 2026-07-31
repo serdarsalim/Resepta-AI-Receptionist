@@ -214,6 +214,15 @@ went, and the reasoning to preserve:
   table — recording player, per-call collected variables, summary, transcript
   in a row expansion. The word "webhook" never reaches the client; broken
   plumbing renders as "call results are not reaching the app" + Fix.
+- **Randevu is the phone-agent control plane.** The business declares customer
+  information once in Randevu; provider variables, analysis fields and runtime
+  tools are compiled output, never a second user-managed schema. Adding or
+  fixing an agent publishes its private Randevu runtime connection. Confirmed
+  details are written during the call, every signed call event first lands in
+  the durable `voiceEvents` inbox, and a per-call analysis recovery closes the
+  gap when the later analysis event is missed. Normal retries are invisible to
+  the business; exhausted updates show a provider-free warning in Phone agent
+  and raw diagnostics plus replay live only in platform admin.
   **Retell is an implementation detail.** Salon-facing UI never names Retell,
   exposes provider IDs or URLs, or asks the owner to copy provider
   configuration. Use native Randevu language such as Phone agent, Call

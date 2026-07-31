@@ -120,13 +120,15 @@ async function runtimeMcpConfig(
   llm: LlmDoc,
 ): Promise<LlmDoc["mcps"]> {
   const site = siteUrl();
-  if (!site) return llm.mcps;
+  if (!site) return undefined;
   const expectedUrl = `${site}/retell/mcp`;
   const current = llm.mcps ?? [];
   const existing = current.find(
-    (entry) => entry.name === "randevu" || entry.url === expectedUrl,
+    (entry) => entry.name === "randevu" && entry.url === expectedUrl,
   );
-  if (existing && context.runtimeConnectedAt !== null) return current;
+  // Omitting the field preserves the provider's stored secret. Re-sending a
+  // masked header returned by a read API could replace the usable credential.
+  if (existing && context.runtimeConnectedAt !== null) return undefined;
 
   // The clear credential lives only in the provider configuration. Randevu
   // stores its digest, so a database read cannot recover a live runtime key.
@@ -190,6 +192,7 @@ const RUNTIME_MCP_TOOLS = [
 ] satisfies Record<string, unknown>[];
 
 function withRuntimeMcpTools(tools: Record<string, unknown>[] | undefined) {
+  if (!siteUrl()) return tools ?? [];
   const managedNames = new Set(RUNTIME_MCP_TOOLS.map((tool) => tool.name));
   return [
     ...(tools ?? []).filter(
@@ -466,6 +469,11 @@ export const publishPrompt = action({
       mcps: await runtimeMcpConfig(ctx, agentId, context, before),
       general_tools: withRuntimeMcpTools(before.general_tools),
     });
+    if (siteUrl()) {
+      await ctx.runMutation(internal.retell.markRuntimeConnected, {
+        retellAgentId: agentId,
+      });
+    }
     // Returned so the caller can offer "undo" without a second round trip. The
     // LLM is patched in place, so there is no earlier version to point at.
     return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
@@ -635,6 +643,11 @@ export const publishVariables = action({
       retellVersion: draft.version,
       variables: next,
     });
+    if (siteUrl()) {
+      await ctx.runMutation(internal.retell.markRuntimeConnected, {
+        retellAgentId: agentId,
+      });
+    }
     return { ok: true, version: draft.version };
   },
 });
@@ -706,6 +719,9 @@ export const wireWebhook = action({
         { inbound_webhook_url: inboundUrl },
       );
     }
+    await ctx.runMutation(internal.retell.markRuntimeConnected, {
+      retellAgentId: agentId,
+    });
     return { ok: true, url, version: draft.version };
   },
 });
