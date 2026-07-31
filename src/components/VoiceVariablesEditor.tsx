@@ -143,10 +143,24 @@ export function VoiceVariablesEditor({
   const fieldById = new Map(allFields.map((field) => [field.id, field]));
   const supportsLive = engineType === "retell-llm";
 
+  // "Müşteri adı" typed here IS the built-in customer_name — adopting the
+  // built-in's key (and its before-call source) instead of minting a folded
+  // twin is what keeps one concept on one key.
+  const BUILTIN_BEFORE: Record<string, VoiceVariable["beforeSource"]> = {
+    customer_name: "customer_name",
+    customer_phone: "customer_phone",
+    customer_language: "customer_language",
+    next_appointment: "next_appointment",
+    business_name: "business_name",
+  };
+
   const quickAdd = async () => {
     const label = quickName.trim();
     if (!label) return;
-    const key = keyFromLabel(label);
+    const matchedBuiltin = builtinVoiceVariables(t).find(
+      (builtin) => keyFromLabel(builtin.label) === keyFromLabel(label),
+    );
+    const key = matchedBuiltin?.key ?? keyFromLabel(label);
     if (!key) return;
     setQuickError(null);
     if (draft.some((row) => row.key === key)) {
@@ -183,6 +197,7 @@ export function VoiceVariablesEditor({
         ...blankVariable(),
         key,
         label,
+        beforeSource: BUILTIN_BEFORE[key] ?? "none",
         destination: contactFieldId ? "contact" : "call",
         contactFieldId,
       },
