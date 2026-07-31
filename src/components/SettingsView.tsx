@@ -525,7 +525,7 @@ type Roster = {
 function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   const { t } = useLanguage();
   const connected = useQuery(api.retell.list, {});
-  const callsToday = useQuery(api.retell.callsToday, {});
+  const callStats = useQuery(api.retell.agentCallStats, {});
   const connect = useMutation(api.retell.connect);
   const disconnect = useMutation(api.retell.disconnect);
   const update = useMutation(api.retell.update);
@@ -538,6 +538,7 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
   // unique()-crash in prod. Whatever goes wrong renders in the notice row.
   const [wireError, setWireError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -598,14 +599,7 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
             <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
-                <th className="px-3 py-2 font-medium">{t("settings.voiceCollects")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
-                <th className="px-2 py-2 font-medium">
-                  <span className="inline-flex items-center gap-1">
-                    {t("settings.voiceCallsToday")}
-                    <InfoTip text={t("settings.voiceCallsTodayHint")} />
-                  </span>
-                </th>
                 <th className="px-2 py-2 font-medium">
                   <span className="inline-flex items-center gap-1">
                     {t("settings.voiceEnabled")}
@@ -645,28 +639,24 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                           </span>
                         )}
                       </button>
-                    </td>
-                    {/* Truncating with no way to see the rest made this cell
-                        decorative — "business_type_confirmed, decision_mak…"
-                        tells you a list exists and nothing about it. The count
-                        is the useful summary at a glance, and the full list is
-                        one hover away. */}
-                    <td className="px-3 py-2 text-xs text-[var(--muted)]">
-                      {agent && agent.collects.length > 0 ? (
-                        <span
-                          className="cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2"
-                          title={agent.collects.join("\n")}
-                        >
-                          {agent.collects.length === 1
-                            ? agent.collects[0]
-                            : t("settings.voiceCollectsCount").replace(
-                                "{n}",
-                                String(agent.collects.length),
-                              )}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
+                      {/* The nudge pattern: everything that is information
+                          rather than a control lives one expand away — the
+                          collected fields, when it was connected, how much it
+                          has worked. */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenInfo(openInfo === row.retellAgentId ? null : row.retellAgentId)
+                        }
+                        className="ml-2 text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                      >
+                        {agent && agent.collects.length > 0
+                          ? t("settings.voiceCollectsCount").replace(
+                              "{n}",
+                              String(agent.collects.length),
+                            )
+                          : t("settings.voiceDetails")}
+                      </button>
                     </td>
                     <td className="px-3 py-2">
                       {/* The account's real numbers, not a text field. Free
@@ -694,9 +684,6 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                             <option value={row.inboundNumber}>{row.inboundNumber}</option>
                           )}
                       </select>
-                    </td>
-                    <td className="px-2 py-2 text-xs text-[var(--muted)]">
-                      {callsToday?.[row.retellAgentId] || ""}
                     </td>
                     <td className="px-3 py-2">
                       <Toggle
@@ -726,12 +713,78 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                       </ActionTip>
                     </td>
                   </tr>
+                  {openInfo === row.retellAgentId && (
+                    <tr className="bg-[var(--muted-bg)]">
+                      <td colSpan={4} className="px-3 pb-3 pt-1">
+                        <div className="grid gap-4 text-xs sm:grid-cols-2">
+                          <div>
+                            <div className="mb-1 font-medium">
+                              {t("settings.voiceCollects")}
+                            </div>
+                            {agent && agent.collects.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {agent.collects.map((c) => (
+                                  <span
+                                    key={c}
+                                    className="rounded-full border border-[var(--border)] bg-[var(--card)] px-2 py-0.5"
+                                  >
+                                    {c.replace(/_/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-[var(--muted)]">—</span>
+                            )}
+                          </div>
+                          <div className="space-y-1 text-[var(--muted)]">
+                            <div className="font-medium text-[var(--foreground)]">
+                              {t("settings.voiceCalls")}
+                            </div>
+                            {(() => {
+                              const s = callStats?.[row.retellAgentId];
+                              if (!s || s.total === 0)
+                                return <div>{t("settings.voiceNoCalls")}</div>;
+                              return (
+                                <>
+                                  <div>
+                                    {t("settings.voiceStatToday").replace(
+                                      "{n}",
+                                      String(s.today),
+                                    )}
+                                    {" · "}
+                                    {t("settings.voiceStatTotal").replace(
+                                      "{n}",
+                                      String(s.total),
+                                    )}
+                                  </div>
+                                  {s.lastAt !== null && (
+                                    <div>
+                                      {t("settings.voiceStatLast").replace(
+                                        "{when}",
+                                        new Date(s.lastAt).toLocaleString(),
+                                      )}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            <div>
+                              {t("settings.voiceConnectedAt").replace(
+                                "{date}",
+                                new Date(row.connectedAt).toLocaleDateString(),
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {/* Broken plumbing, said as a symptom. The owner reads
                       "results are not arriving" and presses Fix; the word
                       webhook stays our problem. */}
                   {agent && expectedHook && !wired && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
-                      <td colSpan={6} className="px-3 py-2">
+                      <td colSpan={4} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                           {t("settings.voiceNotReceiving")}
                           {wiring === row.retellAgentId ? (
@@ -964,10 +1017,7 @@ export function SettingsView() {
   const isOwner = settings.me.role !== "staff";
 
   return (
-    // The voice section holds a table; the rest are label/input forms. One
-    // container width for both meant the table decided everyone's width or
-    // looked crammed — so the voice section alone gets the wide one.
-    <div className={`mx-auto space-y-4 ${section === "voice" ? "max-w-5xl" : "max-w-3xl"}`}>
+    <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center gap-1">
         {SECTIONS.map((entry) => (
           <SectionChip

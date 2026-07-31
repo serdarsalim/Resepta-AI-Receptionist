@@ -1014,11 +1014,24 @@ const dictionary = {
     de: "Weiterleitungsnummer",
   },
   "settings.voiceEnabled": { tr: "Etkin", en: "Enabled", de: "Aktiv" },
-  "settings.voiceCallsToday": { tr: "Bugün", en: "Today", de: "Heute" },
-  "settings.voiceCallsTodayHint": {
-    tr: "Bu asistanın bugün aldığı aramalar, işletmenizin saat dilimine göre.",
-    en: "Calls this agent took today, in your business's timezone.",
-    de: "Anrufe dieses Assistenten heute, in der Zeitzone Ihres Betriebs.",
+  "settings.voiceDetails": { tr: "ayrıntılar", en: "details", de: "Details" },
+  "settings.voiceConnectedAt": {
+    tr: "Bağlandı: {date}",
+    en: "Connected {date}",
+    de: "Verbunden seit {date}",
+  },
+  "settings.voiceCalls": { tr: "Aramalar", en: "Calls", de: "Anrufe" },
+  "settings.voiceStatToday": { tr: "{n} bugün", en: "{n} today", de: "{n} heute" },
+  "settings.voiceStatTotal": { tr: "{n} toplam", en: "{n} total", de: "{n} gesamt" },
+  "settings.voiceStatLast": {
+    tr: "son arama {when}",
+    en: "last call {when}",
+    de: "letzter Anruf {when}",
+  },
+  "settings.voiceNoCalls": {
+    tr: "Henüz arama yok.",
+    en: "No calls yet.",
+    de: "Noch keine Anrufe.",
   },
   "settings.voiceNoNumber": { tr: "— Yok —", en: "— None —", de: "— Keine —" },
   // Broken-plumbing notice in the salon's words. Deliberately no "webhook":

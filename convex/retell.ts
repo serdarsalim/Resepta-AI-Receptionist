@@ -40,6 +40,7 @@ const agentRow = v.object({
   inboundNumber: v.optional(v.string()),
   transferNumber: v.optional(v.string()),
   enabled: v.boolean(),
+  connectedAt: v.number(),
 });
 
 export const list = query({
@@ -57,6 +58,7 @@ export const list = query({
       inboundNumber: a.inboundNumber,
       transferNumber: a.transferNumber,
       enabled: a.enabled,
+      connectedAt: a._creationTime,
     }));
   },
 });
@@ -136,13 +138,22 @@ export const update = mutation({
   },
 });
 
-// How many calls each connected agent took since midnight, org's wall clock.
-// "Today" deliberately means the salon's today: a call at 23:50 Istanbul time
-// should not survive into tomorrow's count because the server thinks in UTC.
-// Rows older than the retellAgentId stamp have no agent and count nowhere.
-export const callsToday = query({
+// Per-agent call tallies for the details expansion. "Today" means the salon's
+// today: a call at 23:50 Istanbul time should not survive into tomorrow's
+// count because the server thinks in UTC. One org-wide pass — a salon's call
+// history is bounded and this renders on one settings section, not a hot
+// path. Rows older than the retellAgentId stamp have no agent and count
+// nowhere.
+export const agentCallStats = query({
   args: {},
-  returns: v.record(v.string(), v.number()),
+  returns: v.record(
+    v.string(),
+    v.object({
+      today: v.number(),
+      total: v.number(),
+      lastAt: v.union(v.number(), v.null()),
+    }),
+  ),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
     const org = await ctx.db.get(orgId);
@@ -152,16 +163,18 @@ export const callsToday = query({
     const dayStart = localWallTimeToUtcMs(local.y, local.m0, local.d, 0, 0, tz);
     const rows = await ctx.db
       .query("calls")
-      .withIndex("by_org_started", (q) =>
-        q.eq("orgId", orgId).gte("startedAt", dayStart),
-      )
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
-    const counts: Record<string, number> = {};
+    const stats: Record<string, { today: number; total: number; lastAt: number | null }> =
+      {};
     for (const row of rows) {
       if (!row.retellAgentId) continue;
-      counts[row.retellAgentId] = (counts[row.retellAgentId] ?? 0) + 1;
+      const s = (stats[row.retellAgentId] ??= { today: 0, total: 0, lastAt: null });
+      s.total += 1;
+      if (row.startedAt >= dayStart) s.today += 1;
+      if (s.lastAt === null || row.startedAt > s.lastAt) s.lastAt = row.startedAt;
     }
-    return counts;
+    return stats;
   },
 });
 
