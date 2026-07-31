@@ -33,18 +33,25 @@ export function AppHome() {
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
 
   // The tab lives in the URL, so a refresh comes back where you were and a
-  // link to Settings opens Settings. Read after mount rather than during the
-  // first render: initialising state from window during render is a hydration
-  // mismatch.
+  // link to Settings opens Settings. A bare URL falls back to the last tab
+  // this browser was on: a new session resumes where the person left off
+  // rather than resetting to the calendar. Read after mount rather than
+  // during the first render: initialising state from window during render is
+  // a hydration mismatch.
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
-    if (wanted && TAB_IDS.includes(wanted as TabId)) setTabState(wanted as TabId);
+    const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+    const next = [wanted, stored].find(
+      (id): id is TabId => id !== null && TAB_IDS.includes(id as TabId),
+    );
+    if (next) setTabState(next);
   }, []);
 
   // Switching tabs always leaves the contact page, it belongs to Customers.
   const setTab = (next: TabId) => {
     setContactId(null);
     setTabState(next);
+    window.localStorage.setItem(TAB_STORAGE_KEY, next);
     // replaceState, not push: the tab strip is not history. Filling the back
     // stack with every tab a person glanced at means Back stops meaning
     // "the page before this one".
@@ -77,9 +84,11 @@ export function AppHome() {
   );
 }
 
+const TAB_STORAGE_KEY = "randevu.tab";
+
 // Every tab that may appear in the URL. Validated rather than cast: ?tab= is
-// user-editable, and a typo should land on the calendar rather than render
-// nothing at all.
+// user-editable (and localStorage survives releases that rename tabs), and a
+// stale value should land on the calendar rather than render nothing at all.
 const TAB_IDS: TabId[] = [
   "appointments",
   "customers",
