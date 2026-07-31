@@ -26,7 +26,17 @@ export function Card({
           {tip && <InfoTip text={tip} />}
         </div>
       )}
-      <fieldset disabled={disabled} className={disabled ? "opacity-70" : undefined}>
+      {/* min-w-0 is load-bearing, not tidying. Browsers give <fieldset> a
+          default min-width of min-content and it refuses to shrink below its
+          content — so ANY overflow-x-auto inside a Card is defeated and wide
+          children escape the card's right edge instead of scrolling. The voice
+          agent table was clipped past the border for exactly this reason, and
+          two fixes on the table itself did nothing because the table was never
+          the problem. */}
+      <fieldset
+        disabled={disabled}
+        className={`min-w-0 ${disabled ? "opacity-70" : ""}`}
+      >
         {children}
       </fieldset>
     </section>
