@@ -144,17 +144,15 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
-      {connected.length > 0 ? (
-        <div className="mb-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          <div className="flex items-center justify-end gap-1 px-2 py-1.5">
-            {agentActions}
-          </div>
-          <div className="overflow-x-auto">
+      <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
+
+      {connected.length > 0 && (
+        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           {/* min-w-full, not w-full. w-full pins the table to the container and
               the cells overflow it anyway — the Enabled toggle and the
               disconnect button were clipped at the card edge with nothing to
-              grab. min-w-full lets the table size to its content so the inner
-              overflow-x-auto actually has something to scroll. */}
+              grab. min-w-full lets the table size to its content so the
+              overflow-x-auto above actually has something to scroll. */}
           <table className="min-w-full text-sm">
             <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
               <tr>
@@ -377,10 +375,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
               })}
             </tbody>
           </table>
-          </div>
         </div>
-      ) : (
-        <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
       )}
 
       {/* Reserved whether or not it says anything, so refreshing into an error
