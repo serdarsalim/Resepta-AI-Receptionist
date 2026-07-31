@@ -15,6 +15,7 @@ import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
 import { ActionTip, InfoTip } from "./InfoTip";
 import { Card } from "./Card";
+import { McpCard } from "./McpCard";
 import { InlineEditValue } from "./RecordField";
 import { Sheet } from "./Sheet";
 import { VoiceAgentDetail } from "./VoiceAgentDetail";
@@ -776,13 +777,14 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
 // timezone are not a connection.
 //
 // Sections rather than one long scroll of cards.
-type Section = "reminders" | "whatsapp" | "bookings" | "voice";
+type Section = "reminders" | "whatsapp" | "bookings" | "voice" | "ai";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "reminders", key: "settings.reminders" },
   { id: "whatsapp", key: "settings.whatsapp" },
   { id: "bookings", key: "settings.bookings" },
   { id: "voice", key: "settings.voice" },
+  { id: "ai", key: "settings.ai" },
 ];
 
 // Active section is a solid accent fill; the rest are text + hover wash. No
@@ -981,6 +983,9 @@ export function SettingsView() {
       )}
 
       {section === "voice" && <VoiceCard isOwner={isOwner} site={site} />}
+      {/* Not behind isOwner: connector keys are per person, and the backend
+          scopes create to self and revoke-others to owners. */}
+      {section === "ai" && <McpCard site={site} />}
 
       {section === "whatsapp" && <ShopPhoneCard isOwner={isOwner} />}
 

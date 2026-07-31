@@ -1223,6 +1223,81 @@ const dictionary = {
     en: "Enter the number in full international form, e.g. +905321234567.",
     de: "Geben Sie die Nummer im internationalen Format ein, z. B. +4915123456789.",
   },
+
+  // The AI connectors card: keys for talking to this workspace from Claude or
+  // ChatGPT. Keys are per person, so this surface is open to staff too — the
+  // backend scopes create to self and revoke-others to owners.
+  "settings.ai": { tr: "Yapay zekâ", en: "AI", de: "KI" },
+  "mcp.intro": {
+    tr: "İşletmenizle Claude veya ChatGPT üzerinden konuşun: takvime bakın, müşteri arayın, not bırakın. Her ekip üyesi kendi anahtarıyla bağlanır ve yapılan her işlem etkinlik akışına onun adıyla yazılır.",
+    en: "Talk to your business from Claude or ChatGPT: check the calendar, look up customers, leave notes. Each team member connects with their own key, and everything done shows up in the activity feed under their name.",
+    de: "Sprechen Sie über Claude oder ChatGPT mit Ihrem Betrieb: Kalender ansehen, Kunden nachschlagen, Notizen hinterlassen. Jedes Teammitglied verbindet sich mit einem eigenen Schlüssel, und alles erscheint unter seinem Namen im Aktivitätsverlauf.",
+  },
+  "mcp.endpoint": {
+    tr: "Bağlantı adresi",
+    en: "Connector URL",
+    de: "Connector-Adresse",
+  },
+  "mcp.endpointHint": {
+    tr: "Claude veya ChatGPT'ye özel bağlayıcı eklerken bu adresi yapıştırın. Anahtar, adresle birlikte istenir.",
+    en: "Paste this URL when adding a custom connector in Claude or ChatGPT. The key is asked for alongside it.",
+    de: "Fügen Sie diese Adresse beim Anlegen eines eigenen Connectors in Claude oder ChatGPT ein. Der Schlüssel wird zusammen mit ihr abgefragt.",
+  },
+  "mcp.connectClaude": {
+    tr: "Claude bağla",
+    en: "Connect Claude",
+    de: "Claude verbinden",
+  },
+  "mcp.connectChatgpt": {
+    tr: "ChatGPT bağla",
+    en: "Connect ChatGPT",
+    de: "ChatGPT verbinden",
+  },
+  "mcp.keyOnce": {
+    tr: "Bu anahtarı şimdi kopyalayın. Güvenlik için yalnızca bu kez gösterilir.",
+    en: "Copy this key now. For security it is shown only this once.",
+    de: "Kopieren Sie diesen Schlüssel jetzt. Aus Sicherheitsgründen wird er nur dieses eine Mal angezeigt.",
+  },
+  "mcp.instructionsClaude": {
+    tr: "Claude'da: Ayarlar → Bağlayıcılar → Özel bağlayıcı ekle. Adresi ve bu anahtarı yapıştırın.",
+    en: "In Claude: Settings → Connectors → Add custom connector. Paste the URL and this key.",
+    de: "In Claude: Einstellungen → Connectors → Eigenen Connector hinzufügen. Adresse und diesen Schlüssel einfügen.",
+  },
+  "mcp.instructionsChatgpt": {
+    tr: "ChatGPT'de: Ayarlar → Bağlayıcılar → Oluştur. Adresi ve bu anahtarı yapıştırın.",
+    en: "In ChatGPT: Settings → Connectors → Create. Paste the URL and this key.",
+    de: "In ChatGPT: Einstellungen → Connectors → Erstellen. Adresse und diesen Schlüssel einfügen.",
+  },
+  "mcp.none": {
+    tr: "Henüz bağlayıcı yok.",
+    en: "No connectors yet.",
+    de: "Noch keine Connectors.",
+  },
+  "mcp.lastUsed": {
+    tr: "son kullanım {when}",
+    en: "last used {when}",
+    de: "zuletzt verwendet {when}",
+  },
+  "mcp.neverUsed": {
+    tr: "hiç kullanılmadı",
+    en: "never used",
+    de: "nie verwendet",
+  },
+  "mcp.revoked": {
+    tr: "İptal edildi",
+    en: "Revoked",
+    de: "Widerrufen",
+  },
+  "mcp.revoke": {
+    tr: "İptal et",
+    en: "Revoke",
+    de: "Widerrufen",
+  },
+  "mcp.revokeConfirm": {
+    tr: "{name} bağlayıcısı iptal edilsin mi? Bağlantı anında çalışmayı durdurur ve geri alınamaz.",
+    en: "Revoke {name}? The connector stops working immediately and cannot be re-enabled.",
+    de: "{name} widerrufen? Der Connector funktioniert sofort nicht mehr und kann nicht reaktiviert werden.",
+  },
   "settings.businessHours": {
     tr: "Açık olduğunuz günler",
     en: "Days you're open",
