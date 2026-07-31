@@ -1785,9 +1785,9 @@ const dictionary = {
   "fields.add": { tr: "Alan ekle", en: "Add field", de: "Feld hinzufügen" },
   "fields.system": { tr: "Sistem", en: "System", de: "System" },
   "fields.systemHint": {
-    tr: "Her müşteride hazır olan kimlik alanları. Telefon asistanı bunları okuyabilir ama değiştiremez.",
-    en: "Identity fields every customer has. The phone agent can read them but never change them.",
-    de: "Identitätsfelder, die jeder Kunde hat. Der Telefonassistent kann sie lesen, aber nie ändern.",
+    tr: "Her müşteride hazır olan kimlik alanları. Telefon asistanı bunları okuyabilir ama değiştiremez; aramada ad ve soyad tek bir Müşteri adı (customer_name) değişkeni olarak görünür.",
+    en: "Identity fields every customer has. The phone agent can read them but never change them; on calls the name appears as one Customer name (customer_name) variable.",
+    de: "Identitätsfelder, die jeder Kunde hat. Der Telefonassistent kann sie lesen, aber nie ändern; im Anruf erscheint der Name als eine Variable Kundenname (customer_name).",
   },
   "fields.usedByAgents": {
     tr: "{agents} kullanıyor",

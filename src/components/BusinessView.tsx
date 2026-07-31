@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -88,9 +88,32 @@ function SectionChip({
   );
 }
 
+const SECTION_STORAGE_KEY = "randevu.business.section";
+
 export function BusinessView() {
   const { t } = useLanguage();
-  const [section, setSection] = useState<Section>("general");
+  const [section, setSectionState] = useState<Section>("general");
+
+  // Same deal as Reminders: the section lives in the URL so a refresh stays
+  // put, with the last-used one as fallback for a bare URL. Section ids don't
+  // overlap between views, so sharing the ?section param is collision-free.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("section");
+    const stored = window.localStorage.getItem(SECTION_STORAGE_KEY);
+    const next = [wanted, stored].find(
+      (id): id is Section => id !== null && SECTIONS.some((s) => s.id === id),
+    );
+    if (next) setSectionState(next);
+  }, []);
+
+  const setSection = (next: Section) => {
+    setSectionState(next);
+    window.localStorage.setItem(SECTION_STORAGE_KEY, next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("section", next);
+    window.history.replaceState(null, "", url);
+  };
+
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
