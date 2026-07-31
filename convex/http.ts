@@ -326,6 +326,48 @@ function contactUpdateSentence(result: {
   return parts.join(" ") || "Nothing to save.";
 }
 
+// Runs while an inbound call is still ringing. Retell knows the agent and the
+// caller number at this point, which is exactly enough to resolve an org and
+// inject the context that agent is allowed to know before saying hello.
+http.route({
+  path: "/retell/inbound",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const rawBody = await request.text();
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      return new Response("bad json", { status: 400 });
+    }
+    const inbound =
+      payload.call_inbound && typeof payload.call_inbound === "object"
+        ? (payload.call_inbound as Record<string, unknown>)
+        : payload;
+    const agentId = String(inbound.agent_id ?? "");
+    const fromNumber = String(inbound.from_number ?? "");
+    if (!agentId) return new Response("unknown agent", { status: 200 });
+    const context = (await ctx.runQuery(internal.retell.beforeCallContext, {
+      retellAgentId: agentId,
+      phone: fromNumber,
+    })) as { apiKey: string | null; dynamicVariables: Record<string, string> } | null;
+    if (!context) return new Response("agent disabled", { status: 200 });
+    if (!context.apiKey) return new Response("agent unavailable", { status: 503 });
+    const valid = await verifyRetellSignature(
+      context.apiKey,
+      rawBody,
+      request.headers.get("x-retell-signature"),
+    );
+    if (!valid) return new Response("bad signature", { status: 401 });
+    return Response.json({
+      call_inbound: {
+        override_agent_id: agentId,
+        dynamic_variables: context.dynamicVariables,
+      },
+    });
+  }),
+});
+
 // Custom function calls from the agent mid-conversation. The response body is
 // read by the LLM verbatim — return short, speakable facts, never internals.
 http.route({
@@ -562,10 +604,19 @@ http.route({
     // Everything the agent collected, merged the same way the contact update
     // uses it below. Also stored raw on the call row, because "what did they
     // answer on THIS call" belongs next to that call's recording.
+    const beforeValues =
+      (call.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ?? {};
+    const duringValues =
+      (call.collected_dynamic_variables as Record<string, unknown> | undefined) ?? {};
+    const afterValues =
+      (analysis.custom_analysis_data as Record<string, unknown> | undefined) ?? {};
+    // A caller-confirmed live value beats a later transcript inference. The
+    // pre-call value is still useful on the call record, but it is the weakest
+    // source and never wins a collision.
     const collected: Record<string, unknown> = {
-      ...(call.retell_llm_dynamic_variables as Record<string, unknown> | undefined),
-      ...(call.collected_dynamic_variables as Record<string, unknown> | undefined),
-      ...(analysis.custom_analysis_data as Record<string, unknown> | undefined),
+      ...beforeValues,
+      ...afterValues,
+      ...duringValues,
     };
     if (callId && agentId) {
       await ctx.runMutation(internal.retell.recordCall, {
@@ -590,15 +641,26 @@ http.route({
     // exists. Both call_ended and call_analyzed reach here (the gate above
     // dropped call_started); writing the same values twice is a no-op.
     if (agentId) {
-      const values = coerceContactValues(collected);
       const fromNumber = String(call.from_number ?? "");
-      if (fromNumber && Object.keys(values).length > 0) {
+      const after = coerceContactValues(afterValues);
+      const during = coerceContactValues(duringValues);
+      if (fromNumber && (Object.keys(after).length > 0 || Object.keys(during).length > 0)) {
         try {
-          await ctx.runMutation(internal.retell.updateContactFromVoice, {
-            retellAgentId: agentId,
-            phone: fromNumber,
-            values,
-          });
+          if (Object.keys(after).length > 0) {
+            await ctx.runMutation(internal.retell.updateContactFromVoice, {
+              retellAgentId: agentId,
+              phone: fromNumber,
+              values: after,
+              fillOnlyMissing: true,
+            });
+          }
+          if (Object.keys(during).length > 0) {
+            await ctx.runMutation(internal.retell.updateContactFromVoice, {
+              retellAgentId: agentId,
+              phone: fromNumber,
+              values: during,
+            });
+          }
         } catch (err) {
           console.error("post-call contact update failed", err);
         }

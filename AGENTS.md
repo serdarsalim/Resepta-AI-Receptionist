@@ -235,6 +235,24 @@ points at dev OR prod, so a dev workspace sharing prod's agent truthfully
 shows "results not reaching the app" — do not "fix" it from dev, that steals
 the webhook from prod.
 
+### Phone-agent variable lifecycle (decided 2026-07-31, Serdar)
+
+Randevu is the source of truth for a phone agent's variables; Retell is the
+execution target. A variable is ONE lifecycle row, never three unrelated
+lists: its pre-call source, live collection policy, post-call fallback and
+storage destination stay together in `voiceAgentVariables`. Before-call values
+are context, not collected data. Live caller-confirmed values beat post-call
+transcript inference; post-call extraction only fills a missing customer value;
+pre-call context is recorded with the call but never writes back by itself.
+
+Existing agents import Retell defaults, extract-variable tools and custom
+post-call fields on first open. Publishing adopts them into the Randevu
+registry, preserves unrelated Retell tools and system analysis presets, and
+publishes the agent + LLM changes as one Retell draft version. New agents use
+the same registry from their first publish. Customer destinations still pass
+through `contactFields.source === "voice"`; phone, consent and other reserved
+columns never become writable through variable configuration.
+
 ## Conventions carried over from Nudge
 
 - `npx tsc --noEmit` must pass before every commit.

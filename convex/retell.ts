@@ -17,6 +17,8 @@ import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
+import { formatAppointmentTime } from "./lib/format";
+import { voiceVariableInput } from "./lib/voiceVariables";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -216,6 +218,194 @@ export const agentListContext = internalQuery({
       // Legacy singular: the demo seed and error paths want one id to name.
       connectedAgentId: agents[0]?.retellAgentId ?? null,
       hiddenAgentIds: org.hiddenRetellAgentIds ?? [],
+    };
+  },
+});
+
+// One owner-scoped read for the agent editor. The Retell key never reaches the
+// browser: actions use it server-side, while the client receives only the
+// variable rows and the org's possible contact-field destinations.
+export const agentEditorContext = internalQuery({
+  args: { retellAgentId: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { retellAgentId }) => {
+    const { orgId } = await requireOwner(ctx);
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || agent.orgId !== orgId) throw new Error("no-such-agent");
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    const [variables, fields] = await Promise.all([
+      ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org_agent", (q) =>
+          q.eq("orgId", orgId).eq("retellAgentId", retellAgentId),
+        )
+        .collect(),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+    ]);
+    return {
+      orgId,
+      orgName: org.name,
+      timezone: org.timezone,
+      language: org.language,
+      demoMode: org.demoMode === true,
+      apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
+      variables: variables.sort((a, b) => a.order - b.order),
+      variablesSyncedAt: agent.variablesSyncedAt ?? null,
+      variablesRetellVersion: agent.variablesRetellVersion ?? null,
+      fields: fields.sort((a, b) => a.order - b.order),
+    };
+  },
+});
+
+// Provider publication happens before this mutation. If Retell rejects the
+// draft, the Randevu registry stays untouched and the editor can retry without
+// presenting a configuration that never went live.
+export const replaceAgentVariables = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    retellVersion: v.optional(v.number()),
+    variables: v.array(voiceVariableInput),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, retellVersion, variables }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    const fields = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+      .collect();
+    const fieldIds = new Set(fields.map((field) => String(field._id)));
+    const existing = await ctx.db
+      .query("voiceAgentVariables")
+      .withIndex("by_org_agent", (q) =>
+        q.eq("orgId", agent.orgId).eq("retellAgentId", retellAgentId),
+      )
+      .collect();
+    for (const row of existing) await ctx.db.delete(row._id);
+
+    const now = Date.now();
+    for (const [order, variable] of variables.entries()) {
+      if (variable.beforeFieldId && !fieldIds.has(String(variable.beforeFieldId))) {
+        throw new Error("before-field-not-found");
+      }
+      if (variable.contactFieldId && !fieldIds.has(String(variable.contactFieldId))) {
+        throw new Error("contact-field-not-found");
+      }
+      await ctx.db.insert("voiceAgentVariables", {
+        orgId: agent.orgId,
+        retellAgentId,
+        ...variable,
+        choices: variable.type === "enum" ? variable.choices : undefined,
+        beforeValue:
+          variable.beforeSource === "static" ? variable.beforeValue : undefined,
+        beforeFieldId:
+          variable.beforeSource === "contact_field" ? variable.beforeFieldId : undefined,
+        contactFieldId:
+          variable.destination === "contact" ? variable.contactFieldId : undefined,
+        order,
+        updatedAt: now,
+      });
+    }
+    await ctx.db.patch(agent._id, {
+      variablesSyncedAt: now,
+      variablesRetellVersion: retellVersion,
+    });
+    return null;
+  },
+});
+
+// The inbound call webhook has no signed-in user. Tenant resolution therefore
+// starts from the Retell agent id, exactly like the function and call-ended
+// webhooks, and every subsequent read stays on that org.
+export const beforeCallContext = internalQuery({
+  args: { retellAgentId: v.string(), phone: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { retellAgentId, phone }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || !agent.enabled) return null;
+    const org = await ctx.db.get(agent.orgId);
+    if (!org) return null;
+    const normalised = normalisePhone(phone);
+    const customer = normalised
+      ? await ctx.db
+          .query("customers")
+          .withIndex("by_org_phone", (q) =>
+            q.eq("orgId", agent.orgId).eq("phone", normalised),
+          )
+          .unique()
+      : null;
+    const [variables, fields, appointments] = await Promise.all([
+      ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org_agent", (q) =>
+          q.eq("orgId", agent.orgId).eq("retellAgentId", retellAgentId),
+        )
+        .collect(),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+        .collect(),
+      customer
+        ? ctx.db
+            .query("appointments")
+            .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+            .collect()
+        : Promise.resolve([]),
+    ]);
+    const next = nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"]);
+    const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
+    const dynamicVariables: Record<string, string> = {};
+    for (const variable of variables.sort((a, b) => a.order - b.order)) {
+      let value = "";
+      switch (variable.beforeSource) {
+        case "static":
+          value = variable.beforeValue ?? "";
+          break;
+        case "business_name":
+          value = org.name;
+          break;
+        case "customer_name":
+          value = customer
+            ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
+            : "";
+          break;
+        case "customer_phone":
+          value = customer?.phone ?? normalised ?? "";
+          break;
+        case "customer_language":
+          value = customer?.language ?? org.language;
+          break;
+        case "next_appointment":
+          value = next
+            ? formatAppointmentTime(next.startAt, org.timezone, customer?.language ?? org.language)
+            : "";
+          break;
+        case "contact_field": {
+          const field = variable.beforeFieldId
+            ? fieldsById.get(String(variable.beforeFieldId))
+            : null;
+          value = field && customer ? customer.custom?.[field.key] ?? "" : "";
+          break;
+        }
+      }
+      if (value) dynamicVariables[variable.key] = String(value);
+    }
+    return {
+      apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
+      dynamicVariables,
     };
   },
 });
@@ -797,7 +987,12 @@ function toE164(raw: string): string | null {
 // the post-call webhook. Two copies of this guard would drift.
 export async function applyVoiceContactValues(
   ctx: MutationCtx,
-  args: { orgId: Id<"orgs">; phone: string; values: Record<string, string> },
+  args: {
+    orgId: Id<"orgs">;
+    phone: string;
+    values: Record<string, string>;
+    fillOnlyMissing?: boolean;
+  },
 ): Promise<ContactUpdateResult> {
   const phone = toE164(args.phone);
   if (!phone) return contactUpdateFailure("phone-not-recognised");
@@ -834,6 +1029,11 @@ export async function applyVoiceContactValues(
       notForVoice.push(field.label);
       continue;
     }
+    // Post-call analysis is an inference over a transcript, not a correction
+    // from the caller. It may recover a value the live extraction missed, but
+    // it never gets to replace something already confirmed during this or an
+    // earlier call.
+    if (args.fillOnlyMissing && custom[key]) continue;
     const coerced = coerceContactValue(field, rawValue);
     if (!coerced.ok) {
       rejected.push(field.label);
@@ -857,6 +1057,7 @@ export const updateContactFromVoice = internalMutation({
     retellAgentId: v.string(),
     phone: v.string(),
     values: v.record(v.string(), v.string()),
+    fillOnlyMissing: v.optional(v.boolean()),
   },
   returns: contactUpdateResult,
   handler: async (ctx, args) => {
@@ -869,6 +1070,7 @@ export const updateContactFromVoice = internalMutation({
       orgId: agent.orgId,
       phone: args.phone,
       values: args.values,
+      fillOnlyMissing: args.fillOnlyMissing,
     });
   },
 });
@@ -910,7 +1112,10 @@ export const recordCall = internalMutation({
         summary: existing.summary ?? args.summary,
         transcript: existing.transcript ?? args.transcript,
         recordingUrl: existing.recordingUrl ?? args.recordingUrl,
-        collected: existing.collected ?? args.collected,
+        collected:
+          existing.collected || args.collected
+            ? { ...(args.collected ?? {}), ...(existing.collected ?? {}) }
+            : undefined,
       });
       return null;
     }

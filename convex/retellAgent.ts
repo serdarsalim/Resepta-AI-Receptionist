@@ -13,6 +13,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
+import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
 
 const API = "https://api.retellai.com";
 
@@ -47,14 +48,14 @@ type AgentDoc = {
     conversation_flow_id?: string;
     version?: number;
   };
-  post_call_analysis_data?: { name?: string; description?: string; type?: string }[];
+  post_call_analysis_data?: Record<string, unknown>[];
 };
 
 type LlmDoc = {
   llm_id?: string;
   general_prompt?: string;
   begin_message?: string;
-  general_tools?: { name?: string; type?: string; description?: string }[];
+  general_tools?: Record<string, unknown>[];
   default_dynamic_variables?: Record<string, string>;
   states?: { name?: string }[];
 };
@@ -65,8 +66,30 @@ function siteUrl(): string | null {
   return process.env.CONVEX_SITE_URL ?? null;
 }
 
-async function orgKey(ctx: Pick<ActionCtx, "runQuery">): Promise<string> {
-  const context = await ctx.runQuery(internal.retell.agentListContext, {});
+type EditorContext = {
+  orgName: string;
+  demoMode: boolean;
+  apiKey: string | null;
+  variables: Array<VoiceVariableInput & { order: number }>;
+  variablesSyncedAt: number | null;
+  variablesRetellVersion: number | null;
+  fields: Array<{
+    _id: string;
+    key: string;
+    label: string;
+    type: "text" | "select" | "number" | "date";
+    options?: string[];
+    source?: "manual" | "voice";
+  }>;
+};
+
+async function editorContext(
+  ctx: Pick<ActionCtx, "runQuery">,
+  agentId: string,
+): Promise<EditorContext> {
+  const context = (await ctx.runQuery(internal.retell.agentEditorContext, {
+    retellAgentId: agentId,
+  })) as EditorContext | null;
   if (!context) throw new Error("No workspace.");
   if (context.demoMode) {
     throw new Error("This is the demo workspace. It holds no Retell credentials.");
@@ -74,7 +97,117 @@ async function orgKey(ctx: Pick<ActionCtx, "runQuery">): Promise<string> {
   if (!context.apiKey) {
     throw new Error("No Retell API key for this workspace yet.");
   }
-  return context.apiKey;
+  return context;
+}
+
+type VariableRow = VoiceVariableInput;
+
+function humanizeKey(key: string): string {
+  const words = key.replace(/_/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : key;
+}
+
+function analysisType(value: unknown): VariableRow["type"] | null {
+  return value === "string" || value === "number" || value === "boolean" || value === "enum"
+    ? value
+    : null;
+}
+
+function storedVariables(context: EditorContext): VariableRow[] {
+  return context.variables.map((row) => ({
+    key: row.key,
+    label: row.label,
+    description: row.description,
+    type: row.type,
+    choices: row.choices,
+    required: row.required,
+    beforeSource: row.beforeSource,
+    beforeValue: row.beforeValue,
+    beforeFieldId: row.beforeFieldId,
+    duringMode: row.duringMode,
+    afterCall: row.afterCall,
+    destination: row.destination,
+    contactFieldId: row.contactFieldId,
+  }));
+}
+
+// Existing agents start in Retell, not in our database. Fold its three provider
+// shapes into the same lifecycle rows the editor uses, keyed by variable name.
+// A publish then adopts those rows without losing fields the owner already had.
+function importVariables(
+  context: EditorContext,
+  agent: AgentDoc,
+  llm: LlmDoc | null,
+): VariableRow[] {
+  const byKey = new Map<string, VariableRow>();
+  const voiceFields = new Map(
+    context.fields.filter((field) => field.source === "voice").map((field) => [field.key, field]),
+  );
+  const ensure = (rawKey: string): VariableRow | null => {
+    const key = normaliseVoiceVariableKey(rawKey);
+    if (!key) return null;
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const field = voiceFields.get(key);
+    const type: VariableRow["type"] = field
+      ? field.type === "select"
+        ? "enum"
+        : field.type === "number"
+          ? "number"
+          : "string"
+      : "string";
+    const row: VariableRow = {
+      key,
+      label: field?.label ?? humanizeKey(key),
+      description: "",
+      type,
+      choices: type === "enum" ? field?.options ?? [] : undefined,
+      required: false,
+      beforeSource: "none",
+      duringMode: "none",
+      afterCall: false,
+      destination: field ? "contact" : "call",
+      contactFieldId: field?._id as VariableRow["contactFieldId"],
+    };
+    byKey.set(key, row);
+    return row;
+  };
+
+  for (const [name, value] of Object.entries(llm?.default_dynamic_variables ?? {})) {
+    const row = ensure(name);
+    if (!row) continue;
+    row.beforeSource = "static";
+    row.beforeValue = value;
+  }
+  for (const tool of llm?.general_tools ?? []) {
+    if (tool.type !== "extract_dynamic_variable" || !Array.isArray(tool.variables)) continue;
+    for (const item of tool.variables as Record<string, unknown>[]) {
+      const row = ensure(String(item.name ?? ""));
+      const type = analysisType(item.type);
+      if (!row || !type) continue;
+      row.type = type;
+      row.choices = type === "enum" && Array.isArray(item.choices)
+        ? item.choices.map(String)
+        : undefined;
+      row.description = String(item.description ?? row.description);
+      row.required = item.required === true;
+      row.duringMode = "if_missing";
+    }
+  }
+  for (const item of agent.post_call_analysis_data ?? []) {
+    if (item.type === "system-presets") continue;
+    const row = ensure(String(item.name ?? ""));
+    const type = analysisType(item.type);
+    if (!row || !type) continue;
+    row.type = type;
+    row.choices = type === "enum" && Array.isArray(item.choices)
+      ? item.choices.map(String)
+      : undefined;
+    row.description = String(item.description ?? row.description);
+    row.required = item.required === true;
+    row.afterCall = true;
+  }
+  return [...byKey.values()];
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────────
@@ -83,7 +216,8 @@ export const read = action({
   args: { agentId: v.string() },
   returns: v.any(),
   handler: async (ctx, { agentId }) => {
-    const key = await orgKey(ctx);
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
     const id = encodeURIComponent(agentId);
     const agent = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
     const engine = agent.response_engine ?? {};
@@ -125,23 +259,35 @@ export const read = action({
         pointsElsewhere: Boolean(actual && expected && actual !== expected),
       },
       variables: {
-        // Injected at dial time.
         preCall: Object.entries(llm?.default_dynamic_variables ?? {}).map(
           ([name, value]) => ({ name, value }),
         ),
-        // Called back mid-conversation — this is how the agent books.
-        duringCall: (llm?.general_tools ?? []).map((t) => ({
-          name: t.name ?? "",
-          type: t.type ?? "",
-          description: t.description ?? "",
+        duringCall: (llm?.general_tools ?? []).map((tool) => ({
+          name: String(tool.name ?? ""),
+          type: String(tool.type ?? ""),
+          description: String(tool.description ?? ""),
         })),
-        // Extracted after the call ends.
-        postCall: (agent.post_call_analysis_data ?? []).map((f) => ({
-          name: f.name ?? "",
-          type: f.type ?? "",
-          description: f.description ?? "",
+        postCall: (agent.post_call_analysis_data ?? []).map((field) => ({
+          name: String(field.name ?? ""),
+          type: String(field.type ?? ""),
+          description: String(field.description ?? ""),
         })),
       },
+      variableConfig: {
+        managed: context.variablesSyncedAt !== null,
+        items:
+          context.variablesSyncedAt !== null
+            ? storedVariables(context)
+            : importVariables(context, agent, llm),
+      },
+      contactFields: context.fields.map((field) => ({
+        id: field._id,
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        options: field.options ?? [],
+        voice: field.source === "voice",
+      })),
     };
   },
 });
@@ -198,7 +344,7 @@ export const publishPrompt = action({
     previousPrompt: v.string(),
   }),
   handler: async (ctx, { agentId, generalPrompt, beginMessage }) => {
-    const key = await orgKey(ctx);
+    const key = (await editorContext(ctx, agentId)).apiKey!;
     const agent = (await (
       await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
     ).json()) as AgentDoc;
@@ -219,13 +365,179 @@ export const publishPrompt = action({
   },
 });
 
+function variableForRetell(variable: VariableRow): Record<string, unknown> {
+  return {
+    type: variable.type,
+    name: variable.key,
+    description: variable.description.trim() || `Capture ${variable.label}.`,
+    ...(variable.type === "enum" ? { choices: variable.choices ?? [] } : {}),
+    ...(variable.required ? { required: true } : {}),
+  };
+}
+
+function validateVariables(context: EditorContext, input: VariableRow[]): VariableRow[] {
+  if (input.length > 50) throw new Error("Too many variables. Keep the agent under 50 fields.");
+  const fields = new Map(context.fields.map((field) => [String(field._id), field]));
+  const seen = new Set<string>();
+  return input.map((raw) => {
+    const key = normaliseVoiceVariableKey(raw.key);
+    const label = raw.label.trim();
+    if (!key || key !== raw.key.trim()) throw new Error(`Invalid variable key: ${raw.key}`);
+    if (!label) throw new Error(`Variable ${key} needs a label.`);
+    if (seen.has(key)) throw new Error(`Variable ${key} appears more than once.`);
+    seen.add(key);
+    const choices =
+      raw.type === "enum"
+        ? [...new Set((raw.choices ?? []).map((choice) => choice.trim()).filter(Boolean))]
+        : undefined;
+    if (raw.type === "enum" && choices?.length === 0) {
+      throw new Error(`${label} needs at least one option.`);
+    }
+    if (
+      raw.beforeSource === "contact_field" &&
+      (!raw.beforeFieldId || !fields.has(String(raw.beforeFieldId)))
+    ) {
+      throw new Error(`${label} needs a valid before-call source.`);
+    }
+    let contactFieldId = raw.contactFieldId;
+    if (raw.destination === "contact") {
+      const field = contactFieldId ? fields.get(String(contactFieldId)) : null;
+      if (!field || field.source !== "voice") {
+        throw new Error(`${label} needs a voice-filled customer field.`);
+      }
+      if (field.key !== key) {
+        throw new Error(`${label} must use the customer field's variable key.`);
+      }
+    } else {
+      contactFieldId = undefined;
+    }
+    if (raw.beforeSource === "none" && raw.duringMode === "none" && !raw.afterCall) {
+      throw new Error(`${label} is not used at any point in the call.`);
+    }
+    return {
+      ...raw,
+      key,
+      label,
+      description: raw.description.trim(),
+      choices,
+      beforeValue: raw.beforeSource === "static" ? raw.beforeValue?.trim() : undefined,
+      beforeFieldId: raw.beforeSource === "contact_field" ? raw.beforeFieldId : undefined,
+      contactFieldId,
+    };
+  });
+}
+
+// Publishes the lifecycle as one Retell version. One draft contains both the
+// response-engine changes (defaults + live extraction) and the agent changes
+// (post-call analysis), so callers can never land between two configurations.
+export const publishVariables = action({
+  args: {
+    agentId: v.string(),
+    baseVersion: v.optional(v.number()),
+    variables: v.array(voiceVariableInput),
+  },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, { agentId, baseVersion, variables }) => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const next = validateVariables(context, variables);
+    const id = encodeURIComponent(agentId);
+    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    if (baseVersion !== undefined && live.version !== baseVersion) {
+      throw new Error("This agent changed in Retell. Refresh before publishing.");
+    }
+
+    const llmId = live.response_engine?.llm_id;
+    const needsLlm = next.some(
+      (variable) => variable.beforeSource !== "none" || variable.duringMode !== "none",
+    );
+    if (needsLlm && (live.response_engine?.type !== "retell-llm" || !llmId)) {
+      throw new Error("Before-call and during-call variables require a Retell LLM agent.");
+    }
+    const liveLlm = llmId
+      ? ((await (
+          await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+        ).json()) as LlmDoc)
+      : null;
+    const preservedTools = (liveLlm?.general_tools ?? []).filter(
+      (tool) => tool.type !== "extract_dynamic_variable",
+    );
+    const during = next.filter((variable) => variable.duringMode !== "none");
+    const generalTools = [
+      ...preservedTools,
+      ...(during.length > 0
+        ? [
+            {
+              type: "extract_dynamic_variable",
+              name: "randevu_collect",
+              description:
+                "Capture configured customer details when they are provided. Fields marked for confirmation must only be updated after the caller explicitly confirms them.",
+              variables: during.map((variable) => ({
+                ...variableForRetell(variable),
+                description:
+                  variable.duringMode === "confirm"
+                    ? `${variable.description.trim() || variable.label} Only store this after the caller explicitly confirms it.`
+                    : variable.description.trim() ||
+                      `Capture ${variable.label} when the caller provides it.`,
+              })),
+              enable_typing_sound: false,
+            },
+          ]
+        : []),
+    ];
+    const defaultDynamicVariables: Record<string, string> = {};
+    for (const variable of next) {
+      if (variable.beforeSource === "static" && variable.beforeValue) {
+        defaultDynamicVariables[variable.key] = variable.beforeValue;
+      } else if (variable.beforeSource === "business_name") {
+        defaultDynamicVariables[variable.key] = context.orgName;
+      }
+    }
+    const postCallAnalysis = [
+      ...(live.post_call_analysis_data ?? []).filter(
+        (item) => item.type === "system-presets",
+      ),
+      ...next.filter((variable) => variable.afterCall).map(variableForRetell),
+    ];
+
+    if (live.version === undefined) throw new Error("Agent has no version to clone.");
+    const draft = (await (
+      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+    ).json()) as { version?: number };
+    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    const draftAgent = (await (
+      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+    ).json()) as AgentDoc;
+
+    if (llmId) {
+      const llmVersion = draftAgent.response_engine?.version;
+      await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+        ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+        default_dynamic_variables: defaultDynamicVariables,
+        general_tools: generalTools,
+      });
+    }
+    await call(key, "PATCH", `update-agent/${id}`, {
+      version: draft.version,
+      post_call_analysis_data: postCallAnalysis,
+    });
+    await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+    await ctx.runMutation(internal.retell.replaceAgentVariables, {
+      retellAgentId: agentId,
+      retellVersion: draft.version,
+      variables: next,
+    });
+    return { ok: true, version: draft.version };
+  },
+});
+
 // ── Webhook ──────────────────────────────────────────────────────────────────
 
 export const wireWebhook = action({
   args: { agentId: v.string() },
   returns: v.object({ ok: v.boolean(), url: v.string(), version: v.union(v.number(), v.null()) }),
   handler: async (ctx, { agentId }) => {
-    const key = await orgKey(ctx);
+    const key = (await editorContext(ctx, agentId)).apiKey!;
     const site = siteUrl();
     if (!site) {
       throw new Error("This deployment exposes no site URL, so there is nothing to point at.");
@@ -240,6 +552,36 @@ export const wireWebhook = action({
     if (draft.version === undefined) throw new Error("Retell returned no draft version.");
     await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
     await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+
+    // Agent webhooks deliver the result. Number-level inbound webhooks run
+    // before the call is answered and are the only point where caller-specific
+    // context can be injected. Wire every number currently routed to this
+    // agent; PATCHing only this field preserves Retell's routing weights.
+    const numberData: unknown = await (
+      await call(key, "GET", "v2/list-phone-numbers")
+    ).json();
+    const numbers = (
+      Array.isArray(numberData)
+        ? numberData
+        : (numberData as { items?: unknown[] })?.items ?? []
+    ) as Array<{
+      phone_number?: string;
+      inbound_agent_id?: string;
+      inbound_agents?: Array<{ agent_id?: string }>;
+    }>;
+    const inboundUrl = `${site}/retell/inbound`;
+    for (const number of numbers) {
+      const belongs =
+        number.inbound_agent_id === agentId ||
+        number.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
+      if (!belongs || !number.phone_number) continue;
+      await call(
+        key,
+        "PATCH",
+        `update-phone-number/${encodeURIComponent(number.phone_number)}`,
+        { inbound_webhook_url: inboundUrl },
+      );
+    }
     return { ok: true, url, version: draft.version };
   },
 });
@@ -258,7 +600,7 @@ export const testCall = action({
     to: v.string(),
   }),
   handler: async (ctx, { agentId, toNumber, fromNumber }) => {
-    const key = await orgKey(ctx);
+    const key = (await editorContext(ctx, agentId)).apiKey!;
     const to = toNumber.trim();
     if (!/^\+[1-9]\d{6,14}$/.test(to)) {
       throw new Error("Enter the number in full international form, e.g. +905321234567.");
@@ -282,11 +624,19 @@ export const testCall = action({
       throw new Error("This Retell account has no phone number to call from.");
     }
 
+    const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
+      retellAgentId: agentId,
+      phone: to,
+    })) as { dynamicVariables: Record<string, string> } | null;
+
     const res = (await (
       await call(key, "POST", "v2/create-phone-call", {
         from_number: from,
         to_number: to,
         override_agent_id: agentId,
+        ...(before && Object.keys(before.dynamicVariables).length > 0
+          ? { retell_llm_dynamic_variables: before.dynamicVariables }
+          : {}),
       })
     ).json()) as { call_id?: string };
 

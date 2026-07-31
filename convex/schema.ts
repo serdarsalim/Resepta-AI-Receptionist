@@ -271,9 +271,60 @@ export default defineSchema({
     inboundNumber: v.optional(v.string()),
     transferNumber: v.optional(v.string()),
     enabled: v.boolean(),
+    // Set only after a variable publication succeeds at Retell. This separate
+    // marker matters because an intentionally empty registry is still a real,
+    // managed configuration and must not re-import deleted provider fields.
+    variablesSyncedAt: v.optional(v.number()),
+    variablesRetellVersion: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"]),
+
+  // Randevu's provider-neutral definition of the information a phone agent
+  // knows and collects. One row owns the whole lifecycle of one value: where
+  // its pre-call value comes from, whether the caller is asked for it, whether
+  // Retell should recover it from the transcript afterwards, and where the
+  // final value belongs. Keeping those together prevents three Retell lists
+  // from drifting into three slightly different meanings for the same key.
+  voiceAgentVariables: defineTable({
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    key: v.string(),
+    label: v.string(),
+    description: v.string(),
+    type: v.union(
+      v.literal("string"),
+      v.literal("number"),
+      v.literal("boolean"),
+      v.literal("enum"),
+    ),
+    choices: v.optional(v.array(v.string())),
+    required: v.boolean(),
+    beforeSource: v.union(
+      v.literal("none"),
+      v.literal("static"),
+      v.literal("business_name"),
+      v.literal("customer_name"),
+      v.literal("customer_phone"),
+      v.literal("customer_language"),
+      v.literal("next_appointment"),
+      v.literal("contact_field"),
+    ),
+    beforeValue: v.optional(v.string()),
+    beforeFieldId: v.optional(v.id("contactFields")),
+    duringMode: v.union(
+      v.literal("none"),
+      v.literal("if_missing"),
+      v.literal("confirm"),
+    ),
+    afterCall: v.boolean(),
+    destination: v.union(v.literal("call"), v.literal("contact")),
+    contactFieldId: v.optional(v.id("contactFields")),
+    order: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_org_agent", ["orgId", "retellAgentId"]),
 
   calls: defineTable({
     orgId: v.id("orgs"),
