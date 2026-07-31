@@ -440,7 +440,7 @@ export function CustomersView({
       <div className="flex flex-wrap items-center gap-2">
         {/* Search moved to the header, where it is in the same place on
             every tab. What is left here belongs to this table specifically. */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex w-full items-center gap-2">
           {/* The picker belongs to the table, and below sm there is no table. */}
           {hasCustomers && (
             <div className="hidden sm:block">
@@ -489,7 +489,7 @@ export function CustomersView({
             </div>
           )}
           <button
-            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            className="ml-auto h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
             onClick={() => setAdding(true)}
           >
             {t("customers.new")}

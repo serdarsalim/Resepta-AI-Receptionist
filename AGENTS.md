@@ -241,6 +241,8 @@ the webhook from prod.
 - `convex/_generated/` is CHECKED IN — commit it alongside any backend change
   that adds/renames a function or table (Vercel's typecheck reads the committed
   copy).
+- During refinement work, commit each logical unit locally and never push until
+  Serdar explicitly asks (Serdar, 2026-07-31).
 - The user runs dev servers, not the agent.
 - Phone numbers are E.164 with dial code or they don't exist (`+905...`);
   backend rejects anything else.
