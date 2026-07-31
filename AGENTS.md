@@ -254,7 +254,11 @@ each `mcps` entry needs an `id` field ("MCP id cannot be empty or null"
 otherwise; docs don't list it), and `type: "mcp"` general_tools must NOT carry
 an object `input_schema` — the validator wants string-valued
 properties/required and 400s on objects, so omit it and let tool discovery
-read the schema from `/retell/mcp`.
+read the schema from `/retell/mcp`. Webhook signatures are computed with the
+ONE workspace key carrying the "Webhook" badge in Retell's Settings → API
+Keys, not with whichever key an org has installed — a different stored key
+passes every API call yet 401s every webhook, which reads as "no call results"
+with zero rows in `voiceEvents`.
 
 Native phone-agent creation is Randevu-owned. **Add agent** defaults to creating
 an appointment receptionist from the versioned template in
