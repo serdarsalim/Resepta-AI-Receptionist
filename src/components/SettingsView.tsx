@@ -666,7 +666,6 @@ function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
                         {(roster?.phoneNumbers ?? []).map((n) => (
                           <option key={n.number} value={n.number}>
                             {n.number}
-                            {n.nickname ? ` · ${n.nickname}` : ""}
                           </option>
                         ))}
                         {/* A stored number the account no longer lists still
