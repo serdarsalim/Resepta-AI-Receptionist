@@ -115,10 +115,12 @@ export const disconnect = mutation({
   },
 });
 
+// Deliberately no inboundNumber here: the line is provider routing, not a
+// note, so it only moves through retellAgent.assignLine, which rebinds it at
+// Retell before the database adopts the change.
 export const update = mutation({
   args: {
     agentId: v.id("retellAgents"),
-    inboundNumber: v.optional(v.string()),
     transferNumber: v.optional(v.string()),
     enabled: v.optional(v.boolean()),
   },
@@ -126,16 +128,43 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const row = await ownedAgent(ctx, args.agentId);
     await ctx.db.patch(row._id, {
-      inboundNumber:
-        args.inboundNumber === undefined
-          ? row.inboundNumber
-          : args.inboundNumber.trim() || undefined,
       transferNumber:
         args.transferNumber === undefined
           ? row.transferNumber
           : args.transferNumber.trim() || undefined,
       enabled: args.enabled ?? row.enabled,
     });
+    return null;
+  },
+});
+
+// Applied only after Retell accepted the routing change. One line answers as
+// exactly one agent, so adopting a number clears it from every other row of
+// the org in the same mutation.
+export const applyLineAssignment = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    number: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, number }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    if (number) {
+      const rows = await ctx.db
+        .query("retellAgents")
+        .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+        .collect();
+      for (const row of rows) {
+        if (row._id !== agent._id && row.inboundNumber === number) {
+          await ctx.db.patch(row._id, { inboundNumber: undefined });
+        }
+      }
+    }
+    await ctx.db.patch(agent._id, { inboundNumber: number ?? undefined });
     return null;
   },
 });
@@ -260,6 +289,7 @@ export const agentEditorContext = internalQuery({
       variablesSyncedAt: agent.variablesSyncedAt ?? null,
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
+      inboundNumber: agent.inboundNumber ?? null,
       fields: fields.sort((a, b) => a.order - b.order),
     };
   },

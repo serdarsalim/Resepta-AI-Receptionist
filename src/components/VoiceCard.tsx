@@ -99,9 +99,15 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const assignLine = useAction(api.retellAgent.assignLine);
   const createAgent = useAction(api.retellAgent.createAgent);
   const setAgentArchived = useMutation(api.retell.setAgentArchived);
   const [wiring, setWiring] = useState<string | null>(null);
+  // The line dropdown talks to the provider, so it has in-flight and failed
+  // states like Fix does; the reactive list restores the stored truth if the
+  // provider rejects the change.
+  const [assigningLine, setAssigningLine] = useState<string | null>(null);
+  const [lineErrorId, setLineErrorId] = useState<string | null>(null);
   // Fix can fail (provider down, key revoked mid-session). Swallowing that
   // rejection made the button look dead — the exact bug that hid the
   // unique()-crash in prod. Whatever goes wrong renders in the notice row.
@@ -414,10 +420,18 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                           its placeholder in a way that read as a value. */}
                       <select
                         value={row.inboundNumber ?? ""}
-                        onChange={(e) =>
-                          void update({ agentId: row._id, inboundNumber: e.target.value })
-                        }
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+                        disabled={assigningLine === row.retellAgentId}
+                        onChange={(e) => {
+                          setAssigningLine(row.retellAgentId);
+                          setLineErrorId(null);
+                          void assignLine({
+                            agentId: row.retellAgentId,
+                            number: e.target.value || null,
+                          })
+                            .catch(() => setLineErrorId(row.retellAgentId))
+                            .finally(() => setAssigningLine(null));
+                        }}
+                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-60"
                       >
                         <option value="">{t("settings.voiceNoNumber")}</option>
                         {(roster?.phoneNumbers ?? []).map((n) => (
@@ -531,7 +545,9 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                   {/* Connection and delivery health, said as symptoms. Raw
                       provider errors stay in platform admin; the owner gets
                       either one safe Fix or an honest data warning. */}
-                  {(connectionNeedsFix || health?.needsAttention) && (
+                  {(connectionNeedsFix ||
+                    health?.needsAttention ||
+                    lineErrorId === row.retellAgentId) && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
                       <td colSpan={4} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
@@ -544,6 +560,9 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                           )}
                           {health?.needsAttention && (
                             <span>{t("settings.voiceUpdateIncomplete")}</span>
+                          )}
+                          {lineErrorId === row.retellAgentId && (
+                            <span>{t("settings.voiceActionFailed")}</span>
                           )}
                           {connectionNeedsFix &&
                             (wiring === row.retellAgentId ? (

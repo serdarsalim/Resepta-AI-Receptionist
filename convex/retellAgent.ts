@@ -94,6 +94,7 @@ type EditorContext = {
   variablesSyncedAt: number | null;
   variablesRetellVersion: number | null;
   runtimeConnectedAt: number | null;
+  inboundNumber: string | null;
   fields: Array<{
     _id: string;
     key: string;
@@ -916,6 +917,67 @@ export const wireWebhook = action({
     return await wireAgent(ctx, agentId, context);
   },
 });
+
+// The Inbound number dropdown is a routing control, not a note. Assigning a
+// line rebinds it at the provider first; only then does the database adopt
+// the change, clearing the number from whichever agent held it before.
+export const assignLine = action({
+  args: {
+    agentId: v.string(),
+    number: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { agentId, number }) => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const site = siteUrl();
+    const target = number?.trim() || null;
+    const previous = context.inboundNumber;
+    if (target) {
+      await call(key, "PATCH", `update-phone-number/${encodeURIComponent(target)}`, {
+        inbound_agents: [
+          { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+        ],
+        ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
+      });
+    }
+    if (previous && previous !== target) {
+      await releaseLineIfHeld(key, previous, agentId);
+    }
+    await ctx.runMutation(internal.retell.applyLineAssignment, {
+      retellAgentId: agentId,
+      number: target,
+    });
+    return null;
+  },
+});
+
+// Unbinding must not clobber routing the agent no longer owns: another agent
+// may have taken the line between the read and this write, so release only a
+// line the departing agent still answers.
+async function releaseLineIfHeld(key: string, number: string, agentId: string) {
+  const numberData: unknown = await (
+    await call(key, "GET", "v2/list-phone-numbers")
+  ).json();
+  const numbers = (
+    Array.isArray(numberData)
+      ? numberData
+      : (numberData as { items?: unknown[] })?.items ?? []
+  ) as Array<{
+    phone_number?: string;
+    inbound_agent_id?: string;
+    inbound_agents?: Array<{ agent_id?: string }>;
+  }>;
+  const entry = numbers.find((candidate) => candidate.phone_number === number);
+  if (!entry) return;
+  const holds =
+    entry.inbound_agent_id === agentId ||
+    entry.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
+  if (!holds) return;
+  await call(key, "PATCH", `update-phone-number/${encodeURIComponent(number)}`, {
+    inbound_agents: [],
+  });
+}
 
 // ── Test call ────────────────────────────────────────────────────────────────
 
