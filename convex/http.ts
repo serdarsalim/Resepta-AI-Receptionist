@@ -1,5 +1,5 @@
 import { httpRouter } from "convex/server";
-import { httpAction } from "./_generated/server";
+import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
 import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
@@ -18,6 +18,7 @@ import {
 } from "./lib/emailInbound";
 import { formatAppointmentTime } from "./lib/format";
 import { localDayRangeUtc, todayInZone } from "./lib/businessHours";
+import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -241,59 +242,43 @@ http.route({
 
 // ---- Voice lane (Retell) ----
 
-async function retellGuard(request: Request): Promise<
-  { ok: true; payload: Record<string, unknown> } | { ok: false; response: Response }
+async function retellGuard(ctx: ActionCtx, request: Request): Promise<
+  | {
+      ok: true;
+      payload: Record<string, unknown>;
+      agentId: string;
+      orgId: string;
+    }
+  | { ok: false; response: Response }
 > {
   const rawBody = await request.text();
-  const apiKey = process.env.RETELL_API_KEY;
-  if (apiKey) {
-    const valid = await verifyRetellSignature(
-      apiKey,
-      rawBody,
-      request.headers.get("x-retell-signature"),
-    );
-    if (!valid) {
-      return { ok: false, response: new Response("bad signature", { status: 401 }) };
-    }
-  } else {
-    console.warn("RETELL_API_KEY unset — Retell signature NOT verified");
-  }
+  let payload: Record<string, unknown>;
   try {
-    return { ok: true, payload: JSON.parse(rawBody) as Record<string, unknown> };
+    payload = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return { ok: false, response: new Response("bad json", { status: 400 }) };
   }
-}
-
-// Retell hands values back in whatever shape the agent's function schema was
-// written in, so accept the nested object under the name most configs use and
-// fall back to the remaining top-level args. Non-scalars are dropped; keys
-// that could never be a contactFields key are dropped with them.
-function coerceContactValues(source: Record<string, unknown>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (value === null || value === undefined) continue;
-    if (typeof value === "object") continue;
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9_]*$/.test(key)) continue;
-    const text = String(value).trim();
-    // An empty value is Retell saying it did not collect this field, never
-    // "erase what you have". Post-call analysis reports every configured key
-    // whether or not the caller answered, so passing "" through would let one
-    // vague call wipe a value a human typed. Clearing a field is a job for the
-    // contact page, by hand.
-    if (!text) continue;
-    out[key] = text;
+  const call = (payload.call ?? {}) as Record<string, unknown>;
+  const inbound = (payload.call_inbound ?? {}) as Record<string, unknown>;
+  const agentId = String(call.agent_id ?? inbound.agent_id ?? payload.agent_id ?? "");
+  if (!agentId) {
+    return { ok: false, response: new Response("unknown agent", { status: 401 }) };
   }
-  return out;
-}
-
-function contactValuesFromArgs(args: Record<string, unknown>): Record<string, string> {
-  const nested = args.values ?? args.properties ?? args.fields;
-  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-    return coerceContactValues(nested as Record<string, unknown>);
+  const auth = await ctx.runQuery(internal.retell.webhookAuthContext, {
+    retellAgentId: agentId,
+  });
+  if (!auth?.apiKey) {
+    return { ok: false, response: new Response("unknown agent", { status: 401 }) };
   }
-  const { phone: _phone, name: _name, ...rest } = args;
-  return coerceContactValues(rest);
+  const valid = await verifyRetellSignature(
+    auth.apiKey,
+    rawBody,
+    request.headers.get("x-retell-signature"),
+  );
+  if (!valid) {
+    return { ok: false, response: new Response("bad signature", { status: 401 }) };
+  }
+  return { ok: true, payload, agentId, orgId: String(auth.orgId) };
 }
 
 // Short English sentence for the model to relay in the call's own language.
@@ -374,11 +359,11 @@ http.route({
   path: "/retell/functions",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const guard = await retellGuard(request);
+    const guard = await retellGuard(ctx, request);
     if (!guard.ok) return guard.response;
     const payload = guard.payload;
     const call = (payload.call ?? {}) as Record<string, unknown>;
-    const agentId = String(call.agent_id ?? payload.agent_id ?? "");
+    const agentId = guard.agentId;
     const name = String(payload.name ?? "");
     const args = (payload.args ?? {}) as Record<string, unknown>;
     const respond = (body: Record<string, unknown>) =>
@@ -465,7 +450,7 @@ http.route({
     // in the ones already there.
     if (name === "update_contact") {
       if (!callerPhone) return respond({ saved: false, message: "No number for this contact." });
-      const values = contactValuesFromArgs(args);
+      const values = voiceValuesFromToolArgs(args);
       if (Object.keys(values).length === 0) {
         return respond({ saved: false, updated: [], ignored: [], message: "Nothing to save." });
       }
@@ -577,13 +562,13 @@ http.route({
   }),
 });
 
-// Post-call webhook: transcript, summary, recording. call_analyzed carries
-// the analysis; recordCall is idempotent so both events are safe to send.
+// Post-call webhook. Authentication and durable storage happen before the
+// acknowledgement; customer updates run from the stored event with retries.
 http.route({
   path: "/retell/call-ended",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const guard = await retellGuard(request);
+    const guard = await retellGuard(ctx, request);
     if (!guard.ok) return guard.response;
     // Retell posts EVERY lifecycle event to this one URL. call_started carries
     // no transcript, no duration and nothing collected, and recordCall is
@@ -596,76 +581,15 @@ http.route({
       return new Response("ok", { status: 200 });
     }
     const call = (guard.payload.call ?? {}) as Record<string, unknown>;
-    const analysis = (call.call_analysis ?? {}) as Record<string, unknown>;
-    const startedAt = Number(call.start_timestamp ?? Date.now());
-    const endedAt = Number(call.end_timestamp ?? 0);
     const callId = String(call.call_id ?? "");
-    const agentId = String(call.agent_id ?? "");
-    // Everything the agent collected, merged the same way the contact update
-    // uses it below. Also stored raw on the call row, because "what did they
-    // answer on THIS call" belongs next to that call's recording.
-    const beforeValues =
-      (call.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ?? {};
-    const duringValues =
-      (call.collected_dynamic_variables as Record<string, unknown> | undefined) ?? {};
-    const afterValues =
-      (analysis.custom_analysis_data as Record<string, unknown> | undefined) ?? {};
-    // A caller-confirmed live value beats a later transcript inference. The
-    // pre-call value is still useful on the call record, but it is the weakest
-    // source and never wins a collision.
-    const collected: Record<string, unknown> = {
-      ...beforeValues,
-      ...afterValues,
-      ...duringValues,
-    };
-    if (callId && agentId) {
-      await ctx.runMutation(internal.retell.recordCall, {
-        retellAgentId: agentId,
-        retellCallId: callId,
-        fromNumber: String(call.from_number ?? "") || undefined,
-        startedAt,
-        durationSec: endedAt > startedAt ? Math.round((endedAt - startedAt) / 1000) : undefined,
-        outcome: String(analysis.call_successful ?? "") || undefined,
-        summary: String(analysis.call_summary ?? "") || undefined,
-        transcript: String(call.transcript ?? "") || undefined,
-        recordingUrl: String(call.recording_url ?? "") || undefined,
-        collected: Object.keys(collected).length > 0 ? collected : undefined,
-      });
-    }
-
-    // Retell also posts what it collected during the call. Same mapping, same
-    // guards as the mid-call function: only keys the org defined as contact
-    // fields, only fields marked as voice-filled, and only values that survive
-    // their type. This runs outside recordCall's idempotency check on purpose:
-    // the analysis arrives on the second event, after the call row already
-    // exists. Both call_ended and call_analyzed reach here (the gate above
-    // dropped call_started); writing the same values twice is a no-op.
-    if (agentId) {
-      const fromNumber = String(call.from_number ?? "");
-      const after = coerceContactValues(afterValues);
-      const during = coerceContactValues(duringValues);
-      if (fromNumber && (Object.keys(after).length > 0 || Object.keys(during).length > 0)) {
-        try {
-          if (Object.keys(after).length > 0) {
-            await ctx.runMutation(internal.retell.updateContactFromVoice, {
-              retellAgentId: agentId,
-              phone: fromNumber,
-              values: after,
-              fillOnlyMissing: true,
-            });
-          }
-          if (Object.keys(during).length > 0) {
-            await ctx.runMutation(internal.retell.updateContactFromVoice, {
-              retellAgentId: agentId,
-              phone: fromNumber,
-              values: during,
-            });
-          }
-        } catch (err) {
-          console.error("post-call contact update failed", err);
-        }
-      }
-    }
+    if (!callId) return new Response("ok", { status: 200 });
+    await ctx.runMutation(internal.voiceEvents.enqueue, {
+      orgId: guard.orgId as never,
+      retellAgentId: guard.agentId,
+      retellCallId: callId,
+      eventType: event === "call_analyzed" ? "call_analyzed" : "call_ended",
+      payload: guard.payload,
+    });
     return new Response("ok", { status: 200 });
   }),
 });

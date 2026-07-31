@@ -631,6 +631,32 @@ export const loadVoiceContext = internalQuery({
   },
 });
 
+// Authentication lookup for provider-originated HTTP requests. Parsing the
+// signed body tells us the agent id; the agent id tells us which org-owned key
+// must verify it. A deployment-wide fallback would let one client's key sign
+// traffic into another client's workspace.
+export const webhookAuthContext = internalQuery({
+  args: { retellAgentId: v.string() },
+  returns: v.union(
+    v.object({
+      orgId: v.id("orgs"),
+      apiKey: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, { retellAgentId }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    return {
+      orgId: agent.orgId,
+      apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
+    };
+  },
+});
+
 // What the caller asked for, matched against what the salon actually sells.
 //
 // THE KEY WINS. An agent configured from the Services table sends `manikur`,

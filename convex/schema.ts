@@ -276,6 +276,16 @@ export default defineSchema({
     // managed configuration and must not re-import deleted provider fields.
     variablesSyncedAt: v.optional(v.number()),
     variablesRetellVersion: v.optional(v.number()),
+    // Runtime credentials are one-way hashes. The clear token is written to
+    // the provider once and never stored in Randevu.
+    runtimeTokenHash: v.optional(v.string()),
+    runtimeConnectedAt: v.optional(v.number()),
+    // Customer-facing health is derived from these stamps. Provider detail
+    // remains in the event inbox for the platform operator.
+    lastCallEventAt: v.optional(v.number()),
+    lastAnalyzedEventAt: v.optional(v.number()),
+    lastEventErrorAt: v.optional(v.number()),
+    lastEventError: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"]),
@@ -353,6 +363,40 @@ export default defineSchema({
     .index("by_org_started", ["orgId", "startedAt"])
     .index("by_customer", ["customerId"])
     .index("by_retell_call", ["retellCallId"]),
+
+  // Durable inbox for phone-call lifecycle events. The HTTP request only
+  // authenticates and stores the payload; processing and customer updates run
+  // from this row with bounded retries. One event per call/type means provider
+  // retries are harmless and call_ended/call_analyzed can arrive separately.
+  voiceEvents: defineTable({
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    retellCallId: v.string(),
+    eventType: v.union(
+      v.literal("call_ended"),
+      v.literal("call_analyzed"),
+      v.literal("analysis_recovery"),
+    ),
+    eventKey: v.string(),
+    payload: v.any(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("processing"),
+      v.literal("retrying"),
+      v.literal("processed"),
+      v.literal("failed"),
+    ),
+    attempts: v.number(),
+    receivedAt: v.number(),
+    processingAt: v.optional(v.number()),
+    processedAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+  })
+    .index("by_org_event_key", ["orgId", "eventKey"])
+    .index("by_org_call", ["orgId", "retellCallId"])
+    .index("by_org_status", ["orgId", "status"])
+    .index("by_org_received", ["orgId", "receivedAt"]),
 
   customers: defineTable({
     orgId: v.id("orgs"),
