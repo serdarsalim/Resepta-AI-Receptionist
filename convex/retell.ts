@@ -79,12 +79,14 @@ export const connect = mutation({
   args: {
     retellAgentId: v.string(),
     inboundNumber: v.optional(v.string()),
+    name: v.optional(v.string()),
   },
   returns: v.id("retellAgents"),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
     const retellAgentId = args.retellAgentId.trim();
     if (!retellAgentId) throw new Error("agent-id-required");
+    const name = args.name?.trim() || undefined;
     // Agent ids are globally unique at Retell, so one already claimed belongs
     // to somebody. Another org's is refused; this org's is a no-op re-add
     // rather than a duplicate row the webhook path would then find twice.
@@ -94,14 +96,32 @@ export const connect = mutation({
       .unique();
     if (claimed) {
       if (claimed.orgId !== orgId) throw new Error("agent-already-connected");
+      if (name && claimed.name !== name) await ctx.db.patch(claimed._id, { name });
       return claimed._id;
     }
     return await ctx.db.insert("retellAgents", {
       orgId,
       retellAgentId,
+      name,
       inboundNumber: args.inboundNumber?.trim() || undefined,
       enabled: true,
     });
+  },
+});
+
+// Cosmetic cache refresh: whichever action just fetched the provider's agent
+// tells the row its current display name, so name-bearing surfaces stay
+// truthful without their own provider round trip.
+export const rememberAgentName = internalMutation({
+  args: { retellAgentId: v.string(), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, name }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (agent && agent.name !== name) await ctx.db.patch(agent._id, { name });
+    return null;
   },
 });
 
@@ -115,31 +135,44 @@ export const disconnect = mutation({
   },
 });
 
-// How many phone agents reference each customer field. The Business fields
-// card reads this so "used by a phone agent" is visible where fields are
-// managed — and deleting a field an agent still writes to stops being a
-// silent break.
+// Which phone agents reference each customer field, by name. The Business
+// fields card reads this so "used by Booking assistant" is visible where
+// fields are managed — and deleting a field an agent still writes to stops
+// being a silent break. Names come from the cached retellAgents.name; a row
+// connected before that cache existed reads as its agent id tail.
 export const fieldUsage = query({
   args: {},
-  returns: v.record(v.string(), v.number()),
+  returns: v.record(v.string(), v.array(v.string())),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    const rows = await ctx.db
-      .query("voiceAgentVariables")
-      .withIndex("by_org_agent", (q) => q.eq("orgId", orgId))
-      .collect();
+    const [rows, agents] = await Promise.all([
+      ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org_agent", (q) => q.eq("orgId", orgId))
+        .collect(),
+      ctx.db
+        .query("retellAgents")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+    ]);
+    const nameOf = new Map(
+      agents.map((agent) => [
+        agent.retellAgentId,
+        agent.name ?? `…${agent.retellAgentId.slice(-6)}`,
+      ]),
+    );
     const byField = new Map<string, Set<string>>();
     for (const row of rows) {
       for (const fieldId of [row.contactFieldId, row.beforeFieldId]) {
         if (!fieldId) continue;
         const key = String(fieldId);
-        const agents = byField.get(key) ?? new Set<string>();
-        agents.add(row.retellAgentId);
-        byField.set(key, agents);
+        const names = byField.get(key) ?? new Set<string>();
+        names.add(nameOf.get(row.retellAgentId) ?? `…${row.retellAgentId.slice(-6)}`);
+        byField.set(key, names);
       }
     }
     return Object.fromEntries(
-      [...byField.entries()].map(([key, agents]) => [key, agents.size]),
+      [...byField.entries()].map(([key, names]) => [key, [...names].sort()]),
     );
   },
 });

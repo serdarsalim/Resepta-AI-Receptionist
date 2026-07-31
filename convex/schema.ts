@@ -268,6 +268,10 @@ export default defineSchema({
   retellAgents: defineTable({
     orgId: v.id("orgs"),
     retellAgentId: v.string(),
+    // The provider's display name, remembered at connect/create and refreshed
+    // whenever the detail is read. Cosmetic cache: surfaces like "used by
+    // Booking assistant" must not call the provider to render a name.
+    name: v.optional(v.string()),
     inboundNumber: v.optional(v.string()),
     transferNumber: v.optional(v.string()),
     enabled: v.boolean(),

@@ -610,11 +610,11 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
     }`;
 
   const usedBy = (field: ContactField) => {
-    const count = usage?.[String(field._id)] ?? 0;
-    if (count === 0) return null;
+    const agents = usage?.[String(field._id)] ?? [];
+    if (agents.length === 0) return null;
     return (
       <span className="ml-2 text-xs text-[var(--muted)]">
-        {t("fields.usedByAgents").replace("{n}", String(count))}
+        {t("fields.usedByAgents").replace("{agents}", agents.join(", "))}
       </span>
     );
   };

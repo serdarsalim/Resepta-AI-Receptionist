@@ -326,6 +326,12 @@ export const read = action({
     const key = context.apiKey!;
     const id = encodeURIComponent(agentId);
     const agent = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    if (agent.agent_name) {
+      await ctx.runMutation(internal.retell.rememberAgentName, {
+        retellAgentId: agentId,
+        name: agent.agent_name,
+      });
+    }
     const engine = agent.response_engine ?? {};
 
     let llm: LlmDoc | null = null;

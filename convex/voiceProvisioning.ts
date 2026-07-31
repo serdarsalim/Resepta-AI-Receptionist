@@ -196,11 +196,15 @@ export const connect = internalMutation({
       if (args.inboundNumber && claimed.inboundNumber !== args.inboundNumber) {
         await ctx.db.patch(claimed._id, { inboundNumber: args.inboundNumber });
       }
+      if (claimed.name !== job.name) {
+        await ctx.db.patch(claimed._id, { name: job.name });
+      }
       return claimed._id;
     }
     return await ctx.db.insert("retellAgents", {
       orgId: job.orgId,
       retellAgentId: args.retellAgentId,
+      name: job.name,
       inboundNumber: args.inboundNumber,
       enabled: true,
     });

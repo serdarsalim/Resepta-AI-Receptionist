@@ -281,7 +281,11 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
     setWiring(agentId);
     setWireError(null);
     try {
-      await connect({ retellAgentId: agentId, inboundNumber: bound });
+      await connect({
+        retellAgentId: agentId,
+        inboundNumber: bound,
+        name: roster?.agents.find((a) => a.id === agentId)?.name,
+      });
       // One operation from the owner's point of view: adding an agent also
       // connects call results, pre-call context and the Randevu runtime tools.
       await wireWebhook({ agentId });

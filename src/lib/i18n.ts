@@ -1790,9 +1790,9 @@ const dictionary = {
     de: "Identitätsfelder, die jeder Kunde hat. Der Telefonassistent kann sie lesen, aber nie ändern.",
   },
   "fields.usedByAgents": {
-    tr: "{n} telefon asistanı kullanıyor",
-    en: "Used by {n} phone agent(s)",
-    de: "Von {n} Telefonassistenten genutzt",
+    tr: "{agents} kullanıyor",
+    en: "Used by {agents}",
+    de: "Genutzt von {agents}",
   },
   "voiceVariables.customerCard": {
     tr: "Müşteri kartı",

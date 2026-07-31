@@ -51,7 +51,10 @@ export function FieldGroup({
     <div className="flex items-center gap-2 pt-2">
       <span className="text-sm font-medium">{label}</span>
       {hint && <InfoTip text={hint} />}
-      <span className="h-px flex-1 bg-[var(--border)]" aria-hidden />
+      {/* No rule across the row: the heading and the group's own spacing
+          carry the separation. Serdar's design language — lines and borders
+          belong to containers, not decoration. */}
+      <span className="flex-1" aria-hidden />
       {action}
     </div>
   );
