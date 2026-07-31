@@ -308,10 +308,14 @@ export function VoiceVariablesEditor({
           onClose={() => setEditing(null)}
         >
           <div className="space-y-3">
+            {/* A destination is a choice only when the business has allowed
+                the phone agent to edit at least one customer field. A select
+                with a single option is a question the sheet asks nobody; the
+                hint below the form says how to unlock real destinations. */}
+            {voiceFields.length > 0 && (
             <label className="block">
               <span className="mb-1 block text-xs font-medium">{t("voiceVariables.savedTo")}</span>
               <select
-                data-sheet-autofocus
                 value={destinationValue}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -346,11 +350,13 @@ export function VoiceVariablesEditor({
                 ))}
               </select>
             </label>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium">{t("voiceVariables.label")}</span>
                 <input
+                  data-sheet-autofocus
                   value={form.label}
                   disabled={form.destination === "contact"}
                   onChange={(event) => {
@@ -506,6 +512,12 @@ export function VoiceVariablesEditor({
                 {t("voiceVariables.required")}
               </label>
             </div>
+
+            {voiceFields.length === 0 && (
+              <p className="text-xs text-[var(--muted)]">
+                {t("voiceVariables.noFieldsHint")}
+              </p>
+            )}
 
             <div className="flex justify-end gap-2 pt-1">
               <button

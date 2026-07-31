@@ -29,6 +29,15 @@ export function Sheet({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Callers pass inline closures, so onClose has a new identity every parent
+  // render. The mount effect below must NOT depend on it: re-running it
+  // re-fires the autofocus, which steals focus from whatever field the user
+  // is typing in. The ref always holds the latest closure instead.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
@@ -36,16 +45,16 @@ export function Sheet({
       // variable editor). Only the topmost dialog owns Escape; otherwise one
       // keypress closes both layers because both listeners live on window.
       const dialogs = document.querySelectorAll('[role="dialog"]');
-      if (dialogs[dialogs.length - 1] === panelRef.current) onClose();
+      if (dialogs[dialogs.length - 1] === panelRef.current) onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     // Focus lands inside the sheet so the first tab stays in it and a screen
-    // reader starts where the sheet does.
+    // reader starts where the sheet does. Once, on mount only.
     const preferred = panelRef.current?.querySelector<HTMLElement>("[data-sheet-autofocus]");
     const fallback = panelRef.current?.querySelector<HTMLElement>("input, select, button");
     (preferred ?? fallback)?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div

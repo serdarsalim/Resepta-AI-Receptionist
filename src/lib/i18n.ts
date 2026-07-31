@@ -1394,6 +1394,11 @@ const dictionary = {
     en: "Call only",
     de: "Nur Anruf",
   },
+  "voiceVariables.noFieldsHint": {
+    tr: "Aramayla birlikte kaydedilir. Müşteri kartına da yazması için İşletme bölümünde bir alanı telefon asistanına açın.",
+    en: "Saved with the call. To also write into the customer card, allow a field for the phone agent under Business.",
+    de: "Wird mit dem Anruf gespeichert. Damit es auch ins Kundenprofil geschrieben wird, gib unter Betrieb ein Feld für den Telefonassistenten frei.",
+  },
   "voiceVariables.label": { tr: "Ad", en: "Name", de: "Name" },
   "voiceVariables.key": { tr: "Değişken anahtarı", en: "Variable key", de: "Variablenschlüssel" },
   "voiceVariables.description": {
