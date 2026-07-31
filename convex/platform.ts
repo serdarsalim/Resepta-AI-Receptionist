@@ -172,13 +172,19 @@ async function healthFor(
 // from a template problem without opening the database. Bounded and read-only:
 // there is deliberately no mutation in this file, because the fix for every
 // one of these lives in the salon's own Settings.
-export const orgFailures = query({
+// The operator's answer to "is this org's messaging alive": the latest
+// traffic in both directions with its outcome, not only the wrecks. A feed
+// that shows failures alone reads as either "all broken" or "no data", and
+// the operator cannot tell which.
+export const orgActivity = query({
   args: { orgId: v.id("orgs") },
   returns: v.array(
     v.object({
       _id: v.id("messages"),
       at: v.number(),
       kind: v.string(),
+      direction: v.union(v.literal("out"), v.literal("in")),
+      status: v.string(),
       error: v.optional(v.string()),
       attempts: v.optional(v.number()),
       deadLettered: v.boolean(),
@@ -188,13 +194,15 @@ export const orgFailures = query({
     await requirePlatformAdmin(ctx);
     const rows = await ctx.db
       .query("messages")
-      .withIndex("by_org_status", (q) => q.eq("orgId", args.orgId).eq("status", "failed"))
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
       .order("desc")
       .take(50);
     return rows.map((row) => ({
       _id: row._id,
       at: row._creationTime,
       kind: row.kind,
+      direction: row.direction,
+      status: row.status,
       error: row.error,
       attempts: row.attempts,
       deadLettered: row.deadLetteredAt !== undefined,

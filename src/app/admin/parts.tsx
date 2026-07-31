@@ -58,13 +58,35 @@ export function Setup({ org }: { org: { waConnected: boolean; approvedTemplates:
   return <span className="text-[var(--muted)]">{org.approvedTemplates} templates</span>;
 }
 
-export function Failures({ orgId }: { orgId: Id<"orgs"> }) {
-  const rows = useQuery(api.platform.orgFailures, { orgId });
+// Delivery outcome as a dot and a word. Failed is the loud one; queued is a
+// normal in-flight state, not an alarm.
+function StatusPill({ status, deadLettered }: { status: string; deadLettered: boolean }) {
+  const tone =
+    status === "failed"
+      ? "bg-red-500"
+      : status === "queued"
+        ? "bg-amber-400"
+        : status === "received"
+          ? "bg-sky-500"
+          : "bg-emerald-500";
+  const text =
+    status === "failed" ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]";
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs ${text}`}>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone}`} />
+      {status}
+      {deadLettered ? " · gave up" : ""}
+    </span>
+  );
+}
+
+export function Activity({ orgId }: { orgId: Id<"orgs"> }) {
+  const rows = useQuery(api.platform.orgActivity, { orgId });
   if (rows === undefined) {
     return <div className="px-3 py-2 text-xs text-[var(--muted)]">Loading…</div>;
   }
   if (rows.length === 0) {
-    return <div className="px-3 py-2 text-xs text-[var(--muted)]">No failures on record.</div>;
+    return <div className="px-3 py-2 text-xs text-[var(--muted)]">No messages yet.</div>;
   }
   return (
     <div className="overflow-x-auto">
@@ -75,11 +97,20 @@ export function Failures({ orgId }: { orgId: Id<"orgs"> }) {
               <td className="whitespace-nowrap px-3 py-1.5 text-[var(--muted)] tabular-nums">
                 {ago(row.at)} ago
               </td>
-              <td className="whitespace-nowrap px-3 py-1.5">{row.kind}</td>
-              <td className="px-3 py-1.5 font-mono text-[11px]">{row.error ?? "—"}</td>
-              <td className="whitespace-nowrap px-3 py-1.5 text-[var(--muted)]">
-                {row.attempts ? `${row.attempts} tries` : ""}
-                {row.deadLettered ? " · gave up" : ""}
+              <td className="whitespace-nowrap px-3 py-1.5">
+                {row.kind}
+                <span className="ml-1.5 text-[var(--muted)]">
+                  {row.direction === "in" ? "in" : "out"}
+                </span>
+              </td>
+              <td className="whitespace-nowrap px-3 py-1.5">
+                <StatusPill status={row.status} deadLettered={row.deadLettered} />
+              </td>
+              <td className="px-3 py-1.5 font-mono text-[11px]">
+                {row.status === "failed" ? row.error ?? "—" : ""}
+                {row.status === "failed" && row.attempts ? (
+                  <span className="text-[var(--muted)]"> · {row.attempts} tries</span>
+                ) : null}
               </td>
             </tr>
           ))}

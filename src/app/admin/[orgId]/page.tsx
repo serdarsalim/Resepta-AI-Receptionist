@@ -19,7 +19,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Failures } from "../parts";
+import { Activity } from "../parts";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -508,10 +508,10 @@ export default function TenantPage() {
       </Section>
 
       <Section
-        title="Recent failures"
-        description="Delivery problems across every channel of this org, newest first."
+        title="Recent activity"
+        description="The org's latest messages in both directions with their delivery outcome, newest first."
       >
-        <Failures orgId={orgId} />
+        <Activity orgId={orgId} />
       </Section>
     </main>
   );
