@@ -52,12 +52,10 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   }
 });
 
-// icon.svg sits here for the same reason favicon.ico always did, and leaving it
-// out cost a working favicon. src/app/icon.svg is a route like any other, so the
-// auth check caught it and answered the browser's icon request with a 307 to
-// /signin. Chrome asked for an image, got a redirect to an HTML page, and drew
-// the default globe. Anything Next serves from app/ as an asset convention
-// (icon, apple-icon, opengraph-image) belongs on this list.
+// Public assets sit here for the same reason favicon.ico always did. If the auth
+// check catches an image request, the browser receives a 307 to an HTML sign-in
+// page and renders a broken image. The /images directory contains landing-page
+// media only; it calls no backend function and carries no tenant data.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image).*)"],
+  matcher: ["/((?!_next/static|_next/image|images|favicon.ico|icon.svg|apple-icon.png|opengraph-image).*)"],
 };

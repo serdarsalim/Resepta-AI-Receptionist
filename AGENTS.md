@@ -26,6 +26,11 @@ style issue.
   confirmations + reminders, confirm/cancel by reply. NOT lead qualification,
   NOT deal stages, NOT HubSpot. If a feature request looks like Nudge, it
   belongs in Nudge.
+- **The public product is vertical-agnostic** (Serdar, 2026-07-31). Lead with
+  Randevu's call → booking → follow-up workflow and product UI, never with one
+  industry's lifestyle photo. Industry photography belongs only inside
+  labelled use-case tabs and never inside the product demo; it illustrates an
+  example without redefining the app as salon, clinic or workshop software.
 - Self-serve: a salon signs in with **Google OAuth only** (Serdar, 2026-07-25:
   ease of use wins; no passwords, no reset flow ever). First sign-in creates
   the org unnamed; the AppShell onboarding gate asks the one question

@@ -13,8 +13,9 @@ import "flag-icons/css/flag-icons.min.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Randevu",
-  description: "WhatsApp appointment reminders for small businesses",
+  title: "Randevu — calls, bookings and customer follow-up",
+  description:
+    "Randevu answers calls, books appointments and keeps customers informed in one connected workflow.",
 };
 
 export default function RootLayout({
