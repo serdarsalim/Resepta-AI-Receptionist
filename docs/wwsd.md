@@ -14,6 +14,7 @@ rule written only in a repo is a rule the next project won't inherit.
 
 ## Randevu-specific decisions
 
-Those live in [`../AGENTS.md`](../AGENTS.md) (org-scoping invariant, cal.com as
-scheduler, Google-only auth, workspace memberships, Evolution deferred) and
-[`product-spec.md`](product-spec.md) (the phase ladder).
+Those live in [`../AGENTS.md`](../AGENTS.md) (org scoping, current IA and
+implementation invariants) and [`product-spec.md`](product-spec.md) (current
+scope and shipped-state inventory). Phone-agent work also requires
+[`phone-agent.md`](phone-agent.md), the architecture and operator runbook.

@@ -8,10 +8,10 @@ import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
 import { VoiceCard } from "./VoiceCard";
 
-// The phone agent's own sidebar destination. Settings is where a salon
-// configures things once; the phone rings every day. Two sections: the agents
-// (moved out of Settings) and the calls themselves — recording, transcript,
-// summary — so hearing yesterday's call never means opening Retell.
+// The phone agent's own sidebar destination. Two sections: the agents and the
+// calls themselves, including recording, transcript and summary. The provider
+// stays an implementation detail; hearing yesterday's call never means opening
+// another product.
 
 type VoiceSection = "agents" | "calls";
 

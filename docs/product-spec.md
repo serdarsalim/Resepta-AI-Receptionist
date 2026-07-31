@@ -1,172 +1,192 @@
-# Randevu — production spec (v1)
+# Randevu production spec
 
-**Product:** AI front desk for appointment businesses (salons, barbers, dentists,
-clinics) in Türkiye first. Fonio-parity target: the AI answers the business's
-phone, books appointments, and runs the WhatsApp side — confirmations,
-reminders, replies. One multi-org deployment, self-serve signup, partner-assisted
-onboarding at scale.
+Last reconciled with the shipped product: 31 July 2026.
 
-**Decided:** 2026-07-25 (Serdar): full fonio.ai parity as the target; spec-first,
-then sustained implementation. Working name Randevu; brand green; Google-only
-auth; cal.com as external booking intake; Evolution API parked (dedicated-number
-strategy documented in session notes, revisit post-launch).
+## 1. Product
 
----
+Randevu is an AI front desk for appointment businesses, starting with salons,
+barbers, dentists and clinics in Türkiye. One shared, multi-org deployment gives
+each business a phone receptionist, customer records, appointments, WhatsApp
+confirmations and reminders, an inbox and a calendar.
 
-## 1. The product in one sentence per audience
+- **Business owner:** the phone and customer messaging are handled, bookings
+  land in one calendar, and customer details stay current.
+- **Automation partner:** install the customer's external accounts once, then
+  let the business configure and operate its own front desk in Randevu.
+- **Platform:** voice, WhatsApp, email, forms and staff actions write into one
+  org-scoped customer and appointment model.
 
-- **Salon owner:** "Your WhatsApp and your phone answer themselves — bookings
-  land in your calendar, customers get reminded, no-shows drop."
-- **Partner (reseller):** provision a salon in minutes: connect a number, pick a
-  voice, hand over a login.
-- **Us:** one Convex deployment, org-scoped everything, three channels (voice /
-  WhatsApp / manual UI) writing into one appointments table.
+This remains an appointment product. Lead qualification, deal stages and CRM
+pipeline features belong elsewhere.
 
-## 2. Feature ladder (build order)
+## 2. Product boundaries
 
-### Phase A — production foundation (no new product surface)
-- **Multi-user orgs:** invites table + join flow (port Nudge's invite gate:
-  owner enters email → that address's Google sign-in joins the org as `staff`
-  instead of creating a new org). Team card in Settings: members list, pending
-  invites, revoke; owner-only.
-- **Prod deployment:** Convex prod deployment in team `randevu`, Vercel project,
-  domain (needs Serdar: name + DNS), env promotion checklist, `_generated`
-  committed, deploy script (`predeploy` typecheck).
-- **Webhook hardening:** Meta `X-Hub-Signature-256` verification (env
-  `WA_APP_SECRET`), cal.com secret header check, Retell webhook signature.
-  All three fail-closed in prod, fail-open in dev with a console warning.
-- **State completeness:** every view gets loading / empty / error states;
-  mutations get inline error surfaces (no silent catch); mobile pass on every
-  screen; Turkish + English copy reviewed together.
-- **Theme preference on the user row** (`users.themePreference`, port from
-  Nudge) so appearance follows the account across devices.
-- **Ops:** basic health query + failure surfacing (failed sends count on the
-  Messages tab badge), Convex log-based alerting hook for dead sends.
+### Account and tenancy
 
-### Phase B — WhatsApp lane complete
-- **Template sends live end-to-end** on one pilot org (needs Serdar/partner:
-  WABA + approved `randevu_onay` / `randevu_hatirlatma` templates).
-- **Conversations inbox:** per-customer thread view (messages table already
-  two-way); session replies from the UI inside the 24h window (`sendWaCloudText`
-  exists); template-only nudge outside the window.
-- **No-show winback** (v2 of reminders): optional template X days after a
-  `no_show`, org toggle, same scheduler pattern.
-- **Quiet hours:** org-level send window for reminders (Türkiye default
-  09:00–21:00); the tick already stamps offsets, it just holds dispatch.
-- **Email connector: BUILT (2026-07-25), delivery direct to Resend** (the n8n
-  hop was dropped 2026-07-26 — it forwarded one HTTP POST to another and bought
-  no retry or routing we used). Deployment env `RESEND_API_KEY` + per-org
-  `orgs.emailFrom` on a Resend-verified domain; sends ride alongside
-  WhatsApp whenever the customer has an email, using the template row's text
-  (no Meta approval applies to email). Channels attempt independently — an
-  unconfigured WhatsApp no longer blocks the email.
-- **Evolution API lane: probable-later, NOT in v1** (Serdar, 2026-07-25).
-  When it lands it's a second provider on the send path (dedicated-number
-  strategy per the session notes), mirroring Nudge's per-number provider
-  branch. Nothing in Phase B may assume wa_cloud is the only provider —
-  keep the branch point.
+- Google OAuth is the normal sign-in path. There are no passwords or reset
+  flows.
+- A first sign-in creates an unnamed org, then the app asks for the business
+  name.
+- Every app table except `orgs` and auth-owned tables carries `orgId`; every
+  customer-facing query resolves and filters by the caller's org.
+- Membership and invite infrastructure exists, but invitations are not part of
+  the default self-serve onboarding promise while the operator model remains an
+  open product decision.
+- Cross-org reads exist only in the platform-admin layer and are protected by
+  the `PLATFORM_ADMIN_EMAILS` deployment allowlist.
 
-### Phase C — voice receptionist (the fonio core)
-- **Retell agent per org:** `retellAgents` table (agentId, voice, language,
-  greeting, transfer number, inbound number). Nudge's Retell integration is the
-  prior art (REST direct with `RETELL_API_KEY`).
-- **Inbound flow — DECIDED: agent routes through Randevu, not cal.com
-  directly.** Number → Retell agent → custom function calls into Randevu's
-  Convex HTTP endpoints → our cal.com adapter. Rationale: the agent needs
-  OUR data (caller recognition by phone, the caller's existing appointments
-  for cancel/reschedule, consent state) and every function call must be
-  logged on our side for debugging; cal.com only knows slots. Functions:
-  `check_availability(date)` → cal.com slots API via org's key;
-  `book_appointment(name, phone, service, slot)` → cal.com booking API, echo
-  deduped by externalUid, source `"voice"`; `cancel/reschedule` by phone
-  lookup in OUR appointments table; `transfer_to_human` → org's transfer
-  number.
-  **Exception:** the week-one Turkish test call uses Retell's NATIVE cal.com
-  tools (zero code) purely to validate voice quality and flow — production
-  never ships on the native tools.
-- **Post-call:** webhook → call row (transcript, summary, outcome, recording
-  URL) + optional WhatsApp confirmation to the caller (booking confirmations
-  are template sends — same lane as everything else).
-- **Calls tab:** list with outcome badges, transcript drawer, recording player.
-- **Numbers: DECIDED (2026-07-25, Serdar) — TR numbers come in via SIP trunk
-  to Retell.** Serdar owns provisioning. The agent/number management layer is
-  a PORT of Nudge's Retell subsystem (`retellAgentNumbers`: agent-first model,
-  number pinning, hourly binding sync, working-hours clamp) — reuse, don't
-  redesign.
-- **Availability: DECIDED (2026-07-25, Serdar) — cal.com IS the scheduling
-  system.** No in-app availability model. The voice agent's
-  `check_availability` calls cal.com's slots API and `book_appointment`
-  creates the booking via cal.com's API (per-org API key + event type in
-  Settings → Bookings); the booking echoes back through our existing webhook
-  and the upsert-by-externalUid already dedupes it. cal.com owns working
-  hours, staff schedules, collisions, and Google Calendar sync.
-- **Remaining voice risk — Turkish call quality:** fonio works because German
-  ASR/TTS is excellent. Turkish speech recognition with noisy salon callers
-  (names, dates, phone numbers spoken aloud) is the product-quality gate. Do a
-  scripted Turkish test call in week one of Phase C, before building the tab.
+### Scheduling
 
-### Phase D — deeper cal.com integration (shrunk: cal.com is the scheduler)
-- Per-org cal.com API key + event-type mapping UI (entered in Settings →
-  Bookings alongside the webhook URL; validated with a live slots call).
-- Booking page = the org's cal.com hosted page; we surface/QR the link in
-  Settings rather than building our own (revisit only if pilot orgs reject
-  cal.com's page).
-- In-app "next free slots" preview on the Appointments tab (read-only, via the
-  org's API key) so staff quote availability without leaving Randevu.
-- **Onboarding dependency (partner playbook):** every org needs a cal.com
-  account + event type before voice booking works. This is a provisioning
-  step, not code — belongs in the partner's setup checklist next to WABA.
+- cal.com is the intended availability and external-calendar system.
+- Its adapter, webhook and voice booking path exist, but an org is connected
+  only when an operator installs both `calcomApiKey` and `calcomEventTypeId`.
+- Without those values, manual and phone-created appointments are stored only
+  in Randevu. No conflict check runs, so double-booking is possible.
+- Walk-in entry remains native to Randevu. `appointments.source` distinguishes
+  manual, voice and external bookings.
+- Blocked time is not modelled. Do not create fake-customer appointments for
+  breaks; revisit the cal.com availability decision before adding closures.
 
-### Phase E — parity extras
-- Multi-language voice agents (agent language per org).
-- Dashboard: bookings/week, no-show rate, calls answered, response times.
-- Billing (iyzico or Stripe TR) — deliberately last; pilot orgs are hand-billed.
+### Messaging
 
-## 3. Data model deltas
+- WhatsApp production delivery uses the Meta Cloud API lane.
+- Business-initiated confirmation, reminder, win-back and campaign sends use
+  approved Meta templates.
+- Customer language resolves from the customer first, then the org. Missing
+  template language fails visibly; Randevu never falls back to the wrong
+  language.
+- Inbound WhatsApp resolves the org from Meta's phone-number ID, never from the
+  customer's number alone.
+- Delivery is queued with retries and dead-lettering. `messages.applySendResult`
+  is the one authority for final send outcomes.
+- Email delivery and inbound email use Resend. Each org has its own sender and
+  inbound local part on a deployment-wide verified domain.
 
-| Table | Change |
+### Phone agent
+
+- Randevu is the phone-agent control plane. The execution provider is hidden
+  from salon users.
+- The owner can create a native appointment receptionist or connect an existing
+  agent from **Phone agent → Add agent**.
+- New agents start from a versioned Randevu template and can speak Turkish,
+  English or German.
+- Randevu owns Instructions, Variables, runtime tools, call history and customer
+  writes. Provider configuration is compiled output.
+- A variable is declared once across before-call context, live collection,
+  post-call fallback and storage destination.
+- Signed call events first land in a durable inbox, then update the call and
+  customer with retries. Live caller-confirmed values beat transcript
+  inference; post-call analysis only fills missing customer data.
+- Randevu can assign an unclaimed line but does not purchase phone numbers.
+
+See [`phone-agent.md`](phone-agent.md) for the full architecture and operator
+runbook.
+
+## 3. Shipped product surface
+
+The signed-in sidebar is:
+
+1. **Customers**: customer table, custom information fields and history.
+2. **Inbox**: WhatsApp and email conversation work.
+3. **Campaigns**: approved-template outreach.
+4. **Phone agent**: Agents and Calls in one destination.
+5. **Reminders**: reminder rules, templates and WhatsApp connection.
+6. **Calendar**: Day, Week, Month, Year and List views plus manual booking.
+7. **Revenue**: feature-flagged takings view.
+8. **Business**: business facts, services, people, fields and AI connectors.
+
+There is no Settings destination. Do not reintroduce it. Configuration belongs
+next to the work it controls, while operator-only credentials live in `/admin`.
+
+The app UI dictionary supports Turkish, English and German. Customer-facing
+message language is a separate per-customer/per-org decision.
+
+## 4. Phone-agent user experience
+
+### Agents
+
+- **Add agent** and the icon-only refresh action sit outside the agents table.
+- Add agent opens a sheet with **Create new** as the default and **Connect
+  existing** as the second path.
+- Create new asks for name, language, voice and an optional available line.
+- Agent rows show a native name, assigned line, enabled state and details. Raw
+  provider identifiers never appear.
+- Clicking the name opens Instructions, Variables, call-result health and a
+  test-call action.
+- Broken delivery is described as call results not reaching Randevu and has a
+  one-click Fix. Raw webhook language is platform-admin-only.
+- Archive hides unused external agents from the picker. Disconnect removes the
+  Randevu connection without deleting the external resource.
+
+### Calls
+
+- Calls are paginated and include recording, summary, transcript and collected
+  values.
+- The immediate call-ended event and later analyzed event merge into one row.
+- Failed downstream updates retry invisibly. An exhausted update appears as a
+  provider-free warning for the owner and a replayable diagnostic for the
+  platform operator.
+
+## 5. Core data model
+
+| Table | Role |
 |---|---|
-| `invites` | NEW: orgId, email, role, invitedBy, acceptedAt?, acceptedUserId? — index by_email, by_org |
-| `users` | + `themePreference` |
-| `orgs` | + `workingHours` (per-weekday ranges), + `quietHours`, + `transferNumber?`, + `slug?` (booking page) |
-| `retellAgents` | NEW (Phase C): orgId, retellAgentId, inboundNumber, voice, language, greeting |
-| `calls` | NEW (Phase C): orgId, customerId?, direction, startedAt, durationSec, outcome, summary, transcript, recordingUrl, appointmentId? |
-| `appointments.source` | widen: `"manual" \| "calcom" \| "voice" \| "booking_page"` |
-| `services` | + `priceMinor?` (booking page display) |
+| `orgs` | Business identity, locale, scheduling and message defaults. The one app table without `orgId`. |
+| `memberships`, `invites` | Google-account access to orgs. |
+| `connections` | Per-org operator-installed provider credentials. Never falls back to another org's deployment secret. |
+| `customers`, `contactFields` | Customer identity plus business-defined information and its allowed source. |
+| `appointments` | One calendar for manual, phone and external bookings. `nextMessageAt` drives work-proportional reminders. |
+| `messages` | Outbound queue and inbound conversation history with retry/dead-letter state. |
+| `retellAgents` | Internal provider-to-org mapping and phone-agent health. Provider-specific by design, never salon-facing. |
+| `voiceAgentProvisioning` | Durable checkpoints and lease for native agent creation. |
+| `voiceAgentVariables` | Randevu-owned variable lifecycle registry. |
+| `calls` | One row per phone call with recording, transcript, summary and collected values. |
+| `voiceEvents` | Idempotent durable inbox for ended, analyzed and recovery events. |
 
-Auth change (Phase A, subtle): `createOrUpdateUser` checks `invites` by email
-FIRST — match → join that org as invited role; no match → create new org
-(current behavior). Same shape as Nudge's gate, minus the bootstrap-admin list.
+Any mutation changing an appointment's `startAt`, `status`, reminder stamps or
+win-back stamp must call `syncAppointmentSchedule`.
 
-## 4. Screen inventory (each ships with loading/empty/error/mobile states)
+## 6. Operator boundary
 
-1. Sign-in (Google, language toggle) — exists, polish only.
-2. Onboarding gate (business name → working hours next) — extend.
-3. Appointments (day-grouped list, quick-add, status actions) — exists; add
-   filters (status), week nav, per-appointment message history drawer.
-4. Customers (list, consent, add/edit) — exists; add detail drawer with thread
-   + appointment history.
-5. Conversations (Phase B) — NEW.
-6. Calls (Phase C) — NEW.
-7. Settings: Business / Team (Phase A) / Reminders / WhatsApp / Templates /
-   Bookings / Voice agent (Phase C) — RowLabel grid, autosave, InfoTips.
-8. Public booking page (Phase D) — NEW, unauthenticated.
+The platform operator uses `/admin` to:
 
-## 5. Production checklist (Phase A exit criteria)
+- install per-org phone-provider, WhatsApp, email and cal.com configuration;
+- inspect native phone-agent provisioning checkpoints;
+- see provider IDs and raw call-event errors;
+- replay exhausted phone-call updates; and
+- work inside an org when support is required.
 
-- [ ] Convex prod deployment + Vercel project + domain, deploy documented in README
-- [ ] All three webhooks signature-verified in prod
-- [ ] Invite flow: second user joins org, staff role enforced (owner-only:
-      Settings mutations, invites, WhatsApp credentials)
-- [ ] `npx tsc --noEmit` green; every view has all four states; tr+en complete
-- [ ] Pilot org live with real WABA credentials and approved templates
-- [ ] Failure visibility: failed sends surface in UI within one cron cycle
+The business uses Randevu to create agents, edit instructions and variables,
+connect a line, run calls, manage reminders and work its calendar. It should not
+need to know which voice provider executes the calls.
 
-## 6. Needs Serdar / partner (not blockable by code)
+## 7. Production exit criteria
 
-1. Domain name for the product.
-2. WABA path for pilot org #1 (Meta Business verification + 2 template approvals).
-3. ~~TR inbound numbers~~ — DECIDED: SIP trunk into Retell, Serdar provisions.
-4. Pricing intent (affects nothing until Phase E, informs partner pitch now).
-5. fonio.ai account walkthrough if possible — screenshots of their onboarding
-   would sharpen Phase C scope.
+- [ ] `npm run typecheck` passes and generated Convex API files are committed.
+- [ ] Google OAuth works on the production Convex and frontend origins.
+- [ ] Meta webhook signatures are enforced and one pilot WABA has the required
+      approved templates.
+- [ ] One org creates a new Phone agent from Randevu, receives a real call and
+      gets one durable call row plus the later analysis merge.
+- [ ] A live-confirmed variable updates an allowed customer field and post-call
+      extraction fills only a missing value.
+- [ ] Failed call updates and failed messages are visible and replayable from
+      the appropriate operator surface.
+- [ ] cal.com is either connected and verified end to end, or the pilot is
+      explicitly run with the known no-conflict-check limitation.
+- [ ] Turkish, English and German UI changes are reviewed together.
+
+## 8. Open product decisions
+
+1. **Operator model:** pure self-serve, partner-operated agency or a hybrid.
+2. **WABA ownership:** each business owns its Meta account, or the partner acts
+   as a Tech Provider.
+3. **Template approval:** per-business templates versus centrally managed
+   approvals if the partner owns WABA infrastructure.
+4. **Phone-number onboarding:** the app currently assigns existing unclaimed
+   lines but does not buy or provision them.
+5. **Scheduling activation:** cal.com is the chosen system but still needs a
+   real operator playbook and a production pilot.
+6. **Voice-quality gate:** noisy Turkish names, dates and numbers require live
+   pilot validation even when the software path is correct.
+7. **Billing:** intentionally later; pilot businesses can be hand-billed.

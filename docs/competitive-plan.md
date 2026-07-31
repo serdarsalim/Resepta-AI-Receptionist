@@ -2,6 +2,18 @@
 
 Written 25 July 2026, from twelve research passes plus a read of this repo at commit `7f29b2c`.
 
+> **Historical research snapshot.** The market research and strategic argument
+> remain useful, but statements about the repository describe commit `7f29b2c`,
+> not the current product. By 31 July 2026 Randevu had shipped native phone-agent
+> creation and existing-agent connection, a Randevu-owned variable registry, a
+> private runtime connection, a durable call-event inbox and operator recovery.
+> Agents and Calls now live as two sections inside one **Phone agent** sidebar
+> destination; there is no separate Calls destination and no Settings page.
+> Shared `RETELL_API_KEY`, manual webhook-copying and paste-an-agent-ID guidance
+> below are superseded and must not be implemented. Use
+> [`product-spec.md`](product-spec.md), [`phone-agent.md`](phone-agent.md) and
+> `AGENTS.md` for current product and implementation decisions.
+
 Read this once, then work section 10. Everything before it exists to justify section 10.
 
 Two conventions. Effort is in **developer-weeks**, where a developer-week means four focused

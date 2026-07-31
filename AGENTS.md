@@ -260,6 +260,9 @@ assign an already-provisioned, unclaimed phone line but never buys numbers.
 Provider names, ids, models and plumbing errors stay out of the salon UI; raw
 setup state is visible only in platform admin.
 
+The complete create/connect flow, variable lifecycle, call-event pipeline and
+operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent.md).
+
 ### Phone-agent variable lifecycle (decided 2026-07-31, Serdar)
 
 Randevu is the source of truth for a phone agent's variables; Retell is the

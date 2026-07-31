@@ -1,180 +1,194 @@
-# Deploying Randevu
+# Deploying and operating Randevu
 
-Written 26 July 2026, for the first deploy. Nothing here has been run yet — this
-is the sequence, not a report.
+Last reconciled with the implementation: 31 July 2026.
 
-The state it starts from: `.env.local` points at
-`CONVEX_DEPLOYMENT=local:local-randevu-randevu_tr`, there is no `.vercel`
-directory, and no Meta, cal.com or Retell webhook has ever reached this code.
-Until that changes, a demo cannot happen inside the app, because Retell has no
-URL to call.
+This is the current production runbook. The phone-agent-specific setup and
+recovery paths are expanded in [`phone-agent.md`](phone-agent.md).
 
-## The order matters
+## 1. Pre-deploy checks
 
-Both webhook guards **fail open when their env var is missing** and both write
-appointments. `retellGuard` skips signature verification entirely when
-`RETELL_API_KEY` is unset (`convex/http.ts`), and the Meta webhook does the same
-without `WA_APP_SECRET`. So the env vars go on in the same sitting as the deploy,
-not the next day. An unsigned POST to a live deployment can create bookings.
+Run the same check required before every commit:
 
-## 1. Convex production deployment
+```bash
+npm run typecheck
+```
+
+`convex/_generated` is checked in. A backend change that adds or renames a
+function or table must include the regenerated files before Vercel builds the
+frontend.
+
+## 2. Deploy Convex
 
 ```bash
 npx convex deploy
 ```
 
-First run prompts for the production deployment in the `randevu` team. It reads
-`convex/schema.ts` and pushes functions. Note the deployment URL it prints —
-both the `.convex.cloud` (client) and `.convex.site` (webhooks) forms.
+Keep both URLs from the target deployment:
 
-## 2. Set the deployment env vars
+- `https://<deployment>.convex.cloud` is the application API URL.
+- `https://<deployment>.convex.site` is the HTTP-action URL used by OAuth,
+  webhooks and the private phone-agent runtime.
 
-Every one of these lives on the **Convex deployment**, never in `.env.local`, and
-never per-org (per-org WhatsApp credentials go in Settings → WhatsApp).
+The hosted Convex deployment supplies `CONVEX_SITE_URL` to backend functions.
+Native phone-agent creation stops with `deployment-site-url-missing` if the
+backend cannot determine its own HTTP origin.
+
+## 3. Convex deployment environment
+
+Set deployment-wide values on the target Convex deployment, not in a checked-in
+file:
 
 ```bash
-npx convex env set --prod AUTH_GOOGLE_ID <from Google Cloud OAuth web client>
-npx convex env set --prod AUTH_GOOGLE_SECRET <same client>
-npx convex env set --prod RETELL_API_KEY <Retell dashboard>
+npx convex env set --prod AUTH_GOOGLE_ID <Google OAuth web client id>
+npx convex env set --prod AUTH_GOOGLE_SECRET <Google OAuth web client secret>
+npx convex env set --prod PLATFORM_ADMIN_EMAILS <comma-separated operator emails>
 npx convex env set --prod WA_APP_SECRET <Meta app secret>
-npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <any random string, kept>
-npx convex env set --prod RESEND_API_KEY <Resend dashboard, API keys>
-npx convex env set --prod RESEND_INBOUND_DOMAIN <the domain customers write to>
-npx convex env set --prod RESEND_WEBHOOK_SECRET <whsec_… from the webhook you add>
+npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <random retained value>
+npx convex env set --prod RESEND_API_KEY <Resend API key>
+npx convex env set --prod RESEND_INBOUND_DOMAIN <shared inbound email domain>
+npx convex env set --prod RESEND_WEBHOOK_SECRET <Resend whsec value>
+npx convex env set --prod SITE_URL <public Randevu app origin>
 ```
 
-`RETELL_API_KEY` and `WA_APP_SECRET` are the two that close the fail-open holes.
-`RESEND_API_KEY` is what turns the email lane and the owner alerts on; unset
-means alerts are logged and dropped. The domain in each org's `emailFrom` must
-also be verified in Resend (DNS: SPF + DKIM records it gives you), or sends come
-back 403 and land in the message row's error column.
+Optional:
 
-Inbound email needs two more things beyond the key. `RESEND_INBOUND_DOMAIN` is
-the domain customers write TO — one verified domain serves every org, because
-routing happens on the LOCAL PART (each org's `inboundAddress`, set in Business
-settings). And in Resend, add a webhook for `email.received` pointing at
-`<your convex site url>/email/inbound`; the `whsec_…` it gives you is
-`RESEND_WEBHOOK_SECRET`. Unset means the route answers 503 and mail is
-dropped rather than silently accepted unverified.
-
-Google OAuth redirect URI, added in Google Cloud console:
-
-```
-https://<your-deployment>.convex.site/api/auth/callback/google
+```bash
+npx convex env set --prod DEMO_ORG_ID <demo org id>
 ```
 
-## 3. Vercel project
+Only set `DEMO_ORG_ID` after the target org has `demoMode` enabled and has no
+real messaging credentials. With it unset, anonymous demo sign-in is not
+registered and Google is the only auth provider.
+
+The Google Cloud authorized redirect URI is:
+
+```text
+https://<deployment>.convex.site/api/auth/callback/google
+```
+
+`WA_APP_SECRET` is required in production. The Meta route logs a warning and
+accepts unsigned payloads when it is absent for local-development convenience.
+The phone-agent routes do not have an equivalent deployment-wide key: they
+resolve the agent to an org, require that org's provider key and fail closed if
+the key or signature is missing.
+
+`RESEND_API_KEY` enables customer email and owner alerts. The From domain used
+by an org must be verified in Resend. `RESEND_INBOUND_DOMAIN` is the one shared
+domain customers write to; routing happens on each org's local part.
+
+## 4. Deploy the frontend
+
+Set these Vercel values for the target environment:
 
 ```bash
 npx vercel link
 npx vercel env add NEXT_PUBLIC_CONVEX_URL production
+npx vercel env add NEXT_PUBLIC_CONVEX_SITE_URL production
 npx vercel --prod
 ```
 
-`NEXT_PUBLIC_CONVEX_URL` is the `.convex.cloud` URL, and it is the only one the
-frontend needs. `SettingsView` derives the `.convex.site` webhook addresses from
-it by string replacement, so getting this one wrong hands an owner webhook URLs
-that silently never fire.
+- `NEXT_PUBLIC_CONVEX_URL` is the `.convex.cloud` URL.
+- `NEXT_PUBLIC_CONVEX_SITE_URL` is the matching `.convex.site` URL.
 
-`NEXT_PUBLIC_CONVEX_SITE_URL` exists in the local `.env.local` but **no code
-reads it** — don't bother setting it on Vercel. Worth deleting from `.env.local`
-so the next person doesn't assume it matters.
+The client can derive the second URL in hosted Convex, but setting it explicitly
+prevents a deployed screen from displaying a loopback URL left over from local
+development.
 
-## 4. Point the three webhooks at it
+## 5. External endpoints
 
-All three are `https://<deployment>.convex.site/...`:
+All endpoints below use the production `.convex.site` origin:
 
-| Provider | URL | Configured where |
+| Integration | Endpoint | Setup |
 |---|---|---|
-| Meta | `/whatsapp/webhook` | Meta app → WhatsApp → Configuration. Verify token must match `WA_WEBHOOK_VERIFY_TOKEN` |
-| cal.com | `/calcom/webhook?token=<per-org>` | Generated per org in Settings → Bookings. Subscribe BOOKING_CREATED, BOOKING_RESCHEDULED, BOOKING_CANCELLED |
-| Retell | `/retell/functions` and `/retell/call-ended` | Retell dashboard, per agent. Settings → Voice prints both |
+| Meta WhatsApp | `/whatsapp/webhook` | Configure in the Meta app. The verification token must equal `WA_WEBHOOK_VERIFY_TOKEN`. |
+| Resend inbound | `/email/inbound` | Subscribe a Resend webhook to `email.received`; store its signing secret as `RESEND_WEBHOOK_SECRET`. |
+| cal.com | `/calcom/webhook?token=<org token>` | Operator-only per-org setup. Subscribe to created, rescheduled and cancelled booking events. |
+| Phone agent | `/retell/inbound`, `/retell/functions`, `/retell/mcp`, `/retell/call-ended` | Randevu publishes these automatically when an agent is created, connected or fixed. Never ask a salon owner to copy them. |
 
-The cal.com token is per-org and is how a booking resolves to a business —
-cal.com's payload carries no tenant identity. Rotating it in Settings
-invalidates the old URL.
+The cal.com token is how an inbound booking resolves to an org because the
+payload does not carry tenant identity. A missing or unknown token is rejected.
+cal.com API keys and event-type IDs are installed per org in platform admin;
+they are not salon-facing settings.
 
-## 4b. cal.com event type: two settings that are not optional
+For cal.com event types used by Randevu:
 
-Both are consequences of Randevu writing to cal.com rather than reading from it.
+- disable cal.com's attendee emails so Randevu remains the customer-messaging
+  owner; and
+- include every service duration in the event type's duration options so a
+  90-minute service does not occupy only the default slot length.
 
-**Turn OFF cal.com's attendee emails** for the Randevu event type. Randevu owns
-every message to the customer — that is the product — and a phone-only walk-in
-is booked with a placeholder address (`…@noemail.randevu.app`) that cal.com would
-otherwise try to email and bounce. cal.com keeps the calendar; Randevu keeps the
-conversation.
+## 6. Per-org onboarding
 
-**Add duration options covering your service lengths.** Set
-`lengthInMinutesOptions` on the event type to include every duration in
-Settings → Services (30, 45, 60, 90…). cal.com takes `lengthInMinutes` on a
-booking only when the event type declares it, so without this a 90-minute colour
-books as the event type's default length and the salon's Google Calendar is
-wrong about how long the chair is busy. A resize that cal.com will not accept is
-refused with a readable reason rather than moving the block and lying.
+Open `/admin` as an email in `PLATFORM_ADMIN_EMAILS`, then choose the org.
 
-## 4c. Backfill staff
+1. Install the org's phone-provider API key under Voice. There is no shared
+   fallback key.
+2. Install cal.com API and event-type values if verified availability and
+   collision prevention are required.
+3. Install the Meta account values and confirm the approved message-template
+   names in the org's Reminders experience.
+4. Install outbound/inbound email addresses if the email lane is part of the
+   customer setup.
+5. Provision an inbound phone line externally if needed. Leave it unassigned
+   so the org owner can select it while creating a Phone agent. Randevu does
+   not buy numbers.
+6. Let the org owner create the appointment receptionist under
+   **Phone agent → Add agent**. Connecting an existing agent is the second path.
 
-One-shot, after the first deploy of the staff table. Turns the old free-text
-`staffName` into one row per person per org and links every appointment.
+Platform admin shows native-creation checkpoints, runtime connection state,
+the latest call events and raw failed-event diagnostics. Salon-facing screens
+show only provider-free health and a Fix action.
 
-```bash
-npx convex run migrations:backfillStaff
-```
+## 7. Demo data
 
-Idempotent, and it leaves `staffName` in place so a rollback still renders.
-
-## 5. Seed the demo org
-
-`convex/devSeed.ts` already builds a believable business: services, 20 Turkish
-customers, a week of appointments in both directions, message history. An empty
-appointments app is a bad screen-share.
+`convex/devSeed.ts` builds a sample business with customers, appointments and
+message history:
 
 ```bash
 npx convex run devSeed:seed
 ```
 
-Targets the first org unless `orgId` is passed, and refuses to run twice without
-`force`. It is dev data — do not point it at an org a real customer uses.
+It targets the first org unless `orgId` is passed and refuses to run twice
+without `force`. Never seed an org used by a real customer.
 
-## 6. Smoke test, in this order
+## 8. Production smoke test
 
-Each step is the first live exercise of code that has only ever typechecked.
+Run these against a dedicated test org before onboarding a customer:
 
-1. **Sign in with Google.** Confirms the OAuth redirect URI.
-2. **Call the Retell number from a phone the app has never seen.** The call
-   should appear in the inbox against a new contact. This is the one that used to
-   fail silently — the row was written with no `customerId` and the inbox groups
-   by customer, so the agent booked and the screen stayed empty.
-3. **Ask the agent for availability "tomorrow".** Slots should be tomorrow in the
-   org's timezone, not UTC.
-4. **Book by voice.** Check the booking appears in cal.com *and* in Randevu, once
-   — not twice. The dedupe is by `externalUid`.
-5. **Cancel by voice.** Check the slot frees up **in cal.com**, not just in
-   Randevu. A failure returns a reason like `calcom-cancel-http-403` to the agent
-   rather than going quiet.
-6. **Reschedule from cal.com's own confirmation email.** Should move the existing
-   appointment, not create a second one.
-7. **Tap Confirm on a WhatsApp reminder**, then Cancel on another, and check
-   cal.com again.
-8. **Message the number outside business hours** with something that isn't
-   EVET/İPTAL. Expect one away-reply with the booking link, and only one.
-9. **Click an empty slot on the calendar**, book, and confirm the booking appears
-   in cal.com with the right *length*, not just the right start.
-10. **Drag a block to a new time.** It should move instantly, then stay. Watch
-    cal.com: the old slot frees, the new one blocks.
-11. **Drag a block onto an occupied slot.** It should snap back with a reason and
-    offer "book anyway"; taking that offer should double-book deliberately.
-12. **Drag a block's bottom edge.** This is cancel-and-rebook underneath, so
-    check cal.com ends up with exactly one booking at the new length.
+1. Sign in with Google and finish the business-name gate.
+2. From platform admin, install the org's phone-provider key.
+3. In the org, create a new Phone agent without a line. Confirm the setup
+   survives a refresh and opens the native Instructions and Variables sheet.
+4. Create or connect an agent with an unclaimed line and place a call from an
+   unknown E.164 number.
+5. Confirm one customer and one call row appear. The same call must gain its
+   summary and extracted values later, not become a second call.
+6. Configure one variable for live confirmation and one for post-call recovery.
+   Confirm the live value wins and post-call analysis only fills a missing
+   customer field.
+7. If cal.com is connected, ask for availability, book, reschedule and cancel;
+   verify both systems agree. If it is not connected, confirm the agent does
+   not claim a time was checked.
+8. Send a WhatsApp confirmation/reminder and exercise Confirm and Cancel.
+9. Send an inbound email and confirm it attaches to the correct customer in
+   the correct org.
+10. Move and resize calendar appointments and verify external scheduling when
+    cal.com is configured.
 
-Write down every step that surprised you. That list is the onboarding script.
+Do not use **Fix** from a development deployment on an agent shared with
+production. One agent can publish only one call-result URL, so development
+would take the events away from production.
 
-## What is not covered
+## 9. Recovery and rollback
 
-- **No tests exist in this repo.** Step 6 above is the entire regression net.
-- Meta template sends need an approved WABA and approved template names entered
-  per org. Business verification is the long pole (2–14 days) and blocks the
-  reminder path, not the voice path.
-- Rollback is `npx convex deploy` from the previous commit plus a Vercel
-  promote of the prior deployment. Convex has no one-command rollback; a schema
-  change that drops a field is not reversible by redeploying.
+- Failed phone-agent call updates retain their signed payload in `voiceEvents`.
+  Use **Retry failed updates** in platform admin to replay them.
+- Retrying outbound messages remain `queued`; exhausted sends become failed and
+  are visible in fleet health.
+- Promote the prior Vercel deployment for a frontend rollback.
+- Deploy the prior code commit to Convex for a backend rollback. Convex does not
+  offer a one-command schema rollback, so destructive schema changes require a
+  forward repair plan.
+
+There is currently no automated regression suite in `package.json`; the
+TypeScript check and the smoke test above are the release gate.

@@ -117,8 +117,13 @@ Four places write a customer's email, and each needs the uniqueness check:
 - `calcom.ts` (~line 158) — the cal.com attendee
 - `email.recordInbound` — an unknown sender
 
-Voice doesn't capture email at all (`retell.applyVoiceContactValues` handles
-custom contact fields and phone). Out of scope, worth adding later.
+The phone-agent variable registry can write custom fields marked
+`contactFields.source === "voice"`, but canonical email remains a reserved
+identity field in `retell.applyVoiceContactValues`. A variable may keep an
+email-like answer on the call; it cannot silently replace `customers.email`.
+Adding a caller-confirmed email flow later must reuse the uniqueness and
+phone-wins rules in this document rather than bypassing them as a generic voice
+field.
 
 ## What we are deliberately not building
 

@@ -143,7 +143,7 @@ export const update = mutation({
 // Per-agent call tallies for the details expansion. "Today" means the salon's
 // today: a call at 23:50 Istanbul time should not survive into tomorrow's
 // count because the server thinks in UTC. One org-wide pass — a salon's call
-// history is bounded and this renders on one settings section, not a hot
+// history is bounded and this renders on one Phone agent section, not a hot
 // path. Rows older than the retellAgentId stamp have no agent and count
 // nowhere.
 export const agentCallStats = query({
@@ -447,8 +447,8 @@ const DEMO_AGENTS = [
   },
 ];
 
-// Never throws on a provider failure. This renders inside a salon's own
-// Settings, and a red banner is not what an owner should get because a key was
+// Never throws on a provider failure. This renders inside a salon's own Phone
+// agent view, and a red banner is not what an owner should get because a key was
 // rotated — `error` carries the reason so the surface can say which of "not
 // set up yet", "key rejected" and "Retell is down" it is looking at.
 export const listAgents = action({
