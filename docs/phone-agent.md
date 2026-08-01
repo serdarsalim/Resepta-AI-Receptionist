@@ -1,6 +1,6 @@
 # Phone agent: architecture and operator runbook
 
-Last reconciled with the implementation: 31 July 2026.
+Last reconciled with the implementation: 1 August 2026.
 
 This is the canonical handoff for Randevu's phone-agent lane. Salon owners use
 one native Randevu surface. The current execution provider is an implementation
@@ -22,10 +22,48 @@ detail that appears only in backend code and the platform-admin console.
 
 The Phone agent destination has two sections:
 
-1. **Agents**: create/connect, line assignment, enabled state, details,
-   instructions, variables, connection health and test calls.
-2. **Calls**: paginated call history with recording, collected information,
-   summary and transcript.
+1. **Agents**: create/connect, line assignment, enabled state, details.
+   Clicking an agent's name opens its own page (`?agent=`), described below.
+2. **Calls**: paginated call history. A row opens into `CallDetail`, the one
+   component every call renders through.
+
+## The agent page
+
+One column, no tabs: **Instructions → Opening line → Voice → Variables**, the
+order a call happens in. It was tried as a modal and as two tabs; both hid the
+thing the page exists for. `{{variables}}` render as pills in the instructions
+and the opening line, and `@` inserts them.
+
+One **Save** in the header publishes everything, and **Variables publish before
+the prompt** — `publishVariables` guards on the agent's provider version, so
+the other order fails with a stale-version error nobody caused. Voice rides the
+same publish via `publishViaDraft`'s `agentPatch`, so voice and script land as
+one version rather than leaving a window where a caller hears the new voice
+reading the old script.
+
+Variables are edited **inline**, grouped under Before / During / After by each
+row's most active phase. Because a Randevu variable is a lifecycle rather than
+one moment, the phases a row is *also* used in appear on it as tags that name
+what the group heading does not (`Prefilled: Customer name`), and the row's
+popover — type, choices, phase, destination, required — is what moves it
+between groups. A published key never follows a label edit; renaming it
+orphans every answer collected under the old name.
+
+**Unsaved edits survive leaving, closing the tab and reloading**, kept per agent
+in this browser's localStorage. An amber pill says they are not live. Discard
+is the only thing that throws them away.
+
+## The call record
+
+`CallDetail` is the only way a call is rendered — Phone agent → Calls, the
+contact feed's expanded Calls column, and the mixed feed's card. Recording,
+summary, why the call ended, collected values, then the transcript laid out as
+a conversation. The transcript is parsed from the string already on
+`calls.transcript`, not refetched, so it works for every call ever recorded;
+speaker labels are read from the transcript itself rather than matched against
+an English word list, because a Turkish call comes back `Ajan:` / `Müşteri:`.
+`calls.disconnectionReason` is stored raw and humanized in the UI — on an
+unanswered call it is the only thing there is to show.
 
 ## Create and connect flows
 

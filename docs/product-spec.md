@@ -1,6 +1,6 @@
 # Randevu production spec
 
-Last reconciled with the shipped product: 31 July 2026.
+Last reconciled with the shipped product: 1 August 2026.
 
 ## 1. Product
 
@@ -119,8 +119,10 @@ message language is a separate per-customer/per-org decision.
 - Create new asks for name, language, voice and an optional available line.
 - Agent rows show a native name, assigned line, enabled state and details. Raw
   provider identifiers never appear.
-- Clicking the name opens Instructions, Variables, call-result health and a
-  test-call action.
+- Clicking the name opens the agent's own page: Instructions, Opening line,
+  Voice, Variables, plus call-result health and a test-call action. Variables
+  are edited in place, grouped by when in the call they are captured.
+- Unsaved edits are kept until saved or discarded, and are marked as not live.
 - Broken delivery is described as call results not reaching Randevu and has a
   one-click Fix. Raw webhook language is platform-admin-only.
 - Archive hides unused external agents from the picker. Disconnect removes the
@@ -128,8 +130,9 @@ message language is a separate per-customer/per-org decision.
 
 ### Calls
 
-- Calls are paginated and include recording, summary, transcript and collected
-  values.
+- Calls are paginated and open into recording, summary, why the call ended,
+  collected values and the transcript read as a conversation. The contact's
+  activity feed shows the same record.
 - The immediate call-ended event and later analyzed event merge into one row.
 - Failed downstream updates retry invisibly. An exhausted update appears as a
   provider-free warning for the owner and a replayable diagnostic for the
