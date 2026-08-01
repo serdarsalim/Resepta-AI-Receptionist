@@ -90,6 +90,36 @@ export const create = mutation({
   },
 });
 
+// Rename is label-only, and that is the whole reason renaming is safe: the
+// key stays the address that stored values and published agents were written
+// against, so a new label ripples into every surface that renders the field
+// without republishing anything.
+export const update = mutation({
+  args: {
+    fieldId: v.id("contactFields"),
+    label: v.optional(v.string()),
+    options: v.optional(v.array(v.string())),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const field = await ctx.db.get(args.fieldId);
+    if (!field || field.orgId !== orgId) throw new Error("not-found");
+    const patch: { label?: string; options?: string[] } = {};
+    if (args.label !== undefined) {
+      const label = args.label.trim();
+      if (!label) throw new Error("label-required");
+      patch.label = label;
+    }
+    if (args.options !== undefined) {
+      if (field.type !== "select") throw new Error("not-a-select");
+      patch.options = [...new Set(args.options.map((o) => o.trim()).filter(Boolean))];
+    }
+    if (Object.keys(patch).length > 0) await ctx.db.patch(args.fieldId, patch);
+    return null;
+  },
+});
+
 export const remove = mutation({
   args: { fieldId: v.id("contactFields") },
   returns: v.null(),

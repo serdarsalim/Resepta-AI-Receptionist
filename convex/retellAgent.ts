@@ -535,13 +535,10 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
     if (!label) throw new Error(`Variable ${key} needs a label.`);
     if (seen.has(key)) throw new Error(`Variable ${key} appears more than once.`);
     seen.add(key);
-    const choices =
+    let choices =
       raw.type === "enum"
         ? [...new Set((raw.choices ?? []).map((choice) => choice.trim()).filter(Boolean))]
         : undefined;
-    if (raw.type === "enum" && choices?.length === 0) {
-      throw new Error(`${label} needs at least one option.`);
-    }
     if (
       raw.beforeSource === "contact_field" &&
       (!raw.beforeFieldId || !fields.has(String(raw.beforeFieldId)))
@@ -557,8 +554,17 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
       if (field.key !== key) {
         throw new Error(`${label} must use the customer field's variable key.`);
       }
+      // The field's options are the live truth for a linked select: editing
+      // them in Business ripples into the agent's next publish without the
+      // row's stale copy getting a say.
+      if (field.type === "select" && raw.type === "enum") {
+        choices = [...new Set((field.options ?? []).map((o) => o.trim()).filter(Boolean))];
+      }
     } else {
       contactFieldId = undefined;
+    }
+    if (raw.type === "enum" && (choices?.length ?? 0) === 0) {
+      throw new Error(`${label} needs at least one option.`);
     }
     if (raw.beforeSource === "none" && raw.duringMode === "none" && !raw.afterCall) {
       throw new Error(`${label} is not used at any point in the call.`);

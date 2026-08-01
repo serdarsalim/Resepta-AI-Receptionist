@@ -542,6 +542,14 @@ export function VoiceVariablesEditor({
                   <VariableRow
                     key={index}
                     row={row}
+                    // A linked row shows the field's CURRENT label: renaming
+                    // the field in Business renames it here without touching
+                    // the stored row, because the key is the identity.
+                    displayLabel={
+                      (row.contactFieldId
+                        ? fieldById.get(row.contactFieldId)?.label
+                        : undefined) ?? row.label
+                    }
                     fields={voiceFields}
                     pickerFields={rowPickerFields(row)}
                     pickerBuiltins={rowPickerBuiltins(row)}
@@ -836,6 +844,7 @@ function VariablePicker({
 // is what keeps the row to a width that fits the card.
 function VariableRow({
   row,
+  displayLabel,
   fields,
   pickerFields,
   pickerBuiltins,
@@ -852,6 +861,7 @@ function VariableRow({
   onRename,
 }: {
   row: VoiceVariable;
+  displayLabel: string;
   fields: VoiceContactField[];
   pickerFields: VoiceContactField[];
   pickerBuiltins: PickerBuiltin[];
@@ -894,7 +904,7 @@ function VariableRow({
           a call-only name — identity always moves as one piece. */}
       <div className="w-48 shrink-0">
         <VariablePicker
-          current={row.label}
+          current={displayLabel}
           fields={pickerFields}
           builtins={pickerBuiltins}
           onField={onPickField}

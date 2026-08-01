@@ -604,16 +604,71 @@ const FIELD_SOURCES: { id: FieldSource; key: TranslationKey }[] = [
   { id: "voice", key: "fields.source.voice" },
 ];
 
-// Voice rows carry a third column for the key, so header and rows share one
-// template string. Narrower on phones, where 11rem of key would eat the label.
-const VOICE_ROW_GRID =
-  "grid grid-cols-[1fr_8rem_3.5rem] items-center gap-2 sm:grid-cols-[1fr_11rem_4rem]";
+// One template for every contact-field row, System included, so the card
+// reads as one table: label, type, key, actions. The key column hides on
+// phones, where 11rem of monospace would eat the label.
+const FIELD_ROW_GRID =
+  "grid grid-cols-[1fr_6rem_3.5rem] items-center gap-2 sm:grid-cols-[1fr_6rem_11rem_4rem]";
+
+// The identity columns every customer has. Their keys are the reserved write
+// addresses the voice pipeline refuses to touch — real keys, shown for the
+// same reason field keys are: they are the vocabulary agents and exports use.
+const SYSTEM_FIELDS = [
+  { labelKey: "customers.firstName", typeKey: "fields.type.text", key: "firstname" },
+  { labelKey: "customers.lastName", typeKey: "fields.type.text", key: "lastname" },
+  { labelKey: "customers.phone", typeKey: "fields.type.phone", key: "phone" },
+  { labelKey: "customers.email", typeKey: "fields.type.email", key: "email" },
+] as const;
+
+// "+ Add option" that becomes an input on demand. Enter commits and stays
+// open for the next option; blur commits and closes; Escape abandons.
+function AddOptionInline({ onAdd }: { onAdd: (option: string) => void }) {
+  const { t } = useLanguage();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const commit = (stayOpen: boolean) => {
+    const option = value.trim();
+    setValue("");
+    if (!stayOpen) setEditing(false);
+    if (option) onAdd(option);
+  };
+  if (!editing)
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="rounded-lg px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+      >
+        {t("voiceVariables.addOption")}
+      </button>
+    );
+  return (
+    <input
+      autoFocus
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => commit(false)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit(true);
+        }
+        if (e.key === "Escape") {
+          setValue("");
+          setEditing(false);
+        }
+      }}
+      className="w-32 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs"
+    />
+  );
+}
 
 function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
   const usage = useQuery(api.retell.fieldUsage, {});
   const createField = useMutation(api.contactFields.create);
+  const updateField = useMutation(api.contactFields.update);
   const removeField = useMutation(api.contactFields.remove);
   const [adding, setAdding] = useState(false);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
@@ -626,11 +681,6 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const rows = fields ?? [];
   const manualFields = rows.filter((field) => (field.source ?? "manual") === "manual");
   const voiceFields = rows.filter((field) => field.source === "voice");
-
-  const typeSummary = (field: ContactField) =>
-    `${t(`fields.type.${field.type}` as "fields.type.text")}${
-      field.options?.length ? ` · ${field.options.join(", ")}` : ""
-    }`;
 
   const usedBy = (field: ContactField) => {
     const agents = usage?.[String(field._id)] ?? [];
@@ -661,26 +711,96 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
       </button>
     );
 
+  // One renderer for staff-filled and voice rows: label (rename is label-only;
+  // values and agents address the key, so a new name ripples everywhere
+  // without a republish), type, key, delete — and for selects, the options as
+  // removable pills with inline add on a second line.
+  const fieldRow = (field: ContactField) => (
+    <li key={field._id} className={`group py-2 text-sm ${FIELD_ROW_GRID}`}>
+      <span className="flex min-w-0 items-center">
+        <InlineEditValue
+          value={field.label}
+          onSave={(next) => next && updateField({ fieldId: field._id, label: next })}
+        />
+        {usedBy(field)}
+      </span>
+      <span className="text-xs text-[var(--muted)]">
+        {t(`fields.type.${field.type}` as "fields.type.text")}
+      </span>
+      <span className="hidden min-w-0 items-center sm:flex">
+        <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
+          {field.key}
+        </code>
+      </span>
+      {deleteButton(field, "justify-self-end")}
+      {field.type === "select" && (
+        <div className="col-span-full flex flex-wrap items-center gap-1 pt-1">
+          {(field.options ?? []).map((option) => (
+            <span
+              key={option}
+              className="flex items-center gap-1 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs"
+            >
+              {option}
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void updateField({
+                      fieldId: field._id,
+                      options: (field.options ?? []).filter((o) => o !== option),
+                    })
+                  }
+                  className="text-[var(--muted)] hover:text-red-600"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          ))}
+          {isOwner && (
+            <AddOptionInline
+              onAdd={(option) =>
+                void updateField({
+                  fieldId: field._id,
+                  options: [...(field.options ?? []), option],
+                })
+              }
+            />
+          )}
+        </div>
+      )}
+    </li>
+  );
+
   return (
     <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
+      {/* One header for the whole card: every group below answers the same
+          three questions per row — what staff call it, what shape it has,
+          what key addresses it. */}
+      <div className={`${FIELD_ROW_GRID} pb-1 text-xs text-[var(--muted)]`}>
+        <span>{t("fields.label")}</span>
+        <span>{t("fields.typeLabel")}</span>
+        <span className="hidden sm:block">{t("fields.key")}</span>
+        <span />
+      </div>
+
       {/* Identity first: every customer has these, nothing here can edit or
           delete them, and the phone agent may read but never write them.
-          Listing them makes this card the complete answer to "what
-          information do we hold about a customer" instead of the custom
-          remainder. */}
+          Their keys are the reserved write addresses, shown because they are
+          part of the same vocabulary as every other key on this card. */}
       <div className="mb-3">
         <FieldGroup label={t("fields.system")} hint={t("fields.systemHint")} />
         <ul>
-          {(
-            [
-              t("customers.firstName"),
-              t("customers.lastName"),
-              t("customers.phone"),
-              t("customers.email"),
-            ]
-          ).map((label) => (
-            <li key={label} className="flex items-center gap-3 py-2 text-sm text-[var(--muted)]">
-              <span className="min-w-0 flex-1">{label}</span>
+          {SYSTEM_FIELDS.map((field) => (
+            <li key={field.key} className={`py-2 text-sm text-[var(--muted)] ${FIELD_ROW_GRID}`}>
+              <span className="min-w-0 truncate">{t(field.labelKey)}</span>
+              <span className="text-xs">{t(field.typeKey)}</span>
+              <span className="hidden min-w-0 items-center sm:flex">
+                <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs">
+                  {field.key}
+                </code>
+              </span>
+              <span />
             </li>
           ))}
         </ul>
@@ -690,20 +810,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
           group is skipped whole when it is empty rather than left as a heading
           over nothing. */}
       {manualFields.length > 0 && (
-        <ul className="mb-3">
-          {manualFields.map((field) => (
-            <li key={field._id} className="group flex items-center gap-3 py-2 text-sm">
-              <span className="min-w-0 flex-1">
-                <span className="font-medium">{field.label}</span>
-                <span className="ml-2 text-xs text-[var(--muted)]">
-                  {typeSummary(field)}
-                </span>
-                {usedBy(field)}
-              </span>
-              {deleteButton(field, "")}
-            </li>
-          ))}
-        </ul>
+        <ul className="mb-3">{manualFields.map(fieldRow)}</ul>
       )}
 
       {voiceFields.length > 0 && (
@@ -712,33 +819,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               fields stacked six identical icons carrying the same two
               sentences down the column. */}
           <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
-          {/* The key is a stable internal name for using this value across the
-              phone agent and customer records, so it is a real column with a
-              real label rather than decoration on the end of the row. */}
-          <div className={`${VOICE_ROW_GRID} pt-2 text-xs text-[var(--muted)]`}>
-            <span>{t("fields.label")}</span>
-            <span>{t("fields.key")}</span>
-            <span />
-          </div>
-          <ul>
-            {voiceFields.map((field) => (
-              <li key={field._id} className={`group py-2 text-sm ${VOICE_ROW_GRID}`}>
-                <span className="min-w-0">
-                  <span className="font-medium">{field.label}</span>
-                  <span className="ml-2 text-xs text-[var(--muted)]">
-                    {typeSummary(field)}
-                  </span>
-                  {usedBy(field)}
-                </span>
-                <span className="flex min-w-0 items-center">
-                  <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
-                    {field.key}
-                  </code>
-                </span>
-                {deleteButton(field, "justify-self-end")}
-              </li>
-            ))}
-          </ul>
+          <ul>{voiceFields.map(fieldRow)}</ul>
         </div>
       )}
 

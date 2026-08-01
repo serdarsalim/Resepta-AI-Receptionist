@@ -123,6 +123,14 @@ touches the customer card. There is one field registry; agents reference it,
 they never retype it. Deleting a customer field an agent still references is
 refused for the same reason.
 
+Renaming is label-only and therefore safe: the key is the identity (stored
+values and published agents address it), so editing a field's label in
+Services & fields ripples into every agent's editor instantly with nothing to
+republish, and keys never change after creation. A select field's options are
+edited as pills in the same card, and publish reads a linked select's options
+from the field, so an options edit reaches the agent on its next publish
+without touching the agent page.
+
 The precedence rule is fixed:
 
 1. a value explicitly confirmed during the live call wins;

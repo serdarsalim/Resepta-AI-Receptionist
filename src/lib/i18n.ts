@@ -1995,6 +1995,9 @@ const dictionary = {
   "fields.type.text": { tr: "Metin", en: "Text", de: "Text" },
   "fields.type.select": { tr: "Seçim", en: "Select", de: "Auswahl" },
   "fields.type.number": { tr: "Sayı", en: "Number", de: "Zahl" },
+  // System-row shapes; identity columns, not creatable field types.
+  "fields.type.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
+  "fields.type.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "fields.type.date": { tr: "Tarih", en: "Date", de: "Datum" },
   "fields.options": {
     tr: "Seçenekler (virgülle)",
