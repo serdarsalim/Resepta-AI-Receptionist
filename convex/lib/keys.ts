@@ -28,10 +28,9 @@ const LEADING_STOP = new Set([
 const TRAILING_STOP = new Set(["nedir", "midir", "mudur", "mi", "mu"]);
 const MAX_KEY_WORD_LENGTH = 40;
 
-// Snake-case a string into key shape WITHOUT the stop-word stripping. This is
-// the rule for a key the user typed themselves: fold, lowercase, snake — but
-// respect every word they chose.
-export function normaliseKey(raw: string): string {
+// Turkish-fold and snake-case, no length cap. The uncapped middle step both
+// public functions build on.
+function foldKey(raw: string): string {
   return raw
     .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
     .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
@@ -39,8 +38,13 @@ export function normaliseKey(raw: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64);
+    .replace(/^_+|_+$/g, "");
+}
+
+// Key shape WITHOUT the stop-word stripping: the rule for a key the owner
+// typed themselves. Every word they chose is kept.
+export function normaliseKey(raw: string): string {
+  return foldKey(raw).slice(0, 64);
 }
 
 // Identity and compliance columns the voice pipeline refuses to write; a
@@ -61,7 +65,9 @@ export const RESERVED_CONTACT_KEYS = new Set([
 ]);
 
 export function keyFromLabel(raw: string): string {
-  const words = normaliseKey(raw).split("_").filter(Boolean);
+  // foldKey, not normaliseKey: a 64-char cap applied to the whole question
+  // would truncate the words the stop-word strip was about to keep.
+  const words = foldKey(raw).split("_").filter(Boolean);
   let start = 0;
   let end = words.length;
   while (start < end - 1 && LEADING_STOP.has(words[start])) start += 1;
