@@ -152,8 +152,13 @@ export function CallTranscript({
   // Agent left, customer right — the same read as any messaging thread, so
   // who-said-what needs no legend. It also matches the WhatsApp panel this app
   // already has, which is where an owner's eye is trained.
+  //
+  // The whole thread sits on its own white card. Loose on the expanded row's
+  // grey it read as text scattered across the page rather than one artefact
+  // you can scroll — and it gives the agent's grey bubbles something to be
+  // grey against.
   return (
-    <div className="thin-scroll max-h-96 space-y-2 overflow-y-auto pr-1">
+    <div className="thin-scroll max-h-96 space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
       {turns.map((turn, i) => (
         <div key={i} className={`flex ${turn.agent ? "justify-start" : "justify-end"}`}>
           <div className="min-w-0 max-w-[80%]">
@@ -165,13 +170,9 @@ export function CallTranscript({
               {turn.agent ? t("calls.agent") : contactName || t("calls.theCaller")}
             </div>
             <div
-              // The agent's side is a bordered card, not a tinted pane: these
-              // bubbles sit on the muted background of an expanded table row,
-              // where --pane is within a shade of the row itself and the
-              // bubble stopped looking like a bubble at all.
               className={`whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 text-xs ${
                 turn.agent
-                  ? "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]"
+                  ? "bg-[var(--pane)] text-[var(--foreground)]"
                   : "bg-[var(--accent)] text-[var(--accent-fg)]"
               }`}
             >
