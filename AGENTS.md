@@ -238,9 +238,10 @@ went, and the reasoning to preserve:
   exception to the sheet rule below, because a grid you retype a description
   in is not a form you open. Rows group under Before / During / After by their
   MOST ACTIVE phase (`duringMode` wins, then `afterCall`, else before-only): a
-  Randevu variable is a lifecycle, not one moment, so the phases a row is also
-  used in stay on it as tags, and the row's popover — type, choices, phase,
-  destination, required — is what moves it between groups. A key that is
+  Randevu variable is a lifecycle, not one moment, and the row's popover —
+  type, choices, phase, destination, required — is what moves it between
+  groups. The row itself carries no state pills: what a variable is comes
+  from its name (a picker selection), the rest lives in the popover. A key that is
   already published never follows a label edit; renaming it orphans every
   answer collected under the old name. **A variable's name is a selection,
   never free text**: both "+ Add variable" and every row's name cell open the

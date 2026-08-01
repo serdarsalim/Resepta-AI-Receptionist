@@ -43,10 +43,9 @@ reading the old script.
 
 Variables are edited **inline**, grouped under Before / During / After by each
 row's most active phase. Because a Randevu variable is a lifecycle rather than
-one moment, the phases a row is *also* used in appear on it as tags that name
-what the group heading does not (`Prefilled: Customer name`), and the row's
-popover — type, choices, phase, destination, required — is what moves it
-between groups. A published key never follows a label edit; renaming it
+one moment, the row's popover — type, choices, phase, destination, required —
+is what moves it between groups; the row itself carries only its name (a
+picker selection) and description. A published key never follows a label edit; renaming it
 orphans every answer collected under the old name.
 
 **Unsaved edits survive leaving, closing the tab and reloading**, kept per agent
