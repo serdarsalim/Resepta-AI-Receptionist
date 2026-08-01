@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
@@ -544,7 +543,6 @@ export function VoiceVariablesEditor({
                     key={index}
                     row={row}
                     fields={voiceFields}
-                    fieldById={fieldById}
                     pickerFields={rowPickerFields(row)}
                     pickerBuiltins={rowPickerBuiltins(row)}
                     supportsLive={supportsLive}
@@ -832,34 +830,6 @@ function VariablePicker({
   );
 }
 
-// Where a row's before-call value comes from, said as the thing it is. The
-// row tag names it, so "Prefilled: Customer name" replaces a bare "Before the
-// call" that told you a phase you could already see from the group heading.
-function beforeSourceLabel(
-  row: VoiceVariable,
-  fieldById: Map<string, VoiceContactField>,
-  t: (key: TranslationKey) => string,
-): string {
-  switch (row.beforeSource) {
-    case "static":
-      return row.beforeValue || t("voiceVariables.defaultValue");
-    case "business_name":
-      return t("voiceVariables.businessName");
-    case "customer_name":
-      return t("voiceVariables.customerName");
-    case "customer_phone":
-      return t("voiceVariables.customerPhone");
-    case "customer_language":
-      return t("voiceVariables.customerLanguage");
-    case "next_appointment":
-      return t("voiceVariables.nextAppointment");
-    case "contact_field":
-      return row.beforeFieldId ? fieldById.get(row.beforeFieldId)?.label ?? "" : "";
-    default:
-      return "";
-  }
-}
-
 // One variable, editable where it sits. Label and description are plain
 // inputs; everything with a fixed set of answers — type, choices, which phases
 // it is captured in, where the answer lands — is behind the one popover, which
@@ -867,7 +837,6 @@ function beforeSourceLabel(
 function VariableRow({
   row,
   fields,
-  fieldById,
   pickerFields,
   pickerBuiltins,
   supportsLive,
@@ -884,7 +853,6 @@ function VariableRow({
 }: {
   row: VoiceVariable;
   fields: VoiceContactField[];
-  fieldById: Map<string, VoiceContactField>;
   pickerFields: VoiceContactField[];
   pickerBuiltins: PickerBuiltin[];
   supportsLive: boolean;
@@ -919,45 +887,6 @@ function VariableRow({
           ? t("voiceVariables.yesNo")
           : t("voiceVariables.text");
 
-  // The phases this row is NOT grouped under, said in a word each. Without
-  // them the lifecycle became invisible the moment the columns went away.
-  // Tags say what the GROUP does not already say. Naming the other phases
-  // outright ("Before the call", "After the call" on a row sitting under
-  // During the call) read as three contradictory group labels rather than as
-  // one lifecycle — so a before-source names its source instead, and the
-  // after-call recovery is left off entirely for a During row, where it is
-  // the default and true of nearly every row.
-  // Prefilled from the customer field AND saved back to the same field is ONE
-  // fact (the row lives on the customer card), not two directions worth a tag
-  // each — "Prefilled: age" next to "age" next to a name saying age read as a
-  // glitch, not a lifecycle.
-  const selfLinked =
-    row.beforeSource === "contact_field" &&
-    row.destination === "contact" &&
-    !!row.beforeFieldId &&
-    row.beforeFieldId === row.contactFieldId;
-  const linkedField =
-    row.destination === "contact" && row.contactFieldId
-      ? fieldById.get(row.contactFieldId)
-      : undefined;
-  const tags = [
-    !selfLinked && row.beforeSource !== "none"
-      ? `${t("voiceVariables.prefilled")}: ${beforeSourceLabel(row, fieldById, t)}`
-      : null,
-    row.duringMode === "confirm" ? t("voiceVariables.confirm") : null,
-    row.duringMode === "none" && row.afterCall && row.beforeSource !== "none"
-      ? t("voiceVariables.extract")
-      : null,
-    // The destination tag repeats the row's own name whenever the linked
-    // field is the row (which is the normal case); "Customer card" is the
-    // information, the field label only earns the spot when it differs.
-    linkedField
-      ? linkedField.label !== row.label
-        ? linkedField.label
-        : t("voiceVariables.customerCard")
-      : null,
-  ].filter(Boolean) as string[];
-
   return (
     <div className="flex items-center gap-1.5">
       {/* The name is a selection, not free text. Clicking it re-points the
@@ -974,31 +903,13 @@ function VariableRow({
           onCallOnly={onRename}
         />
       </div>
-      {/* Tags render INSIDE the description cell as right-edge adornments, so
-          every row's description has the same outer width; a pill between the
-          input and the type button gave each row a different input width,
-          which read as a layout bug. The wrapper carries the border and the
-          focus ring; the input inside is bare. */}
-      <div
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 focus-within:outline-2 focus-within:outline-[var(--accent)] focus-within:-outline-offset-1"
-        title={tags.length > 0 ? tags.join(" · ") : undefined}
-      >
-        <input
-          ref={descriptionRef}
-          value={row.description}
-          onChange={(e) => onChange({ description: e.target.value })}
-          placeholder={t("voiceVariables.description")}
-          className="min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-xs focus:outline-none"
-        />
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className="hidden shrink-0 rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] sm:inline"
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
+      <input
+        ref={descriptionRef}
+        value={row.description}
+        onChange={(e) => onChange({ description: e.target.value })}
+        placeholder={t("voiceVariables.description")}
+        className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+      />
       {/* Fixed width: the trigger is a select in behaviour, and a select
           whose width follows its value gives every row a different edge. */}
       <button

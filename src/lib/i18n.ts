@@ -1526,13 +1526,6 @@ const dictionary = {
     de: "+ Option hinzufügen",
   },
   "voiceVariables.none": { tr: "Kullanma", en: "Do not use", de: "Nicht verwenden" },
-  // On a row, naming where its before-call value comes from. Not "Before the
-  // call" — that repeats the group heading the row already sits under.
-  "voiceVariables.prefilled": {
-    tr: "Hazır gelir",
-    en: "Prefilled",
-    de: "Vorbefüllt",
-  },
   "voiceVariables.addRow": {
     tr: "+ Bilgi ekle",
     en: "+ Add variable",
