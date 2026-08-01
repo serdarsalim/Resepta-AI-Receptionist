@@ -175,6 +175,14 @@ export function VoiceVariablesEditor({
   const fieldById = new Map(allFields.map((field) => [field.id, field]));
   const supportsLive = engineType === "retell-llm";
 
+  // A key that is already live in Retell must not follow a label edit —
+  // renaming it orphans every answer already collected under the old name.
+  const publishedKeys = useMemo(
+    () => new Set(initial.map((row) => row.key)),
+    [initial],
+  );
+
+
   // "Also save this onto the customer card" — the one thing quick-add could do
   // that a row could not, brought onto the row itself. Only offered when the
   // key still follows the label: publishVariables requires the customer
@@ -287,6 +295,93 @@ export function VoiceVariablesEditor({
     setFocusLast(true);
   };
 
+  // Picking a built-in ("Customer name") builds the row quick-add used to:
+  // prefilled from that context, asked only when the business doesn't know it.
+  const adoptBuiltin = (builtin: PickerBuiltin, phase: Phase) => {
+    setDraft((rows) => [
+      ...rows,
+      {
+        ...blankVariable(),
+        label: builtin.label,
+        key: builtin.key,
+        beforeSource: builtin.source,
+        duringMode: phase === "during" ? "if_missing" : "none",
+        afterCall: phase === "after",
+      },
+    ]);
+    setFocusLast(true);
+  };
+
+  // Name-cell re-points: clicking a row's name and choosing something else
+  // redefines what the row is. Identity fields move together — label, key,
+  // type, link, prefill — so a row can never claim a field's key while
+  // pointing its data elsewhere.
+  const relinkRow = (index: number, field: VoiceContactField) =>
+    patch(index, {
+      label: field.label,
+      key: field.key,
+      type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
+      choices: field.type === "select" ? field.options : undefined,
+      destination: "contact",
+      contactFieldId: field.id,
+      beforeSource: "contact_field",
+      beforeFieldId: field.id,
+    });
+
+  const relinkRowToBuiltin = (index: number, builtin: PickerBuiltin) =>
+    patch(index, {
+      label: builtin.label,
+      key: builtin.key,
+      beforeSource: builtin.source,
+      beforeFieldId: undefined,
+      destination: "call",
+      contactFieldId: undefined,
+    });
+
+  const renameRowCallOnly = (index: number, label: string) => {
+    const row = draft[index];
+    patch(index, {
+      label,
+      // A published key never follows a rename; unpublished ones do.
+      key: publishedKeys.has(row.key) ? row.key : keyFromLabel(label),
+      destination: "call",
+      contactFieldId: undefined,
+      ...(row.beforeSource === "contact_field"
+        ? {
+            // A before-only row stripped of its field source would be used at
+            // no phase, which publish rejects; static keeps it a before row.
+            beforeSource:
+              row.duringMode === "none" && !row.afterCall
+                ? ("static" as const)
+                : ("none" as const),
+            beforeFieldId: undefined,
+          }
+        : {}),
+    });
+  };
+
+  const createFieldForRow = async (index: number, label: string) => {
+    const key = keyFromLabel(label);
+    if (!key) return;
+    const existing = voiceFields.find((field) => field.key === key);
+    if (existing) {
+      relinkRow(index, existing);
+      return;
+    }
+    try {
+      const id = (await createContactField({
+        label,
+        type: "text",
+        source: "voice",
+      })) as string;
+      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true };
+      setCreatedFields((rows) => [...rows, field]);
+      relinkRow(index, field);
+    } catch {
+      setStatus(t("voiceVariables.fieldExists"));
+    }
+  };
+
   const publish = async (rows: VoiceVariable[], keepUndo: boolean) => {
     setBusy(true);
     setStatus(t("voiceVariables.publishing"));
@@ -328,13 +423,6 @@ export function VoiceVariablesEditor({
       discard: () => setDraft(liveRef.current.initial),
     });
   }, [dirty, busy, draft, onSaveStateChange]);
-
-  // A key that is already live in Retell must not follow a label edit —
-  // renaming it orphans every answer already collected under the old name.
-  const publishedKeys = useMemo(
-    () => new Set(initial.map((row) => row.key)),
-    [initial],
-  );
 
   // Which group a row lives in. A Randevu variable is a LIFECYCLE, not a
   // single moment — one row can be seeded before the call, asked during it and
@@ -382,6 +470,29 @@ export function VoiceVariablesEditor({
   const availableFields = voiceFields.filter(
     (field) => !draft.some((row) => row.contactFieldId === field.id || row.key === field.key),
   );
+  // What the pickers offer. "Service list" stays out: it is injected context
+  // with no before-source, not a value a row can hold.
+  const pickerBuiltins: PickerBuiltin[] = availableBuiltins
+    .filter((builtin) => builtin.key !== "services")
+    .map((builtin) => ({
+      key: builtin.key,
+      label: builtin.label,
+      source: builtin.key as PickerBuiltin["source"],
+    }));
+  // A row's own picker also lists what the row currently is, so the menu
+  // always contains the current selection.
+  const rowPickerFields = (row: VoiceVariable): VoiceContactField[] => {
+    const own = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
+    return own ? [own, ...availableFields] : availableFields;
+  };
+  const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
+    const own = builtinVoiceVariables(t).find(
+      (builtin) => builtin.key === row.key && builtin.key !== "services",
+    );
+    return own
+      ? [{ key: own.key, label: own.label, source: own.key as PickerBuiltin["source"] }, ...pickerBuiltins]
+      : pickerBuiltins;
+  };
 
   return (
     <div>
@@ -434,25 +545,31 @@ export function VoiceVariablesEditor({
                     row={row}
                     fields={voiceFields}
                     fieldById={fieldById}
+                    pickerFields={rowPickerFields(row)}
+                    pickerBuiltins={rowPickerBuiltins(row)}
                     supportsLive={supportsLive}
                     autoFocus={focusLast && index === draft.length - 1}
-                    keyLocked={publishedKeys.has(row.key)}
                     canLinkCustomer={
                       row.key === keyFromLabel(row.label) &&
                       !voiceFields.some((field) => field.key === row.key)
                     }
                     onLinkCustomer={() => void linkToCustomer(index)}
+                    onPickField={(field) => relinkRow(index, field)}
+                    onPickBuiltin={(builtin) => relinkRowToBuiltin(index, builtin)}
+                    onCreateField={(label) => void createFieldForRow(index, label)}
+                    onRename={(label) => renameRowCallOnly(index, label)}
                     onFocused={() => setFocusLast(false)}
                     onChange={(next) => patch(index, next)}
                     onRemove={() => removeAt(index)}
                   />
                 ))}
-                <AddVariablePicker
-                  phase={group.id}
+                <VariablePicker
                   fields={availableFields}
-                  onAdopt={adoptField}
-                  onCreate={(label, phase) => void createFieldAndAdopt(label, phase)}
-                  onCallOnly={addCallOnly}
+                  builtins={pickerBuiltins}
+                  onField={(field) => adoptField(field, group.id)}
+                  onBuiltin={(builtin) => adoptBuiltin(builtin, group.id)}
+                  onCreate={(label) => void createFieldAndAdopt(label, group.id)}
+                  onCallOnly={(label) => addCallOnly(label, group.id)}
                 />
               </div>
             </div>
@@ -532,28 +649,43 @@ export function VoiceVariablesEditor({
   );
 }
 
-// "+ Add variable" is a picker, not a blank row. The dropdown offers the
-// org's not-yet-captured voice fields first, then creating a new customer
-// field (which appears in Business → Services & fields the same moment), then
-// a call-only variable. Existing-or-create-inline is the same contract a CRM
-// property picker makes: one field registry, referenced everywhere, never
-// retyped. Enter takes the first field match, else creates — the golden path
-// is the default and call-only is the deliberate exception.
-function AddVariablePicker({
-  phase,
+// A variable that Randevu knows about, offered by the picker. Built-ins map
+// to their before-call source so picking "Customer name" builds the same row
+// quick-add used to.
+type PickerBuiltin = {
+  key: string;
+  label: string;
+  source: VoiceVariable["beforeSource"];
+};
+
+// THE variable selector. It is both the "+ Add variable" control and every
+// row's name cell — a variable's name is a choice from what the business
+// knows (customer fields, built-in context), or an explicit new thing, never
+// silent free text. That is the CRM-property-picker contract: one registry,
+// referenced everywhere, created inline, and a row can always be re-pointed
+// by clicking its name.
+function VariablePicker({
+  current,
   fields,
-  onAdopt,
+  builtins,
+  onField,
+  onBuiltin,
   onCreate,
   onCallOnly,
 }: {
-  phase: Phase;
+  // undefined renders the "+ Add variable" link; a string renders a row's
+  // name cell (empty string = unnamed row).
+  current?: string;
   fields: VoiceContactField[];
-  onAdopt: (field: VoiceContactField, phase: Phase) => void;
-  onCreate: (label: string, phase: Phase) => void;
-  onCallOnly: (label: string, phase: Phase) => void;
+  builtins: PickerBuiltin[];
+  onField: (field: VoiceContactField) => void;
+  onBuiltin: (builtin: PickerBuiltin) => void;
+  onCreate: (label: string) => void;
+  onCallOnly: (label: string) => void;
 }) {
   const { t } = useLanguage();
-  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 340, "left");
+  const isName = current !== undefined;
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 380, "left");
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -564,13 +696,20 @@ function AddVariablePicker({
 
   const trimmed = query.trim();
   const needle = trimmed.toLowerCase();
-  const matches = trimmed
+  const fieldMatches = trimmed
     ? fields.filter(
         (field) =>
           field.label.toLowerCase().includes(needle) ||
           field.key.includes(keyFromLabel(trimmed)),
       )
     : fields;
+  const builtinMatches = trimmed
+    ? builtins.filter(
+        (builtin) =>
+          builtin.label.toLowerCase().includes(needle) ||
+          builtin.key.includes(keyFromLabel(trimmed)),
+      )
+    : builtins;
   // An unclaimed field already owning this exact key makes "create" a
   // guaranteed collision; adopting it is the only outcome that works.
   const exactMatch = trimmed ? fields.find((field) => field.key === keyFromLabel(trimmed)) : undefined;
@@ -580,16 +719,36 @@ function AddVariablePicker({
     close();
   };
 
+  const optionClass =
+    "flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]";
+  const headingClass = "px-2 pt-1.5 pb-0.5 text-[10px] font-medium text-[var(--muted)]";
+
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={toggle}
-        className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
-      >
-        {t("voiceVariables.addRow")}
-      </button>
+      {isName ? (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={toggle}
+          className="flex w-full items-center justify-between gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-left text-xs"
+        >
+          <span className={`truncate ${current ? "" : "text-[var(--muted)]"}`}>
+            {current || t("voiceVariables.label")}
+          </span>
+          <span aria-hidden className="shrink-0 text-[10px] text-[var(--muted)]">
+            ▾
+          </span>
+        </button>
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={toggle}
+          className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+        >
+          {t("voiceVariables.addRow")}
+        </button>
+      )}
       {open &&
         pos &&
         createPortal(
@@ -605,29 +764,47 @@ function AddVariablePicker({
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
-                if (matches[0]) pick(() => onAdopt(matches[0], phase));
-                else if (trimmed) pick(() => onCreate(trimmed, phase));
+                if (fieldMatches[0]) pick(() => onField(fieldMatches[0]));
+                else if (builtinMatches[0]) pick(() => onBuiltin(builtinMatches[0]));
+                else if (trimmed) pick(() => onCreate(trimmed));
               }}
               placeholder={t("voiceVariables.pickerSearch")}
               className="mb-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
             />
-            <div className="max-h-52 overflow-y-auto">
-              {matches.map((field) => (
+            <div className="max-h-64 overflow-y-auto">
+              {fieldMatches.length > 0 && (
+                <div className={headingClass}>{t("voiceVariables.customerCard")}</div>
+              )}
+              {fieldMatches.map((field) => (
                 <button
                   key={field.id}
                   type="button"
-                  onClick={() => pick(() => onAdopt(field, phase))}
-                  className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                  onClick={() => pick(() => onField(field))}
+                  className={optionClass}
                 >
                   <span className="min-w-0 truncate">{field.label}</span>
                   <code className="shrink-0 text-[10px] text-[var(--muted)]">{field.key}</code>
+                </button>
+              ))}
+              {builtinMatches.length > 0 && (
+                <div className={headingClass}>{t("voiceVariables.alwaysAvailable")}</div>
+              )}
+              {builtinMatches.map((builtin) => (
+                <button
+                  key={builtin.key}
+                  type="button"
+                  onClick={() => pick(() => onBuiltin(builtin))}
+                  className={optionClass}
+                >
+                  <span className="min-w-0 truncate">{builtin.label}</span>
+                  <code className="shrink-0 text-[10px] text-[var(--muted)]">{builtin.key}</code>
                 </button>
               ))}
             </div>
             {trimmed && !exactMatch && (
               <button
                 type="button"
-                onClick={() => pick(() => onCreate(trimmed, phase))}
+                onClick={() => pick(() => onCreate(trimmed))}
                 title={t("voiceVariables.pickerCreateHint")}
                 className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
               >
@@ -637,13 +814,13 @@ function AddVariablePicker({
             {trimmed && (
               <button
                 type="button"
-                onClick={() => pick(() => onCallOnly(trimmed, phase))}
+                onClick={() => pick(() => onCallOnly(trimmed))}
                 className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
               >
                 {t("voiceVariables.pickerCallOnly").replace("{name}", trimmed)}
               </button>
             )}
-            {!trimmed && (
+            {!trimmed && fieldMatches.length === 0 && builtinMatches.length === 0 && (
               <div className="px-2 py-1.5 text-[11px] text-[var(--muted)]">
                 {t("voiceVariables.pickerEmpty")}
               </div>
@@ -691,39 +868,46 @@ function VariableRow({
   row,
   fields,
   fieldById,
+  pickerFields,
+  pickerBuiltins,
   supportsLive,
   autoFocus,
-  keyLocked,
   canLinkCustomer,
   onFocused,
   onChange,
   onRemove,
   onLinkCustomer,
+  onPickField,
+  onPickBuiltin,
+  onCreateField,
+  onRename,
 }: {
   row: VoiceVariable;
   fields: VoiceContactField[];
   fieldById: Map<string, VoiceContactField>;
+  pickerFields: VoiceContactField[];
+  pickerBuiltins: PickerBuiltin[];
   supportsLive: boolean;
   autoFocus: boolean;
-  keyLocked: boolean;
   canLinkCustomer: boolean;
   onFocused: () => void;
   onChange: (next: Partial<VoiceVariable>) => void;
   onRemove: () => void;
   onLinkCustomer: () => void;
+  onPickField: (field: VoiceContactField) => void;
+  onPickBuiltin: (builtin: PickerBuiltin) => void;
+  onCreateField: (label: string) => void;
+  onRename: (label: string) => void;
 }) {
   const { t } = useLanguage();
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
-  const labelRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!autoFocus) return;
-    // A picker-added row arrives named; the description is what's left to
-    // write. Only a blank row still needs its name first.
-    (row.label ? descriptionRef : labelRef).current?.focus();
+    // Rows arrive named from the picker; the description is what's left.
+    descriptionRef.current?.focus();
     onFocused();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus, onFocused]);
 
   const typeLabel =
@@ -776,19 +960,18 @@ function VariableRow({
 
   return (
     <div className="flex items-center gap-1.5">
+      {/* The name is a selection, not free text. Clicking it re-points the
+          row at another customer field, a built-in, a newly created field or
+          a call-only name — identity always moves as one piece. */}
       <div className="w-48 shrink-0">
-        <input
-          ref={labelRef}
-          value={row.label}
-          onChange={(e) => {
-            const label = e.target.value;
-            // The key follows the label until the row has been published or
-            // hand-edited; a key that drifts from its label is how you end up
-            // with musteri_adi holding the phone number.
-            onChange({ label, ...(keyLocked ? {} : { key: keyFromLabel(label) }) });
-          }}
-          placeholder={t("voiceVariables.label")}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+        <VariablePicker
+          current={row.label}
+          fields={pickerFields}
+          builtins={pickerBuiltins}
+          onField={onPickField}
+          onBuiltin={onPickBuiltin}
+          onCreate={onCreateField}
+          onCallOnly={onRename}
         />
       </div>
       {/* Tags render INSIDE the description cell as right-edge adornments, so
