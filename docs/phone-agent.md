@@ -113,6 +113,16 @@ Publishing Variables compiles this registry into provider defaults, live
 extraction tools and post-call analysis fields. Randevu remains the editable
 schema; the provider configuration is generated output.
 
+"+ Add variable" is a picker over the org's voice customer fields, not a blank
+row. Selecting an existing field links it and pre-wires the repeat-caller
+path: prefill from the customer card before the call, ask only when the value
+is missing, write the answer back. Typing a new name creates the customer
+field inline (it appears under Business → Services & fields at the same
+moment) or, as the explicit exception, adds a call-only variable that never
+touches the customer card. There is one field registry; agents reference it,
+they never retype it. Deleting a customer field an agent still references is
+refused for the same reason.
+
 The precedence rule is fixed:
 
 1. a value explicitly confirmed during the live call wins;
