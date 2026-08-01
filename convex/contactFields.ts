@@ -97,6 +97,17 @@ export const remove = mutation({
     const { orgId } = await requireOwner(ctx);
     const field = await ctx.db.get(args.fieldId);
     if (!field || field.orgId !== orgId) throw new Error("not-found");
+    // A field an agent still references must not go: the variable registry
+    // keeps the dangling id and that agent's next publish dies on
+    // "needs a voice-filled customer field". Unlink it on the agent first.
+    const variables = await ctx.db
+      .query("voiceAgentVariables")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const inUse = variables.some(
+      (row) => row.contactFieldId === args.fieldId || row.beforeFieldId === args.fieldId,
+    );
+    if (inUse) throw new Error("field-in-use");
     // Stored values keep their key harmlessly; re-adding the same label
     // resurfaces them.
     await ctx.db.delete(args.fieldId);

@@ -646,8 +646,13 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   // and an empty fieldset. Don't render the frame.
   if (!isOwner && fields !== undefined && rows.length === 0) return null;
 
+  // A field an agent references cannot be deleted (the backend refuses: the
+  // agent's variable registry would dangle and its next publish fail). The
+  // row's "used by" note is the explanation, so the affordance goes away
+  // rather than erroring after the click.
   const deleteButton = (field: ContactField, className: string) =>
-    isOwner && (
+    isOwner &&
+    (usage?.[String(field._id)] ?? []).length === 0 && (
       <button
         className={`rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 ${className}`}
         onClick={() => void removeField({ fieldId: field._id })}
