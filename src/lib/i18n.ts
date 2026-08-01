@@ -1538,6 +1538,33 @@ const dictionary = {
     en: "+ Add variable",
     de: "+ Variable hinzufügen",
   },
+  // The add-variable picker: existing customer fields first, create inline
+  // second, call-only as the deliberate exception.
+  "voiceVariables.pickerSearch": {
+    tr: "Bilgi adı yazın",
+    en: "Type a name",
+    de: "Namen eingeben",
+  },
+  "voiceVariables.pickerCreate": {
+    tr: "Müşteri alanı oluştur: {name}",
+    en: "Create customer field: {name}",
+    de: "Kundenfeld anlegen: {name}",
+  },
+  "voiceVariables.pickerCreateHint": {
+    tr: "Hizmetler ve alanlar bölümünde de görünür ve toplanan yanıt müşteri kartına yazılır.",
+    en: "Also appears under Services & fields, and the collected answer is written to the customer card.",
+    de: "Erscheint auch unter Leistungen & Felder, und die erfasste Antwort wird ins Kundenprofil geschrieben.",
+  },
+  "voiceVariables.pickerCallOnly": {
+    tr: "Yalnızca aramayla kaydet: {name}",
+    en: "Just for this call: {name}",
+    de: "Nur für diesen Anruf: {name}",
+  },
+  "voiceVariables.pickerEmpty": {
+    tr: "Yeni bir bilgi için adını yazın.",
+    en: "Type a name to add a new one.",
+    de: "Namen eingeben, um eine neue hinzuzufügen.",
+  },
   // The context the runtime injects whether or not anyone configured it, plus
   // customer fields waiting to be captured. Neither is a row you edit.
   "voiceVariables.alwaysAvailable": {

@@ -205,21 +205,86 @@ export function VoiceVariablesEditor({
     }
   };
 
-  // A voice-enabled customer field the org configured in Business becomes a
-  // capture row here in one click, pre-linked to its field.
-  const adoptField = (field: VoiceContactField) => {
+  // A voice-enabled customer field becomes a capture row in one click,
+  // pre-linked to its field AND pre-wired for the repeat caller: the stored
+  // value is injected before the call and the agent only asks when it is
+  // missing. Without the prefill, every adopted field re-interrogated people
+  // the business already knew.
+  const adoptField = (field: VoiceContactField, phase: Phase = "during") => {
+    const base: VoiceVariable = {
+      ...blankVariable(),
+      key: field.key,
+      label: field.label,
+      type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
+      choices: field.type === "select" ? field.options : undefined,
+      destination: "contact",
+      contactFieldId: field.id,
+    };
+    const row: VoiceVariable =
+      phase === "before"
+        ? // Context only: read the stored value into the call, capture nothing.
+          {
+            ...base,
+            duringMode: "none",
+            afterCall: false,
+            beforeSource: "contact_field",
+            beforeFieldId: field.id,
+            destination: "call",
+            contactFieldId: undefined,
+          }
+        : phase === "after"
+          ? { ...base, duringMode: "none", afterCall: true }
+          : {
+              ...base,
+              beforeSource: "contact_field",
+              beforeFieldId: field.id,
+            };
+    setDraft((rows) => [...rows, row]);
+    setFocusLast(true);
+  };
+
+  // The picker's "create" action: the field lands in Business → Services &
+  // fields at the same moment it becomes a row here, so the two registries
+  // cannot drift apart. If the label folds to a key an unclaimed voice field
+  // already owns, adopt that field instead of failing on the collision.
+  const createFieldAndAdopt = async (label: string, phase: Phase) => {
+    const key = keyFromLabel(label);
+    if (!key) return;
+    const existing = voiceFields.find((field) => field.key === key);
+    if (existing) {
+      adoptField(existing, phase);
+      return;
+    }
+    try {
+      const id = (await createContactField({
+        label,
+        type: "text",
+        source: "voice",
+      })) as string;
+      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true };
+      setCreatedFields((rows) => [...rows, field]);
+      adoptField(field, phase);
+    } catch {
+      setStatus(t("voiceVariables.fieldExists"));
+    }
+  };
+
+  // Call-scoped variable: named in the picker, saved with the call only.
+  // Deliberately NOT a customer field — per-call answers ("reason for
+  // calling") on the customer card is how a field registry rots.
+  const addCallOnly = (label: string, phase: Phase) => {
     setDraft((rows) => [
       ...rows,
       {
         ...blankVariable(),
-        key: field.key,
-        label: field.label,
-        type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
-        choices: field.type === "select" ? field.options : undefined,
-        destination: "contact",
-        contactFieldId: field.id,
+        label,
+        key: keyFromLabel(label),
+        duringMode: phase === "during" ? "if_missing" : "none",
+        afterCall: phase !== "before",
+        beforeSource: phase === "before" ? "static" : "none",
       },
     ]);
+    setFocusLast(true);
   };
 
   const publish = async (rows: VoiceVariable[], keepUndo: boolean) => {
@@ -291,21 +356,6 @@ export function VoiceVariablesEditor({
       return;
     }
     setDraft((rows) => rows.filter((_, i) => i !== index));
-  };
-
-  const addTo = (phase: Phase) => {
-    setDraft((rows) => [
-      ...rows,
-      {
-        ...blankVariable(),
-        duringMode: phase === "during" ? "if_missing" : "none",
-        afterCall: phase !== "before",
-        // A before-only row needs a source or it is used at no point in the
-        // call, which the publish validator rejects.
-        beforeSource: phase === "before" ? "static" : "none",
-      },
-    ]);
-    setFocusLast(true);
   };
 
   const groups: { id: Phase; title: string; tip: string }[] = [
@@ -397,13 +447,13 @@ export function VoiceVariablesEditor({
                     onRemove={() => removeAt(index)}
                   />
                 ))}
-                <button
-                  type="button"
-                  onClick={() => addTo(group.id)}
-                  className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
-                >
-                  {t("voiceVariables.addRow")}
-                </button>
+                <AddVariablePicker
+                  phase={group.id}
+                  fields={availableFields}
+                  onAdopt={adoptField}
+                  onCreate={(label, phase) => void createFieldAndAdopt(label, phase)}
+                  onCallOnly={addCallOnly}
+                />
               </div>
             </div>
           );
@@ -482,6 +532,129 @@ export function VoiceVariablesEditor({
   );
 }
 
+// "+ Add variable" is a picker, not a blank row. The dropdown offers the
+// org's not-yet-captured voice fields first, then creating a new customer
+// field (which appears in Business → Services & fields the same moment), then
+// a call-only variable. Existing-or-create-inline is the same contract a CRM
+// property picker makes: one field registry, referenced everywhere, never
+// retyped. Enter takes the first field match, else creates — the golden path
+// is the default and call-only is the deliberate exception.
+function AddVariablePicker({
+  phase,
+  fields,
+  onAdopt,
+  onCreate,
+  onCallOnly,
+}: {
+  phase: Phase;
+  fields: VoiceContactField[];
+  onAdopt: (field: VoiceContactField, phase: Phase) => void;
+  onCreate: (label: string, phase: Phase) => void;
+  onCallOnly: (label: string, phase: Phase) => void;
+}) {
+  const { t } = useLanguage();
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 340, "left");
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+    else setQuery("");
+  }, [open]);
+
+  const trimmed = query.trim();
+  const needle = trimmed.toLowerCase();
+  const matches = trimmed
+    ? fields.filter(
+        (field) =>
+          field.label.toLowerCase().includes(needle) ||
+          field.key.includes(keyFromLabel(trimmed)),
+      )
+    : fields;
+  // An unclaimed field already owning this exact key makes "create" a
+  // guaranteed collision; adopting it is the only outcome that works.
+  const exactMatch = trimmed ? fields.find((field) => field.key === keyFromLabel(trimmed)) : undefined;
+
+  const pick = (action: () => void) => {
+    action();
+    close();
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggle}
+        className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+      >
+        {t("voiceVariables.addRow")}
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
+            className="fixed z-50 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg"
+          >
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                if (matches[0]) pick(() => onAdopt(matches[0], phase));
+                else if (trimmed) pick(() => onCreate(trimmed, phase));
+              }}
+              placeholder={t("voiceVariables.pickerSearch")}
+              className="mb-1 w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+            />
+            <div className="max-h-52 overflow-y-auto">
+              {matches.map((field) => (
+                <button
+                  key={field.id}
+                  type="button"
+                  onClick={() => pick(() => onAdopt(field, phase))}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                >
+                  <span className="min-w-0 truncate">{field.label}</span>
+                  <code className="shrink-0 text-[10px] text-[var(--muted)]">{field.key}</code>
+                </button>
+              ))}
+            </div>
+            {trimmed && !exactMatch && (
+              <button
+                type="button"
+                onClick={() => pick(() => onCreate(trimmed, phase))}
+                title={t("voiceVariables.pickerCreateHint")}
+                className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+              >
+                + {t("voiceVariables.pickerCreate").replace("{name}", trimmed)}
+              </button>
+            )}
+            {trimmed && (
+              <button
+                type="button"
+                onClick={() => pick(() => onCallOnly(trimmed, phase))}
+                className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+              >
+                {t("voiceVariables.pickerCallOnly").replace("{name}", trimmed)}
+              </button>
+            )}
+            {!trimmed && (
+              <div className="px-2 py-1.5 text-[11px] text-[var(--muted)]">
+                {t("voiceVariables.pickerEmpty")}
+              </div>
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 // Where a row's before-call value comes from, said as the thing it is. The
 // row tag names it, so "Prefilled: Customer name" replaces a bare "Before the
 // call" that told you a phase you could already see from the group heading.
@@ -542,11 +715,15 @@ function VariableRow({
   const { t } = useLanguage();
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
   const labelRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!autoFocus) return;
-    labelRef.current?.focus();
+    // A picker-added row arrives named; the description is what's left to
+    // write. Only a blank row still needs its name first.
+    (row.label ? descriptionRef : labelRef).current?.focus();
     onFocused();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus, onFocused]);
 
   const typeLabel =
@@ -597,6 +774,7 @@ function VariableRow({
         />
       </div>
       <input
+        ref={descriptionRef}
         value={row.description}
         onChange={(e) => onChange({ description: e.target.value })}
         placeholder={t("voiceVariables.description")}
