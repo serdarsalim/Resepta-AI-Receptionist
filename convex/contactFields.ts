@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey } from "./lib/keys";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 
@@ -192,5 +192,121 @@ export const remove = mutation({
     // resurfaces them.
     await ctx.db.delete(args.fieldId);
     return null;
+  },
+});
+
+// Standing a tenant's whole field set up in one shot, from outside the app: an
+// onboarding, a migration, a support request. The app has no bulk path and
+// should not grow one — an owner adding fields one at a time is the right pace
+// for an owner. A CLI run is a different job, and this is its door:
+//
+//   npx convex run contactFields:seedForOrg --prod '{"orgId":"...","fields":[...]}'
+//
+// It skips the session because a CLI run has none, and NOTHING else. Key
+// derivation, the reserved-key refusal, the empty-select refusal and the
+// in-use guard are the same rules `create` and `remove` apply, reached the
+// same way. A seeding path that quietly accepted what the UI rejects would
+// produce rows the app can then neither render nor delete.
+export const seedForOrg = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    fields: v.array(
+      v.object({
+        label: v.string(),
+        type: fieldType,
+        options: v.optional(v.array(v.string())),
+        source: v.optional(fieldSource),
+        key: v.optional(v.string()),
+      }),
+    ),
+    // Clear the org's existing fields first. Off by default: the destructive
+    // reading of "seed" should never be the one you get by forgetting a flag.
+    replaceExisting: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    removed: v.array(v.string()),
+    created: v.array(v.object({ key: v.string(), label: v.string() })),
+    skipped: v.array(v.object({ label: v.string(), reason: v.string() })),
+  }),
+  handler: async (ctx, args) => {
+    const removed: string[] = [];
+    const created: { key: string; label: string }[] = [];
+    const skipped: { label: string; reason: string }[] = [];
+
+    let existing = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+
+    if (args.replaceExisting) {
+      const variables = await ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .collect();
+      for (const field of existing) {
+        // Same refusal as `remove`, and it throws rather than skipping: a
+        // half-replaced field set is worse than an untouched one, because the
+        // caller asked for a known end state and would be told they got it.
+        const inUse = variables.some(
+          (row) => row.contactFieldId === field._id || row.beforeFieldId === field._id,
+        );
+        if (inUse) {
+          throw new Error(
+            `field-in-use: "${field.label}" is referenced by a phone agent. Unlink it on the agent first.`,
+          );
+        }
+        await ctx.db.delete(field._id);
+        removed.push(field.key);
+      }
+      existing = [];
+    }
+
+    const takenKeys = new Set(existing.map((row) => row.key));
+    let order = existing.length;
+
+    for (const spec of args.fields) {
+      const label = spec.label.trim();
+      if (!label) {
+        skipped.push({ label: spec.label, reason: "label-required" });
+        continue;
+      }
+      const key = spec.key?.trim() ? normaliseKey(spec.key) : keyFromLabel(label);
+      if (!key) {
+        skipped.push({ label, reason: "label-required" });
+        continue;
+      }
+      if (RESERVED_CONTACT_KEYS.has(key)) {
+        skipped.push({ label, reason: `key-reserved (${key})` });
+        continue;
+      }
+      // Against keys claimed EARLIER IN THIS RUN as well as already stored
+      // ones, or two labels folding to one key would collide silently and the
+      // second would overwrite nothing while reporting success.
+      if (takenKeys.has(key)) {
+        skipped.push({ label, reason: `field-exists (${key})` });
+        continue;
+      }
+      const options =
+        spec.type === "select"
+          ? (spec.options ?? []).map((o) => o.trim()).filter(Boolean)
+          : undefined;
+      if (spec.type === "select" && (!options || options.length === 0)) {
+        skipped.push({ label, reason: "select-needs-options" });
+        continue;
+      }
+      await ctx.db.insert("contactFields", {
+        orgId: args.orgId,
+        key,
+        label,
+        type: spec.type,
+        options,
+        order: order++,
+        source: spec.source === "voice" ? "voice" : undefined,
+      });
+      takenKeys.add(key);
+      created.push({ key, label });
+    }
+
+    return { removed, created, skipped };
   },
 });
