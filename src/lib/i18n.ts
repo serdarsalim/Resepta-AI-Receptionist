@@ -1987,6 +1987,21 @@ const dictionary = {
   "common.show": { tr: "Göster", en: "Show", de: "Anzeigen" },
   "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
+  "fields.keyEditHint": {
+    tr: "Anahtarı düzenle. Yalnızca hiçbir asistan bu alanı kullanmıyorken değişir.",
+    en: "Edit the key. It can only change while no agent uses this field.",
+    de: "Schlüssel bearbeiten. Er kann sich nur ändern, solange kein Assistent dieses Feld nutzt.",
+  },
+  "fields.keyReserved": {
+    tr: "Bu anahtar sistem alanları için ayrılmış.",
+    en: "This key is reserved for system fields.",
+    de: "Dieser Schlüssel ist für Systemfelder reserviert.",
+  },
+  "fields.keyInUse": {
+    tr: "Bir asistan bu alanı kullanırken anahtar değiştirilemez.",
+    en: "The key can't change while an agent uses this field.",
+    de: "Der Schlüssel kann sich nicht ändern, solange ein Assistent dieses Feld nutzt.",
+  },
   "fields.reorder": {
     tr: "Sürükleyip sırala",
     en: "Drag to reorder",

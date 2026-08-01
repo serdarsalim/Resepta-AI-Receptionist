@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey } from "./lib/keys";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 
 const fieldType = v.union(
@@ -47,6 +48,9 @@ export const create = mutation({
     type: fieldType,
     options: v.optional(v.array(v.string())),
     source: v.optional(fieldSource),
+    // The owner may declare the key instead of taking the derived one; it is
+    // normalised but not stop-word-stripped — their words, their key.
+    key: v.optional(v.string()),
   },
   // Returns the new row's id so a caller wiring the field somewhere else
   // (e.g. a voice variable destination) doesn't have to re-derive the key
@@ -56,18 +60,12 @@ export const create = mutation({
     const { orgId } = await requireOwner(ctx);
     const label = args.label.trim();
     if (!label) throw new Error("label-required");
-    // Key derives from the label once and never changes after (values are
-    // keyed by it); Turkish-folded, snake_case. Fold BEFORE lowercasing:
-    // "İ".toLowerCase() is i + combining dot, which the classes can't match.
-    const key = label
-      .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
-      .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
+    // Key derives from the label once (the one rule lives in lib/keys.ts)
+    // unless the owner declared one; after creation it only moves through
+    // update's unused-only path.
+    const key = args.key?.trim() ? normaliseKey(args.key) : keyFromLabel(label);
     if (!key) throw new Error("label-required");
+    if (RESERVED_CONTACT_KEYS.has(key)) throw new Error("key-reserved");
     const existing = await ctx.db
       .query("contactFields")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -100,12 +98,22 @@ export const update = mutation({
     label: v.optional(v.string()),
     options: v.optional(v.array(v.string())),
     source: v.optional(fieldSource),
+    key: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
     const field = await ctx.db.get(args.fieldId);
     if (!field || field.orgId !== orgId) throw new Error("not-found");
+    const usedByAgents = async () => {
+      const variables = await ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      return variables.some(
+        (row) => row.contactFieldId === args.fieldId || row.beforeFieldId === args.fieldId,
+      );
+    };
     const patch: Record<string, unknown> = {};
     if (args.label !== undefined) {
       const label = args.label.trim();
@@ -116,19 +124,29 @@ export const update = mutation({
       if (field.type !== "select") throw new Error("not-a-select");
       patch.options = [...new Set(args.options.map((o) => o.trim()).filter(Boolean))];
     }
+    // The key may move only while nothing addresses it: no agent references
+    // the field, and stored values under the old key simply stay behind (the
+    // same outcome delete-and-recreate already allows).
+    if (args.key !== undefined) {
+      const key = normaliseKey(args.key);
+      if (!key) throw new Error("key-required");
+      if (key !== field.key) {
+        if (await usedByAgents()) throw new Error("field-in-use");
+        if (RESERVED_CONTACT_KEYS.has(key)) throw new Error("key-reserved");
+        const existing = await ctx.db
+          .query("contactFields")
+          .withIndex("by_org", (q) => q.eq("orgId", orgId))
+          .collect();
+        if (existing.some((other) => other.key === key && other._id !== args.fieldId)) {
+          throw new Error("field-exists");
+        }
+        patch.key = key;
+      }
+    }
     if (args.source !== undefined && args.source !== (field.source ?? "manual")) {
       // Handing a field back to staff while an agent still writes it would
       // fail that agent's next publish; unlink it on the agent first.
-      if (args.source === "manual") {
-        const variables = await ctx.db
-          .query("voiceAgentVariables")
-          .withIndex("by_org", (q) => q.eq("orgId", orgId))
-          .collect();
-        const inUse = variables.some(
-          (row) => row.contactFieldId === args.fieldId || row.beforeFieldId === args.fieldId,
-        );
-        if (inUse) throw new Error("field-in-use");
-      }
+      if (args.source === "manual" && (await usedByAgents())) throw new Error("field-in-use");
       patch.source = args.source === "voice" ? "voice" : undefined;
     }
     if (Object.keys(patch).length > 0) await ctx.db.patch(args.fieldId, patch);

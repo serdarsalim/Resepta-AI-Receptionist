@@ -7,14 +7,72 @@
 // silently addressing a key the app does not have.
 //
 // Turkish-folded so "Saç boyama" and "Manikür" survive as sac_boyama and
-// manikur rather than as underscores where the letters were.
-export function keyFromLabel(raw: string): string {
+// manikur rather than as underscores where the letters were. Folding happens
+// BEFORE lowercasing: "İ".toLowerCase() is "i" plus a combining dot (U+0307)
+// the classes can't match, which is how "İstenen hizmet" once became
+// i_stenen_hizmet; the NFD strip catches any other combining mark.
+//
+// A label is often a question ("What is your best friend's favorite
+// restaurant?"), and a key is a property name — so the scaffolding words are
+// stripped from the edges and the result is capped at a word boundary.
+// best_friend_s_favorite_restaurant, not the whole sentence.
+const LEADING_STOP = new Set([
+  // en
+  "what", "whats", "is", "are", "your", "you", "do", "does", "the", "a", "an",
+  "please", "s", "their", "his", "her", "my", "our", "how", "many", "much", "which", "who",
+  // tr
+  "sizin", "senin", "lutfen", "hangi",
+  // de
+  "was", "ist", "sind", "ihre", "ihr", "dein", "deine", "bitte", "wie", "welche", "welcher",
+]);
+const TRAILING_STOP = new Set(["nedir", "midir", "mudur", "mi", "mu"]);
+const MAX_KEY_WORD_LENGTH = 40;
+
+// Snake-case a string into key shape WITHOUT the stop-word stripping. This is
+// the rule for a key the user typed themselves: fold, lowercase, snake — but
+// respect every word they chose.
+export function normaliseKey(raw: string): string {
   return raw
-    .toLowerCase()
     .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
     .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+}
+
+// Identity and compliance columns the voice pipeline refuses to write; a
+// custom field must not shadow them either. One list, shared with the
+// runtime's write gate in retell.ts.
+export const RESERVED_CONTACT_KEYS = new Set([
+  "firstname",
+  "first_name",
+  "lastname",
+  "last_name",
+  "phone",
+  "phonenumber",
+  "phone_number",
+  "email",
+  "consent",
+  "consentat",
+  "consent_at",
+]);
+
+export function keyFromLabel(raw: string): string {
+  const words = normaliseKey(raw).split("_").filter(Boolean);
+  let start = 0;
+  let end = words.length;
+  while (start < end - 1 && LEADING_STOP.has(words[start])) start += 1;
+  while (end - 1 > start && TRAILING_STOP.has(words[end - 1])) end -= 1;
+  const kept = words.slice(start, end);
+  const parts: string[] = [];
+  for (const word of kept) {
+    if (parts.length > 0 && parts.join("_").length + 1 + word.length > MAX_KEY_WORD_LENGTH) break;
+    parts.push(word);
+  }
+  return parts.join("_").slice(0, 64);
 }
 
 // A key that is already taken gets a numeric tail rather than an error.

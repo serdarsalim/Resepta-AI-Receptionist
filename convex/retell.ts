@@ -20,6 +20,7 @@ import { recordCustomerCreated } from "./lib/newCustomer";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
 import { voiceVariableInput } from "./lib/voiceVariables";
+import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -1138,19 +1139,8 @@ export const nextAppointmentForPhone = internalQuery({
 // Built-in columns are off limits to this path. A phone number misheard
 // mid-call must never overwrite the number we dialled, and consent is a KVKK
 // record with its own moment, not a value an agent infers from a chat.
-const RESERVED_CONTACT_KEYS = new Set([
-  "firstname",
-  "first_name",
-  "lastname",
-  "last_name",
-  "phone",
-  "phonenumber",
-  "phone_number",
-  "email",
-  "consent",
-  "consentat",
-  "consent_at",
-]);
+// RESERVED_CONTACT_KEYS moved to lib/keys.ts — contactFields validates
+// user-declared keys against the same list this write gate enforces.
 
 const contactUpdateResult = v.object({
   ok: v.boolean(),

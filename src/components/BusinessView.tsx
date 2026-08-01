@@ -22,6 +22,7 @@ import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
+import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -614,6 +615,16 @@ const SYSTEM_FIELDS = [
   { labelKey: "customers.email", typeKey: "fields.type.email", key: "email" },
 ] as const;
 
+// Backend refusals said as sentences. Anything unmapped falls back to the
+// raw code, which at least names the problem.
+function fieldErrorText(err: unknown, t: (key: TranslationKey) => string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("field-exists")) return t("voiceVariables.fieldExists");
+  if (message.includes("key-reserved")) return t("fields.keyReserved");
+  if (message.includes("field-in-use")) return t("fields.keyInUse");
+  return message;
+}
+
 // One org field as a table row, ported from Nudge's FieldRow (native mode).
 // Label renames inline (label-only: the key is the identity, so the rename
 // ripples everywhere without a republish). A select's type cell reads
@@ -630,6 +641,7 @@ function FieldTableRow({
   onDragEnd,
   onDrop,
   onRename,
+  onRenameKey,
   onToggleSource,
   onSetOptions,
   onRemove,
@@ -643,11 +655,13 @@ function FieldTableRow({
   onDragEnd: () => void;
   onDrop: () => void;
   onRename: (label: string) => void;
+  onRenameKey: (key: string) => void;
   onToggleSource: () => void;
   onSetOptions: (options: string[]) => void;
   onRemove: () => void;
 }) {
   const { t } = useLanguage();
+  const [editingKey, setEditingKey] = useState(false);
   const inUse = agents.length > 0;
   const voice = field.source === "voice";
   const usedByText = t("fields.usedByAgents").replace("{agents}", agents.join(", "));
@@ -681,12 +695,41 @@ function FieldTableRow({
           <InlineEditValue value={field.label} onSave={(next) => next && onRename(next)} />
         </td>
         <td className="py-1.5 pr-3">
-          <code
-            className="block truncate font-mono text-xs text-[var(--muted)]"
-            title={field.key}
-          >
-            {field.key}
-          </code>
+          {/* The key moves only while nothing addresses it. In use, it is a
+              fact; unused, it is a click-to-edit like the label (Nudge's
+              variable-key pattern). */}
+          {inUse ? (
+            <code
+              className="block truncate font-mono text-xs text-[var(--muted)]"
+              title={`${field.key} · ${usedByText}`}
+            >
+              {field.key}
+            </code>
+          ) : editingKey ? (
+            <input
+              autoFocus
+              defaultValue={field.key}
+              onBlur={(e) => {
+                const next = e.target.value.trim();
+                setEditingKey(false);
+                if (next && next !== field.key) onRenameKey(next);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") setEditingKey(false);
+              }}
+              className="w-full rounded border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-xs"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingKey(true)}
+              title={t("fields.keyEditHint")}
+              className="block max-w-full truncate text-left font-mono text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
+            >
+              {field.key}
+            </button>
+          )}
         </td>
         <td className="py-1.5 pr-3">
           {field.type === "select" ? (
@@ -769,6 +812,12 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const [adding, setAdding] = useState(false);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
   const [source, setSource] = useState<FieldSource>("manual");
+  // The key is declared at creation: prefilled from the label as it is typed,
+  // editable until the owner has touched it — after creation it only moves
+  // through the unused-only path in the table.
+  const [labelDraft, setLabelDraft] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyTouched, setKeyTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sourceLabelId = useId();
 
@@ -855,6 +904,11 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                 onDragEnd={() => setDragId(null)}
                 onDrop={() => moveField(field._id)}
                 onRename={(label) => void updateField({ fieldId: field._id, label })}
+                onRenameKey={(key) =>
+                  void updateField({ fieldId: field._id, key }).catch((err) =>
+                    setError(fieldErrorText(err, t)),
+                  )
+                }
                 onToggleSource={() =>
                   void updateField({
                     fieldId: field._id,
@@ -868,6 +922,9 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
           </tbody>
         </table>
       </div>
+      {error && !adding && (
+        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
 
       {/* Adding appears on demand, mirroring "+ Add service" above: a
           permanently open form charged this card a row of empty inputs on
@@ -890,7 +947,8 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             setError(null);
             try {
               await createField({
-                label: String(form.get("label") ?? ""),
+                label: labelDraft,
+                key: keyDraft.trim() || undefined,
                 type,
                 source,
                 options:
@@ -904,15 +962,40 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
               formEl.reset();
               setType("text");
               setSource("manual");
+              setLabelDraft("");
+              setKeyDraft("");
+              setKeyTouched(false);
               setAdding(false);
             } catch (err) {
-              setError(err instanceof Error ? err.message : "error");
+              setError(fieldErrorText(err, t));
             }
           }}
         >
           <label className="block text-sm">
             {t("fields.label")}
-            <input name="label" required className="mt-1 block w-44" />
+            <input
+              required
+              value={labelDraft}
+              onChange={(e) => {
+                setLabelDraft(e.target.value);
+                if (!keyTouched) setKeyDraft(keyFromLabel(e.target.value));
+              }}
+              className="mt-1 block w-44"
+            />
+          </label>
+          {/* The key, declared at creation: follows the label until touched,
+              normalised on blur so what is shown is what will be stored. */}
+          <label className="block text-sm">
+            {t("fields.key")}
+            <input
+              value={keyDraft}
+              onChange={(e) => {
+                setKeyTouched(true);
+                setKeyDraft(e.target.value);
+              }}
+              onBlur={() => setKeyDraft((current) => normaliseKey(current))}
+              className="mt-1 block w-44 font-mono text-xs"
+            />
           </label>
           <label className="block text-sm">
             {t("fields.typeLabel")}

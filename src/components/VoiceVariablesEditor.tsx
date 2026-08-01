@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
+import { keyFromLabel } from "../../convex/lib/keys";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
@@ -83,26 +84,6 @@ export function builtinVoiceVariables(
     { key: "business_name", label: t("voiceVariables.businessName") },
     { key: "services", label: t("voiceVariables.servicesList") },
   ];
-}
-
-// Turkish letters fold BEFORE lowercasing: "İ".toLowerCase() is "i" plus a
-// combining dot (U+0307) that the class above can't match, which is how
-// "İstenen hizmet" once became i_stenen_hizmet. The NFD strip catches any
-// other combining mark the same way.
-function keyFromLabel(label: string): string {
-  return label
-    .replace(/[çÇ]/g, "c")
-    .replace(/[ğĞ]/g, "g")
-    .replace(/[ıİ]/g, "i")
-    .replace(/[öÖ]/g, "o")
-    .replace(/[şŞ]/g, "s")
-    .replace(/[üÜ]/g, "u")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64);
 }
 
 function blankVariable(): VoiceVariable {
