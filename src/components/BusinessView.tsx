@@ -761,7 +761,7 @@ function FieldTableRow({
             <button
               type="button"
               onClick={onToggleSource}
-              title={t(voice ? "fields.voiceHint" : "fields.systemHint")}
+              title={t(voice ? "fields.unlockHint" : "fields.lockHint")}
               className={
                 voice
                   ? "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-100"

@@ -1959,12 +1959,15 @@ const dictionary = {
   // the label asks who fills the field in. "Kaynak" already means where an
   // appointment came from (appointments.source), and one word for two ideas
   // reads as the same column twice.
-  "fields.source": { tr: "Dolduran", en: "Filled by", de: "Ausgefüllt von" },
-  "fields.source.manual": { tr: "Ekip", en: "Staff", de: "Mitarbeiter" },
+  // The column answers ONE question, from the agent's side: may the phone
+  // agent write this field? "Locked" is the safe default — a misheard answer
+  // on a bad call must not overwrite what a person typed.
+  "fields.source": { tr: "Telefon asistanı", en: "Phone agent", de: "Telefonassistent" },
+  "fields.source.manual": { tr: "Kilitli", en: "Locked", de: "Gesperrt" },
   "fields.source.voice": {
-    tr: "Sesli asistan",
-    en: "Voice agent",
-    de: "Sprachassistent",
+    tr: "Düzenleyebilir",
+    en: "Can edit",
+    de: "Darf bearbeiten",
   },
   "fields.voiceGroup": {
     tr: "Aramalardan gelen",
@@ -1987,6 +1990,16 @@ const dictionary = {
   "common.show": { tr: "Göster", en: "Show", de: "Anzeigen" },
   "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
+  "fields.lockHint": {
+    tr: "Telefon asistanı bu alanı yazamaz. Asistana açmak için tıklayın.",
+    en: "The phone agent can't write this field. Click to let it.",
+    de: "Der Telefonassistent kann dieses Feld nicht schreiben. Klicken, um es freizugeben.",
+  },
+  "fields.unlockHint": {
+    tr: "Telefon asistanı bu alanı yazabilir. Kilitlemek için tıklayın.",
+    en: "The phone agent can write this field. Click to lock it.",
+    de: "Der Telefonassistent kann dieses Feld schreiben. Klicken, um es zu sperren.",
+  },
   "fields.keyEditHint": {
     tr: "Anahtarı düzenle. Yalnızca hiçbir asistan bu alanı kullanmıyorken değişir.",
     en: "Edit the key. It can only change while no agent uses this field.",
