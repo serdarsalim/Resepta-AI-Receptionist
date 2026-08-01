@@ -12,7 +12,7 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, type ActionCtx } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
 import { voiceCatalogue } from "./lib/voiceCatalogue";
@@ -803,151 +803,188 @@ async function bindInboundNumber(
 // Native creation is a durable orchestration, not a browser sequence. The
 // job table checkpoints every external id and leases one worker so a retry,
 // refresh or double-click continues the same setup.
-export const createAgent = action({
+const createAgentArgs = {
+  requestId: v.string(),
+  name: v.string(),
+  language: v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE")),
+  voiceId: v.string(),
+  inboundNumber: v.optional(v.string()),
+} as const;
+
+const createAgentResult = v.object({
+  status: v.union(v.literal("working"), v.literal("complete")),
+  agentId: v.union(v.string(), v.null()),
+});
+
+// All of provisioning except who is asking. Everything past the lease — engine,
+// agent, publish, connect, line, runtime wiring — reads the job row and never
+// identity, so one copy serves both doors below and there is a single place
+// where the checkpoint order can be got right.
+async function provisionAgent(
+  ctx: ActionCtx,
   args: {
-    requestId: v.string(),
-    name: v.string(),
-    language: v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE")),
-    voiceId: v.string(),
-    inboundNumber: v.optional(v.string()),
+    requestId: string;
+    name: string;
+    language: VoiceAgentLanguage;
+    voiceId: string;
+    inboundNumber?: string;
+    // Absent on the signed-in path, where `begin` resolves it from the session.
+    orgId?: Id<"orgs">;
   },
-  returns: v.object({
-    status: v.union(v.literal("working"), v.literal("complete")),
-    agentId: v.union(v.string(), v.null()),
-  }),
-  handler: async (ctx, args): Promise<{
-    status: "working" | "complete";
-    agentId: string | null;
-  }> => {
-    const leaseToken = crypto.randomUUID();
-    const started = (await ctx.runMutation(internal.voiceProvisioning.begin, {
-      ...args,
-      leaseToken,
-    })) as {
-      claimed: boolean;
-      complete: boolean;
-      apiKey: string;
-      orgName: string;
-      row: {
-        _id: string;
-        status: string;
-        name: string;
-        language: VoiceAgentLanguage;
-        voiceId: string;
-        inboundNumber?: string;
-        retellLlmId?: string;
-        retellAgentId?: string;
-        retellVersion?: number;
-      };
+): Promise<{ status: "working" | "complete"; agentId: string | null }> {
+  const leaseToken = crypto.randomUUID();
+  const started = (await ctx.runMutation(internal.voiceProvisioning.begin, {
+    ...args,
+    leaseToken,
+  })) as {
+    claimed: boolean;
+    complete: boolean;
+    apiKey: string;
+    orgName: string;
+    row: {
+      _id: string;
+      status: string;
+      name: string;
+      language: VoiceAgentLanguage;
+      voiceId: string;
+      inboundNumber?: string;
+      retellLlmId?: string;
+      retellAgentId?: string;
+      retellVersion?: number;
     };
-    if (started.complete) {
-      return { status: "complete", agentId: started.row.retellAgentId ?? null };
-    }
-    if (!started.claimed) {
-      return { status: "working", agentId: started.row.retellAgentId ?? null };
-    }
+  };
+  if (started.complete) {
+    return { status: "complete", agentId: started.row.retellAgentId ?? null };
+  }
+  if (!started.claimed) {
+    return { status: "working", agentId: started.row.retellAgentId ?? null };
+  }
 
-    const jobId = started.row._id as Id<"voiceAgentProvisioning">;
-    const key = started.apiKey;
-    try {
-      const site = siteUrl();
-      if (!site) throw new Error("deployment-site-url-missing");
-      const template = appointmentReceptionistTemplate({
-        language: started.row.language,
-        businessName: started.orgName,
-        site,
-      });
+  const jobId = started.row._id as Id<"voiceAgentProvisioning">;
+  const key = started.apiKey;
+  try {
+    const site = siteUrl();
+    if (!site) throw new Error("deployment-site-url-missing");
+    const template = appointmentReceptionistTemplate({
+      language: started.row.language,
+      businessName: started.orgName,
+      site,
+    });
 
-      let llmId = started.row.retellLlmId;
-      if (!llmId) {
-        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
-          jobId,
-          leaseToken,
-          status: "creating_engine",
-        });
-        const createdLlm = (await (
-          await call(key, "POST", "create-retell-llm", template.llm)
-        ).json()) as { llm_id?: string };
-        if (!createdLlm.llm_id) throw new Error("provider-returned-no-response-engine");
-        llmId = createdLlm.llm_id;
-        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
-          jobId,
-          leaseToken,
-          status: "creating_agent",
-          retellLlmId: llmId,
-        });
-      }
-
-      let agentId = started.row.retellAgentId;
-      let initialVersion = started.row.retellVersion;
-      if (!agentId) {
-        const createdAgent = (await (
-          await call(key, "POST", "create-agent", {
-            response_engine: { type: "retell-llm", llm_id: llmId },
-            voice_id: started.row.voiceId,
-            agent_name: started.row.name,
-            ...template.agent,
-          })
-        ).json()) as AgentDoc;
-        if (!createdAgent.agent_id) throw new Error("provider-returned-no-agent");
-        agentId = createdAgent.agent_id;
-        initialVersion = createdAgent.version ?? 0;
-        await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
-          jobId,
-          leaseToken,
-          status: "publishing",
-          retellAgentId: agentId,
-          retellVersion: initialVersion,
-        });
-      }
-
-      if (initialVersion === undefined) initialVersion = 0;
-      const initial = (await (
-        await call(
-          key,
-          "GET",
-          `get-agent/${encodeURIComponent(agentId)}?version=${initialVersion}`,
-        )
-      ).json()) as AgentDoc;
-      if (!initial.is_published) {
-        await call(key, "POST", `publish-agent-version/${encodeURIComponent(agentId)}`, {
-          version: initialVersion,
-          version_title: `Randevu template v${VOICE_AGENT_TEMPLATE_VERSION}`,
-        });
-      }
+    let llmId = started.row.retellLlmId;
+    if (!llmId) {
       await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
         jobId,
         leaseToken,
-        status: "connecting",
+        status: "creating_engine",
+      });
+      const createdLlm = (await (
+        await call(key, "POST", "create-retell-llm", template.llm)
+      ).json()) as { llm_id?: string };
+      if (!createdLlm.llm_id) throw new Error("provider-returned-no-response-engine");
+      llmId = createdLlm.llm_id;
+      await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+        jobId,
+        leaseToken,
+        status: "creating_agent",
+        retellLlmId: llmId,
+      });
+    }
+
+    let agentId = started.row.retellAgentId;
+    let initialVersion = started.row.retellVersion;
+    if (!agentId) {
+      const createdAgent = (await (
+        await call(key, "POST", "create-agent", {
+          response_engine: { type: "retell-llm", llm_id: llmId },
+          voice_id: started.row.voiceId,
+          agent_name: started.row.name,
+          ...template.agent,
+        })
+      ).json()) as AgentDoc;
+      if (!createdAgent.agent_id) throw new Error("provider-returned-no-agent");
+      agentId = createdAgent.agent_id;
+      initialVersion = createdAgent.version ?? 0;
+      await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+        jobId,
+        leaseToken,
+        status: "publishing",
+        retellAgentId: agentId,
         retellVersion: initialVersion,
       });
-      await ctx.runMutation(internal.voiceProvisioning.connect, {
-        jobId,
-        leaseToken,
-        retellAgentId: agentId,
-        inboundNumber: started.row.inboundNumber,
-      });
-      if (started.row.inboundNumber) {
-        await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
-      }
-      const context = await editorContext(ctx, agentId);
-      const wired = await wireAgent(ctx, agentId, context);
-      await ctx.runMutation(internal.voiceProvisioning.complete, {
-        jobId,
-        leaseToken,
-        retellVersion: wired.version ?? undefined,
-      });
-      return { status: "complete", agentId };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "phone-agent-setup-failed";
-      await ctx.runMutation(internal.voiceProvisioning.fail, {
-        jobId,
-        leaseToken,
-        error: message,
-      });
-      throw error;
     }
-  },
+
+    if (initialVersion === undefined) initialVersion = 0;
+    const initial = (await (
+      await call(
+        key,
+        "GET",
+        `get-agent/${encodeURIComponent(agentId)}?version=${initialVersion}`,
+      )
+    ).json()) as AgentDoc;
+    if (!initial.is_published) {
+      await call(key, "POST", `publish-agent-version/${encodeURIComponent(agentId)}`, {
+        version: initialVersion,
+        version_title: `Randevu template v${VOICE_AGENT_TEMPLATE_VERSION}`,
+      });
+    }
+    await ctx.runMutation(internal.voiceProvisioning.checkpoint, {
+      jobId,
+      leaseToken,
+      status: "connecting",
+      retellVersion: initialVersion,
+    });
+    await ctx.runMutation(internal.voiceProvisioning.connect, {
+      jobId,
+      leaseToken,
+      retellAgentId: agentId,
+      inboundNumber: started.row.inboundNumber,
+    });
+    if (started.row.inboundNumber) {
+      await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
+    }
+    const context = await editorContext(ctx, agentId);
+    const wired = await wireAgent(ctx, agentId, context);
+    await ctx.runMutation(internal.voiceProvisioning.complete, {
+      jobId,
+      leaseToken,
+      retellVersion: wired.version ?? undefined,
+    });
+    return { status: "complete", agentId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "phone-agent-setup-failed";
+    await ctx.runMutation(internal.voiceProvisioning.fail, {
+      jobId,
+      leaseToken,
+      error: message,
+    });
+    throw error;
+  }
+}
+
+// The signed-in door. It deliberately does NOT accept an orgId: adding one
+// here would let a client provision into another salon's workspace, since
+// `begin` trusts the field when it is present.
+export const createAgent = action({
+  args: createAgentArgs,
+  returns: createAgentResult,
+  handler: async (ctx, args): Promise<{
+    status: "working" | "complete";
+    agentId: string | null;
+  }> => await provisionAgent(ctx, args),
+});
+
+// The same provisioning for a caller that established the org without a
+// browser session — the MCP connector, whose key re-checks membership on every
+// request, or an operator CLI run. Internal, so no client can reach it; the
+// caller is responsible for having proved this person owns this org first.
+export const createAgentForOrg = internalAction({
+  args: { orgId: v.id("orgs"), ...createAgentArgs },
+  returns: createAgentResult,
+  handler: async (ctx, args): Promise<{
+    status: "working" | "complete";
+    agentId: string | null;
+  }> => await provisionAgent(ctx, args),
 });
 
 export const wireWebhook = action({

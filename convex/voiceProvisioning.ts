@@ -64,6 +64,16 @@ export const active = query({
 // expires, using the ids checkpointed below.
 export const begin = internalMutation({
   args: {
+    // Set only by a caller that has ALREADY established the org some other
+    // way: the MCP connector, whose key re-checks membership on every request,
+    // or an operator CLI run. Left unset by the signed-in path, which proves
+    // ownership right here.
+    //
+    // This is safe because `begin` is internal — no client can call it, and
+    // the public `createAgent` action does not accept an orgId to forward. If
+    // that action ever grows one, this becomes a way to provision into another
+    // salon's workspace, so the two facts have to move together.
+    orgId: v.optional(v.id("orgs")),
     requestId: v.string(),
     leaseToken: v.string(),
     name: v.string(),
@@ -73,7 +83,7 @@ export const begin = internalMutation({
   },
   returns: v.any(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOwner(ctx);
+    const orgId = args.orgId ?? (await requireOwner(ctx)).orgId;
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("no-org");
     if (org.demoMode) throw new Error("demo-workspace");
