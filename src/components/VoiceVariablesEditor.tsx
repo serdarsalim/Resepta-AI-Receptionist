@@ -743,16 +743,34 @@ function VariableRow({
   // one lifecycle — so a before-source names its source instead, and the
   // after-call recovery is left off entirely for a During row, where it is
   // the default and true of nearly every row.
+  // Prefilled from the customer field AND saved back to the same field is ONE
+  // fact (the row lives on the customer card), not two directions worth a tag
+  // each — "Prefilled: age" next to "age" next to a name saying age read as a
+  // glitch, not a lifecycle.
+  const selfLinked =
+    row.beforeSource === "contact_field" &&
+    row.destination === "contact" &&
+    !!row.beforeFieldId &&
+    row.beforeFieldId === row.contactFieldId;
+  const linkedField =
+    row.destination === "contact" && row.contactFieldId
+      ? fieldById.get(row.contactFieldId)
+      : undefined;
   const tags = [
-    row.beforeSource !== "none"
+    !selfLinked && row.beforeSource !== "none"
       ? `${t("voiceVariables.prefilled")}: ${beforeSourceLabel(row, fieldById, t)}`
       : null,
     row.duringMode === "confirm" ? t("voiceVariables.confirm") : null,
     row.duringMode === "none" && row.afterCall && row.beforeSource !== "none"
       ? t("voiceVariables.extract")
       : null,
-    row.destination === "contact" && row.contactFieldId
-      ? fieldById.get(row.contactFieldId)?.label
+    // The destination tag repeats the row's own name whenever the linked
+    // field is the row (which is the normal case); "Customer card" is the
+    // information, the field label only earns the spot when it differs.
+    linkedField
+      ? linkedField.label !== row.label
+        ? linkedField.label
+        : t("voiceVariables.customerCard")
       : null,
   ].filter(Boolean) as string[];
 
@@ -795,13 +813,16 @@ function VariableRow({
           ))}
         </span>
       )}
+      {/* Fixed width: the trigger is a select in behaviour, and a select
+          whose width follows its value gives every row a different edge. */}
       <button
         ref={triggerRef}
         type="button"
         onClick={toggle}
-        className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+        className="flex w-[7.5rem] shrink-0 items-center justify-between gap-1 rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
       >
-        {typeLabel} ▾
+        <span className="truncate">{typeLabel}</span>
+        <span aria-hidden className="text-[10px]">▾</span>
       </button>
       <button
         type="button"
