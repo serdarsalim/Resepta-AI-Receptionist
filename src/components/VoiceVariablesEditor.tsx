@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
@@ -38,6 +39,10 @@ export type VoiceVariable = {
 export type VoiceEditorSaveState = {
   dirty: boolean;
   busy: boolean;
+  // The rows as they stand, so the page can persist the draft. The editor
+  // still owns the editing; it just stops being the only place the work
+  // exists.
+  rows: VoiceVariable[];
   save: () => void;
   discard: () => void;
 };
@@ -120,6 +125,7 @@ export function VoiceVariablesEditor({
   engineType,
   managed,
   initial,
+  seed,
   contactFields,
   onPublished,
   onSaveStateChange,
@@ -129,6 +135,10 @@ export function VoiceVariablesEditor({
   engineType: string | null;
   managed: boolean;
   initial: VoiceVariable[];
+  // Rows recovered from a stored draft. Seeds the editor instead of `initial`
+  // while keeping `initial` as the server truth that dirty is measured
+  // against, so a restored draft still reports itself as unsaved.
+  seed?: VoiceVariable[] | null;
   contactFields: VoiceContactField[];
   onPublished: () => void;
   // Lets the page header own Save and Discard for the whole agent. The editor
@@ -140,7 +150,7 @@ export function VoiceVariablesEditor({
   const { t } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
   const createContactField = useMutation(api.contactFields.create);
-  const [draft, setDraft] = useState(initial);
+  const [draft, setDraft] = useState(seed ?? initial);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [previous, setPrevious] = useState<VoiceVariable[] | null>(null);
@@ -154,7 +164,7 @@ export function VoiceVariablesEditor({
   // unpublished draft.
   const [createdFields, setCreatedFields] = useState<VoiceContactField[]>([]);
 
-  useEffect(() => setDraft(initial), [initial]);
+  useEffect(() => setDraft(seed ?? initial), [initial, seed]);
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
   const allFields = useMemo(
@@ -248,10 +258,11 @@ export function VoiceVariablesEditor({
     onSaveStateChange?.({
       dirty,
       busy,
+      rows: draft,
       save: () => void liveRef.current.publish(liveRef.current.draft, true),
       discard: () => setDraft(liveRef.current.initial),
     });
-  }, [dirty, busy, onSaveStateChange]);
+  }, [dirty, busy, draft, onSaveStateChange]);
 
   // A key that is already live in Retell must not follow a label edit —
   // renaming it orphans every answer already collected under the old name.
@@ -471,6 +482,34 @@ export function VoiceVariablesEditor({
   );
 }
 
+// Where a row's before-call value comes from, said as the thing it is. The
+// row tag names it, so "Prefilled: Customer name" replaces a bare "Before the
+// call" that told you a phase you could already see from the group heading.
+function beforeSourceLabel(
+  row: VoiceVariable,
+  fieldById: Map<string, VoiceContactField>,
+  t: (key: TranslationKey) => string,
+): string {
+  switch (row.beforeSource) {
+    case "static":
+      return row.beforeValue || t("voiceVariables.defaultValue");
+    case "business_name":
+      return t("voiceVariables.businessName");
+    case "customer_name":
+      return t("voiceVariables.customerName");
+    case "customer_phone":
+      return t("voiceVariables.customerPhone");
+    case "customer_language":
+      return t("voiceVariables.customerLanguage");
+    case "next_appointment":
+      return t("voiceVariables.nextAppointment");
+    case "contact_field":
+      return row.beforeFieldId ? fieldById.get(row.beforeFieldId)?.label ?? "" : "";
+    default:
+      return "";
+  }
+}
+
 // One variable, editable where it sits. Label and description are plain
 // inputs; everything with a fixed set of answers — type, choices, which phases
 // it is captured in, where the answer lands — is behind the one popover, which
@@ -521,10 +560,20 @@ function VariableRow({
 
   // The phases this row is NOT grouped under, said in a word each. Without
   // them the lifecycle became invisible the moment the columns went away.
+  // Tags say what the GROUP does not already say. Naming the other phases
+  // outright ("Before the call", "After the call" on a row sitting under
+  // During the call) read as three contradictory group labels rather than as
+  // one lifecycle — so a before-source names its source instead, and the
+  // after-call recovery is left off entirely for a During row, where it is
+  // the default and true of nearly every row.
   const tags = [
-    row.beforeSource !== "none" ? t("voiceDetail.before") : null,
+    row.beforeSource !== "none"
+      ? `${t("voiceVariables.prefilled")}: ${beforeSourceLabel(row, fieldById, t)}`
+      : null,
     row.duringMode === "confirm" ? t("voiceVariables.confirm") : null,
-    row.afterCall && row.duringMode !== "none" ? t("voiceDetail.after") : null,
+    row.duringMode === "none" && row.afterCall && row.beforeSource !== "none"
+      ? t("voiceVariables.extract")
+      : null,
     row.destination === "contact" && row.contactFieldId
       ? fieldById.get(row.contactFieldId)?.label
       : null,

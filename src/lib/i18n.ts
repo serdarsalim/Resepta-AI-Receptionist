@@ -1526,6 +1526,13 @@ const dictionary = {
     de: "Optionen, durch Kommas getrennt",
   },
   "voiceVariables.none": { tr: "Kullanma", en: "Do not use", de: "Nicht verwenden" },
+  // On a row, naming where its before-call value comes from. Not "Before the
+  // call" — that repeats the group heading the row already sits under.
+  "voiceVariables.prefilled": {
+    tr: "Hazır gelir",
+    en: "Prefilled",
+    de: "Vorbefüllt",
+  },
   "voiceVariables.addRow": {
     tr: "+ Bilgi ekle",
     en: "+ Add variable",
@@ -1668,17 +1675,6 @@ const dictionary = {
     en: "Discard changes",
     de: "Änderungen verwerfen",
   },
-  "voiceDetail.leaveTitle": {
-    tr: "Kaydetmeden çıkılsın mı?",
-    en: "Leave without saving?",
-    de: "Ohne Speichern verlassen?",
-  },
-  "voiceDetail.leaveBody": {
-    tr: "Bu değişiklikler henüz yayında değil. Çıkarsanız silinirler; asistan mevcut ayarlarıyla çalışmaya devam eder.",
-    en: "These edits aren't live yet. Leaving throws them away — the agent keeps running the settings it already has.",
-    de: "Diese Änderungen sind noch nicht live. Beim Verlassen gehen sie verloren — der Assistent behält seine bisherigen Einstellungen.",
-  },
-  "voiceDetail.leave": { tr: "Çık", en: "Leave", de: "Verlassen" },
   "voiceDetail.voice": { tr: "Ses", en: "Voice", de: "Stimme" },
   "voiceDetail.voiceHint": {
     tr: "Asistanın konuştuğu ses. Kaydettiğinizde bir sonraki aramadan itibaren geçerli olur.",

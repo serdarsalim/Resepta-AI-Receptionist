@@ -40,6 +40,12 @@ import {
 // on the agent's Retell version, so publishing the prompt first would bump the
 // version out from under it and the variables save would fail with a stale-
 // version error the person did nothing to cause.
+//
+// Unsaved work SURVIVES leaving. There was a leave-guard dialog here that
+// threw the draft away on confirm, which is the wrong trade: a half-written
+// prompt is real work, and losing it to a mis-click is worse than the thing
+// the guard protected against. The amber pill was already doing that job —
+// nothing on this page can be mistaken for live while it is showing.
 
 type Detail = {
   agentId: string;
@@ -72,6 +78,45 @@ type Detail = {
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 
+// The unsaved draft, per agent, on this browser. Deliberately NOT on the
+// server: an unpublished prompt is one person's thinking-in-progress, and
+// syncing it would mean a colleague opening the agent and finding text nobody
+// decided to ship yet.
+type StoredDraft = {
+  prompt?: string;
+  begin?: string;
+  voice?: string;
+  rows?: VoiceVariable[];
+};
+
+const draftKey = (agentId: string) => `randevu.agentDraft.${agentId}`;
+
+function readDraft(agentId: string): StoredDraft | null {
+  try {
+    const raw = window.localStorage.getItem(draftKey(agentId));
+    return raw ? (JSON.parse(raw) as StoredDraft) : null;
+  } catch {
+    // Corrupt or unavailable storage must not take the editor down with it.
+    return null;
+  }
+}
+
+function writeDraft(agentId: string, draft: StoredDraft) {
+  try {
+    window.localStorage.setItem(draftKey(agentId), JSON.stringify(draft));
+  } catch {
+    // Private mode, or the quota. The editor still works, it just forgets.
+  }
+}
+
+function clearDraft(agentId: string) {
+  try {
+    window.localStorage.removeItem(draftKey(agentId));
+  } catch {
+    // Nothing to do — the draft was never the source of truth.
+  }
+}
+
 export function VoiceAgentPage({
   agentId,
   onBack,
@@ -102,9 +147,13 @@ export function VoiceAgentPage({
   const [testOpen, setTestOpen] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testError, setTestError] = useState<string | null>(null);
-  const [confirmLeave, setConfirmLeave] = useState(false);
   // Mirrored out of the variables editor so the header can save it too.
   const [varsState, setVarsState] = useState<VoiceEditorSaveState | null>(null);
+  // Rows recovered from a stored draft, handed to the editor as its seed.
+  const [seed, setSeed] = useState<VoiceVariable[] | null>(null);
+  // Until the first read lands there is nothing to compare a draft against,
+  // and writing one would persist empty strings over real work.
+  const [restored, setRestored] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -115,6 +164,17 @@ export function VoiceAgentPage({
         setDraft(detail.prompt?.general ?? "");
         setBegin(detail.prompt?.beginMessage ?? "");
         setVoice(detail.voiceId ?? "");
+        // A draft left behind on this browser wins over what the server says,
+        // because it is the newer intent. The amber pill keeps it honest about
+        // not being live.
+        const stored = readDraft(agentId);
+        if (stored) {
+          if (stored.prompt !== undefined) setDraft(stored.prompt);
+          if (stored.begin !== undefined) setBegin(stored.begin);
+          if (stored.voice !== undefined) setVoice(stored.voice);
+          setSeed(stored.rows ?? null);
+        }
+        setRestored(true);
       })
       .catch(() => setError(t("settings.voiceActionFailed")));
   }, [read, agentId, t]);
@@ -141,6 +201,19 @@ export function VoiceAgentPage({
       : false) || voiceDirty;
   const dirty = promptDirty || !!varsState?.dirty;
   const saving = busy || !!varsState?.busy;
+
+  // The draft follows the edits. Leaving the page, closing the tab or coming
+  // back tomorrow all find the work where it was left — losing typed work to a
+  // mis-click is worse than the thing a leave-guard was protecting against,
+  // and the amber pill already stops a draft being mistaken for live.
+  useEffect(() => {
+    if (!restored) return;
+    if (dirty) {
+      writeDraft(agentId, { prompt: draft, begin, voice, rows: varsState?.rows });
+    } else {
+      clearDraft(agentId);
+    }
+  }, [restored, dirty, agentId, draft, begin, voice, varsState?.rows]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -172,24 +245,21 @@ export function VoiceAgentPage({
 
   // Variables first, then the prompt — see the version note at the top.
   const saveAll = () => {
+    setSeed(null);
     if (varsState?.dirty) varsState.save();
     if (promptDirty) void savePrompt();
+    clearDraft(agentId);
   };
 
+  // The only way work is thrown away, and it takes a deliberate click.
   const discardAll = () => {
+    setSeed(null);
     varsState?.discard();
     setDraft(detail?.prompt?.general ?? "");
     setBegin(detail?.prompt?.beginMessage ?? "");
     setVoice(detail?.voiceId ?? "");
+    clearDraft(agentId);
     setStatus(null);
-  };
-
-  const leave = () => {
-    if (dirty) {
-      setConfirmLeave(true);
-      return;
-    }
-    onBack();
   };
 
   const placeTestCall = () => {
@@ -248,7 +318,7 @@ export function VoiceAgentPage({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <button
             type="button"
-            onClick={leave}
+            onClick={onBack}
             className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
           >
             <svg
@@ -467,6 +537,7 @@ export function VoiceAgentPage({
                 engineType={detail.engineType}
                 managed={detail.variableConfig.managed}
                 initial={detail.variableConfig.items}
+                seed={seed}
                 contactFields={detail.contactFields}
                 onPublished={load}
                 onSaveStateChange={onVarsSaveState}
@@ -528,32 +599,6 @@ export function VoiceAgentPage({
         </Sheet>
       )}
 
-      {confirmLeave && (
-        <Sheet title={t("voiceDetail.leaveTitle")} onClose={() => setConfirmLeave(false)}>
-          <div className="space-y-3">
-            <p className="text-sm text-[var(--muted)]">{t("voiceDetail.leaveBody")}</p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmLeave(false)}
-                className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmLeave(false);
-                  onBack();
-                }}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
-              >
-                {t("voiceDetail.leave")}
-              </button>
-            </div>
-          </div>
-        </Sheet>
-      )}
     </>
   );
 }

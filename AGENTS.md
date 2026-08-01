@@ -224,7 +224,16 @@ went, and the reasoning to preserve:
   `publishVariables` guards on the agent's provider version and the other
   order fails with a stale-version error. Voice rides the same Save through
   `publishViaDraft`'s `agentPatch`, so voice and script land as one version.
-  Editing with unsaved work shows an amber pill and guards the way out.
+- **An unsaved agent draft survives leaving, closing the tab and reloading**
+  (`randevu.agentDraft.<agentId>` in localStorage; prompt, opening line, voice
+  and variable rows). There WAS a leave-guard dialog that discarded on
+  confirm — the wrong trade, since a half-written prompt is real work and the
+  amber pill already stops a draft reading as live. Discard is now the only
+  thing that throws work away. Deliberately per-browser, not on the server: an
+  unpublished prompt is one person's thinking, and syncing it would put text
+  nobody decided to ship in front of a colleague. The editor takes the
+  recovered rows as `seed` while `initial` stays server truth, which is what
+  makes a restored draft still report itself as unsaved.
 - **Variables are edited inline, not in a sheet** — the one documented
   exception to the sheet rule below, because a grid you retype a description
   in is not a form you open. Rows group under Before / During / After by their
