@@ -25,7 +25,7 @@ import {
   type ToolDef as ProtocolToolDef,
 } from "./lib/mcpProtocol";
 
-const SERVER_INFO = { name: "randevu", version: "1.0.0" };
+const SERVER_INFO = { name: "randevu", version: "1.1.0" };
 
 type Who = {
   connectionId: string;
@@ -249,6 +249,254 @@ const TOOLS: ToolDef[] = [
       return { scope: all ? who.orgName : `this connection (${who.name})`, actions };
     },
   },
+
+  // ── Setting the business up ────────────────────────────────────────────────
+  // The tools above run a salon that already exists. These build one. They are
+  // here because the setup is the part an owner most wants done FOR them, and
+  // a connector that could read the book but not fill it in sent people back
+  // to the app for the only job they had asked for help with.
+  {
+    name: "list_services",
+    title: "What this business sells",
+    description:
+      "The bookable services, with the key the phone agent books by, duration, price and whether they are active. Prices are minor units of the returned currency — 40000 is 400,00. Read this before adding one, so you do not create a near-duplicate.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, _args, who) =>
+      await ctx.runQuery(internal.agentTools.listServices, {
+        orgId: who.orgId as never,
+      }),
+  },
+  {
+    name: "create_service",
+    title: "Add a bookable service",
+    description:
+      "Add one service. The phone agent reads this list at call time, so a service that is not here is one it will refuse to book. Price is optional and in MINOR UNITS of the org's currency (40000 = 400,00) — omit it rather than guessing. Reversible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "What a customer would call it." },
+        durationMinutes: { type: "number", description: "Minimum 5." },
+        price: {
+          type: "number",
+          description: "Minor units (40000 = 400,00). Omit if the business does not track it.",
+        },
+      },
+      required: ["name", "durationMinutes"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const name = str(args, "name");
+      const durationMinutes = num(args, "durationMinutes");
+      if (!name) throw new Error("name is required");
+      if (durationMinutes === undefined) throw new Error("durationMinutes is required");
+      const res = await ctx.runMutation(internal.agentTools.createService, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        name,
+        durationMinutes,
+        price: num(args, "price"),
+      });
+      return {
+        ok: true,
+        note: `Added "${res.name}". The phone agent books it as "${res.key}".`,
+        serviceId: res.serviceId,
+        key: res.key,
+        actionId: res.actionId,
+        undoWith: `undo(actionId: "${res.actionId}")`,
+      };
+    },
+  },
+  {
+    name: "list_contact_fields",
+    title: "What this business records about a customer",
+    description:
+      "The custom properties on a customer card, in display order, each with the key values are stored under and whether staff or the phone agent fills it. Name, phone and email are built in and never appear here.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, _args, who) =>
+      await ctx.runQuery(internal.agentTools.listContactFields, {
+        orgId: who.orgId as never,
+      }),
+  },
+  {
+    name: "create_contact_field",
+    title: "Add a customer detail to collect",
+    description:
+      "Add one custom property to every customer card. Set filledBy to \"voice\" for something the phone agent should collect on a call, \"staff\" for something typed in the app. A select needs its options up front. Owner only. Reversible until an agent references it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "What staff see, e.g. \"Company name\"." },
+        type: { type: "string", enum: ["text", "select", "number", "date"] },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "Required for select, ignored otherwise.",
+        },
+        filledBy: {
+          type: "string",
+          enum: ["staff", "voice"],
+          description: "Who fills it in. Defaults to staff.",
+        },
+        key: {
+          type: "string",
+          description:
+            "Optional. The permanent write address. Derived from the label when omitted; declare it only when the label makes a poor one.",
+        },
+      },
+      required: ["label", "type"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const label = str(args, "label");
+      const type = str(args, "type");
+      if (!label) throw new Error("label is required");
+      if (!["text", "select", "number", "date"].includes(type ?? "")) {
+        throw new Error("type must be one of text, select, number, date");
+      }
+      const rawOptions = args.options;
+      const options = Array.isArray(rawOptions) ? rawOptions.map((o) => String(o)) : undefined;
+      const res = await ctx.runMutation(internal.agentTools.createContactField, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        label,
+        type: type as "text" | "select" | "number" | "date",
+        options,
+        source: str(args, "filledBy") === "voice" ? "voice" : "manual",
+        key: str(args, "key"),
+      });
+      return {
+        ok: true,
+        note: `Added "${res.label}", filled by ${res.filledBy}. Values are stored under "${res.key}".`,
+        fieldId: res.fieldId,
+        key: res.key,
+        actionId: res.actionId,
+        undoWith: `undo(actionId: "${res.actionId}")`,
+      };
+    },
+  },
+  {
+    name: "list_phone_agents",
+    title: "The phone agents this business has",
+    description:
+      "Every phone agent connected to this workspace, whether it is enabled, which inbound number it answers on, and whether Randevu's private runtime is published to it. An agent without the runtime can take a call but cannot read or write customer data.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, _args, who) =>
+      await ctx.runQuery(internal.agentTools.listPhoneAgents, {
+        orgId: who.orgId as never,
+      }),
+  },
+  {
+    name: "list_voices",
+    title: "Voices a phone agent can use",
+    description:
+      "The voices available to this workspace, for choosing one before creating a phone agent. Only needed if the caller cares which voice — create_phone_agent picks one when none is given.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, _args, who) =>
+      await ctx.runAction(internal.retellAgent.voiceOptionsForOrg, {
+        orgId: who.orgId as never,
+      }),
+  },
+  {
+    name: "create_phone_agent",
+    title: "Create a phone agent",
+    description:
+      "Build a new appointment receptionist: it answers, tells callers what the business offers, collects the details this workspace records, and books. Add the services and voice-filled contact fields FIRST — the agent reads both at call time, and one created against an empty business has nothing to say. Creates a real resource at the phone provider and CANNOT be undone. Owner only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "What the salon calls this agent, e.g. \"Reception\"." },
+        language: {
+          type: "string",
+          enum: ["tr-TR", "en-US", "de-DE"],
+          description: "The language it speaks. Defaults to en-US.",
+        },
+        voiceId: { type: "string", description: "From list_voices. One is chosen if omitted." },
+        inboundNumber: {
+          type: "string",
+          description:
+            "An unassigned line already provisioned at the provider. Randevu never buys numbers, so a number it does not already hold will fail.",
+        },
+        requestId: {
+          type: "string",
+          description:
+            "Pass the SAME value when retrying a call that timed out. It continues the existing setup instead of creating a second agent.",
+        },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const name = str(args, "name");
+      if (!name) throw new Error("name is required");
+      const language = str(args, "language") || "en-US";
+      if (!["tr-TR", "en-US", "de-DE"].includes(language)) {
+        throw new Error("language must be one of tr-TR, en-US, de-DE");
+      }
+      // Refused BEFORE the provider is touched. An owner check that ran after
+      // would leave a real external agent behind every rejected attempt.
+      await ctx.runQuery(internal.agentTools.assertCanProvision, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+      });
+      let voiceId = str(args, "voiceId");
+      if (!voiceId) {
+        const voices = (await ctx.runAction(internal.retellAgent.voiceOptionsForOrg, {
+          orgId: who.orgId as never,
+        })) as { id: string }[];
+        if (voices.length === 0) {
+          throw new Error("The provider offered no voices. Pass voiceId explicitly.");
+        }
+        voiceId = voices[0].id;
+      }
+      const requestId = str(args, "requestId") || crypto.randomUUID();
+      const result = (await ctx.runAction(internal.retellAgent.createAgentForOrg, {
+        orgId: who.orgId as never,
+        requestId,
+        name,
+        language: language as "tr-TR" | "en-US" | "de-DE",
+        voiceId,
+        inboundNumber: str(args, "inboundNumber"),
+      })) as { status: "working" | "complete"; agentId: string | null };
+
+      if (result.status !== "complete" || !result.agentId) {
+        // Another attempt holds the lease. Handing back the SAME requestId is
+        // the whole answer: retrying with it resumes that job, and retrying
+        // without one is how a business ends up paying for two agents.
+        return {
+          ok: false,
+          status: result.status,
+          requestId,
+          note: `Setup for "${name}" is already running. Retry create_phone_agent with requestId "${requestId}" — do not start a new one.`,
+        };
+      }
+      const recorded = await ctx.runMutation(internal.agentTools.recordAgentCreated, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        retellAgentId: result.agentId,
+        name,
+      });
+      return {
+        ok: true,
+        agentId: result.agentId,
+        voiceId,
+        language,
+        actionId: recorded.actionId,
+        note: `Created "${name}". It is connected and enabled${
+          str(args, "inboundNumber") ? ` on ${str(args, "inboundNumber")}` : ", with no inbound line yet"
+        }. This cannot be undone.`,
+      };
+    },
+  },
 ];
 
 export const handler = httpAction(async (ctx, req) => {
@@ -270,7 +518,7 @@ export const handler = httpAction(async (ctx, req) => {
   return await serveMcp<ActionCtx, Who>(ctx, req, who, {
     tools: TOOLS,
     serverInfo: SERVER_INFO,
-    instructions: `You are connected to ${who.orgName}, an appointment business. Everything you do is recorded in their activity feed against ${who.userName}, and reversible actions can be undone. Read before you write — check a customer's history before logging a note about it. Never invent a customer id; search first.`,
+    instructions: `You are connected to ${who.orgName}, an appointment business. Everything you do is recorded in their activity feed against ${who.userName}, and reversible actions can be undone. Read before you write — check a customer's history before logging a note about it. Never invent a customer id; search first. Setting the business up has an order: services and contact fields first, then a phone agent, because the agent reads both at call time and one built against an empty business has nothing to say. Creating a phone agent makes a real resource at the phone provider and cannot be undone — confirm the name and language with the owner before you call it.`,
   });
 });
 

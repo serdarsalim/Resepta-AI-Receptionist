@@ -17,6 +17,9 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
+import { connectionField } from "./lib/connections";
+import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
+import { serviceKey } from "./services";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -293,6 +296,299 @@ export const updateCustomer = internalMutation({
   },
 });
 
+// ── Configuration ────────────────────────────────────────────────────────────
+// Setting the business up, rather than running it day to day. These exist
+// because a connector that can read a salon's book but cannot give it a
+// service list or a phone agent is a reporting tool, not a control surface —
+// and the setup is exactly the part somebody wants done FOR them.
+//
+// The permission split mirrors the app exactly: services.create takes any
+// member, contactFields.create and phone-agent provisioning take an owner.
+// It is re-derived from `memberships` here rather than read off the key,
+// because the connector must not become a way around the app's own rules.
+
+async function assertOwner(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  userId: Id<"users">,
+  what: string,
+): Promise<void> {
+  const membership = await ctx.db
+    .query("memberships")
+    .withIndex("by_user_org", (q) => q.eq("userId", userId).eq("orgId", orgId))
+    .unique();
+  if (!membership || membership.role !== "owner") {
+    throw new Error(`Only an owner can ${what}.`);
+  }
+}
+
+export const listServices = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.any(),
+  handler: async (ctx, { orgId }) => {
+    const org = await ctx.db.get(orgId);
+    const rows = await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return {
+      // Prices are minor units OF THIS. A bare integer is not an amount
+      // anybody can read back to a caller.
+      currency: org?.currency ?? null,
+      services: rows.map((row) => ({
+        id: row._id,
+        name: row.name,
+        key: serviceKey(row),
+        durationMinutes: row.durationMinutes,
+        active: row.active,
+        price: row.price ?? null,
+      })),
+    };
+  },
+});
+
+export const listContactFields = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.any(),
+  handler: async (ctx, { orgId }) => {
+    const rows = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return rows
+      .sort((a, b) => a.order - b.order)
+      .map((row) => ({
+        id: row._id,
+        key: row.key,
+        label: row.label,
+        type: row.type,
+        options: row.options ?? null,
+        filledBy: row.source === "voice" ? "voice agent" : "staff",
+      }));
+  },
+});
+
+export const listPhoneAgents = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.any(),
+  handler: async (ctx, { orgId }) => {
+    const rows = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return rows.map((row) => ({
+      id: row._id,
+      name: row.name,
+      enabled: row.enabled,
+      inboundNumber: row.inboundNumber ?? null,
+      // Whether Randevu's private runtime is published to it. An agent without
+      // this can take a call but cannot read or write customer data.
+      runtimeConnected: row.runtimeConnectedAt !== undefined,
+      lastCallAt: row.lastCallEventAt ? new Date(row.lastCallEventAt).toISOString() : null,
+    }));
+  },
+});
+
+export const createService = internalMutation({
+  args: {
+    ...scope,
+    name: v.string(),
+    durationMinutes: v.number(),
+    price: v.optional(v.number()),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, name, durationMinutes, price }) => {
+    const label = name.trim();
+    if (!label) throw new Error("A service needs a name.");
+    const rows = await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    // Case-folded: "Saç kesimi" and "saç kesimi" are one service to a caller,
+    // and two rows the voice agent would have to choose between.
+    if (rows.some((row) => row.name.trim().toLowerCase() === label.toLowerCase())) {
+      throw new Error(`"${label}" already exists.`);
+    }
+    const taken = new Set(rows.map(serviceKey));
+    const base = keyFromLabel(label) || `service_${taken.size + 1}`;
+    const key = uniqueKey(base, taken);
+    const duration = Math.max(5, Math.round(durationMinutes));
+    const amount = price === undefined ? undefined : Math.max(0, Math.round(price));
+    const serviceId = await ctx.db.insert("services", {
+      orgId,
+      name: label,
+      key,
+      durationMinutes: duration,
+      active: true,
+      ...(amount !== undefined ? { price: amount } : {}),
+    });
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_service",
+      args: { name: label, durationMinutes: duration, price: amount ?? null },
+      targetTable: "services",
+      targetId: serviceId,
+      before: null,
+      after: { name: label, key },
+      reversible: true,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `Added the service "${label}" (${duration} min)`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { serviceId, key, name: label, actionId };
+  },
+});
+
+export const createContactField = internalMutation({
+  args: {
+    ...scope,
+    label: v.string(),
+    type: v.union(
+      v.literal("text"),
+      v.literal("select"),
+      v.literal("number"),
+      v.literal("date"),
+    ),
+    options: v.optional(v.array(v.string())),
+    source: v.optional(v.union(v.literal("manual"), v.literal("voice"))),
+    key: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const { orgId, userId, connectionId } = args;
+    await assertOwner(ctx, orgId, userId, "add contact fields");
+    const label = args.label.trim();
+    if (!label) throw new Error("A field needs a label.");
+    const key = args.key?.trim() ? normaliseKey(args.key) : keyFromLabel(label);
+    if (!key) throw new Error("That label does not produce a usable key.");
+    if (RESERVED_CONTACT_KEYS.has(key)) {
+      throw new Error(
+        `"${key}" is reserved. Name, phone, email and consent already exist and cannot be redefined.`,
+      );
+    }
+    const existing = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    if (existing.some((row) => row.key === key)) {
+      throw new Error(`A field already addresses "${key}".`);
+    }
+    const options =
+      args.type === "select"
+        ? (args.options ?? []).map((o) => o.trim()).filter(Boolean)
+        : undefined;
+    // A select with no choices is a field the agent can never fill.
+    if (args.type === "select" && (!options || options.length === 0)) {
+      throw new Error("A select field needs at least one option.");
+    }
+    const fieldId = await ctx.db.insert("contactFields", {
+      orgId,
+      key,
+      label,
+      type: args.type,
+      options,
+      order: existing.length,
+      source: args.source === "voice" ? "voice" : undefined,
+    });
+    const filledBy = args.source === "voice" ? "voice agent" : "staff";
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_contact_field",
+      args: { label, type: args.type, source: args.source ?? "manual" },
+      targetTable: "contactFields",
+      targetId: fieldId,
+      before: null,
+      after: { key, label },
+      reversible: true,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `Added the contact field "${label}", filled by ${filledBy}`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { fieldId, key, label, filledBy, actionId };
+  },
+});
+
+// The org's provider credentials, for the action that provisions. Every other
+// context query in retell.ts resolves the org from a session or from a
+// globally unique agent id; this one is handed the org, because the connector
+// already knows it and there is no agent yet to look one up from.
+export const phoneAgentContext = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    demoMode: v.boolean(),
+    apiKey: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, { orgId }) => {
+    const org = await ctx.db.get(orgId);
+    return {
+      demoMode: org?.demoMode === true,
+      apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
+    };
+  },
+});
+
+// Owner check for the phone-agent path, which cannot use assertOwner: it runs
+// from an ACTION (provisioning talks to the provider over the network), and an
+// action has no database handle of its own.
+export const assertCanProvision = internalQuery({
+  args: { orgId: v.id("orgs"), userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, { orgId, userId }) => {
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) => q.eq("userId", userId).eq("orgId", orgId))
+      .unique();
+    if (!membership || membership.role !== "owner") {
+      throw new Error("Only an owner can create a phone agent.");
+    }
+    return null;
+  },
+});
+
+// Journalled AFTER the provider call, never before: the agent is an external
+// resource, so the only honest moment to record it is once it exists.
+// reversible:false because nothing here can un-create it — `undo` says so in
+// those words rather than failing on a missing branch.
+export const recordAgentCreated = internalMutation({
+  args: { ...scope, retellAgentId: v.string(), name: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, retellAgentId, name }) => {
+    const row = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_phone_agent",
+      args: { name },
+      targetTable: "retellAgents",
+      targetId: row?._id ?? retellAgentId,
+      before: null,
+      after: { name, retellAgentId },
+      reversible: false,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `Created the phone agent "${name}"`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { actionId, agentRowId: row?._id ?? null };
+  },
+});
+
 // ── Undo ─────────────────────────────────────────────────────────────────────
 
 export const undo = internalMutation({
@@ -343,6 +639,39 @@ export const undo = internalMutation({
       }
       await ctx.db.patch(customer._id, restore as Partial<Doc<"customers">>);
       summary = `Restored ${Object.keys(restore).join(", ")} on ${fullName(customer)}.`;
+    } else if (action.tool === "create_service") {
+      const service = await ctx.db.get(action.targetId as Id<"services">).catch(() => null);
+      if (!service || service.orgId !== orgId) throw new Error("That service is already gone.");
+      // Same drift rule as update_customer, for the same reason: if the salon
+      // renamed or repriced it after the agent added it, deleting takes their
+      // work with it. Undo takes back your own change; it does not win races.
+      if (service.name !== after.name) {
+        throw new Error(
+          `Refusing to undo: the service now reads "${service.name}", not "${after.name}". Someone edited it after this action.`,
+        );
+      }
+      await ctx.db.delete(service._id);
+      summary = `Removed the service "${after.name}".`;
+    } else if (action.tool === "create_contact_field") {
+      const field = await ctx.db.get(action.targetId as Id<"contactFields">).catch(() => null);
+      if (!field || field.orgId !== orgId) throw new Error("That field is already gone.");
+      // The guard `contactFields.remove` applies, reached the same way: a field
+      // an agent references leaves a dangling id in the variable registry, and
+      // that agent's next publish dies on it.
+      const variables = await ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      const inUse = variables.some(
+        (row) => row.contactFieldId === field._id || row.beforeFieldId === field._id,
+      );
+      if (inUse) {
+        throw new Error(
+          `Refusing to undo: "${field.label}" is now referenced by a phone agent. Unlink it there first.`,
+        );
+      }
+      await ctx.db.delete(field._id);
+      summary = `Removed the contact field "${field.label}".`;
     } else {
       throw new Error(`No undo is implemented for ${action.tool}.`);
     }

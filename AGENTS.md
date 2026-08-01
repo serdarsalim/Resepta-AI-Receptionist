@@ -291,6 +291,21 @@ went, and the reasoning to preserve:
   person and lands in the activity feed under their name. Not owner-gated —
   keys are per person; the backend scopes create-to-self / revoke-others-to-
   owner.
+
+  The connector is a CONTROL surface, not a reporting one: alongside the
+  customer/appointment tools it can list and create services and contact
+  fields and create a phone agent (`convex/mcp.ts` → `convex/agentTools.ts`).
+  Permissions are re-derived from `memberships` in `agentTools`, never read
+  off the key, so the connector cannot become a way around the app's own
+  owner-only rules. Phone-agent creation is journalled `reversible: false` —
+  it makes a real provider resource and `undo` says so in those words.
+
+  **The invariant that keeps provisioning safe:**
+  `voiceProvisioning.begin` accepts an optional `orgId` and TRUSTS it. That is
+  fine only because `begin` is internal and the PUBLIC `retellAgent.createAgent`
+  action does not accept an `orgId` to forward. If that action ever grows one,
+  a client can provision into another salon's workspace. The two facts are
+  commented at both ends; move them together or not at all.
 - **Bookings (cal.com) config**: operator-only, admin console
   (`platform.setOrgConfig`). Never show a salon a cal.com key field again.
 

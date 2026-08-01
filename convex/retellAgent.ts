@@ -15,7 +15,7 @@ import { internal } from "./_generated/api";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
-import { voiceCatalogue } from "./lib/voiceCatalogue";
+import { voiceCatalogue, type CatalogueVoice } from "./lib/voiceCatalogue";
 import {
   createVoiceRuntimeToken,
   hashVoiceRuntimeToken,
@@ -961,6 +961,32 @@ async function provisionAgent(
     throw error;
   }
 }
+
+// The picker's list, for a caller with no browser. `read` already returns
+// voices, but only alongside an agent that exists — and choosing a voice is
+// something you do BEFORE there is one.
+export const voiceOptionsForOrg = internalAction({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      gender: v.string(),
+      accent: v.string(),
+      previewUrl: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, { orgId }): Promise<CatalogueVoice[]> => {
+    const context = (await ctx.runQuery(internal.agentTools.phoneAgentContext, {
+      orgId,
+    })) as { demoMode: boolean; apiKey: string | null };
+    if (context.demoMode) {
+      throw new Error("This is the demo workspace. It holds no Retell credentials.");
+    }
+    if (!context.apiKey) throw new Error("No Retell API key for this workspace yet.");
+    return voiceCatalogue(await (await call(context.apiKey, "GET", "list-voices")).json(), null);
+  },
+});
 
 // The signed-in door. It deliberately does NOT accept an orgId: adding one
 // here would let a client provision into another salon's workspace, since
