@@ -15,6 +15,7 @@ import { internal } from "./_generated/api";
 import { action, type ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
+import { voiceCatalogue } from "./lib/voiceCatalogue";
 import {
   createVoiceRuntimeToken,
   hashVoiceRuntimeToken,
@@ -334,6 +335,18 @@ export const read = action({
     }
     const engine = agent.response_engine ?? {};
 
+    // The voice picker's options, on the same read as the agent. A voice-list
+    // outage must not blank the prompt editor — the picker just falls back to
+    // showing the id it already has.
+    const voices = await (async () => {
+      try {
+        const res = await call(key, "GET", "list-voices");
+        return voiceCatalogue(await res.json(), agent.voice_id ?? null);
+      } catch {
+        return [];
+      }
+    })();
+
     let llm: LlmDoc | null = null;
     if (engine.type === "retell-llm" && engine.llm_id) {
       llm = (await (
@@ -352,6 +365,7 @@ export const read = action({
       name: agent.agent_name ?? agentId,
       version: agent.version ?? null,
       voiceId: agent.voice_id ?? null,
+      voices,
       language: agent.language ?? null,
       engineType: engine.type ?? null,
       llmId: engine.llm_id ?? null,
@@ -421,6 +435,11 @@ async function publishViaDraft(
   agentId: string,
   llmId: string,
   patch: Record<string, unknown>,
+  // Fields that live on the AGENT doc rather than the LLM — voice is the one
+  // that matters here. Folded into the same draft so "how it speaks" and "what
+  // it says" land as ONE published version: two writes would mean a window
+  // where a caller hears the new voice reading the old script.
+  agentPatch?: Record<string, unknown>,
 ): Promise<number | null> {
   const id = encodeURIComponent(agentId);
   const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
@@ -440,6 +459,12 @@ async function publishViaDraft(
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
     ...patch,
   });
+  if (agentPatch && Object.keys(agentPatch).length > 0) {
+    await call(key, "PATCH", `update-agent/${id}`, {
+      version: draft.version,
+      ...agentPatch,
+    });
+  }
   await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
   return draft.version;
 }
@@ -449,13 +474,16 @@ export const publishPrompt = action({
     agentId: v.string(),
     generalPrompt: v.string(),
     beginMessage: v.optional(v.string()),
+    // Omitted means "leave the voice alone" — the undo path republishes an old
+    // prompt and must not drag a stale voice back with it.
+    voiceId: v.optional(v.string()),
   },
   returns: v.object({
     ok: v.boolean(),
     version: v.union(v.number(), v.null()),
     previousPrompt: v.string(),
   }),
-  handler: async (ctx, { agentId, generalPrompt, beginMessage }) => {
+  handler: async (ctx, { agentId, generalPrompt, beginMessage, voiceId }) => {
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const agent = (await (
@@ -473,7 +501,8 @@ export const publishPrompt = action({
       ...(beginMessage !== undefined ? { begin_message: beginMessage } : {}),
       mcps: await runtimeMcpConfig(ctx, agentId, context, before),
       general_tools: withRuntimeMcpTools(before.general_tools),
-    });
+    },
+    voiceId?.trim() ? { voice_id: voiceId.trim() } : undefined);
     if (siteUrl()) {
       await ctx.runMutation(internal.retell.markRuntimeConnected, {
         retellAgentId: agentId,

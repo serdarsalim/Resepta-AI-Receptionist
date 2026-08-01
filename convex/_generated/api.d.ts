@@ -48,6 +48,7 @@ import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_voiceAgentTemplate from "../lib/voiceAgentTemplate.js";
+import type * as lib_voiceCatalogue from "../lib/voiceCatalogue.js";
 import type * as lib_voicePayload from "../lib/voicePayload.js";
 import type * as lib_voiceRuntime from "../lib/voiceRuntime.js";
 import type * as lib_voiceVariables from "../lib/voiceVariables.js";
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/voiceAgentTemplate": typeof lib_voiceAgentTemplate;
+  "lib/voiceCatalogue": typeof lib_voiceCatalogue;
   "lib/voicePayload": typeof lib_voicePayload;
   "lib/voiceRuntime": typeof lib_voiceRuntime;
   "lib/voiceVariables": typeof lib_voiceVariables;

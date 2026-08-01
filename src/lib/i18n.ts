@@ -1657,6 +1657,22 @@ const dictionary = {
     de: "Diese Änderungen sind noch nicht live. Beim Verlassen gehen sie verloren — der Assistent behält seine bisherigen Einstellungen.",
   },
   "voiceDetail.leave": { tr: "Çık", en: "Leave", de: "Verlassen" },
+  "voiceDetail.voice": { tr: "Ses", en: "Voice", de: "Stimme" },
+  "voiceDetail.voiceHint": {
+    tr: "Asistanın konuştuğu ses. Kaydettiğinizde bir sonraki aramadan itibaren geçerli olur.",
+    en: "The voice the agent speaks with. Saving makes it live on the very next call.",
+    de: "Die Stimme, mit der der Assistent spricht. Nach dem Speichern gilt sie ab dem nächsten Anruf.",
+  },
+  "voiceDetail.voicePick": {
+    tr: "— bir ses seçin —",
+    en: "— pick a voice —",
+    de: "— Stimme wählen —",
+  },
+  "voiceDetail.voicePreview": {
+    tr: "Bu sesten bir örnek dinleyin",
+    en: "Play a sample of this voice",
+    de: "Hörprobe dieser Stimme abspielen",
+  },
   "voiceDetail.callingFromTo": {
     tr: "{from} numarasından {to} aranıyor…",
     en: "Calling {to} from {from}…",

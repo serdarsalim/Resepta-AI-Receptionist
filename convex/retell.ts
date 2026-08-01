@@ -12,6 +12,7 @@ import type { Id } from "./_generated/dataModel";
 import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { normalisePhone } from "./lib/phone";
+import { voiceCatalogue } from "./lib/voiceCatalogue";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -697,15 +698,6 @@ export const listAgents = action({
       inbound_agents?: Array<{ agent_id?: string }>;
       outbound_agents?: Array<{ agent_id?: string }>;
     }>;
-    const voiceItems = (Array.isArray(vData) ? vData : []) as Array<{
-      voice_id?: string;
-      voice_name?: string;
-      provider?: string;
-      gender?: string;
-      accent?: string;
-      preview_audio_url?: string;
-    }>;
-
     const seen = new Set<string>();
     const agents: AgentListResult["agents"] = [];
     for (const a of agentItems) {
@@ -741,32 +733,7 @@ export const listAgents = action({
           null,
       }));
 
-    // The raw library contains the same named voice many times from different
-    // engines. Randevu offers the provider's own maintained set when present,
-    // then removes any remaining human-visible duplicates. The provider name
-    // never reaches the browser and the creation sheet stays a useful picker
-    // instead of a catalogue of implementation choices.
-    const maintained = voiceItems.filter((voice) => voice.provider === "platform");
-    const voiceCandidates = maintained.length > 0 ? maintained : voiceItems;
-    const voiceLabels = new Set<string>();
-    const voices = voiceCandidates
-      .filter((voice) => voice.voice_id && voice.voice_name)
-      .filter((voice) => {
-        const label = [voice.voice_name, voice.accent, voice.gender]
-          .map((value) => value?.trim().toLocaleLowerCase() ?? "")
-          .join("|");
-        if (voiceLabels.has(label)) return false;
-        voiceLabels.add(label);
-        return true;
-      })
-      .map((voice) => ({
-        id: voice.voice_id!,
-        name: voice.voice_name!.trim(),
-        gender: voice.gender?.trim() || "",
-        accent: voice.accent?.trim() || "",
-        previewUrl: voice.preview_audio_url?.trim() || null,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const voices = voiceCatalogue(vData);
 
     return {
       configured: true,
