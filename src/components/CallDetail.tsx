@@ -86,29 +86,47 @@ type Turn = { agent: boolean; text: string };
 // not a second API call — it works for every call ever recorded, including the
 // ones from before this view existed.
 //
-// A line with no recognised prefix continues the previous speaker (Retell wraps
-// long turns), which is why this appends rather than starting a turn.
-const SPEAKER_RE = /^\s*(agent|assistant|bot|user|customer|caller|human)\s*:\s*/i;
+// The labels are NOT always English — a Turkish call comes back "Ajan:" /
+// "Müşteri:". So this doesn't match on a word list. It reads whatever labels
+// the transcript actually uses, then decides which one is the agent: the known
+// agent words in any language Randevu speaks, and failing that the label that
+// speaks FIRST, because the agent always opens the call. Getting that backwards
+// only mirrors the layout, which is recoverable; refusing to parse at all is
+// the wall of grey text this replaced.
+const LABELLED_LINE = /^\s*([\p{L}][\p{L} .'-]{0,24}?)\s*:\s+(?=\S)/u;
+const AGENT_WORDS = /^(agent|assistant|bot|ai|ajan|asistan|assistent)$/i;
 
 export function parseTranscript(raw: string): Turn[] {
-  const turns: Turn[] = [];
+  const lines: Array<{ label: string; text: string }> = [];
   for (const line of raw.split("\n")) {
-    const match = line.match(SPEAKER_RE);
+    const match = line.match(LABELLED_LINE);
     if (match) {
-      turns.push({
-        agent: /agent|assistant|bot/i.test(match[1]),
-        text: line.slice(match[0].length).trim(),
-      });
+      lines.push({ label: match[1].trim(), text: line.slice(match[0].length).trim() });
       continue;
     }
     const text = line.trim();
     if (!text) continue;
     // A transcript that never labels a speaker is not a conversation we can
     // lay out — the caller renders it as plain text instead.
-    if (turns.length === 0) return [];
-    turns[turns.length - 1].text += `\n${text}`;
+    if (lines.length === 0) return [];
+    // Retell wraps long turns, so an unlabelled line continues the last one.
+    lines[lines.length - 1].text += `\n${text}`;
   }
-  return turns.filter((turn) => turn.text.length > 0);
+
+  const labels = [...new Set(lines.map((line) => line.label.toLocaleLowerCase()))];
+  // Three or more speakers is not a two-sided call — more likely a transcript
+  // whose content happens to contain colons. Don't force it into bubbles.
+  if (labels.length === 0 || labels.length > 2) return [];
+  const agentLabel =
+    labels.find((label) => AGENT_WORDS.test(label)) ??
+    (labels.length === 2 ? lines[0].label.toLocaleLowerCase() : null);
+
+  return lines
+    .filter((line) => line.text.length > 0)
+    .map((line) => ({
+      agent: line.label.toLocaleLowerCase() === agentLabel,
+      text: line.text,
+    }));
 }
 
 export function CallTranscript({
@@ -125,7 +143,7 @@ export function CallTranscript({
 
   if (turns.length === 0) {
     return (
-      <pre className="thin-scroll max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--pane)] p-3 font-sans text-xs leading-relaxed">
+      <pre className="thin-scroll max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 font-sans text-xs leading-relaxed">
         {transcript}
       </pre>
     );
@@ -147,9 +165,13 @@ export function CallTranscript({
               {turn.agent ? t("calls.agent") : contactName || t("calls.theCaller")}
             </div>
             <div
+              // The agent's side is a bordered card, not a tinted pane: these
+              // bubbles sit on the muted background of an expanded table row,
+              // where --pane is within a shade of the row itself and the
+              // bubble stopped looking like a bubble at all.
               className={`whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 text-xs ${
                 turn.agent
-                  ? "bg-[var(--pane)] text-[var(--foreground)]"
+                  ? "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]"
                   : "bg-[var(--accent)] text-[var(--accent-fg)]"
               }`}
             >
@@ -176,7 +198,7 @@ function CollectedList({ values }: { values: Record<string, unknown> }) {
   if (rows.length === 0) return null;
 
   return (
-    <dl className="space-y-0.5 rounded-lg bg-[var(--pane)] px-2.5 py-2">
+    <dl className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-2">
       {rows.map(([key, value]) => (
         <div key={key} className="flex gap-2 text-xs">
           <dt className="shrink-0 capitalize text-[var(--muted)]">

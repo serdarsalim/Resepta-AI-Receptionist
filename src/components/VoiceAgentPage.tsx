@@ -397,10 +397,13 @@ export function VoiceAgentPage({
                     <InfoTip text={t("voiceDetail.voiceHint")} />
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Sized to a voice name, not to the card. A full-width
+                        select for "Andrew · American · male" reads as an empty
+                        field with a word in the corner. */}
                     <select
                       value={voice}
                       onChange={(e) => setVoice(e.target.value)}
-                      className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                      className="w-full max-w-xs rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
                     >
                       {/* An agent whose voice is not in the catalogue still
                           shows what it is actually using, rather than

@@ -4,6 +4,7 @@ import { usePaginatedQuery } from "convex/react";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { formatDateTime } from "@/lib/datetime";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
@@ -25,7 +26,7 @@ function fmtDuration(sec: number | null): string {
 }
 
 function CallHistory() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { results, status, loadMore } = usePaginatedQuery(
     api.calls.list,
     {},
@@ -80,7 +81,9 @@ function CallHistory() {
                         {c.customerName || c.fromNumber || t("calls.unknown")}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                        {new Date(c.startedAt).toLocaleString()}
+                        {/* The org's format, not the browser's: a Turkish
+                            salon was reading "7/26/2026, 8:42:26 PM". */}
+                        {formatDateTime(c.startedAt, language)}
                       </td>
                       <td className="px-3 py-2 text-xs text-[var(--muted)]">
                         {fmtDuration(c.durationSec)}
