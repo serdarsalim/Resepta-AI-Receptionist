@@ -242,11 +242,13 @@ went, and the reasoning to preserve:
   used in stay on it as tags, and the row's popover — type, choices, phase,
   destination, required — is what moves it between groups. A key that is
   already published never follows a label edit; renaming it orphans every
-  answer collected under the old name. **"+ Add variable" opens a picker**
-  (existing voice customer fields → create a field inline → call-only), so a
-  variable that stores customer data always references the one field
-  registry; adopting or creating a field pre-wires prefill + ask-if-missing,
-  the repeat-caller default. Deleting a referenced customer field is refused
+  answer collected under the old name. **A variable's name is a selection,
+  never free text**: both "+ Add variable" and every row's name cell open the
+  same picker (voice customer fields → built-in context → create a field
+  inline → explicit call-only name), so a variable that stores customer data
+  always references the one field registry; picking or creating a field
+  pre-wires prefill + ask-if-missing, the repeat-caller default, and clicking
+  a row's name re-points its whole identity (label, key, type, link) at once. Deleting a referenced customer field is refused
   backend-side and the Business row hides delete while "used by" explains.
 - **`PromptEditor` renders `{{tokens}}` as pills** via a mirror div under a
   text-transparent textarea. Not a contenteditable: that takes the caret, undo
