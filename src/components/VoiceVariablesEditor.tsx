@@ -728,7 +728,7 @@ function VariableRow({
 
   const typeLabel =
     row.type === "enum"
-      ? `${t("voiceVariables.options")} · ${row.choices?.length ?? 0}`
+      ? `${t("voiceVariables.options")} · ${row.choices?.filter((c) => c.trim()).length ?? 0}`
       : row.type === "number"
         ? t("voiceVariables.number")
         : row.type === "boolean"
@@ -791,28 +791,31 @@ function VariableRow({
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
         />
       </div>
-      <input
-        ref={descriptionRef}
-        value={row.description}
-        onChange={(e) => onChange({ description: e.target.value })}
-        placeholder={t("voiceVariables.description")}
-        className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-      />
-      {tags.length > 0 && (
-        <span
-          className="hidden shrink-0 gap-1 sm:flex"
-          title={tags.join(" · ")}
-        >
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]"
-            >
-              {tag}
-            </span>
-          ))}
-        </span>
-      )}
+      {/* Tags render INSIDE the description cell as right-edge adornments, so
+          every row's description has the same outer width; a pill between the
+          input and the type button gave each row a different input width,
+          which read as a layout bug. The wrapper carries the border and the
+          focus ring; the input inside is bare. */}
+      <div
+        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 focus-within:outline-2 focus-within:outline-[var(--accent)] focus-within:-outline-offset-1"
+        title={tags.length > 0 ? tags.join(" · ") : undefined}
+      >
+        <input
+          ref={descriptionRef}
+          value={row.description}
+          onChange={(e) => onChange({ description: e.target.value })}
+          placeholder={t("voiceVariables.description")}
+          className="min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-xs focus:outline-none"
+        />
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className="hidden shrink-0 rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] sm:inline"
+          >
+            {tag}
+          </span>
+        ))}
+      </div>
       {/* Fixed width: the trigger is a select in behaviour, and a select
           whose width follows its value gives every row a different edge. */}
       <button
@@ -841,14 +844,16 @@ function VariableRow({
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
             className="fixed z-50 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-lg"
           >
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">{t("voiceVariables.type")}</span>
+            {/* Label left, control right: six stacked label-above-control
+                blocks made the popover twice as tall as its content. */}
+            <label className="flex items-center justify-between gap-3 text-xs">
+              <span className="shrink-0 font-medium">{t("voiceVariables.type")}</span>
               <select
                 value={row.type}
                 onChange={(e) =>
                   onChange({ type: e.target.value as VoiceVariable["type"] })
                 }
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="string">{t("voiceVariables.text")}</option>
                 <option value="number">{t("voiceVariables.number")}</option>
@@ -858,24 +863,51 @@ function VariableRow({
             </label>
 
             {row.type === "enum" && (
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">
-                  {t("voiceVariables.choices")}
-                </span>
-                <input
-                  value={(row.choices ?? []).join(", ")}
-                  onChange={(e) =>
-                    onChange({ choices: e.target.value.split(",").map((c) => c.trim()) })
-                  }
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-                />
-              </label>
+              <div className="space-y-1">
+                {(row.choices ?? []).map((choice, index) => (
+                  <div key={index} className="flex items-center gap-1">
+                    <input
+                      value={choice}
+                      autoFocus={choice === "" && index === (row.choices?.length ?? 0) - 1}
+                      onChange={(e) =>
+                        onChange({
+                          choices: (row.choices ?? []).map((c, i) =>
+                            i === index ? e.target.value : c,
+                          ),
+                        })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" || !choice.trim()) return;
+                        e.preventDefault();
+                        onChange({ choices: [...(row.choices ?? []), ""] });
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onChange({ choices: (row.choices ?? []).filter((_, i) => i !== index) })
+                      }
+                      className="shrink-0 rounded-lg px-1.5 py-1 text-xs text-[var(--muted)] hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => onChange({ choices: [...(row.choices ?? []), ""] })}
+                  className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                >
+                  {t("voiceVariables.addOption")}
+                </button>
+              </div>
             )}
 
             {/* The capture phase. Changing it moves the row to that group,
                 which is the only way to move a row between them. */}
-            <div>
-              <span className="mb-1 block text-xs font-medium">
+            <label className="flex items-center justify-between gap-3 text-xs">
+              <span className="shrink-0 font-medium">
                 {t("voiceVariables.capturedWhen")}
               </span>
               <select
@@ -897,7 +929,7 @@ function VariableRow({
                     });
                   }
                 }}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="before">{t("voiceDetail.before")}</option>
                 {supportsLive && (
@@ -906,10 +938,10 @@ function VariableRow({
                 {supportsLive && <option value="confirm">{t("voiceVariables.confirm")}</option>}
                 <option value="after">{t("voiceVariables.extract")}</option>
               </select>
-            </div>
+            </label>
 
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">
+            <label className="flex items-center justify-between gap-3 text-xs">
+              <span className="shrink-0 font-medium">
                 {t("voiceDetail.before")}
               </span>
               <select
@@ -932,7 +964,7 @@ function VariableRow({
                     });
                   }
                 }}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="none">{t("voiceVariables.none")}</option>
                 <option value="static">{t("voiceVariables.defaultValue")}</option>
@@ -950,16 +982,20 @@ function VariableRow({
             </label>
 
             {row.beforeSource === "static" && (
-              <input
-                value={row.beforeValue ?? ""}
-                onChange={(e) => onChange({ beforeValue: e.target.value })}
-                placeholder={t("voiceVariables.defaultValue")}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-              />
+              <label className="flex items-center justify-between gap-3 text-xs">
+                <span className="shrink-0 font-medium">
+                  {t("voiceVariables.defaultValue")}
+                </span>
+                <input
+                  value={row.beforeValue ?? ""}
+                  onChange={(e) => onChange({ beforeValue: e.target.value })}
+                  className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                />
+              </label>
             )}
 
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">
+            <label className="flex items-center justify-between gap-3 text-xs">
+              <span className="shrink-0 font-medium">
                 {t("voiceVariables.savedTo")}
               </span>
               <select
@@ -980,7 +1016,7 @@ function VariableRow({
                       : { destination: "contact", contactFieldId: value.slice(6) },
                   );
                 }}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="call">{t("voiceVariables.callOnly")}</option>
                 {/* Only a field whose key matches — the publish validator
@@ -997,21 +1033,21 @@ function VariableRow({
                   <option value="new">{t("voiceVariables.saveToCustomer")}</option>
                 )}
               </select>
-              {fields.length === 0 && (
-                <span className="mt-1 block text-[11px] text-[var(--muted)]">
-                  {t("voiceVariables.noFieldsHint")}
-                </span>
-              )}
             </label>
+            {fields.length === 0 && (
+              <span className="block text-[11px] text-[var(--muted)]">
+                {t("voiceVariables.noFieldsHint")}
+              </span>
+            )}
 
-            <label className="flex items-center gap-1.5 text-xs">
+            <label className="flex items-center justify-between gap-3 text-xs">
+              <span className="shrink-0 font-medium">{t("voiceVariables.required")}</span>
               <input
                 type="checkbox"
                 checked={row.required}
                 onChange={(e) => onChange({ required: e.target.checked })}
                 className="accent-[var(--accent)]"
               />
-              {t("voiceVariables.required")}
             </label>
 
             <div className="flex justify-between">

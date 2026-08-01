@@ -1520,10 +1520,10 @@ const dictionary = {
   "voiceVariables.number": { tr: "Sayı", en: "Number", de: "Zahl" },
   "voiceVariables.yesNo": { tr: "Evet veya hayır", en: "Yes or no", de: "Ja oder Nein" },
   "voiceVariables.options": { tr: "Seçenekler", en: "Options", de: "Auswahl" },
-  "voiceVariables.choices": {
-    tr: "Seçenekler, virgülle ayırın",
-    en: "Options, separated by commas",
-    de: "Optionen, durch Kommas getrennt",
+  "voiceVariables.addOption": {
+    tr: "+ Seçenek ekle",
+    en: "+ Add option",
+    de: "+ Option hinzufügen",
   },
   "voiceVariables.none": { tr: "Kullanma", en: "Do not use", de: "Nicht verwenden" },
   // On a row, naming where its before-call value comes from. Not "Before the
