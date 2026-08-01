@@ -109,9 +109,13 @@ type EditorContext = {
 async function editorContext(
   ctx: Pick<ActionCtx, "runQuery">,
   agentId: string,
+  // Only provisioning passes this, and only on the sessionless path. Every
+  // signed-in caller leaves it unset and is authorised by requireOwner.
+  orgId?: Id<"orgs">,
 ): Promise<EditorContext> {
   const context = (await ctx.runQuery(internal.retell.agentEditorContext, {
     retellAgentId: agentId,
+    orgId,
   })) as EditorContext | null;
   if (!context) throw new Error("No workspace.");
   if (context.demoMode) {
@@ -943,7 +947,7 @@ async function provisionAgent(
     if (started.row.inboundNumber) {
       await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
     }
-    const context = await editorContext(ctx, agentId);
+    const context = await editorContext(ctx, agentId, args.orgId);
     const wired = await wireAgent(ctx, agentId, context);
     await ctx.runMutation(internal.voiceProvisioning.complete, {
       jobId,

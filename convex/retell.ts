@@ -319,10 +319,23 @@ export const agentListContext = internalQuery({
 // browser: actions use it server-side, while the client receives only the
 // variable rows and the org's possible contact-field destinations.
 export const agentEditorContext = internalQuery({
-  args: { retellAgentId: v.string() },
+  args: {
+    retellAgentId: v.string(),
+    // Same rule as voiceProvisioning.begin: set only by a caller that has
+    // already established the org — the connector, or an operator CLI run —
+    // and unset by the signed-in path, which proves ownership right here.
+    // Safe for the same reason: this is internal, no public action forwards a
+    // caller-supplied orgId into it, and the agent-belongs-to-this-org check
+    // below still runs either way.
+    //
+    // Provisioning is why this exists. The runtime wiring at the END of
+    // creating an agent reads this context, so without it every non-UI
+    // creation got a real provider agent and no Randevu runtime.
+    orgId: v.optional(v.id("orgs")),
+  },
   returns: v.any(),
-  handler: async (ctx, { retellAgentId }) => {
-    const { orgId } = await requireOwner(ctx);
+  handler: async (ctx, { retellAgentId, orgId: providedOrgId }) => {
+    const orgId = providedOrgId ?? (await requireOwner(ctx)).orgId;
     const agent = await ctx.db
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
