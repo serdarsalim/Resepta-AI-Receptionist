@@ -178,7 +178,7 @@ without claiming that the slot was checked.
 
 | Area | Primary files |
 |---|---|
-| Salon UI | `src/components/VoiceView.tsx`, `VoiceCard.tsx`, `VoiceAgentDetail.tsx`, `VoiceVariablesEditor.tsx` |
+| Salon UI | `src/components/VoiceView.tsx`, `VoiceCard.tsx`, `VoiceAgentPage.tsx`, `VoiceVariablesEditor.tsx`, `CallDetail.tsx` |
 | Native template and orchestration | `convex/lib/voiceAgentTemplate.ts`, `convex/voiceProvisioning.ts`, `convex/retellAgent.ts` |
 | Org mapping and variable registry | `convex/retell.ts`, `convex/schema.ts` |
 | Runtime tools | `convex/voiceMcp.ts`, `convex/http.ts` |

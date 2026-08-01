@@ -213,12 +213,29 @@ went, and the reasoning to preserve:
   sections. *Agents* is `VoiceCard` — connect/archive agents, pick the inbound
   number from the account's real numbers (never free text), enabled toggle
   (keeps the wiring, stops bookings), per-row details expansion (collected
-  fields, call counts, connected date), and the `VoiceAgentDetail` sheet
-  (click the name): prompt publish with session undo, webhook truth with
-  one-click fix, test call. *Calls* is a paginated table over the `calls`
-  table — recording player, per-call collected variables, summary, transcript
-  in a row expansion. The word "webhook" never reaches the client; broken
-  plumbing renders as "call results are not reaching the app" + Fix.
+  fields, call counts, connected date), and `VoiceAgentPage` (click the name,
+  deep-linked as `?agent=`): prompt and opening line, the variables grid, a
+  test call, plumbing truth with one-click fix. It is a PAGE, not a sheet —
+  the prompt is the thing people come here to edit and a modal gave it eight
+  lines. One Save in the header covers both tabs; the variables editor keeps
+  its own draft and reports dirty/busy up via `onSaveStateChange`. Variables
+  publish BEFORE the prompt, because `publishVariables` guards on the agent's
+  provider version and the other order fails with a stale-version error.
+  Editing with unsaved work shows an amber pill and guards the way out.
+  *Calls* is a paginated table over the `calls` table, opening into
+  `CallDetail`. The word "webhook" never reaches the client; broken plumbing
+  renders as "call results are not reaching the app" + Fix, and only when it
+  is actually broken.
+- **`CallDetail` is the only way a call is rendered** (`src/components/
+  CallDetail.tsx`): recording, summary, why it ended, collected values, then
+  the transcript as a conversation. Used by Phone agent → Calls, the contact
+  feed's expanded Calls column, and the mixed feed's card. Three surfaces used
+  to render three different subsets of one row. The transcript is PARSED from
+  the string already stored on `calls.transcript` (speaker-prefixed lines),
+  not refetched, so it works for every call ever recorded.
+  `calls.disconnectionReason` is stored raw and humanized in the UI — it is
+  the only thing that explains a row with no summary and no transcript, which
+  is every unanswered call.
 - **Randevu is the phone-agent control plane.** The business declares customer
   information once in Randevu; provider variables, analysis fields and runtime
   tools are compiled output, never a second user-managed schema. Adding or
