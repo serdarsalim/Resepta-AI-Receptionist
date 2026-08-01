@@ -65,10 +65,21 @@ export type VoiceVariableInput = {
   contactFieldId?: Id<"contactFields">;
 };
 
+// Turkish letters fold before lowercasing — "İ".toLowerCase() is i plus a
+// combining dot the ascii class would turn into an underscore. The NFD strip
+// clears any other combining mark the same way.
 export function normaliseVoiceVariableKey(raw: string): string {
   return raw
     .trim()
+    .replace(/[çÇ]/g, "c")
+    .replace(/[ğĞ]/g, "g")
+    .replace(/[ıİ]/g, "i")
+    .replace(/[öÖ]/g, "o")
+    .replace(/[şŞ]/g, "s")
+    .replace(/[üÜ]/g, "u")
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9_]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);

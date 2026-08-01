@@ -66,15 +66,21 @@ export function builtinVoiceVariables(
   ];
 }
 
+// Turkish letters fold BEFORE lowercasing: "İ".toLowerCase() is "i" plus a
+// combining dot (U+0307) that the class above can't match, which is how
+// "İstenen hizmet" once became i_stenen_hizmet. The NFD strip catches any
+// other combining mark the same way.
 function keyFromLabel(label: string): string {
   return label
-    .toLowerCase()
     .replace(/[çÇ]/g, "c")
     .replace(/[ğĞ]/g, "g")
     .replace(/[ıİ]/g, "i")
     .replace(/[öÖ]/g, "o")
     .replace(/[şŞ]/g, "s")
     .replace(/[üÜ]/g, "u")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);

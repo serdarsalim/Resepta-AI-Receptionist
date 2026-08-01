@@ -57,11 +57,14 @@ export const create = mutation({
     const label = args.label.trim();
     if (!label) throw new Error("label-required");
     // Key derives from the label once and never changes after (values are
-    // keyed by it); Turkish-folded, snake_case.
+    // keyed by it); Turkish-folded, snake_case. Fold BEFORE lowercasing:
+    // "İ".toLowerCase() is i + combining dot, which the classes can't match.
     const key = label
-      .toLowerCase()
       .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
       .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "");
     if (!key) throw new Error("label-required");
