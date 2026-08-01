@@ -214,14 +214,30 @@ went, and the reasoning to preserve:
   number from the account's real numbers (never free text), enabled toggle
   (keeps the wiring, stops bookings), per-row details expansion (collected
   fields, call counts, connected date), and `VoiceAgentPage` (click the name,
-  deep-linked as `?agent=`): prompt and opening line, the variables grid, a
-  test call, plumbing truth with one-click fix. It is a PAGE, not a sheet —
-  the prompt is the thing people come here to edit and a modal gave it eight
-  lines. One Save in the header covers both tabs; the variables editor keeps
-  its own draft and reports dirty/busy up via `onSaveStateChange`. Variables
-  publish BEFORE the prompt, because `publishVariables` guards on the agent's
-  provider version and the other order fails with a stale-version error.
+  deep-linked as `?agent=`). It is a PAGE, not a sheet, and ONE COLUMN, not
+  tabs: instructions → opening line → voice → variables, the order a call
+  happens in. Both were tried and both failed the same way — a modal gave the
+  prompt eight lines, and tabs made the first screen a lone textarea over dead
+  space with the variables hidden behind a pill. One Save in the header covers
+  everything; the variables editor keeps its own draft and reports dirty/busy
+  up via `onSaveStateChange`. Variables publish BEFORE the prompt, because
+  `publishVariables` guards on the agent's provider version and the other
+  order fails with a stale-version error. Voice rides the same Save through
+  `publishViaDraft`'s `agentPatch`, so voice and script land as one version.
   Editing with unsaved work shows an amber pill and guards the way out.
+- **Variables are edited inline, not in a sheet** — the one documented
+  exception to the sheet rule below, because a grid you retype a description
+  in is not a form you open. Rows group under Before / During / After by their
+  MOST ACTIVE phase (`duringMode` wins, then `afterCall`, else before-only): a
+  Randevu variable is a lifecycle, not one moment, so the phases a row is also
+  used in stay on it as tags, and the row's popover — type, choices, phase,
+  destination, required — is what moves it between groups. A key that is
+  already published never follows a label edit; renaming it orphans every
+  answer collected under the old name.
+- **`PromptEditor` renders `{{tokens}}` as pills** via a mirror div under a
+  text-transparent textarea. Not a contenteditable: that takes the caret, undo
+  stack and IME with it. Used twice — the prompt, and the opening line in
+  `singleLine` mode.
   *Calls* is a paginated table over the `calls` table, opening into
   `CallDetail`. The word "webhook" never reaches the client; broken plumbing
   renders as "call results are not reaching the app" + Fix, and only when it
