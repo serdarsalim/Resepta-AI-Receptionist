@@ -32,6 +32,14 @@ export type VoiceVariable = {
   contactFieldId?: string;
 };
 
+// What the page header needs to render Save/Discard on this editor's behalf.
+export type VoiceEditorSaveState = {
+  dirty: boolean;
+  busy: boolean;
+  save: () => void;
+  discard: () => void;
+};
+
 export type VoiceContactField = {
   id: string;
   key: string;
@@ -108,6 +116,7 @@ export function VoiceVariablesEditor({
   initial,
   contactFields,
   onPublished,
+  onSaveStateChange,
 }: {
   agentId: string;
   version: number | null;
@@ -116,6 +125,11 @@ export function VoiceVariablesEditor({
   initial: VoiceVariable[];
   contactFields: VoiceContactField[];
   onPublished: () => void;
+  // Lets the page header own Save and Discard for the whole agent. The editor
+  // still holds the draft — it just stops being the only place the save button
+  // exists, because on a tall page that button is below the fold and unsaved
+  // work is how it gets abandoned.
+  onSaveStateChange?: (state: VoiceEditorSaveState) => void;
 }) {
   const { t } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
@@ -307,6 +321,23 @@ export function VoiceVariablesEditor({
       setBusy(false);
     }
   };
+
+  // Save and Discard have to act on the draft as it stands when the header
+  // button is clicked, not as it stood when the effect ran. A ref holds the
+  // live closures; the effect then depends only on the two flags the header
+  // actually renders from, instead of re-firing every keystroke.
+  const liveRef = useRef({ publish, draft, initial });
+  useEffect(() => {
+    liveRef.current = { publish, draft, initial };
+  });
+  useEffect(() => {
+    onSaveStateChange?.({
+      dirty,
+      busy,
+      save: () => void liveRef.current.publish(liveRef.current.draft, true),
+      discard: () => setDraft(liveRef.current.initial),
+    });
+  }, [dirty, busy, onSaveStateChange]);
 
   const destinationValue =
     form.destination === "contact" && form.contactFieldId
@@ -503,14 +534,18 @@ export function VoiceVariablesEditor({
             {t("voiceDetail.undo")}
           </button>
         )}
-        <button
-          type="button"
-          disabled={!dirty || busy}
-          onClick={() => void publish(draft, true)}
-          className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
-        >
-          {t("voiceVariables.publish")}
-        </button>
+        {/* Only when nobody upstream is rendering Save. Two save buttons for
+            one draft is worse than the scroll it was meant to fix. */}
+        {!onSaveStateChange && (
+          <button
+            type="button"
+            disabled={!dirty || busy}
+            onClick={() => void publish(draft, true)}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
+          >
+            {t("voiceVariables.publish")}
+          </button>
+        )}
       </div>
 
       {editing !== null && (

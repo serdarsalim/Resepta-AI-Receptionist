@@ -1624,6 +1624,39 @@ const dictionary = {
     en: "Call {to} now with {name}?",
     de: "{to} jetzt mit {name} anrufen?",
   },
+  "voiceDetail.testUnsaved": {
+    tr: "Kaydedilmemiş değişiklikler bu aramada geçerli değil — önce kaydedin.",
+    en: "Unsaved changes are not part of this call — save first to hear them.",
+    de: "Nicht gespeicherte Änderungen gelten für diesen Anruf nicht — zuerst speichern.",
+  },
+  // The header's dirty state. An edited prompt looks live on screen while the
+  // agent is still answering the phone with whatever Retell has; this says so.
+  "voiceDetail.unsaved": {
+    tr: "Kaydedilmemiş değişiklikler",
+    en: "Unsaved changes",
+    de: "Nicht gespeicherte Änderungen",
+  },
+  "voiceDetail.unsavedHint": {
+    tr: "Bu değişiklikler henüz yayında değil. Siz kaydedene kadar asistan mevcut ayarlarıyla çalışmaya devam eder.",
+    en: "These edits aren't live yet. The agent keeps running its saved settings until you save.",
+    de: "Diese Änderungen sind noch nicht live. Der Assistent läuft mit seinen gespeicherten Einstellungen weiter, bis Sie speichern.",
+  },
+  "voiceDetail.discard": {
+    tr: "Değişiklikleri at",
+    en: "Discard changes",
+    de: "Änderungen verwerfen",
+  },
+  "voiceDetail.leaveTitle": {
+    tr: "Kaydetmeden çıkılsın mı?",
+    en: "Leave without saving?",
+    de: "Ohne Speichern verlassen?",
+  },
+  "voiceDetail.leaveBody": {
+    tr: "Bu değişiklikler henüz yayında değil. Çıkarsanız silinirler; asistan mevcut ayarlarıyla çalışmaya devam eder.",
+    en: "These edits aren't live yet. Leaving throws them away — the agent keeps running the settings it already has.",
+    de: "Diese Änderungen sind noch nicht live. Beim Verlassen gehen sie verloren — der Assistent behält seine bisherigen Einstellungen.",
+  },
+  "voiceDetail.leave": { tr: "Çık", en: "Leave", de: "Verlassen" },
   "voiceDetail.callingFromTo": {
     tr: "{from} numarasından {to} aranıyor…",
     en: "Calling {to} from {from}…",

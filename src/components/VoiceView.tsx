@@ -1,12 +1,13 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
+import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 
 // The phone agent's own sidebar destination. Two sections: the agents and the
@@ -121,9 +122,34 @@ function CallHistory() {
 export function VoiceView() {
   const { t } = useLanguage();
   const [section, setSection] = useState<VoiceSection>("agents");
+  // The open agent lives in the URL, the same way the tab does: a page you can
+  // link a colleague to, and a refresh that comes back to the prompt you were
+  // editing rather than the list. Read after mount — initialising state from
+  // window during render is a hydration mismatch.
+  const [agentId, setAgentId] = useState<string | null>(null);
   const me = useQuery(api.orgs.current, {});
   const site = resolveSiteUrl();
   const isOwner = me ? me.me.role !== "staff" : false;
+
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("agent");
+    if (wanted) setAgentId(wanted);
+  }, []);
+
+  // replaceState, not push: opening an agent from the list is a drill-in, and
+  // filling the back stack with every agent glanced at makes Back stop meaning
+  // "the page before this one". The header's own back arrow is the way out.
+  const openAgent = (next: string | null) => {
+    setAgentId(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("agent", next);
+    else url.searchParams.delete("agent");
+    window.history.replaceState(null, "", url);
+  };
+
+  if (agentId) {
+    return <VoiceAgentPage agentId={agentId} onBack={() => openAgent(null)} />;
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -150,7 +176,9 @@ export function VoiceView() {
         ))}
       </div>
 
-      {section === "agents" && <VoiceCard isOwner={isOwner} site={site} />}
+      {section === "agents" && (
+        <VoiceCard isOwner={isOwner} site={site} onOpenAgent={openAgent} />
+      )}
       {section === "calls" && <CallHistory />}
     </div>
   );

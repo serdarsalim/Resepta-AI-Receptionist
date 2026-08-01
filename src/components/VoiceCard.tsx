@@ -9,7 +9,6 @@ import { type SiteUrl } from "@/lib/siteUrl";
 import { ActionTip, InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
-import { VoiceAgentDetail } from "./VoiceAgentDetail";
 
 
 // The roster comes from the org's OWN Retell account (convex/retell.ts
@@ -85,7 +84,17 @@ function languageLabel(tag: string, locale: string, multiple: string): string {
   }
 }
 
-export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }) {
+export function VoiceCard({
+  isOwner,
+  site,
+  onOpenAgent,
+}: {
+  isOwner: boolean;
+  site: SiteUrl;
+  // The agent opens as a page now, not a sheet from inside this card, so the
+  // parent owns which agent is open (and puts it in the URL).
+  onOpenAgent: (agentId: string) => void;
+}) {
   const { t, language } = useLanguage();
   const connected = useQuery(api.retell.list, {});
   const callStats = useQuery(api.retell.agentCallStats, {});
@@ -117,7 +126,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [addMode, setAddMode] = useState<"create" | "connect">("create");
   const [createName, setCreateName] = useState("");
   const [createLanguage, setCreateLanguage] = useState<CreateLanguage>("en-US");
@@ -265,7 +273,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
       }
       closeAdd();
       load();
-      if (result.agentId) setDetailId(result.agentId);
+      if (result.agentId) onOpenAgent(result.agentId);
     } catch {
       setCreateError(t("voiceCreate.failed"));
     } finally {
@@ -387,7 +395,7 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
                           detail is where you find out what the id points at. */}
                       <button
                         type="button"
-                        onClick={() => setDetailId(row.retellAgentId)}
+                        onClick={() => onOpenAgent(row.retellAgentId)}
                         className="underline-offset-2 hover:underline"
                       >
                         {agent ? (
@@ -612,7 +620,6 @@ export function VoiceCard({ isOwner, site }: { isOwner: boolean; site: SiteUrl }
           : null}
       </p>
 
-      {detailId && <VoiceAgentDetail agentId={detailId} onClose={() => setDetailId(null)} />}
 
       {adding && (
         <Sheet
