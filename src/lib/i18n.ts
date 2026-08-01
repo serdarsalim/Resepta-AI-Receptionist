@@ -1526,6 +1526,28 @@ const dictionary = {
     de: "Optionen, durch Kommas getrennt",
   },
   "voiceVariables.none": { tr: "Kullanma", en: "Do not use", de: "Nicht verwenden" },
+  "voiceVariables.addRow": {
+    tr: "+ Bilgi ekle",
+    en: "+ Add variable",
+    de: "+ Variable hinzufügen",
+  },
+  // The context the runtime injects whether or not anyone configured it, plus
+  // customer fields waiting to be captured. Neither is a row you edit.
+  "voiceVariables.alwaysAvailable": {
+    tr: "Her aramada hazır",
+    en: "Always available",
+    de: "Immer verfügbar",
+  },
+  "voiceVariables.capturedWhen": {
+    tr: "Ne zaman alınır",
+    en: "Captured when",
+    de: "Wann erfasst",
+  },
+  "voiceVariables.removeBody": {
+    tr: "“{name}” bu asistandan kaldırılsın mı? Kaydedene kadar geçerli olmaz.",
+    en: "Remove “{name}” from this agent? Nothing changes until you save.",
+    de: "„{name}“ von diesem Assistenten entfernen? Bis zum Speichern ändert sich nichts.",
+  },
   "voiceVariables.defaultValue": {
     tr: "Sabit değer",
     en: "Default value",

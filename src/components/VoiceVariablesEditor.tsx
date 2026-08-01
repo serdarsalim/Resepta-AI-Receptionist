@@ -2,9 +2,11 @@
 
 import { useAction, useMutation } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 
@@ -39,6 +41,10 @@ export type VoiceEditorSaveState = {
   save: () => void;
   discard: () => void;
 };
+
+// Where in the call a variable is captured. A row is grouped by its most
+// active phase; the popover's picker is what moves it.
+type Phase = "before" | "during" | "after";
 
 export type VoiceContactField = {
   id: string;
@@ -135,21 +141,17 @@ export function VoiceVariablesEditor({
   const publishVariables = useAction(api.retellAgent.publishVariables);
   const createContactField = useMutation(api.contactFields.create);
   const [draft, setDraft] = useState(initial);
-  const [editing, setEditing] = useState<number | "new" | null>(null);
-  const [form, setForm] = useState<VoiceVariable>(blankVariable);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [previous, setPrevious] = useState<VoiceVariable[] | null>(null);
-  // Quick add: a row that appears under the header, not a sheet. Name plus
-  // one decision (customer card or not); everything else gets the defaults
-  // and the full sheet stays one click away on the row.
-  const [quickOpen, setQuickOpen] = useState(false);
-  const [quickName, setQuickName] = useState("");
-  const [quickToCustomer, setQuickToCustomer] = useState(false);
-  const [quickError, setQuickError] = useState<string | null>(null);
-  const quickRef = useRef<HTMLInputElement>(null);
-  // Customer fields created from quick add, so their labels resolve before
-  // the parent reloads. Reloading here would reset the unpublished draft.
+  // Deleting a row that has work in it asks first; see removeAt.
+  const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
+  // Set when "+ Add variable" appends a row, so the caret lands in the new
+  // row's name field instead of leaving an empty row for someone to find.
+  const [focusLast, setFocusLast] = useState(false);
+  // Customer fields created from a row's Saved-to picker, so their labels
+  // resolve before the parent reloads. Reloading here would reset the
+  // unpublished draft.
   const [createdFields, setCreatedFields] = useState<VoiceContactField[]>([]);
 
   useEffect(() => setDraft(initial), [initial]);
@@ -163,98 +165,35 @@ export function VoiceVariablesEditor({
   const fieldById = new Map(allFields.map((field) => [field.id, field]));
   const supportsLive = engineType === "retell-llm";
 
-  // "Müşteri adı" typed here IS the built-in customer_name — adopting the
-  // built-in's key (and its before-call source) instead of minting a folded
-  // twin is what keeps one concept on one key.
-  const BUILTIN_BEFORE: Record<string, VoiceVariable["beforeSource"]> = {
-    customer_name: "customer_name",
-    customer_phone: "customer_phone",
-    customer_language: "customer_language",
-    next_appointment: "next_appointment",
-    business_name: "business_name",
-  };
-
-  const quickAdd = async () => {
-    const label = quickName.trim();
-    if (!label) return;
-    const matchedBuiltin = builtinVoiceVariables(t).find(
-      (builtin) => keyFromLabel(builtin.label) === keyFromLabel(label),
-    );
-    const key = matchedBuiltin?.key ?? keyFromLabel(label);
-    if (!key) return;
-    setQuickError(null);
-    if (draft.some((row) => row.key === key)) {
-      setQuickError(t("voiceVariables.fieldExists"));
+  // "Also save this onto the customer card" — the one thing quick-add could do
+  // that a row could not, brought onto the row itself. Only offered when the
+  // key still follows the label: publishVariables requires the customer
+  // field's key to equal the variable's, and a hand-adopted key (customer_name
+  // on a row labelled "Müşteri adı") would create a field that can never link.
+  const linkToCustomer = async (index: number) => {
+    const row = draft[index];
+    const label = row.label.trim();
+    if (!label || !row.key) return;
+    const existing = voiceFields.find((field) => field.key === row.key);
+    if (existing) {
+      patch(index, { destination: "contact", contactFieldId: existing.id });
       return;
     }
-    let contactFieldId: string | undefined;
-    if (quickToCustomer) {
-      // An already-configured voice field with this key is the same intent —
-      // link it instead of failing on the duplicate.
-      const existing = voiceFields.find((field) => field.key === key);
-      if (existing) {
-        contactFieldId = existing.id;
-      } else {
-        try {
-          contactFieldId = (await createContactField({
-            label,
-            type: "text",
-            source: "voice",
-          })) as string;
-          setCreatedFields((rows) => [
-            ...rows,
-            { id: contactFieldId!, key, label, type: "text", options: [], voice: true },
-          ]);
-        } catch {
-          setQuickError(t("voiceVariables.fieldExists"));
-          return;
-        }
-      }
-    }
-    setDraft((rows) => [
-      ...rows,
-      {
-        ...blankVariable(),
-        key,
+    try {
+      const id = (await createContactField({
         label,
-        beforeSource: BUILTIN_BEFORE[key] ?? "none",
-        destination: contactFieldId ? "contact" : "call",
-        contactFieldId,
-      },
-    ]);
-    setQuickName("");
-    quickRef.current?.focus();
-  };
-
-  const beforeLabel = (row: VoiceVariable) => {
-    switch (row.beforeSource) {
-      case "static":
-        return row.beforeValue || t("voiceVariables.defaultValue");
-      case "business_name":
-        return t("voiceVariables.businessName");
-      case "customer_name":
-        return t("voiceVariables.customerName");
-      case "customer_phone":
-        return t("voiceVariables.customerPhone");
-      case "customer_language":
-        return t("voiceVariables.customerLanguage");
-      case "next_appointment":
-        return t("voiceVariables.nextAppointment");
-      case "contact_field":
-        return row.beforeFieldId
-          ? fieldById.get(row.beforeFieldId)?.label ?? ""
-          : "";
-      default:
-        return "";
+        type: "text",
+        source: "voice",
+      })) as string;
+      setCreatedFields((rows) => [
+        ...rows,
+        { id, key: row.key, label, type: "text", options: [], voice: true },
+      ]);
+      patch(index, { destination: "contact", contactFieldId: id });
+    } catch {
+      setStatus(t("voiceVariables.fieldExists"));
     }
   };
-
-  const duringLabel = (row: VoiceVariable) =>
-    row.duringMode === "if_missing"
-      ? t("voiceVariables.askMissing")
-      : row.duringMode === "confirm"
-        ? t("voiceVariables.confirm")
-        : "";
 
   // A voice-enabled customer field the org configured in Business becomes a
   // capture row here in one click, pre-linked to its field.
@@ -271,31 +210,6 @@ export function VoiceVariablesEditor({
         contactFieldId: field.id,
       },
     ]);
-  };
-
-  const openEdit = (index: number) => {
-    setForm({ ...draft[index], choices: draft[index].choices?.slice() });
-    setEditing(index);
-  };
-
-  const applyForm = () => {
-    const next = {
-      ...form,
-      label: form.label.trim(),
-      key: form.key.trim(),
-      description: form.description.trim(),
-      choices:
-        form.type === "enum"
-          ? [...new Set((form.choices ?? []).map((choice) => choice.trim()).filter(Boolean))]
-          : undefined,
-    };
-    if (!next.label || !next.key) return;
-    setDraft((rows) =>
-      editing === "new"
-        ? [...rows, next]
-        : rows.map((row, index) => (index === editing ? next : row)),
-    );
-    setEditing(null);
   };
 
   const publish = async (rows: VoiceVariable[], keepUndo: boolean) => {
@@ -339,203 +253,96 @@ export function VoiceVariablesEditor({
     });
   }, [dirty, busy, onSaveStateChange]);
 
-  const destinationValue =
-    form.destination === "contact" && form.contactFieldId
-      ? `field:${form.contactFieldId}`
-      : "call";
-  const beforeValue =
-    form.beforeSource === "contact_field" && form.beforeFieldId
-      ? `field:${form.beforeFieldId}`
-      : form.beforeSource;
+  // A key that is already live in Retell must not follow a label edit —
+  // renaming it orphans every answer already collected under the old name.
+  const publishedKeys = useMemo(
+    () => new Set(initial.map((row) => row.key)),
+    [initial],
+  );
+
+  // Which group a row lives in. A Randevu variable is a LIFECYCLE, not a
+  // single moment — one row can be seeded before the call, asked during it and
+  // recovered from the analysis after. So the group is its most active phase,
+  // and the phase picker in the Type popover is what moves it between groups.
+  // The other phases stay visible on the row as small tags rather than as
+  // three extra columns nobody could edit inline at this width.
+  const phaseOf = (row: VoiceVariable): Phase =>
+    row.duringMode !== "none" ? "during" : row.afterCall ? "after" : "before";
+
+  const patch = (index: number, next: Partial<VoiceVariable>) =>
+    setDraft((rows) => rows.map((row, i) => (i === index ? { ...row, ...next } : row)));
+
+  const removeAt = (index: number) => {
+    const row = draft[index];
+    // A blank row is a mis-click; a filled one is work. Only the second asks.
+    if (row.label.trim() || row.description.trim()) {
+      setConfirmRemove(index);
+      return;
+    }
+    setDraft((rows) => rows.filter((_, i) => i !== index));
+  };
+
+  const addTo = (phase: Phase) => {
+    setDraft((rows) => [
+      ...rows,
+      {
+        ...blankVariable(),
+        duringMode: phase === "during" ? "if_missing" : "none",
+        afterCall: phase !== "before",
+        // A before-only row needs a source or it is used at no point in the
+        // call, which the publish validator rejects.
+        beforeSource: phase === "before" ? "static" : "none",
+      },
+    ]);
+    setFocusLast(true);
+  };
+
+  const groups: { id: Phase; title: string; tip: string }[] = [
+    {
+      id: "before",
+      title: t("voiceDetail.before"),
+      tip: t("voiceDetail.beforeHint"),
+    },
+    {
+      id: "during",
+      title: t("voiceDetail.during"),
+      tip: t("voiceDetail.duringHint"),
+    },
+    { id: "after", title: t("voiceDetail.after"), tip: t("voiceDetail.afterHint") },
+  ];
+
+  // Built-ins and the org's voice-enabled customer fields that no row captures
+  // yet. Not editable — they are context the runtime always injects, or a
+  // field configured in Business — so they sit under their own quiet heading
+  // instead of pretending to be rows you can type in.
+  const availableBuiltins = builtinVoiceVariables(t).filter(
+    (builtin) => !draft.some((row) => row.key === builtin.key),
+  );
+  const availableFields = voiceFields.filter(
+    (field) => !draft.some((row) => row.contactFieldId === field.id || row.key === field.key),
+  );
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <h4 className="text-xs font-medium">{t("voiceVariables.title")}</h4>
+          <h4 className="text-sm font-semibold">{t("voiceVariables.title")}</h4>
           <InfoTip
             text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.builtinHint")}`}
           />
           <span className="text-xs text-[var(--muted)]">{draft.length || ""}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setQuickOpen((open) => !open);
-            setQuickError(null);
-            requestAnimationFrame(() => quickRef.current?.focus());
-          }}
-          className="h-8 rounded-lg bg-[var(--accent)] px-3 text-xs font-medium text-[var(--accent-fg)]"
-        >
-          {t("voiceVariables.add")}
-        </button>
-      </div>
-
-      {quickOpen && (
-        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-[var(--muted-bg)] p-2">
-          <input
-            ref={quickRef}
-            value={quickName}
-            onChange={(event) => setQuickName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void quickAdd();
-              if (event.key === "Escape") setQuickOpen(false);
-            }}
-            placeholder={t("voiceVariables.label")}
-            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
-          />
-          <label className="inline-flex items-center gap-1.5 text-xs">
-            <input
-              type="checkbox"
-              checked={quickToCustomer}
-              onChange={(event) => setQuickToCustomer(event.target.checked)}
-              className="accent-[var(--accent)]"
-            />
-            {t("voiceVariables.saveToCustomer")}
-          </label>
-          <button
-            type="button"
-            disabled={!quickName.trim()}
-            onClick={() => void quickAdd()}
-            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
-          >
-            {t("common.add")}
-          </button>
-          {quickError && (
-            <span className="text-xs text-amber-700 dark:text-amber-400">{quickError}</span>
-          )}
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
-            <tr>
-              <th className="px-3 py-2 font-medium">{t("voiceVariables.variable")}</th>
-              <th className="px-3 py-2 font-medium">{t("voiceDetail.before")}</th>
-              <th className="px-3 py-2 font-medium">{t("voiceDetail.during")}</th>
-              <th className="px-3 py-2 font-medium">{t("voiceDetail.after")}</th>
-              <th className="px-3 py-2 font-medium">{t("voiceVariables.savedTo")}</th>
-              <th className="w-8 px-2 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {/* Built-ins first: always present, never editable, so the list
-                here matches the @ picker exactly. A registry row with the
-                same key replaces its built-in. */}
-            {builtinVoiceVariables(t)
-              .filter((builtin) => !draft.some((row) => row.key === builtin.key))
-              .map((builtin) => (
-                <tr key={`builtin:${builtin.key}`} className="border-t border-[var(--border)]">
-                  <td className="px-3 py-2 text-[var(--muted)]">
-                    {builtin.label}
-                    <code className="ml-2 text-[10px]">{builtin.key}</code>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {t("voiceVariables.builtin")}
-                  </td>
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {t("voiceVariables.callOnly")}
-                  </td>
-                  <td className="px-2 py-2" />
-                </tr>
-              ))}
-            {/* Voice-enabled customer fields the agent doesn't capture yet.
-                Configured in Business, offered here: the owner who just added
-                a field must find it where variables live, with one click to
-                start collecting it. */}
-            {voiceFields
-              .filter(
-                (field) =>
-                  !draft.some(
-                    (row) => row.contactFieldId === field.id || row.key === field.key,
-                  ),
-              )
-              .map((field) => (
-                <tr key={`field:${field.id}`} className="border-t border-[var(--border)]">
-                  <td className="px-3 py-2 text-[var(--muted)]">
-                    {field.label}
-                    <code className="ml-2 text-[10px]">{field.key}</code>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {t("voiceVariables.customerCard")}
-                  </td>
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {field.label}
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => adoptField(field)}
-                      className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
-                    >
-                      {t("voiceVariables.use")}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            {/* No empty state: the built-ins above mean the list is never
-                empty, and "no variables yet" over a list of variables lies. */}
-            {draft.map((row, index) => (
-                <tr key={`${row.key}:${index}`} className="group border-t border-[var(--border)]">
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(index)}
-                      className="text-left font-medium underline-offset-2 hover:underline"
-                    >
-                      {row.label}
-                    </button>
-                    <code className="ml-2 text-[10px] text-[var(--muted)]">{row.key}</code>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {beforeLabel(row)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {duringLabel(row)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {row.afterCall ? t("voiceVariables.extract") : ""}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
-                    {row.destination === "contact" && row.contactFieldId
-                      ? fieldById.get(row.contactFieldId)?.label ?? ""
-                      : t("voiceVariables.callOnly")}
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <button
-                      type="button"
-                      aria-label={t("voiceVariables.remove").replace("{name}", row.label)}
-                      onClick={() => setDraft((rows) => rows.filter((_, i) => i !== index))}
-                      className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-2 flex min-h-8 items-center justify-end gap-2">
-        {status && <span className="mr-auto text-xs text-[var(--muted)]">{status}</span>}
+        {status && <span className="text-xs text-[var(--muted)]">{status}</span>}
         {previous && !dirty && (
           <button
             type="button"
             disabled={busy}
             onClick={() => void publish(previous, false)}
-            className="rounded-lg px-2 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+            className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
           >
             {t("voiceDetail.undo")}
           </button>
         )}
-        {/* Only when nobody upstream is rendering Save. Two save buttons for
-            one draft is worse than the scroll it was meant to fix. */}
         {!onSaveStateChange && (
           <button
             type="button"
@@ -548,108 +355,252 @@ export function VoiceVariablesEditor({
         )}
       </div>
 
-      {editing !== null && (
+      <div className="space-y-4">
+        {groups.map((group) => {
+          const rows = draft
+            .map((row, index) => ({ row, index }))
+            .filter(({ row }) => phaseOf(row) === group.id);
+          return (
+            <div key={group.id}>
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+                {group.title}
+                <InfoTip text={group.tip} />
+              </div>
+              <div className="space-y-1">
+                {rows.map(({ row, index }) => (
+                  <VariableRow
+                    key={index}
+                    row={row}
+                    fields={voiceFields}
+                    fieldById={fieldById}
+                    supportsLive={supportsLive}
+                    autoFocus={focusLast && index === draft.length - 1}
+                    keyLocked={publishedKeys.has(row.key)}
+                    canLinkCustomer={
+                      row.key === keyFromLabel(row.label) &&
+                      !voiceFields.some((field) => field.key === row.key)
+                    }
+                    onLinkCustomer={() => void linkToCustomer(index)}
+                    onFocused={() => setFocusLast(false)}
+                    onChange={(next) => patch(index, next)}
+                    onRemove={() => removeAt(index)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addTo(group.id)}
+                  className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                >
+                  {t("voiceVariables.addRow")}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {(availableBuiltins.length > 0 || availableFields.length > 0) && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+              {t("voiceVariables.alwaysAvailable")}
+              <InfoTip text={t("voiceVariables.builtinHint")} />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {availableBuiltins.map((builtin) => (
+                <span
+                  key={builtin.key}
+                  title={builtin.key}
+                  className="rounded-lg bg-[var(--muted-bg)] px-2 py-1 text-xs text-[var(--muted)]"
+                >
+                  {builtin.label}
+                </span>
+              ))}
+              {/* A field the org already configured in Business becomes a
+                  capture row in one click — it must be findable where
+                  variables live, not only where it was created. */}
+              {availableFields.map((field) => (
+                <button
+                  key={field.id}
+                  type="button"
+                  onClick={() => adoptField(field)}
+                  title={t("voiceVariables.customerCard")}
+                  className="rounded-lg border border-dashed border-[var(--border)] px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+                >
+                  + {field.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {confirmRemove !== null && (
         <Sheet
-          title={editing === "new" ? t("voiceVariables.add") : t("voiceVariables.edit")}
-          hint={t("voiceVariables.editHint")}
-          onClose={() => setEditing(null)}
+          title={t("voiceVariables.remove")}
+          onClose={() => setConfirmRemove(null)}
         >
           <div className="space-y-3">
-            {/* A destination is a choice only when the business has allowed
-                the phone agent to edit at least one customer field. A select
-                with a single option is a question the sheet asks nobody; the
-                hint below the form says how to unlock real destinations. */}
-            {voiceFields.length > 0 && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">{t("voiceVariables.savedTo")}</span>
-              <select
-                value={destinationValue}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === "call") {
-                    setForm((row) => ({ ...row, destination: "call", contactFieldId: undefined }));
-                    return;
-                  }
-                  const field = fieldById.get(value.slice(6));
-                  if (!field) return;
-                  setForm((row) => ({
-                    ...row,
-                    destination: "contact",
-                    contactFieldId: field.id,
-                    key: field.key,
-                    label: field.label,
-                    type:
-                      field.type === "select"
-                        ? "enum"
-                        : field.type === "number"
-                          ? "number"
-                          : "string",
-                    choices: field.type === "select" ? field.options : undefined,
-                  }));
-                }}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
+            <p className="text-sm text-[var(--muted)]">
+              {t("voiceVariables.removeBody").replace(
+                "{name}",
+                draft[confirmRemove]?.label || draft[confirmRemove]?.key || "",
+              )}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemove(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
               >
-                <option value="call">{t("voiceVariables.callOnly")}</option>
-                {voiceFields.map((field) => (
-                  <option key={field.id} value={`field:${field.id}`}>
-                    {field.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            )}
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceVariables.label")}</span>
-                <input
-                  data-sheet-autofocus
-                  value={form.label}
-                  disabled={form.destination === "contact"}
-                  onChange={(event) => {
-                    const label = event.target.value;
-                    setForm((row) => ({
-                      ...row,
-                      label,
-                      key: editing === "new" ? keyFromLabel(label) : row.key,
-                    }));
-                  }}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm disabled:opacity-60"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceVariables.key")}</span>
-                <input
-                  value={form.key}
-                  disabled={form.destination === "contact"}
-                  onChange={(event) => setForm((row) => ({ ...row, key: keyFromLabel(event.target.value) }))}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 font-mono text-xs disabled:opacity-60"
-                />
-              </label>
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft((rows) => rows.filter((_, i) => i !== confirmRemove));
+                  setConfirmRemove(null);
+                }}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
+              >
+                {t("voiceVariables.remove")}
+              </button>
             </div>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
 
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">{t("voiceVariables.description")}</span>
-              <input
-                value={form.description}
-                onChange={(event) => setForm((row) => ({ ...row, description: event.target.value }))}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
-              />
-            </label>
+// One variable, editable where it sits. Label and description are plain
+// inputs; everything with a fixed set of answers — type, choices, which phases
+// it is captured in, where the answer lands — is behind the one popover, which
+// is what keeps the row to a width that fits the card.
+function VariableRow({
+  row,
+  fields,
+  fieldById,
+  supportsLive,
+  autoFocus,
+  keyLocked,
+  canLinkCustomer,
+  onFocused,
+  onChange,
+  onRemove,
+  onLinkCustomer,
+}: {
+  row: VoiceVariable;
+  fields: VoiceContactField[];
+  fieldById: Map<string, VoiceContactField>;
+  supportsLive: boolean;
+  autoFocus: boolean;
+  keyLocked: boolean;
+  canLinkCustomer: boolean;
+  onFocused: () => void;
+  onChange: (next: Partial<VoiceVariable>) => void;
+  onRemove: () => void;
+  onLinkCustomer: () => void;
+}) {
+  const { t } = useLanguage();
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
+  const labelRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!autoFocus) return;
+    labelRef.current?.focus();
+    onFocused();
+  }, [autoFocus, onFocused]);
+
+  const typeLabel =
+    row.type === "enum"
+      ? `${t("voiceVariables.options")} · ${row.choices?.length ?? 0}`
+      : row.type === "number"
+        ? t("voiceVariables.number")
+        : row.type === "boolean"
+          ? t("voiceVariables.yesNo")
+          : t("voiceVariables.text");
+
+  // The phases this row is NOT grouped under, said in a word each. Without
+  // them the lifecycle became invisible the moment the columns went away.
+  const tags = [
+    row.beforeSource !== "none" ? t("voiceDetail.before") : null,
+    row.duringMode === "confirm" ? t("voiceVariables.confirm") : null,
+    row.afterCall && row.duringMode !== "none" ? t("voiceDetail.after") : null,
+    row.destination === "contact" && row.contactFieldId
+      ? fieldById.get(row.contactFieldId)?.label
+      : null,
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-48 shrink-0">
+        <input
+          ref={labelRef}
+          value={row.label}
+          onChange={(e) => {
+            const label = e.target.value;
+            // The key follows the label until the row has been published or
+            // hand-edited; a key that drifts from its label is how you end up
+            // with musteri_adi holding the phone number.
+            onChange({ label, ...(keyLocked ? {} : { key: keyFromLabel(label) }) });
+          }}
+          placeholder={t("voiceVariables.label")}
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+        />
+      </div>
+      <input
+        value={row.description}
+        onChange={(e) => onChange({ description: e.target.value })}
+        placeholder={t("voiceVariables.description")}
+        className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+      />
+      {tags.length > 0 && (
+        <span
+          className="hidden shrink-0 gap-1 sm:flex"
+          title={tags.join(" · ")}
+        >
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]"
+            >
+              {tag}
+            </span>
+          ))}
+        </span>
+      )}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggle}
+        className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+      >
+        {typeLabel} ▾
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        title={t("voiceVariables.remove")}
+        className="shrink-0 rounded-lg px-1.5 py-1.5 text-xs text-[var(--muted)] hover:text-red-600"
+      >
+        ✕
+      </button>
+
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
+            className="fixed z-50 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-lg"
+          >
             <label className="block">
               <span className="mb-1 block text-xs font-medium">{t("voiceVariables.type")}</span>
               <select
-                value={form.type}
-                disabled={form.destination === "contact"}
-                onChange={(event) =>
-                  setForm((row) => ({
-                    ...row,
-                    type: event.target.value as VoiceVariable["type"],
-                    choices: event.target.value === "enum" ? row.choices ?? [] : undefined,
-                  }))
+                value={row.type}
+                onChange={(e) =>
+                  onChange({ type: e.target.value as VoiceVariable["type"] })
                 }
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm disabled:opacity-60"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="string">{t("voiceVariables.text")}</option>
                 <option value="number">{t("voiceVariables.number")}</option>
@@ -657,135 +608,177 @@ export function VoiceVariablesEditor({
                 <option value="enum">{t("voiceVariables.options")}</option>
               </select>
             </label>
-            {form.type === "enum" && (
+
+            {row.type === "enum" && (
               <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceVariables.choices")}</span>
+                <span className="mb-1 block text-xs font-medium">
+                  {t("voiceVariables.choices")}
+                </span>
                 <input
-                  value={(form.choices ?? []).join(", ")}
-                  disabled={form.destination === "contact"}
-                  onChange={(event) =>
-                    setForm((row) => ({ ...row, choices: event.target.value.split(",") }))
+                  value={(row.choices ?? []).join(", ")}
+                  onChange={(e) =>
+                    onChange({ choices: e.target.value.split(",").map((c) => c.trim()) })
                   }
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm disabled:opacity-60"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
                 />
               </label>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceDetail.before")}</span>
-                <select
-                  value={beforeValue}
-                  disabled={!supportsLive}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (value.startsWith("field:")) {
-                      setForm((row) => ({
-                        ...row,
-                        beforeSource: "contact_field",
-                        beforeFieldId: value.slice(6),
-                      }));
-                    } else {
-                      setForm((row) => ({
-                        ...row,
-                        beforeSource: value as VoiceVariable["beforeSource"],
-                        beforeFieldId: undefined,
-                      }));
-                    }
-                  }}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm disabled:opacity-60"
-                >
-                  <option value="none">{t("voiceVariables.none")}</option>
-                  <option value="static">{t("voiceVariables.defaultValue")}</option>
-                  <option value="business_name">{t("voiceVariables.businessName")}</option>
-                  <option value="customer_name">{t("voiceVariables.customerName")}</option>
-                  <option value="customer_phone">{t("voiceVariables.customerPhone")}</option>
-                  <option value="customer_language">{t("voiceVariables.customerLanguage")}</option>
-                  <option value="next_appointment">{t("voiceVariables.nextAppointment")}</option>
-                  {contactFields.map((field) => (
+            {/* The capture phase. Changing it moves the row to that group,
+                which is the only way to move a row between them. */}
+            <div>
+              <span className="mb-1 block text-xs font-medium">
+                {t("voiceVariables.capturedWhen")}
+              </span>
+              <select
+                value={row.duringMode !== "none" ? row.duringMode : row.afterCall ? "after" : "before"}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next === "before") {
+                    onChange({
+                      duringMode: "none",
+                      afterCall: false,
+                      beforeSource: row.beforeSource === "none" ? "static" : row.beforeSource,
+                    });
+                  } else if (next === "after") {
+                    onChange({ duringMode: "none", afterCall: true });
+                  } else {
+                    onChange({
+                      duringMode: next as VoiceVariable["duringMode"],
+                      afterCall: true,
+                    });
+                  }
+                }}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+              >
+                <option value="before">{t("voiceDetail.before")}</option>
+                {supportsLive && (
+                  <option value="if_missing">{t("voiceVariables.askMissing")}</option>
+                )}
+                {supportsLive && <option value="confirm">{t("voiceVariables.confirm")}</option>}
+                <option value="after">{t("voiceVariables.extract")}</option>
+              </select>
+            </div>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium">
+                {t("voiceDetail.before")}
+              </span>
+              <select
+                value={
+                  row.beforeSource === "contact_field" && row.beforeFieldId
+                    ? `field:${row.beforeFieldId}`
+                    : row.beforeSource
+                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.startsWith("field:")) {
+                    onChange({
+                      beforeSource: "contact_field",
+                      beforeFieldId: value.slice(6),
+                    });
+                  } else {
+                    onChange({
+                      beforeSource: value as VoiceVariable["beforeSource"],
+                      beforeFieldId: undefined,
+                    });
+                  }
+                }}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+              >
+                <option value="none">{t("voiceVariables.none")}</option>
+                <option value="static">{t("voiceVariables.defaultValue")}</option>
+                <option value="business_name">{t("voiceVariables.businessName")}</option>
+                <option value="customer_name">{t("voiceVariables.customerName")}</option>
+                <option value="customer_phone">{t("voiceVariables.customerPhone")}</option>
+                <option value="customer_language">{t("voiceVariables.customerLanguage")}</option>
+                <option value="next_appointment">{t("voiceVariables.nextAppointment")}</option>
+                {fields.map((field) => (
+                  <option key={field.id} value={`field:${field.id}`}>
+                    {field.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {row.beforeSource === "static" && (
+              <input
+                value={row.beforeValue ?? ""}
+                onChange={(e) => onChange({ beforeValue: e.target.value })}
+                placeholder={t("voiceVariables.defaultValue")}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+              />
+            )}
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium">
+                {t("voiceVariables.savedTo")}
+              </span>
+              <select
+                value={
+                  row.destination === "contact" && row.contactFieldId
+                    ? `field:${row.contactFieldId}`
+                    : "call"
+                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "new") {
+                    onLinkCustomer();
+                    return;
+                  }
+                  onChange(
+                    value === "call"
+                      ? { destination: "call", contactFieldId: undefined }
+                      : { destination: "contact", contactFieldId: value.slice(6) },
+                  );
+                }}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+              >
+                <option value="call">{t("voiceVariables.callOnly")}</option>
+                {/* Only a field whose key matches — the publish validator
+                    rejects any other pairing, so offering it would be a
+                    choice that always fails. */}
+                {fields
+                  .filter((field) => field.key === row.key)
+                  .map((field) => (
                     <option key={field.id} value={`field:${field.id}`}>
                       {field.label}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceDetail.during")}</span>
-                <select
-                  value={form.duringMode}
-                  disabled={!supportsLive}
-                  onChange={(event) =>
-                    setForm((row) => ({
-                      ...row,
-                      duringMode: event.target.value as VoiceVariable["duringMode"],
-                    }))
-                  }
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm disabled:opacity-60"
-                >
-                  <option value="none">{t("voiceVariables.none")}</option>
-                  <option value="if_missing">{t("voiceVariables.askMissing")}</option>
-                  <option value="confirm">{t("voiceVariables.confirm")}</option>
-                </select>
-              </label>
-            </div>
-            {form.beforeSource === "static" && (
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium">{t("voiceVariables.defaultValue")}</span>
-                <input
-                  value={form.beforeValue ?? ""}
-                  onChange={(event) => setForm((row) => ({ ...row, beforeValue: event.target.value }))}
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
-                />
-              </label>
-            )}
+                {canLinkCustomer && (
+                  <option value="new">{t("voiceVariables.saveToCustomer")}</option>
+                )}
+              </select>
+              {fields.length === 0 && (
+                <span className="mt-1 block text-[11px] text-[var(--muted)]">
+                  {t("voiceVariables.noFieldsHint")}
+                </span>
+              )}
+            </label>
 
-            <div className="flex items-center gap-4 text-xs">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.afterCall}
-                  onChange={(event) => setForm((row) => ({ ...row, afterCall: event.target.checked }))}
-                  className="accent-[var(--accent)]"
-                />
-                {t("voiceVariables.afterFallback")}
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={form.required}
-                  onChange={(event) => setForm((row) => ({ ...row, required: event.target.checked }))}
-                  className="accent-[var(--accent)]"
-                />
-                {t("voiceVariables.required")}
-              </label>
-            </div>
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={row.required}
+                onChange={(e) => onChange({ required: e.target.checked })}
+                className="accent-[var(--accent)]"
+              />
+              {t("voiceVariables.required")}
+            </label>
 
-            {voiceFields.length === 0 && (
-              <p className="text-xs text-[var(--muted)]">
-                {t("voiceVariables.noFieldsHint")}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex justify-between">
+              <code className="self-center text-[10px] text-[var(--muted)]">{row.key}</code>
               <button
                 type="button"
-                onClick={() => setEditing(null)}
-                className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+                onClick={close}
+                className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
               >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                disabled={!form.label.trim() || !form.key.trim()}
-                onClick={applyForm}
-                className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
-              >
-                {editing === "new" ? t("common.add") : t("voiceVariables.done")}
+                {t("voiceVariables.done")}
               </button>
             </div>
-          </div>
-        </Sheet>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
