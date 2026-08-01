@@ -14,8 +14,14 @@ const LANGUAGE_NAMES: Record<VoiceAgentLanguage, string> = {
   "de-DE": "German",
 };
 
+// Every one of these puts the business name where the caller's own language
+// says "you have reached X", never in the vocative — "Merhaba, {{business_name}}"
+// greets the salon rather than the caller. Turkish gets there with "burası",
+// which is also the only form that stays correct for an arbitrary name: any
+// case suffix would have to agree with the name's own vowels ('den vs 'dan vs
+// 'ten vs 'tan), and a template cannot inflect a variable.
 const BEGIN_MESSAGES: Record<VoiceAgentLanguage, string> = {
-  "tr-TR": "Merhaba, {{business_name}}. Size nasıl yardımcı olabilirim?",
+  "tr-TR": "Merhaba, burası {{business_name}}. Size nasıl yardımcı olabilirim?",
   "en-US": "Hello, you've reached {{business_name}}. How can I help?",
   "de-DE": "Guten Tag bei {{business_name}}. Wie kann ich Ihnen helfen?",
 };
