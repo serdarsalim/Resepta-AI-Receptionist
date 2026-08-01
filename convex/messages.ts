@@ -285,6 +285,12 @@ const feedItem = v.object({
   summary: v.optional(v.string()),
   transcript: v.optional(v.string()),
   recordingUrl: v.optional(v.string()),
+  // What the agent collected on the call, and why the call ended. The contact
+  // feed's expanded call column shows exactly what Voice → Calls shows; a
+  // person who opened a call to find out what was said should not have to
+  // learn which of two screens carries the answer.
+  collected: v.optional(v.record(v.string(), v.any())),
+  disconnectionReason: v.optional(v.string()),
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
@@ -371,6 +377,8 @@ export const feedForCustomer = query({
         summary: c.summary,
         transcript: c.transcript,
         recordingUrl: c.recordingUrl,
+        collected: c.collected,
+        disconnectionReason: c.disconnectionReason,
       })),
       ...notes.map((n) => ({
         id: n._id as string,

@@ -43,6 +43,7 @@ export const list = query({
         transcript: c.transcript ?? null,
         recordingUrl: c.recordingUrl ?? null,
         collected: c.collected ?? null,
+        disconnectionReason: c.disconnectionReason ?? null,
         customerName: (c.customerId && names.get(c.customerId)) || null,
       })),
     };

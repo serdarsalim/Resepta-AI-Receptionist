@@ -396,6 +396,11 @@ export default defineSchema({
     // copy is the raw per-call answer to "what did they say", kept with the
     // recording and transcript it belongs to.
     collected: v.optional(v.record(v.string(), v.any())),
+    // Retell's raw disconnect code (agent_hangup, dial_no_answer, voicemail_
+    // reached…). Kept raw rather than pre-humanized: the label is a UI concern
+    // and this app speaks three languages. It is the only thing that explains a
+    // call with no summary — an unanswered call has nothing else to show.
+    disconnectionReason: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_started", ["orgId", "startedAt"])

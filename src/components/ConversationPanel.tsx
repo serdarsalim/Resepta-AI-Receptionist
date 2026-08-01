@@ -13,6 +13,12 @@ import {
   fromDatetimeLocalValue,
   localeFor,
 } from "@/lib/datetime";
+import {
+  CallDetail,
+  CallOutcomePill,
+  CallTranscript,
+  humanizeCallEnd,
+} from "./CallDetail";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject } from "../../convex/lib/emailInbound";
 import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
@@ -99,12 +105,16 @@ export type FeedFilter = Channel | "form" | "note" | "all";
 // variant (Nudge's rule).
 export function ConversationPanel({
   customerId,
+  contactName,
   lastInboundAt,
   filter = "all",
   onFilterChange,
   className,
 }: {
   customerId: Id<"customers">;
+  // Labels the customer's side of a call transcript. Optional: the panel works
+  // without it, the bubbles just say "Caller".
+  contactName?: string | null;
   lastInboundAt?: number;
   filter?: FeedFilter;
   // The index ROUTES: an email or call row moves the whole pane to that
@@ -663,7 +673,14 @@ export function ConversationPanel({
           ? null
           : thread.map((item, index) => {
           if (item.channel === "call")
-            return <CallEntry key={item.id} item={item} detail={filter === "call"} />;
+            return (
+              <CallEntry
+                key={item.id}
+                item={item}
+                detail={filter === "call"}
+                contactName={contactName}
+              />
+            );
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
@@ -1338,8 +1355,11 @@ function NoteEntry({
 function CallEntry({
   item,
   detail = false,
+  contactName,
 }: {
   detail?: boolean;
+  // Labels the human side of the transcript when the card is opened.
+  contactName?: string | null;
   item: {
     at: number;
     direction?: "in" | "out";
@@ -1348,64 +1368,66 @@ function CallEntry({
     summary?: string;
     transcript?: string;
     recordingUrl?: string;
+    collected?: Record<string, unknown>;
+    disconnectionReason?: string;
   };
 }) {
   const { t, language } = useLanguage();
   const duration =
     item.durationSec !== undefined ? formatDuration(item.durationSec) : null;
+  const ended = humanizeCallEnd(item.disconnectionReason, t);
+
+  // Opened deliberately: the full record, identical to what Voice → Calls
+  // shows. In the mixed feed it stays a summary card — a chat transcript
+  // inline would bury every message after it.
+  if (detail) {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
+        {duration && <p className="mb-1 text-xs text-[var(--muted)]">{duration}</p>}
+        <CallDetail call={item} contactName={contactName} />
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm">
-      {/* Header line repeats direction and time only when this card is riding
-          in the mixed feed. Inside the call tab the pane's own header already
-          said both, and saying them twice made the card look like a second
-          call. */}
-      {!detail && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-          <FeedIcon type="call" size={13} />
-          <span>{item.direction === "in" ? t("calls.inbound") : t("calls.outbound")}</span>
-          <span>{formatDateTime(item.at, language)}</span>
-          {duration && <span>· {duration}</span>}
-          {item.outcome && (
-            <span className="rounded-full bg-[var(--card)] px-2 py-0.5">
-              {item.outcome}
-            </span>
-          )}
-        </div>
+      {/* The mixed feed's card says direction and time itself; the call tab's
+          pane header already says both, which is why the opened form above
+          doesn't repeat them. */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+        <FeedIcon type="call" size={13} />
+        <span>{item.direction === "in" ? t("calls.inbound") : t("calls.outbound")}</span>
+        <span>{formatDateTime(item.at, language)}</span>
+        {duration && <span>· {duration}</span>}
+        <CallOutcomePill outcome={item.outcome} />
+      </div>
+      {/* Summary, or the reason it ended when there was no conversation to
+          summarize. A missed call used to render as an empty card. */}
+      {item.summary ? (
+        <p className="mt-1">{item.summary}</p>
+      ) : (
+        ended && <p className="mt-1 text-xs text-[var(--muted)]">{ended}</p>
       )}
-      {detail && duration && (
-        <p className="text-xs text-[var(--muted)]">{duration}</p>
-      )}
-      {item.summary && <p className="mt-1">{item.summary}</p>}
       {item.recordingUrl && (
-        <>
-          {/* In the detail view the recording PLAYS here rather than opening a
-              tab: the transcript is right underneath, and listening while
-              reading is the whole reason anyone opens a call. */}
-          {detail ? (
-            <audio controls src={item.recordingUrl} className="mt-2 h-9 w-full" />
-          ) : (
-            <a
-              href={item.recordingUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline"
-            >
-              {t("calls.recording")}
-            </a>
-          )}
-        </>
+        <a
+          href={item.recordingUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline"
+        >
+          {t("calls.recording")}
+        </a>
       )}
       {item.transcript && (
-        // Open by default in the detail view — you navigated here to read it.
-        // Collapsed in the mixed feed, where it would bury everything after.
-        <details className="mt-1" open={detail}>
+        // Collapsed here, where an open transcript would bury everything after
+        // it. Opening the Calls filter is the way to read one properly.
+        <details className="mt-1">
           <summary className="cursor-pointer text-xs text-[var(--muted)]">
             {t("calls.transcript")}
           </summary>
-          <pre className="mt-1 whitespace-pre-wrap text-xs text-[var(--muted)]">
-            {item.transcript}
-          </pre>
+          <div className="mt-1.5">
+            <CallTranscript transcript={item.transcript} contactName={contactName} />
+          </div>
         </details>
       )}
     </div>

@@ -335,6 +335,7 @@ export function InboxView({
             <ConversationPanel
               key={active.customerId}
               customerId={active.customerId}
+              contactName={active.name}
               lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
               filter={filter}
               onFilterChange={setFilter}

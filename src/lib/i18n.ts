@@ -926,6 +926,75 @@ const dictionary = {
     en: "No recording or transcript for this call.",
     de: "Keine Aufnahme oder kein Transkript für diesen Anruf.",
   },
+  // Speaker labels above the transcript bubbles. The customer's own name is
+  // used when the call is bound to a contact; this is the fallback for a first
+  // -time caller whose row is still just a phone number.
+  "calls.agent": { tr: "Asistan", en: "Agent", de: "Assistent" },
+  // Retell's call_successful, said out loud. "Unsuccessful" is not a failure —
+  // the caller may simply have said no.
+  "calls.successful": { tr: "Başarılı", en: "Successful", de: "Erfolgreich" },
+  "calls.unsuccessful": {
+    tr: "Sonuçsuz",
+    en: "Unsuccessful",
+    de: "Ohne Ergebnis",
+  },
+  "calls.theCaller": { tr: "Arayan kişi", en: "Caller", de: "Anrufer" },
+
+  // Retell's disconnect codes, said the way an owner would say them. A call
+  // that nobody answered has no summary and no transcript, so this line is the
+  // whole story of that row — it is not decoration.
+  "calls.end.agent_hangup": {
+    tr: "Aramayı asistan sonlandırdı",
+    en: "Agent ended the call",
+    de: "Der Assistent hat das Gespräch beendet",
+  },
+  "calls.end.user_hangup": {
+    tr: "Arayan telefonu kapattı",
+    en: "Caller hung up",
+    de: "Anrufer hat aufgelegt",
+  },
+  "calls.end.dial_no_answer": {
+    tr: "Cevap yok",
+    en: "No answer",
+    de: "Keine Antwort",
+  },
+  "calls.end.dial_busy": { tr: "Hat meşgul", en: "Line busy", de: "Leitung besetzt" },
+  "calls.end.dial_failed": {
+    tr: "Arama bağlanamadı",
+    en: "Call failed to connect",
+    de: "Anruf konnte nicht verbunden werden",
+  },
+  "calls.end.voicemail_reached": {
+    tr: "Telesekretere düştü",
+    en: "Reached voicemail",
+    de: "Mailbox erreicht",
+  },
+  "calls.end.call_transfer": {
+    tr: "Arama aktarıldı",
+    en: "Call transferred",
+    de: "Anruf weitergeleitet",
+  },
+  "calls.end.inactivity": {
+    tr: "Sessizlik nedeniyle sonlandı",
+    en: "Ended after silence",
+    de: "Nach Stille beendet",
+  },
+  "calls.end.machine_detected": {
+    tr: "Telesekreter algılandı",
+    en: "Answering machine detected",
+    de: "Anrufbeantworter erkannt",
+  },
+  "calls.end.max_duration_reached": {
+    tr: "Azami arama süresine ulaşıldı",
+    en: "Hit the maximum call length",
+    de: "Maximale Gesprächsdauer erreicht",
+  },
+  "calls.end.concurrency_limit_reached": {
+    tr: "Eşzamanlı arama sınırına takıldı",
+    en: "Hit the concurrent call limit",
+    de: "Limit gleichzeitiger Anrufe erreicht",
+  },
+  "calls.end.error": { tr: "Arama hatası", en: "Call error", de: "Anruffehler" },
   // The sidebar destination and its two sections. "Phone agent", the salon's
   // word, never "voice"/"Retell".
   "nav.voice": {
@@ -1996,6 +2065,10 @@ const dictionary = {
   "common.copy": { tr: "Kopyala", en: "Copy", de: "Kopieren" },
   "common.copied": { tr: "Kopyalandı", en: "Copied", de: "Kopiert" },
   "common.loading": { tr: "Yükleniyor…", en: "Loading…", de: "Wird geladen…" },
+  // For rendering a collected boolean. Retell answers true/false; "Wants to
+  // proceed: false" is a developer's sentence, not an owner's.
+  "common.yes": { tr: "Evet", en: "Yes", de: "Ja" },
+  "common.no": { tr: "Hayır", en: "No", de: "Nein" },
   // Deliberately short and generic. The box sizes itself to its longest text,
   // so a 19-character "Randevu ara" would pin it at the clamp ceiling on every
   // tab; the page title beside it already says what you are searching.

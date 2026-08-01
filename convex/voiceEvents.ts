@@ -235,6 +235,9 @@ export const process = internalAction({
         transcript: String(call.transcript ?? "") || undefined,
         recordingUrl: String(call.recording_url ?? "") || undefined,
         collected: Object.keys(collected).length > 0 ? collected : undefined,
+        // Only call_ended carries it; call_analyzed arrives without one and
+        // recordCall's fill-don't-overwrite patch keeps the first value.
+        disconnectionReason: String(call.disconnection_reason ?? "") || undefined,
       });
 
       const phone = String(call.from_number ?? "");

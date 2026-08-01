@@ -1464,6 +1464,7 @@ export const recordCall = internalMutation({
     transcript: v.optional(v.string()),
     recordingUrl: v.optional(v.string()),
     collected: v.optional(v.record(v.string(), v.any())),
+    disconnectionReason: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -1488,6 +1489,7 @@ export const recordCall = internalMutation({
         summary: existing.summary ?? args.summary,
         transcript: existing.transcript ?? args.transcript,
         recordingUrl: existing.recordingUrl ?? args.recordingUrl,
+        disconnectionReason: existing.disconnectionReason ?? args.disconnectionReason,
         collected:
           existing.collected || args.collected
             ? { ...(args.collected ?? {}), ...(existing.collected ?? {}) }
@@ -1542,6 +1544,7 @@ export const recordCall = internalMutation({
       recordingUrl: args.recordingUrl,
       retellCallId: args.retellCallId,
       collected: args.collected,
+      disconnectionReason: args.disconnectionReason,
     });
     return null;
   },

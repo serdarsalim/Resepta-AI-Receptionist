@@ -531,6 +531,7 @@ export function ContactView({
         >
           <ConversationPanel
             customerId={customerId}
+            contactName={`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
             lastInboundAt={customer.lastInboundAt}
             filter={filter}
             onFilterChange={setFilter}
