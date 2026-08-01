@@ -79,19 +79,50 @@ type Menu = {
   fragment: string;
 };
 
+// A variable in the text is a THING, not the seven characters of punctuation
+// around its name. The braces still occupy their exact width — the mirror's
+// metrics have to match the real text underneath it character for character —
+// but render transparent, so inside the tinted pill they read as its padding.
+const TOKEN_RE = /(\{\{\s*[a-z0-9_]+\s*\}\})/gi;
+
+function renderTokens(text: string) {
+  return text.split(TOKEN_RE).map((part, i) => {
+    const match = part.match(/^(\{\{\s*)([a-z0-9_]+)(\s*\}\})$/i);
+    if (!match) return <span key={i}>{part}</span>;
+    return (
+      <span
+        key={i}
+        className="rounded bg-blue-100 font-medium text-blue-700 dark:bg-blue-500/25 dark:text-blue-300"
+      >
+        <span className="text-transparent">{match[1]}</span>
+        {match[2]}
+        <span className="text-transparent">{match[3]}</span>
+      </span>
+    );
+  });
+}
+
 export function PromptEditor({
   value,
   onChange,
   variables,
   rows = 14,
+  singleLine = false,
 }: {
   value: string;
   onChange: (next: string) => void;
   variables: PromptVariable[];
   rows?: number;
+  // One LOGICAL line that wraps and grows rather than scrolling off the right
+  // edge — the opening line. Enter is swallowed and pasted newlines become
+  // spaces, so the value stays one line and only the box gets taller. The
+  // footer is dropped too: a hint and a chip row under a one-line field is
+  // more chrome than field.
+  singleLine?: boolean;
 }) {
   const { t } = useLanguage();
   const ref = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [active, setActive] = useState(0);
@@ -177,18 +208,45 @@ export function PromptEditor({
     return chips;
   }, [value, variables]);
 
+  // Applied to BOTH layers, or the pills drift off the words they mark.
+  const fieldClass = `w-full rounded-lg border px-2 py-1.5 text-xs leading-relaxed ${
+    singleLine ? "" : "font-mono"
+  }`;
+
   return (
     <div>
-      <textarea
+      <div className="relative w-full">
+        {/* The pills live here, under a text-transparent textarea. A
+            contenteditable would render them directly but takes the caret,
+            undo stack and IME with it — this keeps a plain textarea. */}
+        <div
+          ref={mirrorRef}
+          aria-hidden
+          className={`${fieldClass} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border-transparent`}
+        >
+          {renderTokens(value)}
+          {/* Stops a trailing blank line collapsing out of the mirror. */}
+          {"​"}
+        </div>
+        <textarea
         ref={ref}
         value={value}
         onChange={(event) => {
-          onChange(event.target.value);
+          onChange(singleLine ? event.target.value.replace(/\n/g, " ") : event.target.value);
           detect();
         }}
         onClick={detect}
         onBlur={() => setTimeout(close, 150)}
+        onScroll={(event) => {
+          const mirror = mirrorRef.current;
+          if (!mirror) return;
+          mirror.scrollTop = event.currentTarget.scrollTop;
+        }}
         onKeyDown={(event) => {
+          if (singleLine && event.key === "Enter" && !menu) {
+            event.preventDefault();
+            return;
+          }
           if (!menu || matches.length === 0) return;
           if (event.key === "ArrowDown") {
             event.preventDefault();
@@ -204,11 +262,16 @@ export function PromptEditor({
             close();
           }
         }}
-        rows={rows}
+        rows={singleLine ? 1 : rows}
         spellCheck={false}
-        className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 font-mono text-xs leading-relaxed"
+        className={`${fieldClass} relative block border-[var(--border)] bg-transparent text-transparent caret-[var(--foreground)] ${
+          singleLine ? "resize-none [field-sizing:content]" : ""
+        }`}
       />
-      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      </div>
+      <div
+        className={`mt-1 flex flex-wrap items-center gap-1.5 ${singleLine ? "hidden" : ""}`}
+      >
         <span className="text-[11px] text-[var(--muted)]">{t("voiceDetail.atHint")}</span>
         {used.map((chip) => (
           <span

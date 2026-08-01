@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction } from "convex/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
@@ -213,6 +213,19 @@ export function VoiceAgentPage({
     });
   };
 
+  // The registry's rows plus the built-ins the runtime always injects
+  // (customer, business, next appointment, services). A registry row with the
+  // same key wins, mirroring the injection's precedence. Shared by the prompt
+  // and the opening line so the @ picker offers the same list in both.
+  const promptVariables = useMemo(() => {
+    const rows = (detail?.variableConfig.items ?? []).map((row) => ({
+      key: row.key,
+      label: row.label,
+    }));
+    const seen = new Set(rows.map((row) => row.key));
+    return [...rows, ...builtinVoiceVariables(t).filter((row) => !seen.has(row.key))];
+  }, [detail, t]);
+
   // Not from the backend: the backend would have to pick a language. Which of
   // the two unsupported shapes this is, the client can tell from engineType.
   const unsupported = !detail
@@ -352,38 +365,22 @@ export function VoiceAgentPage({
                     <span className="text-xs text-[var(--muted)]">v{detail.version}</span>
                   )}
                 </div>
-                <PromptEditor
-                  value={draft}
-                  onChange={setDraft}
-                  // The registry's rows plus the built-ins the runtime always
-                  // injects (customer, business, next appointment, services).
-                  // A registry row with the same key wins, mirroring the
-                  // injection's precedence.
-                  variables={(() => {
-                    const rows = detail.variableConfig.items.map((row) => ({
-                      key: row.key,
-                      label: row.label,
-                    }));
-                    const seen = new Set(rows.map((row) => row.key));
-                    return [
-                      ...rows,
-                      ...builtinVoiceVariables(t).filter((row) => !seen.has(row.key)),
-                    ];
-                  })()}
-                />
+                <PromptEditor value={draft} onChange={setDraft} variables={promptVariables} />
                 <label className="mt-3 block">
                   <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
                     {t("voiceDetail.opening")}
                     <InfoTip text={t("voiceDetail.openingHint")} />
                   </span>
-                  {/* A textarea, not an input: an opening line is a spoken
-                      sentence and often two, and a single-line field made the
-                      end of it scroll out of sight while typing. */}
-                  <textarea
+                  {/* The same editor as the prompt, in single-line mode: the
+                      opening line is where {{customer_name}} matters most, and
+                      it deserves the same @ picker and the same pills. It
+                      wraps and grows rather than scrolling, because an opening
+                      line is a spoken sentence and often two. */}
+                  <PromptEditor
                     value={begin}
-                    onChange={(e) => setBegin(e.target.value)}
-                    rows={2}
-                    className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                    onChange={setBegin}
+                    variables={promptVariables}
+                    singleLine
                   />
                 </label>
 
