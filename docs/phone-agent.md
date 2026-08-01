@@ -126,7 +126,11 @@ refused for the same reason.
 Renaming is label-only and therefore safe: the key is the identity (stored
 values and published agents address it), so editing a field's label in
 Services & fields ripples into every agent's editor instantly with nothing to
-republish, and keys never change after creation.
+republish. The key itself is derived from the label (question scaffolding
+stripped, capped at a word boundary; the one rule is `lib/keys.ts`), can be
+declared explicitly when the field is created, and can be edited in the table
+only while no agent references the field, never colliding with another key or
+a reserved system key.
 
 The Contact fields card is one sortable table, ported from Nudge's fields
 admin: system rows pinned and undeletable, org rows drag to reorder, and a
