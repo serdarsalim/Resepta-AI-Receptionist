@@ -8,6 +8,7 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
+import { OptionsEditor } from "./RecordField";
 import { Sheet } from "./Sheet";
 
 export type VoiceVariable = {
@@ -149,6 +150,7 @@ export function VoiceVariablesEditor({
   const { t } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
   const createContactField = useMutation(api.contactFields.create);
+  const updateContactField = useMutation(api.contactFields.update);
   const [draft, setDraft] = useState(seed ?? initial);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -484,6 +486,12 @@ export function VoiceVariablesEditor({
     const own = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
     return own ? [own, ...availableFields] : availableFields;
   };
+  // A row linked to a select field edits THAT field's options — one registry,
+  // same as the Business card — instead of a private copy.
+  const linkedSelectFor = (row: VoiceVariable): VoiceContactField | undefined => {
+    const field = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
+    return field?.type === "select" ? field : undefined;
+  };
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
     const own = builtinVoiceVariables(t).find(
       (builtin) => builtin.key === row.key && builtin.key !== "services",
@@ -553,6 +561,14 @@ export function VoiceVariablesEditor({
                     fields={voiceFields}
                     pickerFields={rowPickerFields(row)}
                     pickerBuiltins={rowPickerBuiltins(row)}
+                    linkedSelect={linkedSelectFor(row)}
+                    onSetFieldOptions={(options) => {
+                      if (row.contactFieldId)
+                        void updateContactField({
+                          fieldId: row.contactFieldId as Id<"contactFields">,
+                          options,
+                        });
+                    }}
                     supportsLive={supportsLive}
                     autoFocus={focusLast && index === draft.length - 1}
                     canLinkCustomer={
@@ -848,6 +864,8 @@ function VariableRow({
   fields,
   pickerFields,
   pickerBuiltins,
+  linkedSelect,
+  onSetFieldOptions,
   supportsLive,
   autoFocus,
   canLinkCustomer,
@@ -865,6 +883,8 @@ function VariableRow({
   fields: VoiceContactField[];
   pickerFields: VoiceContactField[];
   pickerBuiltins: PickerBuiltin[];
+  linkedSelect: VoiceContactField | undefined;
+  onSetFieldOptions: (options: string[]) => void;
   supportsLive: boolean;
   autoFocus: boolean;
   canLinkCustomer: boolean;
@@ -888,9 +908,12 @@ function VariableRow({
     onFocused();
   }, [autoFocus, onFocused]);
 
+  const optionValues = (linkedSelect ? linkedSelect.options : row.choices ?? []).filter(
+    (choice) => choice.trim(),
+  );
   const typeLabel =
     row.type === "enum"
-      ? `${t("voiceVariables.options")} · ${row.choices?.filter((c) => c.trim()).length ?? 0}`
+      ? `${t("voiceVariables.options")} · ${optionValues.length}`
       : row.type === "number"
         ? t("voiceVariables.number")
         : row.type === "boolean"
@@ -967,45 +990,16 @@ function VariableRow({
             </label>
 
             {row.type === "enum" && (
-              <div className="space-y-1">
-                {(row.choices ?? []).map((choice, index) => (
-                  <div key={index} className="flex items-center gap-1">
-                    <input
-                      value={choice}
-                      autoFocus={choice === "" && index === (row.choices?.length ?? 0) - 1}
-                      onChange={(e) =>
-                        onChange({
-                          choices: (row.choices ?? []).map((c, i) =>
-                            i === index ? e.target.value : c,
-                          ),
-                        })
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter" || !choice.trim()) return;
-                        e.preventDefault();
-                        onChange({ choices: [...(row.choices ?? []), ""] });
-                      }}
-                      className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChange({ choices: (row.choices ?? []).filter((_, i) => i !== index) })
-                      }
-                      className="shrink-0 rounded-lg px-1.5 py-1 text-xs text-[var(--muted)] hover:text-red-600"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => onChange({ choices: [...(row.choices ?? []), ""] })}
-                  className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
-                >
-                  {t("voiceVariables.addOption")}
-                </button>
-              </div>
+              <OptionsEditor
+                options={optionValues}
+                onChange={(options) => {
+                  // A linked select's options live on the customer field —
+                  // same registry the Business card edits — and the row's
+                  // copy just mirrors them for the draft.
+                  if (linkedSelect) onSetFieldOptions(options);
+                  onChange({ choices: options });
+                }}
+              />
             )}
 
             {/* The capture phase. Changing it moves the row to that group,

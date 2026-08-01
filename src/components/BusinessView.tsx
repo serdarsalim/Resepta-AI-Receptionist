@@ -21,7 +21,7 @@ import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
-import { FieldGroup, InlineEditValue } from "./RecordField";
+import { InlineEditValue, OptionsEditor } from "./RecordField";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -604,12 +604,6 @@ const FIELD_SOURCES: { id: FieldSource; key: TranslationKey }[] = [
   { id: "voice", key: "fields.source.voice" },
 ];
 
-// One template for every contact-field row, System included, so the card
-// reads as one table: label, type, key, actions. The key column hides on
-// phones, where 11rem of monospace would eat the label.
-const FIELD_ROW_GRID =
-  "grid grid-cols-[1fr_6rem_3.5rem] items-center gap-2 sm:grid-cols-[1fr_6rem_11rem_4rem]";
-
 // The identity columns every customer has. Their keys are the reserved write
 // addresses the voice pipeline refuses to touch — real keys, shown for the
 // same reason field keys are: they are the vocabulary agents and exports use.
@@ -620,46 +614,148 @@ const SYSTEM_FIELDS = [
   { labelKey: "customers.email", typeKey: "fields.type.email", key: "email" },
 ] as const;
 
-// "+ Add option" that becomes an input on demand. Enter commits and stays
-// open for the next option; blur commits and closes; Escape abandons.
-function AddOptionInline({ onAdd }: { onAdd: (option: string) => void }) {
+// One org field as a table row, ported from Nudge's FieldRow (native mode).
+// Label renames inline (label-only: the key is the identity, so the rename
+// ripples everywhere without a republish). A select's type cell reads
+// "Select (n)" and expands the options editor. Filled by toggles staff/voice;
+// a field an agent references can be neither deleted nor handed back to
+// staff, and the row says who uses it instead of offering the ✕.
+function FieldTableRow({
+  field,
+  agents,
+  expanded,
+  dragging,
+  onToggleExpand,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onRename,
+  onToggleSource,
+  onSetOptions,
+  onRemove,
+}: {
+  field: ContactField;
+  agents: string[];
+  expanded: boolean;
+  dragging: boolean;
+  onToggleExpand: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
+  onRename: (label: string) => void;
+  onToggleSource: () => void;
+  onSetOptions: (options: string[]) => void;
+  onRemove: () => void;
+}) {
   const { t } = useLanguage();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState("");
-  const commit = (stayOpen: boolean) => {
-    const option = value.trim();
-    setValue("");
-    if (!stayOpen) setEditing(false);
-    if (option) onAdd(option);
-  };
-  if (!editing)
-    return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="rounded-lg px-2 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-      >
-        {t("voiceVariables.addOption")}
-      </button>
-    );
+  const inUse = agents.length > 0;
+  const voice = field.source === "voice";
+  const usedByText = t("fields.usedByAgents").replace("{agents}", agents.join(", "));
   return (
-    <input
-      autoFocus
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => commit(false)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit(true);
-        }
-        if (e.key === "Escape") {
-          setValue("");
-          setEditing(false);
-        }
-      }}
-      className="w-32 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs"
-    />
+    <>
+      <tr
+        className={`border-t border-[var(--border)] transition-colors hover:bg-[var(--muted-bg)] ${dragging ? "opacity-40" : ""}`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+      >
+        <td className="pl-0.5 text-[var(--muted)]">
+          <span
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            title={t("fields.reorder")}
+            aria-label={t("fields.reorder")}
+            className="inline-flex cursor-grab select-none active:cursor-grabbing hover:text-[var(--foreground)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="9" cy="6" r="1.5" />
+              <circle cx="15" cy="6" r="1.5" />
+              <circle cx="9" cy="12" r="1.5" />
+              <circle cx="15" cy="12" r="1.5" />
+              <circle cx="9" cy="18" r="1.5" />
+              <circle cx="15" cy="18" r="1.5" />
+            </svg>
+          </span>
+        </td>
+        <td className="py-1.5 pr-3">
+          <InlineEditValue value={field.label} onSave={(next) => next && onRename(next)} />
+        </td>
+        <td className="py-1.5 pr-3">
+          <code
+            className="block truncate font-mono text-xs text-[var(--muted)]"
+            title={field.key}
+          >
+            {field.key}
+          </code>
+        </td>
+        <td className="py-1.5 pr-3">
+          {field.type === "select" ? (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              title={t("fields.showOptions")}
+              className="text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
+            >
+              {t("fields.type.select")} ({field.options?.length ?? 0})
+            </button>
+          ) : (
+            <span className="text-xs text-[var(--muted)]">
+              {t(`fields.type.${field.type}` as "fields.type.text")}
+            </span>
+          )}
+        </td>
+        <td className="py-1.5 pr-3">
+          {inUse ? (
+            // Referenced by an agent: the state isn't a choice anymore, and
+            // the chip says who holds it.
+            <span
+              title={usedByText}
+              className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+            >
+              {t("fields.source.voice")}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onToggleSource}
+              title={t(voice ? "fields.voiceHint" : "fields.systemHint")}
+              className={
+                voice
+                  ? "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-100"
+                  : "rounded px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              }
+            >
+              {t(voice ? "fields.source.voice" : "fields.source.manual")}
+            </button>
+          )}
+        </td>
+        <td className="py-1.5 text-right">
+          {!inUse && (
+            <button
+              type="button"
+              onClick={onRemove}
+              title={t("common.delete")}
+              aria-label={t("common.delete")}
+              className="text-sm leading-none text-[var(--muted)] transition-colors hover:text-red-600"
+            >
+              ✕
+            </button>
+          )}
+        </td>
+      </tr>
+      {expanded && field.type === "select" && (
+        <tr className="bg-[var(--muted-bg)]">
+          <td colSpan={6} className="px-3 py-3">
+            <div className="space-y-2">
+              <div className="text-xs text-[var(--muted)]">
+                {t("fields.optionsFor").replace("{name}", field.label)}
+              </div>
+              <OptionsEditor options={field.options ?? []} onChange={onSetOptions} />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -679,149 +775,99 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   // Unset reads as "manual": fields defined before the voice agent existed are
   // staff-filled by definition.
   const rows = fields ?? [];
-  const manualFields = rows.filter((field) => (field.source ?? "manual") === "manual");
-  const voiceFields = rows.filter((field) => field.source === "voice");
 
-  const usedBy = (field: ContactField) => {
-    const agents = usage?.[String(field._id)] ?? [];
-    if (agents.length === 0) return null;
-    return (
-      <span className="ml-2 text-xs text-[var(--muted)]">
-        {t("fields.usedByAgents").replace("{agents}", agents.join(", "))}
-      </span>
-    );
+  // Drag-to-reorder across the org's own rows; system rows are pinned above.
+  // Ported from Nudge's fields admin: persist the full order on drop.
+  const reorderFields = useMutation(api.contactFields.reorder);
+  const [dragId, setDragId] = useState<Id<"contactFields"> | null>(null);
+  const [expandedId, setExpandedId] = useState<Id<"contactFields"> | null>(null);
+  const moveField = (targetId: Id<"contactFields">) => {
+    if (!dragId || dragId === targetId) {
+      setDragId(null);
+      return;
+    }
+    const order = rows.map((field) => field._id);
+    const from = order.indexOf(dragId);
+    const to = order.indexOf(targetId);
+    setDragId(null);
+    if (from < 0 || to < 0) return;
+    order.splice(from, 1);
+    order.splice(to, 0, dragId);
+    void reorderFields({ orderedIds: order });
   };
+
+  const agentsFor = (field: ContactField) => usage?.[String(field._id)] ?? [];
 
   // Staff cannot add a field, so an empty list for them is a heading, an (i)
   // and an empty fieldset. Don't render the frame.
   if (!isOwner && fields !== undefined && rows.length === 0) return null;
 
-  // A field an agent references cannot be deleted (the backend refuses: the
-  // agent's variable registry would dangle and its next publish fail). The
-  // row's "used by" note is the explanation, so the affordance goes away
-  // rather than erroring after the click.
-  const deleteButton = (field: ContactField, className: string) =>
-    isOwner &&
-    (usage?.[String(field._id)] ?? []).length === 0 && (
-      <button
-        className={`rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 ${className}`}
-        onClick={() => void removeField({ fieldId: field._id })}
-      >
-        {t("common.delete")}
-      </button>
-    );
-
-  // One renderer for staff-filled and voice rows: label (rename is label-only;
-  // values and agents address the key, so a new name ripples everywhere
-  // without a republish), type, key, delete — and for selects, the options as
-  // removable pills with inline add on a second line.
-  const fieldRow = (field: ContactField) => (
-    <li key={field._id} className={`group py-2 text-sm ${FIELD_ROW_GRID}`}>
-      <span className="flex min-w-0 items-center">
-        <InlineEditValue
-          value={field.label}
-          onSave={(next) => next && updateField({ fieldId: field._id, label: next })}
-        />
-        {usedBy(field)}
-      </span>
-      <span className="text-xs text-[var(--muted)]">
-        {t(`fields.type.${field.type}` as "fields.type.text")}
-      </span>
-      <span className="hidden min-w-0 items-center sm:flex">
-        <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
-          {field.key}
-        </code>
-      </span>
-      {deleteButton(field, "justify-self-end")}
-      {field.type === "select" && (
-        <div className="col-span-full flex flex-wrap items-center gap-1 pt-1">
-          {(field.options ?? []).map((option) => (
-            <span
-              key={option}
-              className="flex items-center gap-1 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs"
-            >
-              {option}
-              {isOwner && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void updateField({
-                      fieldId: field._id,
-                      options: (field.options ?? []).filter((o) => o !== option),
-                    })
-                  }
-                  className="text-[var(--muted)] hover:text-red-600"
-                >
-                  ✕
-                </button>
-              )}
-            </span>
-          ))}
-          {isOwner && (
-            <AddOptionInline
-              onAdd={(option) =>
-                void updateField({
-                  fieldId: field._id,
-                  options: [...(field.options ?? []), option],
-                })
-              }
-            />
-          )}
-        </div>
-      )}
-    </li>
-  );
-
   return (
     <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
-      {/* One header for the whole card: every group below answers the same
-          three questions per row — what staff call it, what shape it has,
-          what key addresses it. */}
-      <div className={`${FIELD_ROW_GRID} pb-1 text-xs text-[var(--muted)]`}>
-        <span>{t("fields.label")}</span>
-        <span>{t("fields.typeLabel")}</span>
-        <span className="hidden sm:block">{t("fields.key")}</span>
-        <span />
+      {/* One sortable table, ported from Nudge's fields admin: system rows
+          are pinned and undeletable, org rows drag to reorder, a List type
+          expands into its options editor, and Filled by is the column that
+          replaced the old three-group split. */}
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-6" />
+            <col />
+            <col className="w-40" />
+            <col className="w-24" />
+            <col className="w-32" />
+            <col className="w-10" />
+          </colgroup>
+          <thead className="text-left text-xs text-[var(--muted)]">
+            <tr>
+              <th aria-label={t("fields.reorder")} />
+              <th className="py-2 pr-3 font-medium">{t("fields.label")}</th>
+              <th className="py-2 pr-3 font-medium">{t("fields.key")}</th>
+              <th className="py-2 pr-3 font-medium">{t("fields.typeLabel")}</th>
+              <th className="py-2 pr-3 font-medium">{t("fields.source")}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {SYSTEM_FIELDS.map((field) => (
+              <tr key={field.key} className="border-t border-[var(--border)] text-[var(--muted)]">
+                <td />
+                <td className="py-2 pr-3">{t(field.labelKey)}</td>
+                <td className="py-2 pr-3">
+                  <code className="block truncate font-mono text-xs">{field.key}</code>
+                </td>
+                <td className="py-2 pr-3 text-xs">{t(field.typeKey)}</td>
+                <td className="py-2 pr-3 text-xs">{t("fields.source.manual")}</td>
+                <td />
+              </tr>
+            ))}
+            {rows.map((field) => (
+              <FieldTableRow
+                key={field._id}
+                field={field}
+                agents={agentsFor(field)}
+                expanded={expandedId === field._id}
+                dragging={dragId === field._id}
+                onToggleExpand={() =>
+                  setExpandedId((current) => (current === field._id ? null : field._id))
+                }
+                onDragStart={() => setDragId(field._id)}
+                onDragEnd={() => setDragId(null)}
+                onDrop={() => moveField(field._id)}
+                onRename={(label) => void updateField({ fieldId: field._id, label })}
+                onToggleSource={() =>
+                  void updateField({
+                    fieldId: field._id,
+                    source: (field.source ?? "manual") === "voice" ? "manual" : "voice",
+                  })
+                }
+                onSetOptions={(options) => void updateField({ fieldId: field._id, options })}
+                onRemove={() => void removeField({ fieldId: field._id })}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      {/* Identity first: every customer has these, nothing here can edit or
-          delete them, and the phone agent may read but never write them.
-          Their keys are the reserved write addresses, shown because they are
-          part of the same vocabulary as every other key on this card. */}
-      <div className="mb-3">
-        <FieldGroup label={t("fields.system")} hint={t("fields.systemHint")} />
-        <ul>
-          {SYSTEM_FIELDS.map((field) => (
-            <li key={field.key} className={`py-2 text-sm text-[var(--muted)] ${FIELD_ROW_GRID}`}>
-              <span className="min-w-0 truncate">{t(field.labelKey)}</span>
-              <span className="text-xs">{t(field.typeKey)}</span>
-              <span className="hidden min-w-0 items-center sm:flex">
-                <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs">
-                  {field.key}
-                </code>
-              </span>
-              <span />
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Staff-filled next, then whatever the agent collects on a call. Each
-          group is skipped whole when it is empty rather than left as a heading
-          over nothing. */}
-      {manualFields.length > 0 && (
-        <ul className="mb-3">{manualFields.map(fieldRow)}</ul>
-      )}
-
-      {voiceFields.length > 0 && (
-        <div className="mb-3">
-          {/* One (i) for the group. It used to sit on every row, so six voice
-              fields stacked six identical icons carrying the same two
-              sentences down the column. */}
-          <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceHint")} />
-          <ul>{voiceFields.map(fieldRow)}</ul>
-        </div>
-      )}
 
       {/* Adding appears on demand, mirroring "+ Add service" above: a
           permanently open form charged this card a row of empty inputs on

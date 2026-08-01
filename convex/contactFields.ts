@@ -99,13 +99,14 @@ export const update = mutation({
     fieldId: v.id("contactFields"),
     label: v.optional(v.string()),
     options: v.optional(v.array(v.string())),
+    source: v.optional(fieldSource),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
     const field = await ctx.db.get(args.fieldId);
     if (!field || field.orgId !== orgId) throw new Error("not-found");
-    const patch: { label?: string; options?: string[] } = {};
+    const patch: Record<string, unknown> = {};
     if (args.label !== undefined) {
       const label = args.label.trim();
       if (!label) throw new Error("label-required");
@@ -115,7 +116,38 @@ export const update = mutation({
       if (field.type !== "select") throw new Error("not-a-select");
       patch.options = [...new Set(args.options.map((o) => o.trim()).filter(Boolean))];
     }
+    if (args.source !== undefined && args.source !== (field.source ?? "manual")) {
+      // Handing a field back to staff while an agent still writes it would
+      // fail that agent's next publish; unlink it on the agent first.
+      if (args.source === "manual") {
+        const variables = await ctx.db
+          .query("voiceAgentVariables")
+          .withIndex("by_org", (q) => q.eq("orgId", orgId))
+          .collect();
+        const inUse = variables.some(
+          (row) => row.contactFieldId === args.fieldId || row.beforeFieldId === args.fieldId,
+        );
+        if (inUse) throw new Error("field-in-use");
+      }
+      patch.source = args.source === "voice" ? "voice" : undefined;
+    }
     if (Object.keys(patch).length > 0) await ctx.db.patch(args.fieldId, patch);
+    return null;
+  },
+});
+
+// Persists a drag-reorder: the client sends the full order, every row gets
+// its index. Ported from Nudge's fields admin.
+export const reorder = mutation({
+  args: { orderedIds: v.array(v.id("contactFields")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    for (const [index, id] of args.orderedIds.entries()) {
+      const field = await ctx.db.get(id);
+      if (!field || field.orgId !== orgId) throw new Error("not-found");
+      await ctx.db.patch(id, { order: index });
+    }
     return null;
   },
 });

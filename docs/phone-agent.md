@@ -126,10 +126,16 @@ refused for the same reason.
 Renaming is label-only and therefore safe: the key is the identity (stored
 values and published agents address it), so editing a field's label in
 Services & fields ripples into every agent's editor instantly with nothing to
-republish, and keys never change after creation. A select field's options are
-edited as pills in the same card, and publish reads a linked select's options
-from the field, so an options edit reaches the agent on its next publish
-without touching the agent page.
+republish, and keys never change after creation.
+
+The Contact fields card is one sortable table, ported from Nudge's fields
+admin: system rows pinned and undeletable, org rows drag to reorder, and a
+Filled by column (Staff / Voice agent) instead of separate groups. A select's
+type cell reads "Select (n)" and expands into its options editor (removable
+pills plus "Add an option"); the same editor appears in the agent popover, and
+for a linked select both edit the field itself, which publish reads as the
+live truth. A field an agent references can be neither deleted nor handed
+back to staff until the agent unlinks it.
 
 The precedence rule is fixed:
 

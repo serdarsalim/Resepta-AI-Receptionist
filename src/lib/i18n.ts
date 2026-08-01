@@ -1520,11 +1520,6 @@ const dictionary = {
   "voiceVariables.number": { tr: "Sayı", en: "Number", de: "Zahl" },
   "voiceVariables.yesNo": { tr: "Evet veya hayır", en: "Yes or no", de: "Ja oder Nein" },
   "voiceVariables.options": { tr: "Seçenekler", en: "Options", de: "Auswahl" },
-  "voiceVariables.addOption": {
-    tr: "+ Seçenek ekle",
-    en: "+ Add option",
-    de: "+ Option hinzufügen",
-  },
   "voiceVariables.none": { tr: "Kullanma", en: "Do not use", de: "Nicht verwenden" },
   "voiceVariables.addRow": {
     tr: "+ Bilgi ekle",
@@ -1992,6 +1987,26 @@ const dictionary = {
   "common.show": { tr: "Göster", en: "Show", de: "Anzeigen" },
   "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
+  "fields.reorder": {
+    tr: "Sürükleyip sırala",
+    en: "Drag to reorder",
+    de: "Zum Sortieren ziehen",
+  },
+  "fields.showOptions": {
+    tr: "Seçenekleri göster",
+    en: "Show the options",
+    de: "Optionen anzeigen",
+  },
+  "fields.optionsFor": {
+    tr: "{name} seçenekleri.",
+    en: "Options for {name}.",
+    de: "Optionen für {name}.",
+  },
+  "fields.optionPlaceholder": {
+    tr: "Seçenek ekle…",
+    en: "Add an option…",
+    de: "Option hinzufügen…",
+  },
   "fields.type.text": { tr: "Metin", en: "Text", de: "Text" },
   "fields.type.select": { tr: "Seçim", en: "Select", de: "Auswahl" },
   "fields.type.number": { tr: "Sayı", en: "Number", de: "Zahl" },
