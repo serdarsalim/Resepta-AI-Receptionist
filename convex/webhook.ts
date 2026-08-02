@@ -3,7 +3,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
-import { nextUpcomingOf } from "./appointments";
+import { nextUpcomingOf, scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -300,6 +300,9 @@ export async function processInboundMessage(
   // A walk-in typed in by hand exists nowhere but here.
   await ctx.db.patch(appointment._id, { status: "cancelled" });
   await syncAppointmentSchedule(ctx, appointment._id);
+  // The customer asked by message; the cancellation rule, if the org has one,
+  // is what answers them.
+  await scheduleLifecycleMessages(ctx, orgId, appointment._id, "cancellation");
 }
 
 // ---- The Evolution lane ----

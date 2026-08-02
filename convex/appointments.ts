@@ -5,7 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { appointmentStatus } from "./schema";
 import { requireOrg } from "./lib/orgAuth";
 import { getLocalPartsSafe } from "./lib/businessHours";
-import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity, statusChange } from "./lib/activity";
 import { formatAppointmentTime } from "./lib/format";
 
@@ -239,26 +239,59 @@ export const listForCustomer = query({
   },
 });
 
-// Shared by manual create and the cal.com intake: after a booking lands,
-// queue the confirmation template if the org wants one and can send one.
+// The two message triggers that fire on an EVENT rather than a clock: a
+// booking landing, an appointment being cancelled. Shared by every path that
+// causes either — manual create, the cal.com intake, the voice agent, the
+// WhatsApp İPTAL reply — so the answer to "does this org say something now?"
+// lives in exactly one place.
+//
+// No WhatsApp account is NOT a reason to skip a send. The sender attempts
+// each channel independently, so an org with an email address and no WABA
+// still confirms its bookings; returning early here once meant an
+// unconfigured WhatsApp silently blocked the email lane too.
+export async function scheduleLifecycleMessages(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  appointmentId: Id<"appointments">,
+  trigger: "booking" | "cancellation",
+) {
+  const org = await ctx.db.get(orgId);
+  if (!org) return;
+  if (org.rulesMigratedAt !== undefined) {
+    // Every matching live rule fires — two booking messages is a choice the
+    // owner made by having two rows, not a bug to dedupe away.
+    const rules = await loadOrgRules(ctx, orgId);
+    for (const rule of rules) {
+      if (rule.trigger !== trigger || rule.paused) continue;
+      await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
+        appointmentId,
+        kind: trigger === "booking" ? "confirmation" : "cancellation",
+        ruleId: rule._id,
+      });
+    }
+    return;
+  }
+  // Legacy orgs: the confirmation trio, verbatim. Cancellation notices did
+  // not exist on the old model, and inventing them for orgs that never chose
+  // one is not a migration, it is a surprise.
+  if (trigger !== "booking") return;
+  if (org.sendBookingConfirmation === false) return;
+  // Taken off the table entirely, which is a different act from switching it
+  // off — but the same outcome for this send.
+  if ((org.removedRules ?? []).includes("confirmation")) return;
+  await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
+    appointmentId,
+    kind: "confirmation",
+  });
+}
+
+// The old name, kept callable while every intake path moves over.
 export async function scheduleConfirmationIfConfigured(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
   appointmentId: Id<"appointments">,
 ) {
-  const org = await ctx.db.get(orgId);
-  if (!org || org.sendBookingConfirmation === false) return;
-  // Taken off the table entirely, which is a different act from switching it
-  // off — but the same outcome for this send.
-  if ((org.removedRules ?? []).includes("confirmation")) return;
-  // No WhatsApp account is NOT a reason to skip the confirmation. The sender
-  // attempts each channel independently, so an org with an email address and
-  // no WABA still confirms its bookings; returning here meant an unconfigured
-  // WhatsApp silently blocked the email lane too.
-  await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
-    appointmentId,
-    kind: "confirmation",
-  });
+  await scheduleLifecycleMessages(ctx, orgId, appointmentId, "booking");
 }
 
 export const setStatus = mutation({
@@ -272,6 +305,11 @@ export const setStatus = mutation({
     // Status decides what is owed: marking a no_show arms the winback,
     // cancelling disarms every reminder still queued behind it.
     await syncAppointmentSchedule(ctx, args.appointmentId);
+    // On the TRANSITION only — re-saving an already-cancelled appointment is
+    // not a second cancellation and must not message the customer twice.
+    if (args.status === "cancelled" && appointment.status !== "cancelled") {
+      await scheduleLifecycleMessages(ctx, orgId, args.appointmentId, "cancellation");
+    }
     await recordActivity(ctx, {
       orgId,
       kind: "appointment_status",
@@ -329,8 +367,21 @@ export const markCancelled = internalMutation({
   args: { appointmentId: v.id("appointments") },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment) return null;
+    const wasCancelled = appointment.status === "cancelled";
     await ctx.db.patch(args.appointmentId, { status: "cancelled" });
     await syncAppointmentSchedule(ctx, args.appointmentId);
+    // cal.com can deliver the same cancellation more than once (the push we
+    // initiated comes straight back as a webhook); the notice must not.
+    if (!wasCancelled) {
+      await scheduleLifecycleMessages(
+        ctx,
+        appointment.orgId,
+        args.appointmentId,
+        "cancellation",
+      );
+    }
     return null;
   },
 });

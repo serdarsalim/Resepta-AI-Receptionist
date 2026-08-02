@@ -7,7 +7,10 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOwner } from "./lib/orgAuth";
-import { scheduleConfirmationIfConfigured } from "./appointments";
+import {
+  scheduleConfirmationIfConfigured,
+  scheduleLifecycleMessages,
+} from "./appointments";
 import { cancelBooking } from "./lib/calcomApi";
 import { queueOrgAlert } from "./lib/alerts";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -119,9 +122,13 @@ export const handleCalcomEvent = internalMutation({
     if (!existing && previousUid) existing = await findByUid(previousUid);
 
     if (triggerEvent === "BOOKING_CANCELLED") {
-      if (existing) {
+      // Transition guard doubles as the echo guard: our own pushCancelToCalcom
+      // comes back through here, by which time markCancelled already wrote the
+      // status and sent the notice.
+      if (existing && existing.status !== "cancelled") {
         await ctx.db.patch(existing._id, { status: "cancelled" });
         await syncAppointmentSchedule(ctx, existing._id);
+        await scheduleLifecycleMessages(ctx, org._id, existing._id, "cancellation");
       }
       return { ok: true };
     }
