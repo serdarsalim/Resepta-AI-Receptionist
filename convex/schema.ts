@@ -188,6 +188,15 @@ export default defineSchema({
     // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
     // verified there or sends are rejected. Unset = email off.
     emailFrom: v.optional(v.string()),
+    // Which channel the appointment rules (confirmation, reminder, winback)
+    // send on. Unset = "both", which is what every org did before the choice
+    // existed: attempt WhatsApp, and email rides alongside when configured.
+    // This is a PREFERENCE, unlike the lane selector deliberately absent
+    // above: WhatsApp-vs-email is a real decision the salon owns, whereas
+    // cloud-vs-shop-phone is plumbing read off what is configured.
+    messageChannel: v.optional(
+      v.union(v.literal("whatsapp"), v.literal("email"), v.literal("both")),
+    ),
 
     // When the salon is OPEN — a different question from quietHours, which is
     // when it is polite to message a customer. Drives the WhatsApp away-reply

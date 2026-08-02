@@ -28,6 +28,7 @@ const LOCAL_REFUSALS = new Set([
   "wa-not-configured",
   "session-window-closed",
   "email-not-configured",
+  "no-email-address",
   "customer-missing",
   "no-body",
 ]);
@@ -48,6 +49,9 @@ export function classifyFailure(reason: string | undefined): FailureClass {
   if (!reason) return "permanent";
   if (LOCAL_REFUSALS.has(reason)) return "permanent";
   if (reason.startsWith("no-approved-template")) return "permanent";
+  // A template row with no text. Language-suffixed like no-approved-template,
+  // and just as permanent: the words will not write themselves.
+  if (reason.startsWith("no-template-text")) return "permanent";
 
   const http = reason.match(/^wa-cloud-http-(\d{3})(?:-(\d+))?/);
   if (http) {

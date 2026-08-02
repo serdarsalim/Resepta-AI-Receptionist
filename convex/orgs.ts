@@ -61,6 +61,11 @@ export const current = query({
       winbackEnabled: v.boolean(),
       winbackDaysAfter: v.number(),
       emailFrom: v.optional(v.string()),
+      messageChannel: v.union(
+        v.literal("whatsapp"),
+        v.literal("email"),
+        v.literal("both"),
+      ),
       calcomEventTypeId: v.optional(v.string()),
       calcomApiKeyTail: v.optional(v.string()),
       // Left optional rather than defaulted: "no hours set" is a real state the
@@ -157,6 +162,7 @@ export const current = query({
         winbackEnabled: org.winbackEnabled ?? false,
         winbackDaysAfter: org.winbackDaysAfter ?? 14,
         emailFrom: org.emailFrom,
+        messageChannel: org.messageChannel ?? "both",
         calcomEventTypeId: org.calcomEventTypeId,
         calcomApiKeyTail: org.calcomApiKey ? org.calcomApiKey.slice(-4) : undefined,
         businessHours: org.businessHours,
@@ -215,6 +221,9 @@ export const update = mutation({
     winbackEnabled: v.optional(v.boolean()),
     winbackDaysAfter: v.optional(v.number()),
     emailFrom: v.optional(v.string()),
+    messageChannel: v.optional(
+      v.union(v.literal("whatsapp"), v.literal("email"), v.literal("both")),
+    ),
     businessHours: v.optional(
       v.object({
         activeDays: v.optional(v.array(v.number())),
@@ -287,6 +296,7 @@ export const update = mutation({
       patch.winbackDaysAfter = Math.min(90, Math.max(1, Math.round(args.winbackDaysAfter)));
     }
     if (args.emailFrom !== undefined) patch.emailFrom = args.emailFrom.trim() || undefined;
+    if (args.messageChannel !== undefined) patch.messageChannel = args.messageChannel;
     if (args.businessHours !== undefined) {
       const { activeDays, startMinute, endMinute } = args.businessHours;
       const clampMinute = (m: number) =>

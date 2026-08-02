@@ -452,6 +452,10 @@ const STEADY_STATE_FAILURES = new Set([
   "no-consent",
   "wa-not-configured",
   "session-window-closed",
+  // Email-only org, customer without an address. Like no-consent this is a
+  // per-customer fact whose row belongs in that customer's thread, not in the
+  // owner's inbox at 06:00 for every reminder.
+  "no-email-address",
 ]);
 
 // A narrower set: failures that say nothing about the customer or the message,
@@ -468,6 +472,7 @@ const STEADY_STATE_FAILURES = new Set([
 export function isOrgSetupFailure(reason: string): boolean {
   return (
     reason === "wa-not-configured" ||
+    reason === "email-not-configured" ||
     reason.startsWith("no-approved-template") ||
     reason.startsWith("no-template-text")
   );

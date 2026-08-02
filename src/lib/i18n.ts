@@ -756,6 +756,17 @@ const dictionary = {
     de: "Erinnerung hinzufügen",
   },
   "settings.ruleEmail": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  "settings.sendChannel": {
+    tr: "Gönderim kanalı",
+    en: "Send by",
+    de: "Versandweg",
+  },
+  "settings.sendChannelHint": {
+    tr: "Onay, hatırlatma ve geri kazanım mesajlarının hangi kanaldan gideceği. E-posta için müşterinin kayıtlı bir e-posta adresi olmalı.",
+    en: "Which channel confirmations, reminders and win-backs go out on. Email needs an address on the customer's record.",
+    de: "Über welchen Weg Bestätigungen, Erinnerungen und Rückgewinnungen gesendet werden. Für E-Mail braucht die Kundin oder der Kunde eine hinterlegte Adresse.",
+  },
+  "settings.channelBoth": { tr: "İkisi de", en: "Both", de: "Beide" },
   "settings.ruleNoChannel": {
     tr: "Gönderilmiyor",
     en: "Not sending",

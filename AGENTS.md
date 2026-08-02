@@ -73,6 +73,11 @@ style issue.
   drops first contact (Reachout Timelock, ACK 463). Cloud sends ride
   pre-approved **Meta template messages**; the shop phone and the email lane
   send the template row's authored body and need no approval from anybody.
+  Orthogonal to the lanes: `orgs.messageChannel` (whatsapp | email | both,
+  unset = both) is the salon's own choice of which CHANNEL the appointment
+  rules send on — email-only skips the WhatsApp attempt including its failure
+  rows, and logs visible failures when the email half is missing instead
+  (`email-not-configured`, `no-email-address`).
 
 ## Message model
 

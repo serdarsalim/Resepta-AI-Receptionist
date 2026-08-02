@@ -60,6 +60,7 @@ function ruleChannels(
   evolutionEnabled: boolean,
   emailFrom: string | undefined,
   emailLabel: string,
+  channelPref: "whatsapp" | "email" | "both",
 ): string[] {
   const template = templates.find((t) => t.kind === kind && t.language === language);
   const hasText = Boolean(template?.body || template?.bodyPreview);
@@ -67,8 +68,8 @@ function ruleChannels(
   const waOk = waConnected
     ? template?.status === "approved" && Boolean(template?.metaName)
     : evolutionEnabled && hasText;
-  if (waOk) channels.push("WhatsApp");
-  if (emailFrom && hasText) channels.push(emailLabel);
+  if (channelPref !== "email" && waOk) channels.push("WhatsApp");
+  if (channelPref !== "whatsapp" && emailFrom && hasText) channels.push(emailLabel);
   return channels;
 }
 
@@ -167,6 +168,7 @@ function NotificationRulesCard({
     quietHoursStart: number;
     quietHoursEnd: number;
     emailFrom?: string;
+    messageChannel: "whatsapp" | "email" | "both";
   };
   templates: TemplateRow[];
   waConnected: boolean;
@@ -187,6 +189,7 @@ function NotificationRulesCard({
       evolutionEnabled,
       org.emailFrom,
       t("settings.ruleEmail"),
+      org.messageChannel,
     );
 
   const setOffsets = (next: number[]) =>
@@ -201,6 +204,35 @@ function NotificationRulesCard({
 
   return (
     <Card disabled={!isOwner}>
+      {/* The channel decision, org-wide rather than per rule: per-rule
+          channels would need the rules to become documents (see the storage
+          note above), and one salon sending its confirmation by WhatsApp but
+          its reminder by email is a configuration nobody has asked for. */}
+      <div className="flex flex-wrap items-center gap-1.5 pb-3">
+        <span className="mr-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+          {t("settings.sendChannel")}
+          <InfoTip text={t("settings.sendChannelHint")} />
+        </span>
+        {(["whatsapp", "email", "both"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => update({ messageChannel: option })}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              org.messageChannel === option
+                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {option === "whatsapp"
+              ? t("channel.whatsapp")
+              : option === "email"
+                ? t("settings.ruleEmail")
+                : t("settings.channelBoth")}
+          </button>
+        ))}
+      </div>
+
       <div className="hidden items-center gap-3 pb-2 sm:flex">
         <div className={RULE_COLUMNS}>
           <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">

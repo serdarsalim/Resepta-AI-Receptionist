@@ -467,6 +467,12 @@ export const sendAppointmentMessage = internalAction({
       return null;
     }
 
+    // Which channel(s) this org sends rules on. Unset = both, the behaviour
+    // every org had before the choice existed. "email" skips the WhatsApp
+    // attempt entirely — including its failure rows, because a channel the
+    // owner switched off cannot be broken.
+    const channelPref = org.messageChannel ?? "both";
+
     // ---- WhatsApp attempt. Failures log a visible row and do NOT block the
     // email lane — an unconfigured number is exactly what the Messages tab
     // needs to show the owner.
@@ -478,7 +484,7 @@ export const sendAppointmentMessage = internalAction({
     // Rule 2: Cloud wins whenever it exists. A confirmation or a reminder is
     // first contact after silence, which is precisely what Evolution drops
     // silently (Reachout Timelock, ACK 463, while the send returns success).
-    const lane = laneForOutbound(available);
+    const lane = channelPref === "email" ? null : laneForOutbound(available);
 
     if (lane === "evolution" && evolution) {
       // No Meta template here and none needed — this lane has no approval to
@@ -519,6 +525,9 @@ export const sendAppointmentMessage = internalAction({
           appointmentId: appointment._id,
         });
       }
+    } else if (channelPref === "email") {
+      // Email-only by choice. Not a failure of any kind: the WhatsApp rows
+      // below would tell the owner a channel they switched off is broken.
     } else if (!waAccount) {
       await fail("wa-not-configured");
     } else if (!cloudTemplate) {
@@ -558,10 +567,24 @@ export const sendAppointmentMessage = internalAction({
       }
     }
 
-    // Email lane: rides alongside WhatsApp when the customer left an address
-    // and the org set a From. No Meta approval applies to email, so the
-    // authored body sends as-is.
-    if (emailLaneConfigured() && customer.email && org.emailFrom && body) {
+    // Email lane: rides alongside WhatsApp (or replaces it, when the owner
+    // chose email-only) for customers with an address and an org with a From.
+    // No Meta approval applies to email, so the authored body sends as-is.
+    //
+    // On "both", a customer this cannot reach is skipped silently — WhatsApp
+    // already carried the message or logged its own failure. On email-only
+    // there is no other channel to blame, so every reason nothing went out
+    // becomes a visible row: an owner who chose email and set no From, or a
+    // customer with no address, must not produce a reminder that vanishes.
+    if (channelPref === "whatsapp") {
+      // Switched off. Same reasoning as the mirror case above.
+    } else if (channelPref === "email" && (!emailLaneConfigured() || !org.emailFrom)) {
+      await fail("email-not-configured");
+    } else if (channelPref === "email" && !customer.email) {
+      await fail("no-email-address");
+    } else if (channelPref === "email" && !body) {
+      await fail(`no-template-text-${language}`);
+    } else if (emailLaneConfigured() && customer.email && org.emailFrom && body) {
       // The authored subject, rendered with the same tokens as the body. The
       // "name, time" fallback covers rows without one — and an authored
       // subject that renders to nothing for this customer falls through too,
@@ -610,6 +633,14 @@ export const sendAppointmentMessage = internalAction({
         ok: emailResult.ok,
         error: emailResult.ok ? undefined : emailResult.reason,
       });
+      // On "both", the WhatsApp branches own this stamp. Email-only has no
+      // other branch to do it, and an unstamped confirmation reads as never
+      // sent.
+      if (emailResult.ok && channelPref === "email" && args.kind === "confirmation") {
+        await ctx.runMutation(internal.appointments.stampConfirmationSent, {
+          appointmentId: appointment._id,
+        });
+      }
     }
     return null;
   },
