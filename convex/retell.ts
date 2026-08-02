@@ -531,6 +531,12 @@ export const beforeCallContext = internalQuery({
             ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
             : "";
           break;
+        case "customer_first_name":
+          value = customer?.firstName ?? "";
+          break;
+        case "customer_last_name":
+          value = customer?.lastName ?? "";
+          break;
         case "customer_phone":
           value = customer?.phone ?? normalised ?? "";
           break;
@@ -575,6 +581,11 @@ export const beforeCallContext = internalQuery({
       customer_name: customer
         ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
         : "",
+      // Kept alongside the two columns: an opening line saying the whole name
+      // is the common case, and {{customer_name}} is already written into
+      // prompts. It is READ-only context — nothing writes back through it.
+      customer_first_name: customer?.firstName ?? "",
+      customer_last_name: customer?.lastName ?? "",
       customer_phone: customer?.phone ?? normalised ?? "",
       customer_email: customer?.email ?? "",
       customer_language: lang,
@@ -1003,8 +1014,9 @@ export const runtimeCallContext = internalQuery({
             variable.destination === "customer" && customer
               ? variable.customerField === "email"
                 ? customer.email ?? null
-                : [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
-                  null
+                : variable.customerField === "lastName"
+                  ? customer.lastName ?? null
+                  : customer.firstName || null
               : null;
           return {
             key: variable.key,
@@ -1145,6 +1157,11 @@ export const voiceBook = internalMutation({
       // so this branch, not the insert above, is the common one on a real
       // call. It used to leave the name it was just handed on the floor, and
       // the card kept showing the phone number where a name belongs.
+      //
+      // Still split here, because book_appointment takes ONE name argument:
+      // it is the caller's name for the booking, not a customer record edit.
+      // A record that already has its first and last name from the agent's
+      // own capture never reaches this branch.
       const [firstName, ...rest] = args.name.trim().split(/\s+/).filter(Boolean);
       if (firstName) {
         await ctx.db.patch(customer._id, {
@@ -1389,15 +1406,6 @@ function toE164(raw: string): string | null {
 
 // The single mapping both voice write paths share: the mid-call function and
 // the post-call webhook. Two copies of this guard would drift.
-// A spoken name arrives as one string, because that is how a person says it.
-// Everything after the first word is the surname — wrong for a few names in
-// every market, and still better than a card that says nothing at all. The
-// caller can be corrected by hand; a blank cannot be noticed.
-function splitSpokenName(spoken: string): { firstName: string; lastName?: string } {
-  const parts = spoken.trim().split(/\s+/).filter(Boolean);
-  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") || undefined };
-}
-
 // Deliberately loose. A stricter pattern rejects real addresses, and the cost
 // of a wrong reject here is the agent asking a caller to spell their email a
 // third time. What it does catch is the transcription that came back as words
@@ -1414,7 +1422,7 @@ export async function applyVoiceContactValues(
     // Which incoming keys mean a column on the customer rather than an entry
     // in its custom map. Resolved by the caller from the agent's own
     // variables, so a key only reaches a built-in if the owner said it should.
-    identity?: Record<string, { field: "name" | "email"; label: string }>;
+    identity?: Record<string, { field: "firstName" | "lastName" | "email"; label: string }>;
   },
 ): Promise<ContactUpdateResult> {
   const phone = toE164(args.phone);
@@ -1451,21 +1459,20 @@ export async function applyVoiceContactValues(
       // for a caller to do; clearing the name off a record because a model
       // returned "" is not.
       if (!value) continue;
-      if (target.field === "name") {
-        if (args.fillOnlyMissing && customer.firstName) continue;
-        const { firstName, lastName } = splitSpokenName(value);
-        if (!firstName) continue;
-        identityPatch.firstName = firstName;
-        // One-word name arriving over an existing surname keeps the surname:
-        // a caller saying "it's Ayşe" is not asking to lose their family name.
-        if (lastName) identityPatch.lastName = lastName;
-      } else {
+      if (target.field === "email") {
         if (args.fillOnlyMissing && customer.email) continue;
         if (!SPOKEN_EMAIL_RE.test(value)) {
           rejected.push(target.label);
           continue;
         }
         identityPatch.email = value.toLowerCase();
+      } else {
+        // Stored exactly as the agent gave it. It heard the whole sentence
+        // and decided where the given name ended; this is not the place to
+        // second-guess that with a rule about spaces.
+        const current = target.field === "firstName" ? customer.firstName : customer.lastName;
+        if (args.fillOnlyMissing && current) continue;
+        identityPatch[target.field] = value;
       }
       updated.push(key);
       updatedLabels.push(target.label);
@@ -1551,7 +1558,10 @@ export const updateContactFromVoice = internalMutation({
         q.eq("orgId", agent.orgId).eq("retellAgentId", args.retellAgentId),
       )
       .collect();
-    const identity: Record<string, { field: "name" | "email"; label: string }> = {};
+    const identity: Record<
+      string,
+      { field: "firstName" | "lastName" | "email"; label: string }
+    > = {};
     for (const row of rows) {
       if (row.destination === "customer" && row.customerField) {
         identity[row.key] = { field: row.customerField, label: row.label };

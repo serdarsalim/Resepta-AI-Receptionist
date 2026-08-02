@@ -38,7 +38,7 @@ export type VoiceVariable = {
   // them. See convex/schema.ts for why the third case exists.
   destination: "call" | "contact" | "customer";
   contactFieldId?: string;
-  customerField?: "name" | "email";
+  customerField?: "firstName" | "lastName" | "email";
 };
 
 // What the page header needs to render Save/Discard on this editor's behalf.
@@ -73,7 +73,8 @@ export type VoiceContactField = {
 export function builtinVoiceVariables(
   t: (
     key:
-      | "voiceVariables.customerName"
+      | "customers.firstName"
+      | "customers.lastName"
       | "voiceVariables.customerPhone"
       | "voiceVariables.customerEmail"
       | "voiceVariables.customerLanguage"
@@ -83,7 +84,12 @@ export function builtinVoiceVariables(
   ) => string,
 ): { key: string; label: string }[] {
   return [
-    { key: "customer_name", label: t("voiceVariables.customerName") },
+    // The SAME translation keys Business → Fields uses for its identity rows.
+    // Deliberately not a second vocabulary: seeing "Customer name" in the
+    // agent and "First name"/"Last name" everywhere else reads as a third
+    // thing that exists nowhere, and there is no such thing.
+    { key: "customer_first_name", label: t("customers.firstName") },
+    { key: "customer_last_name", label: t("customers.lastName") },
     { key: "customer_phone", label: t("voiceVariables.customerPhone") },
     { key: "customer_email", label: t("voiceVariables.customerEmail") },
     { key: "customer_language", label: t("voiceVariables.customerLanguage") },
@@ -93,10 +99,16 @@ export function builtinVoiceVariables(
   ];
 }
 
-// The two built-ins that are columns on the customer rather than entries in
-// its custom map. Phone is not among them: it is how the caller was found.
-function customerFieldOf(key: string): "name" | "email" | undefined {
-  return key === "customer_name" ? "name" : key === "customer_email" ? "email" : undefined;
+// The built-ins that are columns on the customer rather than entries in its
+// custom map. Phone is not among them: it is how the caller was found.
+function customerFieldOf(key: string): "firstName" | "lastName" | "email" | undefined {
+  return key === "customer_first_name"
+    ? "firstName"
+    : key === "customer_last_name"
+      ? "lastName"
+      : key === "customer_email"
+        ? "email"
+        : undefined;
 }
 
 function blankVariable(): VoiceVariable {
@@ -1082,7 +1094,8 @@ function VariableRow({
                 <option value="none">{t("voiceVariables.none")}</option>
                 <option value="static">{t("voiceVariables.defaultValue")}</option>
                 <option value="business_name">{t("voiceVariables.businessName")}</option>
-                <option value="customer_name">{t("voiceVariables.customerName")}</option>
+                <option value="customer_first_name">{t("customers.firstName")}</option>
+                <option value="customer_last_name">{t("customers.lastName")}</option>
                 <option value="customer_phone">{t("voiceVariables.customerPhone")}</option>
                 <option value="customer_email">{t("voiceVariables.customerEmail")}</option>
                 <option value="customer_language">{t("voiceVariables.customerLanguage")}</option>
@@ -1133,7 +1146,7 @@ function VariableRow({
                     // cannot see from this row.
                     onChange({
                       destination: "customer",
-                      customerField: value.slice(9) as "name" | "email",
+                      customerField: value.slice(9) as "firstName" | "lastName" | "email",
                       contactFieldId: undefined,
                       type: "string",
                     });
@@ -1152,12 +1165,13 @@ function VariableRow({
                 className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="call">{t("voiceVariables.callOnly")}</option>
-                {/* The customer's own columns. Offered on every row, not just
-                    the ones keyed customer_name: plenty of agents call it
-                    caller_name, and the label here says exactly where the
-                    value lands either way. */}
-                <option value="customer:name">{t("voiceVariables.saveToName")}</option>
-                <option value="customer:email">{t("voiceVariables.saveToEmail")}</option>
+                {/* The customer's own columns, named exactly as Business →
+                    Fields names them. Offered on every row, not just the
+                    built-in ones: plenty of agents call it caller_name, and
+                    the label says where the value lands either way. */}
+                <option value="customer:firstName">{t("customers.firstName")}</option>
+                <option value="customer:lastName">{t("customers.lastName")}</option>
+                <option value="customer:email">{t("customers.email")}</option>
                 {/* Only a field whose key matches — the publish validator
                     rejects any other pairing, so offering it would be a
                     choice that always fails. */}

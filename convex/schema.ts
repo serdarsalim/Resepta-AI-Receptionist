@@ -366,6 +366,8 @@ export default defineSchema({
       v.literal("static"),
       v.literal("business_name"),
       v.literal("customer_name"),
+      v.literal("customer_first_name"),
+      v.literal("customer_last_name"),
       v.literal("customer_phone"),
       v.literal("customer_email"),
       v.literal("customer_language"),
@@ -380,14 +382,16 @@ export default defineSchema({
       v.literal("confirm"),
     ),
     afterCall: v.boolean(),
-    // "customer" is the third destination because name and email are COLUMNS
-    // on a customer, not entries in its custom map, and so unreachable through
-    // a contactFieldId. Without it a first-time caller was created from their
-    // phone number and left permanently nameless: the agent asked for the
-    // name, repeated it back, and had nowhere to put it.
+    // "customer" is the third destination because first name, last name and
+    // email are COLUMNS on a customer, not entries in its custom map, and so
+    // unreachable through a contactFieldId. Without it a first-time caller was
+    // created from their phone number and left permanently nameless: the agent
+    // asked for the name, repeated it back, and had nowhere to put it.
     destination: v.union(v.literal("call"), v.literal("contact"), v.literal("customer")),
     contactFieldId: v.optional(v.id("contactFields")),
-    customerField: v.optional(v.union(v.literal("name"), v.literal("email"))),
+    customerField: v.optional(
+      v.union(v.literal("firstName"), v.literal("lastName"), v.literal("email")),
+    ),
     order: v.number(),
     updatedAt: v.number(),
   })

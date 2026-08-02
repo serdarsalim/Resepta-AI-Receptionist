@@ -654,27 +654,47 @@ export const buildAgentVariables = internalQuery({
         afterCall: false,
         destination: "call",
       },
+      // Two rows, not one "caller name": these are the customer's own First
+      // name and Last name columns, and the agent decides where the spoken
+      // name divides. Onto the customer, not the call — every agent built
+      // through this tool used to ask a first-time caller their name and drop
+      // it, leaving a record with a phone number and nothing else on it.
       {
-        key: "customer_name",
-        label: "Caller name",
+        key: "customer_first_name",
+        label: "First name",
         description: "",
         type: "string",
         required: false,
-        beforeSource: "customer_name",
+        beforeSource: "customer_first_name",
         duringMode: "if_missing",
         afterCall: true,
-        // Onto the customer, not the call. Every agent built through this tool
-        // used to ask a first-time caller their name and drop it, leaving a
-        // record with a phone number and nothing else on it.
         destination: "customer",
-        customerField: "name",
+        customerField: "firstName",
+      },
+      {
+        key: "customer_last_name",
+        label: "Last name",
+        description: "",
+        type: "string",
+        required: false,
+        beforeSource: "customer_last_name",
+        duringMode: "if_missing",
+        afterCall: true,
+        destination: "customer",
+        customerField: "lastName",
       },
     ];
 
     const missing: string[] = [];
     const notVoice: string[] = [];
     for (const key of fieldKeys) {
-      if (key === "business_name" || key === "customer_name") continue;
+      if (
+        key === "business_name" ||
+        key === "customer_first_name" ||
+        key === "customer_last_name"
+      ) {
+        continue;
+      }
       const field = byKey.get(key);
       if (!field) {
         missing.push(key);

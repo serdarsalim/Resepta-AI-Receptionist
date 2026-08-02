@@ -590,7 +590,11 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
     let contactFieldId = raw.contactFieldId;
     let customerField = raw.customerField;
     if (raw.destination === "customer") {
-      if (customerField !== "name" && customerField !== "email") {
+      if (
+        customerField !== "firstName" &&
+        customerField !== "lastName" &&
+        customerField !== "email"
+      ) {
         throw new Error(`${label} needs to say which customer detail it fills.`);
       }
       // Both are free text as spoken. An enum name is not a thing, and an
