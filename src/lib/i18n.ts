@@ -871,6 +871,18 @@ const dictionary = {
     en: "Sends from your shop phone.",
     de: "Wird von Ihrem Betriebstelefon gesendet.",
   },
+  // Winback open rate, with the honesty caveat built into the tooltip: mail
+  // relays prefetch tracking pixels, so this is a trend line, not a ledger.
+  "settings.templateEmailOpens": {
+    tr: "Açılan e-postalar",
+    en: "Emails opened",
+    de: "Geöffnete E-Mails",
+  },
+  "settings.templateEmailOpensHint": {
+    tr: "Yaklaşık bir orandır: bazı e-posta uygulamaları mesajı kimse okumadan da açılmış gösterebilir.",
+    en: "An approximate rate: some mail apps can register an open even when nobody read the message.",
+    de: "Ein Näherungswert: Manche Mail-Apps melden ein Öffnen, auch wenn niemand die Nachricht gelesen hat.",
+  },
   "settings.templateLaneCloud": {
     tr: "WhatsApp Business numaranızdan gönderilir. Metnin önce Meta onayından geçmesi gerekir.",
     en: "Sends from your WhatsApp Business number. The wording needs Meta's approval first.",
@@ -2443,6 +2455,7 @@ const dictionary = {
     de: "Senden? Das lässt sich nicht rückgängig machen.",
   },
   "campaign.sent": { tr: "gönderildi", en: "sent", de: "gesendet" },
+  "campaign.opened": { tr: "açıldı", en: "opened", de: "geöffnet" },
   "campaign.pending": { tr: "sırada", en: "in the queue", de: "in der Warteschlange" },
   "campaign.failed": { tr: "başarısız", en: "failed", de: "fehlgeschlagen" },
   "campaign.draft": { tr: "Taslak", en: "Draft", de: "Entwurf" },

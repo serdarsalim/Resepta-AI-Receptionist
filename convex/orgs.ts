@@ -114,6 +114,9 @@ export const current = query({
         language: v.string(),
         status: templateStatus,
         bodyPreview: v.optional(v.string()),
+        // Winback open rate (the only kind that tracks — see schema).
+        emailSentCount: v.optional(v.number()),
+        emailOpenCount: v.optional(v.number()),
       }),
     ),
     // Whether the shop-phone lane is provisioned for this org (instance name
@@ -187,6 +190,8 @@ export const current = query({
         language: t.language,
         status: t.status,
         bodyPreview: t.bodyPreview,
+        emailSentCount: t.emailSentCount,
+        emailOpenCount: t.emailOpenCount,
       })),
       evolutionEnabled: Boolean(
         await loadEvolutionCreds(ctx, orgId, org.evolutionInstance),

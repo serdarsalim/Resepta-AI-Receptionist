@@ -637,6 +637,44 @@ http.route({
 
 // The MCP control surface — this URL is what gets pasted into Claude or
 // ChatGPT as a custom connector. An exact path, not a prefix: MCP is a single
+// ── Email open pixel ────────────────────────────────────────────────────────
+//
+// Winback and campaign mail carries <img src=".../e/o/<token>"> (injected by
+// lib/email.withOpenPixel); this route resolves the token to its message row
+// (messages.recordEmailOpen) and always answers with a 1×1 transparent GIF —
+// unknown or expired tokens included, so a broken image never shows in the
+// mail client. No auth on purpose: the token is the capability, and the route
+// reveals nothing. Ported from Nudge.
+const PIXEL_GIF = new Uint8Array([
+  0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00,
+  0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+  0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+]);
+
+http.route({
+  pathPrefix: "/e/o/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const token = new URL(request.url).pathname.slice("/e/o/".length).trim();
+    if (token) {
+      try {
+        await ctx.runMutation(internal.messages.recordEmailOpen, { token });
+      } catch {
+        // Never let a tracking failure break the image load.
+      }
+    }
+    return new Response(PIXEL_GIF, {
+      headers: {
+        "content-type": "image/gif",
+        // Every open must re-hit the route — a cached pixel would swallow
+        // repeat opens.
+        "cache-control": "no-store, no-cache, must-revalidate, private",
+      },
+    });
+  }),
+});
+
 // JSON-RPC endpoint, not a REST tree. GET is routed so the handler can explain
 // itself to a client probing for the deprecated SSE transport.
 for (const method of ["GET", "POST"] as const) {

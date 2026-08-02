@@ -8,7 +8,12 @@ import {
   mutation,
 } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
-import { emailBodyHtml, emailLaneConfigured, sendEmail } from "./lib/email";
+import {
+  emailBodyHtml,
+  emailLaneConfigured,
+  sendEmail,
+  withOpenPixel,
+} from "./lib/email";
 import {
   fetchWaMedia,
   sendWaCloudImage,
@@ -574,6 +579,12 @@ export const sendAppointmentMessage = internalAction({
         org.inboundAddress && domain
           ? `${org.inboundAddress}@${domain}`
           : undefined;
+      // Winback mail carries the open pixel; confirmations and reminders do
+      // not, because their open rate reports nowhere and untracked data is
+      // just surveillance. The template id rides along so the counters on the
+      // winback template row have a home.
+      const tracked = args.kind === "winback" && contentTemplate;
+      const trackingToken = tracked ? crypto.randomUUID() : undefined;
       const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,
@@ -584,12 +595,14 @@ export const sendAppointmentMessage = internalAction({
         // a retry reuses it instead of rebuilding a different one.
         emailSubject: subject,
         emailFrom: org.emailFrom,
+        trackingToken,
+        templateId: tracked ? contentTemplate._id : undefined,
       });
       const emailResult = await sendEmail({
         from: `${org.name} <${org.emailFrom}>`,
         to: customer.email,
         subject,
-        html: emailBodyHtml(body),
+        html: withOpenPixel(emailBodyHtml(body), trackingToken),
         replyTo,
       });
       await ctx.runMutation(internal.messages.applySendResult, {

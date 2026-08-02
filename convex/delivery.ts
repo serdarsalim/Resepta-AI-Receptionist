@@ -40,7 +40,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
-import { emailBodyHtml, emailLaneConfigured, sendEmail } from "./lib/email";
+import {
+  emailBodyHtml,
+  emailLaneConfigured,
+  sendEmail,
+  withOpenPixel,
+} from "./lib/email";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
@@ -157,6 +162,9 @@ export const claimForRetry = internalMutation({
       // it is retrying.
       templateParams: message.templateParams,
       emailSubject: message.emailSubject,
+      // The token the first attempt minted (or the fan-out stamped), so a
+      // retried mail carries the same pixel and its open resolves to this row.
+      trackingToken: message.trackingToken,
       // Resolved here rather than in the action: a retry of an image send has
       // to go back out as an image, and getUrl needs the storage id from the
       // row we just read.
@@ -218,6 +226,7 @@ type RetryJob = {
   templateLanguage: string;
   templateParams?: string[];
   emailSubject?: string;
+  trackingToken?: string;
   when?: string;
   appointmentId?: string;
   mediaLink?: string | null;
@@ -244,7 +253,7 @@ async function attempt(
       // field and are rebuilt the way the first attempt built them.
       subject:
         job.emailSubject ?? (job.when ? `${job.orgName}, ${job.when}` : job.orgName),
-      html: emailBodyHtml(job.body),
+      html: withOpenPixel(emailBodyHtml(job.body), job.trackingToken),
       replyTo:
         job.inboundAddress && domain ? `${job.inboundAddress}@${domain}` : undefined,
     });

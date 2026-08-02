@@ -160,6 +160,7 @@ export const list = query({
       sent: v.number(),
       failed: v.number(),
       pending: v.number(),
+      opened: v.number(),
     }),
   ),
   handler: async (ctx) => {
@@ -189,6 +190,10 @@ export const list = query({
           sent: messages.filter((m) => m.status !== "queued" && m.status !== "failed")
             .length,
           failed: messages.filter((m) => m.status === "failed").length,
+          // First-open-wins per message (recordEmailOpen), counted live like
+          // everything else here. A rate over the run's email half — the only
+          // granularity prefetch noise leaves honest.
+          opened: messages.filter((m) => m.openedAt !== undefined).length,
           // Still queued: either waiting for its first attempt or backing off
           // between retries. Shown separately because a campaign mid-flight
           // and a campaign that half-failed look identical otherwise.
@@ -326,7 +331,10 @@ export const fanOut = internalMutation({
       }
 
       // Email rides alongside when we have an address and a From. No Meta
-      // approval applies, so the line sends as ordinary text.
+      // approval applies, so the line sends as ordinary text. The tracking
+      // token is minted here at fan-out; delivery injects the pixel, and the
+      // campaign's open count is read live off these rows — bulk mail is the
+      // one place an open rate means something.
       if (customer.email && org.emailFrom) {
         await ctx.db.insert("messages", {
           orgId: campaign.orgId,
@@ -338,6 +346,7 @@ export const fanOut = internalMutation({
           body: line,
           emailSubject: org.name,
           emailFrom: org.emailFrom,
+          trackingToken: crypto.randomUUID(),
           nextAttemptAt: Date.now(),
         });
         created += 1;

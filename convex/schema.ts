@@ -747,6 +747,16 @@ export default defineSchema({
     // business, {{3}} date+time). Kept as the legacy content fallback for rows
     // whose owner has not authored a body yet.
     bodyPreview: v.optional(v.string()),
+    // Email engagement, denormalised because the honest alternative is
+    // scanning every message the org ever sent. Sent bumps in ONE place
+    // (messages.applySendResult, where every path already reports), opened in
+    // one place (messages.recordEmailOpen, first open per message) — a counter
+    // fed from a single site cannot drift the way the campaign comment warns
+    // about. Only the winback template renders these; open tracking is a rate
+    // on bulk-ish mail, never a per-customer fact (Apple and Gmail prefetch
+    // pixels, so an individual "opened" would be a guess dressed as a record).
+    emailSentCount: v.optional(v.number()),
+    emailOpenCount: v.optional(v.number()),
   }).index("by_org", ["orgId"]),
 
   messages: defineTable({
@@ -837,6 +847,29 @@ export default defineSchema({
     // one was tried properly and the provider never took it, which is the
     // failure worth waking someone for.
     deadLetteredAt: v.optional(v.number()),
+
+    // ---- Email open tracking (messages.recordEmailOpen, http /e/o/) --------
+    //
+    // Winback and campaign emails only. The pixel measures a RATE across a
+    // template or a run; it is never shown as "this customer opened it",
+    // because relay prefetch (Apple MPP, Gmail image proxy) opens pixels no
+    // human saw and a per-person badge would launder that guess into a fact.
+
+    // Opaque token minted at dispatch; the open pixel resolves the row by it.
+    trackingToken: v.optional(v.string()),
+    // When the provider accepted the send. _creationTime cannot serve here: a
+    // campaign row is created queued and dispatched minutes later, and the
+    // prefetch guard in recordEmailOpen needs the moment the mail actually
+    // left, not the moment it was planned.
+    sentAt: v.optional(v.number()),
+    // First tracked open + total hits. Hits inside the first 15s of dispatch
+    // are dropped as prefetch, see recordEmailOpen.
+    openedAt: v.optional(v.number()),
+    openCount: v.optional(v.number()),
+    // Which template row's words this send carried, for the denormalised
+    // sent/open counters on waTemplates. Email sends only; WhatsApp rows keep
+    // identifying their template by templateName as they always have.
+    templateId: v.optional(v.id("waTemplates")),
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"])
@@ -858,7 +891,10 @@ export default defineSchema({
     // the one that would break is among them.
     .index("by_media", ["mediaStorageId"])
     .index("by_campaign", ["campaignId"])
-    .index("by_wamid", ["wamid"]),
+    .index("by_wamid", ["wamid"])
+    // Open-pixel hits. The token is the capability: the route carries no auth,
+    // so resolving it must be an indexed point read, not a scan.
+    .index("by_tracking_token", ["trackingToken"]),
 
   // A one-off message to a group of customers — "we're closed next Monday",
   // "20% off colour in March", "we've moved".

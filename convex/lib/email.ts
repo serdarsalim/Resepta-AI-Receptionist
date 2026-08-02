@@ -34,6 +34,18 @@ export function emailLaneConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
+// Open-pixel injection, winback and campaign mail only. The URL is this
+// deployment's own convex.site route (/e/o/<token>, convex/http.ts), so the
+// hit lands in the right deployment's database. Appended after the body — our
+// customer mail is a single paragraph, there is no </body> to slot before.
+// No token or no site URL means the mail simply goes untracked; a missing
+// pixel must never block a send.
+export function withOpenPixel(html: string, token: string | undefined): string {
+  const site = process.env.CONVEX_SITE_URL;
+  if (!token || !site) return html;
+  return `${html}<img src="${site}/e/o/${token}" width="1" height="1" alt="" style="display:none;max-height:1px;max-width:1px;" />`;
+}
+
 export async function sendEmail(args: {
   from: string;
   to: string;

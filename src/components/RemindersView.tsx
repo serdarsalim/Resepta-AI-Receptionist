@@ -650,6 +650,19 @@ export function RemindersView() {
                           {t("settings.templateTokens")}:{" "}
                           {t("settings.templateTokensList")}
                         </p>
+                        {/* Win-back mail is the one kind that tracks opens —
+                            a rate over the template, never a per-customer
+                            fact, because mail relays prefetch pixels and a
+                            personal "opened" badge would launder that guess
+                            into a record. */}
+                        {template.kind === "winback" &&
+                          (template.emailSentCount ?? 0) > 0 && (
+                            <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                              {t("settings.templateEmailOpens")}:{" "}
+                              {template.emailOpenCount ?? 0} / {template.emailSentCount}
+                              <InfoTip text={t("settings.templateEmailOpensHint")} />
+                            </p>
+                          )}
                         {settings.org.emailFrom && (
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="w-36 shrink-0 text-xs text-[var(--muted)]">

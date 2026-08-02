@@ -46,6 +46,10 @@ export const logOutQueued = internalMutation({
     mediaStorageId: v.optional(v.id("_storage")),
     // Which number this goes out on. Unset = cloud.
     lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
+    // Email open tracking (winback + campaign mail only): the pixel token and
+    // the template row whose counters this send feeds.
+    trackingToken: v.optional(v.string()),
+    templateId: v.optional(v.id("waTemplates")),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -63,6 +67,8 @@ export const logOutQueued = internalMutation({
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
       lane: args.lane,
+      trackingToken: args.trackingToken,
+      templateId: args.templateId,
       status: "queued",
       // A row with no scheduledFor is being sent RIGHT NOW by the action that
       // just created it, so it is in flight from this moment. Stamping it here
@@ -114,7 +120,21 @@ export const applySendResult = internalMutation({
         attempts,
         nextAttemptAt: undefined,
         sendingAt: undefined,
+        sentAt: Date.now(),
       });
+      // The denominator of the template's open rate. Bumped HERE because this
+      // is the one place every send path already reports, so the counter has a
+      // single feeding site and cannot drift between the send path and the
+      // retry queue. A row reaches this branch at most once — on the attempt
+      // that landed — so one message is one count regardless of retries.
+      if (message.kind.startsWith("email_") && message.templateId) {
+        const template = await ctx.db.get(message.templateId);
+        if (template) {
+          await ctx.db.patch(template._id, {
+            emailSentCount: (template.emailSentCount ?? 0) + 1,
+          });
+        }
+      }
       return null;
     }
 
@@ -154,6 +174,43 @@ export const applySendResult = internalMutation({
       reason: args.error ?? "unknown",
       deadLettered,
     });
+    return null;
+  },
+});
+
+// Resolve an open-pixel hit (GET /e/o/<token>, convex/http.ts) to its message
+// row. Every hit bumps openCount; openedAt is first-open-wins, and the first
+// open feeds the template's denormalised open counter. Hits inside the first
+// 15s after dispatch are dropped — that is a relay prefetching the image
+// (Apple MPP, corporate scanners), not a human reading the mail. Ported from
+// Nudge's recordEmailOpen.
+export const recordEmailOpen = internalMutation({
+  args: { token: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_tracking_token", (q) => q.eq("trackingToken", args.token))
+      .first();
+    if (!message || message.direction !== "out" || !message.kind.startsWith("email_")) {
+      return null;
+    }
+    const now = Date.now();
+    const sentAt = message.sentAt ?? message.sendingAt ?? message._creationTime;
+    if (now - sentAt < 15_000) return null;
+    const firstOpen = message.openedAt === undefined;
+    await ctx.db.patch(message._id, {
+      openedAt: message.openedAt ?? now,
+      openCount: (message.openCount ?? 0) + 1,
+    });
+    if (firstOpen && message.templateId) {
+      const template = await ctx.db.get(message.templateId);
+      if (template) {
+        await ctx.db.patch(template._id, {
+          emailOpenCount: (template.emailOpenCount ?? 0) + 1,
+        });
+      }
+    }
     return null;
   },
 });

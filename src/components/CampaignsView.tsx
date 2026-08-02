@@ -95,6 +95,11 @@ export function CampaignsView() {
                   ) : (
                     <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
                       {campaign.sent} {t("campaign.sent")}
+                      {/* Email opens only, and only once somebody has. A run
+                          with no email half stays a clean "sent" count
+                          instead of a permanent "0 opened". */}
+                      {campaign.opened > 0 &&
+                        ` · ${campaign.opened} ${t("campaign.opened")}`}
                       {campaign.pending > 0 &&
                         ` · ${campaign.pending} ${t("campaign.pending")}`}
                       {campaign.failed > 0 && (
