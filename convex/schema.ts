@@ -191,9 +191,12 @@ export default defineSchema({
 
     // When the salon is OPEN — a different question from quietHours, which is
     // when it is polite to message a customer. Drives the WhatsApp away-reply
-    // only. No defaults applied in code: a Turkish barber routinely opens
-    // Saturday and closes Monday, so a guessed default would announce "we're
-    // closed" on the busiest day. Unset = no away-reply (lib/businessHours.ts).
+    // and the voice agent's availability answers (http.ts check_availability
+    // hands these hours to the agent as open_hours). No defaults applied in
+    // code: a Turkish barber routinely opens Saturday and closes Monday, so a
+    // guessed default would announce "we're closed" on the busiest day.
+    // Unset = no away-reply, and the agent only knows what is booked
+    // (lib/businessHours.ts).
     businessHours: v.optional(
       v.object({
         // 0=Sunday .. 6=Saturday. Empty/unset = every day.

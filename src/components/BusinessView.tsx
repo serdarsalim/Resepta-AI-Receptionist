@@ -17,6 +17,7 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
+import { AwayReplyCard } from "./RemindersView";
 import { McpCard } from "./McpCard";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
@@ -53,10 +54,16 @@ import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "catalogue" | "people" | "ai" | "activity";
+type Section = "general" | "hours" | "catalogue" | "people" | "ai" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
+  // Hours are a fact about the business, so they live here — second, right
+  // beside General. They spent their first life inside the WhatsApp tab under
+  // Reminders because only the away-reply read them; now the voice agent
+  // schedules by them, and "when are we open" filed under a messaging channel
+  // was a genuine scavenger hunt.
+  { id: "hours", key: "settings.hours" },
   { id: "catalogue", key: "settings.catalogue" },
   { id: "people", key: "staff.title" },
   // AI connectors live with the business, not in Settings: like People, a key
@@ -89,6 +96,18 @@ function SectionChip({
       {label}
     </button>
   );
+}
+
+// Thin wrapper owning the mutation, so the shared card stays a dumb form.
+function HoursCard({
+  isOwner,
+  org,
+}: {
+  isOwner: boolean;
+  org: Parameters<typeof AwayReplyCard>[0]["org"];
+}) {
+  const update = useMutation(api.orgs.update);
+  return <AwayReplyCard isOwner={isOwner} org={org} update={(args) => void update(args)} />;
 }
 
 const SECTION_STORAGE_KEY = "randevu.business.section";
@@ -141,6 +160,7 @@ export function BusinessView() {
         </p>
       )}
       {section === "general" && <DetailsCard isOwner={isOwner} />}
+      {section === "hours" && <HoursCard isOwner={isOwner} org={settings.org} />}
       {section === "catalogue" && (
         <>
           <ServicesCard isOwner={isOwner} />

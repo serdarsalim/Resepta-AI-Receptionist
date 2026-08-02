@@ -771,9 +771,9 @@ const dictionary = {
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
   "settings.rulesNoChannel": {
-    tr: "Ne WhatsApp bağlı ne de gönderen e-posta adresi var, bu yüzden listedeki hiçbir kural şu anda mesaj göndermiyor. WhatsApp'ı WhatsApp bölümünden bağlayın ya da İşletme sayfasında bir e-posta adresi girin.",
-    en: "No WhatsApp connection and no sender email address, so nothing on this list is going out yet. Connect WhatsApp in the WhatsApp section, or set an email address on the Business page.",
-    de: "Weder ist WhatsApp verbunden noch ist eine Absenderadresse hinterlegt, daher sendet derzeit keine dieser Regeln. Verbinden Sie WhatsApp im WhatsApp-Bereich oder hinterlegen Sie eine E-Mail-Adresse auf der Seite Betrieb.",
+    tr: "Ne WhatsApp bağlı ne de gönderen e-posta adresi var, bu yüzden listedeki hiçbir kural şu anda mesaj göndermiyor. WhatsApp kurulumunu biz yapıyoruz — bize ulaşın. E-posta adresini İşletme sayfasında girebilirsiniz.",
+    en: "No WhatsApp connection and no sender email address, so nothing on this list is going out yet. We handle the WhatsApp setup — get in touch. An email address can be set on the Business page.",
+    de: "Weder ist WhatsApp verbunden noch ist eine Absenderadresse hinterlegt, daher sendet derzeit keine dieser Regeln. Die WhatsApp-Einrichtung übernehmen wir — melden Sie sich. Eine E-Mail-Adresse können Sie auf der Seite Betrieb hinterlegen.",
   },
   "settings.ruleSendWindow": {
     tr: "Gönderim saatleri",
@@ -1816,15 +1816,21 @@ const dictionary = {
     en: "Revoke {name}? The connector stops working immediately and cannot be re-enabled.",
     de: "{name} widerrufen? Der Connector funktioniert sofort nicht mehr und kann nicht reaktiviert werden.",
   },
+  // The Business section's Hours tab. Short, because it is a tab label.
+  "settings.hours": {
+    tr: "Saatler",
+    en: "Hours",
+    de: "Zeiten",
+  },
   "settings.businessHours": {
     tr: "Açık olduğunuz günler",
     en: "Days you're open",
     de: "Ihre Öffnungstage",
   },
   "settings.businessHoursHint": {
-    tr: "Sadece WhatsApp otomatik yanıtı için kullanılır — hangi saatlerde kapalı olduğunuzu bilmeden \"şu anda kapalıyız\" yazamayız. Randevu hatırlatmalarının saatini bu değil, Hatırlatmalar bölümündeki sessiz saatler belirler.",
-    en: "Used only by the WhatsApp auto-reply — we can't say \"we're closed\" without knowing when you are. Reminder timing is set by quiet hours under Reminders, not here.",
-    de: "Wird nur für die WhatsApp-Autoantwort verwendet — ohne Ihre Zeiten können wir nicht \"geschlossen\" schreiben. Die Zeit für Erinnerungen steuern die Ruhezeiten unter Erinnerungen, nicht dies.",
+    tr: "WhatsApp otomatik yanıtı ve sesli asistanın randevu teklifleri bu saatlere göre çalışır — kapalıyken \"kapalıyız\" diyebilmek ve kapalı saatlere randevu önermemek için. Hatırlatmaların saatini bu değil, Hatırlatmalar bölümündeki sessiz saatler belirler.",
+    en: "Drives the WhatsApp auto-reply and the voice agent's scheduling — saying \"we're closed\" when you are, and never offering an appointment outside these hours. Reminder timing is set by quiet hours under Reminders, not here.",
+    de: "Steuert die WhatsApp-Autoantwort und die Terminvorschläge des Sprachassistenten — \"geschlossen\" nur wenn zu ist, und keine Termine außerhalb dieser Zeiten. Die Zeit für Erinnerungen steuern die Ruhezeiten unter Erinnerungen, nicht dies.",
   },
   "settings.openFrom": {
     tr: "Açılış",

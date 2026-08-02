@@ -4,7 +4,6 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { type TranslationKey } from "@/lib/i18n";
 import {
   formatReminderOffset,
   minutesToTimeValue,
@@ -280,7 +279,13 @@ function NotificationRulesCard({
 // is org data, so this card is the whole configuration surface for it: which
 // days, which hours, the link, the number, and an optional override of the
 // wording. Weekday names come from Intl (see weekdayNames), not the dictionary.
-function AwayReplyCard({
+//
+// Exported and rendered under Business → Hours, not here. The hours stopped
+// being a WhatsApp detail the day the voice agent started scheduling by them;
+// finding "when are we open" behind a WhatsApp tab was a scavenger hunt. The
+// component keeps living in this file because the away-reply half of it is
+// still wired to everything else here.
+export function AwayReplyCard({
   isOwner,
   org,
   update,
@@ -324,7 +329,11 @@ function AwayReplyCard({
           hint={t("settings.businessHoursHint")}
         />
         <div className="flex flex-wrap gap-1.5">
-          {days.map((label, index) => {
+          {/* Shown Monday-first — the week as this market reads it — while
+              the STORED indices stay 0=Sunday, because that is what
+              Date.getDay() speaks and what the away-reply check compares. */}
+          {[1, 2, 3, 4, 5, 6, 0].map((index) => {
+            const label = days[index];
             const active = activeDays.includes(index);
             return (
               <button
@@ -509,72 +518,18 @@ function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
 // Sections rather than one long scroll of cards.
 // What used to be Settings, whittled down until the name stopped being true:
 // voice became its own tab, bookings went to the operator's admin console, AI
-// connectors joined Business next to People. Reminder rules and the WhatsApp
-// connection are what remained — the messaging half of the product — and they
-// are a work destination now, not a configuration page.
-type Section = "reminders" | "whatsapp";
+// connectors joined Business next to People, credentials moved behind /admin
+// and the hours card to Business → Hours. What remained no longer justified
+// tabs, so there are none.
 
-const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "reminders", key: "settings.reminders" },
-  { id: "whatsapp", key: "settings.whatsapp" },
-];
-
-// Active section is a solid accent fill; the rest are text + hover wash. No
-// border on either state — borders belong to containers, not buttons.
-function SectionChip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={`rounded-full px-3 py-1 text-sm transition-colors ${
-        active
-          ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-const SECTION_STORAGE_KEY = "randevu.reminders-section";
-
+// One flat page, no tabs. Reminders/WhatsApp was a two-tab split where the
+// second tab held credentials (now /admin's job) and the hours card (now
+// Business → Hours); what is left — the rules, the templates the rules send,
+// and the shop phone — is one story read top to bottom.
 export function RemindersView() {
   const { t } = useLanguage();
-  const [section, setSectionState] = useState<Section>("reminders");
-
-  // Same deal as the main tabs in AppHome: the section lives in the URL so a
-  // refresh stays put, and the last-used one is the fallback for a bare URL.
-  // Before this, every refresh dumped you back on Reminders.
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get("section");
-    const stored = window.localStorage.getItem(SECTION_STORAGE_KEY);
-    const next = [wanted, stored].find(
-      (id): id is Section => id !== null && SECTIONS.some((s) => s.id === id),
-    );
-    if (next) setSectionState(next);
-  }, []);
-
-  const setSection = (next: Section) => {
-    setSectionState(next);
-    window.localStorage.setItem(SECTION_STORAGE_KEY, next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("section", next);
-    window.history.replaceState(null, "", url);
-  };
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
-  const connectWhatsapp = useMutation(api.orgs.connectWhatsapp);
-  const disconnectWhatsapp = useMutation(api.orgs.disconnectWhatsapp);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
 
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -584,83 +539,39 @@ export function RemindersView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex flex-wrap items-center gap-1">
-        {SECTIONS.map((entry) => (
-          <SectionChip
-            key={entry.id}
-            active={section === entry.id}
-            label={t(entry.key)}
-            onClick={() => setSection(entry.id)}
-          />
-        ))}
-      </div>
-
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
         </p>
       )}
 
-      {section === "reminders" && (
-        <NotificationRulesCard
+      <NotificationRulesCard
           isOwner={isOwner}
           org={settings.org}
           templates={settings.templates}
           waConnected={settings.whatsapp.connected}
           update={(args) => void update(args)}
         />
-      )}
 
-      {section === "whatsapp" && (
-        <>
-          <Card disabled={!isOwner}>
-            {settings.whatsapp.connected ? (
+      <>
+          {/* No connect form here. The Meta credentials — phone number id,
+              access token — are operator plumbing, entered from /admin like
+              the Retell key. A salon owner was being shown a password field
+              for an account they do not have; all they need to know is
+              whether the number works, and the templates card already goes
+              amber when it does not. */}
+          {settings.whatsapp.connected && (
+            <Card disabled={!isOwner}>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                   {t("settings.waConnected")}
                 </span>
                 <span className="text-[var(--muted)]">
-                  {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId} · ••••
-                  {settings.whatsapp.tokenTail}
+                  {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId}
                 </span>
-                <button
-                  className="ml-auto rounded-lg px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-[var(--muted-bg)] dark:text-red-400"
-                  onClick={() => void disconnectWhatsapp({})}
-                >
-                  {t("settings.waDisconnect")}
-                </button>
               </div>
-            ) : (
-              <form
-                className={ROW_GRID}
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  const form = new FormData(event.currentTarget);
-                  await connectWhatsapp({
-                    phoneNumberId: String(form.get("phoneNumberId") ?? ""),
-                    accessToken: String(form.get("accessToken") ?? ""),
-                    displayNumber: String(form.get("displayNumber") ?? "") || undefined,
-                  });
-                }}
-              >
-                <RowLabel label={t("settings.waPhoneNumberId")} />
-                <input name="phoneNumberId" required />
-                <RowLabel label={t("customers.phone")} />
-                <input name="displayNumber" placeholder="+905321234567" />
-                <RowLabel label={t("settings.waToken")} />
-                <input name="accessToken" type="password" required />
-                <span />
-                <div>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-                  >
-                    {t("settings.waConnect")}
-                  </button>
-                </div>
-              </form>
-            )}
-          </Card>
+            </Card>
+          )}
 
           <Card
             title={t("settings.templates")}
@@ -701,17 +612,8 @@ export function RemindersView() {
             </div>
           </Card>
         </>
-      )}
 
-      {section === "whatsapp" && <ShopPhoneCard isOwner={isOwner} />}
-
-      {section === "whatsapp" && (
-        <AwayReplyCard
-          isOwner={isOwner}
-          org={settings.org}
-          update={(args) => void update(args)}
-        />
-      )}
+      <ShopPhoneCard isOwner={isOwner} />
 
     </div>
   );
