@@ -381,11 +381,38 @@ http.route({
     const callerPhone = String(args.phone ?? call.from_number ?? "");
 
     if (name === "check_availability") {
-      if (!org.calcomApiKey || !org.calcomEventTypeId) {
-        return respond({ error: "no-calendar-connected" });
-      }
       const dayIso = String(args.date ?? todayInZone(org.timezone));
       const { startIso, endIso } = localDayRangeUtc(dayIso, org.timezone);
+      // No cal.com is not "no calendar". Randevu holds every appointment this
+      // org has, so the agent gets the day's bookings from our own table and
+      // works around them. It used to answer "no-calendar-connected", which
+      // the agent relayed to a caller as "the calendar isn't linked" — an
+      // internals leak that is also simply false.
+      if (!org.calcomApiKey || !org.calcomEventTypeId) {
+        const booked = (await ctx.runQuery(internal.retell.bookedBetween, {
+          orgId: org._id,
+          startMs: Date.parse(startIso),
+          endMs: Date.parse(endIso),
+        })) as { startAt: number; durationMinutes: number | null }[];
+        const hours = org.businessHours ?? null;
+        const asClock = (minute: number) =>
+          `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+        return respond({
+          date: dayIso,
+          // Speakable ranges, not raw timestamps: this body goes to the LLM
+          // verbatim and gets read down a phone line.
+          booked_slots: booked.map((slot) => ({
+            start: formatAppointmentTime(slot.startAt, org.timezone, org.language),
+            duration_minutes: slot.durationMinutes ?? 30,
+          })),
+          ...(hours && hours.startMinute !== undefined && hours.endMinute !== undefined
+            ? { open_hours: `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}` }
+            : {}),
+          note:
+            "These times are already booked. Offer times that avoid them" +
+            (hours ? " and stay inside open_hours." : "."),
+        });
+      }
       const result = await getAvailableSlots({
         apiKey: org.calcomApiKey,
         eventTypeId: org.calcomEventTypeId,

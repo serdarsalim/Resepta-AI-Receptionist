@@ -1463,6 +1463,13 @@ const dictionary = {
     en: "Call only",
     de: "Nur Anruf",
   },
+  // The disabled placeholder a legacy capture row shows until it is linked
+  // somewhere real. Phrased as the unfinished task it is.
+  "voiceVariables.choosePlace": {
+    tr: "Nereye kaydedileceğini seçin",
+    en: "Choose where to save",
+    de: "Speicherort wählen",
+  },
   "voiceVariables.builtin": {
     tr: "Otomatik",
     en: "Automatic",

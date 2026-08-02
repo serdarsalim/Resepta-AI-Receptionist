@@ -495,13 +495,22 @@ export function VoiceVariablesEditor({
   );
   // What the pickers offer. "Service list" stays out: it is injected context
   // with no before-source, not a value a row can hold.
-  const pickerBuiltins: PickerBuiltin[] = availableBuiltins
-    .filter((builtin) => builtin.key !== "services")
-    .map((builtin) => ({
-      key: builtin.key,
-      label: builtin.label,
-      source: builtin.key as PickerBuiltin["source"],
-    }));
+  //
+  // Phase matters: a during/after row CAPTURES, and a captured value must
+  // land somewhere. Phone, language and business name have no writable
+  // column — phone identifies the caller, language and business name belong
+  // to the org — so they are offered as before-call context only. Offering
+  // "Customer phone" as a question was how a row got created that could
+  // never say where its answer went.
+  const pickerBuiltinsFor = (phase: Phase): PickerBuiltin[] =>
+    availableBuiltins
+      .filter((builtin) => builtin.key !== "services")
+      .filter((builtin) => phase === "before" || customerFieldOf(builtin.key))
+      .map((builtin) => ({
+        key: builtin.key,
+        label: builtin.label,
+        source: builtin.key as PickerBuiltin["source"],
+      }));
   // A row's own picker also lists what the row currently is, so the menu
   // always contains the current selection.
   const rowPickerFields = (row: VoiceVariable): VoiceContactField[] => {
@@ -515,12 +524,13 @@ export function VoiceVariablesEditor({
     return field?.type === "select" ? field : undefined;
   };
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
+    const phased = pickerBuiltinsFor(phaseOf(row));
     const own = builtinVoiceVariables(t).find(
       (builtin) => builtin.key === row.key && builtin.key !== "services",
     );
     return own
-      ? [{ key: own.key, label: own.label, source: own.key as PickerBuiltin["source"] }, ...pickerBuiltins]
-      : pickerBuiltins;
+      ? [{ key: own.key, label: own.label, source: own.key as PickerBuiltin["source"] }, ...phased]
+      : phased;
   };
 
   return (
@@ -602,6 +612,7 @@ export function VoiceVariablesEditor({
                     onPickBuiltin={(builtin) => relinkRowToBuiltin(index, builtin)}
                     onCreateField={(label) => void createFieldForRow(index, label)}
                     onRename={(label) => renameRowCallOnly(index, label)}
+                    allowCallOnly={row.duringMode === "none" && !row.afterCall}
                     onFocused={() => setFocusLast(false)}
                     onChange={(next) => patch(index, next)}
                     onRemove={() => removeAt(index)}
@@ -609,11 +620,16 @@ export function VoiceVariablesEditor({
                 ))}
                 <VariablePicker
                   fields={availableFields}
-                  builtins={pickerBuiltins}
+                  builtins={pickerBuiltinsFor(group.id)}
                   onField={(field) => adoptField(field, group.id)}
                   onBuiltin={(builtin) => adoptBuiltin(builtin, group.id)}
                   onCreate={(label) => void createFieldAndAdopt(label, group.id)}
                   onCallOnly={(label) => addCallOnly(label, group.id)}
+                  // "Just for this call" only where a row is context, not an
+                  // answer. A during/after variable captures something the
+                  // caller said, and a captured value with no destination is
+                  // the invisible-orphan case this editor no longer permits.
+                  allowCallOnly={group.id === "before"}
                 />
               </div>
             </div>
@@ -721,6 +737,7 @@ function VariablePicker({
   onBuiltin,
   onCreate,
   onCallOnly,
+  allowCallOnly,
 }: {
   // undefined renders the "+ Add variable" link; a string renders a row's
   // name cell (empty string = unnamed row).
@@ -731,6 +748,9 @@ function VariablePicker({
   onBuiltin: (builtin: PickerBuiltin) => void;
   onCreate: (label: string) => void;
   onCallOnly: (label: string) => void;
+  // False on anything that captures an answer: "just for this call" is a
+  // valid home for context, not for something the caller said.
+  allowCallOnly: boolean;
 }) {
   const { t } = useLanguage();
   const isName = current !== undefined;
@@ -860,7 +880,7 @@ function VariablePicker({
                 + {t("voiceVariables.pickerCreate").replace("{name}", trimmed)}
               </button>
             )}
-            {trimmed && (
+            {trimmed && allowCallOnly && (
               <button
                 type="button"
                 onClick={() => pick(() => onCallOnly(trimmed))}
@@ -904,6 +924,7 @@ function VariableRow({
   onPickBuiltin,
   onCreateField,
   onRename,
+  allowCallOnly,
 }: {
   row: VoiceVariable;
   displayLabel: string;
@@ -923,6 +944,7 @@ function VariableRow({
   onPickBuiltin: (builtin: PickerBuiltin) => void;
   onCreateField: (label: string) => void;
   onRename: (label: string) => void;
+  allowCallOnly: boolean;
 }) {
   const { t } = useLanguage();
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
@@ -961,6 +983,7 @@ function VariableRow({
           onBuiltin={onPickBuiltin}
           onCreate={onCreateField}
           onCallOnly={onRename}
+          allowCallOnly={allowCallOnly}
         />
       </div>
       <input
@@ -1164,7 +1187,20 @@ function VariableRow({
                 }}
                 className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
-                <option value="call">{t("voiceVariables.callOnly")}</option>
+                {/* An answer must land somewhere. "Call only" survives solely
+                    for rows that capture nothing (pre-call context), and a
+                    legacy capture row still pointing at "call" sees a
+                    disabled "choose where to save" it cannot re-pick —
+                    visible debt, not an offer. */}
+                {row.duringMode === "none" && !row.afterCall ? (
+                  <option value="call">{t("voiceVariables.callOnly")}</option>
+                ) : (
+                  row.destination === "call" && (
+                    <option value="call" disabled>
+                      {t("voiceVariables.choosePlace")}
+                    </option>
+                  )
+                )}
                 {/* The customer's own columns, named exactly as Business →
                     Fields names them. Offered on every row, not just the
                     built-in ones: plenty of agents call it caller_name, and

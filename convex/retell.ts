@@ -1174,6 +1174,35 @@ export const voiceBook = internalMutation({
     const line = args.service
       ? await matchService(ctx, args.orgId, args.service)
       : undefined;
+    // Double-booking guard, but only when Randevu's own book is the truth. An
+    // externalUid means cal.com already accepted this slot — it owns the
+    // inventory, and refusing here after it said yes would leave the two
+    // calendars telling different stories.
+    if (!args.externalUid) {
+      const duration = line?.durationMinutes ?? args.durationMinutes ?? 30;
+      const endAt = args.startAt + duration * 60_000;
+      // One day either side is enough: nothing a salon books runs longer.
+      const nearby = await ctx.db
+        .query("appointments")
+        .withIndex("by_org_start", (q) =>
+          q
+            .eq("orgId", args.orgId)
+            .gte("startAt", args.startAt - 24 * 60 * 60_000)
+            .lt("startAt", endAt),
+        )
+        .collect();
+      const clash = nearby.find(
+        (row) =>
+          (row.status === "scheduled" || row.status === "confirmed") &&
+          row.startAt < endAt &&
+          args.startAt < row.startAt + (row.durationMinutes ?? 30) * 60_000,
+      );
+      if (clash) {
+        // The message is the tool result the agent reads back, so it names
+        // the conflict in a way the agent can act on: offer another time.
+        throw new Error("slot-taken");
+      }
+    }
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: args.orgId,
       customerId: customer._id,
@@ -1189,6 +1218,27 @@ export const voiceBook = internalMutation({
     await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
     return { appointmentId, serviceName: line?.name };
+  },
+});
+
+// The salon's own book, for agents with no cal.com. Randevu IS a calendar —
+// every appointment in the org lives in this table — so "calendar not
+// connected" was never true, just the only answer check_availability had when
+// its single backend was missing. Scheduled and confirmed block a slot;
+// cancelled and no_show do not.
+export const bookedBetween = internalQuery({
+  args: { orgId: v.id("orgs"), startMs: v.number(), endMs: v.number() },
+  returns: v.array(v.object({ startAt: v.number(), durationMinutes: v.union(v.number(), v.null()) })),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) =>
+        q.eq("orgId", args.orgId).gte("startAt", args.startMs).lt("startAt", args.endMs),
+      )
+      .collect();
+    return rows
+      .filter((row) => row.status === "scheduled" || row.status === "confirmed")
+      .map((row) => ({ startAt: row.startAt, durationMinutes: row.durationMinutes ?? null }));
   },
 });
 

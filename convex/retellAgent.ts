@@ -628,6 +628,19 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
     if (raw.beforeSource === "none" && raw.duringMode === "none" && !raw.afterCall) {
       throw new Error(`${label} is not used at any point in the call.`);
     }
+    // Anything the agent captures must say where it lands. A call-only answer
+    // is invisible from every screen the business actually reads — the exact
+    // "declared in the agent, updates nobody knows what" drift this registry
+    // exists to prevent. Context rows (before-only) stay call-scoped; they
+    // capture nothing.
+    if (
+      raw.destination === "call" &&
+      (raw.duringMode !== "none" || raw.afterCall)
+    ) {
+      throw new Error(
+        `${label} is asked on the call but saved nowhere. Link it to a customer field.`,
+      );
+    }
     return {
       ...raw,
       key,
