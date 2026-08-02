@@ -45,7 +45,13 @@ export function EmojiPicker({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setPos(null);
     };
-    const onScroll = () => setPos(null);
+    // Capture-phase, so it sees every scroll — including the emoji list's
+    // own, which must NOT close the panel. Only a scroll outside the panel
+    // means it would detach from its button.
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);

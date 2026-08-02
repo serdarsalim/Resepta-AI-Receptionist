@@ -902,9 +902,19 @@ const dictionary = {
     de: "Auf Standard zurücksetzen",
   },
   "settings.resetRulesConfirm": {
-    tr: "Tüm mesaj kuralları ve yazdığınız özel metinler silinecek; varsayılan kurallar (onay + 1 gün önce hatırlatma) ve hazır metinler geri gelecek. WhatsApp onayları etkilenmez. Devam edilsin mi?",
-    en: "This deletes every message rule and the custom texts you wrote, and restores the defaults (confirmation + 1-day reminder) with stock wording. WhatsApp approvals are not affected. Continue?",
-    de: "Alle Nachrichtenregeln und Ihre eigenen Texte werden gelöscht; die Standardregeln (Bestätigung + Erinnerung 1 Tag vorher) mit Standardtexten kommen zurück. WhatsApp-Genehmigungen bleiben unberührt. Fortfahren?",
+    tr: "Tüm mesaj kuralları ve yazdığınız özel metinler silinir; varsayılan kural seti hazır metinlerle geri gelir. WhatsApp onayları etkilenmez.",
+    en: "This deletes every message rule and the custom texts you wrote, and restores the stock rule set with stock wording. WhatsApp approvals are not affected.",
+    de: "Alle Nachrichtenregeln und Ihre eigenen Texte werden gelöscht; das Standard-Regelset mit Standardtexten kommt zurück. WhatsApp-Genehmigungen bleiben unberührt.",
+  },
+  "settings.deleteRule": {
+    tr: "Kuralı sil",
+    en: "Delete rule",
+    de: "Regel löschen",
+  },
+  "settings.deleteRuleConfirm": {
+    tr: "Bu kural ve ona yazdığınız özel metin silinir. Aynı kuralı sonra yeniden ekleyebilirsiniz; metin hazır varsayılandan başlar.",
+    en: "This removes the rule and the custom text you wrote for it. You can add the same rule again later; its text starts from the stock wording.",
+    de: "Diese Regel und der eigene Text dazu werden gelöscht. Sie können die Regel später wieder hinzufügen; der Text beginnt dann mit dem Standardtext.",
   },
   // Shown when NO channel is wired. The wiring is the operator's job, so this
   // reassures rather than instructs: the rules above it already show that

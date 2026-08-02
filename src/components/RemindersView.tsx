@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 // renderer the send path uses, or the preview becomes a second opinion.
 import { renderTokens } from "../../convex/lib/renderTokens";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
@@ -438,6 +439,42 @@ function NotificationRulesCard({
 // live preview. The legacy card above renders only for orgs the migration has
 // not reached and dies with the legacy fields.
 
+// A number that reads as part of the sentence until it is touched: no border,
+// no spinners, just an underline on hover saying "this is yours to change".
+// The row copy is "24 hours before" — a boxed input in the middle of that
+// made every row look like a form, and a rules list is a list, not a form.
+function InlineNumber({
+  value,
+  min,
+  max,
+  label,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  label: string;
+  onCommit: (next: number) => void;
+}) {
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      defaultValue={value}
+      aria-label={label}
+      onBlur={(e) => {
+        const next = Number(e.target.value);
+        if (Number.isFinite(next) && next > 0 && next !== value) onCommit(next);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-10 border-0 bg-transparent p-0 text-center text-sm underline decoration-[var(--border)] decoration-dotted underline-offset-4 [appearance:textfield] hover:decoration-[var(--foreground)] focus:decoration-solid focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+    />
+  );
+}
+
 // The message editor behind a rule's chevron. Controlled state rather than
 // defaultValue+blur alone, because the variable insert and the preview both
 // need the text as it is being written, not as it was last saved.
@@ -721,6 +758,17 @@ function RulesCard({
   // dropdown reads, so preview and menu can never disagree.
   const contactFieldRows = useQuery(api.contactFields.list, {}) ?? [];
   const [expandedId, setExpandedId] = useState<Id<"messageRules"> | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+
+  const deleteRule = async (rule: RuleRowData) => {
+    const ok = await confirm({
+      title: t("settings.deleteRule"),
+      body: t("settings.deleteRuleConfirm"),
+    });
+    if (!ok) return;
+    setExpandedId(null);
+    void removeRule({ ruleId: rule._id });
+  };
 
   const orgHasChannel = waConnected || evolutionEnabled || emailEnabled;
   // One chip per channel that could ACTUALLY carry this rule — the chip list
@@ -822,18 +870,14 @@ function RulesCard({
       case "before_start":
         return (
           <span className="flex items-center gap-1.5">
-            <input
-              type="number"
+            <InlineNumber
+              value={rule.offsetHours}
               min={1}
               max={168}
-              className="w-16"
-              defaultValue={rule.offsetHours}
-              onBlur={(e) => {
-                const hours = Number(e.target.value);
-                if (Number.isFinite(hours) && hours > 0) {
-                  void updateRule({ ruleId: rule._id, offsetHours: hours });
-                }
-              }}
+              label={t("settings.ruleHoursBefore")}
+              onCommit={(hours) =>
+                void updateRule({ ruleId: rule._id, offsetHours: hours })
+              }
             />
             {t("settings.ruleHoursBefore")}
           </span>
@@ -841,18 +885,14 @@ function RulesCard({
       case "after_end":
         return (
           <span className="flex items-center gap-1.5">
-            <input
-              type="number"
+            <InlineNumber
+              value={rule.offsetHours}
               min={1}
               max={720}
-              className="w-16"
-              defaultValue={rule.offsetHours}
-              onBlur={(e) => {
-                const hours = Number(e.target.value);
-                if (Number.isFinite(hours) && hours > 0) {
-                  void updateRule({ ruleId: rule._id, offsetHours: hours });
-                }
-              }}
+              label={t("settings.ruleHoursAfterEnd")}
+              onCommit={(hours) =>
+                void updateRule({ ruleId: rule._id, offsetHours: hours })
+              }
             />
             {t("settings.ruleHoursAfterEnd")}
           </span>
@@ -860,18 +900,14 @@ function RulesCard({
       case "no_show":
         return (
           <span className="flex items-center gap-1.5">
-            <input
-              type="number"
+            <InlineNumber
+              value={Math.round(rule.offsetHours / 24)}
               min={1}
               max={90}
-              className="w-16"
-              defaultValue={Math.round(rule.offsetHours / 24)}
-              onBlur={(e) => {
-                const days = Number(e.target.value);
-                if (Number.isFinite(days) && days > 0) {
-                  void updateRule({ ruleId: rule._id, offsetHours: days * 24 });
-                }
-              }}
+              label={t("settings.ruleDaysAfterNoShow")}
+              onCommit={(days) =>
+                void updateRule({ ruleId: rule._id, offsetHours: days * 24 })
+              }
             />
             {t("settings.ruleDaysAfterNoShow")}
           </span>
@@ -912,7 +948,6 @@ function RulesCard({
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
         </div>
-        <span className="w-9 shrink-0" aria-hidden />
         <span className="w-9 shrink-0" aria-hidden />
       </div>
 
@@ -965,15 +1000,6 @@ function RulesCard({
                 </div>
                 <button
                   type="button"
-                  onClick={() => void removeRule({ ruleId: rule._id })}
-                  aria-label={`${ruleName(rule.trigger)} — ${t("common.delete")}`}
-                  title={t("common.delete")}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
-                >
-                  ×
-                </button>
-                <button
-                  type="button"
                   onClick={() => toggleExpand(rule)}
                   aria-expanded={expanded}
                   aria-label={`${ruleName(rule.trigger)} — ${t("settings.ruleEditMessage")}`}
@@ -989,21 +1015,34 @@ function RulesCard({
                 </button>
               </div>
               {expanded && (
-                <RuleEditor
-                  rule={rule}
-                  template={ownTemplate}
-                  contactFields={contactFieldRows}
-                  orgName={org.name}
-                  orgLanguage={org.language}
-                  emailEnabled={emailEnabled}
-                  waConnected={waConnected}
-                  onSaveBody={(templateId, body) =>
-                    void updateTemplate({ templateId, body })
-                  }
-                  onSaveSubject={(templateId, subject) =>
-                    void updateTemplate({ templateId, subject })
-                  }
-                />
+                <>
+                  <RuleEditor
+                    rule={rule}
+                    template={ownTemplate}
+                    contactFields={contactFieldRows}
+                    orgName={org.name}
+                    orgLanguage={org.language}
+                    emailEnabled={emailEnabled}
+                    waConnected={waConnected}
+                    onSaveBody={(templateId, body) =>
+                      void updateTemplate({ templateId, body })
+                    }
+                    onSaveSubject={(templateId, subject) =>
+                      void updateTemplate({ templateId, subject })
+                    }
+                  />
+                  {/* Deleting lives with the thing being deleted — the open
+                      panel — not as a glyph on every collapsed row. */}
+                  <div className="flex justify-end pb-4">
+                    <button
+                      type="button"
+                      onClick={() => void deleteRule(rule)}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                    >
+                      {t("settings.deleteRule")}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           );
@@ -1051,14 +1090,17 @@ function RulesCard({
       )}
 
       {/* The escape hatch, deliberately quiet and in the corner: back to the
-          stock rules and stock wording. window.confirm, same as sending a
-          campaign — a native dialog is exactly the right amount of ceremony
-          for an action this destructive and this rare. */}
+          stock rules and stock wording. */}
       <div className="mt-3 flex justify-end">
         <button
           type="button"
-          onClick={() => {
-            if (!window.confirm(t("settings.resetRulesConfirm"))) return;
+          onClick={async () => {
+            const ok = await confirm({
+              title: t("settings.resetRules"),
+              body: t("settings.resetRulesConfirm"),
+              confirmLabel: t("settings.resetRules"),
+            });
+            if (!ok) return;
             setExpandedId(null);
             void resetRules({});
           }}
@@ -1067,6 +1109,7 @@ function RulesCard({
           {t("settings.resetRules")}
         </button>
       </div>
+      {confirmDialog}
     </Card>
   );
 }
