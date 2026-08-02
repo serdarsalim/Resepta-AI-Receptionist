@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
@@ -36,13 +36,17 @@ type TemplateRow = {
   kind: string;
   language: string;
   status: string;
+  metaName?: string;
+  body?: string;
   bodyPreview?: string;
 };
 
 // What a rule can actually reach today, mirroring wa.sendAppointmentMessage:
-// WhatsApp needs a connected number AND an APPROVED template of this kind;
-// email needs a From on the org and a template row carrying body text (Meta
-// approval gates the WhatsApp send, not the email).
+// email needs a From on the org and template text; WhatsApp depends on which
+// lane would carry the send. A Cloud number wins whenever it exists
+// (lib/waLane rule 2), so with one connected the send stands or falls on
+// Meta's approval — the shop phone carries rules only when it is the only
+// WhatsApp the org has, and then all it needs is the words.
 //
 // Resolved against the ORG's language. A customer whose own language differs
 // is resolved per send, so no settings table can promise what they'll get —
@@ -53,13 +57,18 @@ function ruleChannels(
   templates: TemplateRow[],
   language: string,
   waConnected: boolean,
+  evolutionEnabled: boolean,
   emailFrom: string | undefined,
   emailLabel: string,
 ): string[] {
   const template = templates.find((t) => t.kind === kind && t.language === language);
+  const hasText = Boolean(template?.body || template?.bodyPreview);
   const channels: string[] = [];
-  if (waConnected && template?.status === "approved") channels.push("WhatsApp");
-  if (emailFrom && template?.bodyPreview) channels.push(emailLabel);
+  const waOk = waConnected
+    ? template?.status === "approved" && Boolean(template?.metaName)
+    : evolutionEnabled && hasText;
+  if (waOk) channels.push("WhatsApp");
+  if (emailFrom && hasText) channels.push(emailLabel);
   return channels;
 }
 
@@ -145,6 +154,7 @@ function NotificationRulesCard({
   org,
   templates,
   waConnected,
+  evolutionEnabled,
   update,
 }: {
   isOwner: boolean;
@@ -160,12 +170,13 @@ function NotificationRulesCard({
   };
   templates: TemplateRow[];
   waConnected: boolean;
+  evolutionEnabled: boolean;
   update: (args: Record<string, unknown>) => void;
 }) {
   const { t, language } = useLanguage();
   const offsets = org.reminderOffsetsHours;
   const unused = OFFSET_PRESETS.filter((h) => !offsets.includes(h));
-  const orgHasChannel = waConnected || Boolean(org.emailFrom);
+  const orgHasChannel = waConnected || evolutionEnabled || Boolean(org.emailFrom);
 
   const channelsFor = (kind: RuleKind) =>
     ruleChannels(
@@ -173,6 +184,7 @@ function NotificationRulesCard({
       templates,
       org.language,
       waConnected,
+      evolutionEnabled,
       org.emailFrom,
       t("settings.ruleEmail"),
     );
@@ -550,6 +562,7 @@ export function RemindersView() {
           org={settings.org}
           templates={settings.templates}
           waConnected={settings.whatsapp.connected}
+          evolutionEnabled={settings.evolutionEnabled}
           update={(args) => void update(args)}
         />
 
@@ -573,42 +586,130 @@ export function RemindersView() {
             </Card>
           )}
 
+          {/* The templates the rules send, one editor per kind. The body is
+              the salon's own words in named tokens; where a send actually
+              leaves from is a single status line, and the Meta registration
+              (name + approval) is a technical detail row that only exists
+              while a Business number is connected — the shop phone and email
+              need no approval from anybody. */}
           <Card
             title={t("settings.templates")}
             tip={t("settings.templatesHint")}
             disabled={!isOwner}
           >
             <div className="divide-y divide-[var(--border)]">
-              {settings.templates.map((template) => (
-                <div key={template._id} className="grid gap-2 py-3 sm:grid-cols-3 sm:items-center">
-                  <span className="flex items-center gap-2 text-sm">
-                    {template.kind === "confirmation"
-                      ? t("settings.sendConfirmation")
-                      : t("settings.reminders")}
-                    {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
-                  </span>
-                  <input
-                    defaultValue={template.metaName}
-                    onBlur={(e) =>
-                      void updateTemplate({ templateId: template._id, metaName: e.target.value })
-                    }
-                  />
-                  <select
-                    defaultValue={template.status}
-                    onChange={(e) =>
-                      void updateTemplate({
-                        templateId: template._id,
-                        status: e.target.value as "draft" | "pending" | "approved" | "rejected",
-                      })
-                    }
-                  >
-                    <option value="draft">{t("template.draft")}</option>
-                    <option value="pending">{t("template.pending")}</option>
-                    <option value="approved">{t("template.approved")}</option>
-                    <option value="rejected">{t("template.rejected")}</option>
-                  </select>
-                </div>
-              ))}
+              {settings.templates
+                // The campaign template is Cloud plumbing only — its body
+                // lives on each campaign, so without a connected Business
+                // number the row would be an editor for nothing.
+                .filter(
+                  (template) =>
+                    template.kind !== "campaign" || settings.whatsapp.connected,
+                )
+                .map((template) => (
+                  <div key={template._id} className="space-y-2 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {template.kind === "confirmation"
+                          ? t("settings.ruleConfirmation")
+                          : template.kind === "reminder"
+                            ? t("settings.ruleReminder")
+                            : template.kind === "winback"
+                              ? t("settings.ruleWinback")
+                              : t("settings.templateKindCampaign")}
+                      </span>
+                      {/* Which number this leaves from, in the salon's words.
+                          Cloud wins whenever it exists (lib/waLane rule 2),
+                          so the shop-phone line only shows when the shop
+                          phone is the org's only WhatsApp. Neither lane: the
+                          rules card already says so once, in amber. */}
+                      {(settings.whatsapp.connected || settings.evolutionEnabled) && (
+                        <span className="text-xs text-[var(--muted)]">
+                          {settings.whatsapp.connected
+                            ? t("settings.templateLaneCloud")
+                            : t("settings.templateLaneShopPhone")}
+                        </span>
+                      )}
+                    </div>
+                    {template.kind !== "campaign" && (
+                      <>
+                        <textarea
+                          rows={3}
+                          className="w-full"
+                          defaultValue={template.body ?? ""}
+                          placeholder={t("settings.templateBodyPlaceholder")}
+                          aria-label={t("settings.templateBody")}
+                          onBlur={(e) =>
+                            void updateTemplate({
+                              templateId: template._id,
+                              body: e.target.value,
+                            })
+                          }
+                        />
+                        <p className="text-xs text-[var(--muted)]">
+                          {t("settings.templateTokens")}:{" "}
+                          {t("settings.templateTokensList")}
+                        </p>
+                        {settings.org.emailFrom && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
+                              {t("settings.templateSubject")}
+                            </span>
+                            <input
+                              className="min-w-0 flex-1"
+                              defaultValue={template.subject ?? ""}
+                              onBlur={(e) =>
+                                void updateTemplate({
+                                  templateId: template._id,
+                                  subject: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {settings.whatsapp.connected && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex w-36 shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
+                          {t("settings.templateName")}
+                          {/* The exact string Meta approved, for checking the
+                              authored body against it. */}
+                          {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
+                        </span>
+                        <input
+                          className="min-w-0 flex-1"
+                          defaultValue={template.metaName ?? ""}
+                          onBlur={(e) =>
+                            void updateTemplate({
+                              templateId: template._id,
+                              metaName: e.target.value,
+                            })
+                          }
+                        />
+                        <select
+                          defaultValue={template.status}
+                          aria-label={t("settings.templateStatus")}
+                          onChange={(e) =>
+                            void updateTemplate({
+                              templateId: template._id,
+                              status: e.target.value as
+                                | "draft"
+                                | "pending"
+                                | "approved"
+                                | "rejected",
+                            })
+                          }
+                        >
+                          <option value="draft">{t("template.draft")}</option>
+                          <option value="pending">{t("template.pending")}</option>
+                          <option value="approved">{t("template.approved")}</option>
+                          <option value="rejected">{t("template.rejected")}</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ))}
             </div>
           </Card>
         </>

@@ -819,9 +819,9 @@ const dictionary = {
     de: "Nachrichtenvorlagen",
   },
   "settings.templatesHint": {
-    tr: "Şablonlar Meta tarafından onaylanmalıdır. Onaylanan şablon adını buraya yazın.",
-    en: "Templates must be approved by Meta. Enter the approved template name here.",
-    de: "Vorlagen müssen von Meta genehmigt sein. Tragen Sie hier den genehmigten Vorlagennamen ein.",
+    tr: "Kuralların gönderdiği mesajları burada yazarsınız. Köşeli parantezli alanlar gönderim anında müşterinin bilgileriyle doldurulur.",
+    en: "This is where you write what the rules send. Fields in square brackets are filled with the customer's details at send time.",
+    de: "Hier schreiben Sie die Texte, die die Regeln versenden. Felder in eckigen Klammern werden beim Versand mit den Daten der Kundin oder des Kunden gefüllt.",
   },
   "settings.templateName": {
     tr: "Şablon adı",
@@ -829,6 +829,53 @@ const dictionary = {
     de: "Vorlagenname",
   },
   "settings.templateStatus": { tr: "Durum", en: "Status", de: "Status" },
+  "settings.templateKindCampaign": {
+    tr: "Kampanya",
+    en: "Campaign",
+    de: "Kampagne",
+  },
+  "settings.templateBody": {
+    tr: "Mesaj metni",
+    en: "Message text",
+    de: "Nachrichtentext",
+  },
+  "settings.templateBodyPlaceholder": {
+    tr: "Merhaba [ad]! [isletme] randevunuz [tarih].",
+    en: "Hello [name]! Your appointment with [business] is on [date].",
+    de: "Hallo [name]! Ihr Termin bei [betrieb]: [termin].",
+  },
+  "settings.templateSubject": {
+    tr: "E-posta konusu",
+    en: "Email subject",
+    de: "E-Mail-Betreff",
+  },
+  "settings.templateTokens": {
+    tr: "Alanlar",
+    en: "Fields",
+    de: "Felder",
+  },
+  // The tokens on offer, in the reader's own words. Every one is an alias of
+  // the same canonical token (convex/lib/renderTokens), so a Turkish template
+  // keeps working when the interface language changes.
+  "settings.templateTokensList": {
+    tr: "[ad] [isletme] [tarih] [hizmet] [soyad] [personel] [telefon]",
+    en: "[name] [business] [date] [service] [lastname] [staff] [phone]",
+    de: "[name] [betrieb] [termin] [leistung] [nachname] [mitarbeiter] [telefon]",
+  },
+  // The lane a template's WhatsApp send actually leaves on, in the salon's
+  // words. Vendor names (Evolution, Cloud API, Meta Business Manager) never
+  // reach this screen — "Meta's approval" is the one exception, because the
+  // approval wait is a real thing the owner experiences and has no other name.
+  "settings.templateLaneShopPhone": {
+    tr: "Dükkan telefonunuzdan gönderilir.",
+    en: "Sends from your shop phone.",
+    de: "Wird von Ihrem Betriebstelefon gesendet.",
+  },
+  "settings.templateLaneCloud": {
+    tr: "WhatsApp Business numaranızdan gönderilir. Metnin önce Meta onayından geçmesi gerekir.",
+    en: "Sends from your WhatsApp Business number. The wording needs Meta's approval first.",
+    de: "Wird über Ihre WhatsApp-Business-Nummer gesendet. Der Text braucht zuerst Metas Freigabe.",
+  },
   // Meta's approval states, in the reader's language. The stored value stays
   // the English slug.
   "template.draft": { tr: "Taslak", en: "Draft", de: "Entwurf" },

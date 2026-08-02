@@ -45,6 +45,7 @@ const ALIASES: Record<string, keyof TokenValues> = {
   isim: "firstName",
   lastname: "lastName",
   soyad: "lastName",
+  nachname: "lastName",
   // Business
   business: "businessName",
   isletme: "businessName",
@@ -55,9 +56,11 @@ const ALIASES: Record<string, keyof TokenValues> = {
   datetime: "appointmentAt",
   tarih: "appointmentAt",
   termin: "appointmentAt",
+  datum: "appointmentAt",
   // People and contact
   staff: "staffName",
   personel: "staffName",
+  mitarbeiter: "staffName",
   phone: "phone",
   telefon: "phone",
   // Service — the same word the voice agent's variables use, because a token
