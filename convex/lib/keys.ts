@@ -20,12 +20,25 @@ const LEADING_STOP = new Set([
   // en
   "what", "whats", "is", "are", "your", "you", "do", "does", "the", "a", "an",
   "please", "s", "their", "his", "her", "my", "our", "how", "many", "much", "which", "who",
+  "this", "that",
   // tr
-  "sizin", "senin", "lutfen", "hangi",
+  "sizin", "senin", "lutfen", "hangi", "bu",
   // de
   "was", "ist", "sind", "ihre", "ihr", "dein", "deine", "bitte", "wie", "welche", "welcher",
 ]);
-const TRAILING_STOP = new Set(["nedir", "midir", "mudur", "mi", "mu"]);
+// Words a key must not END on. The question-mark words were the original
+// reason, but the function words matter more in practice: the length cap
+// truncates mid-phrase, so a long label reliably left keys like
+// "..._to_be_defined_to". Stripping runs again AFTER the cap for exactly that.
+const TRAILING_STOP = new Set([
+  // en
+  "a", "an", "the", "to", "be", "is", "are", "of", "for", "and", "or", "with",
+  "in", "on", "at", "by", "from",
+  // tr
+  "nedir", "midir", "mudur", "mi", "mu", "ve", "ile",
+  // de
+  "und", "oder", "mit", "von", "fur", "ist",
+]);
 const MAX_KEY_WORD_LENGTH = 40;
 
 // Turkish-fold and snake-case, no length cap. The uncapped middle step both
@@ -78,6 +91,12 @@ export function keyFromLabel(raw: string): string {
     if (parts.length > 0 && parts.join("_").length + 1 + word.length > MAX_KEY_WORD_LENGTH) break;
     parts.push(word);
   }
+  // Again, because the cap cuts mid-phrase and the first pass could only see
+  // the end of the WHOLE label. "…to be defined to be a great service" capped
+  // to "…_to_be_defined_to_be_a"; this is what takes it back to a real word.
+  // Never down to nothing: a label made entirely of stop words still needs an
+  // address, and the caller's fallback is a positional key, not silence.
+  while (parts.length > 1 && TRAILING_STOP.has(parts[parts.length - 1])) parts.pop();
   return parts.join("_").slice(0, 64);
 }
 

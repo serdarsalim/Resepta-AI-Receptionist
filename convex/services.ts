@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
-import { keyFromLabel, uniqueKey } from "./lib/keys";
+import { keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 
 const serviceDoc = v.object({
   _id: v.id("services"),
@@ -91,6 +91,14 @@ export const update = mutation({
   args: {
     serviceId: v.id("services"),
     name: v.optional(v.string()),
+    // Editable, where a contact field's key is frozen the moment an agent
+    // references it. The difference is real, not an inconsistency: nothing
+    // stores a pointer to a service key. The agent is handed the current list
+    // on every call (get_call_context), so a key it "learned" last month was
+    // never remembered in the first place. What the key still buys is that a
+    // RENAME does not silently move the address — which is why it is derived
+    // once and then only ever moves when somebody says so.
+    key: v.optional(v.string()),
     durationMinutes: v.optional(v.number()),
     active: v.optional(v.boolean()),
     // Null clears the price; a number sets it. Without the null case there is
@@ -108,7 +116,17 @@ export const update = mutation({
     // folded name all along, so storing exactly that changes nothing today and
     // makes every rename after this one safe. Rows that already have a key are
     // never re-derived — that is the whole point of having one.
-    if (service.key === undefined) {
+    if (args.key !== undefined) {
+      const next = normaliseKey(args.key);
+      if (!next) throw new Error("key-required");
+      // Refused, not suffixed. A key the owner TYPED getting a silent _2 is
+      // how you end up addressing sac_kesimi_2 forever; creation auto-suffixes
+      // because there nobody chose the word.
+      if ((await keysTakenBy(ctx, orgId, args.serviceId)).has(next)) {
+        throw new Error("key-exists");
+      }
+      patch.key = next;
+    } else if (service.key === undefined) {
       patch.key = uniqueKey(
         serviceKey(service) || `service_${Date.now()}`,
         await keysTakenBy(ctx, orgId, args.serviceId),

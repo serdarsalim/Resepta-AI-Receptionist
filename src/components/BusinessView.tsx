@@ -395,6 +395,55 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 const SERVICE_ROW_GRID =
   "sm:grid sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:items-center sm:gap-2";
 
+function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("key-exists")) return t("services.keyExists");
+  return message;
+}
+
+// Click-to-edit, the same shape the fields table uses for its key. Its own
+// component because the services list is a map() and this needs a piece of
+// state per row.
+function ServiceKeyCell({
+  value,
+  onSave,
+}: {
+  value: string;
+  onSave: (key: string) => void;
+}) {
+  const { t } = useLanguage();
+  const [editing, setEditing] = useState(false);
+  return (
+    <span className="flex min-w-0 items-center">
+      {editing ? (
+        <input
+          autoFocus
+          defaultValue={value}
+          onBlur={(e) => {
+            const next = e.target.value.trim();
+            setEditing(false);
+            if (next && next !== value) onSave(next);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-xs"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title={t("services.keyEditHint")}
+          className="min-w-0 truncate rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-left font-mono text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
+        >
+          {value}
+        </button>
+      )}
+    </span>
+  );
+}
+
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
 // nothing to pick and every appointment falls back to 30 minutes.
@@ -407,6 +456,7 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const update = useMutation(api.services.update);
   const remove = useMutation(api.services.remove);
   const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -450,15 +500,20 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     }
                   />
                 </span>
-                {/* Not editable, and deliberately so: this is the address the
-                    voice agent was configured with, and the one thing a rename
-                    must never move. Shown as code for the same reason the
-                    fields table does — it is a string to copy, not to read. */}
-                <span className="flex min-w-0 items-center">
-                  <code className="min-w-0 overflow-x-auto rounded bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-xs text-[var(--muted)]">
-                    {service.key}
-                  </code>
-                </span>
+                {/* Editable, unlike a contact field's key, and the difference
+                    is real rather than an oversight: nothing stores a pointer
+                    to a service key. The agent is handed the current list on
+                    every call, so a key it "knew" last month was never
+                    remembered. What the key still buys is that RENAMING the
+                    service does not move the address by itself. */}
+                <ServiceKeyCell
+                  value={service.key}
+                  onSave={(key) =>
+                    void update({ serviceId: service._id, key }).catch((err) =>
+                      setError(serviceErrorText(err, t)),
+                    )
+                  }
+                />
                 <span className="flex items-center gap-0.5">
                   <InlineEditValue
                     value={String(service.durationMinutes)}
@@ -508,7 +563,19 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                 {/* Hover reveal is a desktop idea. A phone has no hover, so the
                     button stays visible there rather than being unreachable. */}
                 <button
-                  onClick={() => void remove({ serviceId: service._id })}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        t("services.deleteConfirm").replace("{name}", service.name),
+                      )
+                    ) {
+                      return;
+                    }
+                    setError(null);
+                    void remove({ serviceId: service._id }).catch((err) =>
+                      setError(serviceErrorText(err, t)),
+                    );
+                  }}
                   className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
                 >
                   {t("common.delete")}
@@ -516,6 +583,10 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
               </li>
             ))}
           </ul>
+
+          {error && !adding && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
 
           {/* Inline row, not a modal: click add, type, Enter saves. */}
           {adding ? (
@@ -668,7 +739,7 @@ function FieldTableRow({
   return (
     <>
       <tr
-        className={`border-t border-[var(--border)] transition-colors hover:bg-[var(--muted-bg)] ${dragging ? "opacity-40" : ""}`}
+        className={`group border-t border-[var(--border)] transition-colors hover:bg-[var(--muted-bg)] ${dragging ? "opacity-40" : ""}`}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
@@ -773,17 +844,26 @@ function FieldTableRow({
           )}
         </td>
         <td className="py-1.5 text-right">
-          {!inUse && (
-            <button
-              type="button"
-              onClick={onRemove}
-              title={t("common.delete")}
-              aria-label={t("common.delete")}
-              className="text-sm leading-none text-[var(--muted)] transition-colors hover:text-red-600"
-            >
-              ✕
-            </button>
-          )}
+          {/* Always rendered, never hidden by state. A control that vanishes
+              when a field is in use reads as "this row cannot be deleted, and
+              I will not tell you why" — the ✕ stays and says it. Hover reveal
+              is a desktop idea, so it stays visible where there is no hover.
+              aria-disabled rather than disabled: a disabled button swallows the
+              click, and the click is how the reason gets said. */}
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-disabled={inUse}
+            title={inUse ? usedByText : t("common.delete")}
+            aria-label={t("common.delete")}
+            className={`text-sm leading-none opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
+              inUse
+                ? "cursor-not-allowed text-[var(--muted)] opacity-40 group-hover:opacity-40 [@media(hover:none)]:opacity-40"
+                : "text-[var(--muted)] transition-colors hover:text-red-600"
+            }`}
+          >
+            ✕
+          </button>
         </td>
       </tr>
       {expanded && field.type === "select" && (
@@ -916,7 +996,29 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   })
                 }
                 onSetOptions={(options) => void updateField({ fieldId: field._id, options })}
-                onRemove={() => void removeField({ fieldId: field._id })}
+                onRemove={() => {
+                  // The refusal is said here rather than left to the backend's
+                  // error: by the time `field-in-use` comes back the owner has
+                  // already confirmed a delete that was never going to happen.
+                  const used = agentsFor(field);
+                  if (used.length > 0) {
+                    setError(
+                      t("fields.deleteInUse").replace("{agents}", used.join(", ")),
+                    );
+                    return;
+                  }
+                  if (
+                    !window.confirm(
+                      t("fields.deleteConfirm").replace("{name}", field.label),
+                    )
+                  ) {
+                    return;
+                  }
+                  setError(null);
+                  void removeField({ fieldId: field._id }).catch((err) =>
+                    setError(fieldErrorText(err, t)),
+                  );
+                }}
               />
             ))}
           </tbody>

@@ -1915,6 +1915,21 @@ const dictionary = {
     en: "Service key",
     de: "Leistungsschlüssel",
   },
+  "services.keyEditHint": {
+    tr: "Anahtarı düzenlemek için tıklayın. Yeniden adlandırmak anahtarı değiştirmez.",
+    en: "Click to edit the key. Renaming the service never changes it.",
+    de: "Zum Bearbeiten des Schlüssels klicken. Ein Umbenennen ändert ihn nie.",
+  },
+  "services.keyExists": {
+    tr: "Bu anahtar başka bir hizmete ait.",
+    en: "Another service already uses that key.",
+    de: "Ein anderer Dienst verwendet diesen Schlüssel bereits.",
+  },
+  "services.deleteConfirm": {
+    tr: "\"{name}\" silinsin mi? Geçmiş randevular kendi kayıtlarını korur.",
+    en: "Delete \"{name}\"? Past appointments keep their own record.",
+    de: "\"{name}\" löschen? Vergangene Termine behalten ihre eigenen Angaben.",
+  },
   "services.add": {
     tr: "Hizmet ekle",
     en: "Add service",
@@ -2014,6 +2029,16 @@ const dictionary = {
     tr: "Bir asistan bu alanı kullanırken anahtar değiştirilemez.",
     en: "The key can't change while an agent uses this field.",
     de: "Der Schlüssel kann sich nicht ändern, solange ein Assistent dieses Feld nutzt.",
+  },
+  "fields.deleteInUse": {
+    tr: "{agents} bu alanı topluyor. Önce asistanda bağlantısını kaldırın, sonra silinebilir.",
+    en: "{agents} collects this field. Unlink it on the agent first, then it can be deleted.",
+    de: "{agents} erfasst dieses Feld. Heben Sie die Verknüpfung zuerst im Assistenten auf, dann kann es gelöscht werden.",
+  },
+  "fields.deleteConfirm": {
+    tr: "\"{name}\" silinsin mi? Kayıtlı değerler müşteri kartlarında kalır.",
+    en: "Delete \"{name}\"? Values already saved stay on customer cards.",
+    de: "\"{name}\" löschen? Bereits gespeicherte Werte bleiben auf den Kundenkarten.",
   },
   "fields.reorder": {
     tr: "Sürükleyip sırala",
