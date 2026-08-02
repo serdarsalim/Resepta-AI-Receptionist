@@ -49,9 +49,21 @@ export function Count({
 
 // Setup state reads as a word, not a tick: "no WABA" is the actual answer to
 // "why is this salon not sending", and a red ✗ makes the reader work it out.
-export function Setup({ org }: { org: { waConnected: boolean; approvedTemplates: number } }) {
+// Whether this salon can reach anybody, which is not the same question as
+// whether WhatsApp is connected. An org on email alone is fully working, and
+// amber-flagging it as "no WhatsApp" sent the operator chasing a Meta number
+// nobody needed. Amber is now reserved for genuinely dark: no channel at all.
+export function Setup({
+  org,
+}: {
+  org: { waConnected: boolean; approvedTemplates: number; emailReady: boolean };
+}) {
   if (!org.waConnected) {
-    return <span className="text-amber-600 dark:text-amber-400">no WhatsApp</span>;
+    return org.emailReady ? (
+      <span className="text-[var(--muted)]">email only</span>
+    ) : (
+      <span className="text-amber-600 dark:text-amber-400">no channel</span>
+    );
   }
   if (org.approvedTemplates === 0) {
     return <span className="text-amber-600 dark:text-amber-400">no templates</span>;

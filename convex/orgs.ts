@@ -6,6 +6,7 @@ import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 import { recordActivity } from "./lib/activity";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
+import { resolveInboundAddress } from "./lib/inboundAddress";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -267,23 +268,9 @@ export const update = mutation({
     }
     if (args.revenueEnabled !== undefined) patch.revenueEnabled = args.revenueEnabled;
     if (args.inboundAddress !== undefined) {
-      // Slugged, not trusted: this becomes the left side of a real address, so
-      // anything that isn't a-z0-9.- would bounce mail rather than route it.
-      const slug = args.inboundAddress
-        .toLowerCase()
-        .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
-        .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 40);
-      if (!slug) throw new Error("address-required");
-      // Uniqueness is the whole routing contract: two orgs sharing a local
-      // part means one salon reading the other's customer mail.
-      const clash = (await ctx.db.query("orgs").collect()).find(
-        (other) => other._id !== orgId && other.inboundAddress === slug,
-      );
-      if (clash) throw new Error("address-taken");
-      patch.inboundAddress = slug;
+      // Slugging and uniqueness both live in lib/inboundAddress, because the
+      // admin console writes this field too and used to do neither.
+      patch.inboundAddress = await resolveInboundAddress(ctx, orgId, args.inboundAddress);
     }
     if (args.reminderOffsetsHours !== undefined) {
       patch.reminderOffsetsHours = args.reminderOffsetsHours

@@ -31,6 +31,7 @@ export default function AdminPage() {
   // would get a crash instead of an answer. This turns that into a sentence.
   const allowed = useQuery(api.platform.amPlatformAdmin, {});
   const fleet = useQuery(api.platform.fleet, allowed ? {} : "skip");
+  const deployment = useQuery(api.platform.deploymentHealth, allowed ? {} : "skip");
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -57,6 +58,19 @@ export default function AdminPage() {
           {fleet.length} {fleet.length === 1 ? "org" : "orgs"} · noisiest first
         </p>
       </header>
+
+      {/* One line for the whole deployment. Email is operator plumbing that
+          arrives for every org at once, so a missing key is one fact stated
+          once — not a column that would say the same thing on every row. */}
+      {deployment && !deployment.emailLane && (
+        <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          No email lane on this deployment: RESEND_API_KEY is unset, so nothing
+          sends by email for any org — reminders, invites and your own failure
+          alerts included.
+          {!deployment.inboundDomain && " RESEND_INBOUND_DOMAIN is unset too."}{" "}
+          See docs/email-lane-setup.md.
+        </p>
+      )}
 
       {fleet.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">No orgs on this deployment yet.</p>

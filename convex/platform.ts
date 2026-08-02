@@ -24,6 +24,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { isPlatformAdmin, requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
+import { resolveInboundAddress } from "./lib/inboundAddress";
+import { customerSender, emailLaneConfigured } from "./lib/email";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -45,6 +47,12 @@ const orgHealth = v.object({
   waConnected: v.boolean(),
   approvedTemplates: v.number(),
   calcomConnected: v.boolean(),
+  // Whether this org can reach anybody by EMAIL — the deployment has a
+  // provider key and a From resolves. Almost always the same answer for every
+  // row (it turns on the moment RESEND_API_KEY exists), which is the point:
+  // "no WhatsApp" used to read as "this salon is dark" when email was the
+  // channel it actually sends on.
+  emailReady: v.boolean(),
   // Failure surface over the last 24h.
   failed24h: v.number(),
   deadLettered24h: v.number(),
@@ -55,6 +63,25 @@ const orgHealth = v.object({
   // onboarded, and the two look identical from a billing table.
   lastActivityAt: v.optional(v.number()),
   upcomingAppointments: v.number(),
+});
+
+// Deployment-wide facts, the ones that are true for every org at once. Kept
+// apart from `fleet` because they belong to the DEPLOYMENT, not to any salon:
+// a missing provider key makes every row dark for one reason, and repeating
+// that reason per row would read as twelve salons with twelve problems.
+export const deploymentHealth = query({
+  args: {},
+  returns: v.object({
+    emailLane: v.boolean(),
+    inboundDomain: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    return {
+      emailLane: emailLaneConfigured(),
+      inboundDomain: process.env.RESEND_INBOUND_DOMAIN ?? null,
+    };
+  },
 });
 
 export const fleet = query({
@@ -159,6 +186,7 @@ async function healthFor(
     waConnected: waAccount !== null,
     approvedTemplates: templates.filter((t) => t.status === "approved").length,
     calcomConnected: Boolean(org.calcomApiKey && org.calcomEventTypeId),
+    emailReady: emailLaneConfigured() && Boolean(customerSender(org)),
     failed24h: recentFailed.length,
     deadLettered24h: recentFailed.filter((row) => row.deadLetteredAt !== undefined).length,
     capped: failedRows.length === SCAN_CAP,
@@ -503,9 +531,20 @@ export const setOrgConfig = mutation({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) throw new Error("no-such-org");
+    // The incoming address goes through the same slug + uniqueness rules the
+    // owner's own settings page applies. It did not used to: this path trimmed
+    // the string and wrote it, so an operator setting a second org to an
+    // address already in use — or to the same one in different case — pointed
+    // one salon's customer replies into another salon's inbox. `applied`
+    // still owns the absent-vs-empty distinction; only a real value is
+    // resolved.
+    const nextInbound = applied(args.inboundAddress, org.inboundAddress);
     await ctx.db.patch(args.orgId, {
       emailFrom: applied(args.emailFrom, org.emailFrom),
-      inboundAddress: applied(args.inboundAddress, org.inboundAddress),
+      inboundAddress:
+        nextInbound === undefined || nextInbound === org.inboundAddress
+          ? nextInbound
+          : await resolveInboundAddress(ctx, args.orgId, nextInbound),
       calcomApiKey: applied(args.calcomApiKey, org.calcomApiKey),
       calcomEventTypeId: applied(args.calcomEventTypeId, org.calcomEventTypeId),
     });

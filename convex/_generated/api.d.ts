@@ -36,6 +36,7 @@ import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
 import type * as lib_evolution from "../lib/evolution.js";
 import type * as lib_format from "../lib/format.js";
+import type * as lib_inboundAddress from "../lib/inboundAddress.js";
 import type * as lib_keys from "../lib/keys.js";
 import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
@@ -111,6 +112,7 @@ declare const fullApi: ApiFromModules<{
   "lib/emailInbound": typeof lib_emailInbound;
   "lib/evolution": typeof lib_evolution;
   "lib/format": typeof lib_format;
+  "lib/inboundAddress": typeof lib_inboundAddress;
   "lib/keys": typeof lib_keys;
   "lib/mcpProtocol": typeof lib_mcpProtocol;
   "lib/metaSig": typeof lib_metaSig;
