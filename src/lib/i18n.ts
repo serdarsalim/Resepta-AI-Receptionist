@@ -891,13 +891,15 @@ const dictionary = {
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
-  // The row would send, but there are no words to send in the business
-  // language. Different errand from ruleNoChannelHint: this one is solved one
-  // chevron away, not by an operator.
-  "settings.ruleNoTextHint": {
-    tr: "Bu mesajın işletme dilinde metni yok. Satırı açın ve mesajı yazın — kaydettiğiniz anda gönderime hazır.",
-    en: "This message has no text in the business language yet. Open the row and write it — it is ready to send the moment you save.",
-    de: "Diese Nachricht hat noch keinen Text in der Sprache des Betriebs. Öffnen Sie die Zeile und schreiben Sie ihn — gespeichert ist er sofort versandbereit.",
+  "settings.resetRules": {
+    tr: "Varsayılanlara sıfırla",
+    en: "Reset to defaults",
+    de: "Auf Standard zurücksetzen",
+  },
+  "settings.resetRulesConfirm": {
+    tr: "Tüm mesaj kuralları ve yazdığınız özel metinler silinecek; varsayılan kurallar (onay + 1 gün önce hatırlatma) ve hazır metinler geri gelecek. WhatsApp onayları etkilenmez. Devam edilsin mi?",
+    en: "This deletes every message rule and the custom texts you wrote, and restores the defaults (confirmation + 1-day reminder) with stock wording. WhatsApp approvals are not affected. Continue?",
+    de: "Alle Nachrichtenregeln und Ihre eigenen Texte werden gelöscht; die Standardregeln (Bestätigung + Erinnerung 1 Tag vorher) mit Standardtexten kommen zurück. WhatsApp-Genehmigungen bleiben unberührt. Fortfahren?",
   },
   // Shown when NO channel is wired. The wiring is the operator's job, so this
   // reassures rather than instructs: the rules above it already show that

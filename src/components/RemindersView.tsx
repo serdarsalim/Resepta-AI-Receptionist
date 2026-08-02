@@ -714,6 +714,7 @@ function RulesCard({
   const addRule = useMutation(api.messageRules.add);
   const updateRule = useMutation(api.messageRules.update);
   const removeRule = useMutation(api.messageRules.remove);
+  const resetRules = useMutation(api.messageRules.resetToDefaults);
   const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
   // For the preview's custom-token map — the same registry the variable
@@ -721,16 +722,38 @@ function RulesCard({
   const contactFieldRows = useQuery(api.contactFields.list, {}) ?? [];
   const [expandedId, setExpandedId] = useState<Id<"messageRules"> | null>(null);
 
-  const waAvailable = waConnected || evolutionEnabled;
-  const orgHasChannel = waAvailable || emailEnabled;
-  // One chip per WIRED channel. The chips are also the on/off control: a rule
-  // with every chip off is paused, which is why there is no separate Active
-  // column — "sends nowhere" and "off" are the same fact, and two controls
-  // for one fact is how the old card confused people.
-  const wired: ("whatsapp" | "email")[] = [
-    ...(waAvailable ? (["whatsapp"] as const) : []),
-    ...(emailEnabled ? (["email"] as const) : []),
-  ];
+  const orgHasChannel = waConnected || evolutionEnabled || emailEnabled;
+  // One chip per channel that could ACTUALLY carry this rule — the chip list
+  // is the truth, so there is nothing to warn about beside it. WhatsApp
+  // qualifies through an Evolution outbound number, or through a Cloud number
+  // WITH a Meta-approved template for this message (an unapproved Cloud
+  // template cannot send, so its chip would be a lie). Approval is per
+  // message, which is why this is computed per rule.
+  //
+  // The chips are also the on/off control: a rule with every chip off is
+  // paused, which is why there is no separate Active column — "sends nowhere"
+  // and "off" are the same fact, and two controls for one fact is how the old
+  // card confused people.
+  const wiredFor = (rule: RuleRowData): ("whatsapp" | "email")[] => {
+    const own = templates.find(
+      (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
+    );
+    const fallback = templates.find(
+      (tpl) =>
+        tpl.ruleId === undefined &&
+        tpl.kind === KIND_FOR_TRIGGER[rule.trigger] &&
+        tpl.language === org.language,
+    );
+    const metaSource =
+      own && own.status === "approved" && own.metaName ? own : fallback;
+    const cloudApproved =
+      waConnected && metaSource?.status === "approved" && Boolean(metaSource?.metaName);
+    const waOk = evolutionEnabled || cloudApproved;
+    return [
+      ...(waOk ? (["whatsapp"] as const) : []),
+      ...(emailEnabled ? (["email"] as const) : []),
+    ];
+  };
   const activeChannels = (rule: RuleRowData): Set<"whatsapp" | "email"> => {
     if (rule.paused) return new Set();
     const active = new Set<"whatsapp" | "email">();
@@ -742,7 +765,7 @@ function RulesCard({
     const active = activeChannels(rule);
     if (active.has(channel)) active.delete(channel);
     else active.add(channel);
-    const on = wired.filter((w) => active.has(w));
+    const on = wiredFor(rule).filter((w) => active.has(w));
     if (on.length === 0) {
       // Last chip off: the rule keeps its channel and pauses, so switching a
       // chip back on restores exactly what was there.
@@ -773,35 +796,6 @@ function RulesCard({
       : channel === "email"
         ? t("settings.ruleEmail")
         : t("settings.channelBoth");
-
-  // Whether anything would actually leave for this rule, and if not, WHY —
-  // "no words yet" sends the owner to the editor one row down, while "channel
-  // not ready" is about Meta approval or wiring, which is a different errand.
-  // Paused rules get no verdict: off is off, not broken.
-  const ruleSilent = (rule: RuleRowData): "text" | "channel" | null => {
-    if (!orgHasChannel || rule.paused) return null;
-    const own = templates.find(
-      (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
-    );
-    const fallback = templates.find(
-      (tpl) =>
-        tpl.ruleId === undefined &&
-        tpl.kind === KIND_FOR_TRIGGER[rule.trigger] &&
-        tpl.language === org.language,
-    );
-    const content = own ?? fallback;
-    const hasText = Boolean(content?.body || content?.bodyPreview);
-    const metaSource =
-      own && own.status === "approved" && own.metaName ? own : fallback;
-    const waOk = waConnected
-      ? metaSource?.status === "approved" && Boolean(metaSource?.metaName)
-      : evolutionEnabled && hasText;
-    const emailOk = emailEnabled && hasText;
-    const sends =
-      (rule.channel !== "email" && waOk) || (rule.channel !== "whatsapp" && emailOk);
-    if (sends) return null;
-    return hasText ? "channel" : "text";
-  };
 
   const toggleExpand = (rule: RuleRowData) => {
     if (expandedId === rule._id) {
@@ -908,7 +902,7 @@ function RulesCard({
       <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
         {rules.map((rule) => {
           const expanded = expandedId === rule._id;
-          const silent = ruleSilent(rule);
+          const rowChannels = wiredFor(rule);
           const ownTemplate = templates.find(
             (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
           );
@@ -927,7 +921,7 @@ function RulesCard({
                     {ruleName(rule.trigger)}
                   </span>
                   <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                    {wired.map((channel) => {
+                    {rowChannels.map((channel) => {
                       const on = activeChannels(rule).has(channel);
                       return (
                         <button
@@ -947,18 +941,8 @@ function RulesCard({
                         </button>
                       );
                     })}
-                    {!orgHasChannel && <span className="hidden sm:inline text-[var(--muted)]">—</span>}
-                    {silent && (
-                      <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
-                        {t("settings.ruleNoChannel")}
-                        <InfoTip
-                          text={
-                            silent === "text"
-                              ? t("settings.ruleNoTextHint")
-                              : t("settings.ruleNoChannelHint")
-                          }
-                        />
-                      </span>
+                    {rowChannels.length === 0 && (
+                      <span className="hidden sm:inline text-[var(--muted)]">—</span>
                     )}
                   </span>
                 </div>
@@ -1048,6 +1032,24 @@ function RulesCard({
           {t("settings.rulesNoChannel")}
         </p>
       )}
+
+      {/* The escape hatch, deliberately quiet and in the corner: back to the
+          stock rules and stock wording. window.confirm, same as sending a
+          campaign — a native dialog is exactly the right amount of ceremony
+          for an action this destructive and this rare. */}
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            if (!window.confirm(t("settings.resetRulesConfirm"))) return;
+            setExpandedId(null);
+            void resetRules({});
+          }}
+          className="text-xs text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
+        >
+          {t("settings.resetRules")}
+        </button>
+      </div>
     </Card>
   );
 }

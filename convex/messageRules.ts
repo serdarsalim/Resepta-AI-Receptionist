@@ -110,6 +110,93 @@ export async function rulesForOrg(
     .collect();
 }
 
+// Stock wording per language, used twice: resetToDefaults writes it onto the
+// kind-level fallback rows, and ensureTemplate reaches for it when an org has
+// no fallback row in its language at all — which is every non-Turkish org,
+// because the founding seeds only ever spoke Turkish. Tokens are written in
+// each language's own aliases ([name]/[ad]/[betrieb]) so the text reads as
+// the sentence it will become.
+type TemplateKind = "confirmation" | "reminder" | "winback" | "followup" | "cancellation";
+const TEMPLATE_KINDS: TemplateKind[] = [
+  "confirmation",
+  "reminder",
+  "winback",
+  "followup",
+  "cancellation",
+];
+
+export const DEFAULT_TEMPLATE_TEXTS: Record<
+  string,
+  Record<TemplateKind, { body: string; subject: string }>
+> = {
+  tr: {
+    confirmation: {
+      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.",
+      subject: "Randevunuz oluşturuldu",
+    },
+    reminder: {
+      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].",
+      subject: "Randevu hatırlatması",
+    },
+    winback: {
+      body: "Merhaba [ad]! [isletme] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+      subject: "Sizi özledik!",
+    },
+    followup: {
+      body: "Merhaba [ad]! [isletme] ziyaretiniz için teşekkürler. Memnun kaldıysanız bize birkaç kelime bırakır mısınız?",
+      subject: "Ziyaretiniz için teşekkürler",
+    },
+    cancellation: {
+      body: "Merhaba [ad], [tarih] tarihli [isletme] randevunuz iptal edildi. Yeni bir randevu için bu mesajı yanıtlayabilirsiniz.",
+      subject: "Randevunuz iptal edildi",
+    },
+  },
+  en: {
+    confirmation: {
+      body: "Hello [name]! Your appointment with [business] is booked for [date].",
+      subject: "Your appointment is booked",
+    },
+    reminder: {
+      body: "Hi [name]! A reminder from [business]: your appointment is on [date].",
+      subject: "Appointment reminder",
+    },
+    winback: {
+      body: "Hi [name]! We've missed you at [business]. Just reply to this message to book your next visit.",
+      subject: "We've missed you!",
+    },
+    followup: {
+      body: "Hi [name]! Thanks for visiting [business]. If you have a minute, we'd love a few words about how it went.",
+      subject: "Thanks for your visit",
+    },
+    cancellation: {
+      body: "Hi [name], your [business] appointment on [date] has been cancelled. Reply to this message to book a new one.",
+      subject: "Your appointment was cancelled",
+    },
+  },
+  de: {
+    confirmation: {
+      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht.",
+      subject: "Ihr Termin ist gebucht",
+    },
+    reminder: {
+      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin: [datum].",
+      subject: "Terminerinnerung",
+    },
+    winback: {
+      body: "Hallo [name]! Wir haben Sie bei [betrieb] vermisst. Antworten Sie einfach auf diese Nachricht für einen neuen Termin.",
+      subject: "Wir haben Sie vermisst!",
+    },
+    followup: {
+      body: "Hallo [name]! Danke für Ihren Besuch bei [betrieb]. Wenn Sie eine Minute haben, freuen wir uns über ein paar Worte.",
+      subject: "Danke für Ihren Besuch",
+    },
+    cancellation: {
+      body: "Hallo [name], Ihr Termin bei [betrieb] am [datum] wurde storniert. Antworten Sie auf diese Nachricht für einen neuen Termin.",
+      subject: "Ihr Termin wurde storniert",
+    },
+  },
+};
+
 // The two rules every new org starts with: a confirmation and one reminder a
 // day ahead. Deliberately trimmed from the legacy three — the second reminder
 // and the winback are one + chip away, and a default an owner never chose is
@@ -276,16 +363,78 @@ export const ensureTemplate = mutation({
     const fallback = templates.find(
       (t) => t.ruleId === undefined && t.kind === kind && t.language === language,
     );
+    // No fallback row in this language — every non-Turkish org, since the
+    // founding seeds only spoke Turkish. Stock text beats an empty editor.
+    const stock = (DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en)[kind];
     return await ctx.db.insert("waTemplates", {
       orgId,
       ruleId: args.ruleId,
       kind,
       language,
       status: "draft",
-      body: fallback?.body,
-      subject: fallback?.subject,
+      body: fallback?.body ?? stock.body,
+      subject: fallback?.subject ?? stock.subject,
       bodyPreview: fallback?.bodyPreview,
     });
+  },
+});
+
+// The bottom-right escape hatch: back to what a fresh org gets. Every rule
+// row and every piece of per-rule wording goes; the stock rules (confirmation
+// + 24h reminder) come back, and the kind-level fallback rows are rewritten
+// with the stock text in the org's language. Meta registrations survive —
+// metaName and approval status live on rows this only patches body/subject
+// on, because a reset of WORDS must never cost an approval that took weeks.
+export const resetToDefaults = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+
+    for (const rule of await rulesForOrg(ctx, orgId)) {
+      await ctx.db.delete(rule._id);
+    }
+    const templates = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const stock = DEFAULT_TEMPLATE_TEXTS[org.language] ?? DEFAULT_TEMPLATE_TEXTS.en;
+    for (const template of templates) {
+      if (template.ruleId !== undefined) {
+        // Per-rule wording belonged to rules that no longer exist.
+        await ctx.db.delete(template._id);
+      } else if (template.kind !== "campaign" && template.language === org.language) {
+        const text = stock[template.kind as TemplateKind];
+        await ctx.db.patch(template._id, { body: text.body, subject: text.subject });
+      }
+    }
+    // Kinds with no fallback row in the org's language yet get one, so every
+    // rule the owner adds later starts with words instead of an empty box.
+    for (const kind of TEMPLATE_KINDS) {
+      const exists = templates.some(
+        (t) =>
+          t.ruleId === undefined && t.kind === kind && t.language === org.language,
+      );
+      if (exists) continue;
+      await ctx.db.insert("waTemplates", {
+        orgId,
+        kind,
+        language: org.language,
+        status: "draft",
+        body: stock[kind].body,
+        subject: stock[kind].subject,
+      });
+    }
+    await seedDefaultRules(ctx.db, orgId, org.messageChannel ?? "both");
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: "message rules reset to defaults",
+    });
+    await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
+    return null;
   },
 });
 
