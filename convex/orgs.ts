@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 import { recordActivity } from "./lib/activity";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
-import { resolveInboundAddress } from "./lib/inboundAddress";
+import { assignInboundAddress, resolveInboundAddress } from "./lib/inboundAddress";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -330,6 +330,22 @@ export const update = mutation({
     if (args.publicPhone !== undefined) {
       patch.publicPhone = args.publicPhone.trim() || undefined;
     }
+
+    // An org with no incoming address is quietly broken: it sends from the
+    // shared noreply@ and every customer reply is dropped, because no org
+    // answers to "noreply". So the first save that gives the business a name
+    // also gives it an address, derived from that name and deduped.
+    //
+    // Self-healing rather than a migration: any save on an org missing one
+    // fills it, which covers the orgs that predate this. It never overwrites —
+    // once a customer has replied to an address, changing it costs mail.
+    const org = await ctx.db.get(orgId);
+    if (org && !org.inboundAddress && patch.inboundAddress === undefined) {
+      const name = (patch.name as string | undefined) ?? org.name;
+      const assigned = await assignInboundAddress(ctx, orgId, name);
+      if (assigned) patch.inboundAddress = assigned;
+    }
+
     await ctx.db.patch(orgId, patch);
 
     // One row per save, naming the fields rather than their values: a settings
@@ -463,6 +479,30 @@ export const ensureCampaignTemplate = mutation({
       status: "draft",
       bodyPreview: preview[language] ?? preview.en,
     });
+  },
+});
+
+// One-off repair for orgs that predate the auto-assignment above. The rule in
+// `update` is self-healing, but only on the next save, and an org nobody opens
+// stays unable to receive mail in the meantime.
+//
+//   npx convex run orgs:backfillInboundAddresses --prod
+//
+// Idempotent: an org that already has an address is skipped, so running it
+// twice changes nothing.
+export const backfillInboundAddresses = internalMutation({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const filled: string[] = [];
+    for (const org of await ctx.db.query("orgs").collect()) {
+      if (org.inboundAddress || !org.name.trim()) continue;
+      const assigned = await assignInboundAddress(ctx, org._id, org.name);
+      if (!assigned) continue;
+      await ctx.db.patch(org._id, { inboundAddress: assigned });
+      filled.push(`${org.name} -> ${assigned}`);
+    }
+    return filled;
   },
 });
 

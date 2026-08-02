@@ -52,3 +52,34 @@ export async function resolveInboundAddress(
   if (clash) throw new Error("address-taken");
   return slug;
 }
+
+// The same thing, but for the machine rather than a person: takes the next
+// free variant instead of refusing. `berber` then `berber-2`, exactly the way
+// forms.ts assigns publicSlug — the two fields are the same kind of sticky,
+// globally-unique, name-derived handle.
+//
+// This exists because an org with NO incoming address is quietly broken: its
+// mail goes out from the shared noreply@ and every customer reply is dropped
+// on the floor, because no org answers to "noreply". Nobody notices, since
+// the failure is a message that simply never appears.
+//
+// Assigned rather than demanded because the salon never needs to know it.
+// Customers reply to a message that already carries the address; they never
+// type it, and no salon is printing our domain on their cards.
+export async function assignInboundAddress(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  name: string,
+): Promise<string | null> {
+  const base = slugifyInboundAddress(name);
+  if (!base) return null;
+  const taken = new Set(
+    (await ctx.db.query("orgs").collect())
+      .filter((other) => other._id !== orgId)
+      .map((other) => other.inboundAddress),
+  );
+  let slug = base;
+  let n = 2;
+  while (taken.has(slug)) slug = `${base}-${n++}`;
+  return slug;
+}
