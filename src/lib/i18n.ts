@@ -460,6 +460,18 @@ const dictionary = {
     en: "The address customers write to. Mail sent here lands in that customer's conversation.",
     de: "Die Adresse, an die Kunden schreiben. Hier eingehende E-Mails landen im Gespräch des Kunden.",
   },
+  // A refused incoming address. Names the reason, because "it did not save"
+  // sends the owner back to type the same thing again.
+  "settings.inboundAddressTaken": {
+    tr: "Bu adres başka bir işletmede kullanılıyor. Başka bir tane deneyin.",
+    en: "Another business already uses this address. Try a different one.",
+    de: "Diese Adresse wird bereits von einem anderen Betrieb genutzt. Versuchen Sie eine andere.",
+  },
+  "settings.inboundAddressRejected": {
+    tr: "Bu adres kaydedilemedi. Sadece harf ve rakam kullanın.",
+    en: "That address could not be saved. Use letters and numbers only.",
+    de: "Diese Adresse konnte nicht gespeichert werden. Verwenden Sie nur Buchstaben und Ziffern.",
+  },
   "settings.inboundNoDomain": {
     tr: "(alan adı henüz ayarlı değil)",
     en: "(no domain configured yet)",

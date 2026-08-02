@@ -293,6 +293,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   // and the real domain, and a hardcoded host would hand the salon a link that
   // works for nobody but whoever built it.
   const origin = typeof window === "undefined" ? "" : window.location.origin;
+  // The incoming address is the one field here a server can REFUSE — it is a
+  // routing key, so another org may already answer to it. Without this the
+  // rejection landed in an unhandled promise: nothing on screen, the typed
+  // text still sitting in the box, and the salon believing they own an
+  // address that was never saved. Services and Fields below already work this
+  // way; General did not.
+  const [addressError, setAddressError] = useState<string | null>(null);
+  // Bumped on a refusal to remount the input, so it snaps back to the value
+  // that is actually stored instead of showing the rejected one.
+  const [addressTick, setAddressTick] = useState(0);
 
   return (
     <Card title={t("settings.general")} disabled={!isOwner}>
@@ -363,9 +373,22 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 fixed "guzellik" was one specific salon's name shown to every
                 other salon, which reads as someone else's data. */}
             <input
+              key={`inbound-${addressTick}`}
               defaultValue={settings.org.inboundAddress ?? ""}
               placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
-              onBlur={(e) => void update({ inboundAddress: e.target.value })}
+              onBlur={(e) => {
+                const next = e.target.value;
+                if (next === (settings.org.inboundAddress ?? "")) return;
+                setAddressError(null);
+                void update({ inboundAddress: next }).catch((err) => {
+                  setAddressError(
+                    String(err).includes("address-taken")
+                      ? t("settings.inboundAddressTaken")
+                      : t("settings.inboundAddressRejected"),
+                  );
+                  setAddressTick((tick) => tick + 1);
+                });
+              }}
             />
             <span className="shrink-0 text-sm text-[var(--muted)]">
               {settings.org.inboundDomain
@@ -373,6 +396,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 : t("settings.inboundNoDomain")}
             </span>
           </span>
+          {addressError && (
+            <>
+              <span />
+              <p className="text-sm text-red-600 dark:text-red-400">{addressError}</p>
+            </>
+          )}
           {/* Operator plumbing, same call as the WhatsApp credentials: sending
               from your own domain means verifying it with the mail provider,
               which the salon cannot do from in here. So the row is absent
