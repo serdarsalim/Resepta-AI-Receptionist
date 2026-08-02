@@ -23,6 +23,36 @@ placeholder domain (it is what renders as `@mail.example.com` under Incoming
 email address on the Business page), `RESEND_WEBHOOK_SECRET` is base64 of
 "testsecretforlocalverify", and there is no API key there either.
 
+## Which Resend account this is
+
+**The Resend account is under `mansureastman@gmail.com`**, not either of the
+GitHub identities. It is the Autotakt account, borrowed because this product
+has no domain of its own yet — so anyone looking for the API key, the domain
+list or the inbound routes needs that login, and looking under
+`slmxyz@gmail.com` or `gezmakan@gmail.com` will turn up nothing.
+
+The sending domain is **`mail.autotakt.dev`** (region `eu-west-1`). A
+subdomain rather than the root, because `autotakt.dev` itself has Google
+Workspace on its MX — mail addressed to `anything@autotakt.dev` goes to the
+Workspace mailbox, so a customer reply would never reach the app. The
+subdomain keeps the two apart. Its DNS lives in Porkbun:
+
+| Host | Type | Value |
+|---|---|---|
+| `resend._domainkey.mail` | TXT | the DKIM public key |
+| `send.mail` | MX | `feedback-smtp.eu-west-1.amazonses.com` (priority 10) |
+| `send.mail` | TXT | `v=spf1 include:amazonses.com ~all` |
+
+Note the `.mail` suffix on every host: Resend states them relative to the
+domain you registered, Porkbun states them relative to the root, so a record
+pasted verbatim from Resend lands one level too high and the domain never
+verifies. DMARC needs no row — `_dmarc.autotakt.dev` already exists and a
+subdomain inherits it.
+
+`autotakt.dev` itself is separately verified in Resend (region
+`ap-northeast-1`) from an earlier setup. Do not confuse the two: different
+DKIM keys, different regions.
+
 ## The fix: /admin, no terminal needed
 
 Set it in the operator console — **/admin → Email (Resend)** — on each
