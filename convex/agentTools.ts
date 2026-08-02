@@ -622,9 +622,18 @@ export const listAgentVariables = internalQuery({
 // set without it silently blanks {{business_name}} and the agent opens by
 // greeting nobody.
 export const buildAgentVariables = internalQuery({
-  args: { orgId: v.id("orgs"), fieldKeys: v.array(v.string()) },
+  args: {
+    orgId: v.id("orgs"),
+    fieldKeys: v.array(v.string()),
+    // Field key → the instruction the agent follows for that one value. Left
+    // out, publishing substitutes "Capture <label> when the caller provides
+    // it", which is enough to work and not enough to be good: it is the only
+    // place to say "map what they describe onto these options, do not read the
+    // list aloud", and an enum without that gets read aloud.
+    descriptions: v.optional(v.record(v.string(), v.string())),
+  },
   returns: v.any(),
-  handler: async (ctx, { orgId, fieldKeys }) => {
+  handler: async (ctx, { orgId, fieldKeys, descriptions }) => {
     const fields = await ctx.db
       .query("contactFields")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -674,7 +683,7 @@ export const buildAgentVariables = internalQuery({
       variables.push({
         key: field.key,
         label: field.label,
-        description: "",
+        description: (descriptions?.[field.key] ?? "").trim(),
         type:
           field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
         ...(field.type === "select" ? { choices: field.options ?? [] } : {}),
@@ -701,6 +710,42 @@ export const buildAgentVariables = internalQuery({
       );
     }
     return variables;
+  },
+});
+
+// reversible:false for the same reason as every other provider write: putting
+// the line back is another routing change, not an undo of this one. The feed
+// still names both agents so it is obvious what moved.
+export const recordLineAssigned = internalMutation({
+  args: {
+    ...scope,
+    retellAgentId: v.string(),
+    agentName: v.string(),
+    number: v.union(v.string(), v.null()),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, retellAgentId, agentName, number }) => {
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "assign_phone_number",
+      args: { retellAgentId, number },
+      targetTable: "retellAgents",
+      targetId: retellAgentId,
+      before: null,
+      after: { number: number ?? "" },
+      reversible: false,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: number
+        ? `${number} now rings "${agentName}"`
+        : `"${agentName}" no longer answers an inbound line`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { actionId };
   },
 });
 

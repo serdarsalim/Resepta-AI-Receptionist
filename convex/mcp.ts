@@ -440,6 +440,12 @@ const TOOLS: ToolDef[] = [
           items: { type: "string" },
           description: "Contact field keys from list_contact_fields, in the order to ask.",
         },
+        descriptions: {
+          type: "object",
+          additionalProperties: { type: "string" },
+          description:
+            "Field key to the instruction the agent follows for that value, e.g. \"Map what they describe onto one of the options; do not read the list aloud.\" Optional — omitted fields get a generic \"capture this when offered\", which works but is the difference between an agent that functions and one that sounds like it knows the business.",
+        },
       },
       required: ["agentId", "fieldKeys"],
       additionalProperties: false,
@@ -459,9 +465,20 @@ const TOOLS: ToolDef[] = [
       // Built here, never accepted from the caller: the contact-field link,
       // the matching key and a select's choices are all derivable, and each is
       // a publish error rather than a decision.
+      const rawDescriptions = args.descriptions;
+      const descriptions =
+        rawDescriptions && typeof rawDescriptions === "object" && !Array.isArray(rawDescriptions)
+          ? Object.fromEntries(
+              Object.entries(rawDescriptions as Record<string, unknown>).map(([k, val]) => [
+                k,
+                String(val ?? ""),
+              ]),
+            )
+          : undefined;
       const variables = (await ctx.runQuery(internal.agentTools.buildAgentVariables, {
         orgId: who.orgId as never,
         fieldKeys,
+        descriptions,
       })) as VoiceVariableInput[];
       const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
         orgId: who.orgId as never,
@@ -488,6 +505,59 @@ const TOOLS: ToolDef[] = [
         note: `Published. It now asks for ${
           fieldKeys.length > 0 ? fieldKeys.join(", ") : "nothing beyond the caller's name"
         } and writes the answers to the customer card. This cannot be undone.`,
+      };
+    },
+  },
+  {
+    name: "assign_phone_number",
+    title: "Move an inbound line to an agent",
+    description:
+      "Point an inbound number at one agent, or pass null to unassign. A line answers for exactly one agent, so assigning a number another agent holds MOVES it — that agent stops taking calls immediately. Use list_phone_agents to see who holds what. Randevu never buys numbers; this only routes ones the business already has. Owner only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "From list_phone_agents." },
+        number: {
+          type: "string",
+          description: "The line in international form. Omit or pass null to unassign.",
+        },
+      },
+      required: ["agentId"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      if (!agentId) throw new Error("agentId is required");
+      await ctx.runQuery(internal.agentTools.assertCanProvision, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        what: "move an inbound line",
+      });
+      const number = str(args, "number") || null;
+      const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
+        orgId: who.orgId as never,
+        agentId,
+      })) as { retellAgentId: string; name: string };
+      await ctx.runAction(internal.retellAgent.assignLineForOrg, {
+        orgId: who.orgId as never,
+        agentId: agent.retellAgentId,
+        number,
+      });
+      const recorded = await ctx.runMutation(internal.agentTools.recordLineAssigned, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        agentName: agent.name,
+        retellAgentId: agent.retellAgentId,
+        number,
+      });
+      return {
+        ok: true,
+        actionId: recorded.actionId,
+        note: number
+          ? `${number} now rings "${agent.name}". Any agent that held it has stopped answering.`
+          : `"${agent.name}" no longer answers an inbound line.`,
       };
     },
   },

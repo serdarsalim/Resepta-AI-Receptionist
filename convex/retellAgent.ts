@@ -1065,35 +1065,55 @@ export const wireWebhook = action({
 // The Inbound number dropdown is a routing control, not a note. Assigning a
 // line rebinds it at the provider first; only then does the database adopt
 // the change, clearing the number from whichever agent held it before.
+async function assignLineTo(
+  ctx: ActionCtx,
+  { agentId, number, orgId }: { agentId: string; number: string | null; orgId?: Id<"orgs"> },
+): Promise<null> {
+  const context = await editorContext(ctx, agentId, orgId);
+  const key = context.apiKey!;
+  const site = siteUrl();
+  const target = number?.trim() || null;
+  const previous = context.inboundNumber;
+  if (target) {
+    // Replacing inbound_agents outright is also how a line MOVES: whichever
+    // agent held it stops answering the moment this lands, at the provider and
+    // then in applyLineAssignment.
+    await call(key, "PATCH", `update-phone-number/${encodeURIComponent(target)}`, {
+      inbound_agents: [
+        { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+      ],
+      ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
+    });
+  }
+  if (previous && previous !== target) {
+    await releaseLineIfHeld(key, previous, agentId);
+  }
+  await ctx.runMutation(internal.retell.applyLineAssignment, {
+    retellAgentId: agentId,
+    number: target,
+  });
+  return null;
+}
+
 export const assignLine = action({
   args: {
     agentId: v.string(),
     number: v.union(v.string(), v.null()),
   },
   returns: v.null(),
-  handler: async (ctx, { agentId, number }) => {
-    const context = await editorContext(ctx, agentId);
-    const key = context.apiKey!;
-    const site = siteUrl();
-    const target = number?.trim() || null;
-    const previous = context.inboundNumber;
-    if (target) {
-      await call(key, "PATCH", `update-phone-number/${encodeURIComponent(target)}`, {
-        inbound_agents: [
-          { agent_id: agentId, agent_version: "latest_published", weight: 1 },
-        ],
-        ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
-      });
-    }
-    if (previous && previous !== target) {
-      await releaseLineIfHeld(key, previous, agentId);
-    }
-    await ctx.runMutation(internal.retell.applyLineAssignment, {
-      retellAgentId: agentId,
-      number: target,
-    });
-    return null;
+  handler: async (ctx, args): Promise<null> => await assignLineTo(ctx, args),
+});
+
+// Sessionless twin. Same rule as the others: internal only, and the public
+// action above must never accept an orgId.
+export const assignLineForOrg = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    agentId: v.string(),
+    number: v.union(v.string(), v.null()),
   },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => await assignLineTo(ctx, args),
 });
 
 // Unbinding must not clobber routing the agent no longer owns: another agent
