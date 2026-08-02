@@ -803,10 +803,12 @@ const dictionary = {
   // address above; this field only swaps the sender to the salon's own domain,
   // which needs DNS records they will not have. Reading it as a requirement is
   // what left the whole lane looking broken.
+  // Read-only now: the operator installs this, because it needs a domain
+  // verified with the mail provider. Says what it IS, not how to fill it in.
   "settings.emailFromHint": {
-    tr: "İsteğe bağlı. E-postalar zaten yukarıdaki adresinizden gider; burayı doldurursanız kendi alan adınızdan gönderilir. Alan adının e-posta sağlayıcımızda doğrulanmış olması gerekir.",
-    en: "Optional. Email already goes out from your incoming address above; fill this in to send from your own domain instead. The domain has to be verified with our email provider first.",
-    de: "Optional. E-Mails gehen bereits von Ihrer oben genannten Eingangsadresse raus; tragen Sie hier eine Adresse ein, um stattdessen über Ihre eigene Domain zu senden. Die Domain muss zuvor bei unserem E-Mail-Anbieter verifiziert sein.",
+    tr: "Bu işletmeye özel gönderen adresi. Kendi alan adınızdan gönderim için kurulumu biz yapıyoruz; boşsa e-postalar yukarıdaki adresinizden gider.",
+    en: "This business's own sender address. We set up sending from your own domain; when it is empty, email goes out from your incoming address above.",
+    de: "Die eigene Absenderadresse dieses Betriebs. Den Versand über Ihre eigene Domain richten wir ein; ist sie leer, gehen E-Mails von Ihrer oben genannten Adresse raus.",
   },
   "settings.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
   "settings.waConnected": { tr: "Bağlı", en: "Connected", de: "Verbunden" },

@@ -26,6 +26,7 @@ import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
+import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -356,9 +357,14 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           )}
           <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
           <span className="flex items-center gap-1">
+            {/* The salon's OWN name, slugged the way the server will slug it
+                (lib/inboundAddress) — so the placeholder is both an example
+                and a preview of what typing their name would give them. A
+                fixed "guzellik" was one specific salon's name shown to every
+                other salon, which reads as someone else's data. */}
             <input
               defaultValue={settings.org.inboundAddress ?? ""}
-              placeholder="guzellik"
+              placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
               onBlur={(e) => void update({ inboundAddress: e.target.value })}
             />
             <span className="shrink-0 text-sm text-[var(--muted)]">
@@ -367,12 +373,24 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 : t("settings.inboundNoDomain")}
             </span>
           </span>
-          <RowLabel label={t("settings.emailFrom")} hint={t("settings.emailFromHint")} />
-          <input
-            defaultValue={settings.org.emailFrom ?? ""}
-            placeholder="info@salonunuz.com"
-            onBlur={(e) => void update({ emailFrom: e.target.value })}
-          />
+          {/* Operator plumbing, same call as the WhatsApp credentials: sending
+              from your own domain means verifying it with the mail provider,
+              which the salon cannot do from in here. So the row is absent
+              until an operator has set one, and read-only once they have —
+              a salon typing an unverified domain in would get every send
+              refused with a 403 and no way to see why. Everyone else sends
+              from the incoming address above, which needs no setup at all. */}
+          {settings.org.emailFrom && (
+            <>
+              <RowLabel
+                label={t("settings.emailFrom")}
+                hint={t("settings.emailFromHint")}
+              />
+              <span className="text-sm text-[var(--muted)]">
+                {settings.org.emailFrom}
+              </span>
+            </>
+          )}
           <RowLabel
             label={t("settings.language")}
             hint={t("settings.languageHint")}
