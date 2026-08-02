@@ -818,9 +818,9 @@ const dictionary = {
   // In the campaign composer. One subject for all campaign mail, stored on
   // the campaign template row — not per campaign.
   "campaign.subjectHint": {
-    tr: "Kampanya e-postalarının konu satırı. Boş kalırsa işletme adı kullanılır. [ad] gibi değişkenler burada da çalışır.",
-    en: "The subject line on campaign emails. Left empty, the business name is used. Tokens like [ad] work here too.",
-    de: "Die Betreffzeile von Kampagnen-E-Mails. Bleibt sie leer, wird der Betriebsname verwendet. Platzhalter wie [ad] funktionieren auch hier.",
+    tr: "Kampanya e-postalarının konu satırı. Boş kalırsa işletme adı kullanılır. [name] gibi değişkenler burada da çalışır.",
+    en: "The subject line on campaign emails. Left empty, the business name is used. Tokens like [name] work here too.",
+    de: "Die Betreffzeile von Kampagnen-E-Mails. Bleibt sie leer, wird der Betriebsname verwendet. Platzhalter wie [name] funktionieren auch hier.",
   },
   // The appointment facts the variable dropdown offers beside the org's own
   // contact fields — things that are true of the booking, not the person.
@@ -880,7 +880,7 @@ const dictionary = {
   },
   "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
   "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
-  // Two bullets, matching how the send path renders [hizmet]: one line per
+  // Two bullets, matching how the send path renders [service]: one line per
   // booked service. A single inline name would preview a shape that never
   // sends.
   "settings.previewSampleService": {
@@ -1025,9 +1025,9 @@ const dictionary = {
     de: "Nachrichtentext",
   },
   "settings.templateBodyPlaceholder": {
-    tr: "Merhaba [ad]! [isletme] randevunuz [tarih].",
+    tr: "Merhaba [name]! [business] randevunuz [date].",
     en: "Hello [name]! Your appointment with [business] is on [date].",
-    de: "Hallo [name]! Ihr Termin bei [betrieb]: [termin].",
+    de: "Hallo [name]! Ihr Termin bei [business]: [date].",
   },
   "settings.templateSubject": {
     tr: "E-posta konusu",
@@ -1039,13 +1039,16 @@ const dictionary = {
     en: "Fields",
     de: "Felder",
   },
-  // The tokens on offer, in the reader's own words. Every one is an alias of
-  // the same canonical token (convex/lib/renderTokens), so a Turkish template
-  // keeps working when the interface language changes.
+  // ONE vocabulary, English, in all three interfaces — a token is stored text
+  // inside a message body, and a name that followed the interface language
+  // would read as broken the day the interface changed. The labels around it
+  // translate; the names do not. (The Turkish and German aliases in
+  // convex/lib/renderTokens stay valid forever, so bodies already written
+  // with them keep working.)
   "settings.templateTokensList": {
-    tr: "[ad] [isletme] [tarih] [hizmet] [soyad] [personel] [telefon]",
+    tr: "[name] [business] [date] [service] [lastname] [staff] [phone]",
     en: "[name] [business] [date] [service] [lastname] [staff] [phone]",
-    de: "[name] [betrieb] [termin] [leistung] [nachname] [mitarbeiter] [telefon]",
+    de: "[name] [business] [date] [service] [lastname] [staff] [phone]",
   },
   // The lane a template's WhatsApp send actually leaves on, in the salon's
   // words. Vendor names (Evolution, Cloud API, Meta Business Manager) never
@@ -2102,9 +2105,9 @@ const dictionary = {
     de: "Ihr eigener Text",
   },
   "settings.autoReplyTextHint": {
-    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın. [ad] ve [isletme] yazarsanız yerine müşterinin adı ve işletmenizin adı geçer.",
-    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one. Write [ad] or [isletme] to drop in the customer's name or your business name.",
-    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden. Mit [ad] oder [isletme] werden Kundenname und Betriebsname eingesetzt.",
+    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın. [name] ve [business] yazarsanız yerine müşterinin adı ve işletmenizin adı geçer.",
+    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one. Write [name] or [business] to drop in the customer's name or your business name.",
+    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden. Mit [name] oder [business] werden Kundenname und Betriebsname eingesetzt.",
   },
   "settings.bookingUrl": {
     tr: "Randevu linki",
@@ -2593,9 +2596,9 @@ const dictionary = {
   },
   "campaign.body": { tr: "Mesaj", en: "Message", de: "Nachricht" },
   "campaign.bodyHint": {
-    tr: "WhatsApp'ta onaylı şablonunuzun {{3}} yerine geçer. [ad] yazarsanız müşterinin adı gelir.",
-    en: "This becomes {{3}} in your approved WhatsApp template. Write [ad] to drop in the customer's name.",
-    de: "Wird zu {{3}} in Ihrer genehmigten WhatsApp-Vorlage. Mit [ad] wird der Kundenname eingesetzt.",
+    tr: "WhatsApp'ta onaylı şablonunuzun {{3}} yerine geçer. [name] yazarsanız müşterinin adı gelir.",
+    en: "This becomes {{3}} in your approved WhatsApp template. Write [name] to drop in the customer's name.",
+    de: "Wird zu {{3}} in Ihrer genehmigten WhatsApp-Vorlage. Mit [name] wird der Kundenname eingesetzt.",
   },
   "campaign.segment": { tr: "Kimlere", en: "Who gets it", de: "Wer es erhält" },
   "campaign.notSeenFor": {

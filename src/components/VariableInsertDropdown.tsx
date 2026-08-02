@@ -22,13 +22,20 @@ export function VariableInsertDropdown({
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {}) ?? [];
   // Appointment facts, by their canonical token names (lib/renderTokens).
+  // Token NAMES are English, always, in all three interfaces. The label
+  // beside each one is what translates. A token is a piece of stored text
+  // inside a message body: if the name followed the interface language, a
+  // body written in one language would read as a broken token the day the
+  // interface switched, since the stored string cannot be right in three
+  // languages at once. (The Turkish and German aliases in lib/renderTokens
+  // stay valid forever — bodies already written with them keep working.)
   const builtIns = [
-    { key: "isletme", label: t("vars.business") },
-    { key: "tarih", label: t("vars.date") },
-    { key: "hizmet", label: t("vars.service") },
-    { key: "fiyatlistesi", label: t("vars.priceList") },
-    { key: "fiyat", label: t("vars.price") },
-    { key: "personel", label: t("vars.staff") },
+    { key: "business", label: t("vars.business") },
+    { key: "date", label: t("vars.date") },
+    { key: "service", label: t("vars.service") },
+    { key: "pricelist", label: t("vars.priceList") },
+    { key: "price", label: t("vars.price") },
+    { key: "staff", label: t("vars.staff") },
   ];
   const all = [
     ...fields.map((field) => ({ key: field.key, label: field.label })),

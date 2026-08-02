@@ -114,8 +114,8 @@ export async function rulesForOrg(
 // kind-level fallback rows, and ensureTemplate reaches for it when an org has
 // no fallback row in its language at all — which is every non-Turkish org,
 // because the founding seeds only ever spoke Turkish. Tokens are written in
-// each language's own aliases ([name]/[ad]/[betrieb]) so the text reads as
-// the sentence it will become.
+// English token names ([name], [business], [date], [service]) — the PROSE is
+// per language, the vocabulary never is. See lib/renderTokens.
 type TemplateKind = "confirmation" | "reminder" | "winback" | "followup" | "cancellation";
 const TEMPLATE_KINDS: TemplateKind[] = [
   "confirmation",
@@ -131,23 +131,23 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
 > = {
   tr: {
     confirmation: {
-      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.\n\n[hizmet]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [name]! [business] randevunuz [date] için oluşturuldu.\n\n[service]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
       subject: "Randevunuz oluşturuldu",
     },
     reminder: {
-      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].\n\n[hizmet]\n\nGelemeyecekseniz bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [name]! [business] randevunuzu hatırlatırız: [date].\n\n[service]\n\nGelemeyecekseniz bu mesajı yanıtlamanız yeterli.",
       subject: "Randevu hatırlatması",
     },
     winback: {
-      body: "Merhaba [ad]! [isletme] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [name]! [business] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
       subject: "Sizi özledik!",
     },
     followup: {
-      body: "Merhaba [ad]! [isletme] ziyaretiniz için teşekkürler. Memnun kaldıysanız bize birkaç kelime bırakır mısınız?",
+      body: "Merhaba [name]! [business] ziyaretiniz için teşekkürler. Memnun kaldıysanız bize birkaç kelime bırakır mısınız?",
       subject: "Ziyaretiniz için teşekkürler",
     },
     cancellation: {
-      body: "Merhaba [ad], [tarih] tarihli [isletme] randevunuz iptal edildi. Yeni bir randevu için bu mesajı yanıtlayabilirsiniz.",
+      body: "Merhaba [name], [date] tarihli [business] randevunuz iptal edildi. Yeni bir randevu için bu mesajı yanıtlayabilirsiniz.",
       subject: "Randevunuz iptal edildi",
     },
   },
@@ -175,23 +175,23 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   de: {
     confirmation: {
-      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht.\n\n[leistung]\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
+      body: "Hallo [name]! Ihr Termin bei [business] ist für [date] gebucht.\n\n[service]\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
       subject: "Ihr Termin ist gebucht",
     },
     reminder: {
-      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin am [datum].\n\n[leistung]\n\nWenn etwas dazwischenkommt, antworten Sie einfach auf diese Nachricht.",
+      body: "Hallo [name]! [business] erinnert Sie an Ihren Termin am [date].\n\n[service]\n\nWenn etwas dazwischenkommt, antworten Sie einfach auf diese Nachricht.",
       subject: "Terminerinnerung",
     },
     winback: {
-      body: "Hallo [name]! Wir haben Sie bei [betrieb] vermisst. Antworten Sie einfach auf diese Nachricht für einen neuen Termin.",
+      body: "Hallo [name]! Wir haben Sie bei [business] vermisst. Antworten Sie einfach auf diese Nachricht für einen neuen Termin.",
       subject: "Wir haben Sie vermisst!",
     },
     followup: {
-      body: "Hallo [name]! Danke für Ihren Besuch bei [betrieb]. Wenn Sie eine Minute haben, freuen wir uns über ein paar Worte.",
+      body: "Hallo [name]! Danke für Ihren Besuch bei [business]. Wenn Sie eine Minute haben, freuen wir uns über ein paar Worte.",
       subject: "Danke für Ihren Besuch",
     },
     cancellation: {
-      body: "Hallo [name], Ihr Termin bei [betrieb] am [datum] wurde storniert. Antworten Sie auf diese Nachricht für einen neuen Termin.",
+      body: "Hallo [name], Ihr Termin bei [business] am [date] wurde storniert. Antworten Sie auf diese Nachricht für einen neuen Termin.",
       subject: "Ihr Termin wurde storniert",
     },
   },

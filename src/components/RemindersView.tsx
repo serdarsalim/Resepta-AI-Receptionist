@@ -599,7 +599,7 @@ function RuleEditor({
     for (const field of contactFields) {
       custom[field.key] = (contactId && picked?.custom?.[field.key]) || "";
     }
-    // Same shapes the send path produces for [fiyat] and [fiyatlistesi] —
+    // Same shapes the send path produces for [price] and [pricelist] —
     // org currency, message language, believable numbers.
     const formatMoney = (amount: number) =>
       new Intl.NumberFormat(orgLanguage, {

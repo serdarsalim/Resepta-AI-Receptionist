@@ -172,7 +172,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         metaName: "randevu_onay",
         language: "tr",
         status: "draft",
-        body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.",
+        body: "Merhaba [name]! [business] randevunuz [date] için oluşturuldu.",
         subject: "Randevunuz oluşturuldu",
         bodyPreview:
           "Merhaba {{1}}! {{2}} randevunuz {{3}} için oluşturuldu. Onaylamak için butona dokunun.",
@@ -183,7 +183,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         metaName: "randevu_hatirlatma",
         language: "tr",
         status: "draft",
-        body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].",
+        body: "Merhaba [name]! [business] randevunuzu hatırlatırız: [date].",
         subject: "Randevu hatırlatması",
         bodyPreview:
           "Merhaba {{1}}! {{2}} randevunuz {{3}}. Gelemeyecekseniz lütfen iptal butonunu kullanın.",
@@ -194,7 +194,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         metaName: "randevu_telafi",
         language: "tr",
         status: "draft",
-        body: "Merhaba [ad]! [isletme] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+        body: "Merhaba [name]! [business] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
         subject: "Sizi özledik!",
         bodyPreview:
           "Merhaba {{1}}! {{2}} olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",

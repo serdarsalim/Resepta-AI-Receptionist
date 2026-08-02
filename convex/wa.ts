@@ -57,7 +57,7 @@ export const loadSessionContext = internalQuery({
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
         .collect(),
     ]);
-    // org rides along for token rendering ([isletme]); the send itself needs
+    // org rides along for token rendering ([business]); the send itself needs
     // only the account. contactFields feed the same tokens the reminders and
     // campaigns speak — one vocabulary everywhere.
     const evolution = org
@@ -327,7 +327,7 @@ export const loadSendContext = internalQuery({
           .query("waTemplates")
           .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
           .collect(),
-        // For the [personel] token. Null when nobody is assigned, and the token
+        // For the [staff] token. Null when nobody is assigned, and the token
         // renders as nothing — renderTokens' whitespace cleanup owns that case.
         appointment.staffId ? ctx.db.get(appointment.staffId) : null,
         // The org's field registry, so [age] and friends resolve from the same
@@ -511,7 +511,7 @@ export const sendAppointmentMessage = internalAction({
     for (const field of contactFields as { key: string }[]) {
       customValues[field.key] = customer.custom?.[field.key] ?? "";
     }
-    // The appointment total for the [fiyat] token, in the org's currency and
+    // The appointment total for the [price] token, in the org's currency and
     // the message language. Items store integer minor units; no items or a
     // zero total renders as nothing rather than as a free appointment.
     const totalMinor = (
@@ -523,7 +523,7 @@ export const sendAppointmentMessage = internalAction({
         currency: org.currency ?? "TRY",
       }).format(minor / 100);
     const price = totalMinor > 0 ? formatMoney(totalMinor) : undefined;
-    // [fiyatlistesi] — the receipt look. An unpriced item keeps its bullet
+    // [pricelist] — the receipt look. An unpriced item keeps its bullet
     // without a dangling dash.
     const servicePriceList = appointment.items
       ?.map(
@@ -539,7 +539,7 @@ export const sendAppointmentMessage = internalAction({
       staffName: staffRow?.name,
       phone: customer.phone,
       email: customer.email,
-      // One bullet line per booked service — [hizmet] renders as a LIST, so
+      // One bullet line per booked service — [service] renders as a LIST, so
       // the stock texts put it on its own paragraph rather than mid-sentence.
       serviceName: appointment.items
         ?.map((item: { name: string }) => `• ${item.name}`)

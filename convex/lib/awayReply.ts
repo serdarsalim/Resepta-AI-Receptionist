@@ -72,7 +72,7 @@ export function awayReplyText(args: {
   firstName?: string;
 }): string | null {
   const override = args.override?.trim();
-  // "Merhaba [ad], şu anda kapalıyız" is the whole reason an override exists:
+  // "Merhaba [name], şu anda kapalıyız" is the whole reason an override exists:
   // the built-in copy cannot greet somebody by name. An unresolved token
   // renders as nothing rather than as itself — see lib/renderTokens.
   if (override) {

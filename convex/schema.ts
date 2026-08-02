@@ -852,7 +852,7 @@ export default defineSchema({
     // for every reminder row the owner has not given its own wording, which is
     // exactly the "the 24h and 2h reminders say different things" feature.
     ruleId: v.optional(v.id("messageRules")),
-    // What the salon wrote, in named tokens ([ad], [isletme], [tarih] —
+    // What the salon wrote, in named tokens ([name], [business], [date] —
     // lib/renderTokens). Rendered at send time for the lanes Meta does not
     // constrain. Optional because rows predate it; the send path falls back to
     // bodyPreview's positional text until the owner writes one.

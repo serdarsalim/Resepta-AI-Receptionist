@@ -14,14 +14,23 @@
 // NAMED tokens instead: "Merhaba [ad], [isletme] olarak..." reads as the
 // sentence it will become.
 //
-// ── WHY THE TOKENS ARE ENGLISH-ISH BUT AI ALIASED ───────────────────────────
+// ── ONE VOCABULARY, AND IT IS ENGLISH ───────────────────────────────────────
 //
-// The app ships in Turkish, English and German, and a token is typed by a
-// human. Making the token names translate would mean a template written by a
-// Turkish owner breaks the day someone switches the interface to English —
-// the stored text is one string and it cannot be right in three languages at
-// once. So the canonical names are stable and each has aliases, including the
-// Turkish ones, because that is what a Turkish salon owner will actually type.
+// The app ships in Turkish, English and German, and a token is stored text
+// inside a message body. Making the names translate would mean a body written
+// by a Turkish owner reads as a broken token the day someone switches the
+// interface to English — the stored string is one string and it cannot be
+// right in three languages at once.
+//
+// So: the CANONICAL names are English, and every surface that offers a token
+// (the Insert-variable dropdown, the field hints, the stock templates) offers
+// the English name in all three interfaces. What translates is the LABEL
+// beside it — "Business name" / "İşletme adı" / "Betriebsname" all insert
+// [business].
+//
+// The Turkish and German aliases below stay valid forever. They are not
+// offered anywhere anymore; they exist so bodies already written with them —
+// and a Turkish owner who types [ad] out of habit — keep working.
 
 export type TokenValues = {
   firstName?: string;
@@ -97,18 +106,6 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   total: "price",
   toplam: "price",
 };
-
-// What the editor offers. Ordered by how often a salon actually reaches for
-// them, not alphabetically — the first two are ninety percent of real use.
-export const TOKEN_HINTS = [
-  "[ad]",
-  "[isletme]",
-  "[tarih]",
-  "[hizmet]",
-  "[soyad]",
-  "[personel]",
-  "[telefon]",
-] as const;
 
 // Render a free-text body.
 //
