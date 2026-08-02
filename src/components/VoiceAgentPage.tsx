@@ -407,12 +407,7 @@ export function VoiceAgentPage({
               "why didn't my test number reach it" is answered right here.
               Options are every line on the account, not just the free ones:
               picking one another agent holds MOVES it, which is the whole
-              point when you are switching which agent answers.
-
-              Capped to the width of its own empty label. Left to size itself a
-              select takes the width of its LONGEST option, so one nicknamed
-              line stretched the control across half the header for a value
-              that is fifteen characters. */}
+              point when you are switching which agent answers. */}
           {detail && (
             <select
               value={detail.inboundNumber ?? ""}
@@ -420,14 +415,16 @@ export function VoiceAgentPage({
               title={t("settings.inboundNumber")}
               aria-label={t("settings.inboundNumber")}
               onChange={(e) => chooseLine(e.target.value || null)}
-              className="w-auto max-w-[11rem] shrink-0 truncate rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
+              className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
             >
               <option value="">{t("voiceDetail.noLine")}</option>
+              {/* The number, never the nickname. A nickname is what someone
+                  called the line at the provider, and prepending it pushed the
+                  number itself out of a control this narrow — leaving "austrian
+                  number · +435…", which answers nothing. */}
               {detail.lines.map((line) => (
                 <option key={line.number} value={line.number}>
-                  {line.nickname === line.number
-                    ? line.number
-                    : `${line.nickname} · ${line.number}`}
+                  {line.number}
                 </option>
               ))}
             </select>
