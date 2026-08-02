@@ -104,6 +104,24 @@ export const setActive = mutation({
 //
 // Removing the row drops its login LINK, never the login itself: that is a
 // membership, and it keeps its own row in the list.
+// Same shape as contactFields.reorder, and it moves the same thing twice: this
+// list's row order IS the calendar's column order, so dragging somebody up
+// here moves their column in the week view too. That is the point — the order
+// people are listed in should be the order they stand in.
+export const reorder = mutation({
+  args: { orderedIds: v.array(v.id("staff")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    for (const [index, id] of args.orderedIds.entries()) {
+      const row = await ctx.db.get(id);
+      if (!row || row.orgId !== orgId) throw new Error("not-found");
+      await ctx.db.patch(id, { order: index });
+    }
+    return null;
+  },
+});
+
 export const remove = mutation({
   args: { staffId: v.id("staff") },
   returns: v.null(),

@@ -2125,6 +2125,21 @@ const dictionary = {
     en: "Remove {name} from the list?",
     de: "{name} aus der Liste entfernen?",
   },
+  "roster.grantLogin": {
+    tr: "{name} için giriş ekle",
+    en: "Give {name} a login",
+    de: "{name} einen Zugang geben",
+  },
+  "roster.grantLoginHint": {
+    tr: "Davet e-postası gider. Bu Google adresiyle giriş yaptığında hesabı bu üyeye bağlanır — ikinci bir satır oluşmaz.",
+    en: "An invite is emailed. When they sign in with that Google address, the account attaches to this member rather than appearing as a second row.",
+    de: "Eine Einladung wird per E-Mail gesendet. Meldet sich die Person mit dieser Google-Adresse an, wird das Konto diesem Mitglied zugeordnet statt als zweite Zeile zu erscheinen.",
+  },
+  "roster.linkExisting": {
+    tr: "Ya da zaten giriş yapmış bir hesabı bağlayın:",
+    en: "Or attach an account that has already signed in:",
+    de: "Oder ein bereits angemeldetes Konto zuordnen:",
+  },
   "roster.emailOptional": {
     tr: "E-posta (isteğe bağlı) — bu adresle giriş yapabilir",
     en: "Email (optional) — lets them sign in with this address",

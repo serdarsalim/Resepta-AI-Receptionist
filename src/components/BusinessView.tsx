@@ -1185,7 +1185,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 // identifies somebody now reads across, and the two controls sit in their
 // columns beside it.
 const ROSTER_ROW =
-  "sm:grid sm:grid-cols-[minmax(0,1fr)_5rem_minmax(0,9rem)_1.75rem] sm:items-center sm:gap-3";
+  "sm:grid sm:grid-cols-[1rem_minmax(0,1fr)_5rem_minmax(0,9rem)_1.75rem] sm:items-center sm:gap-3";
 
 const ACCESS_REMOVE = "remove";
 
@@ -1206,10 +1206,15 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const linkStaff = useMutation(api.team.linkStaff);
   const addStaff = useMutation(api.staff.add);
   const removeStaff = useMutation(api.staff.remove);
+  const reorderStaff = useMutation(api.staff.reorder);
   const renameStaff = useMutation(api.staff.rename);
   const setActive = useMutation(api.staff.setActive);
   const [adding, setAdding] = useState(false);
   const [showDeactivated, setShowDeactivated] = useState(false);
+  const [dragId, setDragId] = useState<Id<"staff"> | null>(null);
+  const [inviteFor, setInviteFor] = useState<{ staffId: Id<"staff">; name: string } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -1245,12 +1250,35 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   // meaning anything. They should never have been offered regardless: a
   // walk-in with no email is not a person you staff the salon with.
   const unclaimed = roster.filter((row) => row.userId && !row.staffId && row.email);
-  // Deactivated people leave the main list entirely rather than sitting in it
-  // greyed out. The Team card answers "who works here", and somebody who
-  // doesn't is noise in that answer — but they are not gone, so they get their
-  // own collapsed card rather than a filter nobody finds.
-  const activeRows = roster.filter((row) => !(row.staffId && row.active === false));
-  const deactivated = roster.filter((row) => row.staffId && row.active === false);
+  // Deactivated members leave the main list rather than sitting in it greyed
+  // out: the Team card answers "who works here", and somebody who doesn't is
+  // noise in that answer.
+  //
+  // Only if they have NO login, though. Somebody who can sign in is on the
+  // team whether or not they take bookings — an owner who never stands behind
+  // a chair still runs the place, and filing them under Deactivated took the
+  // account holder out of their own team list.
+  const isRetired = (row: (typeof roster)[number]) =>
+    Boolean(row.staffId) && row.active === false && !row.userId;
+  const activeRows = roster.filter((row) => !isRetired(row));
+  const deactivated = roster.filter(isRetired);
+
+  // Reordering rewrites the whole draggable sequence rather than one row's
+  // index: the list is short, and a single patch would leave two people
+  // sharing a position the next drag then resolves arbitrarily.
+  const draggable = activeRows.flatMap((row) =>
+    row.staffId && !row.userId ? [row.staffId] : [],
+  );
+  const moveMember = (target: (typeof roster)[number]) => {
+    if (!dragId || !target.staffId || target.staffId === dragId) return;
+    const from = draggable.indexOf(dragId);
+    const to = draggable.indexOf(target.staffId);
+    if (from < 0 || to < 0) return;
+    const next = [...draggable];
+    next.splice(to, 0, ...next.splice(from, 1));
+    setDragId(null);
+    void guard(() => reorderStaff({ orderedIds: next }));
+  };
   const accessLabel = (value: string) =>
     value === "owner"
       ? t("role.owner")
@@ -1268,6 +1296,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
             that wanted "Kuaför" got a form field on a page it visits to
             manage people, not vocabulary. */}
         <div className={`hidden pb-1 text-xs text-[var(--muted)] sm:block ${ROSTER_ROW}`}>
+          <span />
           <span>{t("roster.person")}</span>
           <span>{t("roster.bookable")}</span>
           <span>{t("roster.access")}</span>
@@ -1275,7 +1304,41 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
         <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {activeRows.map((row) => (
-            <li key={row.key} className={`group py-1 text-sm ${ROSTER_ROW}`}>
+            <li
+              key={row.key}
+              className={`group py-1 text-sm ${ROSTER_ROW} ${
+                dragId === row.staffId ? "opacity-40" : ""
+              }`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => moveMember(row)}
+            >
+              {/* Only the members below the pinned logins can be dragged. This
+                  order is the calendar's column order, and somebody floated to
+                  the top by having an account is not standing in a different
+                  place on the rota — letting them be dragged would write an
+                  order the list then refuses to show. */}
+              {isOwner && row.staffId && !row.userId ? (
+                <span
+                  draggable
+                  onDragStart={() => setDragId(row.staffId ?? null)}
+                  onDragEnd={() => setDragId(null)}
+                  title={t("fields.reorder")}
+                  aria-label={t("fields.reorder")}
+                  className="hidden cursor-grab select-none text-[var(--muted)] hover:text-[var(--foreground)] active:cursor-grabbing sm:inline-flex"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </span>
+              ) : (
+                <span className="hidden sm:block" />
+              )}
+
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {row.staffId ? (
                   <InlineEditValue
@@ -1334,35 +1397,22 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                     )
                   }
                 />
-              ) : unclaimed.length === 0 ? (
-                // Nothing to pick. Offering the control anyway opened a menu
-                // whose only entry was the blank placeholder — which reads as
-                // a broken dropdown, not as "there is no login to attach".
-                <span
-                  className="px-2 py-1 text-sm text-[var(--muted)]"
-                  title={t("roster.noLoginToLink")}
+              ) : (
+                // "No login" is a state you can change, so it is a control and
+                // not a label. It used to be a picklist of unlinked accounts,
+                // which meant the commonest case — nobody has signed in yet —
+                // opened an empty menu and there was no way at all to invite
+                // somebody already on the list.
+                <button
+                  type="button"
+                  disabled={!isOwner || !row.staffId}
+                  onClick={() =>
+                    row.staffId && setInviteFor({ staffId: row.staffId, name: row.name })
+                  }
+                  className="justify-self-start rounded-md px-2 py-1 text-left text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:pointer-events-none"
                 >
                   {t("roster.noAccess")}
-                </span>
-              ) : (
-                <InlineEditValue
-                  compact
-                  value=""
-                  placeholder={t("roster.noAccess")}
-                  options={unclaimed.map((candidate) => candidate.userId as string)}
-                  labelFor={(id) =>
-                    unclaimed.find((candidate) => candidate.userId === id)?.email ??
-                    t("roster.noAccess")
-                  }
-                  onSave={(next) =>
-                    guard(() =>
-                      linkStaff({
-                        staffId: row.staffId!,
-                        userId: next ? (next as Id<"users">) : null,
-                      }),
-                    )
-                  }
-                />
+                </button>
               )}
 
               {/* Deactivate, not delete. The list above is who works here now;
@@ -1378,7 +1428,26 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                   }
                   className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
-                  ⊘
+                  {/* An archive tray, not a ⊘. The circle-slash is the "no
+                      entry" glyph — it reads as this action is forbidden,
+                      which is the opposite of what the control does. Filing
+                      somebody away is the idea, and it is the same picture
+                      Gmail, Linear and Notion use for it. */}
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="3" y="4" width="18" height="4" rx="1" />
+                    <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
+                    <path d="M10 13h4" />
+                  </svg>
                 </ActionTip>
               ) : (
                 <span />
@@ -1388,6 +1457,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
           {team.pending.map((pendingInvite) => (
             <li key={pendingInvite._id} className={`py-1 text-sm ${ROSTER_ROW}`}>
+              {/* Leading cell for the drag column. An invite has no row to
+                  order — it is not a member yet. */}
+              <span className="hidden sm:block" />
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
                 <span className="text-xs text-[var(--muted)]">
@@ -1432,6 +1504,17 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
       {adding && (
         <AddPersonSheet onClose={() => setAdding(false)} />
       )}
+      {inviteFor && (
+        <GrantLoginSheet
+          staffId={inviteFor.staffId}
+          name={inviteFor.name}
+          unclaimed={unclaimed}
+          onLink={(userId) =>
+            guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
+          }
+          onClose={() => setInviteFor(null)}
+        />
+      )}
     </Card>
 
     {/* Only when there is somebody in it. An always-present "Deactivated (0)"
@@ -1448,7 +1531,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           aria-expanded={showDeactivated}
           className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         >
-          {showDeactivated ? "▾" : "▸"} {deactivated.map((row) => row.name).join(", ")}
+          {/* The count is already in the card title and the names are in the
+              list; a summary that repeats both says nothing twice. */}
+          {showDeactivated ? "▾" : "▸"} {t(showDeactivated ? "common.hide" : "common.show")}
         </button>
 
         {showDeactivated && (
@@ -1505,6 +1590,114 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 }
 
 // Two ways to add somebody and they produce different things, so the sheet
+// Giving an existing member a login, which is the half "Add member" cannot do:
+// somebody added months ago with no address still needs a way in.
+//
+// Two routes, and they are genuinely different situations rather than a mode
+// switch. Usually nobody has signed in yet, so you send an invite and the
+// staffId rides along to be joined up on acceptance. Occasionally they already
+// signed in on their own and are sitting in the list as a second row — then
+// there is nothing to invite and the job is to join the two. That case only
+// appears when there IS such a row, which is why it is not always on screen.
+function GrantLoginSheet({
+  staffId,
+  name,
+  unclaimed,
+  onLink,
+  onClose,
+}: {
+  staffId: Id<"staff">;
+  name: string;
+  unclaimed: { userId?: Id<"users">; email?: string }[];
+  onLink: (userId: Id<"users">) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const { t } = useLanguage();
+  const invite = useMutation(api.team.invite);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Sheet
+      title={t("roster.grantLogin").replace("{name}", name)}
+      hint={t("roster.grantLoginHint")}
+      onClose={onClose}
+    >
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setError(null);
+          try {
+            await invite({
+              email: String(form.get("email") ?? ""),
+              role: form.get("role") === "owner" ? "owner" : "staff",
+              staffId,
+            });
+            onClose();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "error");
+          }
+        }}
+      >
+        <div className="flex gap-2">
+          <input
+            name="email"
+            type="email"
+            required
+            data-sheet-autofocus
+            placeholder="ornek@gmail.com"
+            className="min-w-0 flex-1"
+          />
+          <select name="role" defaultValue="staff" className="w-auto shrink-0">
+            <option value="staff">{t("role.staff")}</option>
+            <option value="owner">{t("role.owner")}</option>
+          </select>
+        </div>
+
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="submit"
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("team.invite")}
+          </button>
+        </div>
+      </form>
+
+      {unclaimed.length > 0 && (
+        <div className="mt-4 border-t border-[var(--border)] pt-3">
+          <p className="text-xs text-[var(--muted)]">{t("roster.linkExisting")}</p>
+          <ul className="mt-1 space-y-1">
+            {unclaimed.map((candidate) => (
+              <li key={candidate.userId}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onLink(candidate.userId as Id<"users">).then(onClose)
+                  }
+                  className="w-full rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  {candidate.email}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 // ONE form, because there was never really a question to ask.
 //
 // It used to open on a choice — "takes bookings" or "signs in" — which made

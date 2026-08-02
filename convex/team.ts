@@ -150,7 +150,12 @@ export const roster = query({
         isMe: membership.userId === user._id,
       });
     }
-    return rows;
+    // Anyone who can sign in floats to the top, keeping their order otherwise.
+    // They are the people you look for first — the ones you grant access to,
+    // change roles for and hand the business to — while the rest of the list
+    // is a rota you scroll. A stable sort, so the manual order below them
+    // survives; nothing else here reorders.
+    return rows.sort((a, b) => (b.userId ? 1 : 0) - (a.userId ? 1 : 0));
   },
 });
 
@@ -254,12 +259,26 @@ export const linkStaff = mutation({
 });
 
 export const invite = mutation({
-  args: { email: v.string(), role },
+  args: {
+    email: v.string(),
+    role,
+    // Sent from an existing member's row: the login being granted belongs to
+    // somebody already on the list, so it must arrive attached to them rather
+    // than as a second row for one human.
+    staffId: v.optional(v.id("staff")),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { user, orgId } = await requireOwner(ctx);
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("bad-email");
+    // Checked before either branch writes anything: an id from another org, or
+    // one already claimed, must not quietly become an unlinked invite.
+    if (args.staffId) {
+      const staff = await ctx.db.get(args.staffId);
+      if (!staff || staff.orgId !== orgId) throw new Error("not-found");
+      if (staff.userId) throw new Error("already-linked");
+    }
     const org = await ctx.db.get(orgId);
     // Scheduled at the end of whichever branch takes, never before: the mail
     // says "you have been added", and an invite that then failed validation
@@ -291,6 +310,9 @@ export const invite = mutation({
         orgId,
         role: args.role,
       });
+      // This account already exists, so there is no acceptance to wait for and
+      // the link happens here instead of in auth.ts.
+      if (args.staffId) await ctx.db.patch(args.staffId, { userId: existingUser._id });
       await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
       await notify();
       return null;
@@ -307,6 +329,7 @@ export const invite = mutation({
       email,
       role: args.role,
       invitedBy: user._id,
+      staffId: args.staffId,
     });
     await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
     await notify();

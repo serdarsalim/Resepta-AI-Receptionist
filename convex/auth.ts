@@ -127,6 +127,17 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           orgId: invite.orgId,
           role: invite.role,
         });
+        // Invited from an existing member's row: join the two halves now,
+        // while we know they belong together. Guarded on the staff row still
+        // existing and still being unclaimed — an invite can sit unaccepted
+        // for weeks, and in that time the member may have been removed or
+        // given a different login.
+        if (invite.staffId) {
+          const staff = await db.get(invite.staffId);
+          if (staff && staff.orgId === invite.orgId && !staff.userId) {
+            await db.patch(invite.staffId, { userId });
+          }
+        }
         // Audit trail of who admitted whom; stamping also drops the row off
         // the pending list.
         await db.patch(invite._id, {

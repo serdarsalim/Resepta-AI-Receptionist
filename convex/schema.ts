@@ -95,6 +95,12 @@ export default defineSchema({
     email: v.string(),
     role: v.union(v.literal("owner"), v.literal("staff")),
     invitedBy: v.id("users"),
+    // The member this invite belongs to, when it was sent from their row.
+    // Without it an accepted invite arrives as a SECOND row for a person who
+    // is already on the list, and somebody has to notice and join them by
+    // hand. Set at acceptance (convex/auth.ts), which is the first moment a
+    // user id exists to link.
+    staffId: v.optional(v.id("staff")),
     acceptedAt: v.optional(v.number()),
     acceptedUserId: v.optional(v.id("users")),
   })
