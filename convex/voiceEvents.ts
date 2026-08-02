@@ -213,15 +213,20 @@ export const process = internalAction({
       const analysis = (call.call_analysis ?? {}) as Record<string, unknown>;
       const startedAt = Number(call.start_timestamp ?? Date.now());
       const endedAt = Number(call.end_timestamp ?? 0);
-      const beforeValues =
-        (call.retell_llm_dynamic_variables as Record<string, unknown> | undefined) ?? {};
       const duringValues =
         (call.collected_dynamic_variables as Record<string, unknown> | undefined) ?? {};
       const afterValues =
         (analysis.custom_analysis_data as Record<string, unknown> | undefined) ?? {};
-      // Confirmed live values win over transcript inference. Pre-call context
-      // remains on the call record but is the weakest source.
-      const collected = { ...beforeValues, ...afterValues, ...duringValues };
+      // Confirmed live values win over transcript inference.
+      //
+      // beforeValues is deliberately NOT merged in. It is Retell's whole
+      // pre-call bag, and over a Twilio SIP trunk that bag carries the
+      // transport's own headers — Diversion, P-Asserted-Identity, Lk-Real-Ip,
+      // Twilio-Callsid. Merging it filed all of that under "what the agent
+      // collected", so a discovery call's card read as six answers buried in
+      // eight lines of SIP plumbing. What we injected is not something the
+      // caller told us, and this record only claims the latter.
+      const collected = { ...afterValues, ...duringValues };
 
       await ctx.runMutation(internal.retell.recordCall, {
         retellAgentId: row.retellAgentId,

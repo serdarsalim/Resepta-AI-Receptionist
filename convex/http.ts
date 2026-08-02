@@ -407,6 +407,19 @@ http.route({
       if (Number.isNaN(startAt) || !customerName || !callerPhone) {
         return respond({ error: "missing-name-phone-or-start" });
       }
+      // A date the model made up parses just as cleanly as one the caller
+      // said. This booked 8 June 2024 off a live call — two years past, a
+      // confirmation sent for it, and a slot in the salon's list nobody can
+      // explain. Handing the miss back is the only safe answer: the agent can
+      // ask again, and inventing a plausible date on the caller's behalf is
+      // exactly what it must not do.
+      const now = Date.now();
+      if (startAt < now - 5 * 60_000) {
+        return respond({ error: "start-is-in-the-past" });
+      }
+      if (startAt > now + 400 * 24 * 60 * 60_000) {
+        return respond({ error: "start-is-too-far-ahead" });
+      }
       let externalUid: string | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
         const booking = await createBooking({

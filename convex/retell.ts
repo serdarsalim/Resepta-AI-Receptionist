@@ -1139,6 +1139,19 @@ export const voiceBook = internalMutation({
         source: "voice",
       });
       customer = await ctx.db.get(customerId);
+    } else if (!customer.firstName || customer.firstName === phone) {
+      // A caller the agent already saved details for exists BEFORE the
+      // booking — save_customer_details creates them from the number alone —
+      // so this branch, not the insert above, is the common one on a real
+      // call. It used to leave the name it was just handed on the floor, and
+      // the card kept showing the phone number where a name belongs.
+      const [firstName, ...rest] = args.name.trim().split(/\s+/).filter(Boolean);
+      if (firstName) {
+        await ctx.db.patch(customer._id, {
+          firstName,
+          ...(rest.length > 0 ? { lastName: rest.join(" ") } : {}),
+        });
+      }
     }
     if (!customer) throw new Error("customer-failed");
     const line = args.service
