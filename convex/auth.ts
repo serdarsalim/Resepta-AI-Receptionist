@@ -3,6 +3,7 @@ import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
 import { convexAuth } from "@convex-dev/auth/server";
 import type { DatabaseWriter } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { seedDefaultRules } from "./messageRules";
 
 // ── Walk-in access to the demo org ──────────────────────────────────────────
 //
@@ -155,6 +156,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         language: "tr",
         sendBookingConfirmation: true,
       });
+      // Confirmation + one 24h reminder, and the migrated marker — a new org
+      // is born on the messageRules model, never on the legacy fields.
+      await seedDefaultRules(db, orgId);
 
       // Seed the template rows every org needs, as drafts with suggested Meta
       // names and a starter body the owner can rewrite. The authored body

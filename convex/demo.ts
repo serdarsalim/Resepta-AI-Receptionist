@@ -34,6 +34,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { seedDefaultRules } from "./messageRules";
 
 // Roughly how often a simulated outbound draws a reply. Not 100%: a demo where
 // every customer answers reads as a toy. Not 0: the inbox is half the product.
@@ -183,6 +184,22 @@ export const provision = internalMutation({
       reminderOffsetsHours: [24, 2],
       winbackEnabled: true,
       winbackDaysAfter: 14,
+    });
+    // The demo gets the full spread as rules — the default two, plus the 2h
+    // reminder and the winback the legacy fields above describe. The fields
+    // stay only as documentation of what the demo shows; the rows send.
+    await seedDefaultRules(ctx.db, orgId);
+    await ctx.db.insert("messageRules", {
+      orgId,
+      trigger: "before_start",
+      offsetHours: 2,
+      channel: "both",
+    });
+    await ctx.db.insert("messageRules", {
+      orgId,
+      trigger: "no_show",
+      offsetHours: 14 * 24,
+      channel: "both",
     });
     await ctx.scheduler.runAfter(0, internal.devSeed.seed, { orgId, force: true });
     return orgId;
