@@ -2122,6 +2122,21 @@ const dictionary = {
     en: "You can't remove the last admin. Make somebody else an admin first.",
     de: "Die letzte Administratorin oder der letzte Administrator kann nicht entfernt werden. Machen Sie zuerst jemand anderen zum Administrator.",
   },
+  "roster.remove": {
+    tr: "{name} listeden kaldırılsın mı?",
+    en: "Remove {name} from the list?",
+    de: "{name} aus der Liste entfernen?",
+  },
+  "roster.hasAppointments": {
+    tr: "Bu kişi randevularda görünüyor, bu yüzden silinemez. \"Randevu alır\" kapatıldığında yeni randevu almaz, geçmiş randevular adını korur.",
+    en: "This person appears on appointments, so they can't be deleted. Switch off Bookable instead — they stop taking new bookings and past ones keep their name.",
+    de: "Diese Person erscheint in Terminen und kann daher nicht gelöscht werden. Schalten Sie stattdessen \"Buchbar\" aus — sie nimmt keine neuen Termine an, alte behalten ihren Namen.",
+  },
+  "roster.noLoginToLink": {
+    tr: "Bağlanacak giriş yok",
+    en: "No unlinked login",
+    de: "Kein freier Zugang",
+  },
   "roster.add": { tr: "Kişi ekle", en: "Add person", de: "Person hinzufügen" },
 
   // The two tabs in Add person. Previously the org's staff label ("Kuaför")

@@ -88,3 +88,32 @@ export const setActive = mutation({
     return null;
   },
 });
+
+// The counterpart to that rule, and not a contradiction of it. What
+// deactivating protects is HISTORY — a name an old appointment still points
+// at. Somebody who has never appeared on one has no history to protect, and a
+// misspelt duplicate you can only ever hide is its own kind of wrong: the
+// roster grows a row nobody can explain and nobody can remove.
+//
+// So the guard is the actual question, asked directly: is this person on any
+// appointment. If they are, deactivating remains the answer and the error says
+// so. Removing the row also drops its login LINK, never the login itself —
+// that is a membership, and it keeps its own row in the list.
+export const remove = mutation({
+  args: { staffId: v.id("staff") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const row = await ctx.db.get(args.staffId);
+    if (!row || row.orgId !== orgId) throw new Error("not-found");
+    const booked = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_staff", (q) =>
+        q.eq("orgId", orgId).eq("staffId", args.staffId),
+      )
+      .first();
+    if (booked) throw new Error("staff-has-appointments");
+    await ctx.db.delete(args.staffId);
+    return null;
+  },
+});

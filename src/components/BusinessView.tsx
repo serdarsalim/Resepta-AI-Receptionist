@@ -1182,7 +1182,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
 // identifies somebody now reads across, and the two controls sit in their
 // columns beside it.
 const ROSTER_ROW =
-  "sm:grid sm:grid-cols-[minmax(0,1fr)_5rem_minmax(0,9rem)] sm:items-center sm:gap-3";
+  "sm:grid sm:grid-cols-[minmax(0,1fr)_5rem_minmax(0,9rem)_1.75rem] sm:items-center sm:gap-3";
 
 const ACCESS_REMOVE = "remove";
 
@@ -1203,6 +1203,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const removeMember = useMutation(api.team.removeMember);
   const linkStaff = useMutation(api.team.linkStaff);
   const addStaff = useMutation(api.staff.add);
+  const removeStaff = useMutation(api.staff.remove);
   const renameStaff = useMutation(api.staff.rename);
   const setActive = useMutation(api.staff.setActive);
   const updateOrg = useMutation(api.orgs.update);
@@ -1217,7 +1218,13 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
       await run();
     } catch (err) {
       const reason = err instanceof Error ? err.message : "error";
-      setError(reason.includes("last-admin") ? t("roster.lastAdmin") : reason);
+      setError(
+        reason.includes("last-admin")
+          ? t("roster.lastAdmin")
+          : reason.includes("staff-has-appointments")
+            ? t("roster.hasAppointments")
+            : reason,
+      );
     }
   };
 
@@ -1263,7 +1270,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
         <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {roster.map((row) => (
-            <li key={row.key} className={`py-1 text-sm ${ROSTER_ROW}`}>
+            <li key={row.key} className={`group py-1 text-sm ${ROSTER_ROW}`}>
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {row.staffId ? (
                   <InlineEditValue
@@ -1322,6 +1329,16 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                     )
                   }
                 />
+              ) : unclaimed.length === 0 ? (
+                // Nothing to pick. Offering the control anyway opened a menu
+                // whose only entry was the blank placeholder — which reads as
+                // a broken dropdown, not as "there is no login to attach".
+                <span
+                  className="px-2 py-1 text-sm text-[var(--muted)]"
+                  title={t("roster.noLoginToLink")}
+                >
+                  {t("roster.noAccess")}
+                </span>
               ) : (
                 <InlineEditValue
                   compact
@@ -1341,6 +1358,24 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                     )
                   }
                 />
+              )}
+
+              {/* Only a bookable person with NO login gets an ✕. Someone who
+                  can sign in is removed by taking their access away, in the
+                  column to the left — two controls that both said "remove"
+                  and meant different things would be worse than one. */}
+              {isOwner && row.staffId && !row.userId ? (
+                <ActionTip
+                  label={t("roster.remove").replace("{name}", row.name)}
+                  onClick={() =>
+                    void guard(() => removeStaff({ staffId: row.staffId! }))
+                  }
+                  className="opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                >
+                  ✕
+                </ActionTip>
+              ) : (
+                <span />
               )}
             </li>
           ))}
@@ -1363,6 +1398,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                   {t("team.revoke")}
                 </button>
               )}
+              <span />
             </li>
           ))}
         </ul>

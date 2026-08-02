@@ -650,6 +650,11 @@ export default defineSchema({
     .index("by_org_start", ["orgId", "startAt"])
     .index("by_start", ["startAt"])
     .index("by_customer", ["customerId"])
+    // Answers one question: does this person appear on any appointment. That
+    // is what decides whether a staff row may be deleted or only deactivated,
+    // and asking it by scanning the org's whole history would get slower every
+    // month for a check that runs on a button.
+    .index("by_org_staff", ["orgId", "staffId"])
     .index("by_org_external", ["orgId", "externalUid"])
     // Cross-org cron reads. Status first so a sweep for the few appointments
     // in a given state skips the overwhelming majority that are already
