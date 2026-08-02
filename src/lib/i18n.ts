@@ -781,10 +781,13 @@ const dictionary = {
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
+  // Shown when NO channel is wired. The wiring is the operator's job, so this
+  // reassures rather than instructs: the rules above it already show that
+  // reminders exist, and this says why nothing sends yet and whose move it is.
   "settings.rulesNoChannel": {
-    tr: "Ne WhatsApp bağlı ne de gönderen e-posta adresi var, bu yüzden listedeki hiçbir kural şu anda mesaj göndermiyor. WhatsApp kurulumunu biz yapıyoruz — bize ulaşın. E-posta adresini İşletme sayfasında girebilirsiniz.",
-    en: "No WhatsApp connection and no sender email address, so nothing on this list is going out yet. We handle the WhatsApp setup — get in touch. An email address can be set on the Business page.",
-    de: "Weder ist WhatsApp verbunden noch ist eine Absenderadresse hinterlegt, daher sendet derzeit keine dieser Regeln. Die WhatsApp-Einrichtung übernehmen wir — melden Sie sich. Eine E-Mail-Adresse können Sie auf der Seite Betrieb hinterlegen.",
+    tr: "Hatırlatmalarınız hazır, kurulum bekliyor. WhatsApp ve e-posta bağlantısını biz yapıyoruz, bize ulaşmanız yeterli.",
+    en: "Your reminders are ready and waiting on setup. We wire up WhatsApp and email for you, just get in touch.",
+    de: "Ihre Erinnerungen stehen bereit und warten auf die Einrichtung. WhatsApp und E-Mail richten wir für Sie ein, melden Sie sich einfach.",
   },
   "settings.ruleSendWindow": {
     tr: "Gönderim saatleri",

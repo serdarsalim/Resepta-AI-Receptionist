@@ -207,31 +207,46 @@ function NotificationRulesCard({
       {/* The channel decision, org-wide rather than per rule: per-rule
           channels would need the rules to become documents (see the storage
           note above), and one salon sending its confirmation by WhatsApp but
-          its reminder by email is a configuration nobody has asked for. */}
-      <div className="flex flex-wrap items-center gap-1.5 pb-3">
-        <span className="mr-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
-          {t("settings.sendChannel")}
-          <InfoTip text={t("settings.sendChannelHint")} />
-        </span>
-        {(["whatsapp", "email", "both"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => update({ messageChannel: option })}
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              org.messageChannel === option
-                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {option === "whatsapp"
-              ? t("channel.whatsapp")
-              : option === "email"
-                ? t("settings.ruleEmail")
-                : t("settings.channelBoth")}
-          </button>
-        ))}
-      </div>
+          its reminder by email is a configuration nobody has asked for.
+
+          Only WIRED channels are offered — the operator does the wiring, so a
+          pill for an unconfigured channel is a menu of things the salon
+          cannot order. One channel wired shows one pill (it says how messages
+          travel); "Both" exists only when there is actually a pair; nothing
+          wired hides the row, and the amber line below the table says whose
+          move it is. */}
+      {(waConnected || evolutionEnabled || Boolean(org.emailFrom)) && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-3">
+          <span className="mr-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+            {t("settings.sendChannel")}
+            <InfoTip text={t("settings.sendChannelHint")} />
+          </span>
+          {([
+            ...(waConnected || evolutionEnabled ? (["whatsapp"] as const) : []),
+            ...(org.emailFrom ? (["email"] as const) : []),
+            ...((waConnected || evolutionEnabled) && org.emailFrom
+              ? (["both"] as const)
+              : []),
+          ]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => update({ messageChannel: option })}
+              className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                org.messageChannel === option
+                  ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {option === "whatsapp"
+                ? t("channel.whatsapp")
+                : option === "email"
+                  ? t("settings.ruleEmail")
+                  : t("settings.channelBoth")}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="hidden items-center gap-3 pb-2 sm:flex">
         <div className={RULE_COLUMNS}>
