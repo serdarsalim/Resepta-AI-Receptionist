@@ -8,7 +8,7 @@ import {
   mutation,
 } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
-import { emailLaneConfigured, sendEmail } from "./lib/email";
+import { emailBodyHtml, emailLaneConfigured, sendEmail } from "./lib/email";
 import {
   fetchWaMedia,
   sendWaCloudImage,
@@ -413,18 +413,19 @@ export const sendAppointmentMessage = internalAction({
     // vocabulary as the composer and campaigns. The positional bodyPreview
     // survives only as the fallback for rows nobody has authored yet; it is a
     // transcription of Meta's approved string, not something the salon wrote.
+    const tokenValues = {
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      businessName: org.name,
+      appointmentAt: when,
+      staffName: staffRow?.name,
+      phone: customer.phone,
+      serviceName: appointment.items
+        ?.map((item: { name: string }) => item.name)
+        .join(", "),
+    };
     const body = contentTemplate?.body
-      ? renderTokens(contentTemplate.body, {
-          firstName: customer.firstName,
-          lastName: customer.lastName,
-          businessName: org.name,
-          appointmentAt: when,
-          staffName: staffRow?.name,
-          phone: customer.phone,
-          serviceName: appointment.items
-            ?.map((item: { name: string }) => item.name)
-            .join(", "),
-        })
+      ? renderTokens(contentTemplate.body, tokenValues)
       : contentTemplate?.bodyPreview
         ? contentTemplate.bodyPreview
             .replace(/\{\{1\}\}/g, customer.firstName)
@@ -554,20 +555,42 @@ export const sendAppointmentMessage = internalAction({
 
     // Email lane: rides alongside WhatsApp when the customer left an address
     // and the org set a From. No Meta approval applies to email, so the
-    // template's bodyPreview text sends as-is.
+    // authored body sends as-is.
     if (emailLaneConfigured() && customer.email && org.emailFrom && body) {
+      // The authored subject, rendered with the same tokens as the body. The
+      // "name, time" fallback covers rows without one — and an authored
+      // subject that renders to nothing for this customer falls through too,
+      // because an empty subject line reads as spam.
+      const subject =
+        (contentTemplate?.subject
+          ? renderTokens(contentTemplate.subject, tokenValues)
+          : "") || `${org.name}, ${when}`;
+      // Replies come back to US, not to whatever mailbox the From address
+      // belongs to — same wiring as email.sendToCustomer, and for the same
+      // reason: an answer that lands in a personal inbox never reaches the
+      // timeline.
+      const domain = process.env.RESEND_INBOUND_DOMAIN;
+      const replyTo =
+        org.inboundAddress && domain
+          ? `${org.inboundAddress}@${domain}`
+          : undefined;
       const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,
         appointmentId: appointment._id,
         kind: `email_${messageKind}`,
         body,
+        // On the row from the start, so the thread shows the real subject and
+        // a retry reuses it instead of rebuilding a different one.
+        emailSubject: subject,
+        emailFrom: org.emailFrom,
       });
       const emailResult = await sendEmail({
-        from: org.emailFrom,
+        from: `${org.name} <${org.emailFrom}>`,
         to: customer.email,
-        subject: `${org.name}, ${when}`,
-        html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+        subject,
+        html: emailBodyHtml(body),
+        replyTo,
       });
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId: emailMessageId,

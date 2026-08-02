@@ -40,7 +40,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
-import { sendEmail, emailLaneConfigured } from "./lib/email";
+import { emailBodyHtml, emailLaneConfigured, sendEmail } from "./lib/email";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
@@ -142,6 +142,9 @@ export const claimForRetry = internalMutation({
       to: customer.phone,
       email: customer.email,
       emailFrom: org.emailFrom,
+      // For the reply-to on a retried email — same wiring as the first
+      // attempt, so the customer's answer still lands in the timeline.
+      inboundAddress: org.inboundAddress,
       orgName: org.name,
       firstName: customer.firstName,
       accessToken: waAccount?.accessToken,
@@ -206,6 +209,7 @@ type RetryJob = {
   to: string;
   email?: string;
   emailFrom?: string;
+  inboundAddress?: string;
   orgName: string;
   firstName: string;
   accessToken?: string;
@@ -228,15 +232,21 @@ async function attempt(
     if (!emailLaneConfigured()) return { ok: false, reason: "email-not-configured" };
     if (!job.email || !job.emailFrom) return { ok: false, reason: "email-not-configured" };
     if (!job.body) return { ok: false, reason: "no-body" };
+    // Mirrors the first attempt exactly — display From, escaped body,
+    // reply-to into the app — so a retry is the same mail, later, not a
+    // slightly different one.
+    const domain = process.env.RESEND_INBOUND_DOMAIN;
     const sent = await sendEmail({
-      from: job.emailFrom,
+      from: `${job.orgName} <${job.emailFrom}>`,
       to: job.email,
       // The stored subject when there is one, so a retry lands in the same
       // thread rather than starting a second one. Older rows predate the
       // field and are rebuilt the way the first attempt built them.
       subject:
         job.emailSubject ?? (job.when ? `${job.orgName}, ${job.when}` : job.orgName),
-      html: `<p>${job.body.replace(/\n/g, "<br/>")}</p>`,
+      html: emailBodyHtml(job.body),
+      replyTo:
+        job.inboundAddress && domain ? `${job.inboundAddress}@${domain}` : undefined,
     });
     return sent.ok ? { ok: true } : { ok: false, reason: sent.reason };
   }

@@ -15,6 +15,18 @@ const ENDPOINT = "https://api.resend.com/emails";
 
 export type EmailSendResult = { ok: true } | { ok: false; reason: string };
 
+// Plain text → the one HTML shape customer mail uses. Escaped first so a name
+// with an ampersand in it cannot become markup, then newlines become breaks so
+// the mail reads the way it was written.
+export function emailBodyHtml(body: string): string {
+  const escaped = body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return `<p>${escaped.replace(/\n/g, "<br/>")}</p>`;
+}
+
 // Whether this deployment can send at all. Callers check it before writing a
 // queued message row, so a deployment with no key doesn't leave a trail of
 // sends that were never attempted.
