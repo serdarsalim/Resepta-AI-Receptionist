@@ -703,9 +703,13 @@ export default defineSchema({
     // Webhook resolution: metadata.phone_number_id → org.
     .index("by_phone_number_id", ["phoneNumberId"]),
 
-  // Meta-approved template registrations. metaName is the name approved in
-  // Meta Business Manager; body convention: {{1}} customer first name,
-  // {{2}} business name, {{3}} appointment date+time.
+  // The message a rule sends, one row per (kind, language). The row is the
+  // content source for EVERY channel: `body` is what the salon wrote, and it
+  // goes out as-is on the Evolution lane and by email. Only the Cloud API lane
+  // adds a gate on top — Meta approved an exact string, so that lane sends the
+  // registered template (metaName + positional params), never the authored
+  // body. Ported from Nudge's template engine, cut down to what a rule needs:
+  // no triggers, no audiences, no media library.
   waTemplates: defineTable({
     orgId: v.id("orgs"),
     kind: v.union(
@@ -717,14 +721,31 @@ export default defineSchema({
       // template serve every campaign they will ever run. See convex/campaigns.ts.
       v.literal("campaign"),
     ),
-    metaName: v.string(),
+    // What the salon wrote, in named tokens ([ad], [isletme], [tarih] —
+    // lib/renderTokens). Rendered at send time for the lanes Meta does not
+    // constrain. Optional because rows predate it; the send path falls back to
+    // bodyPreview's positional text until the owner writes one.
+    body: v.optional(v.string()),
+    // Email subject line, same token vocabulary. WhatsApp ignores it.
+    subject: v.optional(v.string()),
+    // ---- Cloud API lane only, plumbing below this line -----------------------
+    // The name approved in Meta Business Manager. Optional: an org on the shop
+    // phone or email alone never registers anything with Meta, and a required
+    // metaName would force a fake value into every such row.
+    metaName: v.optional(v.string()),
     language: v.string(),
+    // Meta's approval state, hand-tracked by the operator. Gates the Cloud
+    // send only — the same row's body still emails and sends via Evolution
+    // while this says "draft".
     status: v.union(
       v.literal("draft"),
       v.literal("pending"),
       v.literal("approved"),
       v.literal("rejected"),
     ),
+    // The approved string as registered with Meta ({{1}} first name, {{2}}
+    // business, {{3}} date+time). Kept as the legacy content fallback for rows
+    // whose owner has not authored a body yet.
     bodyPreview: v.optional(v.string()),
   }).index("by_org", ["orgId"]),
 

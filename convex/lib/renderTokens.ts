@@ -31,6 +31,8 @@ export type TokenValues = {
   appointmentAt?: string;
   staffName?: string;
   phone?: string;
+  // The appointment's line items, joined for display ("Saç kesimi, Fön").
+  serviceName?: string;
 };
 
 // Canonical token → the value it resolves to. Aliases map onto the same key,
@@ -58,6 +60,11 @@ const ALIASES: Record<string, keyof TokenValues> = {
   personel: "staffName",
   phone: "phone",
   telefon: "phone",
+  // Service — the same word the voice agent's variables use, because a token
+  // vocabulary that differs per screen is two vocabularies.
+  service: "serviceName",
+  hizmet: "serviceName",
+  leistung: "serviceName",
 };
 
 // What the editor offers. Ordered by how often a salon actually reaches for
@@ -66,6 +73,7 @@ export const TOKEN_HINTS = [
   "[ad]",
   "[isletme]",
   "[tarih]",
+  "[hizmet]",
   "[soyad]",
   "[personel]",
   "[telefon]",

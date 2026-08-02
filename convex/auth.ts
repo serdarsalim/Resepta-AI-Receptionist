@@ -156,15 +156,20 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         sendBookingConfirmation: true,
       });
 
-      // Seed the two template registrations every org needs, as drafts with
-      // suggested Meta names — Settings is where the owner marks them
-      // approved once Meta approves them.
+      // Seed the template rows every org needs, as drafts with suggested Meta
+      // names and a starter body the owner can rewrite. The authored body
+      // (named tokens) is what emails and the shop phone send from day one;
+      // bodyPreview is the positional string to hand Meta if the org ever
+      // takes a Cloud number. Neither body mentions buttons: the Cloud lane
+      // has real ones and the shop-phone lane appends its own reply hint.
       await db.insert("waTemplates", {
         orgId,
         kind: "confirmation",
         metaName: "randevu_onay",
         language: "tr",
         status: "draft",
+        body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.",
+        subject: "Randevunuz oluşturuldu",
         bodyPreview:
           "Merhaba {{1}}! {{2}} randevunuz {{3}} için oluşturuldu. Onaylamak için butona dokunun.",
       });
@@ -174,6 +179,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         metaName: "randevu_hatirlatma",
         language: "tr",
         status: "draft",
+        body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].",
+        subject: "Randevu hatırlatması",
         bodyPreview:
           "Merhaba {{1}}! {{2}} randevunuz {{3}}. Gelemeyecekseniz lütfen iptal butonunu kullanın.",
       });
@@ -183,6 +190,8 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         metaName: "randevu_telafi",
         language: "tr",
         status: "draft",
+        body: "Merhaba [ad]! [isletme] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+        subject: "Sizi özledik!",
         bodyPreview:
           "Merhaba {{1}}! {{2}} olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
       });

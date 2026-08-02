@@ -4,6 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 import { recordActivity } from "./lib/activity";
+import { loadEvolutionCreds } from "./lib/waLane";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -107,12 +108,19 @@ export const current = query({
           v.literal("winback"),
           v.literal("campaign"),
         ),
-        metaName: v.string(),
+        body: v.optional(v.string()),
+        subject: v.optional(v.string()),
+        metaName: v.optional(v.string()),
         language: v.string(),
         status: templateStatus,
         bodyPreview: v.optional(v.string()),
       }),
     ),
+    // Whether the shop-phone lane is provisioned for this org (instance name
+    // plus operator-installed credentials). Presence only, never the
+    // credentials — the templates card uses it to say which number a message
+    // will actually leave from.
+    evolutionEnabled: v.boolean(),
   }),
   handler: async (ctx) => {
     const { user, orgId, role } = await requireOrg(ctx);
@@ -173,11 +181,16 @@ export const current = query({
       templates: templates.map((t) => ({
         _id: t._id,
         kind: t.kind,
+        body: t.body,
+        subject: t.subject,
         metaName: t.metaName,
         language: t.language,
         status: t.status,
         bodyPreview: t.bodyPreview,
       })),
+      evolutionEnabled: Boolean(
+        await loadEvolutionCreds(ctx, orgId, org.evolutionInstance),
+      ),
     };
   },
 });
@@ -444,6 +457,12 @@ export const ensureCampaignTemplate = mutation({
 export const updateTemplate = mutation({
   args: {
     templateId: v.id("waTemplates"),
+    // The authored message text and the email subject. An empty string CLEARS
+    // the field — deleting everything in the editor is how an owner says
+    // "back to nothing", and keeping stale text instead would send words they
+    // watched themselves remove.
+    body: v.optional(v.string()),
+    subject: v.optional(v.string()),
     metaName: v.optional(v.string()),
     language: v.optional(v.string()),
     status: v.optional(templateStatus),
@@ -454,6 +473,8 @@ export const updateTemplate = mutation({
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
+    if (args.body !== undefined) patch.body = args.body.trim() || undefined;
+    if (args.subject !== undefined) patch.subject = args.subject.trim() || undefined;
     if (args.metaName !== undefined && args.metaName.trim()) {
       patch.metaName = args.metaName.trim();
     }

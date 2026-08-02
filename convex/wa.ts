@@ -292,7 +292,7 @@ export const loadSendContext = internalQuery({
   handler: async (ctx, args) => {
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment) return null;
-    const [customer, org, waAccount, templates] = await Promise.all([
+    const [customer, org, waAccount, templates, staffRow] = await Promise.all([
       ctx.db.get(appointment.customerId),
       ctx.db.get(appointment.orgId),
       ctx.db
@@ -303,11 +303,14 @@ export const loadSendContext = internalQuery({
         .query("waTemplates")
         .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
         .collect(),
+      // For the [personel] token. Null when nobody is assigned, and the token
+      // renders as nothing — renderTokens' whitespace cleanup owns that case.
+      appointment.staffId ? ctx.db.get(appointment.staffId) : null,
     ]);
     const evolution = org
       ? await loadEvolutionCreds(ctx, appointment.orgId, org.evolutionInstance)
       : null;
-    return { appointment, customer, org, waAccount, templates, evolution };
+    return { appointment, customer, org, waAccount, templates, evolution, staffRow };
   },
 });
 
@@ -330,7 +333,8 @@ export const sendAppointmentMessage = internalAction({
       appointmentId: args.appointmentId,
     });
     if (!context) return null;
-    const { appointment, customer, org, waAccount, templates, evolution } = context;
+    const { appointment, customer, org, waAccount, templates, evolution, staffRow } =
+      context;
     if (!customer || !org) return null;
 
     // Status gate per kind: confirmations/reminders ride live appointments; a
@@ -360,8 +364,13 @@ export const sendAppointmentMessage = internalAction({
       (t: { kind: string; language: string }) =>
         t.kind === args.kind && t.language === language,
     );
-    const waTemplate =
-      contentTemplate?.status === "approved" ? contentTemplate : undefined;
+    // The Cloud lane needs both halves of the Meta registration: the approved
+    // status AND the name to send under. metaName went optional the day orgs
+    // without a Cloud number stopped being forced to invent one.
+    const cloudTemplate =
+      contentTemplate && contentTemplate.status === "approved" && contentTemplate.metaName
+        ? { metaName: contentTemplate.metaName, language: contentTemplate.language }
+        : undefined;
 
     const fail = async (reason: string) => {
       if (
@@ -400,12 +409,28 @@ export const sendAppointmentMessage = internalAction({
 
     const when = formatAppointmentTime(appointment.startAt, org.timezone, language);
     const bodyParams = [customer.firstName, org.name, when];
-    const body = contentTemplate?.bodyPreview
-      ? contentTemplate.bodyPreview
-          .replace(/\{\{1\}\}/g, customer.firstName)
-          .replace(/\{\{2\}\}/g, org.name)
-          .replace(/\{\{3\}\}/g, when)
-      : undefined;
+    // The authored body, when the owner has written one — named tokens, same
+    // vocabulary as the composer and campaigns. The positional bodyPreview
+    // survives only as the fallback for rows nobody has authored yet; it is a
+    // transcription of Meta's approved string, not something the salon wrote.
+    const body = contentTemplate?.body
+      ? renderTokens(contentTemplate.body, {
+          firstName: customer.firstName,
+          lastName: customer.lastName,
+          businessName: org.name,
+          appointmentAt: when,
+          staffName: staffRow?.name,
+          phone: customer.phone,
+          serviceName: appointment.items
+            ?.map((item: { name: string }) => item.name)
+            .join(", "),
+        })
+      : contentTemplate?.bodyPreview
+        ? contentTemplate.bodyPreview
+            .replace(/\{\{1\}\}/g, customer.firstName)
+            .replace(/\{\{2\}\}/g, org.name)
+            .replace(/\{\{3\}\}/g, when)
+        : undefined;
 
     // ---- Demo org: nothing leaves the building.
     //
@@ -451,9 +476,16 @@ export const sendAppointmentMessage = internalAction({
 
     if (lane === "evolution" && evolution) {
       // No Meta template here and none needed — this lane has no approval to
-      // satisfy. What it does need is the words the buttons would have been:
-      // Baileys never delivers quick replies, so the customer is told which
-      // words to type, and webhook.ts already understands every one of them.
+      // satisfy. It does need WORDS: a row whose owner never authored a body
+      // and whose bodyPreview is empty has nothing to say, and before this
+      // guard the customer received the string "undefined".
+      if (!body) {
+        await fail(`no-template-text-${language}`);
+        return null;
+      }
+      // What the buttons would have been, in words: Baileys never delivers
+      // quick replies, so the customer is told which words to type, and
+      // webhook.ts already understands every one of them.
       const text = `${body}\n\n${evolutionReplyHint(language)}`;
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
@@ -483,7 +515,7 @@ export const sendAppointmentMessage = internalAction({
       }
     } else if (!waAccount) {
       await fail("wa-not-configured");
-    } else if (!waTemplate) {
+    } else if (!cloudTemplate) {
       await fail(`no-approved-template-${language}`);
     } else {
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
@@ -491,7 +523,7 @@ export const sendAppointmentMessage = internalAction({
         customerId: customer._id,
         appointmentId: appointment._id,
         kind: messageKind,
-        templateName: waTemplate.metaName,
+        templateName: cloudTemplate.metaName,
         templateParams: bodyParams,
         body,
       });
@@ -499,8 +531,8 @@ export const sendAppointmentMessage = internalAction({
         accessToken: waAccount.accessToken,
         phoneNumberId: waAccount.phoneNumberId,
         to: customer.phone,
-        templateName: waTemplate.metaName,
-        languageCode: waTemplate.language,
+        templateName: cloudTemplate.metaName,
+        languageCode: cloudTemplate.language,
         bodyParams,
         buttons: [
           { index: 0, payload: `confirm:${appointment._id}` },

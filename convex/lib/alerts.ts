@@ -87,6 +87,7 @@ export type AlertTemplate =
   | "inboundConfirmed"
   | "inboundCancelled"
   | "failedNoTemplate"
+  | "failedNoText"
   | "failedOther"
   | "failedCalendarCancel"
   | "newContact";
@@ -97,6 +98,7 @@ export const alertTemplateValidator = v.union(
   v.literal("inboundConfirmed"),
   v.literal("inboundCancelled"),
   v.literal("failedNoTemplate"),
+  v.literal("failedNoText"),
   v.literal("failedOther"),
   v.literal("failedCalendarCancel"),
   v.literal("newContact"),
@@ -171,6 +173,21 @@ const ALERT_COPY: Record<
       tr: "Kişinin dilinde onaylı bir şablon yok, bu yüzden hiçbir şey gönderilmedi. Şablonu ayarlardan ekleyip Meta onayına gönderin.",
       en: "There is no approved template in the contact's language, so nothing went out. Add the template in settings and send it to Meta for approval.",
       de: "In der Sprache des Kunden gibt es keine freigegebene Vorlage, deshalb ging nichts raus. Legen Sie die Vorlage in den Einstellungen an und reichen Sie sie bei Meta zur Freigabe ein.",
+    },
+  },
+  // The shop-phone sibling of failedNoTemplate: the lane needs no approval,
+  // but it does need the owner to have written the message text.
+  failedNoText: {
+    kind: "failed-send",
+    subject: {
+      tr: "{who} kişisine mesaj gitmedi",
+      en: "The message to {who} did not send",
+      de: "Die Nachricht an {who} ging nicht raus",
+    },
+    body: {
+      tr: "Kişinin dilinde yazılmış bir mesaj metni yok, bu yüzden hiçbir şey gönderilmedi. Metni Hatırlatmalar sayfasından yazabilirsiniz.",
+      en: "There is no message text written in the contact's language, so nothing went out. You can write it on the Reminders page.",
+      de: "In der Sprache des Kunden ist kein Nachrichtentext hinterlegt, deshalb ging nichts raus. Den Text können Sie auf der Seite Erinnerungen schreiben.",
     },
   },
   failedOther: {
@@ -449,7 +466,11 @@ const STEADY_STATE_FAILURES = new Set([
 // too — it depends on when THAT customer last wrote, so it belongs in THAT
 // thread.
 export function isOrgSetupFailure(reason: string): boolean {
-  return reason === "wa-not-configured" || reason.startsWith("no-approved-template");
+  return (
+    reason === "wa-not-configured" ||
+    reason.startsWith("no-approved-template") ||
+    reason.startsWith("no-template-text")
+  );
 }
 
 // Called ONLY when a send has terminally failed — never on a transient failure
@@ -462,18 +483,24 @@ export async function alertFailedSend(
 ) {
   if (STEADY_STATE_FAILURES.has(args.reason)) return;
   const missingTemplate = args.reason.startsWith("no-approved-template");
+  const missingText = args.reason.startsWith("no-template-text");
   await queueOrgAlert(ctx, {
     orgId: args.orgId,
-    template: missingTemplate ? "failedNoTemplate" : "failedOther",
+    template: missingTemplate
+      ? "failedNoTemplate"
+      : missingText
+        ? "failedNoText"
+        : "failedOther",
     who: args.name,
     // The provider's own text only reaches the reader on the generic template;
-    // the missing-template case has a sentence that says what to do instead.
-    // A dead letter says so explicitly — "we tried and gave up" is a different
-    // thing to be told than "this was refused".
-    detail: missingTemplate
-      ? undefined
-      : args.deadLettered
-        ? `${args.reason} (${MAX_ATTEMPTS} attempts)`
-        : args.reason,
+    // the two missing-content cases have a sentence that says what to do
+    // instead. A dead letter says so explicitly — "we tried and gave up" is a
+    // different thing to be told than "this was refused".
+    detail:
+      missingTemplate || missingText
+        ? undefined
+        : args.deadLettered
+          ? `${args.reason} (${MAX_ATTEMPTS} attempts)`
+          : args.reason,
   });
 }
