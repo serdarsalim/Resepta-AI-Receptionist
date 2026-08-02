@@ -820,7 +820,24 @@ function RulesCard({
       case "cancellation":
         return <>{t("settings.ruleWhenCancelled")}</>;
       case "before_start":
-        return <>{formatReminderOffset(rule.offsetHours, language)}</>;
+        return (
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={168}
+              className="w-16"
+              defaultValue={rule.offsetHours}
+              onBlur={(e) => {
+                const hours = Number(e.target.value);
+                if (Number.isFinite(hours) && hours > 0) {
+                  void updateRule({ ruleId: rule._id, offsetHours: hours });
+                }
+              }}
+            />
+            {t("settings.ruleHoursBefore")}
+          </span>
+        );
       case "after_end":
         return (
           <span className="flex items-center gap-1.5">

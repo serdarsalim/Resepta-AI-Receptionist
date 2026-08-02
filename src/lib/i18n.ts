@@ -787,6 +787,11 @@ const dictionary = {
     en: "hours after the appointment",
     de: "Stunden nach dem Termin",
   },
+  "settings.ruleHoursBefore": {
+    tr: "saat önce",
+    en: "hours before",
+    de: "Stunden vorher",
+  },
   // The follow-up needs the visit marked done before it can count from the
   // end — the hourly sweep does that the next day, a same-day nudge needs the
   // owner to complete the appointment themselves.

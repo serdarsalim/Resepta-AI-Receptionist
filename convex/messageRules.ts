@@ -131,11 +131,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
 > = {
   tr: {
     confirmation: {
-      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.",
+      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu ([hizmet]). Sorunuz varsa bu mesajı yanıtlamanız yeterli.",
       subject: "Randevunuz oluşturuldu",
     },
     reminder: {
-      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].",
+      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih] ([hizmet]). Gelemeyecekseniz bu mesajı yanıtlamanız yeterli.",
       subject: "Randevu hatırlatması",
     },
     winback: {
@@ -153,11 +153,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   en: {
     confirmation: {
-      body: "Hello [name]! Your appointment with [business] is booked for [date].",
+      body: "Hello [name]! Your appointment at [business] is booked for [date] ([service]). Any questions? Just reply to this message.",
       subject: "Your appointment is booked",
     },
     reminder: {
-      body: "Hi [name]! A reminder from [business]: your appointment is on [date].",
+      body: "Hi [name]! A reminder from [business]: your appointment is on [date] ([service]). If anything changes, just reply to this message.",
       subject: "Appointment reminder",
     },
     winback: {
@@ -175,11 +175,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   de: {
     confirmation: {
-      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht.",
+      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht ([leistung]). Bei Fragen antworten Sie einfach auf diese Nachricht.",
       subject: "Ihr Termin ist gebucht",
     },
     reminder: {
-      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin: [datum].",
+      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin am [datum] ([leistung]). Wenn etwas dazwischenkommt, antworten Sie einfach auf diese Nachricht.",
       subject: "Terminerinnerung",
     },
     winback: {
@@ -197,10 +197,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
 };
 
-// The two rules every new org starts with: a confirmation and one reminder a
-// day ahead. Deliberately trimmed from the legacy three — the second reminder
-// and the winback are one + chip away, and a default an owner never chose is
-// a message their customers never chose either.
+// What a new org starts with: the full lifecycle a well-run salon actually
+// wants — confirmation at booking, a day-before and a two-hour reminder, a
+// cancellation notice, and the win-back two weeks after a no-show. Only the
+// follow-up stays behind a + chip, because "leave us a review" is a voice a
+// business should choose, not inherit.
 //
 // Takes the writer rather than a ctx because the founding sign-in (auth.ts)
 // holds a bare db, not a MutationCtx.
@@ -209,18 +210,16 @@ export async function seedDefaultRules(
   orgId: Id<"orgs">,
   channel: "whatsapp" | "email" | "both" = "both",
 ): Promise<void> {
-  await db.insert("messageRules", {
-    orgId,
-    trigger: "booking",
-    offsetHours: 0,
-    channel,
-  });
-  await db.insert("messageRules", {
-    orgId,
-    trigger: "before_start",
-    offsetHours: 24,
-    channel,
-  });
+  const defaults: { trigger: Doc<"messageRules">["trigger"]; offsetHours: number }[] = [
+    { trigger: "booking", offsetHours: 0 },
+    { trigger: "before_start", offsetHours: 24 },
+    { trigger: "before_start", offsetHours: 2 },
+    { trigger: "cancellation", offsetHours: 0 },
+    { trigger: "no_show", offsetHours: 14 * 24 },
+  ];
+  for (const rule of defaults) {
+    await db.insert("messageRules", { orgId, channel, ...rule });
+  }
   await db.patch(orgId, { rulesMigratedAt: Date.now() });
 }
 

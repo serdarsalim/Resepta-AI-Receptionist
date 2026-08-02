@@ -185,22 +185,10 @@ export const provision = internalMutation({
       winbackEnabled: true,
       winbackDaysAfter: 14,
     });
-    // The demo gets the full spread as rules — the default two, plus the 2h
-    // reminder and the winback the legacy fields above describe. The fields
-    // stay only as documentation of what the demo shows; the rows send.
+    // The stock rules cover the demo's whole story now — reminders and the
+    // winback included. The legacy fields above stay only as documentation of
+    // what the demo shows; the rows send.
     await seedDefaultRules(ctx.db, orgId);
-    await ctx.db.insert("messageRules", {
-      orgId,
-      trigger: "before_start",
-      offsetHours: 2,
-      channel: "both",
-    });
-    await ctx.db.insert("messageRules", {
-      orgId,
-      trigger: "no_show",
-      offsetHours: 14 * 24,
-      channel: "both",
-    });
     await ctx.scheduler.runAfter(0, internal.devSeed.seed, { orgId, force: true });
     return orgId;
   },

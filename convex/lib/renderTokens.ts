@@ -117,6 +117,10 @@ export function renderTokens(body: string, values: TokenValues): string {
 
   return (
     filled
+      // A parenthetical whose token resolved to nothing is an empty "()" —
+      // the stock texts put the service list in one, and an appointment
+      // without line items must not advertise the fact.
+      .replace(/\(\s*\)/g, "")
       // A token that resolved to nothing leaves a double space behind, and
       // "Merhaba  ," is the tell that a machine wrote this.
       .replace(/[ \t]{2,}/g, " ")
