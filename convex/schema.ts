@@ -140,6 +140,12 @@ export default defineSchema({
     // Eurozone alone breaks country → currency, and an org that bills in a
     // currency other than the one on its address is not an error to correct.
     currency: v.optional(v.string()),
+    // ── LEGACY message-rule fields ─────────────────────────────────────────
+    // Everything from here to removedRules is superseded by the messageRules
+    // table once rulesMigratedAt below is stamped. Kept readable — not the
+    // source of truth — so orgs keep sending between the deploy and the
+    // migration run, and so the migration has something to read.
+    //
     // Hours before startAt to send a reminder. Default [24, 2] applied in code
     // when unset so existing orgs pick up default changes.
     //
@@ -169,6 +175,13 @@ export default defineSchema({
     // the two singleton rules could be switched off but never taken off the
     // list, which made their column behave differently from every other row.
     removedRules: v.optional(v.array(v.string())),
+    // When this org's message rules were lifted out of the legacy fields above
+    // into messageRules rows. Set means the table is the source of truth;
+    // unset means the legacy fields still drive sends. New orgs are stamped at
+    // creation. The marker exists because "no rules rows" is ambiguous without
+    // it — an owner who deleted every rule and an org the migration has not
+    // reached yet would otherwise look identical.
+    rulesMigratedAt: v.optional(v.number()),
     // Org-scoped secret in the cal.com webhook URL (?token=...) — how an
     // inbound booking event resolves to its org. Generated in Settings.
     calcomWebhookToken: v.optional(v.string()),
@@ -698,7 +711,16 @@ export default defineSchema({
     // Reminder offsets (hours) already dispatched for this appointment. The
     // cron stamps an offset here BEFORE scheduling the send — that ordering is
     // the double-send guard across overlapping ticks.
+    //
+    // LEGACY key for that guard: rules are documents now and sentRuleIds below
+    // is where new sends stamp. Still read as a fallback so an appointment
+    // half-reminded under the hour key does not get the same reminder twice
+    // from its migrated rule. Never written anymore.
     reminderSentOffsets: v.optional(v.array(v.number())),
+    // Message rules already dispatched for this appointment — the double-send
+    // guard, keyed by rule id now that a rule is a document rather than an
+    // hour. Same stamping order as above: BEFORE scheduling the send.
+    sentRuleIds: v.optional(v.array(v.id("messageRules"))),
     // When this appointment next wants to send the customer something —
     // the earliest unsent reminder while it is live, or the winback once it
     // ends as a no_show. ONE field for both because the cron's question is the
@@ -762,6 +784,45 @@ export default defineSchema({
     // Webhook resolution: metadata.phone_number_id → org.
     .index("by_phone_number_id", ["phoneNumberId"]),
 
+  // One automated message the org sends, as a row: WHEN it fires (an anchor
+  // plus an offset), on WHICH channel, and — via waTemplates.ruleId — what it
+  // says. Confirmation, each reminder, the follow-up, the cancellation notice
+  // and the win-back are all the same kind of thing here; how many rows hang
+  // off each trigger is the salon's business, not the schema's.
+  //
+  // This replaces the org-field trio (sendBookingConfirmation,
+  // reminderOffsetsHours + pausedReminderHours, winbackEnabled) for orgs with
+  // rulesMigratedAt set. The old fields stay readable so an undeployed org
+  // keeps sending during the rollout; they are never the source of truth once
+  // the marker is stamped.
+  messageRules: defineTable({
+    orgId: v.id("orgs"),
+    // The anchor. booking and cancellation fire on the event itself, from the
+    // mutation that causes it; the other three are scheduled by the cron
+    // through appointments.nextMessageAt (lib/reminderSchedule.ts).
+    trigger: v.union(
+      v.literal("booking"),
+      v.literal("before_start"),
+      v.literal("after_end"),
+      v.literal("cancellation"),
+      v.literal("no_show"),
+    ),
+    // Hours from the anchor: before startAt, after startAt+duration, after the
+    // no-show. 0 for the two event triggers — they have no delay to express.
+    offsetHours: v.number(),
+    // Per RULE, not per org: the 24h reminder can ride WhatsApp while the
+    // review ask goes by email. org.messageChannel survives only as the
+    // default stamped onto new rules.
+    channel: v.union(
+      v.literal("whatsapp"),
+      v.literal("email"),
+      v.literal("both"),
+    ),
+    // Exists-but-off. Presence is the row itself; deleting the row is the
+    // other control, and the two are never one switch again.
+    paused: v.optional(v.boolean()),
+  }).index("by_org", ["orgId"]),
+
   // The message a rule sends, one row per (kind, language). The row is the
   // content source for EVERY channel: `body` is what the salon wrote, and it
   // goes out as-is on the Evolution lane and by email. Only the Cloud API lane
@@ -775,11 +836,22 @@ export default defineSchema({
       v.literal("confirmation"),
       v.literal("reminder"),
       v.literal("winback"),
+      // After the appointment ends, on completed only: the review ask, the
+      // rebooking nudge.
+      v.literal("followup"),
+      // When the appointment is cancelled.
+      v.literal("cancellation"),
       // Campaigns. Its {{3}} is NOT an appointment time — it is whatever line
       // the salon types for that campaign, which is what makes one approved
       // template serve every campaign they will ever run. See convex/campaigns.ts.
       v.literal("campaign"),
     ),
+    // The rule this row words, when it words one specifically. Content
+    // resolution at send time is (ruleId, language) first, then (kind,
+    // language) with no ruleId — so the generic reminder text is the fallback
+    // for every reminder row the owner has not given its own wording, which is
+    // exactly the "the 24h and 2h reminders say different things" feature.
+    ruleId: v.optional(v.id("messageRules")),
     // What the salon wrote, in named tokens ([ad], [isletme], [tarih] —
     // lib/renderTokens). Rendered at send time for the lanes Meta does not
     // constrain. Optional because rows predate it; the send path falls back to
