@@ -34,6 +34,10 @@ export type TokenValues = {
   email?: string;
   // The appointment's line items, one bullet line each ("• Saç kesimi").
   serviceName?: string;
+  // The same lines with each service's price appended
+  // ("• Saç kesimi — ₺350,00"). Two tokens instead of a setting: the owner
+  // picks the receipt look or the plain look per message.
+  servicePriceList?: string;
   // The appointment's total, already formatted in the org's currency and the
   // message language ("₺410,00"). Opt-in by design: a variable the owner
   // types, never a toggle that stamps prices onto every message.
@@ -83,6 +87,9 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   service: "serviceName",
   hizmet: "serviceName",
   leistung: "serviceName",
+  pricelist: "servicePriceList",
+  fiyatlistesi: "servicePriceList",
+  preisliste: "servicePriceList",
   // Money
   price: "price",
   fiyat: "price",

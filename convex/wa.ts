@@ -517,13 +517,20 @@ export const sendAppointmentMessage = internalAction({
     const totalMinor = (
       (appointment.items ?? []) as { price?: number }[]
     ).reduce((sum, item) => sum + (item.price ?? 0), 0);
-    const price =
-      totalMinor > 0
-        ? new Intl.NumberFormat(language, {
-            style: "currency",
-            currency: org.currency ?? "TRY",
-          }).format(totalMinor / 100)
-        : undefined;
+    const formatMoney = (minor: number) =>
+      new Intl.NumberFormat(language, {
+        style: "currency",
+        currency: org.currency ?? "TRY",
+      }).format(minor / 100);
+    const price = totalMinor > 0 ? formatMoney(totalMinor) : undefined;
+    // [fiyatlistesi] — the receipt look. An unpriced item keeps its bullet
+    // without a dangling dash.
+    const servicePriceList = appointment.items
+      ?.map(
+        (item: { name: string; price?: number }) =>
+          `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
+      )
+      .join("\n");
     const tokenValues = {
       firstName: customer.firstName,
       lastName: customer.lastName,
@@ -537,6 +544,7 @@ export const sendAppointmentMessage = internalAction({
       serviceName: appointment.items
         ?.map((item: { name: string }) => `• ${item.name}`)
         .join("\n"),
+      servicePriceList,
       price,
       custom: customValues,
     };
@@ -717,6 +725,7 @@ export const sendAppointmentMessage = internalAction({
         ? renderTokens(contentTemplate.bodyHtml, {
             ...tokenValues,
             serviceName: tokenValues.serviceName?.replace(/\n/g, "<br/>"),
+            servicePriceList: tokenValues.servicePriceList?.replace(/\n/g, "<br/>"),
           })
         : emailBodyHtml(body);
       // Replies come back to US, not to whatever mailbox the From address

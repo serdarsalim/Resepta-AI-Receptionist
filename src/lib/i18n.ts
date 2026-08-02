@@ -828,6 +828,11 @@ const dictionary = {
   "vars.date": { tr: "Randevu tarihi", en: "Appointment date", de: "Termindatum" },
   "vars.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
   "vars.price": { tr: "Toplam tutar", en: "Total price", de: "Gesamtpreis" },
+  "vars.priceList": {
+    tr: "Fiyatlı hizmet listesi",
+    en: "Services with prices",
+    de: "Leistungen mit Preisen",
+  },
   "settings.statSent": { tr: "Gönderim", en: "Sent", de: "Gesendet" },
   "settings.statOpens": { tr: "Açılma", en: "Opens", de: "Öffnungen" },
   "settings.statReplies": { tr: "Yanıt", en: "Replies", de: "Antworten" },

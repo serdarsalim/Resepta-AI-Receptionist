@@ -599,12 +599,19 @@ function RuleEditor({
     for (const field of contactFields) {
       custom[field.key] = (contactId && picked?.custom?.[field.key]) || "";
     }
-    // Same shape the send path produces for [fiyat] — org currency, message
-    // language, a believable number.
-    const price = new Intl.NumberFormat(orgLanguage, {
-      style: "currency",
-      currency: orgCurrency,
-    }).format(410);
+    // Same shapes the send path produces for [fiyat] and [fiyatlistesi] —
+    // org currency, message language, believable numbers.
+    const formatMoney = (amount: number) =>
+      new Intl.NumberFormat(orgLanguage, {
+        style: "currency",
+        currency: orgCurrency,
+      }).format(amount);
+    const price = formatMoney(410);
+    const samplePrices = [350, 60];
+    const servicePriceList = t("settings.previewSampleService")
+      .split("\n")
+      .map((line, i) => `${line} — ${formatMoney(samplePrices[i] ?? 100)}`)
+      .join("\n");
     if (contactId && picked) {
       return {
         firstName: picked.firstName,
@@ -615,6 +622,7 @@ function RuleEditor({
         appointmentAt,
         staffName: t("settings.previewSampleStaff"),
         serviceName: t("settings.previewSampleService"),
+        servicePriceList,
         price,
         custom,
       };
@@ -625,6 +633,7 @@ function RuleEditor({
       appointmentAt,
       staffName: t("settings.previewSampleStaff"),
       serviceName: t("settings.previewSampleService"),
+      servicePriceList,
       price,
       custom,
     };
@@ -665,6 +674,7 @@ function RuleEditor({
         renderTokens(liveHtml, {
           ...previewValues,
           serviceName: previewValues.serviceName?.replace(/\n/g, "<br/>"),
+          servicePriceList: previewValues.servicePriceList?.replace(/\n/g, "<br/>"),
         }),
       )
     : "";
@@ -678,8 +688,10 @@ function RuleEditor({
         {/* Subject first — that is the order an email reads in. Placeholder
             instead of a label so the input gets the full row width. */}
         {emailEnabled && (
+          // h-10 matches the preview header row beside it, so the editor box
+          // and the preview paper start on the same line.
           <input
-            className="w-full"
+            className="h-10 w-full"
             value={subject}
             placeholder={t("settings.templateSubject")}
             aria-label={t("settings.templateSubject")}
@@ -761,7 +773,7 @@ function RuleEditor({
           height — the two panes read as one aligned unit, not a tall form
           beside a floating card. */}
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex h-10 items-center justify-between gap-2">
           <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
           {/* Typeahead over real contacts. Picking one swaps every token to
               that person's record; the × goes back to samples. */}
@@ -813,7 +825,10 @@ function RuleEditor({
             )}
           </span>
         </div>
-        <div className="flex flex-1 flex-col gap-3 rounded-lg bg-[var(--muted-bg)] p-3">
+        {/* No framing surface around the previews — the paper's top edge sits
+            exactly where the editor box's does, which is what makes the two
+            columns read as one aligned pair. */}
+        <div className="flex flex-1 flex-col gap-3">
           {/* The email as the customer's mail client shows it: white paper no
               matter the app theme, subject on top, the authored HTML below.
               flex-1 so the paper runs the full height beside the editor. */}

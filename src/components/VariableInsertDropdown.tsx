@@ -26,6 +26,7 @@ export function VariableInsertDropdown({
     { key: "isletme", label: t("vars.business") },
     { key: "tarih", label: t("vars.date") },
     { key: "hizmet", label: t("vars.service") },
+    { key: "fiyatlistesi", label: t("vars.priceList") },
     { key: "fiyat", label: t("vars.price") },
     { key: "personel", label: t("vars.staff") },
   ];
