@@ -293,3 +293,50 @@ thead {
     transform: translateY(0);
   }
 }
+
+/* Email surfaces render as white "paper" regardless of app theme. Sent emails
+   carry inline colors (e.g. color: rgb(0,0,0)) that assume a mail client's
+   white background — on a dark surface those runs turn black-on-black.
+   Ported from Nudge with the WYSIWYG editor. */
+.email-paper {
+  background: #fff;
+  color: #111;
+}
+.email-paper a {
+  color: #2563eb;
+}
+.email-paper p.is-editor-empty:first-child::before {
+  color: #9ca3af;
+}
+
+/* WYSIWYG email body editor (EmailBodyEditor). The email's own inline styles
+   do most of the styling; these are baseline defaults so untouched markup
+   still reads like an email instead of unstyled prose. */
+.email-body-editor p {
+  margin: 0.5em 0;
+}
+.email-body-editor a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.email-body-editor ul,
+.email-body-editor ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.email-body-editor ul { list-style: disc; }
+.email-body-editor ol { list-style: decimal; }
+.email-body-editor img {
+  display: inline-block;
+  max-width: 100%;
+}
+.email-body-editor table {
+  border-collapse: collapse;
+}
+.email-body-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

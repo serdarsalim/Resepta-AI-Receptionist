@@ -844,6 +844,24 @@ const dictionary = {
     de: "Keine passende Variable.",
   },
   "editor.insertEmoji": { tr: "Emoji ekle", en: "Insert emoji", de: "Emoji einfügen" },
+  "editor.bold": { tr: "Kalın", en: "Bold", de: "Fett" },
+  "editor.italic": { tr: "İtalik", en: "Italic", de: "Kursiv" },
+  "editor.underline": { tr: "Altı çizili", en: "Underline", de: "Unterstrichen" },
+  "editor.bulletList": { tr: "Madde listesi", en: "Bullet list", de: "Aufzählung" },
+  "editor.numberedList": {
+    tr: "Numaralı liste",
+    en: "Numbered list",
+    de: "Nummerierte Liste",
+  },
+  "editor.link": { tr: "Bağlantı ekle", en: "Add / edit link", de: "Link einfügen" },
+  "editor.linkPrompt": { tr: "Bağlantı adresi", en: "Link URL", de: "Link-Adresse" },
+  "editor.textColor": { tr: "Yazı rengi", en: "Text color", de: "Textfarbe" },
+  "editor.clearColor": { tr: "Rengi kaldır", en: "Clear color", de: "Farbe entfernen" },
+  "editor.clearFormatting": {
+    tr: "Biçimi temizle",
+    en: "Clear formatting",
+    de: "Formatierung entfernen",
+  },
   // The preview's contact picker: type a real customer's name and the tokens
   // fill from their actual record instead of sample values.
   "settings.previewTryContact": {

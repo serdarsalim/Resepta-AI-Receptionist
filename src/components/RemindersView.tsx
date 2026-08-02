@@ -8,7 +8,9 @@ import type { Id } from "../../convex/_generated/dataModel";
 // renderer the send path uses, or the preview becomes a second opinion.
 import { renderTokens } from "../../convex/lib/renderTokens";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
+import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
@@ -62,6 +64,7 @@ type TemplateRow = {
   status: string;
   metaName?: string;
   body?: string;
+  bodyHtml?: string;
   subject?: string;
   bodyPreview?: string;
   emailSentCount?: number;
@@ -439,6 +442,36 @@ function NotificationRulesCard({
 // live preview. The legacy card above renders only for orgs the migration has
 // not reached and dies with the legacy fields.
 
+// The two projections of one authored email. plainToHtml lifts a legacy
+// plain-text body into the WYSIWYG editor; htmlToText derives the WhatsApp
+// text the send path uses from whatever the editor holds. Deriving on SAVE —
+// not at send time — keeps the backend blind to HTML parsing.
+function plainToHtml(text: string): string {
+  if (!text) return "";
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return escaped
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+
+function htmlToText(html: string): string {
+  const prepared = html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ");
+  // SSR guard: this only runs for real in the browser; the server render just
+  // needs to not crash before hydration.
+  if (typeof window === "undefined") {
+    return prepared.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  const doc = new DOMParser().parseFromString(prepared, "text/html");
+  return (doc.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // A number that reads as part of the sentence until it is touched: no border,
 // no spinners, just an underline on hover saying "this is yours to change".
 // The row copy is "24 hours before" — a boxed input in the middle of that
@@ -486,8 +519,7 @@ function RuleEditor({
   orgLanguage,
   emailEnabled,
   waConnected,
-  onSaveBody,
-  onSaveSubject,
+  onSaveTemplate,
 }: {
   rule: RuleRowData;
   template: TemplateRow | undefined;
@@ -496,12 +528,20 @@ function RuleEditor({
   orgLanguage: string;
   emailEnabled: boolean;
   waConnected: boolean;
-  onSaveBody: (templateId: Id<"waTemplates">, body: string) => void;
-  onSaveSubject: (templateId: Id<"waTemplates">, subject: string) => void;
+  onSaveTemplate: (
+    templateId: Id<"waTemplates">,
+    patch: { body?: string; bodyHtml?: string; subject?: string },
+  ) => void;
 }) {
   const { t } = useLanguage();
   const [body, setBody] = useState(template?.body ?? "");
   const [subject, setSubject] = useState(template?.subject ?? "");
+  // What the WYSIWYG editor currently holds, saved or not — the previews
+  // track it live. Seeded from the stored HTML, or the plain body lifted into
+  // HTML for rows that predate the editor.
+  const [liveHtml, setLiveHtml] = useState(
+    template?.bodyHtml ?? plainToHtml(template?.body ?? ""),
+  );
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   // The row is created by ensureTemplate when the panel opens; until the
   // query catches up there is nothing to bind to.
@@ -509,6 +549,7 @@ function RuleEditor({
   useEffect(() => {
     setBody(template?.body ?? "");
     setSubject(template?.subject ?? "");
+    setLiveHtml(template?.bodyHtml ?? plainToHtml(template?.body ?? ""));
     // Re-seed exactly when the editor starts talking about a different row.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
@@ -582,13 +623,15 @@ function RuleEditor({
   }
 
   // Inserts land at the CURSOR, not the end — Nudge's VariableChips pattern.
+  // Plain-textarea mode only; the WYSIWYG editor's own toolbar handles both
+  // inserts against the tiptap caret.
   const insertAtCursor = (token: string) => {
     const el = bodyRef.current;
     const start = el?.selectionStart ?? body.length;
     const end = el?.selectionEnd ?? body.length;
     const next = body.slice(0, start) + token + body.slice(end);
     setBody(next);
-    onSaveBody(template._id, next);
+    onSaveTemplate(template._id, { body: next });
     requestAnimationFrame(() => {
       if (!el) return;
       el.focus();
@@ -597,9 +640,15 @@ function RuleEditor({
     });
   };
 
-  const rendered = renderTokens(body, previewValues);
   const showEmailPreview = rule.channel !== "whatsapp" && emailEnabled;
   const showWaPreview = rule.channel !== "email";
+  // What each lane would actually send: WhatsApp the derived plain text,
+  // email the authored HTML — both through the same token renderer.
+  const previewPlain = emailEnabled ? htmlToText(liveHtml) : body;
+  const rendered = renderTokens(previewPlain, previewValues);
+  const renderedEmailHtml = showEmailPreview
+    ? sanitizeEmailHtml(renderTokens(liveHtml, previewValues))
+    : "";
   const pickedLabel = picked
     ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
     : "";
@@ -616,23 +665,43 @@ function RuleEditor({
             placeholder={t("settings.templateSubject")}
             aria-label={t("settings.templateSubject")}
             onChange={(e) => setSubject(e.target.value)}
-            onBlur={() => onSaveSubject(template._id, subject)}
+            onBlur={() => onSaveTemplate(template._id, { subject })}
           />
         )}
-        <textarea
-          ref={bodyRef}
-          rows={5}
-          className="w-full"
-          value={body}
-          placeholder={t("settings.templateBodyPlaceholder")}
-          aria-label={t("settings.templateBody")}
-          onChange={(e) => setBody(e.target.value)}
-          onBlur={() => onSaveBody(template._id, body)}
-        />
-        <div className="flex flex-wrap items-center gap-1.5">
-          <VariableInsertDropdown onInsert={insertAtCursor} />
-          <EmojiPicker onPick={insertAtCursor} title={t("editor.insertEmoji")} />
-        </div>
+        {emailEnabled ? (
+          // The real email editor — Visual/HTML tabs, toolbar with variables
+          // and emoji built in. Every save writes BOTH projections: the HTML
+          // the email sends and the plain text the WhatsApp lane sends.
+          <EmailBodyEditor
+            value={template.bodyHtml ?? plainToHtml(template.body ?? "")}
+            placeholder={t("settings.templateBodyPlaceholder")}
+            onLiveChange={setLiveHtml}
+            onSave={(html) => {
+              setLiveHtml(html);
+              onSaveTemplate(template._id, {
+                bodyHtml: html,
+                body: htmlToText(html),
+              });
+            }}
+          />
+        ) : (
+          <>
+            <textarea
+              ref={bodyRef}
+              rows={5}
+              className="w-full"
+              value={body}
+              placeholder={t("settings.templateBodyPlaceholder")}
+              aria-label={t("settings.templateBody")}
+              onChange={(e) => setBody(e.target.value)}
+              onBlur={() => onSaveTemplate(template._id, { body })}
+            />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <VariableInsertDropdown onInsert={insertAtCursor} />
+              <EmojiPicker onPick={insertAtCursor} title={t("editor.insertEmoji")} />
+            </div>
+          </>
+        )}
         {waConnected && (
           <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
         )}
@@ -698,26 +767,34 @@ function RuleEditor({
             )}
           </span>
         </div>
-        <div className="rounded-lg bg-[var(--muted-bg)] p-3">
+        <div className="space-y-3 rounded-lg bg-[var(--muted-bg)] p-3">
+          {/* The email as the customer's mail client shows it: white paper no
+              matter the app theme, subject on top, the authored HTML below. */}
           {showEmailPreview && (
-            <p className="mb-2 border-b border-[var(--border)] pb-2 text-xs font-medium">
-              {(renderTokens(subject, previewValues) ||
-                `${orgName || "—"}, ${previewValues.appointmentAt}`)}
-            </p>
+            <div className="email-paper overflow-hidden rounded-lg border border-[var(--border)]">
+              <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
+                {(renderTokens(subject, previewValues) ||
+                  `${orgName || "—"}, ${previewValues.appointmentAt}`)}
+              </p>
+              <div
+                className="email-body-editor px-3 py-2 text-sm"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    renderedEmailHtml ||
+                    `<p style="color:#9ca3af">${t("settings.templateBodyPlaceholder")}</p>`,
+                }}
+              />
+            </div>
           )}
-          <div
-            className={`max-w-[90%] whitespace-pre-wrap px-3 py-2 text-sm ${
-              showWaPreview
-                ? "rounded-xl rounded-bl-sm bg-emerald-100 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100"
-                : "rounded-lg bg-[var(--background)]"
-            }`}
-          >
-            {rendered || (
-              <span className="text-[var(--muted)]">
-                {t("settings.templateBodyPlaceholder")}
-              </span>
-            )}
-          </div>
+          {showWaPreview && (
+            <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+              {rendered || (
+                <span className="text-[var(--muted)]">
+                  {t("settings.templateBodyPlaceholder")}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1024,11 +1101,8 @@ function RulesCard({
                     orgLanguage={org.language}
                     emailEnabled={emailEnabled}
                     waConnected={waConnected}
-                    onSaveBody={(templateId, body) =>
-                      void updateTemplate({ templateId, body })
-                    }
-                    onSaveSubject={(templateId, subject) =>
-                      void updateTemplate({ templateId, subject })
+                    onSaveTemplate={(templateId, patch) =>
+                      void updateTemplate({ templateId, ...patch })
                     }
                   />
                   {/* Deleting lives with the thing being deleted — the open
@@ -1400,7 +1474,9 @@ export function RemindersView() {
   });
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    // Wider than the settings default: the expanded rule panel is a real
+    // split-pane (editor beside a rendered email) and 3xl squeezed both.
+    <div className="mx-auto max-w-5xl space-y-4">
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}

@@ -122,6 +122,7 @@ export const current = query({
         ),
         ruleId: v.optional(v.id("messageRules")),
         body: v.optional(v.string()),
+        bodyHtml: v.optional(v.string()),
         subject: v.optional(v.string()),
         metaName: v.optional(v.string()),
         language: v.string(),
@@ -209,6 +210,7 @@ export const current = query({
         kind: t.kind,
         ruleId: t.ruleId,
         body: t.body,
+        bodyHtml: t.bodyHtml,
         subject: t.subject,
         metaName: t.metaName,
         language: t.language,
@@ -546,6 +548,9 @@ export const updateTemplate = mutation({
     // "back to nothing", and keeping stale text instead would send words they
     // watched themselves remove.
     body: v.optional(v.string()),
+    // The WYSIWYG editor saves both halves together: the HTML it authored and
+    // the plain text it derived for the WhatsApp lane.
+    bodyHtml: v.optional(v.string()),
     subject: v.optional(v.string()),
     metaName: v.optional(v.string()),
     language: v.optional(v.string()),
@@ -558,6 +563,7 @@ export const updateTemplate = mutation({
     if (!template || template.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
     if (args.body !== undefined) patch.body = args.body.trim() || undefined;
+    if (args.bodyHtml !== undefined) patch.bodyHtml = args.bodyHtml.trim() || undefined;
     if (args.subject !== undefined) patch.subject = args.subject.trim() || undefined;
     if (args.metaName !== undefined && args.metaName.trim()) {
       patch.metaName = args.metaName.trim();

@@ -856,7 +856,15 @@ export default defineSchema({
     // lib/renderTokens). Rendered at send time for the lanes Meta does not
     // constrain. Optional because rows predate it; the send path falls back to
     // bodyPreview's positional text until the owner writes one.
+    //
+    // When bodyHtml below exists, THIS is the plain-text projection of it —
+    // derived by the editor on save, never authored separately. WhatsApp and
+    // the has-words checks read it; email prefers the HTML.
     body: v.optional(v.string()),
+    // The email body as authored in the WYSIWYG editor — real HTML, signature
+    // tables and all, same token vocabulary. Email lane only: WhatsApp sends
+    // `body`, the plain text the editor derives from this on every save.
+    bodyHtml: v.optional(v.string()),
     // Email subject line, same token vocabulary. WhatsApp ignores it.
     subject: v.optional(v.string()),
     // ---- Cloud API lane only, plumbing below this line -----------------------
@@ -888,6 +896,14 @@ export default defineSchema({
     // pixels, so an individual "opened" would be a guess dressed as a record).
     emailSentCount: v.optional(v.number()),
     emailOpenCount: v.optional(v.number()),
+    // Replies attributed latest-outbound-wins (lib/emailInbound → email.ts):
+    // an inbound email credits the newest outbound this customer got in the
+    // last 30 days. Same contract as Nudge — inbound mail carries no reliable
+    // In-Reply-To through the webhook, so newest-wins IS the attribution.
+    emailReplyCount: v.optional(v.number()),
+    // When this template last actually sent an email — the "Sent 3× · last
+    // Aug 2" line in the editor, without scanning messages to answer it.
+    emailLastSentAt: v.optional(v.number()),
   }).index("by_org", ["orgId"]),
 
   messages: defineTable({
@@ -997,6 +1013,10 @@ export default defineSchema({
     // are dropped as prefetch, see recordEmailOpen.
     openedAt: v.optional(v.number()),
     openCount: v.optional(v.number()),
+    // When an inbound email was attributed to this outbound (latest-outbound-
+    // wins, email.ts recordInbound). One reply credits one send, and a row
+    // already credited is skipped so a chatty customer is not a 400% rate.
+    repliedAt: v.optional(v.number()),
     // Which template row's words this send carried, for the denormalised
     // sent/open counters on waTemplates. Email sends only; WhatsApp rows keep
     // identifying their template by templateName as they always have.

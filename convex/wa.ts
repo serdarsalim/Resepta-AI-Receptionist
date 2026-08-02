@@ -694,6 +694,12 @@ export const sendAppointmentMessage = internalAction({
         (contentTemplate?.subject
           ? renderTokens(contentTemplate.subject, tokenValues)
           : "") || `${org.name}, ${when}`;
+      // The WYSIWYG-authored HTML when there is one — signature tables and
+      // all — otherwise the plain body wrapped the way it always was. Tokens
+      // render in either; they are literal text in both representations.
+      const emailHtml = contentTemplate?.bodyHtml
+        ? renderTokens(contentTemplate.bodyHtml, tokenValues)
+        : emailBodyHtml(body);
       // Replies come back to US, not to whatever mailbox the From address
       // belongs to — same wiring as email.sendToCustomer, and for the same
       // reason: an answer that lands in a personal inbox never reaches the
@@ -730,7 +736,7 @@ export const sendAppointmentMessage = internalAction({
         from: sender,
         to: customer.email,
         subject,
-        html: withOpenPixel(emailBodyHtml(body), trackingToken),
+        html: withOpenPixel(emailHtml, trackingToken),
         replyTo,
       });
       await ctx.runMutation(internal.messages.applySendResult, {

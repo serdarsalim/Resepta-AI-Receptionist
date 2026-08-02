@@ -372,6 +372,7 @@ export const ensureTemplate = mutation({
       language,
       status: "draft",
       body: fallback?.body ?? stock.body,
+      bodyHtml: fallback?.bodyHtml,
       subject: fallback?.subject ?? stock.subject,
       bodyPreview: fallback?.bodyPreview,
     });
@@ -406,7 +407,13 @@ export const resetToDefaults = mutation({
         await ctx.db.delete(template._id);
       } else if (template.kind !== "campaign" && template.language === org.language) {
         const text = stock[template.kind as TemplateKind];
-        await ctx.db.patch(template._id, { body: text.body, subject: text.subject });
+        // bodyHtml cleared too: stock wording is plain text, and a reset that
+        // left old HTML behind would email one thing and preview another.
+        await ctx.db.patch(template._id, {
+          body: text.body,
+          subject: text.subject,
+          bodyHtml: undefined,
+        });
       }
     }
     // Kinds with no fallback row in the org's language yet get one, so every
