@@ -1,13 +1,15 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 // Pure TS shared with the backend on purpose: the preview must be the SAME
 // renderer the send path uses, or the preview becomes a second opinion.
-import { renderTokens, TOKEN_HINTS } from "../../convex/lib/renderTokens";
+import { renderTokens } from "../../convex/lib/renderTokens";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { EmojiPicker } from "./EmojiPicker";
+import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
   formatReminderOffset,
   minutesToTimeValue,
@@ -437,11 +439,12 @@ function NotificationRulesCard({
 // not reached and dies with the legacy fields.
 
 // The message editor behind a rule's chevron. Controlled state rather than
-// defaultValue+blur alone, because the token chips and the preview both need
-// the text as it is being written, not as it was last saved.
+// defaultValue+blur alone, because the variable insert and the preview both
+// need the text as it is being written, not as it was last saved.
 function RuleEditor({
   rule,
   template,
+  contactFields,
   orgName,
   orgLanguage,
   emailEnabled,
@@ -451,6 +454,7 @@ function RuleEditor({
 }: {
   rule: RuleRowData;
   template: TemplateRow | undefined;
+  contactFields: { key: string; label: string }[];
   orgName: string;
   orgLanguage: string;
   emailEnabled: boolean;
@@ -461,6 +465,7 @@ function RuleEditor({
   const { t } = useLanguage();
   const [body, setBody] = useState(template?.body ?? "");
   const [subject, setSubject] = useState(template?.subject ?? "");
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   // The row is created by ensureTemplate when the panel opens; until the
   // query catches up there is nothing to bind to.
   const templateId = template?._id;
@@ -471,41 +476,115 @@ function RuleEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
+  // ── Preview data: a real contact when one is picked, samples otherwise ──
+  // The picker exists because "how will this read for Ayşe" is a question
+  // about Ayşe's actual record, and sample values cannot answer it.
+  const contacts = useQuery(api.customers.options, {}) ?? [];
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
+  const picked = useQuery(
+    api.customers.get,
+    contactId ? { customerId: contactId } : "skip",
+  );
+  const matches =
+    contactQuery.trim() && !contactId
+      ? contacts
+          .filter((c) =>
+            `${c.firstName} ${c.lastName ?? ""} ${c.phone}`
+              .toLocaleLowerCase(orgLanguage)
+              .includes(contactQuery.trim().toLocaleLowerCase(orgLanguage)),
+          )
+          .slice(0, 6)
+      : [];
+
   // Sample values in the ORG's language where the sample is a message fact
   // (the date a customer would read) and the UI language where it is a prop
   // (names). Close enough for a preview; the send path formats for real.
-  const sampleValues = useMemo(() => {
+  const previewValues = useMemo(() => {
     const at = new Date();
     at.setDate(at.getDate() + 1);
     at.setHours(14, 0, 0, 0);
+    const appointmentAt = new Intl.DateTimeFormat(orgLanguage, {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(at);
+    // Every org field key present, empty when valueless — mirrors the send
+    // path exactly, so a real field renders to nothing rather than staying a
+    // literal token in the preview.
+    const custom: Record<string, string> = {};
+    for (const field of contactFields) {
+      custom[field.key] = (contactId && picked?.custom?.[field.key]) || "";
+    }
+    if (contactId && picked) {
+      return {
+        firstName: picked.firstName,
+        lastName: picked.lastName,
+        phone: picked.phone,
+        email: picked.email,
+        businessName: orgName || "—",
+        appointmentAt,
+        staffName: t("settings.previewSampleStaff"),
+        serviceName: t("settings.previewSampleService"),
+        custom,
+      };
+    }
     return {
       firstName: t("settings.previewSampleName"),
       businessName: orgName || "—",
-      appointmentAt: new Intl.DateTimeFormat(orgLanguage, {
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(at),
+      appointmentAt,
       staffName: t("settings.previewSampleStaff"),
       serviceName: t("settings.previewSampleService"),
+      custom,
     };
-  }, [t, orgName, orgLanguage]);
+  }, [t, orgName, orgLanguage, contactFields, contactId, picked]);
 
   if (!template) {
     return <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>;
   }
 
-  const rendered = renderTokens(body, sampleValues);
+  // Inserts land at the CURSOR, not the end — Nudge's VariableChips pattern.
+  const insertAtCursor = (token: string) => {
+    const el = bodyRef.current;
+    const start = el?.selectionStart ?? body.length;
+    const end = el?.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + token + body.slice(end);
+    setBody(next);
+    onSaveBody(template._id, next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const cursor = start + token.length;
+      el.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const rendered = renderTokens(body, previewValues);
   const showEmailPreview = rule.channel !== "whatsapp" && emailEnabled;
   const showWaPreview = rule.channel !== "email";
+  const pickedLabel = picked
+    ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
+    : "";
 
   return (
     <div className="grid gap-4 pb-4 sm:grid-cols-2">
       <div className="space-y-2">
-        <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
+        {/* Subject first — that is the order an email reads in. Placeholder
+            instead of a label so the input gets the full row width. */}
+        {emailEnabled && (
+          <input
+            className="w-full"
+            value={subject}
+            placeholder={t("settings.templateSubject")}
+            aria-label={t("settings.templateSubject")}
+            onChange={(e) => setSubject(e.target.value)}
+            onBlur={() => onSaveSubject(template._id, subject)}
+          />
+        )}
         <textarea
-          rows={4}
+          ref={bodyRef}
+          rows={5}
           className="w-full"
           value={body}
           placeholder={t("settings.templateBodyPlaceholder")}
@@ -513,37 +592,10 @@ function RuleEditor({
           onChange={(e) => setBody(e.target.value)}
           onBlur={() => onSaveBody(template._id, body)}
         />
-        {/* The vocabulary, clickable. Appending saves immediately — a chip
-            click never passes through the textarea's blur. */}
-        <div className="flex flex-wrap gap-1.5">
-          {TOKEN_HINTS.map((token) => (
-            <button
-              key={token}
-              type="button"
-              onClick={() => {
-                const next = body ? `${body.replace(/\s+$/, "")} ${token}` : token;
-                setBody(next);
-                onSaveBody(template._id, next);
-              }}
-              className="rounded-full border border-[var(--border)] px-2 py-0.5 font-mono text-xs text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-            >
-              {token}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <VariableInsertDropdown onInsert={insertAtCursor} />
+          <EmojiPicker onPick={insertAtCursor} title={t("editor.insertEmoji")} />
         </div>
-        {emailEnabled && (
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="shrink-0 text-xs text-[var(--muted)]">
-              {t("settings.templateSubject")}
-            </span>
-            <input
-              className="min-w-0 flex-1"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              onBlur={() => onSaveSubject(template._id, subject)}
-            />
-          </div>
-        )}
         {waConnected && (
           <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
         )}
@@ -557,12 +609,63 @@ function RuleEditor({
       </div>
 
       <div className="space-y-2">
-        <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
+          {/* Typeahead over real contacts. Picking one swaps every token to
+              that person's record; the × goes back to samples. */}
+          <span className="relative min-w-0 flex-1 max-w-56">
+            <input
+              className="w-full text-xs"
+              value={contactId ? pickedLabel : contactQuery}
+              placeholder={t("settings.previewTryContact")}
+              onChange={(e) => {
+                setContactId(null);
+                setContactQuery(e.target.value);
+              }}
+            />
+            {(contactId || contactQuery) && (
+              <button
+                type="button"
+                aria-label={t("common.delete")}
+                onClick={() => {
+                  setContactId(null);
+                  setContactQuery("");
+                }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                ×
+              </button>
+            )}
+            {matches.length > 0 && (
+              <ul className="absolute right-0 top-full z-30 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+                {matches.map((c) => (
+                  <li key={c._id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setContactId(c._id);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                    >
+                      <span className="truncate">
+                        {c.firstName} {c.lastName ?? ""}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-[var(--muted)]">
+                        {c.phone}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </span>
+        </div>
         <div className="rounded-lg bg-[var(--muted-bg)] p-3">
           {showEmailPreview && (
             <p className="mb-2 border-b border-[var(--border)] pb-2 text-xs font-medium">
-              {(renderTokens(subject, sampleValues) ||
-                `${orgName || "—"}, ${sampleValues.appointmentAt}`)}
+              {(renderTokens(subject, previewValues) ||
+                `${orgName || "—"}, ${previewValues.appointmentAt}`)}
             </p>
           )}
           <div
@@ -613,15 +716,45 @@ function RulesCard({
   const removeRule = useMutation(api.messageRules.remove);
   const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
+  // For the preview's custom-token map — the same registry the variable
+  // dropdown reads, so preview and menu can never disagree.
+  const contactFieldRows = useQuery(api.contactFields.list, {}) ?? [];
   const [expandedId, setExpandedId] = useState<Id<"messageRules"> | null>(null);
 
   const waAvailable = waConnected || evolutionEnabled;
   const orgHasChannel = waAvailable || emailEnabled;
-  const channelOptions = [
+  // One chip per WIRED channel. The chips are also the on/off control: a rule
+  // with every chip off is paused, which is why there is no separate Active
+  // column — "sends nowhere" and "off" are the same fact, and two controls
+  // for one fact is how the old card confused people.
+  const wired: ("whatsapp" | "email")[] = [
     ...(waAvailable ? (["whatsapp"] as const) : []),
     ...(emailEnabled ? (["email"] as const) : []),
-    ...(waAvailable && emailEnabled ? (["both"] as const) : []),
   ];
+  const activeChannels = (rule: RuleRowData): Set<"whatsapp" | "email"> => {
+    if (rule.paused) return new Set();
+    const active = new Set<"whatsapp" | "email">();
+    if (rule.channel !== "email") active.add("whatsapp");
+    if (rule.channel !== "whatsapp") active.add("email");
+    return active;
+  };
+  const toggleChannel = (rule: RuleRowData, channel: "whatsapp" | "email") => {
+    const active = activeChannels(rule);
+    if (active.has(channel)) active.delete(channel);
+    else active.add(channel);
+    const on = wired.filter((w) => active.has(w));
+    if (on.length === 0) {
+      // Last chip off: the rule keeps its channel and pauses, so switching a
+      // chip back on restores exactly what was there.
+      void updateRule({ ruleId: rule._id, paused: true });
+      return;
+    }
+    void updateRule({
+      ruleId: rule._id,
+      paused: false,
+      channel: on.length === 2 ? "both" : on[0],
+    });
+  };
 
   const ruleName = (trigger: RuleTrigger) =>
     trigger === "booking"
@@ -641,10 +774,12 @@ function RulesCard({
         ? t("settings.ruleEmail")
         : t("settings.channelBoth");
 
-  // Whether anything would actually leave for this rule — the same reasoning
-  // the legacy ruleChannels ran, against the rule's own channel and wording.
-  const ruleSilent = (rule: RuleRowData) => {
-    if (!orgHasChannel) return false; // the card-level line says it once
+  // Whether anything would actually leave for this rule, and if not, WHY —
+  // "no words yet" sends the owner to the editor one row down, while "channel
+  // not ready" is about Meta approval or wiring, which is a different errand.
+  // Paused rules get no verdict: off is off, not broken.
+  const ruleSilent = (rule: RuleRowData): "text" | "channel" | null => {
+    if (!orgHasChannel || rule.paused) return null;
     const own = templates.find(
       (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
     );
@@ -662,10 +797,10 @@ function RulesCard({
       ? metaSource?.status === "approved" && Boolean(metaSource?.metaName)
       : evolutionEnabled && hasText;
     const emailOk = emailEnabled && hasText;
-    return !(
-      (rule.channel !== "email" && waOk) ||
-      (rule.channel !== "whatsapp" && emailOk)
-    );
+    const sends =
+      (rule.channel !== "email" && waOk) || (rule.channel !== "whatsapp" && emailOk);
+    if (sends) return null;
+    return hasText ? "channel" : "text";
   };
 
   const toggleExpand = (rule: RuleRowData) => {
@@ -766,9 +901,6 @@ function RulesCard({
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
         </div>
-        <span className="flex w-11 shrink-0 justify-center text-xs text-[var(--muted)]">
-          {t("settings.ruleActive")}
-        </span>
         <span className="w-9 shrink-0" aria-hidden />
         <span className="w-9 shrink-0" aria-hidden />
       </div>
@@ -794,50 +926,42 @@ function RulesCard({
                   <span className="text-sm text-[var(--muted)]">
                     {ruleName(rule.trigger)}
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs">
-                    {channelOptions.length > 1 ? (
-                      <select
-                        value={rule.channel}
-                        aria-label={t("settings.rulesWhere")}
-                        onChange={(e) =>
-                          void updateRule({
-                            ruleId: rule._id,
-                            channel: e.target.value as "whatsapp" | "email" | "both",
-                          })
-                        }
-                      >
-                        {channelOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {channelLabel(option)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-[var(--muted)]">
-                        {orgHasChannel ? (
-                          channelLabel(channelOptions[0] ?? rule.channel)
-                        ) : (
-                          <span className="hidden sm:inline">—</span>
-                        )}
-                      </span>
-                    )}
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {wired.map((channel) => {
+                      const on = activeChannels(rule).has(channel);
+                      return (
+                        <button
+                          key={channel}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          aria-label={`${ruleName(rule.trigger)} — ${channelLabel(channel)}`}
+                          onClick={() => toggleChannel(rule, channel)}
+                          className={`rounded-full px-2.5 py-0.5 transition-colors ${
+                            on
+                              ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                              : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                          }`}
+                        >
+                          {channelLabel(channel)}
+                        </button>
+                      );
+                    })}
+                    {!orgHasChannel && <span className="hidden sm:inline text-[var(--muted)]">—</span>}
                     {silent && (
                       <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
                         {t("settings.ruleNoChannel")}
-                        <InfoTip text={t("settings.ruleNoChannelHint")} />
+                        <InfoTip
+                          text={
+                            silent === "text"
+                              ? t("settings.ruleNoTextHint")
+                              : t("settings.ruleNoChannelHint")
+                          }
+                        />
                       </span>
                     )}
                   </span>
                 </div>
-                <span className="flex w-11 shrink-0 justify-center">
-                  <Toggle
-                    checked={!rule.paused}
-                    onChange={(next) =>
-                      void updateRule({ ruleId: rule._id, paused: !next })
-                    }
-                    label={ruleName(rule.trigger)}
-                  />
-                </span>
                 <button
                   type="button"
                   onClick={() => void removeRule({ ruleId: rule._id })}
@@ -867,6 +991,7 @@ function RulesCard({
                 <RuleEditor
                   rule={rule}
                   template={ownTemplate}
+                  contactFields={contactFieldRows}
                   orgName={org.name}
                   orgLanguage={org.language}
                   emailEnabled={emailEnabled}

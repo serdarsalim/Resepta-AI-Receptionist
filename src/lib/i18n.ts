@@ -817,6 +817,35 @@ const dictionary = {
     en: "The subject line on campaign emails. Left empty, the business name is used. Tokens like [ad] work here too.",
     de: "Die Betreffzeile von Kampagnen-E-Mails. Bleibt sie leer, wird der Betriebsname verwendet. Platzhalter wie [ad] funktionieren auch hier.",
   },
+  // The appointment facts the variable dropdown offers beside the org's own
+  // contact fields — things that are true of the booking, not the person.
+  "vars.business": { tr: "İşletme adı", en: "Business name", de: "Betriebsname" },
+  "vars.date": { tr: "Randevu tarihi", en: "Appointment date", de: "Termindatum" },
+  "vars.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
+  "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
+  "editor.insertVariable": {
+    tr: "Değişken ekle",
+    en: "Insert variable",
+    de: "Variable einfügen",
+  },
+  "editor.searchVariables": {
+    tr: "Değişken ara…",
+    en: "Search variables…",
+    de: "Variablen suchen…",
+  },
+  "editor.noVariableMatch": {
+    tr: "Eşleşen değişken yok.",
+    en: "No variables match.",
+    de: "Keine passende Variable.",
+  },
+  "editor.insertEmoji": { tr: "Emoji ekle", en: "Insert emoji", de: "Emoji einfügen" },
+  // The preview's contact picker: type a real customer's name and the tokens
+  // fill from their actual record instead of sample values.
+  "settings.previewTryContact": {
+    tr: "Gerçek bir müşteriyle dene…",
+    en: "Try with a real contact…",
+    de: "Mit echtem Kontakt testen…",
+  },
   "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
   "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
   "settings.previewSampleService": {
@@ -861,6 +890,14 @@ const dictionary = {
     tr: "Bu mesajın işletme dilinde onaylı bir WhatsApp şablonu yok. Şablonun dili işletme diliyle birebir eşleşmeli. Başka dildeki şablon yedek olarak kullanılmaz.",
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
+  },
+  // The row would send, but there are no words to send in the business
+  // language. Different errand from ruleNoChannelHint: this one is solved one
+  // chevron away, not by an operator.
+  "settings.ruleNoTextHint": {
+    tr: "Bu mesajın işletme dilinde metni yok. Satırı açın ve mesajı yazın — kaydettiğiniz anda gönderime hazır.",
+    en: "This message has no text in the business language yet. Open the row and write it — it is ready to send the moment you save.",
+    de: "Diese Nachricht hat noch keinen Text in der Sprache des Betriebs. Öffnen Sie die Zeile und schreiben Sie ihn — gespeichert ist er sofort versandbereit.",
   },
   // Shown when NO channel is wired. The wiring is the operator's job, so this
   // reassures rather than instructs: the rules above it already show that

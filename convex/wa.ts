@@ -46,19 +46,24 @@ export const loadSessionContext = internalQuery({
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) return null;
-    const [waAccount, org] = await Promise.all([
+    const [waAccount, org, contactFields] = await Promise.all([
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
         .unique(),
       ctx.db.get(orgId),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
     ]);
     // org rides along for token rendering ([isletme]); the send itself needs
-    // only the account.
+    // only the account. contactFields feed the same tokens the reminders and
+    // campaigns speak — one vocabulary everywhere.
     const evolution = org
       ? await loadEvolutionCreds(ctx, orgId, org.evolutionInstance)
       : null;
-    return { customer, waAccount, org, evolution };
+    return { customer, waAccount, org, evolution, contactFields };
   },
 });
 
@@ -93,7 +98,7 @@ export const sendSession = action({
       customerId: args.customerId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { customer, waAccount, org, evolution } = context;
+    const { customer, waAccount, org, evolution, contactFields } = context;
     // org is non-null for every real send here; the demo path below is the
     // only caller that reaches this with one missing.
     const available = org
@@ -110,11 +115,17 @@ export const sendSession = action({
     // template and nothing about {{1}} applies. Rendered ONCE, at send time,
     // and the stored row keeps the rendered text: the thread has to show what
     // the customer actually received, not the recipe for it.
+    const sessionCustom: Record<string, string> = {};
+    for (const field of (contactFields ?? []) as { key: string }[]) {
+      sessionCustom[field.key] = customer.custom?.[field.key] ?? "";
+    }
     const body = renderTokens(raw, {
       firstName: customer.firstName,
       lastName: customer.lastName,
       businessName: org?.name,
       phone: customer.phone,
+      email: customer.email,
+      custom: sessionCustom,
     });
     if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
     if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
@@ -304,25 +315,42 @@ export const loadSendContext = internalQuery({
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment) return null;
     const rule = args.ruleId ? await ctx.db.get(args.ruleId) : null;
-    const [customer, org, waAccount, templates, staffRow] = await Promise.all([
-      ctx.db.get(appointment.customerId),
-      ctx.db.get(appointment.orgId),
-      ctx.db
-        .query("waAccounts")
-        .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
-        .unique(),
-      ctx.db
-        .query("waTemplates")
-        .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
-        .collect(),
-      // For the [personel] token. Null when nobody is assigned, and the token
-      // renders as nothing — renderTokens' whitespace cleanup owns that case.
-      appointment.staffId ? ctx.db.get(appointment.staffId) : null,
-    ]);
+    const [customer, org, waAccount, templates, staffRow, contactFields] =
+      await Promise.all([
+        ctx.db.get(appointment.customerId),
+        ctx.db.get(appointment.orgId),
+        ctx.db
+          .query("waAccounts")
+          .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
+          .unique(),
+        ctx.db
+          .query("waTemplates")
+          .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
+          .collect(),
+        // For the [personel] token. Null when nobody is assigned, and the token
+        // renders as nothing — renderTokens' whitespace cleanup owns that case.
+        appointment.staffId ? ctx.db.get(appointment.staffId) : null,
+        // The org's field registry, so [age] and friends resolve from the same
+        // source of truth the Fields tab shows.
+        ctx.db
+          .query("contactFields")
+          .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
+          .collect(),
+      ]);
     const evolution = org
       ? await loadEvolutionCreds(ctx, appointment.orgId, org.evolutionInstance)
       : null;
-    return { appointment, customer, org, waAccount, templates, evolution, staffRow, rule };
+    return {
+      appointment,
+      customer,
+      org,
+      waAccount,
+      templates,
+      evolution,
+      staffRow,
+      rule,
+      contactFields,
+    };
   },
 });
 
@@ -355,8 +383,17 @@ export const sendAppointmentMessage = internalAction({
     // Deployment-wide mail settings. An action has no ctx.db, so the operator's
     // platformConfig row is read through its own internal query.
     const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
-    const { appointment, customer, org, waAccount, templates, evolution, staffRow, rule } =
-      context;
+    const {
+      appointment,
+      customer,
+      org,
+      waAccount,
+      templates,
+      evolution,
+      staffRow,
+      rule,
+      contactFields,
+    } = context;
     if (!customer || !org) return null;
 
     // Status gate per kind: each message only makes sense against the state
@@ -467,6 +504,13 @@ export const sendAppointmentMessage = internalAction({
     // vocabulary as the composer and campaigns. The positional bodyPreview
     // survives only as the fallback for rows nobody has authored yet; it is a
     // transcription of Meta's approved string, not something the salon wrote.
+    // Every org field key present, empty when this customer has no value —
+    // so a real field always resolves (to nothing, cleanly) and only a token
+    // nobody defined stays literal. See renderTokens.
+    const customValues: Record<string, string> = {};
+    for (const field of contactFields as { key: string }[]) {
+      customValues[field.key] = customer.custom?.[field.key] ?? "";
+    }
     const tokenValues = {
       firstName: customer.firstName,
       lastName: customer.lastName,
@@ -474,9 +518,11 @@ export const sendAppointmentMessage = internalAction({
       appointmentAt: when,
       staffName: staffRow?.name,
       phone: customer.phone,
+      email: customer.email,
       serviceName: appointment.items
         ?.map((item: { name: string }) => item.name)
         .join(", "),
+      custom: customValues,
     };
     const body = contentTemplate?.body
       ? renderTokens(contentTemplate.body, tokenValues)

@@ -31,13 +31,21 @@ export type TokenValues = {
   appointmentAt?: string;
   staffName?: string;
   phone?: string;
+  email?: string;
   // The appointment's line items, joined for display ("Saç kesimi, Fön").
   serviceName?: string;
+  // The org's OWN vocabulary: contactFields.key → this customer's value.
+  // This is what keeps tokens honest — [age] works because the Fields tab
+  // says a field named `age` exists, not because this file guessed it might.
+  // Callers fill EVERY org field key (empty string when the customer has no
+  // value) so a real field always resolves — to nothing, cleanly — while a
+  // token nobody defined stays visibly literal.
+  custom?: Record<string, string>;
 };
 
 // Canonical token → the value it resolves to. Aliases map onto the same key,
 // so [ad] and [firstname] are the same token and always will be.
-const ALIASES: Record<string, keyof TokenValues> = {
+const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   // Customer
   firstname: "firstName",
   name: "firstName",
@@ -63,6 +71,9 @@ const ALIASES: Record<string, keyof TokenValues> = {
   mitarbeiter: "staffName",
   phone: "phone",
   telefon: "phone",
+  email: "email",
+  eposta: "email",
+  "e-posta": "email",
   // Service — the same word the voice agent's variables use, because a token
   // vocabulary that differs per screen is two vocabularies.
   service: "serviceName",
@@ -90,10 +101,18 @@ export const TOKEN_HINTS = [
 // them they are talking to broken software, the second just reads as brief.
 // The whitespace cleanup below is what makes that come out as a sentence.
 export function renderTokens(body: string, values: TokenValues): string {
-  const filled = body.replace(/\[([^\]\n]{1,24})\]/g, (whole, rawName: string) => {
-    const key = ALIASES[rawName.trim().toLowerCase()];
-    if (!key) return whole; // Not a token we know — leave the writer's text alone.
-    return values[key]?.trim() ?? "";
+  const filled = body.replace(/\[([^\]\n]{1,32})\]/g, (whole, rawName: string) => {
+    const raw = rawName.trim().toLowerCase();
+    const key = ALIASES[raw];
+    if (key) return values[key]?.trim() ?? "";
+    // The org's own fields, by exact key. hasOwnProperty rather than a truthy
+    // read: an empty value is a field that resolves to nothing, which is a
+    // different fact from a token that is not a field at all.
+    const custom = values.custom;
+    if (custom && Object.prototype.hasOwnProperty.call(custom, raw)) {
+      return custom[raw].trim();
+    }
+    return whole; // Not a token we know — leave the writer's text alone.
   });
 
   return (

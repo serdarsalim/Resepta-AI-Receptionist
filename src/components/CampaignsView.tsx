@@ -13,14 +13,16 @@
 // the product being broken. See convex/campaigns.ts for the shape that makes
 // one approval cover every campaign.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { Card } from "./Card";
+import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
 import { Sheet } from "./Sheet";
+import { VariableInsertDropdown } from "./VariableInsertDropdown";
 
 type Segment = {
   notSeenForDays?: number;
@@ -139,6 +141,21 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
 
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  // Inserts land at the cursor, not the end — same pattern as the rule editor.
+  const insertAtCursor = (token: string) => {
+    const el = bodyRef.current;
+    const start = el?.selectionStart ?? body.length;
+    const end = el?.selectionEnd ?? body.length;
+    const next = body.slice(0, start) + token + body.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const cursor = start + token.length;
+      el.setSelectionRange(cursor, cursor);
+    });
+  };
   // null = untouched, render the stored value. The subject is a property of
   // "campaign mail from this salon" rather than of one campaign — it lives on
   // the template row, and this input edits it in place.
@@ -201,11 +218,16 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
         <div>
           <RowLabel label={t("campaign.body")} hint={t("campaign.bodyHint")} />
           <textarea
+            ref={bodyRef}
             value={body}
             onChange={(event) => setBody(event.target.value)}
             rows={3}
             className="w-full resize-none"
           />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <VariableInsertDropdown onInsert={insertAtCursor} />
+            <EmojiPicker onPick={insertAtCursor} title={t("editor.insertEmoji")} />
+          </div>
         </div>
 
         {settings?.emailEnabled && (

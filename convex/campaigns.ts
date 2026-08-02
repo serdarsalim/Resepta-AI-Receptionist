@@ -314,6 +314,12 @@ export const fanOut = internalMutation({
     // Resolved once for the whole page rather than per recipient: it depends
     // only on the org.
     const sender = customerSender(org, await emailConfig(ctx));
+    // The field registry, once for the page — [age] and friends resolve per
+    // customer below from the same source of truth the Fields tab shows.
+    const contactFields = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", campaign.orgId))
+      .collect();
 
     let created = 0;
     for (const customerId of args.customerIds) {
@@ -324,12 +330,19 @@ export const fanOut = internalMutation({
       // minutes and consent can be withdrawn in between.
       if (customer.consentAt === undefined) continue;
 
-      const line = renderTokens(campaign.body, {
+      const customValues: Record<string, string> = {};
+      for (const field of contactFields) {
+        customValues[field.key] = customer.custom?.[field.key] ?? "";
+      }
+      const tokenValues = {
         firstName: customer.firstName,
         lastName: customer.lastName,
         businessName: org.name,
         phone: customer.phone,
-      });
+        email: customer.email,
+        custom: customValues,
+      };
+      const line = renderTokens(campaign.body, tokenValues);
       // A body that renders to nothing for THIS customer is a message they
       // should not receive. Better to send them nothing than a bare greeting.
       if (!line) continue;
@@ -360,12 +373,7 @@ export const fanOut = internalMutation({
         // render. A subject that resolves to nothing for this customer falls
         // back to the org name rather than sending a blank line.
         const subject = subjectTemplate
-          ? renderTokens(subjectTemplate, {
-              firstName: customer.firstName,
-              lastName: customer.lastName,
-              businessName: org.name,
-              phone: customer.phone,
-            })
+          ? renderTokens(subjectTemplate, tokenValues)
           : "";
         await ctx.db.insert("messages", {
           orgId: campaign.orgId,
