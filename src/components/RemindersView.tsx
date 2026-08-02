@@ -1,8 +1,12 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+// Pure TS shared with the backend on purpose: the preview must be the SAME
+// renderer the send path uses, or the preview becomes a second opinion.
+import { renderTokens, TOKEN_HINTS } from "../../convex/lib/renderTokens";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
   formatReminderOffset,
@@ -32,13 +36,43 @@ const RULE_COLUMNS =
 
 type RuleKind = "confirmation" | "reminder" | "winback";
 
+type RuleTrigger =
+  | "booking"
+  | "before_start"
+  | "after_end"
+  | "cancellation"
+  | "no_show";
+
+type RuleRowData = {
+  _id: Id<"messageRules">;
+  trigger: RuleTrigger;
+  offsetHours: number;
+  channel: "whatsapp" | "email" | "both";
+  paused: boolean;
+};
+
 type TemplateRow = {
+  _id: Id<"waTemplates">;
+  ruleId?: Id<"messageRules">;
   kind: string;
   language: string;
   status: string;
   metaName?: string;
   body?: string;
+  subject?: string;
   bodyPreview?: string;
+  emailSentCount?: number;
+  emailOpenCount?: number;
+};
+
+// Same map as messageRules.kindForTrigger — which template bucket words a
+// trigger, for the fallback lookup and the row labels.
+const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
+  booking: "confirmation",
+  before_start: "reminder",
+  after_end: "followup",
+  cancellation: "cancellation",
+  no_show: "winback",
 };
 
 // What a rule can actually reach today, mirroring wa.sendAppointmentMessage:
@@ -395,6 +429,504 @@ function NotificationRulesCard({
   );
 }
 
+// ── The rules-model card ────────────────────────────────────────────────────
+//
+// One row per messageRules document, in customer-journey order, each owning
+// its timing, its channel and — behind the chevron — its own wording with a
+// live preview. The legacy card above renders only for orgs the migration has
+// not reached and dies with the legacy fields.
+
+// The message editor behind a rule's chevron. Controlled state rather than
+// defaultValue+blur alone, because the token chips and the preview both need
+// the text as it is being written, not as it was last saved.
+function RuleEditor({
+  rule,
+  template,
+  orgName,
+  orgLanguage,
+  emailEnabled,
+  waConnected,
+  onSaveBody,
+  onSaveSubject,
+}: {
+  rule: RuleRowData;
+  template: TemplateRow | undefined;
+  orgName: string;
+  orgLanguage: string;
+  emailEnabled: boolean;
+  waConnected: boolean;
+  onSaveBody: (templateId: Id<"waTemplates">, body: string) => void;
+  onSaveSubject: (templateId: Id<"waTemplates">, subject: string) => void;
+}) {
+  const { t } = useLanguage();
+  const [body, setBody] = useState(template?.body ?? "");
+  const [subject, setSubject] = useState(template?.subject ?? "");
+  // The row is created by ensureTemplate when the panel opens; until the
+  // query catches up there is nothing to bind to.
+  const templateId = template?._id;
+  useEffect(() => {
+    setBody(template?.body ?? "");
+    setSubject(template?.subject ?? "");
+    // Re-seed exactly when the editor starts talking about a different row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId]);
+
+  // Sample values in the ORG's language where the sample is a message fact
+  // (the date a customer would read) and the UI language where it is a prop
+  // (names). Close enough for a preview; the send path formats for real.
+  const sampleValues = useMemo(() => {
+    const at = new Date();
+    at.setDate(at.getDate() + 1);
+    at.setHours(14, 0, 0, 0);
+    return {
+      firstName: t("settings.previewSampleName"),
+      businessName: orgName || "—",
+      appointmentAt: new Intl.DateTimeFormat(orgLanguage, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(at),
+      staffName: t("settings.previewSampleStaff"),
+      serviceName: t("settings.previewSampleService"),
+    };
+  }, [t, orgName, orgLanguage]);
+
+  if (!template) {
+    return <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>;
+  }
+
+  const rendered = renderTokens(body, sampleValues);
+  const showEmailPreview = rule.channel !== "whatsapp" && emailEnabled;
+  const showWaPreview = rule.channel !== "email";
+
+  return (
+    <div className="grid gap-4 pb-4 sm:grid-cols-2">
+      <div className="space-y-2">
+        <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
+        <textarea
+          rows={4}
+          className="w-full"
+          value={body}
+          placeholder={t("settings.templateBodyPlaceholder")}
+          aria-label={t("settings.templateBody")}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={() => onSaveBody(template._id, body)}
+        />
+        {/* The vocabulary, clickable. Appending saves immediately — a chip
+            click never passes through the textarea's blur. */}
+        <div className="flex flex-wrap gap-1.5">
+          {TOKEN_HINTS.map((token) => (
+            <button
+              key={token}
+              type="button"
+              onClick={() => {
+                const next = body ? `${body.replace(/\s+$/, "")} ${token}` : token;
+                setBody(next);
+                onSaveBody(template._id, next);
+              }}
+              className="rounded-full border border-[var(--border)] px-2 py-0.5 font-mono text-xs text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+            >
+              {token}
+            </button>
+          ))}
+        </div>
+        {emailEnabled && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="shrink-0 text-xs text-[var(--muted)]">
+              {t("settings.templateSubject")}
+            </span>
+            <input
+              className="min-w-0 flex-1"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              onBlur={() => onSaveSubject(template._id, subject)}
+            />
+          </div>
+        )}
+        {waConnected && (
+          <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
+        )}
+        {(template.emailSentCount ?? 0) > 0 && (
+          <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+            {t("settings.templateEmailOpens")}: {template.emailOpenCount ?? 0} /{" "}
+            {template.emailSentCount}
+            <InfoTip text={t("settings.templateEmailOpensHint")} />
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
+        <div className="rounded-lg bg-[var(--muted-bg)] p-3">
+          {showEmailPreview && (
+            <p className="mb-2 border-b border-[var(--border)] pb-2 text-xs font-medium">
+              {(renderTokens(subject, sampleValues) ||
+                `${orgName || "—"}, ${sampleValues.appointmentAt}`)}
+            </p>
+          )}
+          <div
+            className={`max-w-[90%] whitespace-pre-wrap px-3 py-2 text-sm ${
+              showWaPreview
+                ? "rounded-xl rounded-bl-sm bg-emerald-100 text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100"
+                : "rounded-lg bg-[var(--background)]"
+            }`}
+          >
+            {rendered || (
+              <span className="text-[var(--muted)]">
+                {t("settings.templateBodyPlaceholder")}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RulesCard({
+  isOwner,
+  org,
+  templates,
+  rules,
+  waConnected,
+  evolutionEnabled,
+  emailEnabled,
+}: {
+  isOwner: boolean;
+  org: {
+    name: string;
+    language: string;
+    quietHoursStart: number;
+    quietHoursEnd: number;
+    messageChannel: "whatsapp" | "email" | "both";
+  };
+  templates: TemplateRow[];
+  rules: RuleRowData[];
+  waConnected: boolean;
+  evolutionEnabled: boolean;
+  emailEnabled: boolean;
+}) {
+  const { t, language } = useLanguage();
+  const addRule = useMutation(api.messageRules.add);
+  const updateRule = useMutation(api.messageRules.update);
+  const removeRule = useMutation(api.messageRules.remove);
+  const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
+  const updateTemplate = useMutation(api.orgs.updateTemplate);
+  const [expandedId, setExpandedId] = useState<Id<"messageRules"> | null>(null);
+
+  const waAvailable = waConnected || evolutionEnabled;
+  const orgHasChannel = waAvailable || emailEnabled;
+  const channelOptions = [
+    ...(waAvailable ? (["whatsapp"] as const) : []),
+    ...(emailEnabled ? (["email"] as const) : []),
+    ...(waAvailable && emailEnabled ? (["both"] as const) : []),
+  ];
+
+  const ruleName = (trigger: RuleTrigger) =>
+    trigger === "booking"
+      ? t("settings.ruleConfirmation")
+      : trigger === "before_start"
+        ? t("settings.ruleReminder")
+        : trigger === "after_end"
+          ? t("settings.ruleFollowup")
+          : trigger === "cancellation"
+            ? t("settings.ruleCancellation")
+            : t("settings.ruleWinback");
+
+  const channelLabel = (channel: "whatsapp" | "email" | "both") =>
+    channel === "whatsapp"
+      ? t("channel.whatsapp")
+      : channel === "email"
+        ? t("settings.ruleEmail")
+        : t("settings.channelBoth");
+
+  // Whether anything would actually leave for this rule — the same reasoning
+  // the legacy ruleChannels ran, against the rule's own channel and wording.
+  const ruleSilent = (rule: RuleRowData) => {
+    if (!orgHasChannel) return false; // the card-level line says it once
+    const own = templates.find(
+      (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
+    );
+    const fallback = templates.find(
+      (tpl) =>
+        tpl.ruleId === undefined &&
+        tpl.kind === KIND_FOR_TRIGGER[rule.trigger] &&
+        tpl.language === org.language,
+    );
+    const content = own ?? fallback;
+    const hasText = Boolean(content?.body || content?.bodyPreview);
+    const metaSource =
+      own && own.status === "approved" && own.metaName ? own : fallback;
+    const waOk = waConnected
+      ? metaSource?.status === "approved" && Boolean(metaSource?.metaName)
+      : evolutionEnabled && hasText;
+    const emailOk = emailEnabled && hasText;
+    return !(
+      (rule.channel !== "email" && waOk) ||
+      (rule.channel !== "whatsapp" && emailOk)
+    );
+  };
+
+  const toggleExpand = (rule: RuleRowData) => {
+    if (expandedId === rule._id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(rule._id);
+    // Creates the rule's own wording row (copied from the kind fallback) the
+    // first time the panel opens; a no-op after that.
+    if (isOwner) void ensureTemplate({ ruleId: rule._id, language: org.language });
+  };
+
+  const pad = (h: number) => String(h).padStart(2, "0");
+  const winbackHint = `${t("settings.ruleWinbackHint")}\n${t("settings.ruleSendWindow")}: ${pad(
+    org.quietHoursStart,
+  )}:00–${pad(org.quietHoursEnd)}:00`;
+
+  const ruleWhen = (rule: RuleRowData) => {
+    switch (rule.trigger) {
+      case "booking":
+        return <>{t("settings.ruleWhenBooked")}</>;
+      case "cancellation":
+        return <>{t("settings.ruleWhenCancelled")}</>;
+      case "before_start":
+        return <>{formatReminderOffset(rule.offsetHours, language)}</>;
+      case "after_end":
+        return (
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={720}
+              className="w-16"
+              defaultValue={rule.offsetHours}
+              onBlur={(e) => {
+                const hours = Number(e.target.value);
+                if (Number.isFinite(hours) && hours > 0) {
+                  void updateRule({ ruleId: rule._id, offsetHours: hours });
+                }
+              }}
+            />
+            {t("settings.ruleHoursAfterEnd")}
+          </span>
+        );
+      case "no_show":
+        return (
+          <span className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={90}
+              className="w-16"
+              defaultValue={Math.round(rule.offsetHours / 24)}
+              onBlur={(e) => {
+                const days = Number(e.target.value);
+                if (Number.isFinite(days) && days > 0) {
+                  void updateRule({ ruleId: rule._id, offsetHours: days * 24 });
+                }
+              }}
+            />
+            {t("settings.ruleDaysAfterNoShow")}
+          </span>
+        );
+    }
+  };
+
+  // The add chips: reminder presets not yet on the table, the singletons when
+  // absent, and the follow-up ALWAYS — a 2h review ask and a three-week
+  // rebooking nudge are two rows, and the chip is how the second one gets in.
+  const reminderOffsets = rules
+    .filter((r) => r.trigger === "before_start")
+    .map((r) => r.offsetHours);
+  const unusedPresets = OFFSET_PRESETS.filter((h) => !reminderOffsets.includes(h));
+  const missingSingles = (
+    [
+      ["booking", "settings.ruleConfirmation"],
+      ["cancellation", "settings.ruleCancellation"],
+      ["no_show", "settings.ruleWinback"],
+    ] as const
+  ).filter(([trigger]) => !rules.some((r) => r.trigger === trigger));
+
+  const addDefaults: Partial<Record<RuleTrigger, number>> = {
+    after_end: 24,
+    no_show: 14 * 24,
+  };
+  const doAdd = (trigger: RuleTrigger, offsetHours?: number) =>
+    void addRule({ trigger, offsetHours: offsetHours ?? addDefaults[trigger] ?? 0 });
+
+  return (
+    <Card disabled={!isOwner}>
+      <div className="hidden items-center gap-3 pb-2 sm:flex">
+        <div className={RULE_COLUMNS}>
+          <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+            {t("settings.rulesWhen")}
+            <InfoTip text={t("settings.rulesHint")} />
+          </span>
+          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
+          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
+        </div>
+        <span className="flex w-11 shrink-0 justify-center text-xs text-[var(--muted)]">
+          {t("settings.ruleActive")}
+        </span>
+        <span className="w-9 shrink-0" aria-hidden />
+        <span className="w-9 shrink-0" aria-hidden />
+      </div>
+
+      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        {rules.map((rule) => {
+          const expanded = expandedId === rule._id;
+          const silent = ruleSilent(rule);
+          const ownTemplate = templates.find(
+            (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
+          );
+          return (
+            <div key={rule._id}>
+              <div className="flex items-center gap-3 py-3">
+                <div className={RULE_COLUMNS}>
+                  <span className="flex items-center gap-1.5 text-sm">
+                    {ruleWhen(rule)}
+                    {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
+                    {rule.trigger === "after_end" && (
+                      <InfoTip text={t("settings.ruleFollowupHint")} />
+                    )}
+                  </span>
+                  <span className="text-sm text-[var(--muted)]">
+                    {ruleName(rule.trigger)}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs">
+                    {channelOptions.length > 1 ? (
+                      <select
+                        value={rule.channel}
+                        aria-label={t("settings.rulesWhere")}
+                        onChange={(e) =>
+                          void updateRule({
+                            ruleId: rule._id,
+                            channel: e.target.value as "whatsapp" | "email" | "both",
+                          })
+                        }
+                      >
+                        {channelOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {channelLabel(option)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-[var(--muted)]">
+                        {orgHasChannel ? (
+                          channelLabel(channelOptions[0] ?? rule.channel)
+                        ) : (
+                          <span className="hidden sm:inline">—</span>
+                        )}
+                      </span>
+                    )}
+                    {silent && (
+                      <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                        {t("settings.ruleNoChannel")}
+                        <InfoTip text={t("settings.ruleNoChannelHint")} />
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <span className="flex w-11 shrink-0 justify-center">
+                  <Toggle
+                    checked={!rule.paused}
+                    onChange={(next) =>
+                      void updateRule({ ruleId: rule._id, paused: !next })
+                    }
+                    label={ruleName(rule.trigger)}
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void removeRule({ ruleId: rule._id })}
+                  aria-label={`${ruleName(rule.trigger)} — ${t("common.delete")}`}
+                  title={t("common.delete")}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
+                >
+                  ×
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleExpand(rule)}
+                  aria-expanded={expanded}
+                  aria-label={`${ruleName(rule.trigger)} — ${t("settings.ruleEditMessage")}`}
+                  title={t("settings.ruleEditMessage")}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  <span
+                    aria-hidden
+                    className={`inline-block transition-transform ${expanded ? "rotate-180" : ""}`}
+                  >
+                    ⌄
+                  </span>
+                </button>
+              </div>
+              {expanded && (
+                <RuleEditor
+                  rule={rule}
+                  template={ownTemplate}
+                  orgName={org.name}
+                  orgLanguage={org.language}
+                  emailEnabled={emailEnabled}
+                  waConnected={waConnected}
+                  onSaveBody={(templateId, body) =>
+                    void updateTemplate({ templateId, body })
+                  }
+                  onSaveSubject={(templateId, subject) =>
+                    void updateTemplate({ templateId, subject })
+                  }
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 pt-3">
+        <span className="text-xs text-[var(--muted)]">{t("settings.ruleAdd")}</span>
+        {missingSingles.map(([trigger, key]) => (
+          <button
+            key={trigger}
+            type="button"
+            onClick={() => doAdd(trigger)}
+            className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+          >
+            <span aria-hidden className="text-[var(--muted)]">+</span>
+            {t(key)}
+          </button>
+        ))}
+        {unusedPresets.map((hours) => (
+          <button
+            key={hours}
+            type="button"
+            onClick={() => doAdd("before_start", hours)}
+            className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+          >
+            <span aria-hidden className="text-[var(--muted)]">+</span>
+            {formatReminderOffset(hours, language)}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => doAdd("after_end")}
+          className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+        >
+          <span aria-hidden className="text-[var(--muted)]">+</span>
+          {t("settings.ruleFollowup")}
+        </button>
+      </div>
+
+      {!orgHasChannel && (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+          {t("settings.rulesNoChannel")}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 // Business hours + the out-of-hours WhatsApp reply. Everything the reply says
 // is org data, so this card is the whole configuration surface for it: which
 // days, which hours, the link, the number, and an optional override of the
@@ -649,13 +1181,30 @@ function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
 export function RemindersView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
+  const rulesData = useQuery(api.messageRules.list, {});
   const update = useMutation(api.orgs.update);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
 
-  if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+  if (!settings || !rulesData)
+    return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
 
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
+  // Which model this org runs on. Legacy renders the old card untouched; it
+  // exists only for the window between the deploy and messageRules:migrateAll.
+  const migrated = rulesData.migrated;
+
+  // What the lower templates card still owns. Rule-bound wording moved into
+  // each rule's own panel, so on the rules model this card is the Meta
+  // registration desk (plus the campaign row, which was always its own thing):
+  // rows only exist to be edited when a Cloud number makes approval a real
+  // concept. Legacy orgs keep the full editor they had.
+  const metaTemplates = settings.templates.filter((template) => {
+    if (template.ruleId !== undefined) return false;
+    if (template.kind === "campaign")
+      return settings.whatsapp.connected || settings.emailEnabled;
+    return migrated ? settings.whatsapp.connected : true;
+  });
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -665,15 +1214,32 @@ export function RemindersView() {
         </p>
       )}
 
-      <NotificationRulesCard
+      {migrated ? (
+        <RulesCard
           isOwner={isOwner}
           org={settings.org}
           templates={settings.templates}
+          rules={rulesData.rules}
           waConnected={settings.whatsapp.connected}
           evolutionEnabled={settings.evolutionEnabled}
           emailEnabled={settings.emailEnabled}
-          update={(args) => void update(args)}
         />
+      ) : (
+        <>
+          <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            {t("settings.rulesMigrationPending")}
+          </p>
+          <NotificationRulesCard
+            isOwner={isOwner}
+            org={settings.org}
+            templates={settings.templates}
+            waConnected={settings.whatsapp.connected}
+            evolutionEnabled={settings.evolutionEnabled}
+            emailEnabled={settings.emailEnabled}
+            update={(args) => void update(args)}
+          />
+        </>
+      )}
 
       <>
           {/* No connect form here. The Meta credentials — phone number id,
@@ -701,24 +1267,14 @@ export function RemindersView() {
               (name + approval) is a technical detail row that only exists
               while a Business number is connected — the shop phone and email
               need no approval from anybody. */}
+          {metaTemplates.length > 0 && (
           <Card
             title={t("settings.templates")}
             tip={t("settings.templatesHint")}
             disabled={!isOwner}
           >
             <div className="divide-y divide-[var(--border)]">
-              {settings.templates
-                // The campaign row has no body of its own — each campaign
-                // carries its line — but it does own the email subject, so it
-                // renders whenever either half has something to edit: the
-                // Meta registration (Cloud connected) or the subject (email
-                // From set). With neither, it is an editor for nothing.
-                .filter(
-                  (template) =>
-                    template.kind !== "campaign" ||
-                    settings.whatsapp.connected ||
-                    settings.emailEnabled,
-                )
+              {metaTemplates
                 .map((template) => (
                   <div key={template._id} className="space-y-2 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -729,7 +1285,11 @@ export function RemindersView() {
                             ? t("settings.ruleReminder")
                             : template.kind === "winback"
                               ? t("settings.ruleWinback")
-                              : t("settings.templateKindCampaign")}
+                              : template.kind === "followup"
+                                ? t("settings.ruleFollowup")
+                                : template.kind === "cancellation"
+                                  ? t("settings.ruleCancellation")
+                                  : t("settings.templateKindCampaign")}
                       </span>
                       {/* Which number this leaves from, in the salon's words.
                           Cloud wins whenever it exists (lib/waLane rule 2),
@@ -744,7 +1304,7 @@ export function RemindersView() {
                         </span>
                       )}
                     </div>
-                    {template.kind !== "campaign" && (
+                    {!migrated && template.kind !== "campaign" && (
                       <>
                         <textarea
                           rows={3}
@@ -780,8 +1340,10 @@ export function RemindersView() {
                     )}
                     {/* Outside the campaign guard: a campaign has no body
                         here, but its emails need a subject like everyone
-                        else's (campaigns.fanOut renders it per customer). */}
-                    {settings.emailEnabled && (
+                        else's (campaigns.fanOut renders it per customer). On
+                        the rules model every other subject lives in its
+                        rule's panel. */}
+                    {(!migrated || template.kind === "campaign") && settings.emailEnabled && (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
                           {t("settings.templateSubject")}
@@ -841,6 +1403,7 @@ export function RemindersView() {
                 ))}
             </div>
           </Card>
+          )}
         </>
 
       <ShopPhoneCard isOwner={isOwner} />

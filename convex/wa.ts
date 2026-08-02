@@ -396,23 +396,34 @@ export const sendAppointmentMessage = internalAction({
     // first, the kind-level row for everything the owner has not worded
     // specifically.
     const language = customer.language ?? org.language;
-    const contentTemplate =
-      (rule
-        ? templates.find(
-            (t: { ruleId?: string; language: string }) =>
-              t.ruleId === rule._id && t.language === language,
-          )
-        : undefined) ??
-      templates.find(
-        (t: { kind: string; language: string; ruleId?: string }) =>
-          t.ruleId === undefined && t.kind === args.kind && t.language === language,
-      );
+    const ruleTemplate = rule
+      ? templates.find(
+          (t: { ruleId?: string; language: string }) =>
+            t.ruleId === rule._id && t.language === language,
+        )
+      : undefined;
+    const kindTemplate = templates.find(
+      (t: { kind: string; language: string; ruleId?: string }) =>
+        t.ruleId === undefined && t.kind === args.kind && t.language === language,
+    );
+    const contentTemplate = ruleTemplate ?? kindTemplate;
     // The Cloud lane needs both halves of the Meta registration: the approved
     // status AND the name to send under. metaName went optional the day orgs
     // without a Cloud number stopped being forced to invent one.
+    //
+    // Registration resolves SEPARATELY from content, and falls back to the
+    // kind-level row: authoring per-rule wording must not cut off a Cloud lane
+    // that was sending fine on the shared approved template. Until this rule's
+    // own wording is registered and approved with Meta, Cloud sends the
+    // generic approved string while email and the shop phone carry the words
+    // the owner actually wrote.
+    const metaSource =
+      ruleTemplate && ruleTemplate.status === "approved" && ruleTemplate.metaName
+        ? ruleTemplate
+        : kindTemplate;
     const cloudTemplate =
-      contentTemplate && contentTemplate.status === "approved" && contentTemplate.metaName
-        ? { metaName: contentTemplate.metaName, language: contentTemplate.language }
+      metaSource && metaSource.status === "approved" && metaSource.metaName
+        ? { metaName: metaSource.metaName, language: metaSource.language }
         : undefined;
 
     const fail = async (reason: string) => {

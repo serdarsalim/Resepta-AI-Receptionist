@@ -767,6 +767,64 @@ const dictionary = {
     en: "Add reminder",
     de: "Erinnerung hinzufügen",
   },
+  "settings.ruleFollowup": {
+    tr: "Randevu sonrası",
+    en: "Follow-up",
+    de: "Nach dem Termin",
+  },
+  "settings.ruleCancellation": {
+    tr: "İptal bildirimi",
+    en: "Cancellation notice",
+    de: "Stornomitteilung",
+  },
+  "settings.ruleWhenCancelled": {
+    tr: "Randevu iptal edildiğinde",
+    en: "When cancelled",
+    de: "Bei Stornierung",
+  },
+  "settings.ruleHoursAfterEnd": {
+    tr: "saat sonra, randevu bitince",
+    en: "hours after the appointment",
+    de: "Stunden nach dem Termin",
+  },
+  // The follow-up needs the visit marked done before it can count from the
+  // end — the hourly sweep does that the next day, a same-day nudge needs the
+  // owner to complete the appointment themselves.
+  "settings.ruleFollowupHint": {
+    tr: "Yalnızca tamamlanan randevulardan sonra gönderilir. Randevu 'tamamlandı' olarak işaretlenince sayaç başlar; gece otomatik işaretlenir, daha erken göndermek için randevuyu kendiniz tamamlayın.",
+    en: "Sends only after completed appointments. The clock starts when the appointment is marked completed — that happens automatically overnight, so for a same-day message mark it completed yourself.",
+    de: "Wird nur nach abgeschlossenen Terminen gesendet. Die Zeit läuft, sobald der Termin als abgeschlossen markiert ist — das passiert automatisch über Nacht; für eine Nachricht am selben Tag markieren Sie ihn selbst.",
+  },
+  "settings.ruleEditMessage": {
+    tr: "Mesajı düzenle",
+    en: "Edit message",
+    de: "Nachricht bearbeiten",
+  },
+  "settings.rulePreview": { tr: "Önizleme", en: "Preview", de: "Vorschau" },
+  // Shown in the editor while a Cloud number is connected: the authored text
+  // rides email and the shop phone, but Meta's lane sends only what Meta
+  // approved. Without this line the owner rewrites a reminder, gets the old
+  // wording on WhatsApp, and reasonably concludes saving is broken.
+  "settings.ruleCloudNote": {
+    tr: "WhatsApp işletme hattı Meta onaylı şablon metnini gönderir; buraya yazdıklarınız e-posta ve dükkan telefonundan gider.",
+    en: "The WhatsApp business line sends the Meta-approved template text; what you write here goes out by email and the shop phone.",
+    de: "Die WhatsApp-Businessnummer sendet den von Meta genehmigten Vorlagentext; was Sie hier schreiben, geht per E-Mail und über das Ladentelefon raus.",
+  },
+  "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
+  "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
+  "settings.previewSampleService": {
+    tr: "Saç kesimi",
+    en: "Haircut",
+    de: "Haarschnitt",
+  },
+  // Operator-facing: the org predates the rules table and the one-shot
+  // migration has not run yet. A salon owner should never see this for more
+  // than a deploy window.
+  "settings.rulesMigrationPending": {
+    tr: "Mesaj kuralları eski modelde çalışıyor. Yeni kural listesi için geçiş bekleniyor.",
+    en: "Message rules are still running on the old model. The new rules list is waiting on the migration.",
+    de: "Die Nachrichtenregeln laufen noch im alten Modell. Die neue Regelliste wartet auf die Migration.",
+  },
   // Column header over the pause switch. "Active" rather than "Pause" because
   // the switch is green when the rule IS sending, and a green switch under a
   // header reading Pause parses backwards.
