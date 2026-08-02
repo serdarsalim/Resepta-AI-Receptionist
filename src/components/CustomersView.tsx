@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
@@ -20,6 +20,18 @@ import { Sheet } from "./Sheet";
 
 type Customer = FunctionReturnType<typeof api.customers.list>[number];
 type ContactField = Doc<"contactFields">;
+
+// What a table that has never been arranged shows: who they are and how to
+// reach them. Everything else — when they were added, when they last replied,
+// and every contact field the business defines — is one tick away in the
+// Columns picker.
+//
+// It used to be everything, on the reasoning that a field you just created
+// should be visible without hunting for a picker. True for the first two
+// fields and wrong by the fifth: nothing ever removed a column, so the table
+// only ever got wider, and the cost is paid on every visit to the customer
+// list by everyone. The name column is pinned and never in the picker.
+const DEFAULT_CUSTOMER_COLUMNS = ["phone", "email"] as const;
 
 // Org-defined columns are namespaced so a field keyed "phone" can never
 // collide with the built-in one.
@@ -186,7 +198,11 @@ export function CustomersView({
     onOpenContact(customer._id);
   };
 
-  const table = useTableState<string>({ key: "added", dir: "desc" }, "customers");
+  const table = useTableState<string>(
+    { key: "added", dir: "desc" },
+    "customers",
+    DEFAULT_CUSTOMER_COLUMNS,
+  );
   const search = useHeaderSearch(t("common.search"));
 
   const fields: ContactField[] = useMemo(() => contactFields ?? [], [contactFields]);
@@ -343,6 +359,19 @@ export function CustomersView({
   const visibleColumns = orderedColumns.filter((column) => table.isColumnVisible(column.key));
   const columnKeys = orderedColumns.map((column) => column.key);
   const dragKey = useRef<string | null>(null);
+
+  // In an effect, not during render: deciding a new column's default flips
+  // state, and the columns are only known once the field list has loaded.
+  // syncColumns is a no-op once every key has been seen, so this settles after
+  // the first pass and stays quiet.
+  //
+  // Keyed on the joined list rather than the array: orderedColumns is rebuilt
+  // every render, so the array identity alone would re-fire this forever.
+  const { syncColumns } = table;
+  const columnSignature = columnKeys.join("|");
+  useEffect(() => {
+    syncColumns(columnSignature.split("|"));
+  }, [syncColumns, columnSignature]);
 
   const rows = useMemo(() => {
     const list = customers ?? [];

@@ -19,6 +19,7 @@ type StoredLayout = {
   hidden?: string[];
   widths?: Record<string, number>;
   order?: string[];
+  known?: string[];
 };
 
 // Anything can be in localStorage: a half-written entry, a shape from a build
@@ -34,6 +35,8 @@ function readLayout(storageKey: string): StoredLayout | null {
     const { hidden, widths, order } = parsed as StoredLayout;
     const out: StoredLayout = {};
     if (Array.isArray(hidden)) out.hidden = hidden.filter((k) => typeof k === "string");
+    const seen = (parsed as StoredLayout).known;
+    if (Array.isArray(seen)) out.known = seen.filter((k) => typeof k === "string");
     if (Array.isArray(order)) out.order = order.filter((k) => typeof k === "string");
     if (widths && typeof widths === "object" && !Array.isArray(widths)) {
       out.widths = Object.fromEntries(
@@ -140,6 +143,10 @@ export type TableState<K extends string> = {
   isColumnVisible: (key: string) => boolean;
   hiddenColumns: ReadonlySet<string>;
   toggleColumn: (key: string) => void;
+  // Tell the layout which columns exist. Call it in an effect once the column
+  // list is built; new ones are shown or hidden per `defaultVisible`, and
+  // recorded so the decision is made exactly once.
+  syncColumns: (keys: string[]) => void;
   filters: Readonly<Record<string, string[]>>;
   filterFor: (column: string) => string[];
   toggleFilter: (column: string, value: string) => void;
@@ -165,6 +172,10 @@ export function useTableState<K extends string>(
   // Omit to keep layout in memory only. Given, it is the localStorage suffix,
   // so two tables in the app never share a layout.
   storageKey?: string,
+  // Which columns a layout that has never seen them should show. Everything
+  // else arrives unticked in the picker. Must be a stable reference — a fresh
+  // array each render would re-run the sync effect forever.
+  defaultVisible: readonly string[] = [],
 ): TableState<K> {
   const [sort, setSort] = useState<SortState<K>>(initial);
   const toggleSort = useCallback((key: K) => {
@@ -175,11 +186,20 @@ export function useTableState<K extends string>(
     );
   }, []);
 
-  // HIDDEN, not visible: a contact field the owner adds next week shows up on
-  // its own instead of staying invisible until someone finds the picker.
+  // Still HIDDEN rather than visible, so a column the code adds later is a
+  // column this layout keeps rendering. What decides whether a NEW one starts
+  // hidden is `known` below — the two together are what let "show what I chose"
+  // and "don't widen my table behind my back" both be true.
   const [hiddenColumns, setHiddenColumns] = useState<ReadonlySet<string>>(
     () => new Set<string>(),
   );
+  // Every column key this layout has already had the chance to hide. A key
+  // that is NOT in here has never been seen before, which is the only reliable
+  // way to tell "the owner unhid this" from "this did not exist yet".
+  //
+  // Storing hidden alone could not tell those apart, so every contact field
+  // ever added arrived switched on and no table ever got narrower again.
+  const [known, setKnown] = useState<string[]>([]);
   const toggleColumn = useCallback((key: string) => {
     setHiddenColumns((prev) => {
       const next = new Set(prev);
@@ -192,6 +212,7 @@ export function useTableState<K extends string>(
     (key: string) => !hiddenColumns.has(key),
     [hiddenColumns],
   );
+
 
   const [widths, setWidths] = useState<Record<string, number>>({});
   const [order, setOrder] = useState<string[]>([]);
@@ -210,8 +231,36 @@ export function useTableState<K extends string>(
     if (stored?.hidden) setHiddenColumns(new Set(stored.hidden));
     if (stored?.widths) setWidths(stored.widths);
     if (stored?.order) setOrder(stored.order);
+    // A layout saved before `known` existed is deliberately NOT grandfathered.
+    // Those are exactly the layouts carrying every contact field as a column,
+    // which is the thing being fixed; honouring them would preserve the
+    // problem for everybody who already has one. They take the new defaults
+    // once, and every choice made after that is kept.
+    if (stored?.known) setKnown(stored.known);
     setRestored(true);
   }, [storageKey]);
+
+  // Called by the view with the keys it is rendering, once they are known.
+  // Anything unseen is decided here and then never again: shown if the table
+  // named it a default, hidden otherwise, and recorded either way so the
+  // owner's next toggle is the last word on it.
+  //
+  // Gated on `restored` for the same reason the persist effect is — running
+  // against the empty first-frame state would hide every column and then save
+  // that over the layout on disk.
+  const syncColumns = useCallback(
+    (keys: string[]) => {
+      if (!restored) return;
+      const fresh = keys.filter((key) => !known.includes(key));
+      if (fresh.length === 0) return;
+      const startHidden = fresh.filter((key) => !defaultVisible.includes(key));
+      if (startHidden.length > 0) {
+        setHiddenColumns((prev) => new Set([...prev, ...startHidden]));
+      }
+      setKnown((prev) => [...prev, ...fresh]);
+    },
+    [restored, known, defaultVisible],
+  );
 
   // Gated on `restored` so the empty defaults of that first frame never
   // overwrite what is on disk before the read lands.
@@ -220,13 +269,13 @@ export function useTableState<K extends string>(
     try {
       window.localStorage.setItem(
         STORAGE_PREFIX + storageKey,
-        JSON.stringify({ hidden: [...hiddenColumns], widths, order }),
+        JSON.stringify({ hidden: [...hiddenColumns], widths, order, known }),
       );
     } catch {
       // Private mode, or the quota is full. A table that cannot remember its
       // layout still works; one that throws while you drag a column does not.
     }
-  }, [storageKey, restored, hiddenColumns, widths, order]);
+  }, [storageKey, restored, hiddenColumns, widths, order, known]);
 
   const widthFor = useCallback(
     (key: string, fallback: number) => widths[key] ?? fallback,
@@ -258,6 +307,10 @@ export function useTableState<K extends string>(
     setHiddenColumns(new Set<string>());
     setWidths({});
     setOrder([]);
+    // Forgetting what it has seen is what makes this a reset rather than
+    // "reveal everything": the columns get re-decided against the defaults on
+    // the next sync, so the table comes back as it shipped.
+    setKnown([]);
   }, []);
 
   const layoutChanged =
@@ -297,6 +350,7 @@ export function useTableState<K extends string>(
     toggleSort,
     isColumnVisible,
     hiddenColumns,
+    syncColumns,
     toggleColumn,
     filters,
     filterFor,
