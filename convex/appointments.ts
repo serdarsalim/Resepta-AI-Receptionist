@@ -248,6 +248,9 @@ export async function scheduleConfirmationIfConfigured(
 ) {
   const org = await ctx.db.get(orgId);
   if (!org || org.sendBookingConfirmation === false) return;
+  // Taken off the table entirely, which is a different act from switching it
+  // off — but the same outcome for this send.
+  if ((org.removedRules ?? []).includes("confirmation")) return;
   // No WhatsApp account is NOT a reason to skip the confirmation. The sender
   // attempts each channel independently, so an org with an email address and
   // no WABA still confirms its bookings; returning here meant an unconfigured

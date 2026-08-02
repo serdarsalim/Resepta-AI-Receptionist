@@ -142,9 +142,33 @@ export default defineSchema({
     currency: v.optional(v.string()),
     // Hours before startAt to send a reminder. Default [24, 2] applied in code
     // when unset so existing orgs pick up default changes.
+    //
+    // This array is PRESENCE: which reminder rows exist. Whether each one is
+    // currently sending is `pausedReminderHours` below. The two were one thing
+    // until a switch that "turned a reminder off" was actually deleting the
+    // row, losing a schedule the salon had built.
     reminderOffsetsHours: v.optional(v.array(v.number())),
+    // Reminder offsets that exist but are switched off. A subset of the array
+    // above; an hour in here is skipped by lib/reminderSchedule but keeps its
+    // row, its position and its wording.
+    //
+    // Kept as a second array rather than turning offsets into objects on
+    // purpose: appointments.reminderSentOffsets keys the double-send guard on
+    // the HOUR, so hours have to stay the identity of a reminder. Changing
+    // that shape is the migration convex/lib/reminderSchedule warns about.
+    pausedReminderHours: v.optional(v.array(v.number())),
     // Send a confirmation template immediately when an appointment is booked.
+    // This is the PAUSE state for that rule, not its presence — see
+    // removedRules for whether the row is on the table at all.
     sendBookingConfirmation: v.optional(v.boolean()),
+    // Rules the salon has removed outright, by key: "confirmation",
+    // "winback". Reminders are not listed here because dropping an offset
+    // from the array above already removes that row.
+    //
+    // Exists so every row can be deleted, not only the reminders. Without it
+    // the two singleton rules could be switched off but never taken off the
+    // list, which made their column behave differently from every other row.
+    removedRules: v.optional(v.array(v.string())),
     // Org-scoped secret in the cal.com webhook URL (?token=...) — how an
     // inbound booking event resolves to its org. Generated in Settings.
     calcomWebhookToken: v.optional(v.string()),

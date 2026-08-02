@@ -80,6 +80,7 @@ function RuleRow({
   orgHasChannel,
   enabled,
   onToggle,
+  onRemove,
   hint,
 }: {
   when: React.ReactNode;
@@ -93,6 +94,7 @@ function RuleRow({
   orgHasChannel: boolean;
   enabled: boolean;
   onToggle: (next: boolean) => void;
+  onRemove: () => void;
   hint?: string;
 }) {
   const { t } = useLanguage();
@@ -130,7 +132,22 @@ function RuleRow({
             ))}
         </span>
       </div>
-      <Toggle checked={enabled} onChange={onToggle} label={what} />
+      {/* Two controls, two meanings, and now every row has both: the switch
+          pauses without losing anything, the × takes the row off the table.
+          They used to be the same control, which is why switching a reminder
+          off silently deleted the schedule behind it. */}
+      <span className="flex w-11 shrink-0 justify-center">
+        <Toggle checked={enabled} onChange={onToggle} label={what} />
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`${what} — ${t("common.delete")}`}
+        title={t("common.delete")}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -163,6 +180,8 @@ function NotificationRulesCard({
   org: {
     language: string;
     reminderOffsetsHours: number[];
+    pausedReminderHours: number[];
+    removedRules: string[];
     sendBookingConfirmation: boolean;
     winbackEnabled: boolean;
     winbackDaysAfter: number;
@@ -258,11 +277,16 @@ function NotificationRulesCard({
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
         </div>
-        {/* Spacer matching the toggle so the headers sit over their columns. */}
-        <span className="w-11" aria-hidden />
+        <span className="flex w-11 shrink-0 justify-center text-xs text-[var(--muted)]">
+          {t("settings.ruleActive")}
+        </span>
+        {/* Spacer over the × column; a header on it would just repeat what the
+            glyph already says. */}
+        <span className="w-9 shrink-0" aria-hidden />
       </div>
 
       <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        {!org.removedRules.includes("confirmation") && (
         <RuleRow
           when={t("settings.ruleWhenBooked")}
           what={t("settings.ruleConfirmation")}
@@ -270,7 +294,11 @@ function NotificationRulesCard({
           orgHasChannel={orgHasChannel}
           enabled={org.sendBookingConfirmation}
           onToggle={(next) => update({ sendBookingConfirmation: next })}
+          onRemove={() =>
+            update({ removedRules: [...org.removedRules, "confirmation"] })
+          }
         />
+        )}
 
         {offsets.map((hours) => (
           <RuleRow
@@ -279,11 +307,19 @@ function NotificationRulesCard({
             what={t("settings.ruleReminder")}
             channels={channelsFor("reminder")}
             orgHasChannel={orgHasChannel}
-            enabled
-            onToggle={() => setOffsets(offsets.filter((h) => h !== hours))}
+            enabled={!org.pausedReminderHours.includes(hours)}
+            onToggle={(next) =>
+              update({
+                pausedReminderHours: next
+                  ? org.pausedReminderHours.filter((h) => h !== hours)
+                  : [...org.pausedReminderHours, hours],
+              })
+            }
+            onRemove={() => setOffsets(offsets.filter((h) => h !== hours))}
           />
         ))}
 
+        {!org.removedRules.includes("winback") && (
         <RuleRow
           when={
             <span className="flex items-center gap-1.5">
@@ -306,20 +342,44 @@ function NotificationRulesCard({
           orgHasChannel={orgHasChannel}
           enabled={org.winbackEnabled}
           onToggle={(next) => update({ winbackEnabled: next })}
+          onRemove={() => update({ removedRules: [...org.removedRules, "winback"] })}
           hint={winbackHint}
         />
+        )}
       </div>
 
-      {unused.length > 0 && (
+      {(unused.length > 0 || org.removedRules.length > 0) && (
         <div className="flex flex-wrap items-center gap-1.5 pt-3">
           <span className="text-xs text-[var(--muted)]">{t("settings.ruleAdd")}</span>
+          {/* A removed singleton comes back the same way a reminder does, from
+              the same row of chips — so "add a rule" is one place, not two. */}
+          {org.removedRules.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() =>
+                update({ removedRules: org.removedRules.filter((r) => r !== key) })
+              }
+              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
+            >
+              <span aria-hidden className="text-[var(--muted)]">+</span>
+              {key === "confirmation"
+                ? t("settings.ruleConfirmation")
+                : t("settings.ruleWinback")}
+            </button>
+          ))}
           {unused.map((hours) => (
+            // Bordered, with a +, because these used to be bare text that
+            // only looked clickable once the pointer was already on them —
+            // and the one control on this card that ADDS a row read exactly
+            // like the labels beside it.
             <button
               key={hours}
               type="button"
               onClick={() => setOffsets([...offsets, hours])}
-              className="rounded-full px-3 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
             >
+              <span aria-hidden className="text-[var(--muted)]">+</span>
               {formatReminderOffset(hours, language)}
             </button>
           ))}

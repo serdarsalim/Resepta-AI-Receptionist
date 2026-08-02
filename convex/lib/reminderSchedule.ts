@@ -65,9 +65,14 @@ function nextReminder(
   // of the cron's read entirely rather than having it fetch and discard them.
   if (appointment.startAt <= Date.now()) return undefined;
   const offsets = org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS;
+  // Paused rows keep their place on the table and their wording; they just do
+  // not send. Filtered here rather than by removing the offset, so switching a
+  // reminder back on restores exactly what was there.
+  const paused = org.pausedReminderHours ?? [];
   const sent = appointment.reminderSentOffsets ?? [];
   let earliest: { at: number; offsetHours: number } | undefined;
   for (const offsetHours of offsets) {
+    if (paused.includes(offsetHours)) continue;
     if (sent.includes(offsetHours)) continue;
     const at = appointment.startAt - offsetHours * HOUR_MS;
     if (earliest === undefined || at < earliest.at) earliest = { at, offsetHours };
@@ -81,6 +86,9 @@ function winbackDueAt(
   org: Doc<"orgs">,
 ): number | undefined {
   if (appointment.status !== "no_show") return undefined;
+  // Removed means the rule is not on the table at all; disabled means it is
+  // there and switched off. Either way nothing sends.
+  if ((org.removedRules ?? []).includes("winback")) return undefined;
   if (!(org.winbackEnabled ?? false)) return undefined;
   if (appointment.winbackSentAt !== undefined) return undefined;
   return appointment.startAt + (org.winbackDaysAfter ?? DEFAULT_WINBACK_DAYS) * DAY_MS;

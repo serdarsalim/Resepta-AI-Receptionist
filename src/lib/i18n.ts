@@ -767,6 +767,10 @@ const dictionary = {
     en: "Add reminder",
     de: "Erinnerung hinzufügen",
   },
+  // Column header over the pause switch. "Active" rather than "Pause" because
+  // the switch is green when the rule IS sending, and a green switch under a
+  // header reading Pause parses backwards.
+  "settings.ruleActive": { tr: "Aktif", en: "Active", de: "Aktiv" },
   "settings.ruleEmail": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "settings.sendChannel": {
     tr: "Gönderim kanalı",

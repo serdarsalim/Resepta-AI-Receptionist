@@ -58,6 +58,8 @@ export const current = query({
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
       reminderOffsetsHours: v.array(v.number()),
+      pausedReminderHours: v.array(v.number()),
+      removedRules: v.array(v.string()),
       sendBookingConfirmation: v.boolean(),
       quietHoursStart: v.number(),
       quietHoursEnd: v.number(),
@@ -166,6 +168,8 @@ export const current = query({
         demoMode: org.demoMode,
         inboundDomain: mailConfig.domain ?? undefined,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
+        pausedReminderHours: org.pausedReminderHours ?? [],
+        removedRules: org.removedRules ?? [],
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
         quietHoursStart: org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0],
         quietHoursEnd: org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1],
@@ -226,6 +230,8 @@ export const update = mutation({
     inboundAddress: v.optional(v.string()),
     revenueEnabled: v.optional(v.boolean()),
     reminderOffsetsHours: v.optional(v.array(v.number())),
+    pausedReminderHours: v.optional(v.array(v.number())),
+    removedRules: v.optional(v.array(v.string())),
     sendBookingConfirmation: v.optional(v.boolean()),
     quietHoursStart: v.optional(v.number()),
     quietHoursEnd: v.optional(v.number()),
@@ -250,6 +256,7 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
+    const org0 = await ctx.db.get(orgId);
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
     if (args.timezone !== undefined) {
@@ -274,10 +281,31 @@ export const update = mutation({
       // admin console writes this field too and used to do neither.
       patch.inboundAddress = await resolveInboundAddress(ctx, orgId, args.inboundAddress);
     }
+    if (args.pausedReminderHours !== undefined) {
+      patch.pausedReminderHours = [...new Set(args.pausedReminderHours)].sort(
+        (a, b) => b - a,
+      );
+    }
+    if (args.removedRules !== undefined) {
+      // Only the two singleton rules can be removed this way. A reminder
+      // leaves by dropping its offset, and letting "reminder:2" in here would
+      // create a second, disagreeing way to hide the same row.
+      patch.removedRules = [...new Set(args.removedRules)].filter(
+        (key) => key === "confirmation" || key === "winback",
+      );
+    }
     if (args.reminderOffsetsHours !== undefined) {
-      patch.reminderOffsetsHours = args.reminderOffsetsHours
+      const next = args.reminderOffsetsHours
         .filter((h) => h > 0 && h <= 168)
         .sort((a, b) => b - a);
+      patch.reminderOffsetsHours = next;
+      // A paused entry for an offset that no longer exists would come back
+      // switched off if the salon re-added that timing later, which is not
+      // something they asked for and not something they could see coming.
+      const paused = (patch.pausedReminderHours as number[] | undefined) ??
+        org0?.pausedReminderHours ??
+        [];
+      patch.pausedReminderHours = paused.filter((h) => next.includes(h));
     }
     if (args.sendBookingConfirmation !== undefined) {
       patch.sendBookingConfirmation = args.sendBookingConfirmation;
