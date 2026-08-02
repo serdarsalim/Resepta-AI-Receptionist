@@ -1202,7 +1202,13 @@ export function RemindersView() {
   const metaTemplates = settings.templates.filter((template) => {
     if (template.ruleId !== undefined) return false;
     if (template.kind === "campaign")
-      return settings.whatsapp.connected || settings.emailEnabled;
+      // The campaign's email subject moved into the campaign composer, where
+      // campaigns are actually written. What is left of this row is its Meta
+      // registration, which only exists as a concept on a Cloud number —
+      // legacy orgs keep the old behaviour.
+      return migrated
+        ? settings.whatsapp.connected
+        : settings.whatsapp.connected || settings.emailEnabled;
     return migrated ? settings.whatsapp.connected : true;
   });
 

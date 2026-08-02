@@ -810,6 +810,13 @@ const dictionary = {
     en: "The WhatsApp business line sends the Meta-approved template text; what you write here goes out by email and the shop phone.",
     de: "Die WhatsApp-Businessnummer sendet den von Meta genehmigten Vorlagentext; was Sie hier schreiben, geht per E-Mail und über das Ladentelefon raus.",
   },
+  // In the campaign composer. One subject for all campaign mail, stored on
+  // the campaign template row — not per campaign.
+  "campaign.subjectHint": {
+    tr: "Kampanya e-postalarının konu satırı. Boş kalırsa işletme adı kullanılır. [ad] gibi değişkenler burada da çalışır.",
+    en: "The subject line on campaign emails. Left empty, the business name is used. Tokens like [ad] work here too.",
+    de: "Die Betreffzeile von Kampagnen-E-Mails. Bleibt sie leer, wird der Betriebsname verwendet. Platzhalter wie [ad] funktionieren auch hier.",
+  },
   "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
   "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
   "settings.previewSampleService": {

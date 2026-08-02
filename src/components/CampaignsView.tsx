@@ -129,11 +129,29 @@ export function CampaignsView() {
 function ComposeSheet({ onClose }: { onClose: () => void }) {
   const { t } = useLanguage();
   const services = useQuery(api.services.list, {});
+  // For the email subject: whether the lane exists at all, and the shared
+  // campaign template row the subject lives on (campaigns.fanOut reads it).
+  const settings = useQuery(api.orgs.current, {});
   const create = useMutation(api.campaigns.create);
   const send = useAction(api.campaigns.send);
+  const ensureCampaignTemplate = useMutation(api.orgs.ensureCampaignTemplate);
+  const updateTemplate = useMutation(api.orgs.updateTemplate);
 
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
+  // null = untouched, render the stored value. The subject is a property of
+  // "campaign mail from this salon" rather than of one campaign — it lives on
+  // the template row, and this input edits it in place.
+  const [subject, setSubject] = useState<string | null>(null);
+  const storedSubject =
+    settings?.templates.find(
+      (row) => row.kind === "campaign" && row.language === settings.org.language,
+    )?.subject ?? "";
+  const saveSubject = async () => {
+    if (subject === null || subject === storedSubject) return;
+    const templateId = await ensureCampaignTemplate({});
+    await updateTemplate({ templateId, subject });
+  };
   const [notSeenForDays, setNotSeenForDays] = useState<number | "">(90);
   const [neverBooked, setNeverBooked] = useState(false);
   const [serviceId, setServiceId] = useState<Id<"services"> | "">("");
@@ -155,6 +173,9 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError(null);
     try {
+      // The blur handler saves this too, but a click straight onto Send races
+      // it; the send must not leave with last week's subject.
+      await saveSubject();
       const campaignId = await create({ name, body, segment });
       const result = await send({ campaignId });
       if (result.ok) onClose();
@@ -186,6 +207,21 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
             className="w-full resize-none"
           />
         </div>
+
+        {settings?.emailEnabled && (
+          <div>
+            <RowLabel
+              label={t("settings.templateSubject")}
+              hint={t("campaign.subjectHint")}
+            />
+            <input
+              value={subject ?? storedSubject}
+              onChange={(event) => setSubject(event.target.value)}
+              onBlur={() => void saveSubject()}
+              className="w-full"
+            />
+          </div>
+        )}
 
         <div>
           <RowLabel label={t("campaign.segment")} hint={t("campaign.consentNote")} />
