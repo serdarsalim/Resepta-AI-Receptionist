@@ -65,12 +65,14 @@ style issue.
   `enrichedAppointment.customer` is already `v.union(object, v.null())`, so the
   read path would tolerate it. Do not build a parallel blocked-time system
   without revisiting that call with Serdar.
-- WhatsApp is the wa_cloud lane ONLY (Meta Cloud API). Business-initiated sends
-  (reminders, confirmations) use pre-approved **template messages** — that is
-  the core send path here, unlike Nudge where template sends are unbuilt. Each
-  org connects its own WABA number (`waAccounts`); the org enters its approved
-  template names in the Reminders tab (WhatsApp section — Settings no longer
-  exists, see the IA section below).
+- WhatsApp runs on TWO lanes (`convex/lib/waLane.ts`): the Meta Cloud API
+  (`waAccounts`, credentials operator-installed at /admin) and the salon's own
+  shop phone on an Evolution instance (operator-provisioned; the salon links
+  the handset by QR in Reminders). A reply goes back out the lane it came in
+  on; anything business-initiated prefers Cloud, because Evolution silently
+  drops first contact (Reachout Timelock, ACK 463). Cloud sends ride
+  pre-approved **Meta template messages**; the shop phone and the email lane
+  send the template row's authored body and need no approval from anybody.
 
 ## Message model
 
@@ -155,17 +157,33 @@ Do not import `lib/platformAuth` anywhere else.
   do not translate: the stored string cannot be right in three languages at
   once. An unresolved token renders as nothing, never as itself.
 
-Campaigns are business-initiated, so they MUST ride an approved template. The
-campaign template's `{{3}}` is a free line the campaign supplies, which is what
-makes one Meta approval cover every campaign the salon will ever run.
+Campaigns are business-initiated, so on the Cloud lane they MUST ride an
+approved template. The campaign template's `{{3}}` is a free line the campaign
+supplies, which is what makes one Meta approval cover every campaign the salon
+will ever run.
+
+The `waTemplates` row bridges the two kinds (the Nudge template-engine port,
+Aug 2026). Per (kind, language) it carries the salon's AUTHORED `body` and
+email `subject` in named tokens — the content for the shop-phone lane, email
+and the demo — while `metaName`/`status`/`bodyPreview` remain the Cloud
+registration, which gates only the Cloud send. `metaName` is optional
+(shop-phone/email-only orgs register nothing with Meta); `bodyPreview` doubles
+as the legacy content fallback for rows with no authored body. The editor is
+the templates card in Reminders; the Meta row renders only while a Cloud
+number is connected. Winback and campaign email carries an open pixel
+(`/e/o/<token>` in `convex/http.ts`, `messages.recordEmailOpen`, 15s prefetch
+guard); opens surface as a RATE on the winback template row and the campaign
+row — never as a per-customer "opened" badge, because relay prefetch makes the
+individual fact a guess.
 
 ## i18n — two layers, don't conflate them
 
 1. **Customer-facing (WhatsApp).** Language resolves per customer:
-   `customers.language ?? orgs.language`. Template selection is an EXACT match
-   on `(kind, language, status="approved")` with **no cross-language
-   fallback** — a missing template logs a failed message rather than shipping
-   the wrong language (the Nudge lesson). Dates inside messages format through
+   `customers.language ?? orgs.language`. The content row is an EXACT match on
+   `(kind, language)` with **no cross-language fallback** — a missing template
+   logs a failed message rather than shipping the wrong language (the Nudge
+   lesson). The Cloud send additionally requires `status === "approved"` plus
+   a `metaName` on that same row. Dates inside messages format through
    `convex/lib/format.ts` in the ORG's timezone and the message language.
 2. **App UI.** A typed dictionary in `src/lib/i18n.ts` (`tr`/`en`) behind
    `LanguageProvider` + `useT()`. Adding a language = adding a column; adding
