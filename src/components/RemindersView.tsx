@@ -599,12 +599,16 @@ export function RemindersView() {
           >
             <div className="divide-y divide-[var(--border)]">
               {settings.templates
-                // The campaign template is Cloud plumbing only — its body
-                // lives on each campaign, so without a connected Business
-                // number the row would be an editor for nothing.
+                // The campaign row has no body of its own — each campaign
+                // carries its line — but it does own the email subject, so it
+                // renders whenever either half has something to edit: the
+                // Meta registration (Cloud connected) or the subject (email
+                // From set). With neither, it is an editor for nothing.
                 .filter(
                   (template) =>
-                    template.kind !== "campaign" || settings.whatsapp.connected,
+                    template.kind !== "campaign" ||
+                    settings.whatsapp.connected ||
+                    Boolean(settings.org.emailFrom),
                 )
                 .map((template) => (
                   <div key={template._id} className="space-y-2 py-4">
@@ -663,24 +667,27 @@ export function RemindersView() {
                               <InfoTip text={t("settings.templateEmailOpensHint")} />
                             </p>
                           )}
-                        {settings.org.emailFrom && (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
-                              {t("settings.templateSubject")}
-                            </span>
-                            <input
-                              className="min-w-0 flex-1"
-                              defaultValue={template.subject ?? ""}
-                              onBlur={(e) =>
-                                void updateTemplate({
-                                  templateId: template._id,
-                                  subject: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
                       </>
+                    )}
+                    {/* Outside the campaign guard: a campaign has no body
+                        here, but its emails need a subject like everyone
+                        else's (campaigns.fanOut renders it per customer). */}
+                    {settings.org.emailFrom && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
+                          {t("settings.templateSubject")}
+                        </span>
+                        <input
+                          className="min-w-0 flex-1"
+                          defaultValue={template.subject ?? ""}
+                          onBlur={(e) =>
+                            void updateTemplate({
+                              templateId: template._id,
+                              subject: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
                     )}
                     {settings.whatsapp.connected && (
                       <div className="flex flex-wrap items-center gap-2">

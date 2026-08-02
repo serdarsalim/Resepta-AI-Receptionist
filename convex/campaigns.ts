@@ -295,6 +295,17 @@ export const fanOut = internalMutation({
     const org = await ctx.db.get(campaign.orgId);
     if (!org) return 0;
 
+    // The campaign template's authored email subject. Looked up here rather
+    // than taken from loadForSend, whose template list is filtered to
+    // approved — a Cloud concern that must not gate the email half. ANY
+    // status will do: Meta approves WhatsApp wording, not mail subjects.
+    const subjectTemplate = (
+      await ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", campaign.orgId))
+        .collect()
+    ).find((t) => t.kind === "campaign" && t.language === org.language)?.subject;
+
     let created = 0;
     for (const customerId of args.customerIds) {
       const customer = await ctx.db.get(customerId);
@@ -336,6 +347,17 @@ export const fanOut = internalMutation({
       // campaign's open count is read live off these rows — bulk mail is the
       // one place an open rate means something.
       if (customer.email && org.emailFrom) {
+        // Same token vocabulary as the campaign line, same per-customer
+        // render. A subject that resolves to nothing for this customer falls
+        // back to the org name rather than sending a blank line.
+        const subject = subjectTemplate
+          ? renderTokens(subjectTemplate, {
+              firstName: customer.firstName,
+              lastName: customer.lastName,
+              businessName: org.name,
+              phone: customer.phone,
+            })
+          : "";
         await ctx.db.insert("messages", {
           orgId: campaign.orgId,
           customerId,
@@ -344,7 +366,7 @@ export const fanOut = internalMutation({
           kind: "email_campaign",
           status: "queued",
           body: line,
-          emailSubject: org.name,
+          emailSubject: subject || org.name,
           emailFrom: org.emailFrom,
           trackingToken: crypto.randomUUID(),
           nextAttemptAt: Date.now(),
