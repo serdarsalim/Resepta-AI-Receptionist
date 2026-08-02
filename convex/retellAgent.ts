@@ -351,6 +351,38 @@ export const read = action({
       }
     })();
 
+    // The account's phone lines, so the agent's own page can say which number
+    // rings it — and move or drop that line without a trip back to the list.
+    // Same tolerance as the voice catalogue: a numbers outage costs the
+    // dropdown, not the prompt editor.
+    const lines = await (async () => {
+      try {
+        const data: unknown = await (await call(key, "GET", "v2/list-phone-numbers")).json();
+        const items = (
+          Array.isArray(data) ? data : (data as { items?: unknown[] })?.items ?? []
+        ) as Array<{
+          phone_number?: string;
+          nickname?: string;
+          inbound_agent_id?: string;
+          inbound_agents?: Array<{ agent_id?: string }>;
+          outbound_agents?: Array<{ agent_id?: string }>;
+        }>;
+        return items
+          .filter((n) => n.phone_number)
+          .map((n) => ({
+            number: n.phone_number!,
+            nickname: n.nickname?.trim() || n.phone_number!,
+            agentId:
+              n.inbound_agent_id ??
+              n.inbound_agents?.[0]?.agent_id ??
+              n.outbound_agents?.[0]?.agent_id ??
+              null,
+          }));
+      } catch {
+        return [];
+      }
+    })();
+
     let llm: LlmDoc | null = null;
     if (engine.type === "retell-llm" && engine.llm_id) {
       llm = (await (
@@ -373,6 +405,11 @@ export const read = action({
       language: agent.language ?? null,
       engineType: engine.type ?? null,
       llmId: engine.llm_id ?? null,
+      lines,
+      // The provider's answer, not ours: whoever holds the line at Retell is
+      // who the phone actually rings, and a stored value that disagrees is the
+      // bug this is meant to show rather than hide.
+      inboundNumber: lines.find((line) => line.agentId === agentId)?.number ?? null,
       // A null prompt is not "it has none": conversation-flow and custom-llm
       // agents keep their script elsewhere. The client says which from
       // engineType, in the org's language, so no English copy is baked here.

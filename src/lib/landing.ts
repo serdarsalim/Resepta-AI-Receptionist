@@ -198,7 +198,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     features: [
       {
         channel: "call",
-        title: "Size göre konuşan telefon asistanı",
+        title: "Size göre konuşan sesli asistan",
         body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Randevu'da belirlersiniz.",
       },
       {
@@ -342,7 +342,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     features: [
       {
         channel: "call",
-        title: "A phone agent shaped around your business",
+        title: "A voice agent shaped around your business",
         body: "Define your services, instructions, and the customer information that should be collected inside Randevu.",
       },
       {
@@ -486,7 +486,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     features: [
       {
         channel: "call",
-        title: "Ein Telefonassistent nach Ihren Vorgaben",
+        title: "Ein Sprachassistent nach Ihren Vorgaben",
         body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Randevu fest.",
       },
       {

@@ -11,7 +11,7 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 
-// The phone agent's own sidebar destination. Two sections: the agents and the
+// The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
 // stays an implementation detail; hearing yesterday's call never means opening
 // another product.

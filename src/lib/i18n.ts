@@ -993,12 +993,14 @@ const dictionary = {
     de: "Limit gleichzeitiger Anrufe erreicht",
   },
   "calls.end.error": { tr: "Arama hatası", en: "Call error", de: "Anruffehler" },
-  // The sidebar destination and its two sections. "Phone agent", the salon's
-  // word, never "voice"/"Retell".
+  // The sidebar destination and its two sections. "Voice agent" — what the
+  // industry calls these, and what a salon owner now hears elsewhere too. It
+  // was "Phone agent", which described the channel rather than the thing.
+  // Never "Retell": the vendor is an implementation detail nobody chose.
   "nav.voice": {
-    tr: "Telefon asistanı",
-    en: "Phone agent",
-    de: "Telefonassistent",
+    tr: "Sesli asistan",
+    en: "Voice agent",
+    de: "Sprachassistent",
   },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
   "nav.reminders": {
@@ -1027,9 +1029,9 @@ const dictionary = {
   // The salon's word for the thing, not the vendor's. They bought a phone that
   // gets answered; "Retell agent" is an implementation detail they never chose.
   "settings.voiceAgent": {
-    tr: "Telefon asistanı",
-    en: "Phone agent",
-    de: "Telefonassistent",
+    tr: "Sesli asistan",
+    en: "Voice agent",
+    de: "Sprachassistent",
   },
   "settings.voiceAgentChoose": {
     tr: "Asistan seçin",
@@ -1169,14 +1171,14 @@ const dictionary = {
     de: "{name} trennen? Der Anrufverlauf bleibt in Randevu, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
   "settings.voiceNotProvisioned": {
-    tr: "Telefon asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
-    en: "Your phone agent isn't set up yet. We handle setup.",
-    de: "Ihr Telefonassistent ist noch nicht eingerichtet. Die Einrichtung übernehmen wir.",
+    tr: "Sesli asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
+    en: "Your voice agent isn't set up yet. We handle setup.",
+    de: "Ihr Sprachassistent ist noch nicht eingerichtet. Die Einrichtung übernehmen wir.",
   },
   "settings.voiceUnreachable": {
-    tr: "Telefon asistanına şu anda ulaşılamıyor. Bizimle iletişime geçin.",
-    en: "Can't reach your phone agent right now. Get in touch with us.",
-    de: "Ihr Telefonassistent ist derzeit nicht erreichbar. Bitte wenden Sie sich an uns.",
+    tr: "Sesli asistana şu anda ulaşılamıyor. Bizimle iletişime geçin.",
+    en: "Can't reach your voice agent right now. Get in touch with us.",
+    de: "Ihr Sprachassistent ist derzeit nicht erreichbar. Bitte wenden Sie sich an uns.",
   },
   "settings.voiceUnavailable": {
     tr: "Kullanılamayan asistan",
@@ -1184,9 +1186,9 @@ const dictionary = {
     de: "Nicht verfügbarer Assistent",
   },
   "settings.voiceActionFailed": {
-    tr: "Telefon asistanı güncellenemedi. Lütfen tekrar deneyin.",
-    en: "The phone agent could not be updated. Please try again.",
-    de: "Der Telefonassistent konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
+    tr: "Sesli asistan güncellenemedi. Lütfen tekrar deneyin.",
+    en: "The voice agent could not be updated. Please try again.",
+    de: "Der Sprachassistent konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
   },
   "settings.voiceNoAgents": {
     tr: "Bu hesapta asistan yok.",
@@ -1502,9 +1504,9 @@ const dictionary = {
     de: "Ein Kundenfeld mit diesem Namen existiert bereits.",
   },
   "voiceVariables.noFieldsHint": {
-    tr: "Aramayla birlikte kaydedilir. Müşteri kartına da yazması için İşletme bölümünde bir alanı telefon asistanına açın.",
-    en: "Saved with the call. To also write into the customer card, allow a field for the phone agent under Business.",
-    de: "Wird mit dem Anruf gespeichert. Damit es auch ins Kundenprofil geschrieben wird, gib unter Betrieb ein Feld für den Telefonassistenten frei.",
+    tr: "Aramayla birlikte kaydedilir. Müşteri kartına da yazması için İşletme bölümünde bir alanı sesli asistana açın.",
+    en: "Saved with the call. To also write into the customer card, allow a field for the voice agent under Business.",
+    de: "Wird mit dem Anruf gespeichert. Damit es auch ins Kundenprofil geschrieben wird, gib unter Betrieb ein Feld für den Sprachassistenten frei.",
   },
   "voiceVariables.label": { tr: "Ad", en: "Name", de: "Name" },
   "voiceVariables.key": { tr: "Değişken anahtarı", en: "Variable key", de: "Variablenschlüssel" },
@@ -1645,6 +1647,19 @@ const dictionary = {
     tr: "Deneme araması",
     en: "Test call",
     de: "Testanruf",
+  },
+  // The empty option in the agent page's line picker. Not the list's "— None —":
+  // that one sits under an "Inbound number" column header, and this one stands
+  // alone in a toolbar where a dash means nothing.
+  "voiceDetail.noLine": {
+    tr: "Gelen numara yok",
+    en: "No inbound number",
+    de: "Keine eingehende Nummer",
+  },
+  "voiceDetail.lineFailed": {
+    tr: "Numara değiştirilemedi",
+    en: "Couldn't change the number",
+    de: "Nummer konnte nicht geändert werden",
   },
   "voiceDetail.testHint": {
     tr: "Girdiğiniz numarayı bu asistanla gerçekten arar. Telefon gerçekten çalar ve dakikalar ücretlendirilir.",
@@ -1949,9 +1964,9 @@ const dictionary = {
   "fields.add": { tr: "Alan ekle", en: "Add field", de: "Feld hinzufügen" },
   "fields.system": { tr: "Sistem", en: "System", de: "System" },
   "fields.systemHint": {
-    tr: "Her müşteride hazır olan kimlik alanları. Telefon asistanı bunları okuyabilir ama değiştiremez; aramada ad ve soyad tek bir Müşteri adı (customer_name) değişkeni olarak görünür.",
-    en: "Identity fields every customer has. The phone agent can read them but never change them; on calls the name appears as one Customer name (customer_name) variable.",
-    de: "Identitätsfelder, die jeder Kunde hat. Der Telefonassistent kann sie lesen, aber nie ändern; im Anruf erscheint der Name als eine Variable Kundenname (customer_name).",
+    tr: "Her müşteride hazır olan kimlik alanları. Sesli asistan bunları okuyabilir ama değiştiremez; aramada ad ve soyad tek bir Müşteri adı (customer_name) değişkeni olarak görünür.",
+    en: "Identity fields every customer has. The voice agent can read them but never change them; on calls the name appears as one Customer name (customer_name) variable.",
+    de: "Identitätsfelder, die jeder Kunde hat. Der Sprachassistent kann sie lesen, aber nie ändern; im Anruf erscheint der Name als eine Variable Kundenname (customer_name).",
   },
   "fields.usedByAgents": {
     tr: "{agents} kullanıyor",
@@ -1975,7 +1990,7 @@ const dictionary = {
   // The column answers ONE question, from the agent's side: may the phone
   // agent write this field? "Locked" is the safe default — a misheard answer
   // on a bad call must not overwrite what a person typed.
-  "fields.source": { tr: "Telefon asistanı", en: "Phone agent", de: "Telefonassistent" },
+  "fields.source": { tr: "Sesli asistan", en: "Voice agent", de: "Sprachassistent" },
   "fields.source.manual": { tr: "Kilitli", en: "Locked", de: "Gesperrt" },
   "fields.source.voice": {
     tr: "Düzenleyebilir",
@@ -1988,9 +2003,9 @@ const dictionary = {
     de: "Aus Anrufen",
   },
   "fields.voiceHint": {
-    tr: "Bu bilgileri telefon asistanının Değişkenler tablosundan seçin. Aramada doğrulanan değerler otomatik olarak buraya kaydedilir.",
-    en: "Choose these fields from the phone agent's Variables table. Values confirmed during a call are saved here automatically.",
-    de: "Wählen Sie diese Felder in der Variablen-Tabelle des Telefonassistenten. Im Anruf bestätigte Werte werden hier automatisch gespeichert.",
+    tr: "Bu bilgileri sesli asistanın Değişkenler tablosundan seçin. Aramada doğrulanan değerler otomatik olarak buraya kaydedilir.",
+    en: "Choose these fields from the voice agent's Variables table. Values confirmed during a call are saved here automatically.",
+    de: "Wählen Sie diese Felder in der Variablen-Tabelle des Sprachassistenten. Im Anruf bestätigte Werte werden hier automatisch gespeichert.",
   },
   // Same group heading, different reader. On the customer record nobody is
   // configuring anything; they want to know why this value is here and whether
@@ -2004,14 +2019,14 @@ const dictionary = {
   "common.hide": { tr: "Gizle", en: "Hide", de: "Ausblenden" },
   "fields.key": { tr: "Alan anahtarı", en: "Field key", de: "Feldschlüssel" },
   "fields.lockHint": {
-    tr: "Telefon asistanı bu alanı yazamaz. Asistana açmak için tıklayın.",
-    en: "The phone agent can't write this field. Click to let it.",
-    de: "Der Telefonassistent kann dieses Feld nicht schreiben. Klicken, um es freizugeben.",
+    tr: "Sesli asistan bu alanı yazamaz. Asistana açmak için tıklayın.",
+    en: "The voice agent can't write this field. Click to let it.",
+    de: "Der Sprachassistent kann dieses Feld nicht schreiben. Klicken, um es freizugeben.",
   },
   "fields.unlockHint": {
-    tr: "Telefon asistanı bu alanı yazabilir. Kilitlemek için tıklayın.",
-    en: "The phone agent can write this field. Click to lock it.",
-    de: "Der Telefonassistent kann dieses Feld schreiben. Klicken, um es zu sperren.",
+    tr: "Sesli asistan bu alanı yazabilir. Kilitlemek için tıklayın.",
+    en: "The voice agent can write this field. Click to lock it.",
+    de: "Der Sprachassistent kann dieses Feld schreiben. Klicken, um es zu sperren.",
   },
   "fields.keyEditHint": {
     tr: "Anahtarı düzenle. Yalnızca hiçbir asistan bu alanı kullanmıyorken değişir.",

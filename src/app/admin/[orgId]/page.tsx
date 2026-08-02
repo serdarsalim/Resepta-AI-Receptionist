@@ -329,7 +329,7 @@ export default function TenantPage() {
       <>
       <Section
         title="Voice"
-        description="The client's own Retell account. The key decides whose agents Phone agent lists, and it must be the account's webhook signing key."
+        description="The client's own Retell account. The key decides whose agents Voice agent lists, and it must be the account's webhook signing key."
       >
         {(conns ?? []).filter((row) => row.provider === "retell").map((row) => (
           <SecretRow
@@ -398,7 +398,7 @@ export default function TenantPage() {
       >
         {detail.agents.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
-            No agents connected. The business can add one in Phone agent once the key is in.
+            No agents connected. The business can add one in Voice agent once the key is in.
           </p>
         ) : (
           detail.agents.map((agent) => (

@@ -62,6 +62,8 @@ type Detail = {
   language: string | null;
   engineType: string | null;
   llmId: string | null;
+  lines: { number: string; nickname: string; agentId: string | null }[];
+  inboundNumber: string | null;
   prompt: { general: string; beginMessage: string } | null;
   webhook: {
     expected: string | null;
@@ -128,6 +130,7 @@ export function VoiceAgentPage({
   const read = useAction(api.retellAgent.read);
   const publishPrompt = useAction(api.retellAgent.publishPrompt);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const assignLine = useAction(api.retellAgent.assignLine);
   const testCall = useAction(api.retellAgent.testCall);
 
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -147,6 +150,12 @@ export function VoiceAgentPage({
   const [testOpen, setTestOpen] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testError, setTestError] = useState<string | null>(null);
+  // The line dropdown writes straight to the provider — no Save, because it
+  // isn't part of the draft the prompt and variables share. It gets its own
+  // in-flight and failed states, and the reload restores the real binding if
+  // the provider refuses.
+  const [assigning, setAssigning] = useState(false);
+  const [lineError, setLineError] = useState(false);
   // Mirrored out of the variables editor so the header can save it too.
   const [varsState, setVarsState] = useState<VoiceEditorSaveState | null>(null);
   // Rows recovered from a stored draft, handed to the editor as its seed.
@@ -262,6 +271,18 @@ export function VoiceAgentPage({
     setStatus(null);
   };
 
+  // Binding a line is immediate and unrelated to the draft: it changes which
+  // phone rings this agent, not what the agent says. Riding Save would mean an
+  // unsaved prompt held the phone number hostage.
+  const chooseLine = (number: string | null) => {
+    setAssigning(true);
+    setLineError(false);
+    void assignLine({ agentId, number })
+      .then(() => load())
+      .catch(() => setLineError(true))
+      .finally(() => setAssigning(false));
+  };
+
   const placeTestCall = () => {
     const to = testTo.trim();
     // Checked here as well as in the action: the action's error is English,
@@ -308,7 +329,7 @@ export function VoiceAgentPage({
 
   return (
     <>
-      {/* Wider than the rest of Phone agent on purpose: the variables grid is
+      {/* Wider than the rest of Voice agent on purpose: the variables grid is
           six columns and the prompt is prose. At the list's width the grid
           horizontally scrolled on every visit. */}
       <div className="mx-auto max-w-4xl space-y-4">
@@ -335,24 +356,13 @@ export function VoiceAgentPage({
               <path d="M19 12H5" />
               <path d="m12 19-7-7 7-7" />
             </svg>
-            {t("voice.agents")}
+            {t("common.back")}
           </button>
-          <h2 className="min-w-[8rem] flex-1 text-lg font-semibold">
+          {/* Centred, not left-aligned: butted up against Back it read as the
+              button's second line rather than the name of the thing. */}
+          <h2 className="min-w-[8rem] flex-1 text-center text-lg font-semibold">
             {detail?.name ?? t("settings.voiceAgent")}
           </h2>
-          {/* Hear the agent live, from the page where you just edited it.
-              Quiet next to Save: it costs real minutes but changes nothing. */}
-          <button
-            type="button"
-            disabled={saving || !detail}
-            onClick={() => {
-              setTestError(null);
-              setTestOpen(true);
-            }}
-            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
-          >
-            {t("voiceDetail.test")}
-          </button>
           {dirty && (
             <>
               {/* Said out loud rather than implied by an enabled button: an
@@ -386,6 +396,55 @@ export function VoiceAgentPage({
           {status && !dirty && (
             <span className="shrink-0 text-xs text-[var(--muted)]">{status}</span>
           )}
+          {lineError && (
+            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">
+              {t("voiceDetail.lineFailed")}
+            </span>
+          )}
+          {/* Which phone rings this agent, next to the button that makes it
+              ring. The list already had this control per row, but by the time
+              you are editing the agent the list is two clicks behind you — and
+              "why didn't my test number reach it" is answered right here.
+              Options are every line on the account, not just the free ones:
+              picking one another agent holds MOVES it, which is the whole
+              point when you are switching which agent answers.
+
+              Capped to the width of its own empty label. Left to size itself a
+              select takes the width of its LONGEST option, so one nicknamed
+              line stretched the control across half the header for a value
+              that is fifteen characters. */}
+          {detail && (
+            <select
+              value={detail.inboundNumber ?? ""}
+              disabled={assigning || saving}
+              title={t("settings.inboundNumber")}
+              aria-label={t("settings.inboundNumber")}
+              onChange={(e) => chooseLine(e.target.value || null)}
+              className="w-auto max-w-[11rem] shrink-0 truncate rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
+            >
+              <option value="">{t("voiceDetail.noLine")}</option>
+              {detail.lines.map((line) => (
+                <option key={line.number} value={line.number}>
+                  {line.nickname === line.number
+                    ? line.number
+                    : `${line.nickname} · ${line.number}`}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Hear the agent live, from the page where you just edited it.
+              Quiet next to Save: it costs real minutes but changes nothing. */}
+          <button
+            type="button"
+            disabled={saving || !detail}
+            onClick={() => {
+              setTestError(null);
+              setTestOpen(true);
+            }}
+            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
+          >
+            {t("voiceDetail.test")}
+          </button>
         </div>
 
         {error && <p className="text-sm text-amber-700 dark:text-amber-400">{error}</p>}
