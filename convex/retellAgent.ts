@@ -239,6 +239,7 @@ function storedVariables(context: EditorContext): VariableRow[] {
     afterCall: row.afterCall,
     destination: row.destination,
     contactFieldId: row.contactFieldId,
+    customerField: row.customerField,
   }));
 }
 
@@ -587,7 +588,19 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
       throw new Error(`${label} needs a valid before-call source.`);
     }
     let contactFieldId = raw.contactFieldId;
-    if (raw.destination === "contact") {
+    let customerField = raw.customerField;
+    if (raw.destination === "customer") {
+      if (customerField !== "name" && customerField !== "email") {
+        throw new Error(`${label} needs to say which customer detail it fills.`);
+      }
+      // Both are free text as spoken. An enum name is not a thing, and an
+      // enum email is a way to make the agent pick the wrong one of four.
+      if (raw.type !== "string") {
+        throw new Error(`${label} must be a text value to fill the customer's ${customerField}.`);
+      }
+      contactFieldId = undefined;
+      choices = undefined;
+    } else if (raw.destination === "contact") {
       const field = contactFieldId ? fields.get(String(contactFieldId)) : null;
       if (!field || field.source !== "voice") {
         throw new Error(`${label} needs a voice-filled customer field.`);
@@ -604,6 +617,7 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
     } else {
       contactFieldId = undefined;
     }
+    if (raw.destination !== "customer") customerField = undefined;
     if (raw.type === "enum" && (choices?.length ?? 0) === 0) {
       throw new Error(`${label} needs at least one option.`);
     }
@@ -619,6 +633,7 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
       beforeValue: raw.beforeSource === "static" ? raw.beforeValue?.trim() : undefined,
       beforeFieldId: raw.beforeSource === "contact_field" ? raw.beforeFieldId : undefined,
       contactFieldId,
+      customerField,
     };
   });
 }

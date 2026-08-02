@@ -597,9 +597,11 @@ export const listAgentVariables = internalQuery({
         .map((row) => ({
           key: row.key,
           label: row.label,
-          // Where the answer goes. "contact" writes it to the customer card;
+          // Where the answer goes. "contact" writes it to a property on the
+          // customer card, "customer" to the card's own name or email, and
           // "call" keeps it on the call record only.
           destination: row.destination,
+          ...(row.customerField ? { customerField: row.customerField } : {}),
           asks:
             row.duringMode === "confirm"
               ? "confirms the current value"
@@ -661,7 +663,11 @@ export const buildAgentVariables = internalQuery({
         beforeSource: "customer_name",
         duringMode: "if_missing",
         afterCall: true,
-        destination: "call",
+        // Onto the customer, not the call. Every agent built through this tool
+        // used to ask a first-time caller their name and drop it, leaving a
+        // record with a phone number and nothing else on it.
+        destination: "customer",
+        customerField: "name",
       },
     ];
 

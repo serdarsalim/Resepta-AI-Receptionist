@@ -1498,6 +1498,19 @@ const dictionary = {
     en: "Also save to the customer card",
     de: "Auch im Kundenprofil speichern",
   },
+  // The customer's own name and email, not a property added next to them.
+  // Named as a possession ("the customer's name") so nobody reads them as two
+  // more custom fields that happen to be called that.
+  "voiceVariables.saveToName": {
+    tr: "Müşterinin adı",
+    en: "The customer's name",
+    de: "Name des Kunden",
+  },
+  "voiceVariables.saveToEmail": {
+    tr: "Müşterinin e-postası",
+    en: "The customer's email",
+    de: "E-Mail des Kunden",
+  },
   "voiceVariables.fieldExists": {
     tr: "Bu adla bir müşteri alanı zaten var.",
     en: "A customer field with this name already exists.",
@@ -1589,6 +1602,11 @@ const dictionary = {
     tr: "Müşteri telefonu",
     en: "Customer phone",
     de: "Kundentelefon",
+  },
+  "voiceVariables.customerEmail": {
+    tr: "Müşteri e-postası",
+    en: "Customer email",
+    de: "Kunden-E-Mail",
   },
   "voiceVariables.customerLanguage": {
     tr: "Müşteri dili",

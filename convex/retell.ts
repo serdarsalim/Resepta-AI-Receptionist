@@ -455,6 +455,8 @@ export const replaceAgentVariables = internalMutation({
           variable.beforeSource === "contact_field" ? variable.beforeFieldId : undefined,
         contactFieldId:
           variable.destination === "contact" ? variable.contactFieldId : undefined,
+        customerField:
+          variable.destination === "customer" ? variable.customerField : undefined,
         order,
         updatedAt: now,
       });
@@ -532,6 +534,9 @@ export const beforeCallContext = internalQuery({
         case "customer_phone":
           value = customer?.phone ?? normalised ?? "";
           break;
+        case "customer_email":
+          value = customer?.email ?? "";
+          break;
         case "customer_language":
           value = customer?.language ?? org.language;
           break;
@@ -571,6 +576,7 @@ export const beforeCallContext = internalQuery({
         ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
         : "",
       customer_phone: customer?.phone ?? normalised ?? "",
+      customer_email: customer?.email ?? "",
       customer_language: lang,
       next_appointment: next
         ? formatAppointmentTime(next.startAt, org.timezone, lang)
@@ -980,13 +986,26 @@ export const runtimeCallContext = internalQuery({
             language: customer.language ?? org.language,
           }
         : { known: false, phone: phone ?? args.phone },
+      // Both destinations that end up on the customer. A row the agent is
+      // never told about is a row it never collects, so "customer" has to be
+      // here or the name goes on being asked for and dropped.
       information: variables
         .sort((a, b) => a.order - b.order)
-        .filter((variable) => variable.destination === "contact")
+        .filter(
+          (variable) =>
+            variable.destination === "contact" || variable.destination === "customer",
+        )
         .map((variable) => {
           const field = variable.contactFieldId
             ? fieldsById.get(String(variable.contactFieldId))
             : null;
+          const builtIn =
+            variable.destination === "customer" && customer
+              ? variable.customerField === "email"
+                ? customer.email ?? null
+                : [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
+                  null
+              : null;
           return {
             key: variable.key,
             label: variable.label,
@@ -1000,7 +1019,7 @@ export const runtimeCallContext = internalQuery({
                 : variable.duringMode === "if_missing"
                   ? "ask when missing"
                   : "do not ask",
-            currentValue: field && customer ? customer.custom?.[field.key] ?? null : null,
+            currentValue: field && customer ? customer.custom?.[field.key] ?? null : builtIn,
           };
         }),
       services: services
@@ -1357,6 +1376,21 @@ function toE164(raw: string): string | null {
 
 // The single mapping both voice write paths share: the mid-call function and
 // the post-call webhook. Two copies of this guard would drift.
+// A spoken name arrives as one string, because that is how a person says it.
+// Everything after the first word is the surname — wrong for a few names in
+// every market, and still better than a card that says nothing at all. The
+// caller can be corrected by hand; a blank cannot be noticed.
+function splitSpokenName(spoken: string): { firstName: string; lastName?: string } {
+  const parts = spoken.trim().split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") || undefined };
+}
+
+// Deliberately loose. A stricter pattern rejects real addresses, and the cost
+// of a wrong reject here is the agent asking a caller to spell their email a
+// third time. What it does catch is the transcription that came back as words
+// rather than an address.
+const SPOKEN_EMAIL_RE = /^[^\s@]+@[^\s@.]+\.[^\s@]+$/;
+
 export async function applyVoiceContactValues(
   ctx: MutationCtx,
   args: {
@@ -1364,6 +1398,10 @@ export async function applyVoiceContactValues(
     phone: string;
     values: Record<string, string>;
     fillOnlyMissing?: boolean;
+    // Which incoming keys mean a column on the customer rather than an entry
+    // in its custom map. Resolved by the caller from the agent's own
+    // variables, so a key only reaches a built-in if the owner said it should.
+    identity?: Record<string, { field: "name" | "email"; label: string }>;
   },
 ): Promise<ContactUpdateResult> {
   const phone = toE164(args.phone);
@@ -1380,6 +1418,7 @@ export async function applyVoiceContactValues(
   const byKey = new Map(fields.map((field) => [field.key, field]));
 
   const custom = { ...(customer.custom ?? {}) };
+  const identityPatch: { firstName?: string; lastName?: string; email?: string } = {};
   const updated: string[] = [];
   const updatedLabels: string[] = [];
   const ignored: string[] = [];
@@ -1388,6 +1427,38 @@ export async function applyVoiceContactValues(
   for (const [rawKey, rawValue] of Object.entries(args.values)) {
     const key = rawKey.trim();
     if (!key) continue;
+
+    // The built-in columns, before the custom map is consulted: name and email
+    // are reserved keys down there and would otherwise be ignored on the way
+    // past. Only keys the agent's own configuration nominated get here.
+    const target = args.identity?.[key];
+    if (target) {
+      const value = rawValue.trim();
+      // Never blank one out. Clearing a custom property is a legitimate thing
+      // for a caller to do; clearing the name off a record because a model
+      // returned "" is not.
+      if (!value) continue;
+      if (target.field === "name") {
+        if (args.fillOnlyMissing && customer.firstName) continue;
+        const { firstName, lastName } = splitSpokenName(value);
+        if (!firstName) continue;
+        identityPatch.firstName = firstName;
+        // One-word name arriving over an existing surname keeps the surname:
+        // a caller saying "it's Ayşe" is not asking to lose their family name.
+        if (lastName) identityPatch.lastName = lastName;
+      } else {
+        if (args.fillOnlyMissing && customer.email) continue;
+        if (!SPOKEN_EMAIL_RE.test(value)) {
+          rejected.push(target.label);
+          continue;
+        }
+        identityPatch.email = value.toLowerCase();
+      }
+      updated.push(key);
+      updatedLabels.push(target.label);
+      continue;
+    }
+
     const field = byKey.get(key);
     if (!field || RESERVED_CONTACT_KEYS.has(key.toLowerCase())) {
       ignored.push(key);
@@ -1418,7 +1489,9 @@ export async function applyVoiceContactValues(
     updated.push(key);
     updatedLabels.push(field.label);
   }
-  if (updated.length > 0) await ctx.db.patch(customer._id, { custom });
+  if (updated.length > 0) {
+    await ctx.db.patch(customer._id, { custom, ...identityPatch });
+  }
   return { ok: true, updated, updatedLabels, ignored, notForVoice, rejected };
 }
 
@@ -1456,11 +1529,27 @@ export const updateContactFromVoice = internalMutation({
         source: "voice",
       });
     }
+    // Only this agent's own rows decide what may reach a built-in column. A
+    // key is not privileged because of what it is called — "email" typed into
+    // some other agent's variable list stays a custom property.
+    const rows = await ctx.db
+      .query("voiceAgentVariables")
+      .withIndex("by_org_agent", (q) =>
+        q.eq("orgId", agent.orgId).eq("retellAgentId", args.retellAgentId),
+      )
+      .collect();
+    const identity: Record<string, { field: "name" | "email"; label: string }> = {};
+    for (const row of rows) {
+      if (row.destination === "customer" && row.customerField) {
+        identity[row.key] = { field: row.customerField, label: row.label };
+      }
+    }
     return await applyVoiceContactValues(ctx, {
       orgId: agent.orgId,
       phone,
       values: args.values,
       fillOnlyMissing: args.fillOnlyMissing,
+      identity,
     });
   },
 });

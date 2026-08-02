@@ -25,6 +25,7 @@ export type VoiceVariable = {
     | "business_name"
     | "customer_name"
     | "customer_phone"
+    | "customer_email"
     | "customer_language"
     | "next_appointment"
     | "contact_field";
@@ -32,8 +33,12 @@ export type VoiceVariable = {
   beforeFieldId?: string;
   duringMode: "none" | "if_missing" | "confirm";
   afterCall: boolean;
-  destination: "call" | "contact";
+  // "customer" writes the customer's own name or email — columns on the
+  // record, not entries in its custom map, so contactFieldId cannot reach
+  // them. See convex/schema.ts for why the third case exists.
+  destination: "call" | "contact" | "customer";
   contactFieldId?: string;
+  customerField?: "name" | "email";
 };
 
 // What the page header needs to render Save/Discard on this editor's behalf.
@@ -70,6 +75,7 @@ export function builtinVoiceVariables(
     key:
       | "voiceVariables.customerName"
       | "voiceVariables.customerPhone"
+      | "voiceVariables.customerEmail"
       | "voiceVariables.customerLanguage"
       | "voiceVariables.nextAppointment"
       | "voiceVariables.businessName"
@@ -79,11 +85,18 @@ export function builtinVoiceVariables(
   return [
     { key: "customer_name", label: t("voiceVariables.customerName") },
     { key: "customer_phone", label: t("voiceVariables.customerPhone") },
+    { key: "customer_email", label: t("voiceVariables.customerEmail") },
     { key: "customer_language", label: t("voiceVariables.customerLanguage") },
     { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
     { key: "business_name", label: t("voiceVariables.businessName") },
     { key: "services", label: t("voiceVariables.servicesList") },
   ];
+}
+
+// The two built-ins that are columns on the customer rather than entries in
+// its custom map. Phone is not among them: it is how the caller was found.
+function customerFieldOf(key: string): "name" | "email" | undefined {
+  return key === "customer_name" ? "name" : key === "customer_email" ? "email" : undefined;
 }
 
 function blankVariable(): VoiceVariable {
@@ -279,7 +292,14 @@ export function VoiceVariablesEditor({
 
   // Picking a built-in ("Customer name") builds the row quick-add used to:
   // prefilled from that context, asked only when the business doesn't know it.
+  //
+  // A capturing name or email row defaults to writing the customer's own
+  // column, because there is no other honest reading of "ask the caller their
+  // name". It used to default to call-only, which is how a first-time caller
+  // ended up as a record with a phone number and no name on it.
   const adoptBuiltin = (builtin: PickerBuiltin, phase: Phase) => {
+    const customerField = customerFieldOf(builtin.key);
+    const captures = phase !== "before";
     setDraft((rows) => [
       ...rows,
       {
@@ -289,6 +309,9 @@ export function VoiceVariablesEditor({
         beforeSource: builtin.source,
         duringMode: phase === "during" ? "if_missing" : "none",
         afterCall: phase === "after",
+        ...(customerField && captures
+          ? { destination: "customer" as const, customerField }
+          : {}),
       },
     ]);
     setFocusLast(true);
@@ -310,15 +333,21 @@ export function VoiceVariablesEditor({
       beforeFieldId: field.id,
     });
 
-  const relinkRowToBuiltin = (index: number, builtin: PickerBuiltin) =>
+  const relinkRowToBuiltin = (index: number, builtin: PickerBuiltin) => {
+    const customerField = customerFieldOf(builtin.key);
+    const row = draft[index];
+    const captures = row.duringMode !== "none" || row.afterCall;
     patch(index, {
       label: builtin.label,
       key: builtin.key,
       beforeSource: builtin.source,
       beforeFieldId: undefined,
-      destination: "call",
       contactFieldId: undefined,
+      ...(customerField && captures
+        ? { destination: "customer" as const, customerField, type: "string" as const }
+        : { destination: "call" as const, customerField: undefined }),
     });
+  };
 
   const renameRowCallOnly = (index: number, label: string) => {
     const row = draft[index];
@@ -1055,6 +1084,7 @@ function VariableRow({
                 <option value="business_name">{t("voiceVariables.businessName")}</option>
                 <option value="customer_name">{t("voiceVariables.customerName")}</option>
                 <option value="customer_phone">{t("voiceVariables.customerPhone")}</option>
+                <option value="customer_email">{t("voiceVariables.customerEmail")}</option>
                 <option value="customer_language">{t("voiceVariables.customerLanguage")}</option>
                 <option value="next_appointment">{t("voiceVariables.nextAppointment")}</option>
                 {fields.map((field) => (
@@ -1084,9 +1114,11 @@ function VariableRow({
               </span>
               <select
                 value={
-                  row.destination === "contact" && row.contactFieldId
-                    ? `field:${row.contactFieldId}`
-                    : "call"
+                  row.destination === "customer" && row.customerField
+                    ? `customer:${row.customerField}`
+                    : row.destination === "contact" && row.contactFieldId
+                      ? `field:${row.contactFieldId}`
+                      : "call"
                 }
                 onChange={(e) => {
                   const value = e.target.value;
@@ -1094,15 +1126,38 @@ function VariableRow({
                     onLinkCustomer();
                     return;
                   }
+                  if (value.startsWith("customer:")) {
+                    // Forced to text: a name is not one of four options, and
+                    // the publish validator refuses the pairing anyway. Doing
+                    // it here beats a save that fails on a rule the person
+                    // cannot see from this row.
+                    onChange({
+                      destination: "customer",
+                      customerField: value.slice(9) as "name" | "email",
+                      contactFieldId: undefined,
+                      type: "string",
+                    });
+                    return;
+                  }
                   onChange(
                     value === "call"
-                      ? { destination: "call", contactFieldId: undefined }
-                      : { destination: "contact", contactFieldId: value.slice(6) },
+                      ? { destination: "call", contactFieldId: undefined, customerField: undefined }
+                      : {
+                          destination: "contact",
+                          contactFieldId: value.slice(6),
+                          customerField: undefined,
+                        },
                   );
                 }}
                 className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
               >
                 <option value="call">{t("voiceVariables.callOnly")}</option>
+                {/* The customer's own columns. Offered on every row, not just
+                    the ones keyed customer_name: plenty of agents call it
+                    caller_name, and the label here says exactly where the
+                    value lands either way. */}
+                <option value="customer:name">{t("voiceVariables.saveToName")}</option>
+                <option value="customer:email">{t("voiceVariables.saveToEmail")}</option>
                 {/* Only a field whose key matches — the publish validator
                     rejects any other pairing, so offering it would be a
                     choice that always fails. */}

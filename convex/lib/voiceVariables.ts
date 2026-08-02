@@ -14,10 +14,17 @@ export const voiceBeforeSource = v.union(
   v.literal("business_name"),
   v.literal("customer_name"),
   v.literal("customer_phone"),
+  v.literal("customer_email"),
   v.literal("customer_language"),
   v.literal("next_appointment"),
   v.literal("contact_field"),
 );
+
+// The three details that live in their own columns on a customer rather than
+// in the custom map, and so cannot be reached through a contactField. Phone is
+// absent on purpose: it is how a caller is IDENTIFIED, and letting a call
+// rewrite it would move the record out from under the lookup that found it.
+export const voiceCustomerField = v.union(v.literal("name"), v.literal("email"));
 
 export const voiceDuringMode = v.union(
   v.literal("none"),
@@ -37,8 +44,9 @@ export const voiceVariableInput = v.object({
   beforeFieldId: v.optional(v.id("contactFields")),
   duringMode: voiceDuringMode,
   afterCall: v.boolean(),
-  destination: v.union(v.literal("call"), v.literal("contact")),
+  destination: v.union(v.literal("call"), v.literal("contact"), v.literal("customer")),
   contactFieldId: v.optional(v.id("contactFields")),
+  customerField: v.optional(voiceCustomerField),
 });
 
 export type VoiceVariableInput = {
@@ -54,6 +62,7 @@ export type VoiceVariableInput = {
     | "business_name"
     | "customer_name"
     | "customer_phone"
+    | "customer_email"
     | "customer_language"
     | "next_appointment"
     | "contact_field";
@@ -61,8 +70,9 @@ export type VoiceVariableInput = {
   beforeFieldId?: Id<"contactFields">;
   duringMode: "none" | "if_missing" | "confirm";
   afterCall: boolean;
-  destination: "call" | "contact";
+  destination: "call" | "contact" | "customer";
   contactFieldId?: Id<"contactFields">;
+  customerField?: "name" | "email";
 };
 
 // Turkish letters fold before lowercasing — "İ".toLowerCase() is i plus a
