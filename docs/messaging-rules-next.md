@@ -1,129 +1,74 @@
-# Handoff: message types, and where the rules table got to
+# Message rules: decided and built (2 Aug 2026)
 
-Written 2 Aug 2026 at the end of a long session. Recorded here rather than in
-`.remember/remember.md` because that file has been truncated to zero twice
-today.
+The open question from the last session — what a "message" is keyed by — got
+its answer: **a rule is a document.** The `messageRules` table holds one row
+per automated message (anchor + offset + channel + paused), wording binds to a
+rule via `waTemplates.ruleId`, and the double-send guard moved from the hour
+to the rule id (`appointments.sentRuleIds`). The offsetHours-on-template idea
+was dropped; the full refactor won.
 
-## The open question, in Serdar's words
-
-Messages should be typed by **lifecycle stage**, not by exact timing:
-
-- **confirmation** — "this is your appointment for ‹service›, reply if
-  something is wrong"
-- **reminder before** — can be several rows (1 day before, 2 hours before),
-  and they should be able to say DIFFERENT things: "your appointment is
-  tomorrow" is not "see you in 2 hours". How a row is tied to its own wording
-  is exactly what is unresolved
-- **after the appointment** — "leave us a review", a rebooking nudge
-- **after a no-show** — the existing win-back
-
-Two things do not exist yet: the "after the appointment" type, and any way for
-one reminder row to word itself differently from another.
-
-One idea raised and NOT settled: put `offsetHours` on a template row, so a
-template can belong to one specific reminder timing, with the generic reminder
-text as the fallback for rows that have none. Serdar has not accepted or
-rejected it — he wants to work the whole model out from scratch in a fresh
-chat. Treat it as one option, not the plan.
-
-The thing to resolve first is what a "message" is keyed by. Today it is
-(kind, language). If each reminder row can say something different, it becomes
-(kind, language, + something that identifies the row) — and what that
-something is drives everything else, including whether the rules stay three
-hardcoded org fields or become one list.
-
-### What "after the appointment" needs
-
-1. A fourth `kind` on `waTemplates`: `"review"` (or `"followup"` — name it with
-   him). Same shape as the others: authored `body`, `subject`, per language.
-2. A schedule anchor. Everything today anchors on `startAt`;
-   this one anchors on the appointment **ending** — `startAt + durationMinutes`
-   — plus an offset. `convex/lib/reminderSchedule.ts` is where that goes,
-   beside `nextReminderAt` and `winbackDueAt`.
-3. **Only on `completed`.** Never a no-show, never a cancellation. The win-back
-   already models this pattern (`appointment.status !== "no_show"` → skip).
-4. A one-shot marker on the appointment, like `winbackSentAt`, so it cannot
-   fire twice. Follow `syncAppointmentSchedule`'s existing rule: every write
-   that moves `startAt`, `status` or a sent-marker must call it afterwards.
-5. One new org field for the review URL, same shape as `orgs.bookingUrl`.
-
-### The anchor model, if it is worth generalising
-
-Serdar sketched every rule as an anchor plus an offset:
+## The model
 
 ```
-at booking          →  confirmation
-before the start    →  reminder      (24h, 2h, …)
-after the end       →  review / rebooking nudge
-after a no-show     →  win-back
+booking        →  confirmation            fires from the mutation
+before_start   →  reminder (n rows)       cron, startAt − offset
+after_end      →  follow-up (n rows)      cron, startAt + duration + offset, completed only
+cancellation   →  cancellation notice     fires from the mutation
+no_show        →  win-back                cron, startAt + offset
 ```
 
-That would make all rows the same kind of thing and remove the last of the
-special-casing. It is a real refactor — the three hardcoded org fields
-(`sendBookingConfirmation`, `reminderOffsetsHours`, `winbackEnabled`) become
-one list. **Not started.** Weigh it against just adding the fourth kind.
+- Channel (whatsapp / email / both) is **per rule**; `orgs.messageChannel` is
+  only the default stamped onto new rows.
+- Content resolves (ruleId, language) → (kind, language). The kind row is the
+  fallback wording; a rule gets its own row the first time its editor opens
+  (`messageRules.ensureTemplate`, copies from the fallback).
+- The Cloud lane resolves its Meta registration SEPARATELY and falls back to
+  the kind row: custom wording rides email + Evolution immediately, while
+  WhatsApp Cloud keeps sending the approved template until the rule's own
+  wording is registered and approved. The editor says this in one line.
+- Follow-up rules apply forward only (guarded on `rule._creationTime`) so
+  adding one does not mass-mail 90 days of completed appointments. Win-back
+  deliberately keeps its retroactive reach, as it always had.
+- Legacy orgs (no `orgs.rulesMigratedAt`) still run the old trio end to end —
+  scheduler, sender, and the old rules card render untouched for them.
 
-Serdar also wants the defaults trimmed to **two rules** for a new org:
-confirmation plus one reminder. Today `DEFAULT_REMINDER_OFFSETS = [24, 2]`
-gives two reminders.
+## The tab
 
-### Also asked for, not built
+One rules list (`RulesCard` in `src/components/RemindersView.tsx`): each row
+has its timing (inline-editable for follow-up hours and win-back days), a
+channel select, the pause switch, the ×, and a chevron opening the inline
+editor — token chips, live preview through the same `renderTokens` the send
+path uses, WhatsApp-bubble or email dress per the rule's channel. The lower
+templates card is now the Meta registration desk plus the campaign row.
 
-Expand/collapse per rule row, with that rule's message edited inline, instead
-of the separate "Message templates" card lower down the page. Blocked only on
-deciding the message types above — once each row maps to one message, the
-panel is obvious.
+New orgs seed confirmation + one 24h reminder (`seedDefaultRules`), trimmed
+from the legacy three on purpose.
 
-## State of the rules table (built this session)
+## Deploy run-book (in order)
 
-`src/components/RemindersView.tsx`, commit `ac51545` — **committed, NOT
-pushed**, on Serdar's instruction. Everything before it is pushed.
+1. `npx convex deploy` — prod is still behind from the platformConfig session
+   AND now the rules work. Until this runs, prod /admin calls functions that
+   do not exist.
+2. `npx convex run messageRules:migrateAll --prod` — lifts every org onto the
+   rules model (idempotent; schedules its own per-org backfill). Until it
+   runs, orgs stay on the legacy path and the tab shows the old card behind
+   an amber note.
+3. Push the branch. Commits since the last push start at `ac51545`.
+4. Dev deployment: the schema very likely synced already (convex dev /
+   codegen); run `npx convex run messageRules:migrateAll` there too to see
+   the new tab locally.
 
-Every row now has two controls with distinct meanings:
+## Loose ends, none blocking
 
-- a **switch** under an `Active` header — pauses without losing anything
-- a separate **×** — takes the row off the table
-
-Before this, a reminder's switch silently deleted the row, because reminders
-are stored as an array of offsets with no way to say "exists but off".
-
-Storage, and why it is two arrays rather than one nicer one:
-
-- `orgs.reminderOffsetsHours` — which reminder rows exist
-- `orgs.pausedReminderHours` — the subset switched off, keeping row and wording
-- `orgs.removedRules` — `"confirmation"` / `"winback"` taken off the table.
-  Reminders are absent from this by design; dropping the offset removes them.
-
-**A reminder is identified by its HOUR, and that must stay true.**
-`appointments.reminderSentOffsets` keys the double-send guard on the hour.
-Re-keying it is the migration `lib/reminderSchedule.ts` warns about, and a
-second array costs far less than being clever with the first.
-
-Removed singletons return from the same row of `+` chips that adds a reminder,
-so there is one place to add a rule.
-
-## The rest of the session, for context
-
-Email went from never having sent anything to fully wired:
-
-- The whole template engine port from Nudge (bodies + subjects in named tokens,
-  the email lane, the editor, open-pixel tracking on win-back and campaign mail).
-- `orgs.messageChannel` — WhatsApp, email, or both, per org.
-- **Prod had no Resend key at all**, which is why nothing had ever sent. The key,
-  sending domain, webhook secret and product name now live in `platformConfig`
-  and are set from **/admin → Email (Resend)**, env vars kept as fallback.
-- Sending domain is **`autotakt.xyz`**, verified, on the Resend account under
-  `mansureastman@gmail.com`. DNS is in Porkbun. See
-  [`email-lane-setup.md`](email-lane-setup.md).
-- `customerSender` resolves a From in three tiers, so no salon needs DNS of
-  their own: their domain → `‹inbound›@autotakt.xyz` → `noreply@`.
-- An org with no incoming address now gets one assigned from its name.
-- Fixed in passing: the admin console could point one salon's mail into
-  another salon's inbox (`platform.setOrgConfig` skipped the uniqueness check).
-
-## Do this first in the new chat
-
-1. `npx convex deploy` — **prod has not been deployed since the platformConfig
-   work.** Pushing does not deploy the Convex backend; `docs/deploy.md` step 2
-   is manual. Until it runs, prod `/admin` calls functions that do not exist.
-2. Decide the message types above with Serdar before writing anything.
+- Per-rule Meta approval is operator work: registering a second reminder's
+  wording with Meta gets it its own metaName on the rule's template row via
+  the existing status fields — no new UI was built for that.
+- Win-back open counters: historical counts live on the kind row (visible
+  while a Cloud number shows the Meta card); new sends count on the rule's
+  own row and show in its editor.
+- The editor edits the ORG language's wording, as the old card did. Customers
+  in another language still resolve per send against exact-language rows.
+- Legacy org fields (`reminderOffsetsHours`, `pausedReminderHours`,
+  `sendBookingConfirmation`, `winbackEnabled`, `winbackDaysAfter`,
+  `removedRules`) can be dropped from the schema once every org carries
+  `rulesMigratedAt` and nobody needs the rollback window anymore.
