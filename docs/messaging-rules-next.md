@@ -10,17 +10,27 @@ Messages should be typed by **lifecycle stage**, not by exact timing:
 
 - **confirmation** — "this is your appointment for ‹service›, reply if
   something is wrong"
-- **reminder before** — can be several rows (1 day before, 2 hours before);
-  they share one message
+- **reminder before** — can be several rows (1 day before, 2 hours before),
+  and they should be able to say DIFFERENT things: "your appointment is
+  tomorrow" is not "see you in 2 hours". How a row is tied to its own wording
+  is exactly what is unresolved
 - **after the appointment** — "leave us a review", a rebooking nudge
 - **after a no-show** — the existing win-back
 
-The thing that does NOT exist yet is the third one. Everything else is built.
+Two things do not exist yet: the "after the appointment" type, and any way for
+one reminder row to word itself differently from another.
 
-An earlier idea in the session — putting `offsetHours` on a template row so the
-2-hour reminder could word itself differently from the day-before one — was
-over-engineering and Serdar did not want it. All "before" reminders share one
-message. Do not build it unless he asks again.
+One idea raised and NOT settled: put `offsetHours` on a template row, so a
+template can belong to one specific reminder timing, with the generic reminder
+text as the fallback for rows that have none. Serdar has not accepted or
+rejected it — he wants to work the whole model out from scratch in a fresh
+chat. Treat it as one option, not the plan.
+
+The thing to resolve first is what a "message" is keyed by. Today it is
+(kind, language). If each reminder row can say something different, it becomes
+(kind, language, + something that identifies the row) — and what that
+something is drives everything else, including whether the rules stay three
+hardcoded org fields or become one list.
 
 ### What "after the appointment" needs
 
