@@ -5,6 +5,7 @@ import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 import { recordActivity } from "./lib/activity";
 import { loadEvolutionCreds } from "./lib/waLane";
+import { customerSender, emailLaneConfigured } from "./lib/email";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -129,6 +130,12 @@ export const current = query({
     // credentials — the templates card uses it to say which number a message
     // will actually leave from.
     evolutionEnabled: v.boolean(),
+    // Whether this org can send email AT ALL — the deployment has a provider
+    // key and we can resolve a From. Deliberately not "has the owner set
+    // emailFrom": that field is an upgrade to their own domain, not the
+    // switch, and gating the UI on it hid a working lane behind a DNS task no
+    // salon was going to do.
+    emailEnabled: v.boolean(),
   }),
   handler: async (ctx) => {
     const { user, orgId, role } = await requireOrg(ctx);
@@ -202,6 +209,7 @@ export const current = query({
       evolutionEnabled: Boolean(
         await loadEvolutionCreds(ctx, orgId, org.evolutionInstance),
       ),
+      emailEnabled: emailLaneConfigured() && Boolean(customerSender(org)),
     };
   },
 });

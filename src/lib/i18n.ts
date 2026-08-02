@@ -799,10 +799,14 @@ const dictionary = {
     en: "Email from address",
     de: "Absenderadresse",
   },
+  // Deliberately says "optional" first. E-mail already works from the incoming
+  // address above; this field only swaps the sender to the salon's own domain,
+  // which needs DNS records they will not have. Reading it as a requirement is
+  // what left the whole lane looking broken.
   "settings.emailFromHint": {
-    tr: "Doluysa onay ve hatırlatmalar, e-posta adresi olan müşterilere e-postayla da gider.",
-    en: "When set, confirmations and reminders also go by email to customers who have an address.",
-    de: "Ist sie hinterlegt, gehen Bestätigungen und Erinnerungen zusätzlich per E-Mail an alle Kunden mit E-Mail-Adresse.",
+    tr: "İsteğe bağlı. E-postalar zaten yukarıdaki adresinizden gider; burayı doldurursanız kendi alan adınızdan gönderilir. Alan adının e-posta sağlayıcımızda doğrulanmış olması gerekir.",
+    en: "Optional. Email already goes out from your incoming address above; fill this in to send from your own domain instead. The domain has to be verified with our email provider first.",
+    de: "Optional. E-Mails gehen bereits von Ihrer oben genannten Eingangsadresse raus; tragen Sie hier eine Adresse ein, um stattdessen über Ihre eigene Domain zu senden. Die Domain muss zuvor bei unserem E-Mail-Anbieter verifiziert sein.",
   },
   "settings.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
   "settings.waConnected": { tr: "Bağlı", en: "Connected", de: "Verbunden" },

@@ -15,6 +15,58 @@ const ENDPOINT = "https://api.resend.com/emails";
 
 export type EmailSendResult = { ok: true } | { ok: false; reason: string };
 
+// ── Who the mail says it is from ────────────────────────────────────────────
+//
+// Resend will only accept a From on a domain verified in the account. There is
+// exactly ONE such domain here — Randevu's own (RESEND_INBOUND_DOMAIN, the one
+// that already carries every org's incoming address) — and a salon that has
+// verified a domain of their own on top.
+//
+// So orgs.emailFrom is an UPGRADE, never a requirement. Demanding it before a
+// reminder could go out meant asking a hairdresser to add DNS records, which
+// is why the email lane sat dark: the address the salon already has
+// (guzellik@mail.randevu.app) was sitting right there, verified, unused.
+
+// A display name safe to put in a From header. Quoted rather than escaped in
+// place, so a salon called "Güzellik, Kadıköy" doesn't parse as two addresses.
+// Empty falls back to the product name — a fresh org has name: "" until
+// onboarding, and `"" <addr>` is not a thing to send to a customer.
+function displayName(raw: string | undefined): string {
+  const cleaned = (raw ?? "").replace(/[\r\n"\\]/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || "Randevu";
+}
+
+// Mail RANDEVU writes: invites, alerts about the account. From the product,
+// never from the salon — an alert saying a salon's message failed should not
+// arrive wearing that salon's name.
+export function productSender(): string | undefined {
+  const domain = process.env.RESEND_INBOUND_DOMAIN;
+  return domain ? `Randevu <noreply@${domain}>` : undefined;
+}
+
+// Mail a SALON writes to its customers: confirmations, reminders, campaigns,
+// replies typed in the composer. Three tiers, best first:
+//
+//   1. their own verified domain, when they went and set one up;
+//   2. their incoming address on ours — From and Reply-To become the same
+//      address, so a customer hitting reply lands in the Inbox by default;
+//   3. noreply@ours, so a salon that has set nothing at all still sends.
+//
+// Undefined only when the deployment itself has no domain, which is a config
+// problem no salon can fix and the caller reports as email-not-configured.
+export function customerSender(org: {
+  name?: string;
+  emailFrom?: string;
+  inboundAddress?: string;
+}): string | undefined {
+  const domain = process.env.RESEND_INBOUND_DOMAIN;
+  const address =
+    org.emailFrom ??
+    (domain && org.inboundAddress ? `${org.inboundAddress}@${domain}` : undefined) ??
+    (domain ? `noreply@${domain}` : undefined);
+  return address ? `${displayName(org.name)} <${address}>` : undefined;
+}
+
 // Plain text → the one HTML shape customer mail uses. Escaped first so a name
 // with an ampersand in it cannot become markup, then newlines become breaks so
 // the mail reads the way it was written.

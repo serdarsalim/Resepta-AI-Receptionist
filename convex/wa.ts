@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
 import {
+  customerSender,
   emailBodyHtml,
   emailLaneConfigured,
   sendEmail,
@@ -576,15 +577,18 @@ export const sendAppointmentMessage = internalAction({
     // there is no other channel to blame, so every reason nothing went out
     // becomes a visible row: an owner who chose email and set no From, or a
     // customer with no address, must not produce a reminder that vanishes.
+    // The From address, resolved rather than required: the salon's own domain
+    // if they have one, otherwise the address they already own on ours.
+    const sender = customerSender(org);
     if (channelPref === "whatsapp") {
       // Switched off. Same reasoning as the mirror case above.
-    } else if (channelPref === "email" && (!emailLaneConfigured() || !org.emailFrom)) {
+    } else if (channelPref === "email" && (!emailLaneConfigured() || !sender)) {
       await fail("email-not-configured");
     } else if (channelPref === "email" && !customer.email) {
       await fail("no-email-address");
     } else if (channelPref === "email" && !body) {
       await fail(`no-template-text-${language}`);
-    } else if (emailLaneConfigured() && customer.email && org.emailFrom && body) {
+    } else if (emailLaneConfigured() && customer.email && sender && body) {
       // The authored subject, rendered with the same tokens as the body. The
       // "name, time" fallback covers rows without one — and an authored
       // subject that renders to nothing for this customer falls through too,
@@ -617,12 +621,15 @@ export const sendAppointmentMessage = internalAction({
         // On the row from the start, so the thread shows the real subject and
         // a retry reuses it instead of rebuilding a different one.
         emailSubject: subject,
-        emailFrom: org.emailFrom,
+        // The resolved From, not the org's raw field: a retry has to leave
+        // from the same address this attempt did, and the row is what the
+        // retry reads.
+        emailFrom: sender,
         trackingToken,
         templateId: tracked ? contentTemplate._id : undefined,
       });
       const emailResult = await sendEmail({
-        from: `${org.name} <${org.emailFrom}>`,
+        from: sender,
         to: customer.email,
         subject,
         html: withOpenPixel(emailBodyHtml(body), trackingToken),

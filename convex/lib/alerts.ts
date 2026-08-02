@@ -27,11 +27,13 @@
 // triggered it. A salon losing an alert email is bad; a salon losing the
 // customer's actual message because the alert broke is unforgivable.
 //
-// Delivery rides the same provider as customer email (lib/email.ts), from
-// the org's own From address. No emailFrom set, or no RESEND_API_KEY on
-// the deployment, means the org has no email lane at all. That case used to
-// return silently while the account switches still promised email; it now logs
-// and is readable from the `alertHealth` query below so the UI can say so.
+// Delivery rides the same provider as customer email (lib/email.ts), from the
+// PRODUCT's address (lib/email productSender) rather than the salon's own: an
+// alert is Randevu writing to the owner, not the salon mailing anybody. It
+// used to demand orgs.emailFrom, which silently cost every salon without one
+// their alerts. What remains is deployment config — no RESEND_API_KEY or no
+// RESEND_INBOUND_DOMAIN means nobody has an email lane — which logs, and is
+// readable from the `alertHealth` query below so the UI can say so.
 
 import { v } from "convex/values";
 import type { Scheduler } from "convex/server";
@@ -39,7 +41,7 @@ import { internal } from "../_generated/api";
 import { internalAction, internalQuery, query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireOrg } from "./orgAuth";
-import { emailLaneConfigured, sendEmail } from "./email";
+import { emailLaneConfigured, productSender, sendEmail } from "./email";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
 export type AlertKind = "inbound" | "failed-send" | "new-contact";
@@ -267,13 +269,12 @@ function escapeHtml(raw: string): string {
 export const alertRecipients = internalQuery({
   args: { orgId: v.id("orgs"), kind: alertKindValidator },
   returns: v.object({
-    from: v.optional(v.string()),
     emails: v.array(v.string()),
     language: v.string(),
   }),
   handler: async (ctx, args) => {
     const org = await ctx.db.get(args.orgId);
-    if (!org) return { from: undefined, emails: [], language: "en" };
+    if (!org) return { emails: [], language: "en" };
     const memberships = await ctx.db
       .query("memberships")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -287,7 +288,7 @@ export const alertRecipients = internalQuery({
       if (!alertEnabled(user, args.kind)) continue;
       if (!emails.includes(user.email)) emails.push(user.email);
     }
-    return { from: org.emailFrom, emails, language: org.language };
+    return { emails, language: org.language };
   },
 });
 
@@ -331,11 +332,10 @@ export const alertHealth = query({
       if (alertEnabled(user, "inbound")) inbound.add(user.email);
       if (alertEnabled(user, "failed-send")) failedSend.add(user.email);
     }
-    const laneConfigured = emailLaneConfigured();
-    const emailFrom = org?.emailFrom;
-    const blocker = !laneConfigured
+    const from = productSender();
+    const blocker = !emailLaneConfigured()
       ? ("no-email-lane" as const)
-      : !emailFrom
+      : !from
         ? ("no-from-address" as const)
         : inbound.size === 0 && failedSend.size === 0
           ? ("no-recipients" as const)
@@ -343,7 +343,7 @@ export const alertHealth = query({
     return {
       deliverable: blocker === undefined,
       blocker,
-      emailFrom,
+      emailFrom: from,
       recipients: { inbound: inbound.size, failedSend: failedSend.size },
     };
   },
@@ -372,16 +372,21 @@ export const deliverOrgAlert = internalAction({
         return null;
       }
       const recipients: {
-        from: string | undefined;
         emails: string[];
         language: string;
       } = await ctx.runQuery(internal.lib.alerts.alertRecipients, {
         orgId: args.orgId,
         kind: copy.kind,
       });
-      if (!recipients.from) {
+      // An alert is Randevu writing to the owner about their account, exactly
+      // like an invite — so it goes out from the product, not wearing the
+      // salon's own name. It used to require orgs.emailFrom, which meant a
+      // salon that never set one got no failed-send alerts at all while the
+      // switches in Account sat on, promising them.
+      const from = productSender();
+      if (!from) {
         console.warn(
-          `alert dropped (${args.template}, org ${args.orgId}): the org has no from address, so alert email cannot be sent`,
+          `alert dropped (${args.template}, org ${args.orgId}): RESEND_INBOUND_DOMAIN is unset, so there is no address to send from`,
         );
         return null;
       }
@@ -399,7 +404,7 @@ export const deliverOrgAlert = internalAction({
       // must not cost the rest of the team their alert.
       for (const to of recipients.emails) {
         await sendEmail({
-          from: recipients.from,
+          from,
           to,
           subject,
           html,

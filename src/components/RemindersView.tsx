@@ -58,7 +58,7 @@ function ruleChannels(
   language: string,
   waConnected: boolean,
   evolutionEnabled: boolean,
-  emailFrom: string | undefined,
+  emailEnabled: boolean,
   emailLabel: string,
   channelPref: "whatsapp" | "email" | "both",
 ): string[] {
@@ -69,7 +69,7 @@ function ruleChannels(
     ? template?.status === "approved" && Boolean(template?.metaName)
     : evolutionEnabled && hasText;
   if (channelPref !== "email" && waOk) channels.push("WhatsApp");
-  if (channelPref !== "whatsapp" && emailFrom && hasText) channels.push(emailLabel);
+  if (channelPref !== "whatsapp" && emailEnabled && hasText) channels.push(emailLabel);
   return channels;
 }
 
@@ -156,6 +156,7 @@ function NotificationRulesCard({
   templates,
   waConnected,
   evolutionEnabled,
+  emailEnabled,
   update,
 }: {
   isOwner: boolean;
@@ -167,18 +168,18 @@ function NotificationRulesCard({
     winbackDaysAfter: number;
     quietHoursStart: number;
     quietHoursEnd: number;
-    emailFrom?: string;
     messageChannel: "whatsapp" | "email" | "both";
   };
   templates: TemplateRow[];
   waConnected: boolean;
   evolutionEnabled: boolean;
+  emailEnabled: boolean;
   update: (args: Record<string, unknown>) => void;
 }) {
   const { t, language } = useLanguage();
   const offsets = org.reminderOffsetsHours;
   const unused = OFFSET_PRESETS.filter((h) => !offsets.includes(h));
-  const orgHasChannel = waConnected || evolutionEnabled || Boolean(org.emailFrom);
+  const orgHasChannel = waConnected || evolutionEnabled || emailEnabled;
 
   const channelsFor = (kind: RuleKind) =>
     ruleChannels(
@@ -187,7 +188,7 @@ function NotificationRulesCard({
       org.language,
       waConnected,
       evolutionEnabled,
-      org.emailFrom,
+      emailEnabled,
       t("settings.ruleEmail"),
       org.messageChannel,
     );
@@ -215,7 +216,7 @@ function NotificationRulesCard({
           travel); "Both" exists only when there is actually a pair; nothing
           wired hides the row, and the amber line below the table says whose
           move it is. */}
-      {(waConnected || evolutionEnabled || Boolean(org.emailFrom)) && (
+      {orgHasChannel && (
         <div className="flex flex-wrap items-center gap-1.5 pb-3">
           <span className="mr-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
             {t("settings.sendChannel")}
@@ -223,8 +224,8 @@ function NotificationRulesCard({
           </span>
           {([
             ...(waConnected || evolutionEnabled ? (["whatsapp"] as const) : []),
-            ...(org.emailFrom ? (["email"] as const) : []),
-            ...((waConnected || evolutionEnabled) && org.emailFrom
+            ...(emailEnabled ? (["email"] as const) : []),
+            ...((waConnected || evolutionEnabled) && emailEnabled
               ? (["both"] as const)
               : []),
           ]).map((option) => (
@@ -610,6 +611,7 @@ export function RemindersView() {
           templates={settings.templates}
           waConnected={settings.whatsapp.connected}
           evolutionEnabled={settings.evolutionEnabled}
+          emailEnabled={settings.emailEnabled}
           update={(args) => void update(args)}
         />
 
@@ -655,7 +657,7 @@ export function RemindersView() {
                   (template) =>
                     template.kind !== "campaign" ||
                     settings.whatsapp.connected ||
-                    Boolean(settings.org.emailFrom),
+                    settings.emailEnabled,
                 )
                 .map((template) => (
                   <div key={template._id} className="space-y-2 py-4">
@@ -719,7 +721,7 @@ export function RemindersView() {
                     {/* Outside the campaign guard: a campaign has no body
                         here, but its emails need a subject like everyone
                         else's (campaigns.fanOut renders it per customer). */}
-                    {settings.org.emailFrom && (
+                    {settings.emailEnabled && (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
                           {t("settings.templateSubject")}

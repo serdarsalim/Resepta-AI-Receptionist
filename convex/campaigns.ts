@@ -40,6 +40,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { customerSender } from "./lib/email";
 import { renderTokens } from "./lib/renderTokens";
 import { recordActivity } from "./lib/activity";
 
@@ -306,6 +307,10 @@ export const fanOut = internalMutation({
         .collect()
     ).find((t) => t.kind === "campaign" && t.language === org.language)?.subject;
 
+    // Resolved once for the whole page rather than per recipient: it depends
+    // only on the org.
+    const sender = customerSender(org);
+
     let created = 0;
     for (const customerId of args.customerIds) {
       const customer = await ctx.db.get(customerId);
@@ -346,7 +351,7 @@ export const fanOut = internalMutation({
       // token is minted here at fan-out; delivery injects the pixel, and the
       // campaign's open count is read live off these rows — bulk mail is the
       // one place an open rate means something.
-      if (customer.email && org.emailFrom) {
+      if (customer.email && sender) {
         // Same token vocabulary as the campaign line, same per-customer
         // render. A subject that resolves to nothing for this customer falls
         // back to the org name rather than sending a blank line.
@@ -367,7 +372,7 @@ export const fanOut = internalMutation({
           status: "queued",
           body: line,
           emailSubject: subject || org.name,
-          emailFrom: org.emailFrom,
+          emailFrom: sender,
           trackingToken: crypto.randomUUID(),
           nextAttemptAt: Date.now(),
         });
@@ -438,7 +443,9 @@ export const send = action({
       (t: Doc<"waTemplates">) => t.language === org.language,
     );
     // No WhatsApp lane at all is only fatal if there is no email lane either.
-    if ((!hasWa || !template) && !org.emailFrom) {
+    // Fatal only when NEITHER channel can carry it. Email needs a sender we
+    // can resolve, which for most orgs is their address on our own domain.
+    if ((!hasWa || !template) && !customerSender(org)) {
       return { ok: false, reason: template ? "wa-not-configured" : "no-campaign-template" };
     }
 

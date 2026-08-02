@@ -41,6 +41,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { formatAppointmentTime } from "./lib/format";
 import {
+  customerSender,
   emailBodyHtml,
   emailLaneConfigured,
   sendEmail,
@@ -146,7 +147,9 @@ export const claimForRetry = internalMutation({
       body: message.body,
       to: customer.phone,
       email: customer.email,
-      emailFrom: org.emailFrom,
+      // What the first attempt sent as, falling back to resolving it now for
+      // rows written before the row carried a full sender.
+      emailFrom: message.emailFrom ?? customerSender(org),
       // For the reply-to on a retried email — same wiring as the first
       // attempt, so the customer's answer still lands in the timeline.
       inboundAddress: org.inboundAddress,
@@ -246,7 +249,7 @@ async function attempt(
     // slightly different one.
     const domain = process.env.RESEND_INBOUND_DOMAIN;
     const sent = await sendEmail({
-      from: `${job.orgName} <${job.emailFrom}>`,
+      from: job.emailFrom,
       to: job.email,
       // The stored subject when there is one, so a retry lands in the same
       // thread rather than starting a second one. Older rows predate the

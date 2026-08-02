@@ -7,7 +7,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
-import { sendEmail } from "./lib/email";
+import { customerSender, productSender, sendEmail } from "./lib/email";
 import {
   bareAddress,
   displayName,
@@ -146,7 +146,7 @@ export const loadSendContext = internalQuery({
     v.object({
       orgId: v.id("orgs"),
       orgName: v.string(),
-      emailFrom: v.optional(v.string()),
+      sender: v.optional(v.string()),
       inboundAddress: v.optional(v.string()),
       customerEmail: v.optional(v.string()),
     }),
@@ -161,7 +161,9 @@ export const loadSendContext = internalQuery({
     return {
       orgId,
       orgName: org.name,
-      emailFrom: org.emailFrom,
+      // Resolved here, where the org doc is in hand. Unset only when the
+      // deployment has no verified domain at all.
+      sender: customerSender(org),
       inboundAddress: org.inboundAddress,
       customerEmail: customer.email,
     };
@@ -184,7 +186,7 @@ export const sendToCustomer = action({
     });
     if (!context) return { ok: false, reason: "not-found" };
     if (!context.customerEmail) return { ok: false, reason: "missing-email" };
-    if (!context.emailFrom) return { ok: false, reason: "no-from-address" };
+    if (!context.sender) return { ok: false, reason: "email-not-configured" };
 
     // Replies come back to US, not to whatever mailbox the From address
     // belongs to. Without this the customer's answer lands in the salon
@@ -202,11 +204,11 @@ export const sendToCustomer = action({
       kind: "email_reply",
       body,
       emailSubject: subject || undefined,
-      emailFrom: context.emailFrom,
+      emailFrom: context.sender,
     });
 
     const result = await sendEmail({
-      from: `${context.orgName} <${context.emailFrom}>`,
+      from: context.sender,
       to: context.customerEmail,
       subject: subject || context.orgName,
       // Typed as plain text, sent as HTML: escaped first so a customer name
@@ -265,11 +267,11 @@ export const sendInvite = internalAction({
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    const domain = process.env.RESEND_INBOUND_DOMAIN;
+    const from = productSender();
     const siteUrl = process.env.SITE_URL;
     // Both are deployment config the owner cannot fix from inside the app, so
     // the only sane response is to skip quietly. The invite still stands.
-    if (!domain || !siteUrl) return null;
+    if (!from || !siteUrl) return null;
 
     const copy =
       INVITE_COPY[args.language as keyof typeof INVITE_COPY] ?? INVITE_COPY.tr;
@@ -277,7 +279,7 @@ export const sendInvite = internalAction({
     const by = escapeHtml(args.invitedByName);
 
     const result = await sendEmail({
-      from: `Randevu <noreply@${domain}>`,
+      from,
       to: args.to,
       subject: copy.subject(args.orgName),
       html: `<p>${copy.line(org, by)}</p><p>${copy.action}<br/><a href="${siteUrl}">${siteUrl}</a></p>`,
