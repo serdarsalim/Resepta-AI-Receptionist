@@ -8,6 +8,7 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
+import { DEFAULT_TITLE, workspaceTitle } from "@/lib/brand";
 import Link from "next/link";
 import { OperatorBanner } from "./OperatorBanner";
 import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
@@ -1068,6 +1069,24 @@ export function AppShell({
       setLanguage(preferredLanguage);
     }
   }, [preferredLanguage, language, setLanguage]);
+
+  // The browser tab carries the workspace, not the product. A tab strip
+  // truncates from the right, so whatever leads is the only part that survives
+  // — and an operator with several salons open is telling businesses apart,
+  // not apps. The favicon is left alone on purpose: the mark is how they find
+  // Randevu among thirty tabs, so it has to stay the constant.
+  //
+  // Restored on unmount because signing out unmounts this shell without a
+  // document load, and the sign-in page would otherwise keep wearing the name
+  // of the salon somebody just left.
+  const workspaceName = settings?.org.name;
+  useEffect(() => {
+    if (!workspaceName) return;
+    document.title = workspaceTitle(workspaceName);
+    return () => {
+      document.title = DEFAULT_TITLE;
+    };
+  }, [workspaceName]);
 
   // "account" has no sidebar entry to borrow a label from, so its title is
   // resolved directly.

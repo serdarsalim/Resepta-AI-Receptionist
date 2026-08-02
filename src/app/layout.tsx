@@ -5,6 +5,7 @@ import { ConvexClientProvider } from "./ConvexClientProvider";
 import { LanguageProvider } from "@/lib/LanguageProvider";
 import { ToastProvider } from "@/lib/ToastProvider";
 import { NO_FOUC_SCRIPT } from "@/lib/theme";
+import { DEFAULT_TITLE } from "@/lib/brand";
 import "./globals.css";
 // Country flags are flag-icons CSS sprites, never Unicode flag emoji: Windows
 // Chrome has no flag glyphs and renders those as the bare letters "TR".
@@ -13,7 +14,9 @@ import "flag-icons/css/flag-icons.min.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Randevu — calls, bookings and customer follow-up",
+  // The signed-in app replaces this with the workspace's own name; see
+  // lib/brand.ts. This is what everyone else reads.
+  title: DEFAULT_TITLE,
   description:
     "Randevu answers calls, books appointments and keeps customers informed in one connected workflow.",
 };
