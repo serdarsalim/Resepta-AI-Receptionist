@@ -589,6 +589,122 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
 // Publishes the lifecycle as one Retell version. One draft contains both the
 // response-engine changes (defaults + live extraction) and the agent changes
 // (post-call analysis), so callers can never land between two configurations.
+// Publishing the lifecycle, minus who is asking. `editorContext` is the only
+// thing in here that ever cared about identity, and it now takes the org
+// directly, so both doors below share one copy of the draft-then-publish
+// ordering rather than growing a second one that drifts.
+async function publishVariableSet(
+  ctx: ActionCtx,
+  {
+    agentId,
+    baseVersion,
+    variables,
+    orgId,
+  }: {
+    agentId: string;
+    baseVersion?: number;
+    variables: VariableRow[];
+    orgId?: Id<"orgs">;
+  },
+): Promise<{ ok: boolean; version: number | null }> {
+  const context = await editorContext(ctx, agentId, orgId);
+  const key = context.apiKey!;
+  const next = validateVariables(context, variables);
+  const id = encodeURIComponent(agentId);
+  const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+  if (baseVersion !== undefined && live.version !== baseVersion) {
+    throw new Error("This agent changed in Retell. Refresh before publishing.");
+  }
+
+  const llmId = live.response_engine?.llm_id;
+  const needsLlm = next.some(
+    (variable) => variable.beforeSource !== "none" || variable.duringMode !== "none",
+  );
+  if (needsLlm && (live.response_engine?.type !== "retell-llm" || !llmId)) {
+    throw new Error("Before-call and during-call variables require a Retell LLM agent.");
+  }
+  const liveLlm = llmId
+    ? ((await (
+        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      ).json()) as LlmDoc)
+    : null;
+  const preservedTools = (liveLlm?.general_tools ?? []).filter(
+    (tool) => tool.type !== "extract_dynamic_variable",
+  );
+  const during = next.filter((variable) => variable.duringMode !== "none");
+  const generalTools = withRuntimeMcpTools([
+    ...preservedTools,
+    ...(during.length > 0
+      ? [
+          {
+            type: "extract_dynamic_variable",
+            name: "randevu_collect",
+            description:
+              "Capture configured customer details when they are provided. Fields marked for confirmation must only be updated after the caller explicitly confirms them.",
+            variables: during.map((variable) => ({
+              ...variableForRetell(variable),
+              description:
+                variable.duringMode === "confirm"
+                  ? `${variable.description.trim() || variable.label} Only store this after the caller explicitly confirms it.`
+                  : variable.description.trim() ||
+                    `Capture ${variable.label} when the caller provides it.`,
+            })),
+            enable_typing_sound: false,
+          },
+        ]
+      : []),
+  ]);
+  const defaultDynamicVariables: Record<string, string> = {};
+  for (const variable of next) {
+    if (variable.beforeSource === "static" && variable.beforeValue) {
+      defaultDynamicVariables[variable.key] = variable.beforeValue;
+    } else if (variable.beforeSource === "business_name") {
+      defaultDynamicVariables[variable.key] = context.orgName;
+    }
+  }
+  const postCallAnalysis = [
+    ...(live.post_call_analysis_data ?? []).filter(
+      (item) => item.type === "system-presets",
+    ),
+    ...next.filter((variable) => variable.afterCall).map(variableForRetell),
+  ];
+
+  if (live.version === undefined) throw new Error("Agent has no version to clone.");
+  const draft = (await (
+    await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+  ).json()) as { version?: number };
+  if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+  const draftAgent = (await (
+    await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+  ).json()) as AgentDoc;
+
+  if (llmId) {
+    const llmVersion = draftAgent.response_engine?.version;
+    await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+      ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+      default_dynamic_variables: defaultDynamicVariables,
+      general_tools: generalTools,
+      mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {}),
+    });
+  }
+  await call(key, "PATCH", `update-agent/${id}`, {
+    version: draft.version,
+    post_call_analysis_data: postCallAnalysis,
+  });
+  await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+  await ctx.runMutation(internal.retell.replaceAgentVariables, {
+    retellAgentId: agentId,
+    retellVersion: draft.version,
+    variables: next,
+  });
+  if (siteUrl()) {
+    await ctx.runMutation(internal.retell.markRuntimeConnected, {
+      retellAgentId: agentId,
+    });
+  }
+  return { ok: true, version: draft.version };
+}
+
 export const publishVariables = action({
   args: {
     agentId: v.string(),
@@ -596,104 +712,24 @@ export const publishVariables = action({
     variables: v.array(voiceVariableInput),
   },
   returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
-  handler: async (ctx, { agentId, baseVersion, variables }) => {
-    const context = await editorContext(ctx, agentId);
-    const key = context.apiKey!;
-    const next = validateVariables(context, variables);
-    const id = encodeURIComponent(agentId);
-    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
-    if (baseVersion !== undefined && live.version !== baseVersion) {
-      throw new Error("This agent changed in Retell. Refresh before publishing.");
-    }
+  handler: async (ctx, args): Promise<{ ok: boolean; version: number | null }> =>
+    await publishVariableSet(ctx, args),
+});
 
-    const llmId = live.response_engine?.llm_id;
-    const needsLlm = next.some(
-      (variable) => variable.beforeSource !== "none" || variable.duringMode !== "none",
-    );
-    if (needsLlm && (live.response_engine?.type !== "retell-llm" || !llmId)) {
-      throw new Error("Before-call and during-call variables require a Retell LLM agent.");
-    }
-    const liveLlm = llmId
-      ? ((await (
-          await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
-        ).json()) as LlmDoc)
-      : null;
-    const preservedTools = (liveLlm?.general_tools ?? []).filter(
-      (tool) => tool.type !== "extract_dynamic_variable",
-    );
-    const during = next.filter((variable) => variable.duringMode !== "none");
-    const generalTools = withRuntimeMcpTools([
-      ...preservedTools,
-      ...(during.length > 0
-        ? [
-            {
-              type: "extract_dynamic_variable",
-              name: "randevu_collect",
-              description:
-                "Capture configured customer details when they are provided. Fields marked for confirmation must only be updated after the caller explicitly confirms them.",
-              variables: during.map((variable) => ({
-                ...variableForRetell(variable),
-                description:
-                  variable.duringMode === "confirm"
-                    ? `${variable.description.trim() || variable.label} Only store this after the caller explicitly confirms it.`
-                    : variable.description.trim() ||
-                      `Capture ${variable.label} when the caller provides it.`,
-              })),
-              enable_typing_sound: false,
-            },
-          ]
-        : []),
-    ]);
-    const defaultDynamicVariables: Record<string, string> = {};
-    for (const variable of next) {
-      if (variable.beforeSource === "static" && variable.beforeValue) {
-        defaultDynamicVariables[variable.key] = variable.beforeValue;
-      } else if (variable.beforeSource === "business_name") {
-        defaultDynamicVariables[variable.key] = context.orgName;
-      }
-    }
-    const postCallAnalysis = [
-      ...(live.post_call_analysis_data ?? []).filter(
-        (item) => item.type === "system-presets",
-      ),
-      ...next.filter((variable) => variable.afterCall).map(variableForRetell),
-    ];
-
-    if (live.version === undefined) throw new Error("Agent has no version to clone.");
-    const draft = (await (
-      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
-    ).json()) as { version?: number };
-    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
-    const draftAgent = (await (
-      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
-    ).json()) as AgentDoc;
-
-    if (llmId) {
-      const llmVersion = draftAgent.response_engine?.version;
-      await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
-        ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-        default_dynamic_variables: defaultDynamicVariables,
-        general_tools: generalTools,
-        mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {}),
-      });
-    }
-    await call(key, "PATCH", `update-agent/${id}`, {
-      version: draft.version,
-      post_call_analysis_data: postCallAnalysis,
-    });
-    await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
-    await ctx.runMutation(internal.retell.replaceAgentVariables, {
-      retellAgentId: agentId,
-      retellVersion: draft.version,
-      variables: next,
-    });
-    if (siteUrl()) {
-      await ctx.runMutation(internal.retell.markRuntimeConnected, {
-        retellAgentId: agentId,
-      });
-    }
-    return { ok: true, version: draft.version };
+// The sessionless door. Note this one takes an orgId where the public action
+// deliberately cannot: `editorContext` TRUSTS the org it is given and only
+// checks that the agent belongs to it, so a public action accepting one would
+// let a client edit any agent whose id they could name.
+export const publishVariablesForOrg = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    agentId: v.string(),
+    baseVersion: v.optional(v.number()),
+    variables: v.array(voiceVariableInput),
   },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, args): Promise<{ ok: boolean; version: number | null }> =>
+    await publishVariableSet(ctx, args),
 });
 
 // ── Webhook ──────────────────────────────────────────────────────────────────

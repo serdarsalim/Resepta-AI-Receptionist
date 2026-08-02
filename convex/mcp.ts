@@ -15,6 +15,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { httpAction, internalQuery, type ActionCtx } from "./_generated/server";
+import type { VoiceVariableInput } from "./lib/voiceVariables";
 import {
   bearer,
   jsonResponse,
@@ -403,6 +404,92 @@ const TOOLS: ToolDef[] = [
       await ctx.runAction(internal.retellAgent.voiceOptionsForOrg, {
         orgId: who.orgId as never,
       }),
+  },
+  {
+    name: "list_agent_variables",
+    title: "What a phone agent collects",
+    description:
+      "What one agent reads and asks for on a call, and whether each answer is written to the customer card or kept on the call record. An agent with nothing here answers and books but records no details.",
+    inputSchema: {
+      type: "object",
+      properties: { agentId: { type: "string", description: "From list_phone_agents." } },
+      required: ["agentId"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      if (!agentId) throw new Error("agentId is required");
+      return await ctx.runQuery(internal.agentTools.listAgentVariables, {
+        orgId: who.orgId as never,
+        agentId,
+      });
+    },
+  },
+  {
+    name: "set_agent_variables",
+    title: "Choose what a phone agent collects",
+    description:
+      "Point an agent at the contact fields it should collect, by their keys. Each one is wired the way a repeat caller expects: read from the customer card before the call, asked only when missing, written back after. REPLACES the agent's whole set, so pass every field you want it collecting, not just new ones. Only fields whose filledBy is \"voice\" are eligible. The caller's name and the business name are always included and do not need listing. Publishes a new version at the phone provider and cannot be undone. Owner only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string", description: "From list_phone_agents." },
+        fieldKeys: {
+          type: "array",
+          items: { type: "string" },
+          description: "Contact field keys from list_contact_fields, in the order to ask.",
+        },
+      },
+      required: ["agentId", "fieldKeys"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      if (!agentId) throw new Error("agentId is required");
+      const raw = args.fieldKeys;
+      if (!Array.isArray(raw)) throw new Error("fieldKeys must be an array of field keys");
+      const fieldKeys = raw.map((k) => String(k));
+      await ctx.runQuery(internal.agentTools.assertCanProvision, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        what: "change what a phone agent collects",
+      });
+      // Built here, never accepted from the caller: the contact-field link,
+      // the matching key and a select's choices are all derivable, and each is
+      // a publish error rather than a decision.
+      const variables = (await ctx.runQuery(internal.agentTools.buildAgentVariables, {
+        orgId: who.orgId as never,
+        fieldKeys,
+      })) as VoiceVariableInput[];
+      const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
+        orgId: who.orgId as never,
+        agentId,
+      })) as { retellAgentId: string; name: string };
+      const published = (await ctx.runAction(internal.retellAgent.publishVariablesForOrg, {
+        orgId: who.orgId as never,
+        agentId: agent.retellAgentId,
+        variables,
+      })) as { ok: boolean; version: number | null };
+      const recorded = await ctx.runMutation(internal.agentTools.recordVariablesPublished, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        retellAgentId: agent.retellAgentId,
+        agentName: agent.name,
+        keys: fieldKeys,
+      });
+      return {
+        ok: published.ok,
+        version: published.version,
+        collecting: fieldKeys,
+        actionId: recorded.actionId,
+        note: `Published. It now asks for ${
+          fieldKeys.length > 0 ? fieldKeys.join(", ") : "nothing beyond the caller's name"
+        } and writes the answers to the customer card. This cannot be undone.`,
+      };
+    },
   },
   {
     name: "create_phone_agent",

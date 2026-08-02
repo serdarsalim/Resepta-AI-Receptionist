@@ -537,21 +537,199 @@ export const phoneAgentContext = internalQuery({
   },
 });
 
-// Owner check for the phone-agent path, which cannot use assertOwner: it runs
-// from an ACTION (provisioning talks to the provider over the network), and an
-// action has no database handle of its own.
+// Owner check for the phone-agent paths, which cannot use assertOwner: they run
+// from an ACTION (the provider is talked to over the network), and an action
+// has no database handle of its own.
 export const assertCanProvision = internalQuery({
-  args: { orgId: v.id("orgs"), userId: v.id("users") },
+  args: { orgId: v.id("orgs"), userId: v.id("users"), what: v.optional(v.string()) },
   returns: v.null(),
-  handler: async (ctx, { orgId, userId }) => {
+  handler: async (ctx, { orgId, userId, what }) => {
     const membership = await ctx.db
       .query("memberships")
       .withIndex("by_user_org", (q) => q.eq("userId", userId).eq("orgId", orgId))
       .unique();
     if (!membership || membership.role !== "owner") {
-      throw new Error("Only an owner can create a phone agent.");
+      throw new Error(`Only an owner can ${what ?? "create a phone agent"}.`);
     }
     return null;
+  },
+});
+
+// Agents are addressed by their RANDEVU id, the one list_phone_agents returns.
+// The provider's id is deliberately not the handle: "Retell is an
+// implementation detail" is a product rule, and a connector that made owners
+// pass provider ids around would be the loudest possible violation of it.
+export const resolvePhoneAgent = internalQuery({
+  args: { orgId: v.id("orgs"), agentId: v.string() },
+  returns: v.object({ retellAgentId: v.string(), name: v.string() }),
+  handler: async (ctx, { orgId, agentId }) => {
+    const row = await ctx.db.get(agentId as Id<"retellAgents">).catch(() => null);
+    if (!row || row.orgId !== orgId) {
+      throw new Error("No phone agent with that id. Use list_phone_agents to get one.");
+    }
+    // `name` is optional on the row: an agent adopted through Connect existing
+    // carries the provider's name only once something has read it back.
+    return { retellAgentId: row.retellAgentId, name: row.name ?? "this agent" };
+  },
+});
+
+export const listAgentVariables = internalQuery({
+  args: { orgId: v.id("orgs"), agentId: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { orgId, agentId }) => {
+    const agent = await ctx.db.get(agentId as Id<"retellAgents">).catch(() => null);
+    if (!agent || agent.orgId !== orgId) {
+      throw new Error("No phone agent with that id. Use list_phone_agents to get one.");
+    }
+    const rows = await ctx.db
+      .query("voiceAgentVariables")
+      .withIndex("by_org_agent", (q) =>
+        q.eq("orgId", orgId).eq("retellAgentId", agent.retellAgentId),
+      )
+      .collect();
+    return {
+      agent: agent.name,
+      publishedAt: agent.variablesSyncedAt
+        ? new Date(agent.variablesSyncedAt).toISOString()
+        : null,
+      variables: rows
+        .sort((a, b) => a.order - b.order)
+        .map((row) => ({
+          key: row.key,
+          label: row.label,
+          // Where the answer goes. "contact" writes it to the customer card;
+          // "call" keeps it on the call record only.
+          destination: row.destination,
+          asks:
+            row.duringMode === "confirm"
+              ? "confirms the current value"
+              : row.duringMode === "if_missing"
+                ? "asks when missing"
+                : "does not ask",
+        })),
+    };
+  },
+});
+
+// Turning a list of field keys into a valid variable set. The caller names
+// fields; everything validateVariables insists on — the contactFieldId link,
+// the key matching the field's, enum choices coming from the field's options —
+// is derived here rather than asked for, because every one of those is a
+// publish error waiting to happen and none of them is a decision.
+//
+// business_name is ALWAYS included and that is not decoration: publishing
+// rebuilds the provider's default dynamic variables from this set alone, so a
+// set without it silently blanks {{business_name}} and the agent opens by
+// greeting nobody.
+export const buildAgentVariables = internalQuery({
+  args: { orgId: v.id("orgs"), fieldKeys: v.array(v.string()) },
+  returns: v.any(),
+  handler: async (ctx, { orgId, fieldKeys }) => {
+    const fields = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const byKey = new Map(fields.map((field) => [field.key, field]));
+
+    const variables: Record<string, unknown>[] = [
+      {
+        key: "business_name",
+        label: "Business name",
+        description: "",
+        type: "string",
+        required: false,
+        beforeSource: "business_name",
+        duringMode: "none",
+        afterCall: false,
+        destination: "call",
+      },
+      {
+        key: "customer_name",
+        label: "Caller name",
+        description: "",
+        type: "string",
+        required: false,
+        beforeSource: "customer_name",
+        duringMode: "if_missing",
+        afterCall: true,
+        destination: "call",
+      },
+    ];
+
+    const missing: string[] = [];
+    const notVoice: string[] = [];
+    for (const key of fieldKeys) {
+      if (key === "business_name" || key === "customer_name") continue;
+      const field = byKey.get(key);
+      if (!field) {
+        missing.push(key);
+        continue;
+      }
+      // A field staff fill in is not one the agent may write. The runtime
+      // refuses it too; refusing here says why while it can still be fixed.
+      if (field.source !== "voice") {
+        notVoice.push(key);
+        continue;
+      }
+      variables.push({
+        key: field.key,
+        label: field.label,
+        description: "",
+        type:
+          field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
+        ...(field.type === "select" ? { choices: field.options ?? [] } : {}),
+        required: false,
+        // The repeat-caller path the picker wires by hand in the app: read the
+        // stored value before the call, only ask when it is missing, write the
+        // answer back to the same field.
+        beforeSource: "contact_field",
+        beforeFieldId: field._id,
+        duringMode: "if_missing",
+        afterCall: true,
+        destination: "contact",
+        contactFieldId: field._id,
+      });
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        `No contact field with key: ${missing.join(", ")}. Use list_contact_fields to see them.`,
+      );
+    }
+    if (notVoice.length > 0) {
+      throw new Error(
+        `These fields are filled by staff, not the phone agent: ${notVoice.join(", ")}. Create them with filledBy "voice" to have the agent collect them.`,
+      );
+    }
+    return variables;
+  },
+});
+
+// Journalled reversible:false. The publish already created a version at the
+// provider; putting the old set back means publishing ANOTHER version, which
+// is a new action rather than an undo of this one.
+export const recordVariablesPublished = internalMutation({
+  args: { ...scope, retellAgentId: v.string(), agentName: v.string(), keys: v.array(v.string()) },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, retellAgentId, agentName, keys }) => {
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "set_agent_variables",
+      args: { retellAgentId, keys },
+      targetTable: "voiceAgentVariables",
+      targetId: retellAgentId,
+      before: null,
+      after: { keys: keys.join(", ") },
+      reversible: false,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `Set what "${agentName}" collects: ${keys.join(", ")}`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { actionId };
   },
 });
 
