@@ -415,7 +415,10 @@ export function VoiceAgentPage({
               title={t("settings.inboundNumber")}
               aria-label={t("settings.inboundNumber")}
               onChange={(e) => chooseLine(e.target.value || null)}
-              className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
+              // w-auto is load-bearing: globals.css gives every select
+              // width:100% in the base layer, so a select without it eats its
+              // whole flex line and drops Test call to the next row.
+              className="w-auto shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
             >
               <option value="">{t("voiceDetail.noLine")}</option>
               {/* The number, never the nickname. A nickname is what someone
