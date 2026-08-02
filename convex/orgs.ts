@@ -75,7 +75,6 @@ export const current = query({
       autoReplyText: v.optional(v.string()),
       bookingUrl: v.optional(v.string()),
       publicPhone: v.optional(v.string()),
-      staffLabel: v.optional(v.string()),
     }),
     me: v.object({
       name: v.optional(v.string()),
@@ -154,7 +153,6 @@ export const current = query({
         autoReplyText: org.autoReplyText,
         bookingUrl: org.bookingUrl,
         publicPhone: org.publicPhone,
-        staffLabel: org.staffLabel,
       },
       me: {
         name: user.name,
@@ -210,7 +208,6 @@ export const update = mutation({
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
     publicPhone: v.optional(v.string()),
-    staffLabel: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -307,11 +304,6 @@ export const update = mutation({
     }
     if (args.publicPhone !== undefined) {
       patch.publicPhone = args.publicPhone.trim() || undefined;
-    }
-    if (args.staffLabel !== undefined) {
-      // Blank falls back to the dictionary's generic word, which is right for
-      // most verticals; this only overrides it.
-      patch.staffLabel = args.staffLabel.trim() || undefined;
     }
     await ctx.db.patch(orgId, patch);
 

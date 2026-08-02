@@ -203,16 +203,11 @@ const dictionary = {
     en: "The calendar refused this change, so the appointment stayed where it was.",
     de: "Der Kalender hat diese Änderung abgelehnt, der Termin blieb unverändert.",
   },
-  "staff.title": { tr: "Ekip", en: "People", de: "Personen" },
+  "staff.title": { tr: "Ekip", en: "Team", de: "Team" },
   "staff.hint": {
-    tr: "Randevuyu kim veriyor. Gün görünümü herkese bir sütun açar. Ayrılan biri silinmez, pasife alınır — geçmiş randevuları bir isme bağlı kalmalı.",
-    en: "Who delivers the appointment. Day view gives each person a column. Somebody who leaves is deactivated, not deleted — their past appointments still need a name.",
-    de: "Wer den Termin ausführt. Die Tagesansicht gibt jeder Person eine Spalte. Wer geht, wird deaktiviert statt gelöscht — vergangene Termine brauchen weiterhin einen Namen.",
-  },
-  "staff.label": {
-    tr: "Bu kişilere ne diyorsunuz?",
-    en: "What do you call these people?",
-    de: "Wie nennen Sie diese Personen?",
+    tr: "Randevuyu kim veriyor. Gün görünümü herkese bir sütun açar. Ayrılan birini önce pasife alın; sonra tamamen kaldırabilirsiniz, ama geçmiş randevuları artık bir isim göstermez.",
+    en: "Who delivers the appointment. Day view gives each person a column. Switch somebody off before removing them — once removed, their past appointments no longer show who did them.",
+    de: "Wer den Termin ausführt. Die Tagesansicht gibt jeder Person eine Spalte. Deaktivieren Sie jemanden, bevor Sie ihn entfernen — danach zeigen vergangene Termine nicht mehr, wer sie ausgeführt hat.",
   },
   "staff.none": { tr: "Henüz kimse eklenmedi.", en: "Nobody added yet.", de: "Noch niemand hinzugefügt." },
   "staff.namePlaceholder": { tr: "Ad", en: "Name", de: "Name" },
@@ -248,7 +243,10 @@ const dictionary = {
   },
   "appointments.when": { tr: "Tarih", en: "When", de: "Datum" },
   "appointments.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
-  "appointments.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
+  // What a bookable person is called, everywhere. Was overridable per org; the
+  // override is gone because it set this one string and cost a form field on
+  // the page you go to manage people.
+  "appointments.staff": { tr: "Ekip üyesi", en: "Team member", de: "Teammitglied" },
   "appointments.status": { tr: "Durum", en: "Status", de: "Status" },
   "appointments.notes": { tr: "Not", en: "Notes", de: "Notiz" },
   "appointments.source": { tr: "Kaynak", en: "Source", de: "Quelle" },
@@ -2103,8 +2101,8 @@ const dictionary = {
   // One roster, the way Fresha, Booksy and Square all show it: a person is a
   // row, and being bookable and being able to log in are two facts about that
   // row rather than two separate lists.
-  "roster.person": { tr: "Kişi", en: "Person", de: "Person" },
-  "roster.bookable": { tr: "Randevu alır", en: "Bookable", de: "Buchbar" },
+  "roster.person": { tr: "Üye", en: "Member", de: "Mitglied" },
+  "roster.bookable": { tr: "Müsait", en: "Available", de: "Verfügbar" },
   "roster.access": { tr: "Erişim", en: "Access", de: "Zugriff" },
   "roster.noAccess": { tr: "Giriş yok", en: "No login", de: "Kein Zugang" },
   "roster.removeAccess": {
@@ -2127,6 +2125,36 @@ const dictionary = {
     en: "Remove {name} from the list?",
     de: "{name} aus der Liste entfernen?",
   },
+  "roster.emailOptional": {
+    tr: "E-posta (isteğe bağlı) — bu adresle giriş yapabilir",
+    en: "Email (optional) — lets them sign in with this address",
+    de: "E-Mail (optional) — ermöglicht die Anmeldung mit dieser Adresse",
+  },
+  "roster.addHint": {
+    tr: "Adı zorunlu, e-posta değil. E-posta girerseniz o Google adresiyle giriş yapabilir; sonradan da ekleyebilirsiniz.",
+    en: "The name is required, the address isn't. Give an address and they can sign in with that Google account — you can also add one later.",
+    de: "Der Name ist erforderlich, die Adresse nicht. Mit einer Adresse kann sich die Person über dieses Google-Konto anmelden — Sie können sie auch später hinzufügen.",
+  },
+  "roster.deactivate": {
+    tr: "{name} pasife alınsın",
+    en: "Deactivate {name}",
+    de: "{name} deaktivieren",
+  },
+  "roster.restore": {
+    tr: "{name} yeniden aktif edilsin",
+    en: "Reactivate {name}",
+    de: "{name} reaktivieren",
+  },
+  "roster.deactivatedTitle": {
+    tr: "Pasif üyeler",
+    en: "Deactivated",
+    de: "Deaktiviert",
+  },
+  "roster.deactivatedHint": {
+    tr: "Artık randevu almayan üyeler. Geçmiş randevuları adlarını korur. Buradan geri alabilir ya da tamamen silebilirsiniz.",
+    en: "Members who no longer take bookings. Their past appointments keep their name. Reactivate them here, or remove them for good.",
+    de: "Mitglieder, die keine Termine mehr annehmen. Vergangene Termine behalten ihren Namen. Hier reaktivieren oder endgültig entfernen.",
+  },
   "roster.deactivateFirst": {
     tr: "Önce \"Randevu alır\" kapatılmalı. Kapattığınızda yeni randevu almaz; ardından tamamen kaldırabilirsiniz.",
     en: "Switch off Bookable first. They stop taking new bookings straight away, and then you can remove them for good.",
@@ -2142,7 +2170,7 @@ const dictionary = {
     en: "No unlinked login",
     de: "Kein freier Zugang",
   },
-  "roster.add": { tr: "Kişi ekle", en: "Add person", de: "Person hinzufügen" },
+  "roster.add": { tr: "Üye ekle", en: "Add member", de: "Mitglied hinzufügen" },
 
   // The two tabs in Add person. Previously the org's staff label ("Kuaför")
   // against the verb "Davet et", which is a category next to an action and
@@ -2150,16 +2178,6 @@ const dictionary = {
   // Both are now verb phrases describing what the person will DO, which is the
   // question the owner is actually answering. Neither mentions logins: "takes
   // bookings" and "signs in" is the distinction in the owner's own terms.
-  "roster.tabBookable": {
-    tr: "Randevu alır",
-    en: "Takes bookings",
-    de: "Nimmt Termine an",
-  },
-  "roster.tabLogin": {
-    tr: "Giriş yapar",
-    en: "Signs in",
-    de: "Meldet sich an",
-  },
   "team.pending": {
     tr: "Bekleyen davetler",
     en: "Pending invites",

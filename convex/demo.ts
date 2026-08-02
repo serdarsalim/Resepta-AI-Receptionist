@@ -183,7 +183,6 @@ export const provision = internalMutation({
       reminderOffsetsHours: [24, 2],
       winbackEnabled: true,
       winbackDaysAfter: 14,
-      staffLabel: "Kuaför",
     });
     await ctx.scheduler.runAfter(0, internal.devSeed.seed, { orgId, force: true });
     return orgId;

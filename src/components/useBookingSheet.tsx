@@ -132,7 +132,7 @@ export function useBookingSheet({
         services={(services ?? []).filter((service) => service.active)}
         currency={settings?.org.currency ?? DEFAULT_CURRENCY}
         staff={staff ?? []}
-        staffLabel={settings?.org.staffLabel?.trim() || t("appointments.staff")}
+        staffLabel={t("appointments.staff")}
         pending={pending}
         error={error}
         canForce={canForce}

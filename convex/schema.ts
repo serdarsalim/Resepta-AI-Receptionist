@@ -213,11 +213,18 @@ export default defineSchema({
     // Number to tell a customer to call. Offered second, after the link: a
     // phone number is a dead end at 23:00, which is when people message.
     publicPhone: v.optional(v.string()),
-    // What this business calls the person delivering the appointment —
-    // "Stylist", "Berber", "Techniker", "Hekim". Display only; the app never
-    // branches on the value. Unset falls back to the generic word already in
-    // the dictionary ("Personel"/"Staff"/"Mitarbeiter"), which is correct for
-    // most verticals and merely bland for the rest.
+    // DEAD. Nothing reads or writes this any more (Serdar, 2026-08-02).
+    //
+    // It let a business rename the person delivering the appointment —
+    // "Stylist", "Berber", "Techniker". One string, in one place: the field
+    // label on the booking sheet. It bought that with the most prominent
+    // control on the page you go to manage PEOPLE, so it went; everyone says
+    // team member now, the way Fresha and Square do.
+    //
+    // The COLUMN stays because orgs still hold values and Convex rejects a
+    // push whose schema cannot describe existing documents. Dropping it means
+    // clearing every row first, then a second deploy — worth doing on a quiet
+    // day, not worth breaking a running dev deployment for one dead string.
     staffLabel: v.optional(v.string()),
     // The showroom. An org with this set never reaches a provider: sends are
     // simulated, replies are invented, and a nightly cron wipes it back to a

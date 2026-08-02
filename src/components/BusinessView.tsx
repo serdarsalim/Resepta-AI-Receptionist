@@ -7,6 +7,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { ActionTip } from "./InfoTip";
+import { useConfirm } from "./ConfirmDialog";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import {
   CURRENCIES,
@@ -458,6 +459,7 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const remove = useMutation(api.services.remove);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -565,17 +567,16 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     button stays visible there rather than being unreachable. */}
                 <button
                   onClick={() => {
-                    if (
-                      !window.confirm(
-                        t("services.deleteConfirm").replace("{name}", service.name),
-                      )
-                    ) {
-                      return;
-                    }
-                    setError(null);
-                    void remove({ serviceId: service._id }).catch((err) =>
-                      setError(serviceErrorText(err, t)),
-                    );
+                    void (async () => {
+                      const ok = await confirm({
+                        title: t("services.deleteConfirm").replace("{name}", service.name),
+                      });
+                      if (!ok) return;
+                      setError(null);
+                      await remove({ serviceId: service._id }).catch((err) =>
+                        setError(serviceErrorText(err, t)),
+                      );
+                    })();
                   }}
                   className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
                 >
@@ -588,6 +589,7 @@ function ServicesCard({ isOwner }: { isOwner: boolean }) {
           {error && !adding && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
+          {confirmDialog}
 
           {/* Inline row, not a modal: click add, type, Enter saves. */}
           {adding ? (
@@ -893,6 +895,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const createField = useMutation(api.contactFields.create);
   const updateField = useMutation(api.contactFields.update);
   const removeField = useMutation(api.contactFields.remove);
+  const [confirm, confirmDialog] = useConfirm();
   const [adding, setAdding] = useState(false);
   const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
   const [source, setSource] = useState<FieldSource>("manual");
@@ -1004,17 +1007,16 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   // Only reached when the field is free — the row refuses an
                   // in-use one against the same usage list, and says why in
                   // its tooltip rather than routing it through here.
-                  if (
-                    !window.confirm(
-                      t("fields.deleteConfirm").replace("{name}", field.label),
-                    )
-                  ) {
-                    return;
-                  }
-                  setError(null);
-                  void removeField({ fieldId: field._id }).catch((err) =>
-                    setError(fieldErrorText(err, t)),
-                  );
+                  void (async () => {
+                    const ok = await confirm({
+                      title: t("fields.deleteConfirm").replace("{name}", field.label),
+                    });
+                    if (!ok) return;
+                    setError(null);
+                    await removeField({ fieldId: field._id }).catch((err) =>
+                      setError(fieldErrorText(err, t)),
+                    );
+                  })();
                 }}
               />
             ))}
@@ -1024,6 +1026,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
       {error && !adding && (
         <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
+      {confirmDialog}
 
       {/* Adding appears on demand, mirroring "+ Add service" above: a
           permanently open form charged this card a row of empty inputs on
@@ -1197,7 +1200,6 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const roster = useQuery(api.team.roster, {});
   const team = useQuery(api.team.overview, {});
-  const settings = useQuery(api.orgs.current, {});
   const revokeInvite = useMutation(api.team.revokeInvite);
   const setRole = useMutation(api.team.setRole);
   const removeMember = useMutation(api.team.removeMember);
@@ -1206,9 +1208,10 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const removeStaff = useMutation(api.staff.remove);
   const renameStaff = useMutation(api.staff.rename);
   const setActive = useMutation(api.staff.setActive);
-  const updateOrg = useMutation(api.orgs.update);
   const [adding, setAdding] = useState(false);
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   // The backend refuses to strip the last admin; this turns that into a
   // sentence instead of a raw error string.
@@ -1242,6 +1245,12 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   // meaning anything. They should never have been offered regardless: a
   // walk-in with no email is not a person you staff the salon with.
   const unclaimed = roster.filter((row) => row.userId && !row.staffId && row.email);
+  // Deactivated people leave the main list entirely rather than sitting in it
+  // greyed out. The Team card answers "who works here", and somebody who
+  // doesn't is noise in that answer — but they are not gone, so they get their
+  // own collapsed card rather than a filter nobody finds.
+  const activeRows = roster.filter((row) => !(row.staffId && row.active === false));
+  const deactivated = roster.filter((row) => row.staffId && row.active === false);
   const accessLabel = (value: string) =>
     value === "owner"
       ? t("role.owner")
@@ -1250,18 +1259,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.removeAccess");
 
   return (
+    <>
     <Card title={t("staff.title")} tip={t("roster.hint")} disabled={!isOwner}>
       <div className="space-y-3">
-        <label className="block text-xs text-[var(--muted)]">
-          {t("staff.label")}
-          <input
-            className="mt-1"
-            defaultValue={settings?.org.staffLabel ?? ""}
-            placeholder={t("appointments.staff")}
-            onBlur={(e) => void updateOrg({ staffLabel: e.target.value })}
-          />
-        </label>
-
+        {/* No "what do you call these people?" input. It was the most
+            prominent control in the card and it set ONE string — the field
+            label in the booking sheet. Everyone says team member; a salon
+            that wanted "Kuaför" got a form field on a page it visits to
+            manage people, not vocabulary. */}
         <div className={`hidden pb-1 text-xs text-[var(--muted)] sm:block ${ROSTER_ROW}`}>
           <span>{t("roster.person")}</span>
           <span>{t("roster.bookable")}</span>
@@ -1269,7 +1274,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         </div>
 
         <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-          {roster.map((row) => (
+          {activeRows.map((row) => (
             <li key={row.key} className={`group py-1 text-sm ${ROSTER_ROW}`}>
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {row.staffId ? (
@@ -1360,42 +1365,20 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 />
               )}
 
-              {/* Only a bookable person with NO login gets an ✕. Someone who
-                  can sign in is removed by taking their access away, in the
-                  column to the left — two controls that both said "remove"
-                  and meant different things would be worse than one.
-
-                  Two steps, and the ✕ stays visible through both: greyed while
-                  they are still bookable, live once they are not. Hiding it
-                  until then would make the first step look like it did
-                  nothing, which is how you get somebody toggling Bookable back
-                  and forth looking for the delete. */}
-              {isOwner && row.staffId && !row.userId ? (
+              {/* Deactivate, not delete. The list above is who works here now;
+                  removing somebody for good happens in the Deactivated card
+                  below, once they are already out of the booking flow. One
+                  destructive control per surface, and this is not the
+                  destructive surface. */}
+              {isOwner && row.staffId ? (
                 <ActionTip
-                  label={
-                    row.active
-                      ? t("roster.deactivateFirst")
-                      : (row.hasAppointments
-                          ? t("roster.removeWithHistory")
-                          : t("roster.remove")
-                        ).replace("{name}", row.name)
+                  label={t("roster.deactivate").replace("{name}", row.name)}
+                  onClick={() =>
+                    void guard(() => setActive({ staffId: row.staffId!, active: false }))
                   }
-                  multiline
-                  disabled={row.active}
-                  onClick={() => {
-                    const question = (
-                      row.hasAppointments
-                        ? t("roster.removeWithHistory")
-                        : t("roster.remove")
-                    ).replace("{name}", row.name);
-                    if (!window.confirm(question)) return;
-                    void guard(() => removeStaff({ staffId: row.staffId! }));
-                  }}
-                  className={`opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
-                    row.active ? "" : "hover:text-red-600"
-                  }`}
+                  className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
-                  ✕
+                  ⊘
                 </ActionTip>
               ) : (
                 <span />
@@ -1450,61 +1433,116 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         <AddPersonSheet onClose={() => setAdding(false)} />
       )}
     </Card>
+
+    {/* Only when there is somebody in it. An always-present "Deactivated (0)"
+        is a permanent reminder of a state most salons never use. */}
+    {deactivated.length > 0 && (
+      <Card
+        title={`${t("roster.deactivatedTitle")} (${deactivated.length})`}
+        tip={t("roster.deactivatedHint")}
+        disabled={!isOwner}
+      >
+        <button
+          type="button"
+          onClick={() => setShowDeactivated((open) => !open)}
+          aria-expanded={showDeactivated}
+          className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        >
+          {showDeactivated ? "▾" : "▸"} {deactivated.map((row) => row.name).join(", ")}
+        </button>
+
+        {showDeactivated && (
+          <ul className="mt-2 divide-y divide-[var(--border)] border-t border-[var(--border)]">
+            {deactivated.map((row) => (
+              <li key={row.key} className="group flex items-center gap-3 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+
+                <ActionTip
+                  label={t("roster.restore").replace("{name}", row.name)}
+                  onClick={() =>
+                    void guard(() => setActive({ staffId: row.staffId!, active: true }))
+                  }
+                  className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                >
+                  ↺
+                </ActionTip>
+
+                {/* The one place a member is destroyed, and only after they
+                    are already out of the booking flow. The confirmation says
+                    what history it costs, because that is the part that
+                    cannot be taken back. */}
+                <ActionTip
+                  label={(row.hasAppointments
+                    ? t("roster.removeWithHistory")
+                    : t("roster.remove")
+                  ).replace("{name}", row.name)}
+                  multiline
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await confirm({
+                        title: t("roster.remove").replace("{name}", row.name),
+                        body: row.hasAppointments
+                          ? t("roster.removeWithHistory").replace("{name}", row.name)
+                          : undefined,
+                      });
+                      if (!ok) return;
+                      await guard(() => removeStaff({ staffId: row.staffId! }));
+                    })();
+                  }}
+                  className="opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                >
+                  ✕
+                </ActionTip>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    )}
+    {confirmDialog}
+    </>
   );
 }
 
 // Two ways to add somebody and they produce different things, so the sheet
-// asks which rather than showing both forms at once: a bookable person is a
-// staff row, an invite is a login. Offering both fields together would let one
-// gesture create two rows for one human, which is the exact confusion the
-// merged list exists to remove.
-// The tabs used to read as the org's own word for the job ("Kuaför") against
-// the verb "Davet et". Avoiding jargon was the right instinct, but a category
-// beside an action reads as two ways to do one thing rather than two different
-// things, and nobody could tell which one they wanted. Both are verb phrases
-// now, "takes bookings" and "signs in", which is the question actually being
-// asked and still nobody's jargon. That is why this no longer needs the org's
-// staff label passed in.
+// ONE form, because there was never really a question to ask.
+//
+// It used to open on a choice — "takes bookings" or "signs in" — which made
+// the reader decide, before typing anything, which KIND of person they were
+// adding. But a member who cuts hair and a member who logs in are the same
+// member; whether they can sign in is a property, not a species. Somebody
+// hired today with no email is not a different thing from the same person
+// after they get one.
+//
+// So: a name, and an address if you have one. The address is what grants a
+// login, and it can be added later from the member's own row, which is what
+// the choice was really standing in for.
 function AddPersonSheet({ onClose }: { onClose: () => void }) {
   const { t } = useLanguage();
   const addStaff = useMutation(api.staff.add);
   const invite = useMutation(api.team.invite);
-  const [mode, setMode] = useState<"bookable" | "login">("bookable");
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <Sheet title={t("roster.add")} onClose={onClose}>
-      <div className="mb-3 inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
-        {(["bookable", "login"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setMode(option)}
-            className={`rounded-md px-3 py-1 transition-colors ${
-              mode === option
-                ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
-                : "text-[var(--muted)]"
-            }`}
-          >
-            {option === "bookable" ? t("roster.tabBookable") : t("roster.tabLogin")}
-          </button>
-        ))}
-      </div>
-
+    <Sheet title={t("roster.add")} hint={t("roster.addHint")} onClose={onClose}>
       <form
         className="space-y-3"
         onSubmit={async (event) => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           setError(null);
+          const name = String(form.get("name") ?? "").trim();
+          const email = String(form.get("email") ?? "").trim();
+          if (!name) return;
           try {
-            if (mode === "bookable") {
-              const name = String(form.get("name") ?? "").trim();
-              if (!name) return;
-              await addStaff({ name });
-            } else {
+            // The member first, always — that is the row this list is about.
+            // The invite is an extra the member may or may not have, and if it
+            // fails (an address already invited, say) the member still exists
+            // and the error names the part that did not land.
+            await addStaff({ name });
+            if (email) {
               await invite({
-                email: String(form.get("email") ?? ""),
+                email,
                 role: form.get("role") === "owner" ? "owner" : "staff",
               });
             }
@@ -1514,29 +1552,30 @@ function AddPersonSheet({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        {/* Both modes are ONE row tall, which is why the role select sits
-            beside the email instead of under it. Switching mode must not
-            resize the sheet: the buttons you are reaching for would move out
-            from under the pointer. */}
-        <div className="flex gap-2">
-          {mode === "bookable" ? (
-            <input name="name" required placeholder={t("staff.namePlaceholder")} />
-          ) : (
-            <>
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder="ornek@gmail.com"
-                className="min-w-0 flex-1"
-              />
-              <select name="role" defaultValue="staff" className="w-auto shrink-0">
-                <option value="staff">{t("role.staff")}</option>
-                <option value="owner">{t("role.owner")}</option>
-              </select>
-            </>
-          )}
-        </div>
+        <input
+          name="name"
+          required
+          data-sheet-autofocus
+          placeholder={t("staff.namePlaceholder")}
+        />
+
+        {/* Optional, and labelled as such rather than left to be guessed at:
+            an empty box under a required one reads as a field you forgot. */}
+        <label className="block text-xs text-[var(--muted)]">
+          {t("roster.emailOptional")}
+          <div className="mt-1 flex gap-2">
+            <input
+              name="email"
+              type="email"
+              placeholder="ornek@gmail.com"
+              className="min-w-0 flex-1"
+            />
+            <select name="role" defaultValue="staff" className="w-auto shrink-0">
+              <option value="staff">{t("role.staff")}</option>
+              <option value="owner">{t("role.owner")}</option>
+            </select>
+          </div>
+        </label>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
@@ -1552,7 +1591,7 @@ function AddPersonSheet({ onClose }: { onClose: () => void }) {
             type="submit"
             className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
           >
-            {mode === "bookable" ? t("staff.add") : t("team.invite")}
+            {t("staff.add")}
           </button>
         </div>
       </form>
