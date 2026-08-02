@@ -26,6 +26,7 @@ import { isPlatformAdmin, requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
+import { emailConfig } from "./lib/platformConfig";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -77,9 +78,10 @@ export const deploymentHealth = query({
   }),
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx);
+    const config = await emailConfig(ctx);
     return {
-      emailLane: emailLaneConfigured(),
-      inboundDomain: process.env.RESEND_INBOUND_DOMAIN ?? null,
+      emailLane: emailLaneConfigured(config),
+      inboundDomain: config.domain,
     };
   },
 });
@@ -130,6 +132,7 @@ async function healthFor(
   since: number,
   stuck: number,
 ) {
+  const mailConfig = await emailConfig(ctx);
   const [memberships, waAccount, templates] = await Promise.all([
     ctx.db
       .query("memberships")
@@ -186,7 +189,7 @@ async function healthFor(
     waConnected: waAccount !== null,
     approvedTemplates: templates.filter((t) => t.status === "approved").length,
     calcomConnected: Boolean(org.calcomApiKey && org.calcomEventTypeId),
-    emailReady: emailLaneConfigured() && Boolean(customerSender(org)),
+    emailReady: emailLaneConfigured(mailConfig) && Boolean(customerSender(org, mailConfig)),
     failed24h: recentFailed.length,
     deadLettered24h: recentFailed.filter((row) => row.deadLetteredAt !== undefined).length,
     capped: failedRows.length === SCAN_CAP,

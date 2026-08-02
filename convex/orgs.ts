@@ -6,6 +6,7 @@ import { DEFAULT_CURRENCY, isCurrency } from "./lib/money";
 import { recordActivity } from "./lib/activity";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
+import { emailConfig } from "./lib/platformConfig";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
@@ -146,6 +147,7 @@ export const current = query({
       .query("waAccounts")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .unique();
+    const mailConfig = await emailConfig(ctx);
     const templates = await ctx.db
       .query("waTemplates")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
@@ -162,7 +164,7 @@ export const current = query({
         formEnabled: org.formEnabled,
         revenueEnabled: org.revenueEnabled,
         demoMode: org.demoMode,
-        inboundDomain: process.env.RESEND_INBOUND_DOMAIN,
+        inboundDomain: mailConfig.domain ?? undefined,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         sendBookingConfirmation: org.sendBookingConfirmation ?? true,
         quietHoursStart: org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0],
@@ -210,7 +212,7 @@ export const current = query({
       evolutionEnabled: Boolean(
         await loadEvolutionCreds(ctx, orgId, org.evolutionInstance),
       ),
-      emailEnabled: emailLaneConfigured() && Boolean(customerSender(org)),
+      emailEnabled: emailLaneConfigured(mailConfig) && Boolean(customerSender(org, mailConfig)),
     };
   },
 });

@@ -11,6 +11,8 @@
 // (orgs.emailFrom) and must be on a domain verified in Resend, or the send is
 // rejected with a 403 rather than silently spam-foldered.
 
+import type { EmailConfig } from "./platformConfig";
+
 const ENDPOINT = "https://api.resend.com/emails";
 
 export type EmailSendResult = { ok: true } | { ok: false; reason: string };
@@ -39,9 +41,10 @@ function displayName(raw: string | undefined): string {
 // Mail RANDEVU writes: invites, alerts about the account. From the product,
 // never from the salon — an alert saying a salon's message failed should not
 // arrive wearing that salon's name.
-export function productSender(): string | undefined {
-  const domain = process.env.RESEND_INBOUND_DOMAIN;
-  return domain ? `Randevu <noreply@${domain}>` : undefined;
+export function productSender(config: EmailConfig): string | undefined {
+  return config.domain
+    ? `${displayName(config.productName)} <noreply@${config.domain}>`
+    : undefined;
 }
 
 // Mail a SALON writes to its customers: confirmations, reminders, campaigns,
@@ -54,17 +57,18 @@ export function productSender(): string | undefined {
 //
 // Undefined only when the deployment itself has no domain, which is a config
 // problem no salon can fix and the caller reports as email-not-configured.
-export function customerSender(org: {
-  name?: string;
-  emailFrom?: string;
-  inboundAddress?: string;
-}): string | undefined {
-  const domain = process.env.RESEND_INBOUND_DOMAIN;
+export function customerSender(
+  org: { name?: string; emailFrom?: string; inboundAddress?: string },
+  config: EmailConfig,
+): string | undefined {
+  const domain = config.domain;
   const address =
     org.emailFrom ??
     (domain && org.inboundAddress ? `${org.inboundAddress}@${domain}` : undefined) ??
     (domain ? `noreply@${domain}` : undefined);
-  return address ? `${displayName(org.name)} <${address}>` : undefined;
+  return address
+    ? `${displayName(org.name ?? config.productName)} <${address}>`
+    : undefined;
 }
 
 // Plain text → the one HTML shape customer mail uses. Escaped first so a name
@@ -81,9 +85,11 @@ export function emailBodyHtml(body: string): string {
 
 // Whether this deployment can send at all. Callers check it before writing a
 // queued message row, so a deployment with no key doesn't leave a trail of
-// sends that were never attempted.
-export function emailLaneConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY);
+// sends that were never attempted. Takes the resolved config rather than
+// reading the environment, because the key now lives in platformConfig where
+// the operator can set it (see lib/platformConfig).
+export function emailLaneConfigured(config: EmailConfig): boolean {
+  return Boolean(config.apiKey);
 }
 
 // Open-pixel injection, winback and campaign mail only. The URL is this
@@ -99,6 +105,8 @@ export function withOpenPixel(html: string, token: string | undefined): string {
 }
 
 export async function sendEmail(args: {
+  // The provider key, resolved by the caller from platformConfig.
+  apiKey: string | null;
   from: string;
   to: string;
   subject: string;
@@ -108,7 +116,7 @@ export async function sendEmail(args: {
   // whichever mailbox the From address belongs to.
   replyTo?: string;
 }): Promise<EmailSendResult> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = args.apiKey;
   if (!apiKey) return { ok: false, reason: "email-not-configured" };
   try {
     const res = await fetch(ENDPOINT, {

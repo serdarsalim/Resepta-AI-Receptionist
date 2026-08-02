@@ -128,9 +128,12 @@ http.route({
   path: "/email/inbound",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    // Operator config, so it comes from platformConfig (falling back to the
+    // env var) rather than the environment alone.
+    const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
+    const secret = await ctx.runQuery(internal.platformConfig.webhookSecret, {});
     if (!secret) {
-      console.warn("inbound email dropped: RESEND_WEBHOOK_SECRET is unset");
+      console.warn("inbound email dropped: no Resend webhook secret configured");
       return new Response("not configured", { status: 503 });
     }
     // Raw text, never a re-serialised object: the signature covers the exact
@@ -189,7 +192,7 @@ http.route({
     const seen = await ctx.runQuery(internal.email.emailAlreadyLogged, { emailId });
     if (seen) return new Response("ok", { status: 200 });
 
-    const received = await fetchReceivedEmail(emailId);
+    const received = await fetchReceivedEmail(emailId, mailConfig.apiKey);
     // Plain text when the sender provided it; the HTML flattened when they
     // did not. A bubble in a timeline wants the words, not a layout.
     const body = received?.text?.trim()

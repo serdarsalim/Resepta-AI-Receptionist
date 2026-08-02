@@ -42,6 +42,7 @@ import { internalAction, internalQuery, query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireOrg } from "./orgAuth";
 import { emailLaneConfigured, productSender, sendEmail } from "./email";
+import { emailConfig } from "./platformConfig";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
 export type AlertKind = "inbound" | "failed-send" | "new-contact";
@@ -332,8 +333,9 @@ export const alertHealth = query({
       if (alertEnabled(user, "inbound")) inbound.add(user.email);
       if (alertEnabled(user, "failed-send")) failedSend.add(user.email);
     }
-    const from = productSender();
-    const blocker = !emailLaneConfigured()
+    const mailConfig = await emailConfig(ctx);
+    const from = productSender(mailConfig);
+    const blocker = !emailLaneConfigured(mailConfig)
       ? ("no-email-lane" as const)
       : !from
         ? ("no-from-address" as const)
@@ -363,7 +365,8 @@ export const deliverOrgAlert = internalAction({
   handler: async (ctx, args): Promise<null> => {
     try {
       const copy = ALERT_COPY[args.template];
-      if (!emailLaneConfigured()) {
+      const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
+      if (!emailLaneConfigured(mailConfig)) {
         // Not silent any more: the account switches promise email, so a
         // deployment with no email lane has to be findable in the logs.
         console.warn(
@@ -383,7 +386,7 @@ export const deliverOrgAlert = internalAction({
       // salon's own name. It used to require orgs.emailFrom, which meant a
       // salon that never set one got no failed-send alerts at all while the
       // switches in Account sat on, promising them.
-      const from = productSender();
+      const from = productSender(mailConfig);
       if (!from) {
         console.warn(
           `alert dropped (${args.template}, org ${args.orgId}): RESEND_INBOUND_DOMAIN is unset, so there is no address to send from`,
@@ -404,6 +407,7 @@ export const deliverOrgAlert = internalAction({
       // must not cost the rest of the team their alert.
       for (const to of recipients.emails) {
         await sendEmail({
+          apiKey: mailConfig.apiKey,
           from,
           to,
           subject,

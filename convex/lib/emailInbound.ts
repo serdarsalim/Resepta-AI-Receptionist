@@ -69,8 +69,10 @@ export type ReceivedEmail = { text?: string; html?: string };
 // The second call: the body Resend kept back.
 export async function fetchReceivedEmail(
   emailId: string,
+  // Resolved by the caller from platformConfig — the operator sets the key in
+  // the admin console now, so it is no longer readable from the environment.
+  apiKey: string | null,
 ): Promise<ReceivedEmail | null> {
-  const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
   try {
     const res = await fetch(`${RECEIVING_ENDPOINT}/${emailId}`, {

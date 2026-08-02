@@ -41,6 +41,7 @@ import {
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { customerSender } from "./lib/email";
+import { emailConfig } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
 import { recordActivity } from "./lib/activity";
 
@@ -269,6 +270,9 @@ export const loadForSend = internalQuery({
       campaign,
       org,
       hasWa: waAccount !== null,
+      // Resolved in the query, where ctx.db is available — the action that
+      // reads this cannot ask the table itself.
+      emailReady: Boolean(customerSender(org, await emailConfig(ctx))),
       templates: templates.filter((t) => t.kind === "campaign" && t.status === "approved"),
       recipientIds: recipients.map((r) => r._id),
     };
@@ -309,7 +313,7 @@ export const fanOut = internalMutation({
 
     // Resolved once for the whole page rather than per recipient: it depends
     // only on the org.
-    const sender = customerSender(org);
+    const sender = customerSender(org, await emailConfig(ctx));
 
     let created = 0;
     for (const customerId of args.customerIds) {
@@ -445,7 +449,7 @@ export const send = action({
     // No WhatsApp lane at all is only fatal if there is no email lane either.
     // Fatal only when NEITHER channel can carry it. Email needs a sender we
     // can resolve, which for most orgs is their address on our own domain.
-    if ((!hasWa || !template) && !customerSender(org)) {
+    if ((!hasWa || !template) && !context.emailReady) {
       return { ok: false, reason: template ? "wa-not-configured" : "no-campaign-template" };
     }
 

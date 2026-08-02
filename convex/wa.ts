@@ -339,6 +339,9 @@ export const sendAppointmentMessage = internalAction({
       appointmentId: args.appointmentId,
     });
     if (!context) return null;
+    // Deployment-wide mail settings. An action has no ctx.db, so the operator's
+    // platformConfig row is read through its own internal query.
+    const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
     const { appointment, customer, org, waAccount, templates, evolution, staffRow } =
       context;
     if (!customer || !org) return null;
@@ -579,16 +582,16 @@ export const sendAppointmentMessage = internalAction({
     // customer with no address, must not produce a reminder that vanishes.
     // The From address, resolved rather than required: the salon's own domain
     // if they have one, otherwise the address they already own on ours.
-    const sender = customerSender(org);
+    const sender = customerSender(org, mailConfig);
     if (channelPref === "whatsapp") {
       // Switched off. Same reasoning as the mirror case above.
-    } else if (channelPref === "email" && (!emailLaneConfigured() || !sender)) {
+    } else if (channelPref === "email" && (!emailLaneConfigured(mailConfig) || !sender)) {
       await fail("email-not-configured");
     } else if (channelPref === "email" && !customer.email) {
       await fail("no-email-address");
     } else if (channelPref === "email" && !body) {
       await fail(`no-template-text-${language}`);
-    } else if (emailLaneConfigured() && customer.email && sender && body) {
+    } else if (emailLaneConfigured(mailConfig) && customer.email && sender && body) {
       // The authored subject, rendered with the same tokens as the body. The
       // "name, time" fallback covers rows without one — and an authored
       // subject that renders to nothing for this customer falls through too,
@@ -601,7 +604,7 @@ export const sendAppointmentMessage = internalAction({
       // belongs to — same wiring as email.sendToCustomer, and for the same
       // reason: an answer that lands in a personal inbox never reaches the
       // timeline.
-      const domain = process.env.RESEND_INBOUND_DOMAIN;
+      const domain = mailConfig.domain;
       const replyTo =
         org.inboundAddress && domain
           ? `${org.inboundAddress}@${domain}`
@@ -629,6 +632,7 @@ export const sendAppointmentMessage = internalAction({
         templateId: tracked ? contentTemplate._id : undefined,
       });
       const emailResult = await sendEmail({
+        apiKey: mailConfig.apiKey,
         from: sender,
         to: customer.email,
         subject,

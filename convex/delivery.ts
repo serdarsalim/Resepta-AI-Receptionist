@@ -47,6 +47,7 @@ import {
   sendEmail,
   withOpenPixel,
 } from "./lib/email";
+import { emailConfig, type EmailConfig } from "./lib/platformConfig";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
@@ -129,6 +130,7 @@ export const claimForRetry = internalMutation({
       nextAttemptAt: undefined,
     });
 
+    const mailConfig = await emailConfig(ctx);
     const language = customer.language ?? org.language;
     // A retry has to go back out the SAME number the first attempt used. The
     // lane is read off the row rather than re-derived: an org that added a
@@ -149,7 +151,10 @@ export const claimForRetry = internalMutation({
       email: customer.email,
       // What the first attempt sent as, falling back to resolving it now for
       // rows written before the row carried a full sender.
-      emailFrom: message.emailFrom ?? customerSender(org),
+      emailFrom: message.emailFrom ?? customerSender(org, mailConfig),
+      // Carried on the job so `attempt` — which runs in an action — has the
+      // key and domain without a second round trip.
+      mailConfig,
       // For the reply-to on a retried email — same wiring as the first
       // attempt, so the customer's answer still lands in the timeline.
       inboundAddress: org.inboundAddress,
@@ -220,6 +225,7 @@ type RetryJob = {
   to: string;
   email?: string;
   emailFrom?: string;
+  mailConfig: EmailConfig;
   inboundAddress?: string;
   orgName: string;
   firstName: string;
@@ -241,14 +247,17 @@ async function attempt(
   job: RetryJob,
 ): Promise<{ ok: true; wamid?: string } | { ok: false; reason: string }> {
   if (job.isEmail) {
-    if (!emailLaneConfigured()) return { ok: false, reason: "email-not-configured" };
+    if (!emailLaneConfigured(job.mailConfig)) {
+      return { ok: false, reason: "email-not-configured" };
+    }
     if (!job.email || !job.emailFrom) return { ok: false, reason: "email-not-configured" };
     if (!job.body) return { ok: false, reason: "no-body" };
     // Mirrors the first attempt exactly — display From, escaped body,
     // reply-to into the app — so a retry is the same mail, later, not a
     // slightly different one.
-    const domain = process.env.RESEND_INBOUND_DOMAIN;
+    const domain = job.mailConfig.domain;
     const sent = await sendEmail({
+      apiKey: job.mailConfig.apiKey,
       from: job.emailFrom,
       to: job.email,
       // The stored subject when there is one, so a retry lands in the same

@@ -276,6 +276,32 @@ export default defineSchema({
   // `label` is the operator's own note for the fleet console ("Kuafor Selin,
   // Retell"), because each client gets their own provider account and a key
   // fragment is not something a human can recognise.
+  // Deployment-wide operator config — the settings that are one value for the
+  // WHOLE fleet, not one per salon.
+  //
+  // ── WHY THIS IS NOT A HOLE IN THE CONNECTIONS DOCTRINE ──────────────────────
+  //
+  // lib/connections.ts refuses to fall back to an env var, because a provider
+  // key shared across orgs means one salon reading another's account. That
+  // reasoning turns on the credential being PER-TENANT: each salon has its own
+  // Retell account, its own WhatsApp number.
+  //
+  // Resend is the opposite by design. There is one Resend account and one
+  // verified domain, and every salon sends from it — that is the entire reason
+  // a salon needs no DNS of its own (lib/email customerSender). Sharing is the
+  // intent here, not the leak. What was wrong was only that the value lived in
+  // an env var, so onboarding needed a terminal and the operator console could
+  // not see, let alone fix, an email lane that was down.
+  //
+  // Rows are read through lib/platformConfig, which falls back to the matching
+  // env var so a deployment configured the old way keeps working.
+  platformConfig: defineTable({
+    key: v.string(),
+    value: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
   connections: defineTable({
     orgId: v.id("orgs"),
     provider: v.string(),

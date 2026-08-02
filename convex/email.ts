@@ -8,6 +8,7 @@ import {
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
 import { customerSender, productSender, sendEmail } from "./lib/email";
+import { emailConfig } from "./lib/platformConfig";
 import {
   bareAddress,
   displayName,
@@ -147,6 +148,8 @@ export const loadSendContext = internalQuery({
       orgId: v.id("orgs"),
       orgName: v.string(),
       sender: v.optional(v.string()),
+      apiKey: v.union(v.string(), v.null()),
+      inboundDomain: v.union(v.string(), v.null()),
       inboundAddress: v.optional(v.string()),
       customerEmail: v.optional(v.string()),
     }),
@@ -158,12 +161,15 @@ export const loadSendContext = internalQuery({
     if (!customer || customer.orgId !== orgId) return null;
     const org = await ctx.db.get(orgId);
     if (!org) return null;
+    const mailConfig = await emailConfig(ctx);
     return {
       orgId,
       orgName: org.name,
       // Resolved here, where the org doc is in hand. Unset only when the
       // deployment has no verified domain at all.
-      sender: customerSender(org),
+      sender: customerSender(org, mailConfig),
+      apiKey: mailConfig.apiKey,
+      inboundDomain: mailConfig.domain,
       inboundAddress: org.inboundAddress,
       customerEmail: customer.email,
     };
@@ -192,7 +198,7 @@ export const sendToCustomer = action({
     // belongs to. Without this the customer's answer lands in the salon
     // owner's personal inbox and never reaches the timeline — which would
     // make the whole inbound lane decorative.
-    const domain = process.env.RESEND_INBOUND_DOMAIN;
+    const domain = context.inboundDomain;
     const replyTo =
       context.inboundAddress && domain
         ? `${context.inboundAddress}@${domain}`
@@ -208,6 +214,7 @@ export const sendToCustomer = action({
     });
 
     const result = await sendEmail({
+      apiKey: context.apiKey,
       from: context.sender,
       to: context.customerEmail,
       subject: subject || context.orgName,
@@ -266,8 +273,9 @@ export const sendInvite = internalAction({
     language: v.string(),
   },
   returns: v.null(),
-  handler: async (_ctx, args) => {
-    const from = productSender();
+  handler: async (ctx, args) => {
+    const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
+    const from = productSender(mailConfig);
     const siteUrl = process.env.SITE_URL;
     // Both are deployment config the owner cannot fix from inside the app, so
     // the only sane response is to skip quietly. The invite still stands.
@@ -279,6 +287,7 @@ export const sendInvite = internalAction({
     const by = escapeHtml(args.invitedByName);
 
     const result = await sendEmail({
+      apiKey: mailConfig.apiKey,
       from,
       to: args.to,
       subject: copy.subject(args.orgName),

@@ -18,11 +18,11 @@
 // page has exactly one reader and translating it would mean maintaining a
 // second copy of every operational term for nobody.
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { ago, Count, Setup } from "./parts";
+import { ago, Count, Row, Section, SecretRow, Setup } from "./parts";
 
 export default function AdminPage() {
   // Asked FIRST, and fleet is skipped until it comes back true. platform.fleet
@@ -32,6 +32,8 @@ export default function AdminPage() {
   const allowed = useQuery(api.platform.amPlatformAdmin, {});
   const fleet = useQuery(api.platform.fleet, allowed ? {} : "skip");
   const deployment = useQuery(api.platform.deploymentHealth, allowed ? {} : "skip");
+  const mail = useQuery(api.platformConfig.status, allowed ? {} : "skip");
+  const setConfig = useMutation(api.platformConfig.set);
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -64,11 +66,9 @@ export default function AdminPage() {
           once — not a column that would say the same thing on every row. */}
       {deployment && !deployment.emailLane && (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          No email lane on this deployment: RESEND_API_KEY is unset, so nothing
-          sends by email for any org — reminders, invites and your own failure
-          alerts included.
-          {!deployment.inboundDomain && " RESEND_INBOUND_DOMAIN is unset too."}{" "}
-          See docs/email-lane-setup.md.
+          No email lane on this deployment, so nothing sends by email for any
+          org — reminders, invites and your own failure alerts included. Set the
+          Resend key below.
         </p>
       )}
 
@@ -153,6 +153,51 @@ export default function AdminPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Deployment settings, below the fleet because the fleet is why the
+          operator opened this page. One Resend account serves every salon —
+          that is what lets a salon send mail without owning a domain — so it
+          is configured here rather than per tenant, and rather than in an env
+          var only a terminal can reach. */}
+      {mail && (
+        <div className="mt-6">
+          <Section
+            title="Email (Resend)"
+            description="One account and one verified domain for the whole deployment. Every salon sends from it unless they set a domain of their own."
+          >
+            <SecretRow
+              label="API key"
+              hint={
+                mail.fromEnv.apiKey
+                  ? "Currently coming from the RESEND_API_KEY env var. Saving here overrides it."
+                  : undefined
+              }
+              masked={mail.apiKey}
+              onSave={(value) => setConfig({ key: "resendApiKey", value })}
+            />
+            <Row
+              label="Sending domain"
+              hint="Verified in Resend. Carries every org's incoming address and the noreply sender."
+              current={mail.domain}
+              placeholder="mail.example.com"
+              onSave={(value) => setConfig({ key: "resendInboundDomain", value })}
+            />
+            <SecretRow
+              label="Inbound webhook secret"
+              hint="Signs Resend's email.received calls. Only needed for replies landing in the Inbox."
+              masked={mail.webhookSecret}
+              onSave={(value) => setConfig({ key: "resendWebhookSecret", value })}
+            />
+            <Row
+              label="Product name"
+              hint="How invites and alerts sign themselves. Not what customers see — salon mail carries the salon's name."
+              current={mail.productName}
+              placeholder="Randevu"
+              onSave={(value) => setConfig({ key: "productName", value })}
+            />
+          </Section>
         </div>
       )}
     </main>
