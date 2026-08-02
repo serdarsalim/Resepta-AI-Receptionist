@@ -1,6 +1,6 @@
 # Randevu production spec
 
-Last reconciled with the shipped product: 1 August 2026.
+Last reconciled with the shipped product: 2 August 2026.
 
 ## 1. Product
 
@@ -94,14 +94,22 @@ sign-in.
 
 The signed-in sidebar is:
 
-1. **Customers**: customer table, custom information fields and history.
+1. **Customers**: customer table, custom information fields and history. The
+   table shows name, phone and email by default; everything else, including
+   every contact field the business defines, is one tick away in the Columns
+   picker. Contact fields used to arrive as visible columns, which meant the
+   table only ever got wider.
 2. **Inbox**: WhatsApp and email conversation work.
 3. **Campaigns**: approved-template outreach.
 4. **Phone agent**: Agents and Calls in one destination.
 5. **Reminders**: reminder rules, templates and WhatsApp connection.
 6. **Calendar**: Day, Week, Month, Year and List views plus manual booking.
 7. **Revenue**: feature-flagged takings view.
-8. **Business**: business facts, services, people, fields and AI connectors.
+8. **Business**: business facts, services, Team, contact fields and AI
+   connectors. Team is one list — who can sign in and who can be booked are
+   columns, not separate cards — and members are archived before they can be
+   deleted. The connector beside it can read and build all of this, including
+   creating a phone agent; see [`phone-agent.md`](phone-agent.md).
 
 There is no Settings destination. Do not reintroduce it. Configuration belongs
 next to the work it controls, while operator-only credentials live in `/admin`.
@@ -159,11 +167,18 @@ win-back stamp must call `syncAppointmentSchedule`.
 
 ## 6. Operator boundary
 
-The platform operator uses `/admin` to:
+`/admin` **does not exist for anybody else** — it renders a 404 rather than
+explaining that it is operator-only, because a refusal that explains itself
+tells a customer the console is there and invites them to ask for a login.
+
+Its tabs are Setup, Agents, Members and Activity. The platform operator uses it
+to:
 
 - install per-org phone-provider, WhatsApp, email and cal.com configuration;
 - inspect native phone-agent provisioning checkpoints;
 - see provider IDs and raw call-event errors;
+- see who can sign in to an org and at which address — sign-in is Google-only,
+  so there is no way to find that from the other side;
 - replay exhausted phone-call updates; and
 - work inside an org when support is required.
 

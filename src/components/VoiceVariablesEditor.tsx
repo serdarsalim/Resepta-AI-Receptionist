@@ -614,17 +614,21 @@ export function VoiceVariablesEditor({
         )}
       </div>
 
-      {confirmRemove !== null && (
+      {confirmRemove !== null && (() => {
+        const removingLabel =
+          draft[confirmRemove]?.label || draft[confirmRemove]?.key || "";
+        return (
         <Sheet
-          title={t("voiceVariables.remove")}
+          // Substituted, not printed. The string carries {name} and both the
+          // title and the button below used it raw, so the dialog asked the
+          // reader to "Remove {name}" while the sentence between them named
+          // the actual variable.
+          title={t("voiceVariables.remove").replace("{name}", removingLabel)}
           onClose={() => setConfirmRemove(null)}
         >
           <div className="space-y-3">
             <p className="text-sm text-[var(--muted)]">
-              {t("voiceVariables.removeBody").replace(
-                "{name}",
-                draft[confirmRemove]?.label || draft[confirmRemove]?.key || "",
-              )}
+              {t("voiceVariables.removeBody").replace("{name}", removingLabel)}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -642,12 +646,13 @@ export function VoiceVariablesEditor({
                 }}
                 className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
               >
-                {t("voiceVariables.remove")}
+                {t("voiceVariables.remove").replace("{name}", removingLabel)}
               </button>
             </div>
           </div>
         </Sheet>
-      )}
+        );
+      })()}
     </div>
   );
 }

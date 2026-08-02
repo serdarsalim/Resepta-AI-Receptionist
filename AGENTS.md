@@ -286,8 +286,31 @@ went, and the reasoning to preserve:
   silently into the Randevu editor.
 - **Reminders** (`RemindersView`, tab id `messages`): the old SettingsView,
   renamed. Reminder rules + the WhatsApp connection.
+- **Business → Team** (`PeopleCard`, rewritten 2026-08-02). ONE list of
+  people, the way Fresha and Square show it: who can sign in and who can be
+  booked are two COLUMNS, never two cards. The vocabulary is **Team /
+  Member / Available**, fixed (see rule 5 below).
+
+  - **Removing somebody is two surfaces, not two states of one control.** The
+    Team card's row action ARCHIVES; deactivated members drop into their own
+    collapsed card, and that is the only place anything is destroyed.
+    `staff.remove` refuses while a member is still active. Appointment history
+    does NOT block it — the confirmation names what it costs instead, from
+    `roster.hasAppointments`. An earlier version blocked on history and it was
+    wrong: a name is not worth making a row permanent.
+  - **Members with a login pin to the top and cannot be dragged.** Row order
+    is the calendar's column order, so a member floated up by having an
+    account is not standing somewhere else on the rota; a handle there would
+    write an order the list then refuses to show.
+  - **Invites carry `staffId`.** Sent from a member's row, the accepted invite
+    attaches to THAT member (`convex/auth.ts`) instead of arriving as a second
+    row for one human. `team.invite` links immediately when the account
+    already exists, since there is no acceptance to wait for.
+  - Destructive confirmations use `useConfirm` (`ConfirmDialog.tsx`), never
+    `window.confirm` — the browser's box says "localhost:3006 says" and its
+    buttons cannot be worded.
 - **Business → AI**: `McpCard`, self-serve MCP connector keys (Claude/ChatGPT
-  paste-once flow). Lives beside People on purpose: a connector key acts as a
+  paste-once flow). Lives beside Team on purpose: a connector key acts as a
   person and lands in the activity feed under their name. Not owner-gated —
   keys are per person; the backend scopes create-to-self / revoke-others-to-
   owner.
@@ -349,6 +372,15 @@ resume the same job instead of intentionally creating another one. The app may
 assign an already-provisioned, unclaimed phone line but never buys numbers.
 Provider names, ids, models and plumbing errors stay out of the salon UI; raw
 setup state is visible only in platform admin.
+
+**Platform admin 404s for everyone else.** `/admin` and `/admin/[orgId]` call
+`notFound()` when the viewer is not an operator, rather than rendering "this
+page is for platform operators". A refusal that explains itself tells a salon
+owner the console exists and invites them to ask for a login — the same reason
+a private repo 404s rather than 403s. Its tabs are Setup (credentials installed
+once), Agents (running state), Members (who can sign in, with addresses — the
+first thing a support call needs, and unfindable otherwise because sign-in is
+Google-only) and Activity.
 
 The complete create/connect flow, variable lifecycle, call-event pipeline and
 operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent.md).
@@ -424,11 +456,18 @@ line an error will occupy, keep the sort caret's space whether or not it shows.
 If two states genuinely cannot match, the taller one sets the height and the
 shorter one pads.
 
-**5. Never invent a word the UI already asks the user for.** The People card
-asks "what do you call these people?" and stores it as `staffLabel` — so the
-add sheet says "Personel"/"Berber"/"Stylist", not a coined term like "bookable
-person". Check whether the product already has the user's own word before
-naming something.
+**5. Use the word the industry already uses, not one you coined.** The Team
+card once asked "what do you call these people?" and stored the answer as
+`orgs.staffLabel`, so every surface could say "Berber" or "Stylist". It was
+deleted 2026-08-02: it set exactly ONE string — the field label on the booking
+sheet — and charged for it with the most prominent control on the page you
+visit to manage people. The vocabulary is fixed now — **Team**, **Member**,
+**Available** — which is what Fresha, Booksy and Square all say. The column
+survives in the schema, dead and commented, because Convex cannot drop a field
+while documents still carry values.
+
+The rule the old note was reaching for still stands: never coin a term like
+"bookable person" when the product already has a plainer one.
 
 ## The calendar (rebuilt 2026-07-29)
 

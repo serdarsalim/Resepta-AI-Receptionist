@@ -1,6 +1,6 @@
 # Phone agent: architecture and operator runbook
 
-Last reconciled with the implementation: 1 August 2026.
+Last reconciled with the implementation: 2 August 2026.
 
 This is the canonical handoff for Randevu's phone-agent lane. Salon owners use
 one native Randevu surface. The current execution provider is an implementation
@@ -152,6 +152,42 @@ Customer writes are permissioned by `contactFields.source === "voice"`.
 Reserved identity and compliance fields, including phone, email and consent,
 cannot be made writable through Variables. Every variable is also retained on
 the call row so the transcript and recording have an auditable per-call value.
+
+## The connector can do all of this without a browser
+
+Everything above is reachable from the MCP connector as well as the UI:
+`list_phone_agents`, `list_voices`, `create_phone_agent`,
+`list_agent_variables`, `set_agent_variables`, `assign_phone_number`, plus the
+services and contact fields an agent reads at call time. That exists so a
+business can be stood up end to end — fields, services, agent, line — without
+anybody clicking through the app.
+
+**The invariant that makes it safe.** Three internal functions —
+`voiceProvisioning.begin`, `retell.agentEditorContext` and
+`retellAgent.publishVariableSet` — accept an optional `orgId` and TRUST it.
+That holds only because each is internal AND no public action forwards a
+caller-supplied `orgId` into one. `createAgent` and `publishVariables` must
+never grow an `orgId` argument: `agentEditorContext` only checks that the agent
+belongs to the org it was handed, so a public action taking one would let a
+client edit any agent whose id they could name. The internal twins
+(`createAgentForOrg`, `publishVariablesForOrg`, `assignLineForOrg`) exist so
+the public pair never has to.
+
+Two things worth knowing before using it:
+
+- `set_agent_variables` takes contact field KEYS, not variable rows, and
+  rebuilds the set from them. `business_name` is always included: publishing
+  recompiles the provider's default dynamic variables from the given set
+  alone, so a set without it silently blanks `{{business_name}}` and the agent
+  opens by greeting nobody.
+- Agents are addressed by their RANDEVU id, never the provider's. Making an
+  owner pass provider ids around would be the loudest possible violation of
+  "Retell is an implementation detail".
+
+Provisioning reads `agentEditorContext` at the END, for the runtime wiring. A
+sessionless caller that could not reach it got the worst half: a real provider
+agent, connected and enabled, with no Randevu runtime — able to answer a call
+and neither read nor write anything.
 
 ## Runtime and call-result flow
 
