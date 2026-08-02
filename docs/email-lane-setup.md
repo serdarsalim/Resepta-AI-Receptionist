@@ -23,20 +23,28 @@ placeholder domain (it is what renders as `@mail.example.com` under Incoming
 email address on the Business page), `RESEND_WEBHOOK_SECRET` is base64 of
 "testsecretforlocalverify", and there is no API key there either.
 
-## The fix, which only Serdar can do
+## The fix: /admin, no terminal needed
 
-Needs a Resend account and a domain he controls, verified there. A subdomain is
-the convention, so customer mail and the app's own domain do not share a
-reputation: `mail.getrandevu.com`, or whatever the real domain ends up being.
+Set it in the operator console — **/admin → Email (Resend)** — on each
+deployment. Four fields: API key, sending domain, inbound webhook secret,
+product name. They are stored in `platformConfig` and read in preference to
+the env vars, which remain as a fallback.
+
+Needs a Resend account and a domain verified there. A subdomain is the
+convention, so customer mail and the app's own domain do not share a sending
+reputation: `mail.example.com`. Until Randevu has its own domain, pointing this
+at an already-verified sibling domain works — set the product name to match so
+the invites and alerts do not sign themselves with the wrong name.
+
+The webhook secret is only for INBOUND mail (customer replies landing in the
+Inbox via `/email/inbound`). Outbound works without it.
+
+The env vars still work if you prefer them, and the console shows which values
+are coming from the environment rather than a row:
 
 ```bash
 npx convex env set RESEND_API_KEY re_xxxxxxxx --prod
-npx convex env set RESEND_INBOUND_DOMAIN mail.your-domain.com --prod
-npx convex env set RESEND_WEBHOOK_SECRET whsec_xxxxxxxx --prod
 ```
-
-`RESEND_WEBHOOK_SECRET` is only for INBOUND mail (customer replies landing in
-the Inbox via `/email/inbound`). Outbound works without it.
 
 In Resend itself: verify the domain (DKIM + SPF records), and point an inbound
 route at `https://expert-poodle-803.convex.site/email/inbound` with the signing
@@ -61,7 +69,8 @@ without anyone touching a salon's settings.
 ## How to tell it worked
 
 1. Book an appointment for a customer who has an email address, with the org's
-   send channel on Email or Both.
+   send channel on Email or Both. The Fleet page should stop showing the amber
+   "no email lane" banner as soon as the key is saved.
 2. The message row appears in that customer's thread with kind `email_*`. Status
    `sent` means Resend accepted it; `failed` puts the provider's own reason in
    the row, which is usually `email-http-403` for an unverified domain.
