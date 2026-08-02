@@ -233,6 +233,39 @@ export const applyLineAssignment = internalMutation({
   },
 });
 
+// Retell owns the routing, so our inboundNumber is a CACHE of a decision made
+// somewhere else — and it drifts. Someone moves a line in Retell's own
+// dashboard, or one key serves two orgs and the second one takes the number:
+// either way the row goes on naming a line that no longer rings this agent,
+// and the salon reads it as fact on four screens.
+//
+// So every clean read of the provider's numbers reconciles it. Only ever
+// called with a numbers fetch that came back OK — reconciling from a failed
+// or partial read would clear every line in the org and call it truth.
+export const reconcileLines = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    bindings: v.array(v.object({ number: v.string(), agentId: v.string() })),
+  },
+  returns: v.null(),
+  handler: async (ctx, { orgId, bindings }) => {
+    const held = new Map(bindings.map((b) => [b.agentId, b.number]));
+    const rows = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    for (const row of rows) {
+      // undefined on both sides is agreement, not a change: patching every
+      // unbound agent on every list would churn the reactive query and
+      // repaint the whole section for nothing.
+      const actual = held.get(row.retellAgentId);
+      if ((row.inboundNumber ?? undefined) === actual) continue;
+      await ctx.db.patch(row._id, { inboundNumber: actual });
+    }
+    return null;
+  },
+});
+
 // Per-agent call tallies for the details expansion. "Today" means the salon's
 // today: a call at 23:50 Istanbul time should not survive into tomorrow's
 // count because the server thinks in UTC. One org-wide pass — a salon's call
@@ -285,6 +318,7 @@ export const agentListContext = internalQuery({
   args: {},
   returns: v.union(
     v.object({
+      orgId: v.id("orgs"),
       demoMode: v.boolean(),
       apiKey: v.union(v.string(), v.null()),
       connectedAgentId: v.union(v.string(), v.null()),
@@ -304,6 +338,7 @@ export const agentListContext = internalQuery({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
     return {
+      orgId,
       demoMode: org.demoMode === true,
       // Demo orgs hold no credentials by construction; resolve anyway so the
       // shape is uniform, and let the caller's demo check win first.
@@ -748,6 +783,15 @@ export const listAgents = action({
       }));
 
     const voices = voiceCatalogue(vData);
+
+    // The one place in the app that reads every number and every agent in the
+    // same breath, so it is the place that puts our copy back in agreement.
+    await ctx.runMutation(internal.retell.reconcileLines, {
+      orgId: context.orgId,
+      bindings: phoneNumbers.flatMap((n) =>
+        n.agentId ? [{ number: n.number, agentId: n.agentId }] : [],
+      ),
+    });
 
     return {
       configured: true,
