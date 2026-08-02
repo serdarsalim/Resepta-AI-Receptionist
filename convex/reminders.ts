@@ -3,7 +3,11 @@ import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { DEFAULT_QUIET_HOURS } from "./orgs";
 import { getLocalPartsSafe } from "./lib/businessHours";
-import { computeNextMessage, syncAppointmentSchedule } from "./lib/reminderSchedule";
+import {
+  computeNextMessage,
+  loadOrgRules,
+  syncAppointmentSchedule,
+} from "./lib/reminderSchedule";
 import type { Doc, Id } from "./_generated/dataModel";
 
 // How many due appointments one tick handles before handing off to a fresh
@@ -43,14 +47,22 @@ export const tick = internalMutation({
   returns: v.null(),
   handler: async (ctx) => {
     const now = Date.now();
-    const orgCache = new Map<Id<"orgs">, Doc<"orgs"> | null>();
+    // Org and its rules cached together: the tick may drain hundreds of rows
+    // for one busy org, and the rules read costs the same every time.
+    const orgCache = new Map<
+      Id<"orgs">,
+      { org: Doc<"orgs"> | null; rules: Doc<"messageRules">[] }
+    >();
     const orgOf = async (orgId: Id<"orgs">) => {
-      let org = orgCache.get(orgId);
-      if (org === undefined) {
-        org = await ctx.db.get(orgId);
-        orgCache.set(orgId, org);
+      let entry = orgCache.get(orgId);
+      if (entry === undefined) {
+        const org = await ctx.db.get(orgId);
+        const rules =
+          org?.rulesMigratedAt !== undefined ? await loadOrgRules(ctx, orgId) : [];
+        entry = { org, rules };
+        orgCache.set(orgId, entry);
       }
-      return org;
+      return entry;
     };
 
     const due = await ctx.db
@@ -61,7 +73,7 @@ export const tick = internalMutation({
       .take(BATCH);
 
     for (const appointment of due) {
-      const org = await orgOf(appointment.orgId);
+      const { org, rules } = await orgOf(appointment.orgId);
       if (!org) {
         // Orphaned row: clear the marker so it stops being read every tick.
         await ctx.db.patch(appointment._id, { nextMessageAt: undefined });
@@ -72,38 +84,42 @@ export const tick = internalMutation({
       if (!insideSendWindow(org, now)) continue;
 
       // Re-derived from the row rather than trusted from the index: the org
-      // may have changed its offsets since the field was written, and what is
+      // may have changed its rules since the field was written, and what is
       // owed NOW is the only correct answer. A stored time that no longer
       // matches means the field is stale — repair it and move on, which is the
       // self-healing path that makes a missed syncAppointmentSchedule call
       // recoverable instead of permanent.
-      const next = computeNextMessage(appointment, org);
+      const next = computeNextMessage(appointment, org, rules);
       if (!next || next.at > now) {
         await syncAppointmentSchedule(ctx, appointment._id);
         continue;
       }
 
-      if (next.kind === "winback") {
-        await ctx.db.patch(appointment._id, { winbackSentAt: now });
-        await syncAppointmentSchedule(ctx, appointment._id);
-        await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
-          appointmentId: appointment._id,
-          kind: "winback",
+      // Stamp BEFORE scheduling the send — the double-send guard across
+      // overlapping ticks. Rules stamp by rule id; the legacy path keeps its
+      // hour and one-shot markers. winbackSentAt is stamped on both paths
+      // because it doubles as the "already won back" fact other reads rely on.
+      if (next.ruleId !== undefined) {
+        await ctx.db.patch(appointment._id, {
+          sentRuleIds: [...(appointment.sentRuleIds ?? []), next.ruleId],
+          ...(next.kind === "winback" ? { winbackSentAt: now } : {}),
         });
-        continue;
+      } else if (next.kind === "winback") {
+        await ctx.db.patch(appointment._id, { winbackSentAt: now });
+      } else {
+        await ctx.db.patch(appointment._id, {
+          reminderSentOffsets: [
+            ...(appointment.reminderSentOffsets ?? []),
+            next.offsetHours!,
+          ],
+        });
       }
-
-      await ctx.db.patch(appointment._id, {
-        reminderSentOffsets: [
-          ...(appointment.reminderSentOffsets ?? []),
-          next.offsetHours!,
-        ],
-      });
       await syncAppointmentSchedule(ctx, appointment._id);
       await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
         appointmentId: appointment._id,
-        kind: "reminder",
+        kind: next.kind,
         offsetHours: next.offsetHours,
+        ruleId: next.ruleId,
       });
     }
 
@@ -135,7 +151,10 @@ export const reconcile = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
     const horizon = now + 48 * 3600_000;
-    const orgCache = new Map<Id<"orgs">, Doc<"orgs"> | null>();
+    const orgCache = new Map<
+      Id<"orgs">,
+      { org: Doc<"orgs"> | null; rules: Doc<"messageRules">[] }
+    >();
 
     for (const status of ["scheduled", "confirmed"] as const) {
       const rows = await ctx.db
@@ -145,12 +164,17 @@ export const reconcile = internalMutation({
         )
         .take(500);
       for (const appointment of rows) {
-        let org = orgCache.get(appointment.orgId);
-        if (org === undefined) {
-          org = await ctx.db.get(appointment.orgId);
-          orgCache.set(appointment.orgId, org);
+        let entry = orgCache.get(appointment.orgId);
+        if (entry === undefined) {
+          const org = await ctx.db.get(appointment.orgId);
+          const rules =
+            org?.rulesMigratedAt !== undefined
+              ? await loadOrgRules(ctx, appointment.orgId)
+              : [];
+          entry = { org, rules };
+          orgCache.set(appointment.orgId, entry);
         }
-        const expected = computeNextMessage(appointment, org)?.at;
+        const expected = computeNextMessage(appointment, entry.org, entry.rules)?.at;
         if (appointment.nextMessageAt !== expected) {
           await ctx.db.patch(appointment._id, { nextMessageAt: expected });
         }
@@ -200,12 +224,14 @@ export const backfillOrg = internalMutation({
     const from = args.fromMs ?? Date.now() - 90 * 24 * 3600_000;
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
+    const rules =
+      org.rulesMigratedAt !== undefined ? await loadOrgRules(ctx, args.orgId) : [];
     const rows = await ctx.db
       .query("appointments")
       .withIndex("by_org_start", (q) => q.eq("orgId", args.orgId).gte("startAt", from))
       .take(500);
     for (const appointment of rows) {
-      const expected = computeNextMessage(appointment, org)?.at;
+      const expected = computeNextMessage(appointment, org, rules)?.at;
       if (appointment.nextMessageAt !== expected) {
         await ctx.db.patch(appointment._id, { nextMessageAt: expected });
       }

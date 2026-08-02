@@ -14,16 +14,23 @@
 // The cron then reads an index range and gets back exactly the rows it has to
 // act on. Adding the thousandth org costs the tick nothing.
 //
-// Reminders and winbacks share ONE field. The cron's question is the same for
-// both — who is due? — and the status already on the row says which kind is
-// owed, so a second field and a second index would buy nothing but a second
-// thing to keep in sync.
+// Every scheduled rule shares ONE field. The cron's question is the same for
+// all of them — who is due? — and re-deriving from the row says which rule is
+// owed, so a field per trigger would buy nothing but more things to sync.
+//
+// ── TWO SOURCES OF TRUTH, ONE AT A TIME ─────────────────────────────────────
+//
+// An org with rulesMigratedAt set is driven by its messageRules rows; an org
+// without it still runs on the legacy trio (reminderOffsetsHours +
+// pausedReminderHours, winbackEnabled, removedRules). Both paths live here so
+// nothing anywhere else has to know the rollout is in progress; the legacy
+// half dies with the legacy fields once every org carries the marker.
 //
 // ── THE RULE FOR CALL SITES ─────────────────────────────────────────────────
 //
-// Any mutation that changes startAt, status, reminderSentOffsets or
-// winbackSentAt must call syncAppointmentSchedule(ctx, appointmentId) AFTER
-// its patch lands.
+// Any mutation that changes startAt, durationMinutes, status, sentRuleIds,
+// reminderSentOffsets or winbackSentAt must call
+// syncAppointmentSchedule(ctx, appointmentId) AFTER its patch lands.
 //
 // It re-derives the field from scratch rather than adjusting it, so it is
 // idempotent — calling it twice, or calling it when nothing changed, is free
@@ -40,7 +47,19 @@ import { DEFAULT_REMINDER_OFFSETS, DEFAULT_WINBACK_DAYS } from "../orgs";
 const HOUR_MS = 3600_000;
 const DAY_MS = 24 * HOUR_MS;
 
-type DueKind = "reminder" | "winback";
+type DueKind = "reminder" | "winback" | "followup";
+
+// What the cron needs to dispatch a due send without re-deriving anything:
+// the kind names the template bucket and the log row, ruleId (rules path
+// only) carries the channel and the per-rule wording, offsetHours keys the
+// LEGACY double-send stamp. A legacy due has no ruleId; that absence is how
+// the tick knows which guard to stamp.
+export type NextMessage = {
+  at: number;
+  kind: DueKind;
+  ruleId?: Id<"messageRules">;
+  offsetHours?: number;
+};
 
 // Statuses that still expect a reminder. A cancelled booking obviously wants
 // none; a completed one happened and is finished with.
@@ -48,26 +67,88 @@ function wantsReminders(status: Doc<"appointments">["status"]): boolean {
   return status === "scheduled" || status === "confirmed";
 }
 
-// The earliest offset this appointment has not yet been reminded at, as an
-// absolute timestamp.
+// ── The rules path ──────────────────────────────────────────────────────────
 //
 // A due time already in the past is returned as-is rather than dropped: an
 // appointment booked two hours before it starts, on an org that reminds at
 // 24h, has a 24h reminder that came due before the booking existed. The cron
 // treats "due in the past" as "due now" and sends once, which is what the
-// salon means by a reminder — the old scan behaved the same way.
+// salon means by a reminder.
+function nextFromRules(
+  appointment: Doc<"appointments">,
+  rules: Doc<"messageRules">[],
+): NextMessage | undefined {
+  const sentIds = appointment.sentRuleIds ?? [];
+  const sentOffsets = appointment.reminderSentOffsets ?? [];
+  let earliest: NextMessage | undefined;
+
+  for (const rule of rules) {
+    if (rule.paused) continue;
+    if (sentIds.includes(rule._id)) continue;
+
+    let at: number | undefined;
+    if (rule.trigger === "before_start") {
+      if (!wantsReminders(appointment.status)) continue;
+      // Nothing to remind anyone about once the appointment has started.
+      // The sender checks this too; skipping here keeps started bookings out
+      // of the cron's read entirely.
+      if (appointment.startAt <= Date.now()) continue;
+      // The legacy stamp, keyed by hour: an appointment half-reminded before
+      // the migration must not get the same reminder again from the row that
+      // replaced its offset.
+      if (sentOffsets.includes(rule.offsetHours)) continue;
+      at = appointment.startAt - rule.offsetHours * HOUR_MS;
+    } else if (rule.trigger === "after_end") {
+      // Only a visit that HAPPENED earns a follow-up — never a no-show,
+      // never a cancellation.
+      if (appointment.status !== "completed") continue;
+      at =
+        appointment.startAt +
+        (appointment.durationMinutes ?? 0) * 60_000 +
+        rule.offsetHours * HOUR_MS;
+      // A follow-up rule applies forward, never backward: without this, adding
+      // one schedules a "thanks for visiting" to every appointment completed
+      // in the 90 days the backfill can see, which is a mass send nobody asked
+      // for. Winback deliberately lacks this guard — switching it on has
+      // always meant "including recent no-shows", and parity with that
+      // behaviour is the point.
+      if (at < rule._creationTime) continue;
+    } else if (rule.trigger === "no_show") {
+      if (appointment.status !== "no_show") continue;
+      // The legacy one-shot marker, same job as sentOffsets above.
+      if (appointment.winbackSentAt !== undefined) continue;
+      at = appointment.startAt + rule.offsetHours * HOUR_MS;
+    } else {
+      // booking / cancellation fire from the mutation that causes them, not
+      // from the cron — they have no due time to store.
+      continue;
+    }
+
+    if (earliest === undefined || at < earliest.at) {
+      earliest = {
+        at,
+        kind:
+          rule.trigger === "before_start"
+            ? "reminder"
+            : rule.trigger === "after_end"
+              ? "followup"
+              : "winback",
+        ruleId: rule._id,
+        offsetHours: rule.offsetHours,
+      };
+    }
+  }
+  return earliest;
+}
+
+// ── The legacy path, verbatim ───────────────────────────────────────────────
+
 function nextReminder(
   appointment: Doc<"appointments">,
   org: Doc<"orgs">,
 ): { at: number; offsetHours: number } | undefined {
-  // Nothing to remind anyone about once the appointment has started. The
-  // sender checks this too; clearing the field here keeps started bookings out
-  // of the cron's read entirely rather than having it fetch and discard them.
   if (appointment.startAt <= Date.now()) return undefined;
   const offsets = org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS;
-  // Paused rows keep their place on the table and their wording; they just do
-  // not send. Filtered here rather than by removing the offset, so switching a
-  // reminder back on restores exactly what was there.
   const paused = org.pausedReminderHours ?? [];
   const sent = appointment.reminderSentOffsets ?? [];
   let earliest: { at: number; offsetHours: number } | undefined;
@@ -80,23 +161,18 @@ function nextReminder(
   return earliest;
 }
 
-// A no_show earns one winback, N days later, if the org asked for them.
 function winbackDueAt(
   appointment: Doc<"appointments">,
   org: Doc<"orgs">,
 ): number | undefined {
   if (appointment.status !== "no_show") return undefined;
-  // Removed means the rule is not on the table at all; disabled means it is
-  // there and switched off. Either way nothing sends.
   if ((org.removedRules ?? []).includes("winback")) return undefined;
   if (!(org.winbackEnabled ?? false)) return undefined;
   if (appointment.winbackSentAt !== undefined) return undefined;
   return appointment.startAt + (org.winbackDaysAfter ?? DEFAULT_WINBACK_DAYS) * DAY_MS;
 }
 
-// What this appointment owes and when, or undefined for "nothing". The cron
-// reads `kind` to pick a send and `offsetHours` to stamp the right marker, so
-// nothing downstream has to re-derive which reminder came due.
+// What this appointment owes and when, or undefined for "nothing".
 //
 // Zero is a legal timestamp in principle and an impossible one here, but the
 // cron's index range starts above zero to skip unset rows — so a due time of
@@ -105,8 +181,14 @@ function winbackDueAt(
 export function computeNextMessage(
   appointment: Doc<"appointments">,
   org: Doc<"orgs"> | null,
-): { at: number; kind: DueKind; offsetHours?: number } | undefined {
+  rules: Doc<"messageRules">[],
+): NextMessage | undefined {
   if (!org) return undefined;
+  if (org.rulesMigratedAt !== undefined) {
+    const next = nextFromRules(appointment, rules);
+    if (!next) return undefined;
+    return { ...next, at: next.at === 0 ? 1 : next.at };
+  }
   if (wantsReminders(appointment.status)) {
     const next = nextReminder(appointment, org);
     if (!next) return undefined;
@@ -120,6 +202,18 @@ export function computeNextMessage(
   return at === undefined ? undefined : { at: at === 0 ? 1 : at, kind: "winback" };
 }
 
+// The org's rules, for feeding computeNextMessage. Callers that walk many
+// appointments of one org should load these once and reuse them.
+export async function loadOrgRules(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+): Promise<Doc<"messageRules">[]> {
+  return await ctx.db
+    .query("messageRules")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+}
+
 // Recompute and persist. Returns the value it settled on, mostly so callers
 // that want to assert in tests can.
 export async function syncAppointmentSchedule(
@@ -129,7 +223,11 @@ export async function syncAppointmentSchedule(
   const appointment = await ctx.db.get(appointmentId);
   if (!appointment) return undefined;
   const org = await ctx.db.get(appointment.orgId);
-  const next = computeNextMessage(appointment, org)?.at;
+  const rules =
+    org?.rulesMigratedAt !== undefined
+      ? await loadOrgRules(ctx, appointment.orgId)
+      : [];
+  const next = computeNextMessage(appointment, org, rules)?.at;
   if (appointment.nextMessageAt !== next) {
     await ctx.db.patch(appointmentId, { nextMessageAt: next });
   }

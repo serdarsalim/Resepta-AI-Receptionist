@@ -293,11 +293,17 @@ export const sendAwayReply = internalAction({
 // Everything one send needs, in one read. Internal-only: the waAccount here
 // carries the live access token, which must never transit a public function.
 export const loadSendContext = internalQuery({
-  args: { appointmentId: v.id("appointments") },
+  args: {
+    appointmentId: v.id("appointments"),
+    // The rule this send belongs to, when it belongs to one — carries the
+    // channel and selects the per-rule wording. Legacy sends have none.
+    ruleId: v.optional(v.id("messageRules")),
+  },
   returns: v.any(),
   handler: async (ctx, args) => {
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment) return null;
+    const rule = args.ruleId ? await ctx.db.get(args.ruleId) : null;
     const [customer, org, waAccount, templates, staffRow] = await Promise.all([
       ctx.db.get(appointment.customerId),
       ctx.db.get(appointment.orgId),
@@ -316,13 +322,14 @@ export const loadSendContext = internalQuery({
     const evolution = org
       ? await loadEvolutionCreds(ctx, appointment.orgId, org.evolutionInstance)
       : null;
-    return { appointment, customer, org, waAccount, templates, evolution, staffRow };
+    return { appointment, customer, org, waAccount, templates, evolution, staffRow, rule };
   },
 });
 
-// The one outbound path: confirmation on booking, reminders from the cron.
-// Business-initiated → always a Meta template message; session messages play
-// no part here.
+// The one outbound path for appointment-lifecycle messages: confirmations on
+// booking, reminders and follow-ups from the cron, cancellation notices from
+// the mutation that cancelled. Business-initiated → the Cloud lane always
+// rides a Meta template message; session messages play no part here.
 export const sendAppointmentMessage = internalAction({
   args: {
     appointmentId: v.id("appointments"),
@@ -330,26 +337,37 @@ export const sendAppointmentMessage = internalAction({
       v.literal("confirmation"),
       v.literal("reminder"),
       v.literal("winback"),
+      v.literal("followup"),
+      v.literal("cancellation"),
     ),
     offsetHours: v.optional(v.number()),
+    // Present on every send that came from a messageRules row. Drives the
+    // channel and the per-rule wording; absent means a legacy-model org.
+    ruleId: v.optional(v.id("messageRules")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const context = await ctx.runQuery(internal.wa.loadSendContext, {
       appointmentId: args.appointmentId,
+      ruleId: args.ruleId,
     });
     if (!context) return null;
     // Deployment-wide mail settings. An action has no ctx.db, so the operator's
     // platformConfig row is read through its own internal query.
     const mailConfig = await ctx.runQuery(internal.platformConfig.forSend, {});
-    const { appointment, customer, org, waAccount, templates, evolution, staffRow } =
+    const { appointment, customer, org, waAccount, templates, evolution, staffRow, rule } =
       context;
     if (!customer || !org) return null;
 
-    // Status gate per kind: confirmations/reminders ride live appointments; a
-    // winback exists precisely BECAUSE the appointment ended as a no_show.
+    // Status gate per kind: each message only makes sense against the state
+    // that earned it — a follow-up exists BECAUSE the visit happened, a
+    // winback because it didn't, a cancellation notice because it won't.
     if (args.kind === "winback") {
       if (appointment.status !== "no_show") return null;
+    } else if (args.kind === "followup") {
+      if (appointment.status !== "completed") return null;
+    } else if (args.kind === "cancellation") {
+      if (appointment.status !== "cancelled") return null;
     } else if (
       appointment.status !== "scheduled" &&
       appointment.status !== "confirmed"
@@ -358,21 +376,37 @@ export const sendAppointmentMessage = internalAction({
     }
     // A reminder for a start time already in the past is stale queue noise.
     if (args.kind === "reminder" && appointment.startAt <= Date.now()) return null;
+    // A rule paused (or deleted) between the cron's stamp and this action
+    // running says nothing should leave. The stamp already happened, which is
+    // fine — a guard that errs toward not sending is the right kind of stale.
+    if (args.ruleId && (!rule || rule.paused)) return null;
 
     const messageKind =
-      args.kind === "reminder" && args.offsetHours !== undefined
-        ? `reminder_${args.offsetHours}h`
+      (args.kind === "reminder" || args.kind === "followup") &&
+      args.offsetHours !== undefined
+        ? `${args.kind}_${args.offsetHours}h`
         : args.kind;
 
     // Exact language match, no cross-language fallback (Nudge lesson: the
     // wrong-language message is worse than no message). The template ROW is
     // the content source for both channels; Meta approval only gates the
     // WhatsApp send, not the email.
+    //
+    // Resolution order is the per-message-wording feature: this rule's own row
+    // first, the kind-level row for everything the owner has not worded
+    // specifically.
     const language = customer.language ?? org.language;
-    const contentTemplate = templates.find(
-      (t: { kind: string; language: string }) =>
-        t.kind === args.kind && t.language === language,
-    );
+    const contentTemplate =
+      (rule
+        ? templates.find(
+            (t: { ruleId?: string; language: string }) =>
+              t.ruleId === rule._id && t.language === language,
+          )
+        : undefined) ??
+      templates.find(
+        (t: { kind: string; language: string; ruleId?: string }) =>
+          t.ruleId === undefined && t.kind === args.kind && t.language === language,
+      );
     // The Cloud lane needs both halves of the Meta registration: the approved
     // status AND the name to send under. metaName went optional the day orgs
     // without a Cloud number stopped being forced to invent one.
@@ -471,11 +505,12 @@ export const sendAppointmentMessage = internalAction({
       return null;
     }
 
-    // Which channel(s) this org sends rules on. Unset = both, the behaviour
-    // every org had before the choice existed. "email" skips the WhatsApp
+    // Which channel(s) this message rides. The RULE owns the choice now — the
+    // 24h reminder can be WhatsApp while the review ask goes by mail; the org
+    // preference survives as the legacy default. "email" skips the WhatsApp
     // attempt entirely — including its failure rows, because a channel the
     // owner switched off cannot be broken.
-    const channelPref = org.messageChannel ?? "both";
+    const channelPref = rule?.channel ?? org.messageChannel ?? "both";
 
     // ---- WhatsApp attempt. Failures log a visible row and do NOT block the
     // email lane — an unconfigured number is exactly what the Messages tab
