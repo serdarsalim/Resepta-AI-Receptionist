@@ -853,10 +853,13 @@ const dictionary = {
   },
   "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
   "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
+  // Two bullets, matching how the send path renders [hizmet]: one line per
+  // booked service. A single inline name would preview a shape that never
+  // sends.
   "settings.previewSampleService": {
-    tr: "Saç kesimi",
-    en: "Haircut",
-    de: "Haarschnitt",
+    tr: "• Saç kesimi\n• Fön",
+    en: "• Haircut\n• Beard trim",
+    de: "• Haarschnitt\n• Föhnen",
   },
   // Operator-facing: the org predates the rules table and the one-shot
   // migration has not run yet. A salon owner should never see this for more

@@ -519,9 +519,11 @@ export const sendAppointmentMessage = internalAction({
       staffName: staffRow?.name,
       phone: customer.phone,
       email: customer.email,
+      // One bullet line per booked service — [hizmet] renders as a LIST, so
+      // the stock texts put it on its own paragraph rather than mid-sentence.
       serviceName: appointment.items
-        ?.map((item: { name: string }) => item.name)
-        .join(", "),
+        ?.map((item: { name: string }) => `• ${item.name}`)
+        .join("\n"),
       custom: customValues,
     };
     const body = contentTemplate?.body

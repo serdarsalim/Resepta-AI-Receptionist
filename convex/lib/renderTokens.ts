@@ -130,6 +130,10 @@ export function renderTokens(body: string, values: TokenValues): string {
       .split("\n")
       .map((line) => line.trimEnd())
       .join("\n")
+      // A paragraph token ([hizmet] on its own line) that resolved to nothing
+      // leaves two blank lines back to back; one is intentional spacing, more
+      // is the hole where the list was.
+      .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
 }

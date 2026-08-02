@@ -131,11 +131,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
 > = {
   tr: {
     confirmation: {
-      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu ([hizmet]). Sorunuz varsa bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [ad]! [isletme] randevunuz [tarih] için oluşturuldu.\n\n[hizmet]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
       subject: "Randevunuz oluşturuldu",
     },
     reminder: {
-      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih] ([hizmet]). Gelemeyecekseniz bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [ad]! [isletme] randevunuzu hatırlatırız: [tarih].\n\n[hizmet]\n\nGelemeyecekseniz bu mesajı yanıtlamanız yeterli.",
       subject: "Randevu hatırlatması",
     },
     winback: {
@@ -153,11 +153,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   en: {
     confirmation: {
-      body: "Hello [name]! Your appointment at [business] is booked for [date] ([service]). Any questions? Just reply to this message.",
+      body: "Hello [name]! Your appointment at [business] is booked for [date].\n\n[service]\n\nAny questions? Just reply to this message.",
       subject: "Your appointment is booked",
     },
     reminder: {
-      body: "Hi [name]! A reminder from [business]: your appointment is on [date] ([service]). If anything changes, just reply to this message.",
+      body: "Hi [name]! A reminder from [business]: your appointment is on [date].\n\n[service]\n\nIf anything changes, just reply to this message.",
       subject: "Appointment reminder",
     },
     winback: {
@@ -175,11 +175,11 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   de: {
     confirmation: {
-      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht ([leistung]). Bei Fragen antworten Sie einfach auf diese Nachricht.",
+      body: "Hallo [name]! Ihr Termin bei [betrieb] ist für [datum] gebucht.\n\n[leistung]\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
       subject: "Ihr Termin ist gebucht",
     },
     reminder: {
-      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin am [datum] ([leistung]). Wenn etwas dazwischenkommt, antworten Sie einfach auf diese Nachricht.",
+      body: "Hallo [name]! [betrieb] erinnert Sie an Ihren Termin am [datum].\n\n[leistung]\n\nWenn etwas dazwischenkommt, antworten Sie einfach auf diese Nachricht.",
       subject: "Terminerinnerung",
     },
     winback: {
