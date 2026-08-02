@@ -300,12 +300,22 @@ went, and the reasoning to preserve:
   owner-only rules. Phone-agent creation is journalled `reversible: false` —
   it makes a real provider resource and `undo` says so in those words.
 
-  **The invariant that keeps provisioning safe:**
-  `voiceProvisioning.begin` accepts an optional `orgId` and TRUSTS it. That is
-  fine only because `begin` is internal and the PUBLIC `retellAgent.createAgent`
-  action does not accept an `orgId` to forward. If that action ever grows one,
-  a client can provision into another salon's workspace. The two facts are
-  commented at both ends; move them together or not at all.
+  **The invariant that keeps the sessionless paths safe:** three internal
+  functions — `voiceProvisioning.begin`, `retell.agentEditorContext` and
+  `retellAgent.publishVariableSet` — accept an optional `orgId` and TRUST it.
+  That is fine only because each is internal AND no public action forwards a
+  caller-supplied `orgId` into one. `createAgent` and `publishVariables` must
+  therefore never grow an `orgId` argument: `agentEditorContext` only checks
+  that the agent belongs to the org it was handed, so a public action taking
+  one would let a client edit any agent whose id they could name. Internal
+  twins (`createAgentForOrg`, `publishVariablesForOrg`) exist precisely so the
+  public pair never has to. Commented at both ends; move them together or not
+  at all.
+
+  Provisioning reads `agentEditorContext` at the END, for the runtime wiring.
+  A sessionless caller that skips this gets the worst half: a real provider
+  agent, connected and enabled, with no Randevu runtime — able to answer a
+  call and neither read nor write anything.
 - **Bookings (cal.com) config**: operator-only, admin console
   (`platform.setOrgConfig`). Never show a salon a cal.com key field again.
 
