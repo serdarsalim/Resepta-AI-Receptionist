@@ -2127,10 +2127,15 @@ const dictionary = {
     en: "Remove {name} from the list?",
     de: "{name} aus der Liste entfernen?",
   },
-  "roster.hasAppointments": {
-    tr: "Bu kişi randevularda görünüyor, bu yüzden silinemez. \"Randevu alır\" kapatıldığında yeni randevu almaz, geçmiş randevular adını korur.",
-    en: "This person appears on appointments, so they can't be deleted. Switch off Bookable instead — they stop taking new bookings and past ones keep their name.",
-    de: "Diese Person erscheint in Terminen und kann daher nicht gelöscht werden. Schalten Sie stattdessen \"Buchbar\" aus — sie nimmt keine neuen Termine an, alte behalten ihren Namen.",
+  "roster.deactivateFirst": {
+    tr: "Önce \"Randevu alır\" kapatılmalı. Kapattığınızda yeni randevu almaz; ardından tamamen kaldırabilirsiniz.",
+    en: "Switch off Bookable first. They stop taking new bookings straight away, and then you can remove them for good.",
+    de: "Schalten Sie zuerst \"Buchbar\" aus. Sie nimmt sofort keine neuen Termine mehr an und kann danach ganz entfernt werden.",
+  },
+  "roster.removeWithHistory": {
+    tr: "{name} kaldırılsın mı? Randevuları kalır ama artık kimin yaptığını göstermez. Geri alınamaz.",
+    en: "Remove {name}? Their appointments stay, but will no longer show who did them. This can't be undone.",
+    de: "{name} entfernen? Die Termine bleiben, zeigen aber nicht mehr, wer sie ausgeführt hat. Nicht widerrufbar.",
   },
   "roster.noLoginToLink": {
     tr: "Bağlanacak giriş yok",

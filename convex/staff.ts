@@ -89,16 +89,21 @@ export const setActive = mutation({
   },
 });
 
-// The counterpart to that rule, and not a contradiction of it. What
-// deactivating protects is HISTORY — a name an old appointment still points
-// at. Somebody who has never appeared on one has no history to protect, and a
-// misspelt duplicate you can only ever hide is its own kind of wrong: the
-// roster grows a row nobody can explain and nobody can remove.
+// Deleting is the second step of a two-step move, and deactivating is the
+// first. That ordering is the whole safety model here: switching Bookable off
+// is instant, reversible and stops any further damage, so by the time anybody
+// reaches this the person is already out of the booking flow and the decision
+// has been made twice.
 //
-// So the guard is the actual question, asked directly: is this person on any
-// appointment. If they are, deactivating remains the answer and the error says
-// so. Removing the row also drops its login LINK, never the login itself —
-// that is a membership, and it keeps its own row in the list.
+// Appointment history does NOT block it. It was tried that way and it was
+// wrong: a name is not worth making a row permanent, and the salon that wants
+// a duplicate gone knows better than this function whether the old bookings
+// still matter. What history costs is stated in the confirmation instead —
+// `roster` reports hasAppointments so the warning can name the consequence
+// before it happens rather than refusing after.
+//
+// Removing the row drops its login LINK, never the login itself: that is a
+// membership, and it keeps its own row in the list.
 export const remove = mutation({
   args: { staffId: v.id("staff") },
   returns: v.null(),
@@ -106,13 +111,7 @@ export const remove = mutation({
     const { orgId } = await requireOwner(ctx);
     const row = await ctx.db.get(args.staffId);
     if (!row || row.orgId !== orgId) throw new Error("not-found");
-    const booked = await ctx.db
-      .query("appointments")
-      .withIndex("by_org_staff", (q) =>
-        q.eq("orgId", orgId).eq("staffId", args.staffId),
-      )
-      .first();
-    if (booked) throw new Error("staff-has-appointments");
+    if (row.active) throw new Error("staff-still-active");
     await ctx.db.delete(args.staffId);
     return null;
   },

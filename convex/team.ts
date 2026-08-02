@@ -79,6 +79,10 @@ export const roster = query({
       name: v.string(),
       staffId: v.optional(v.id("staff")),
       active: v.optional(v.boolean()),
+      // Whether removing this person would leave appointments with no name on
+      // them. Reported rather than enforced, so the confirmation can say what
+      // it costs instead of the mutation refusing after the fact.
+      hasAppointments: v.optional(v.boolean()),
       userId: v.optional(v.id("users")),
       email: v.optional(v.string()),
       role: v.optional(role),
@@ -109,11 +113,20 @@ export const roster = query({
       // showing a tier this person no longer holds.
       const account = membership ? await ctx.db.get(membership.userId) : null;
       if (membership) linked.add(membership.userId);
+      // first(), not collect(): the question is whether removing this person
+      // would strand any appointment, and one is as true as a thousand.
+      const booked = await ctx.db
+        .query("appointments")
+        .withIndex("by_org_staff", (q) =>
+          q.eq("orgId", orgId).eq("staffId", staff._id),
+        )
+        .first();
       rows.push({
         key: staff._id as string,
         name: staff.name,
         staffId: staff._id,
         active: staff.active,
+        hasAppointments: booked !== null,
         userId: membership ? membership.userId : undefined,
         email: account?.email,
         role: membership?.role,
@@ -130,6 +143,7 @@ export const roster = query({
         name: account.name ?? account.email ?? "",
         staffId: undefined,
         active: undefined,
+        hasAppointments: undefined,
         userId: membership.userId,
         email: account.email,
         role: membership.role,

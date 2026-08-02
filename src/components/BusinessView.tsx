@@ -1221,8 +1221,8 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
       setError(
         reason.includes("last-admin")
           ? t("roster.lastAdmin")
-          : reason.includes("staff-has-appointments")
-            ? t("roster.hasAppointments")
+          : reason.includes("staff-still-active")
+            ? t("roster.deactivateFirst")
             : reason,
       );
     }
@@ -1363,14 +1363,37 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               {/* Only a bookable person with NO login gets an ✕. Someone who
                   can sign in is removed by taking their access away, in the
                   column to the left — two controls that both said "remove"
-                  and meant different things would be worse than one. */}
+                  and meant different things would be worse than one.
+
+                  Two steps, and the ✕ stays visible through both: greyed while
+                  they are still bookable, live once they are not. Hiding it
+                  until then would make the first step look like it did
+                  nothing, which is how you get somebody toggling Bookable back
+                  and forth looking for the delete. */}
               {isOwner && row.staffId && !row.userId ? (
                 <ActionTip
-                  label={t("roster.remove").replace("{name}", row.name)}
-                  onClick={() =>
-                    void guard(() => removeStaff({ staffId: row.staffId! }))
+                  label={
+                    row.active
+                      ? t("roster.deactivateFirst")
+                      : (row.hasAppointments
+                          ? t("roster.removeWithHistory")
+                          : t("roster.remove")
+                        ).replace("{name}", row.name)
                   }
-                  className="opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                  multiline
+                  disabled={row.active}
+                  onClick={() => {
+                    const question = (
+                      row.hasAppointments
+                        ? t("roster.removeWithHistory")
+                        : t("roster.remove")
+                    ).replace("{name}", row.name);
+                    if (!window.confirm(question)) return;
+                    void guard(() => removeStaff({ staffId: row.staffId! }));
+                  }}
+                  className={`opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
+                    row.active ? "" : "hover:text-red-600"
+                  }`}
                 >
                   ✕
                 </ActionTip>

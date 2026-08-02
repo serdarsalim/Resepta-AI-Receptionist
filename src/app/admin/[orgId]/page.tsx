@@ -15,7 +15,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { notFound, useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -233,16 +233,9 @@ export default function TenantPage() {
   if (allowed === undefined) {
     return <main className="mx-auto max-w-4xl p-6 text-sm text-[var(--muted)]">Loading…</main>;
   }
-  if (!allowed) {
-    return (
-      <main className="mx-auto max-w-4xl p-6">
-        <h1 className="text-lg font-semibold">Not available</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          This page is for platform operators. Your own settings live in the app.
-        </p>
-      </main>
-    );
-  }
+  // 404, not "you may not" — see the note on the fleet page. A refusal that
+  // explains itself is an advert for the thing it is refusing.
+  if (!allowed) notFound();
   if (detail === undefined) {
     return <main className="mx-auto max-w-4xl p-6 text-sm text-[var(--muted)]">Loading…</main>;
   }

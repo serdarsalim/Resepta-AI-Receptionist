@@ -21,7 +21,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { ago, Count, Setup } from "./parts";
 
 export default function AdminPage() {
@@ -38,17 +38,11 @@ export default function AdminPage() {
       <main className="mx-auto max-w-6xl p-6 text-sm text-[var(--muted)]">Loading…</main>
     );
   }
-  if (!allowed) {
-    return (
-      <main className="mx-auto max-w-6xl p-6">
-        <h1 className="text-lg font-semibold">Not available</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          This page is for platform operators. Nothing here belongs to your business —
-          your own settings live in the app.
-        </p>
-      </main>
-    );
-  }
+  // 404, not "you may not". Explaining the refusal told a salon owner that an
+  // operator console exists and invited them to ask for a login to it; the
+  // honest answer to someone who is not an operator is that this address is
+  // not a page. Same reason a private repo 404s rather than 403s.
+  if (!allowed) notFound();
   if (fleet === undefined) {
     return (
       <main className="mx-auto max-w-6xl p-6 text-sm text-[var(--muted)]">Loading…</main>
