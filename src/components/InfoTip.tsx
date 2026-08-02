@@ -29,12 +29,19 @@ export function ActionTip({
   label,
   onClick,
   disabled,
+  multiline = false,
   className,
   children,
 }: {
   label: string;
   onClick: () => void;
+  // Greys the control and drops the click WITHOUT the disabled attribute: a
+  // disabled button fires no mouse events, so the tooltip explaining why it is
+  // unavailable would never open. Refusing is only useful if it says why.
   disabled?: boolean;
+  // A sentence rather than a label. nowrap turns one into a strip wider than
+  // the screen, so this wraps it and caps the width instead.
+  multiline?: boolean;
   // Appended, not replacing: callers add visibility tricks (hover-only in
   // table rows), never their own button styling.
   className?: string;
@@ -46,7 +53,15 @@ export function ActionTip({
   const show = () => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+    // Clamped on BOTH sides. Anchoring to the button's right edge grows the
+    // box leftward, and a wrapped sentence near the left of the viewport ran
+    // off it — the right offset can never exceed the room actually available.
+    const width = multiline ? TIP_WIDTH : 0;
+    const right = Math.max(8, window.innerWidth - r.right);
+    setPos({
+      top: r.bottom + 6,
+      right: Math.min(right, Math.max(8, window.innerWidth - width - 8)),
+    });
   };
   const hide = () => setPos(null);
 
@@ -56,16 +71,21 @@ export function ActionTip({
         ref={btnRef}
         type="button"
         aria-label={label}
-        disabled={disabled}
+        aria-disabled={disabled}
         onMouseEnter={show}
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
         onClick={() => {
           hide();
+          if (disabled) return;
           onClick();
         }}
-        className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-40 ${className ?? ""}`}
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+          disabled
+            ? "cursor-not-allowed text-[var(--border)]"
+            : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        } ${className ?? ""}`}
       >
         {children}
       </button>
@@ -73,8 +93,14 @@ export function ActionTip({
         createPortal(
           <span
             role="tooltip"
-            style={{ position: "fixed", ...pos }}
-            className="pointer-events-none z-[100] whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg"
+            style={{
+              position: "fixed",
+              ...pos,
+              ...(multiline ? { width: TIP_WIDTH } : {}),
+            }}
+            className={`pointer-events-none z-[100] rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg ${
+              multiline ? "" : "whitespace-nowrap"
+            }`}
           >
             {label}
           </span>,

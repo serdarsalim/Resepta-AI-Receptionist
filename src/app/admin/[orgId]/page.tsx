@@ -20,6 +20,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Activity } from "../parts";
+import { InfoTip } from "@/components/InfoTip";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -120,11 +121,17 @@ function Section({
 }) {
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {description && (
-        <p className="mt-0.5 text-xs text-[var(--muted)]">{description}</p>
-      )}
-      <div className="mt-2 divide-y divide-[var(--border)]">{children}</div>
+      {/* The description is a sentence explaining what the section governs,
+          and a sentence per card is what made this page a wall of prose. It
+          moves behind the (i) the rest of the app already uses — same
+          affordance, same place, and the row labels are what the eye lands on.
+          No divider between rows either: every control in here already draws
+          its own border, so the lines were a second grid over the first. */}
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {description && <InfoTip text={description} />}
+      </div>
+      <div className="mt-2">{children}</div>
     </section>
   );
 }
@@ -218,7 +225,7 @@ export default function TenantPage() {
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
-  const [tab, setTab] = useState<"setup" | "activity">("setup");
+  const [tab, setTab] = useState<"setup" | "agents" | "members" | "activity">("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
@@ -295,6 +302,8 @@ export default function TenantPage() {
         {(
           [
             { id: "setup" as const, label: "Setup" },
+            { id: "agents" as const, label: "Agents" },
+            { id: "members" as const, label: "Members" },
             { id: "activity" as const, label: "Activity" },
           ]
         ).map((entry) => (
@@ -341,9 +350,26 @@ export default function TenantPage() {
           />
         ))}
 
-        {detail.voiceProvisioning.length > 0 && (
+      </Section>
+      </>
+      )}
+
+      {/* Agents live behind their own tab. Setup is credentials you install
+          once; this is running state that changes every call, and reading one
+          while looking for the other is why the Voice card had grown to hold
+          both. */}
+      {tab === "agents" && (
+      <>
+      <Section
+        title="Agent setup"
+        description="Provisioning jobs for agents Randevu created, newest first. A failed job keeps its provider ids, so a retry repairs rather than duplicating."
+      >
+        {detail.voiceProvisioning.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">
+            No agent has been created from Randevu yet.
+          </p>
+        ) : (
           <div className="py-2.5">
-            <div className="text-sm font-medium">Agent setup</div>
             <div className="mt-1 space-y-2">
               {detail.voiceProvisioning.map((job, index) => (
                 <div key={`${job.updatedAt}-${index}`} className="text-xs">
@@ -371,7 +397,12 @@ export default function TenantPage() {
             </div>
           </div>
         )}
+      </Section>
 
+      <Section
+        title="Connected agents"
+        description="Every agent mapped to this business, with whether Randevu's private runtime is published to it and whether call results are arriving."
+      >
         {detail.agents.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
             No agents connected. The business can add one in Phone agent once the key is in.
@@ -465,7 +496,48 @@ export default function TenantPage() {
           ))
         )}
       </Section>
+      </>
+      )}
 
+      {tab === "members" && (
+      <Section
+        title="Members"
+        description="Who can sign in to this business. Sign-in is Google-only, so the address here is the only one that works — and there is no way to look it up from the other side."
+      >
+        {detail.members.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">
+            Nobody has signed in yet.
+          </p>
+        ) : (
+          detail.members.map((member) => (
+            <div
+              key={`${member.email ?? member.name ?? "unknown"}-${member.role}`}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
+            >
+              <span className="text-sm font-medium">
+                {member.name ?? <span className="text-[var(--muted)]">No name</span>}
+              </span>
+              {member.email ? (
+                <CopyId value={member.email} />
+              ) : (
+                <span className="text-xs text-[var(--muted)]">No address</span>
+              )}
+              <span className="ml-auto flex items-center gap-3">
+                {/* Unset seenAt means somebody else added them and they have
+                    not signed in to find out — a seat, not yet a user. */}
+                {member.seenAt === null && (
+                  <span className="text-xs text-[var(--muted)]">Never signed in</span>
+                )}
+                <Pill tone={member.role === "owner" ? "ok" : "muted"}>{member.role}</Pill>
+              </span>
+            </div>
+          ))
+        )}
+      </Section>
+      )}
+
+      {tab === "setup" && (
+      <>
       <Section
         title="WhatsApp"
         description="The org's own Meta Cloud API number. Inbound messages resolve the org by phone number ID."

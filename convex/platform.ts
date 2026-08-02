@@ -295,13 +295,26 @@ export const orgDetail = query({
           error: v.union(v.string(), v.null()),
         }),
       ),
+      // Who can actually sign in. The operator's first question on a support
+      // call is which address to expect, and Google-only sign-in means there
+      // is no way to look it up from the other side.
+      members: v.array(
+        v.object({
+          name: v.union(v.string(), v.null()),
+          email: v.union(v.string(), v.null()),
+          role: v.string(),
+          // Unset means somebody else added them and they have not signed in
+          // to see it yet — the difference between a real user and a seat.
+          seenAt: v.union(v.number(), v.null()),
+        }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const [wa, agents, voiceEvents, voiceProvisioning] = await Promise.all([
+    const [wa, agents, voiceEvents, voiceProvisioning, memberships] = await Promise.all([
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -320,7 +333,31 @@ export const orgDetail = query({
         .withIndex("by_org_updated", (q) => q.eq("orgId", args.orgId))
         .order("desc")
         .take(10),
+      ctx.db
+        .query("memberships")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .collect(),
     ]);
+    const members = (
+      await Promise.all(
+        memberships.map(async (membership) => {
+          const user = await ctx.db.get(membership.userId);
+          return {
+            name: user?.name ?? null,
+            email: user?.email ?? null,
+            role: membership.role,
+            seenAt: membership.seenAt ?? null,
+          };
+        }),
+      )
+    ).sort((a, b) =>
+      // Owners first, then by whatever name there is to read.
+      a.role === b.role
+        ? (a.email ?? "").localeCompare(b.email ?? "")
+        : a.role === "owner"
+          ? -1
+          : 1,
+    );
     return {
       name: org.name,
       timezone: org.timezone,
@@ -379,6 +416,7 @@ export const orgDetail = query({
         retellAgentId: job.retellAgentId ?? null,
         error: job.error ?? null,
       })),
+      members,
     };
   },
 });

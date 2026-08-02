@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { ActionTip } from "./InfoTip";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import {
   CURRENCIES,
@@ -844,26 +845,29 @@ function FieldTableRow({
           )}
         </td>
         <td className="py-1.5 text-right">
-          {/* Always rendered, never hidden by state. A control that vanishes
-              when a field is in use reads as "this row cannot be deleted, and
-              I will not tell you why" — the ✕ stays and says it. Hover reveal
-              is a desktop idea, so it stays visible where there is no hover.
-              aria-disabled rather than disabled: a disabled button swallows the
-              click, and the click is how the reason gets said. */}
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-disabled={inUse}
-            title={inUse ? usedByText : t("common.delete")}
-            aria-label={t("common.delete")}
-            className={`text-sm leading-none opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
+          {/* Always rendered, and revealed on hover in BOTH states. A control
+              that vanishes when a field is in use reads as "this row cannot be
+              deleted, and I will not tell you why" — it stays, greys, and the
+              tooltip names the agent holding it. The reason belongs on the
+              control the reader is pointing at, not in a message at the foot
+              of the card where it is a paragraph away from the ✕ that caused
+              it. Hover reveal is a desktop idea, so it stays visible where
+              there is no hover. */}
+          <ActionTip
+            label={
               inUse
-                ? "cursor-not-allowed text-[var(--muted)] opacity-40 group-hover:opacity-40 [@media(hover:none)]:opacity-40"
-                : "text-[var(--muted)] transition-colors hover:text-red-600"
+                ? t("fields.deleteInUse").replace("{agents}", agents.join(", "))
+                : t("common.delete")
+            }
+            onClick={onRemove}
+            disabled={inUse}
+            multiline={inUse}
+            className={`opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100 ${
+              inUse ? "" : "hover:text-red-600"
             }`}
           >
             ✕
-          </button>
+          </ActionTip>
         </td>
       </tr>
       {expanded && field.type === "select" && (
@@ -997,16 +1001,9 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
                 }
                 onSetOptions={(options) => void updateField({ fieldId: field._id, options })}
                 onRemove={() => {
-                  // The refusal is said here rather than left to the backend's
-                  // error: by the time `field-in-use` comes back the owner has
-                  // already confirmed a delete that was never going to happen.
-                  const used = agentsFor(field);
-                  if (used.length > 0) {
-                    setError(
-                      t("fields.deleteInUse").replace("{agents}", used.join(", ")),
-                    );
-                    return;
-                  }
+                  // Only reached when the field is free — the row refuses an
+                  // in-use one against the same usage list, and says why in
+                  // its tooltip rather than routing it through here.
                   if (
                     !window.confirm(
                       t("fields.deleteConfirm").replace("{name}", field.label),
