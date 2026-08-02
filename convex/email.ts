@@ -124,10 +124,43 @@ export const recordInbound = internalMutation({
       emailSubject: args.subject,
     });
 
+    // Reply attribution, latest-outbound-wins (Nudge's contract): credit this
+    // reply to the newest tracked email the customer was sent in the past 30
+    // days. Inbound mail carries no In-Reply-To we can trust through the
+    // webhook, so newest-wins IS the attribution. A row already credited is
+    // skipped — a chatty customer must not read as a 400% reply rate.
+    // Bounded scan: the customer's newest 100 rows.
+    const now = Date.now();
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_customer", (q) => q.eq("customerId", customerId))
+      .order("desc")
+      .take(100);
+    const repliedTo = recent.find(
+      (m) =>
+        m.direction === "out" &&
+        m.kind.startsWith("email_") &&
+        m.status === "sent" &&
+        m.repliedAt === undefined &&
+        m.templateId !== undefined &&
+        (m.sentAt ?? 0) > now - 30 * 24 * 3600_000,
+    );
+    if (repliedTo) {
+      await ctx.db.patch(repliedTo._id, { repliedAt: now });
+      const template = repliedTo.templateId
+        ? await ctx.db.get(repliedTo.templateId)
+        : null;
+      if (template) {
+        await ctx.db.patch(template._id, {
+          emailReplyCount: (template.emailReplyCount ?? 0) + 1,
+        });
+      }
+    }
+
     // Same stamp the WhatsApp lane sets. It drives "awaiting reply" in the
     // inbox; it does NOT open Meta's session window, which only a WhatsApp
     // inbound can do.
-    await ctx.db.patch(customerId, { lastInboundAt: Date.now() });
+    await ctx.db.patch(customerId, { lastInboundAt: now });
     return null;
   },
 });

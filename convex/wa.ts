@@ -728,11 +728,12 @@ export const sendAppointmentMessage = internalAction({
         org.inboundAddress && domain
           ? `${org.inboundAddress}@${domain}`
           : undefined;
-      // Winback mail carries the open pixel; confirmations and reminders do
-      // not, because their open rate reports nowhere and untracked data is
-      // just surveillance. The template id rides along so the counters on the
-      // winback template row have a home.
-      const tracked = args.kind === "winback" && contentTemplate;
+      // Every rule email counts and tracks now — the editor shows each
+      // message's sent count, open rate and reply rate, so the numbers
+      // finally report somewhere. Still a RATE over the template, never a
+      // per-customer fact; recordEmailOpen's prefetch guard and the relay
+      // caveat apply as ever.
+      const tracked = contentTemplate;
       const trackingToken = tracked ? crypto.randomUUID() : undefined;
       const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,

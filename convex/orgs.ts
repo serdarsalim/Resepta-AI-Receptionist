@@ -128,9 +128,12 @@ export const current = query({
         language: v.string(),
         status: templateStatus,
         bodyPreview: v.optional(v.string()),
-        // Winback open rate (the only kind that tracks — see schema).
+        // Per-template email engagement: sent/opens/replies and the last
+        // send, rendered as the stats footer in each rule's editor.
         emailSentCount: v.optional(v.number()),
         emailOpenCount: v.optional(v.number()),
+        emailReplyCount: v.optional(v.number()),
+        emailLastSentAt: v.optional(v.number()),
       }),
     ),
     // Whether the shop-phone lane is provisioned for this org (instance name
@@ -218,6 +221,8 @@ export const current = query({
         bodyPreview: t.bodyPreview,
         emailSentCount: t.emailSentCount,
         emailOpenCount: t.emailOpenCount,
+        emailReplyCount: t.emailReplyCount,
+        emailLastSentAt: t.emailLastSentAt,
       })),
       evolutionEnabled: Boolean(
         await loadEvolutionCreds(ctx, orgId, org.evolutionInstance),

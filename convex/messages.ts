@@ -132,6 +132,8 @@ export const applySendResult = internalMutation({
         if (template) {
           await ctx.db.patch(template._id, {
             emailSentCount: (template.emailSentCount ?? 0) + 1,
+            // "Sent 3× · last Aug 2" in the editor, answered without a scan.
+            emailLastSentAt: Date.now(),
           });
         }
       }

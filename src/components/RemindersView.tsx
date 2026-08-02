@@ -69,6 +69,8 @@ type TemplateRow = {
   bodyPreview?: string;
   emailSentCount?: number;
   emailOpenCount?: number;
+  emailReplyCount?: number;
+  emailLastSentAt?: number;
 };
 
 // Same map as messageRules.kindForTrigger — which template bucket words a
@@ -722,11 +724,35 @@ function RuleEditor({
         {waConnected && (
           <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
         )}
+        {/* Email engagement, once this message has actually sent one. Rates
+            over the template, never per-customer facts — the opens hint
+            explains why the number is a trend, not a truth. */}
         {(template.emailSentCount ?? 0) > 0 && (
-          <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-            {t("settings.templateEmailOpens")}: {template.emailOpenCount ?? 0} /{" "}
-            {template.emailSentCount}
-            <InfoTip text={t("settings.templateEmailOpensHint")} />
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+            <span>
+              {t("settings.statSent")}: {template.emailSentCount}×
+              {template.emailLastSentAt
+                ? ` · ${new Intl.DateTimeFormat(orgLanguage, {
+                    day: "numeric",
+                    month: "short",
+                  }).format(template.emailLastSentAt)}`
+                : ""}
+            </span>
+            <span className="flex items-center gap-1">
+              {t("settings.statOpens")}:{" "}
+              {Math.round(
+                ((template.emailOpenCount ?? 0) / (template.emailSentCount ?? 1)) * 100,
+              )}
+              %
+              <InfoTip text={t("settings.templateEmailOpensHint")} />
+            </span>
+            <span>
+              {t("settings.statReplies")}:{" "}
+              {Math.round(
+                ((template.emailReplyCount ?? 0) / (template.emailSentCount ?? 1)) * 100,
+              )}
+              %
+            </span>
           </p>
         )}
       </div>
