@@ -517,6 +517,7 @@ function RuleEditor({
   contactFields,
   orgName,
   orgLanguage,
+  orgCurrency,
   emailEnabled,
   waConnected,
   onSaveTemplate,
@@ -526,6 +527,7 @@ function RuleEditor({
   contactFields: { key: string; label: string }[];
   orgName: string;
   orgLanguage: string;
+  orgCurrency: string;
   emailEnabled: boolean;
   waConnected: boolean;
   onSaveTemplate: (
@@ -595,6 +597,12 @@ function RuleEditor({
     for (const field of contactFields) {
       custom[field.key] = (contactId && picked?.custom?.[field.key]) || "";
     }
+    // Same shape the send path produces for [fiyat] — org currency, message
+    // language, a believable number.
+    const price = new Intl.NumberFormat(orgLanguage, {
+      style: "currency",
+      currency: orgCurrency,
+    }).format(410);
     if (contactId && picked) {
       return {
         firstName: picked.firstName,
@@ -605,6 +613,7 @@ function RuleEditor({
         appointmentAt,
         staffName: t("settings.previewSampleStaff"),
         serviceName: t("settings.previewSampleService"),
+        price,
         custom,
       };
     }
@@ -614,9 +623,10 @@ function RuleEditor({
       appointmentAt,
       staffName: t("settings.previewSampleStaff"),
       serviceName: t("settings.previewSampleService"),
+      price,
       custom,
     };
-  }, [t, orgName, orgLanguage, contactFields, contactId, picked]);
+  }, [t, orgName, orgLanguage, orgCurrency, contactFields, contactId, picked]);
 
   if (!template) {
     return <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>;
@@ -646,8 +656,15 @@ function RuleEditor({
   // email the authored HTML — both through the same token renderer.
   const previewPlain = emailEnabled ? htmlToText(liveHtml) : body;
   const rendered = renderTokens(previewPlain, previewValues);
+  // Same swap the send path makes: inside HTML a bare \n is a space, so the
+  // service list rides <br/>.
   const renderedEmailHtml = showEmailPreview
-    ? sanitizeEmailHtml(renderTokens(liveHtml, previewValues))
+    ? sanitizeEmailHtml(
+        renderTokens(liveHtml, {
+          ...previewValues,
+          serviceName: previewValues.serviceName?.replace(/\n/g, "<br/>"),
+        }),
+      )
     : "";
   const pickedLabel = picked
     ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
@@ -714,7 +731,10 @@ function RuleEditor({
         )}
       </div>
 
-      <div className="space-y-2">
+      {/* A flex column so the preview surface stretches to the editor's
+          height — the two panes read as one aligned unit, not a tall form
+          beside a floating card. */}
+      <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
           {/* Typeahead over real contacts. Picking one swaps every token to
@@ -767,17 +787,18 @@ function RuleEditor({
             )}
           </span>
         </div>
-        <div className="space-y-3 rounded-lg bg-[var(--muted-bg)] p-3">
+        <div className="flex flex-1 flex-col gap-3 rounded-lg bg-[var(--muted-bg)] p-3">
           {/* The email as the customer's mail client shows it: white paper no
-              matter the app theme, subject on top, the authored HTML below. */}
+              matter the app theme, subject on top, the authored HTML below.
+              flex-1 so the paper runs the full height beside the editor. */}
           {showEmailPreview && (
-            <div className="email-paper overflow-hidden rounded-lg border border-[var(--border)]">
+            <div className="email-paper flex flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]">
               <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
                 {(renderTokens(subject, previewValues) ||
                   `${orgName || "—"}, ${previewValues.appointmentAt}`)}
               </p>
               <div
-                className="email-body-editor px-3 py-2 text-sm"
+                className="email-body-editor flex-1 px-3 py-2 text-sm"
                 dangerouslySetInnerHTML={{
                   __html:
                     renderedEmailHtml ||
@@ -814,6 +835,7 @@ function RulesCard({
   org: {
     name: string;
     language: string;
+    currency: string;
     quietHoursStart: number;
     quietHoursEnd: number;
     messageChannel: "whatsapp" | "email" | "both";
@@ -1099,6 +1121,7 @@ function RulesCard({
                     contactFields={contactFieldRows}
                     orgName={org.name}
                     orgLanguage={org.language}
+                    orgCurrency={org.currency}
                     emailEnabled={emailEnabled}
                     waConnected={waConnected}
                     onSaveTemplate={(templateId, patch) =>

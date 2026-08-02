@@ -511,6 +511,19 @@ export const sendAppointmentMessage = internalAction({
     for (const field of contactFields as { key: string }[]) {
       customValues[field.key] = customer.custom?.[field.key] ?? "";
     }
+    // The appointment total for the [fiyat] token, in the org's currency and
+    // the message language. Items store integer minor units; no items or a
+    // zero total renders as nothing rather than as a free appointment.
+    const totalMinor = (
+      (appointment.items ?? []) as { price?: number }[]
+    ).reduce((sum, item) => sum + (item.price ?? 0), 0);
+    const price =
+      totalMinor > 0
+        ? new Intl.NumberFormat(language, {
+            style: "currency",
+            currency: org.currency ?? "TRY",
+          }).format(totalMinor / 100)
+        : undefined;
     const tokenValues = {
       firstName: customer.firstName,
       lastName: customer.lastName,
@@ -524,6 +537,7 @@ export const sendAppointmentMessage = internalAction({
       serviceName: appointment.items
         ?.map((item: { name: string }) => `• ${item.name}`)
         .join("\n"),
+      price,
       custom: customValues,
     };
     const body = contentTemplate?.body
@@ -696,9 +710,14 @@ export const sendAppointmentMessage = internalAction({
           : "") || `${org.name}, ${when}`;
       // The WYSIWYG-authored HTML when there is one — signature tables and
       // all — otherwise the plain body wrapped the way it always was. Tokens
-      // render in either; they are literal text in both representations.
+      // render in either; they are literal text in both representations. The
+      // service list swaps its newlines for <br/> here, because inside HTML a
+      // bare \n is just a space and the list would flatten to one line.
       const emailHtml = contentTemplate?.bodyHtml
-        ? renderTokens(contentTemplate.bodyHtml, tokenValues)
+        ? renderTokens(contentTemplate.bodyHtml, {
+            ...tokenValues,
+            serviceName: tokenValues.serviceName?.replace(/\n/g, "<br/>"),
+          })
         : emailBodyHtml(body);
       // Replies come back to US, not to whatever mailbox the From address
       // belongs to — same wiring as email.sendToCustomer, and for the same

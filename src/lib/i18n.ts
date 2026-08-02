@@ -827,6 +827,7 @@ const dictionary = {
   "vars.business": { tr: "İşletme adı", en: "Business name", de: "Betriebsname" },
   "vars.date": { tr: "Randevu tarihi", en: "Appointment date", de: "Termindatum" },
   "vars.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
+  "vars.price": { tr: "Toplam tutar", en: "Total price", de: "Gesamtpreis" },
   "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
   "editor.insertVariable": {
     tr: "Değişken ekle",

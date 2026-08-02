@@ -32,8 +32,12 @@ export type TokenValues = {
   staffName?: string;
   phone?: string;
   email?: string;
-  // The appointment's line items, joined for display ("Saç kesimi, Fön").
+  // The appointment's line items, one bullet line each ("• Saç kesimi").
   serviceName?: string;
+  // The appointment's total, already formatted in the org's currency and the
+  // message language ("₺410,00"). Opt-in by design: a variable the owner
+  // types, never a toggle that stamps prices onto every message.
+  price?: string;
   // The org's OWN vocabulary: contactFields.key → this customer's value.
   // This is what keeps tokens honest — [age] works because the Fields tab
   // says a field named `age` exists, not because this file guessed it might.
@@ -79,6 +83,12 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   service: "serviceName",
   hizmet: "serviceName",
   leistung: "serviceName",
+  // Money
+  price: "price",
+  fiyat: "price",
+  preis: "price",
+  total: "price",
+  toplam: "price",
 };
 
 // What the editor offers. Ordered by how often a salon actually reaches for
