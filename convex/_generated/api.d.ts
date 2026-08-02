@@ -59,6 +59,7 @@ import type * as lib_waLane from "../lib/waLane.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpKeys from "../mcpKeys.js";
 import type * as media from "../media.js";
+import type * as messageRules from "../messageRules.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
 import type * as orgs from "../orgs.js";
@@ -137,6 +138,7 @@ declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
   mcpKeys: typeof mcpKeys;
   media: typeof media;
+  messageRules: typeof messageRules;
   messages: typeof messages;
   notes: typeof notes;
   orgs: typeof orgs;
