@@ -584,6 +584,57 @@ export const migrateOutOfHoursAll = internalMutation({
   },
 });
 
+// ── Backfill [manage_link] into confirmation wording ────────────────────────
+//
+// The stock confirmation texts carry the self-serve link now, but stock text
+// only reaches orgs created (or reset) from here on — every template an owner
+// has already authored predates the token, so their customers would book on
+// the new page and still be told to reply to a message to change anything.
+//
+// APPENDED, never inserted: the body is the owner's own prose and this cannot
+// know where a sentence belongs inside it. Skips a row that already mentions
+// the token (idempotent) and a row with no body at all — a Meta-registration
+// shell with nothing but a metaName has no wording to add a line to, and
+// giving it one would make a message that is only a link.
+//
+// Run after deploying:
+//   npx convex run messageRules:addManageLinkToConfirmations --prod
+const MANAGE_LINK_LINE: Record<string, string> = {
+  tr: "Randevunuzu değiştirmek veya iptal etmek için:",
+  en: "To change or cancel your appointment:",
+  de: "Zum Verschieben oder Stornieren Ihres Termins:",
+};
+
+export const addManageLinkToConfirmations = internalMutation({
+  args: {},
+  returns: v.object({ patched: v.number(), skipped: v.number() }),
+  handler: async (ctx) => {
+    let patched = 0;
+    let skipped = 0;
+    for (const template of await ctx.db.query("waTemplates").collect()) {
+      if (template.kind !== "confirmation") continue;
+      const body = template.body?.trim();
+      if (!body || body.includes("[manage_link]")) {
+        skipped += 1;
+        continue;
+      }
+      const line = MANAGE_LINK_LINE[template.language] ?? MANAGE_LINK_LINE.en;
+      const patch: { body: string; bodyHtml?: string } = {
+        body: `${body}\n\n${line}\n[manage_link]`,
+      };
+      // The email lane prefers bodyHtml wherever one exists, so a patch that
+      // touched only the plain text would put the link on WhatsApp and leave
+      // it off the very channel most of these orgs actually send on.
+      if (template.bodyHtml?.trim()) {
+        patch.bodyHtml = `${template.bodyHtml.trim()}<p>${line}<br/>[manage_link]</p>`;
+      }
+      await ctx.db.patch(template._id, patch);
+      patched += 1;
+    }
+    return { patched, skipped };
+  },
+});
+
 export const migrateOutOfHoursOrg = internalMutation({
   args: { orgId: v.id("orgs") },
   returns: v.null(),
