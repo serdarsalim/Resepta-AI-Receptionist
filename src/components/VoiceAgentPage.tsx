@@ -71,6 +71,7 @@ type Detail = {
     wired: boolean;
     pointsElsewhere: boolean;
   };
+  signatureRejectedAt: number | null;
   variableConfig: {
     managed: boolean;
     items: VoiceVariable[];
@@ -458,6 +459,18 @@ export function VoiceAgentPage({
                 actually broken, and a boxed amber warning the height of a
                 paragraph made a fixable config detail the loudest thing on a
                 page about what the agent says. */}
+            {/* Ranked above the wiring line and shown even when the URL is
+                correct: a rejected signature means calls are reaching us and
+                being turned away, which is worse than a webhook that was never
+                pointed here. No Fix button — the repair is pasting the right
+                key in the operator console, not something this page can do. */}
+            {detail.signatureRejectedAt !== null && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                <span>{t("voiceDetail.signatureRejected")}</span>
+                <InfoTip text={t("voiceDetail.signatureRejectedHint")} />
+              </div>
+            )}
+
             {!detail.webhook.wired && (
               <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                 <span>

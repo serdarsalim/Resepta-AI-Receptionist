@@ -246,7 +246,42 @@ http.route({
 
 // ---- Voice lane (Retell) ----
 
-async function retellGuard(ctx: ActionCtx, request: Request): Promise<
+// Every route below records the verdict of its signature check against the
+// agent, because a rejection is the one failure the app otherwise cannot see:
+// it happens before the event is stored, so nothing lands in voiceEvents and
+// nothing appears in the activity feed. The provider logs it and the caller
+// hears the agent stumble, which is how it stayed invisible for a whole call.
+async function noteSignature(
+  ctx: ActionCtx,
+  agentId: string,
+  route: string,
+  ok: boolean,
+  wasRejected: boolean,
+): Promise<void> {
+  // Never let health bookkeeping decide whether a real webhook is processed.
+  try {
+    if (ok) {
+      if (wasRejected) {
+        await ctx.runMutation(internal.retell.clearSignatureRejection, {
+          retellAgentId: agentId,
+        });
+      }
+      return;
+    }
+    await ctx.runMutation(internal.retell.recordSignatureRejection, {
+      retellAgentId: agentId,
+      route,
+    });
+  } catch {
+    // Ignored on purpose.
+  }
+}
+
+async function retellGuard(
+  ctx: ActionCtx,
+  request: Request,
+  route: string,
+): Promise<
   | {
       ok: true;
       payload: Record<string, unknown>;
@@ -279,6 +314,7 @@ async function retellGuard(ctx: ActionCtx, request: Request): Promise<
     rawBody,
     request.headers.get("x-retell-signature"),
   );
+  await noteSignature(ctx, agentId, route, valid, auth.signatureRejected);
   if (!valid) {
     return { ok: false, response: new Response("bad signature", { status: 401 }) };
   }
@@ -339,7 +375,11 @@ http.route({
     const context = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
       phone: fromNumber,
-    })) as { apiKey: string | null; dynamicVariables: Record<string, string> } | null;
+    })) as {
+      apiKey: string | null;
+      dynamicVariables: Record<string, string>;
+      signatureRejected: boolean;
+    } | null;
     if (!context) return new Response("agent disabled", { status: 200 });
     if (!context.apiKey) return new Response("agent unavailable", { status: 503 });
     const valid = await verifyRetellSignature(
@@ -347,6 +387,7 @@ http.route({
       rawBody,
       request.headers.get("x-retell-signature"),
     );
+    await noteSignature(ctx, agentId, "inbound", valid, context.signatureRejected);
     if (!valid) return new Response("bad signature", { status: 401 });
     return Response.json({
       call_inbound: {
@@ -363,7 +404,7 @@ http.route({
   path: "/retell/functions",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const guard = await retellGuard(ctx, request);
+    const guard = await retellGuard(ctx, request, "functions");
     if (!guard.ok) return guard.response;
     const payload = guard.payload;
     const call = (payload.call ?? {}) as Record<string, unknown>;
@@ -634,7 +675,7 @@ http.route({
   path: "/retell/call-ended",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    const guard = await retellGuard(ctx, request);
+    const guard = await retellGuard(ctx, request, "call-ended");
     if (!guard.ok) return guard.response;
     // Retell posts EVERY lifecycle event to this one URL. call_started carries
     // no transcript, no duration and nothing collected, and recordCall is

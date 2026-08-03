@@ -551,6 +551,7 @@ export const agentEditorContext = internalQuery({
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
+      signatureRejectedAt: agent.signatureRejectedAt ?? null,
       fields: fields.sort((a, b) => a.order - b.order),
     };
   },
@@ -763,6 +764,7 @@ export const beforeCallContext = internalQuery({
     return {
       apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
       dynamicVariables,
+      signatureRejected: agent.signatureRejectedAt !== undefined,
     };
   },
 });
@@ -1097,6 +1099,9 @@ export const webhookAuthContext = internalQuery({
     v.object({
       orgId: v.id("orgs"),
       apiKey: v.union(v.string(), v.null()),
+      // So the caller can skip the clearing write on the happy path, which is
+      // every webhook of every healthy agent.
+      signatureRejected: v.boolean(),
     }),
     v.null(),
   ),
@@ -1109,7 +1114,56 @@ export const webhookAuthContext = internalQuery({
     return {
       orgId: agent.orgId,
       apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
+      signatureRejected: agent.signatureRejectedAt !== undefined,
     };
+  },
+});
+
+// Agent ids are not secret — they sit in the dashboard URL an owner can paste
+// into a chat — so this runs for anyone who can post a malformed body to a
+// public route. Hence the window: a stamp already younger than this says the
+// same thing the write would, and a caller hammering the endpoint gets one
+// write a minute rather than one per request.
+const SIGNATURE_REJECTION_WINDOW_MS = 60_000;
+
+export const recordSignatureRejection = internalMutation({
+  args: { retellAgentId: v.string(), route: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, route }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    const now = Date.now();
+    if (
+      agent.signatureRejectedAt !== undefined &&
+      now - agent.signatureRejectedAt < SIGNATURE_REJECTION_WINDOW_MS
+    ) {
+      return null;
+    }
+    await ctx.db.patch(agent._id, {
+      signatureRejectedAt: now,
+      signatureRejectedRoute: route,
+    });
+    return null;
+  },
+});
+
+export const clearSignatureRejection = internalMutation({
+  args: { retellAgentId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || agent.signatureRejectedAt === undefined) return null;
+    await ctx.db.patch(agent._id, {
+      signatureRejectedAt: undefined,
+      signatureRejectedRoute: undefined,
+    });
+    return null;
   },
 });
 

@@ -1550,6 +1550,16 @@ const dictionary = {
     en: "Not set, so call results are not reaching this app.",
     de: "Nicht gesetzt. Anrufergebnisse erreichen diese App nicht.",
   },
+  "voiceDetail.signatureRejected": {
+    tr: "Aramalar ulaşıyor ama reddediliyor: Retell anahtarı doğrulanmıyor.",
+    en: "Calls are reaching Randevu but being rejected: the Retell key does not verify.",
+    de: "Anrufe erreichen Randevu, werden aber abgewiesen: Der Retell-Schlüssel wird nicht verifiziert.",
+  },
+  "voiceDetail.signatureRejectedHint": {
+    tr: "Bu iş yeri için kayıtlı Retell anahtarı, o çalışma alanının imzalama anahtarı değil. Retell → Settings → API Keys içinde Webhook rozetli anahtarı kopyalayıp yönetici konsolundan güncelleyin. Düzeltilene kadar randevular arama sırasında kaydedilemez.",
+    en: "The Retell key stored for this business is not that workspace's signing key. Copy the key badged Webhook in Retell → Settings → API Keys and update it in the admin console. Until then bookings cannot be saved during a call.",
+    de: "Der für dieses Unternehmen gespeicherte Retell-Schlüssel ist nicht der Signaturschlüssel dieses Workspace. Kopieren Sie den mit Webhook gekennzeichneten Schlüssel unter Retell → Settings → API Keys und aktualisieren Sie ihn in der Admin-Konsole. Bis dahin können Termine während eines Anrufs nicht gespeichert werden.",
+  },
   "voiceDetail.webhookFix": {
     tr: "Düzelt",
     en: "Fix",

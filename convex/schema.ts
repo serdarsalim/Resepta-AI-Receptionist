@@ -391,6 +391,16 @@ export default defineSchema({
     lastAnalyzedEventAt: v.optional(v.number()),
     lastEventErrorAt: v.optional(v.number()),
     lastEventError: v.optional(v.string()),
+    // A webhook arrived for this agent and its signature did not verify, which
+    // in practice means the org holds a key from the right workspace that is
+    // not that workspace's signing key. Kept separate from lastEventError
+    // because that one describes OUR code failing on an event we accepted;
+    // this one is a credential the operator has to change, and it is the only
+    // failure that never reaches voiceEvents at all — the request is turned
+    // away at the door, so without this stamp the app has no record it
+    // happened. Cleared by the next signature that does verify.
+    signatureRejectedAt: v.optional(v.number()),
+    signatureRejectedRoute: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"]),

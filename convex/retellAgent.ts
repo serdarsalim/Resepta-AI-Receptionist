@@ -96,6 +96,7 @@ type EditorContext = {
   variablesRetellVersion: number | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
+  signatureRejectedAt: number | null;
   fields: Array<{
     _id: string;
     key: string;
@@ -426,6 +427,11 @@ export const read = action({
         wired: Boolean(expected && actual && actual === expected),
         pointsElsewhere: Boolean(actual && expected && actual !== expected),
       },
+      // A wired webhook that Retell signs with a key this org does not hold
+      // looks identical to a healthy one from up here, so it gets its own line
+      // rather than folding into webhook.wired: the URL is right, the
+      // credential is not, and the fix is a different one.
+      signatureRejectedAt: context.signatureRejectedAt,
       variables: {
         preCall: Object.entries(llm?.default_dynamic_variables ?? {}).map(
           ([name, value]) => ({ name, value }),
