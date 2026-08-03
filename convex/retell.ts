@@ -726,9 +726,27 @@ export const listAgents = action({
     let vRes: Response | null = null;
     try {
       [aRes, nRes, vRes] = await Promise.all([
-        // is_latest=true or Retell returns one row per agent VERSION, which
-        // shows the same agent five times in the picker.
-        fetch("https://api.retellai.com/list-agents?is_latest=true", { headers }),
+        // POST /v2/list-agents, because GET /list-agents is deprecated and
+        // Retell now emails the account about every call to it.
+        //
+        // The new endpoint lists UNIQUE agents, so the is_latest=true trick
+        // that stopped the picker showing the same agent once per version is
+        // no longer needed — the dedupe below stays as belt and braces.
+        //
+        // What it does NOT return is language, webhook_url or the post-call
+        // fields, all of which the picker shows. Those come from get-agent per
+        // row, below. One request became one plus N, which is the price of the
+        // migration; this is a settings screen opened by hand, not a send path.
+        fetch("https://api.retellai.com/v2/list-agents", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({
+            limit: 200,
+            filter_criteria: {
+              channel: { type: "string", op: "eq", value: "voice" },
+            },
+          }),
+        }),
         fetch("https://api.retellai.com/v2/list-phone-numbers", { headers }),
         // Voice names and previews are customer-facing, but provider names are
         // intentionally discarded below. A voice-list outage must not take
@@ -765,27 +783,53 @@ export const listAgents = action({
       outbound_agents?: Array<{ agent_id?: string }>;
     }>;
     const seen = new Set<string>();
-    const agents: AgentListResult["agents"] = [];
+    const listed: { id: string; name: string }[] = [];
     for (const a of agentItems) {
       if (!a.agent_id || seen.has(a.agent_id)) continue;
       seen.add(a.agent_id);
-      agents.push({
-        id: a.agent_id,
-        name: a.agent_name?.trim() || a.agent_id,
-        languages: Array.isArray(a.language)
-          ? a.language
-          : a.language
-            ? [a.language]
+      listed.push({ id: a.agent_id, name: a.agent_name?.trim() || a.agent_id });
+    }
+    // The three things the picker shows that the list endpoint stopped
+    // carrying. Fetched per agent and in parallel, and a row whose detail call
+    // fails still appears — with a name and nothing else — because an agent you
+    // cannot see is worse than an agent you cannot describe.
+    const details = await Promise.all(
+      listed.map(async (row) => {
+        try {
+          const res = await fetch(
+            `https://api.retellai.com/get-agent/${encodeURIComponent(row.id)}`,
+            { headers },
+          );
+          if (!res.ok) return null;
+          return (await res.json()) as {
+            language?: string | string[];
+            webhook_url?: string;
+            post_call_analysis_data?: Array<{ name?: string; type?: string }>;
+          };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const agents: AgentListResult["agents"] = listed.map((row, i) => {
+      const d = details[i];
+      return {
+        id: row.id,
+        name: row.name,
+        languages: Array.isArray(d?.language)
+          ? d.language
+          : d?.language
+            ? [d.language]
             : [],
         // What the agent captures on a call. Retell's system presets
         // (call_summary and friends) arrive elsewhere in the payload and are
         // not things the salon configured, so they are not "what it collects".
-        collects: (a.post_call_analysis_data ?? [])
+        collects: (d?.post_call_analysis_data ?? [])
           .filter((f) => f.name && f.type !== "system-presets")
           .map((f) => f.name!),
-        webhookUrl: a.webhook_url?.trim() || null,
-      });
-    }
+        webhookUrl: d?.webhook_url?.trim() || null,
+      };
+    });
 
     const phoneNumbers = numItems
       .filter((n) => n.phone_number)
