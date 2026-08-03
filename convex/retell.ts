@@ -1302,12 +1302,22 @@ export const runtimeCallContext = internalQuery({
           key: serviceKey(service),
           name: service.name,
           durationMinutes: service.durationMinutes,
+          // SPOKEN, not written. "₺500,00" is right on a screen and useless
+          // down a phone line: text-to-speech drops the symbol and the caller
+          // hears "five hundred" with no idea of what. currencyDisplay:"name"
+          // gives "500 Türk lirası" / "40 euros" / "40 Euro" — the currency as
+          // a word, in the language the agent is speaking.
+          //
+          // And no decimals on a whole amount, because "five hundred lira
+          // zero zero" is how a person reads a spreadsheet, not a price.
           price:
             service.price === undefined
               ? null
               : new Intl.NumberFormat(org.language, {
                   style: "currency",
                   currency: org.currency ?? "TRY",
+                  currencyDisplay: "name",
+                  minimumFractionDigits: service.price % 100 === 0 ? 0 : 2,
                 }).format(service.price / 100),
           priceNote:
             service.price === undefined
