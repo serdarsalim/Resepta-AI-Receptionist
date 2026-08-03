@@ -48,6 +48,24 @@ export const create = mutation({
   returns: v.string(),
   handler: async (ctx, { client, name }) => {
     const { user, orgId } = await requireOrg(ctx);
+    // An operator working INSIDE a tenant cannot mint one of these.
+    //
+    // requireOrg resolves an operator's org to whichever tenant they are
+    // acting into, so the row came out as {orgId: the salon, userId: the
+    // operator} — and verify re-checks memberships, which an operator does not
+    // have there. The key was born dead: minted, shown once, and rejected by
+    // every call it was ever used for.
+    //
+    // Refused rather than repaired, because the repair is the dangerous one.
+    // Teaching verify to honour actingAsOrgId would turn a session-scoped
+    // operator capability into a long-lived bearer token that outlives the
+    // session, sits in a config file, and answers to nobody's membership —
+    // exactly the escalation lib/platformAuth keeps out of the database.
+    //
+    // The salon mints its own key. That is not a workaround, it is the point:
+    // this credential says "a member of this business authorised a client",
+    // and an operator cannot honestly say that on their behalf.
+    if (user.actingAsOrgId === orgId) throw new Error("acting-as-cannot-mint");
     const key = mintKey();
     await ctx.db.insert("mcpConnections", {
       orgId,

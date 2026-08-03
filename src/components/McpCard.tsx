@@ -29,6 +29,10 @@ export function McpCard({ site }: { site: SiteUrl }) {
   );
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  // The one refusal this card can hit: an operator inside a tenant. Said out
+  // loud, because the alternative was a button that appeared to work and
+  // handed back a key that never would.
+  const [refused, setRefused] = useState(false);
 
   const endpoint = site.isMisconfigured ? null : `${site.url}/mcp`;
 
@@ -41,8 +45,10 @@ export function McpCard({ site }: { site: SiteUrl }) {
 
   const mint = (client: "claude" | "chatgpt") => {
     setBusy(true);
+    setRefused(false);
     void create({ client })
       .then((key) => setMinted({ key, client }))
+      .catch(() => setRefused(true))
       .finally(() => setBusy(false));
   };
 
@@ -52,6 +58,12 @@ export function McpCard({ site }: { site: SiteUrl }) {
     <Card>
       <div className="space-y-4">
         <p className="text-sm text-[var(--muted)]">{t("mcp.intro")}</p>
+
+        {refused && (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            {t("mcp.actingAsCannotMint")}
+          </p>
+        )}
 
         <div>
           <div className="mb-1 flex items-center gap-1.5 text-xs font-medium">

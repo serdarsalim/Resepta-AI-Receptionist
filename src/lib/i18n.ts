@@ -2002,6 +2002,15 @@ const dictionary = {
     en: "Talk to your business from Claude or ChatGPT: check the calendar, look up customers, leave notes. Each team member connects with their own key, and everything done shows up in the activity feed under their name.",
     de: "Sprechen Sie über Claude oder ChatGPT mit Ihrem Betrieb: Kalender ansehen, Kunden nachschlagen, Notizen hinterlassen. Jedes Teammitglied verbindet sich mit einem eigenen Schlüssel, und alles erscheint unter seinem Namen im Aktivitätsverlauf.",
   },
+  // Operator-only, and phrased for the operator: a salon owner never sees it.
+  // The key would carry THEIR membership into a business they are only
+  // visiting, and the connector re-checks that membership on every call, so
+  // the key would be dead the moment it left the screen.
+  "mcp.actingAsCannotMint": {
+    tr: "Bir işletmenin içinde operatör olarak çalışırken anahtar oluşturulamaz — bağlantı her çağrıda üyelik kontrol eder ve sizin bu işletmede üyeliğiniz yok. Anahtarı işletmenin kendi ekibi oluşturmalı.",
+    en: "You can't mint a key while working inside a business as an operator — the connector re-checks membership on every call, and you aren't a member here. The business mints its own.",
+    de: "Als Operator innerhalb eines Betriebs lässt sich kein Schlüssel erstellen — der Connector prüft bei jedem Aufruf die Mitgliedschaft, und Sie sind hier kein Mitglied. Der Betrieb erstellt seinen eigenen Schlüssel.",
+  },
   "mcp.endpoint": {
     tr: "Bağlantı adresi",
     en: "Connector URL",
