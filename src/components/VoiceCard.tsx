@@ -30,6 +30,7 @@ type Roster = {
     languages: string[];
     collects: string[];
     webhookUrl: string | null;
+    ownedHere: boolean;
   }[];
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
   voices: {
@@ -40,6 +41,7 @@ type Roster = {
     previewUrl: string | null;
   }[];
   hiddenAgentIds: string[];
+  agentSource: "randevu" | "account";
 };
 
 type CreateLanguage = "tr-TR" | "en-US" | "de-DE";
@@ -174,11 +176,20 @@ export function VoiceCard({
   const expectedHook = site.isMisconfigured ? null : `${site.url}/retell/call-ended`;
   const connectedIds = new Set(connected.map((row) => row.retellAgentId));
   const hidden = new Set(roster?.hiddenAgentIds ?? []);
+  // Ownership narrows the PICKER and nothing else. A connected agent that
+  // predates tagging keeps its row, its details and its webhook check; what
+  // this decides is which agents you may newly connect. On "randevu" that is
+  // only the ones Randevu made for this business — the rest belong to whoever
+  // else shares the Retell workspace, and offering them was how one salon got
+  // shown another's agents.
+  const ownedOnly = (roster?.agentSource ?? "randevu") === "randevu";
+  const offerable = (a: { id: string; ownedHere: boolean }) =>
+    !connectedIds.has(a.id) && (!ownedOnly || a.ownedHere);
   const available = (roster?.agents ?? []).filter(
-    (a) => !connectedIds.has(a.id) && !hidden.has(a.id),
+    (a) => offerable(a) && !hidden.has(a.id),
   );
   const archived = (roster?.agents ?? []).filter(
-    (a) => !connectedIds.has(a.id) && hidden.has(a.id),
+    (a) => offerable(a) && hidden.has(a.id),
   );
   const pickerRows = [
     ...available.map((agent) => ({ agent, archived: false })),

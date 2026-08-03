@@ -290,6 +290,7 @@ export const orgDetail = query({
       inboundAddress: v.union(v.string(), v.null()),
       calcomApiKey: maskedSecret,
       calcomEventTypeId: v.union(v.string(), v.null()),
+      voiceAgentSource: v.union(v.literal("randevu"), v.literal("account")),
       calcomWebhookToken: v.union(v.string(), v.null()),
       wa: v.union(
         v.null(),
@@ -406,6 +407,7 @@ export const orgDetail = query({
       inboundAddress: org.inboundAddress ?? null,
       calcomApiKey: org.calcomApiKey ? maskSecret(org.calcomApiKey) : null,
       calcomEventTypeId: org.calcomEventTypeId ?? null,
+      voiceAgentSource: org.voiceAgentSource ?? "randevu",
       calcomWebhookToken: org.calcomWebhookToken ?? null,
       wa: wa
         ? {
@@ -536,6 +538,9 @@ export const setOrgConfig = mutation({
     inboundAddress: v.optional(v.string()),
     calcomApiKey: v.optional(v.string()),
     calcomEventTypeId: v.optional(v.string()),
+    voiceAgentSource: v.optional(
+      v.union(v.literal("randevu"), v.literal("account")),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -558,6 +563,8 @@ export const setOrgConfig = mutation({
           : await resolveInboundAddress(ctx, args.orgId, nextInbound),
       calcomApiKey: applied(args.calcomApiKey, org.calcomApiKey),
       calcomEventTypeId: applied(args.calcomEventTypeId, org.calcomEventTypeId),
+      // Absent means "not part of this patch", the same as every field above.
+      voiceAgentSource: args.voiceAgentSource ?? org.voiceAgentSource,
     });
     return null;
   },

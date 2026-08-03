@@ -449,6 +449,37 @@ export default function TenantPage() {
       </Section>
 
       <Section
+        title="Voice agents"
+        description="One Retell workspace can serve several businesses. This decides which of its agents this business may connect — not which it already has, which nothing here changes."
+      >
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Connectable agents</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["randevu", "account"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => void org({ voiceAgentSource: option })}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  detail.voiceAgentSource === option
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option === "randevu" ? "Only this business's" : "Whole workspace"}
+              </button>
+            ))}
+          </div>
+          <div />
+          <div className="text-xs text-[var(--muted)]">
+            {detail.voiceAgentSource === "randevu"
+              ? "Only agents Randevu created for this business. The safe default when the Retell key is shared with another business."
+              : "Every agent in the Retell workspace this key opens, including other businesses'. Agents already claimed elsewhere still cannot be connected."}
+          </div>
+        </div>
+      </Section>
+
+      <Section
         title="Bookings"
         description="cal.com powers availability and conflict checks. Without a key, voice bookings record without checking the calendar."
       >

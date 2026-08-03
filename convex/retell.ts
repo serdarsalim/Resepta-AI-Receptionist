@@ -324,6 +324,7 @@ export const agentListContext = internalQuery({
       apiKey: v.union(v.string(), v.null()),
       connectedAgentId: v.union(v.string(), v.null()),
       hiddenAgentIds: v.array(v.string()),
+      agentSource: v.union(v.literal("randevu"), v.literal("account")),
     }),
     v.null(),
   ),
@@ -347,6 +348,10 @@ export const agentListContext = internalQuery({
       // Legacy singular: the demo seed and error paths want one id to name.
       connectedAgentId: agents[0]?.retellAgentId ?? null,
       hiddenAgentIds: org.hiddenRetellAgentIds ?? [],
+      // Unset reads as the narrow one. A workspace nobody has told us about is
+      // assumed shared, because that assumption is only ever too cautious,
+      // while the other one leaks.
+      agentSource: org.voiceAgentSource ?? "randevu",
     };
   },
 });
@@ -770,7 +775,13 @@ type AgentListResult = {
     languages: string[];
     collects: string[];
     webhookUrl: string | null;
+    // Carries this org's tag at Retell — i.e. Randevu made it for this
+    // business. Reported rather than filtered on here, so a connected agent
+    // that predates tagging keeps its details (and its webhook health check)
+    // while the PICKER is the only thing ownership narrows.
+    ownedHere: boolean;
   }[];
+  agentSource: "randevu" | "account";
   phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
   voices: {
     id: string;
@@ -789,6 +800,7 @@ const DEMO_AGENTS = [
     languages: ["tr-TR"],
     collects: ["customer_name", "service", "preferred_time"],
     webhookUrl: null,
+    ownedHere: true,
   },
 ];
 
@@ -809,8 +821,10 @@ export const listAgents = action({
         languages: v.array(v.string()),
         collects: v.array(v.string()),
         webhookUrl: v.union(v.string(), v.null()),
+        ownedHere: v.boolean(),
       }),
     ),
+    agentSource: v.union(v.literal("randevu"), v.literal("account")),
     phoneNumbers: v.array(
       v.object({
         number: v.string(),
@@ -856,6 +870,7 @@ export const listAgents = action({
         ],
         voices: [],
         hiddenAgentIds: [],
+        agentSource: "randevu",
       };
     }
 
@@ -913,9 +928,7 @@ export const listAgents = action({
     ) as Array<{
       agent_id?: string;
       agent_name?: string;
-      language?: string | string[];
-      webhook_url?: string;
-      post_call_analysis_data?: Array<{ name?: string; type?: string }>;
+      tags?: unknown;
     }>;
     const numItems = (
       Array.isArray(nData) ? nData : (nData as { items?: unknown[] })?.items ?? []
@@ -927,11 +940,15 @@ export const listAgents = action({
       outbound_agents?: Array<{ agent_id?: string }>;
     }>;
     const seen = new Set<string>();
-    const listed: { id: string; name: string }[] = [];
+    const listed: { id: string; name: string; ownedHere: boolean }[] = [];
     for (const a of agentItems) {
       if (!a.agent_id || seen.has(a.agent_id)) continue;
       seen.add(a.agent_id);
-      listed.push({ id: a.agent_id, name: a.agent_name?.trim() || a.agent_id });
+      listed.push({
+        id: a.agent_id,
+        name: a.agent_name?.trim() || a.agent_id,
+        ownedHere: tagsOf(a.tags).includes(orgAgentTag(context.orgId)),
+      });
     }
     // The three things the picker shows that the list endpoint stopped
     // carrying. Fetched per agent and in parallel, and a row whose detail call
@@ -972,6 +989,7 @@ export const listAgents = action({
           .filter((f) => f.name && f.type !== "system-presets")
           .map((f) => f.name!),
         webhookUrl: d?.webhook_url?.trim() || null,
+        ownedHere: row.ownedHere,
       };
     });
 
@@ -1006,6 +1024,7 @@ export const listAgents = action({
       phoneNumbers,
       voices,
       hiddenAgentIds: context.hiddenAgentIds,
+      agentSource: context.agentSource,
     };
   },
 });
@@ -1040,6 +1059,7 @@ function empty(
     phoneNumbers: [],
     voices: [],
     hiddenAgentIds: [],
+    agentSource: "randevu",
   };
 }
 

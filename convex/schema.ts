@@ -198,6 +198,19 @@ export default defineSchema({
     // agents accumulate in a client's account; archiving keeps the picker to
     // agents that are real without touching anything in Retell.
     hiddenRetellAgentIds: v.optional(v.array(v.string())),
+    // Which agents the connect picker may offer. "randevu" (the default when
+    // unset) offers only agents carrying this org's tag — the ones Randevu
+    // created for this business. "account" offers everything in the Retell
+    // workspace the key opens.
+    //
+    // It exists because one workspace can serve several businesses, and then
+    // the picker was showing each of them all the others' agents. Operator-set
+    // from /admin rather than owner-set: a salon owner cannot know whether the
+    // workspace behind their key is shared, and the honest default for someone
+    // who cannot know is the narrow one.
+    voiceAgentSource: v.optional(
+      v.union(v.literal("randevu"), v.literal("account")),
+    ),
     winbackDaysAfter: v.optional(v.number()),
     // Evolution instance name for this org, when it runs one. Credentials
     // (baseUrl, apiKey) live in `connections` like every other provider secret.
