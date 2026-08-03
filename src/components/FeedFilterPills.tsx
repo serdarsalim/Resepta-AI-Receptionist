@@ -43,6 +43,20 @@ export function FeedFilterPills({
   // The same query the panel runs, so Convex serves both from one subscription
   // rather than a counts callback threaded back up through the parent.
   const feed = useQuery(api.messages.feedForCustomer, { customerId });
+  const settings = useQuery(api.orgs.current, {});
+  // A business that never connected WhatsApp has no WhatsApp history and no
+  // way to make any, so the pill is a permanently empty tab advertising a
+  // channel it does not have. The rule editor already tells these businesses
+  // their channel is Email; this keeps the feed saying the same thing.
+  //
+  // Hidden rather than dimmed while the query is in flight: most businesses
+  // here have no WhatsApp, so hiding is the answer that usually turns out
+  // right, and a pill that appears and then vanishes reads as a glitch.
+  // Anything already on the record still shows under All.
+  const waConnected = Boolean(
+    settings && (settings.whatsapp.connected || settings.evolutionEnabled),
+  );
+  const tabs = waConnected ? TABS : TABS.filter((tab) => tab !== "whatsapp");
   const countOf = (tab: FeedFilter) =>
     tab === "all"
       ? (feed?.length ?? 0)
@@ -106,7 +120,7 @@ export function FeedFilterPills({
     // cards up), so a second row of pills would spill out of it rather than
     // push the card down. The pills are small enough to hold one line.
     <div className={`flex shrink-0 flex-nowrap items-center gap-1.5 ${className ?? ""}`}>
-      {TABS.map(pill)}
+      {tabs.map(pill)}
       <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--border)]" />
       {pill("all")}
     </div>

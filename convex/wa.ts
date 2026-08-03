@@ -648,6 +648,17 @@ export const sendAppointmentMessage = internalAction({
     } else if (channelPref === "email") {
       // Email-only by choice. Not a failure of any kind: the WhatsApp rows
       // below would tell the owner a channel they switched off is broken.
+    } else if (!waAccount && !evolution) {
+      // Never connected, which is not the same as broken — and the same
+      // reasoning as the branch above, one step further out. The rule stays
+      // "both" until someone edits it, so a salon that only ever wanted email
+      // still had every booking log a red WhatsApp row. The rule editor
+      // already shows these businesses "Email" as the channel; this is the
+      // send path finally agreeing with it.
+      //
+      // Only total absence is silent. A business that HAS WhatsApp and cannot
+      // send falls through to the rows below, because that one is a real
+      // fault and hiding it is how deliveries fail unnoticed.
     } else if (!waAccount) {
       await fail("wa-not-configured");
     } else if (!cloudTemplate) {
