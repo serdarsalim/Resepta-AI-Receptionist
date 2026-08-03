@@ -18,7 +18,7 @@ import {
   verifyResendSignature,
 } from "./lib/emailInbound";
 import { formatAppointmentTime } from "./lib/format";
-import { localDayRangeUtc, todayInZone } from "./lib/businessHours";
+import { localDayRangeUtc, parseLocalStart, todayInZone } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 
 const http = httpRouter();
@@ -384,7 +384,19 @@ http.route({
     const callerPhone = String(args.phone ?? call.from_number ?? "");
 
     if (name === "check_availability") {
-      const dayIso = String(args.date ?? todayInZone(org.timezone));
+      const today = todayInZone(org.timezone);
+      const dayIso = String(args.date ?? today);
+      // "tomorrow" is not a date. It used to reach localDayRangeUtc, fail its
+      // regex and produce a window around the literal string — a day that does
+      // not exist, answered as if it were empty. Handing the miss back with
+      // today's date attached is what lets the agent do the arithmetic.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dayIso)) {
+        return respond({
+          error: "date-must-be-yyyy-mm-dd",
+          today,
+          timezone: org.timezone,
+        });
+      }
       const { startIso, endIso } = localDayRangeUtc(dayIso, org.timezone);
       // No cal.com is not "no calendar". Randevu holds every appointment this
       // org has, so the agent gets the day's bookings from our own table and
@@ -432,7 +444,10 @@ http.route({
     }
 
     if (name === "book_appointment") {
-      const startAt = Date.parse(String(args.start ?? ""));
+      // Wall time at the BUSINESS, not UTC — see parseLocalStart. An agent
+      // writing down "five o'clock tomorrow" as a zone-less stamp used to
+      // book two hours late in summer Vienna.
+      const startAt = parseLocalStart(String(args.start ?? ""), org.timezone);
       const customerName = String(args.name ?? "").trim();
       if (Number.isNaN(startAt) || !customerName || !callerPhone) {
         return respond({ error: "missing-name-phone-or-start" });

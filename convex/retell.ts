@@ -983,11 +983,27 @@ export const runtimeCallContext = internalQuery({
       ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
     ]);
     const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
+    // What "tomorrow at 5" means. The agent was given a timezone and nothing
+    // to apply it to, so a caller saying "tomorrow" had to be talked into
+    // reciting a full calendar date before book_appointment could be handed
+    // one — the model has no reliable clock of its own and book_appointment
+    // takes an absolute time.
+    const nowMs = Date.now();
+    const parts = getLocalPartsSafe(nowMs, org.timezone);
+    const pad = (n: number) => String(n).padStart(2, "0");
     return {
       business: {
         name: org.name,
         timezone: org.timezone,
         language: org.language,
+      },
+      now: {
+        date: `${parts.y}-${pad(parts.m0 + 1)}-${pad(parts.d)}`,
+        time: `${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}`,
+        timezone: org.timezone,
+        spoken: formatAppointmentTime(nowMs, org.timezone, org.language),
+        note:
+          "Local date and time at the business right now. Resolve every relative time the caller says — today, tomorrow, next Tuesday, 5pm — against this, and book with the full local date and time.",
       },
       caller: customer
         ? {
@@ -1034,12 +1050,31 @@ export const runtimeCallContext = internalQuery({
             currentValue: field && customer ? customer.custom?.[field.key] ?? null : builtIn,
           };
         }),
+      // With the PRICE, which this list never carried — so an agent asked
+      // "how much is a discovery call?" had the service, its key and its
+      // duration, and no honest answer. Spoken form as well as the number,
+      // because the number is minor units and a phone agent reading "4000"
+      // out loud is worse than not answering.
+      //
+      // A service with no price set returns null and says why in one line the
+      // agent can read: an unpriced service must not become an invented one.
       services: services
         .filter((service) => service.active)
         .map((service) => ({
           key: serviceKey(service),
           name: service.name,
           durationMinutes: service.durationMinutes,
+          price:
+            service.price === undefined
+              ? null
+              : new Intl.NumberFormat(org.language, {
+                  style: "currency",
+                  currency: org.currency ?? "TRY",
+                }).format(service.price / 100),
+          priceNote:
+            service.price === undefined
+              ? "No price set for this service. Say it is confirmed when booking rather than quoting a figure."
+              : undefined,
         })),
     };
   },
@@ -1171,6 +1206,20 @@ export const voiceBook = internalMutation({
       }
     }
     if (!customer) throw new Error("customer-failed");
+    // Consent, on the branch that was missing it. The insert above stamps it
+    // because booking by calling the salon IS the opt-in moment — and that is
+    // just as true of a caller who ALREADY has a record. On a real call they
+    // always do: save_customer_details creates them from the number before
+    // the booking, with no consent on it, so every voice booking by an
+    // agent that collects details first landed here unconsented.
+    //
+    // wa.ts gates EVERY channel on consentAt, so the confirmation did not
+    // fail on its way out — it never left. It was logged as a bodyless
+    // no-consent failure, which reads in the feed as a template message that
+    // simply did nothing.
+    if (customer.consentAt === undefined) {
+      await ctx.db.patch(customer._id, { consentAt: Date.now() });
+    }
     const line = args.service
       ? await matchService(ctx, args.orgId, args.service)
       : undefined;

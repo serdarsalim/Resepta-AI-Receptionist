@@ -190,3 +190,35 @@ export function todayInZone(tz: string): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${p.y}-${pad(p.m0 + 1)}-${pad(p.d)}`;
 }
+
+// A start time from the voice agent, read as WALL TIME AT THE BUSINESS.
+//
+// "2026-08-04T17:00:00" is what a model writes down when a caller says five
+// o'clock, and Date.parse reads a string with no zone on it as UTC — which is
+// 19:00 in Vienna and 20:00 in Istanbul. The salon then has a booking nobody
+// agreed to at a time the caller was read back correctly on the phone.
+//
+// A string that DOES carry a zone (trailing Z, or ±HH:MM) is already an
+// instant and is trusted as one. Returns NaN for anything unparseable, so the
+// caller keeps its own "ask again" path rather than getting a guess.
+export function parseLocalStart(raw: string, tz: string): number {
+  const text = raw.trim();
+  if (!text) return Number.NaN;
+  const zoneless = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(
+    text,
+  );
+  if (!zoneless) return Date.parse(text);
+  const [, y, m, d, hour, minute] = zoneless;
+  try {
+    return localWallTimeToUtcMs(
+      Number(y),
+      Number(m) - 1,
+      Number(d),
+      Number(hour),
+      Number(minute),
+      tz,
+    );
+  } catch {
+    return Date.parse(`${text}Z`);
+  }
+}
