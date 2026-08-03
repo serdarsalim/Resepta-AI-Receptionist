@@ -871,22 +871,26 @@ const dictionary = {
     en: "Clear formatting",
     de: "Formatierung entfernen",
   },
-  // The preview's contact picker: type a real customer's name and the tokens
-  // fill from their actual record instead of sample values.
-  "settings.previewTryContact": {
-    tr: "Gerçek bir müşteriyle dene…",
-    en: "Try with a real contact…",
-    de: "Mit echtem Kontakt testen…",
+  // The preview's contact picker. Not optional any more: the preview renders
+  // ONE customer's real booking or it renders nothing, so this is the switch
+  // that turns it on.
+  "settings.previewPickContact": {
+    tr: "Müşteri seçin…",
+    en: "Pick a contact…",
+    de: "Kontakt wählen…",
   },
-  "settings.previewSampleName": { tr: "Ayşe", en: "Emma", de: "Anna" },
-  "settings.previewSampleStaff": { tr: "Elif", en: "Sophie", de: "Lena" },
-  // Two bullets, matching how the send path renders [service]: one line per
-  // booked service. A single inline name would preview a shape that never
-  // sends.
-  "settings.previewSampleService": {
-    tr: "• Saç kesimi\n• Fön",
-    en: "• Haircut\n• Beard trim",
-    de: "• Haarschnitt\n• Föhnen",
+  // Why the preview pane is empty. Sample names and invented prices used to
+  // fill it, and an owner reading "€350,00" for a haircut they charge €35 for
+  // cannot tell a template bug from a made-up number.
+  "settings.previewNeedsContact": {
+    tr: "Bu mesajın nasıl gideceğini görmek için bir müşteri seçin — önizleme sadece gerçek randevu bilgileriyle çalışır.",
+    en: "Pick a contact to see this message. The preview only runs on a real booking — no sample names, no invented prices.",
+    de: "Wählen Sie einen Kontakt, um diese Nachricht zu sehen. Die Vorschau läuft nur mit einem echten Termin — keine Beispielnamen, keine erfundenen Preise.",
+  },
+  "settings.previewNoBooking": {
+    tr: "Bu müşterinin randevusu yok, o yüzden gösterecek gerçek tarih ve fiyat da yok. Randevusu olan bir müşteri seçin.",
+    en: "This contact has no bookings, so there's no real date or price to show. Pick a contact who has an appointment.",
+    de: "Dieser Kontakt hat keine Termine, also gibt es kein echtes Datum und keinen echten Preis. Wählen Sie einen Kontakt mit Termin.",
   },
   // Operator-facing: the org predates the rules table and the one-shot
   // migration has not run yet. A salon owner should never see this for more

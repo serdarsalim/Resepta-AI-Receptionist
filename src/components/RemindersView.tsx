@@ -7,6 +7,9 @@ import type { Id } from "../../convex/_generated/dataModel";
 // Pure TS shared with the backend on purpose: the preview must be the SAME
 // renderer the send path uses, or the preview becomes a second opinion.
 import { renderTokens } from "../../convex/lib/renderTokens";
+// Same reason: the preview prints the date in the shape the send path prints
+// it, timezone and all, rather than a second date formatter's opinion.
+import { formatAppointmentTime } from "../../convex/lib/format";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
@@ -520,6 +523,7 @@ function RuleEditor({
   orgName,
   orgLanguage,
   orgCurrency,
+  orgTimezone,
   emailEnabled,
   waConnected,
   onSaveTemplate,
@@ -530,6 +534,7 @@ function RuleEditor({
   orgName: string;
   orgLanguage: string;
   orgCurrency: string;
+  orgTimezone: string;
   emailEnabled: boolean;
   waConnected: boolean;
   onSaveTemplate: (
@@ -558,12 +563,22 @@ function RuleEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  // ── Preview data: a real contact when one is picked, samples otherwise ──
-  // The picker exists because "how will this read for Ayşe" is a question
-  // about Ayşe's actual record, and sample values cannot answer it.
+  // ── Preview data: a real booking, or no preview at all ──────────────────
+  //
+  // This used to fall back to samples — "Emma", a €350 haircut, tomorrow at
+  // 14:00 — and that made the pane a liar in the exact place it is trusted.
+  // An owner checking whether [pricelist] reads right cannot tell a broken
+  // template from an invented number, and a €350.00 sample in a shop that
+  // charges €35 reads as a pricing bug in the product. So: the preview renders
+  // ONE customer's ONE real appointment, or it renders a line telling you to
+  // pick one. Nothing in this pane is ever made up.
   const contacts = useQuery(api.customers.options, {}) ?? [];
   const [contactQuery, setContactQuery] = useState("");
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
+  // Which lane the preview is showing. One message goes out two ways, so this
+  // is a view of the same thing rather than two things — stacking both cards
+  // made the pane look like the rule sends twice.
+  const [lanePref, setLanePref] = useState<"email" | "whatsapp">("email");
   const picked = useQuery(
     api.customers.get,
     contactId ? { customerId: contactId } : "skip",
@@ -579,65 +594,73 @@ function RuleEditor({
           .slice(0, 6)
       : [];
 
-  // Sample values in the ORG's language where the sample is a message fact
-  // (the date a customer would read) and the UI language where it is a prop
-  // (names). Close enough for a preview; the send path formats for real.
+  // The booking the preview speaks about: the soonest one still ahead, and
+  // failing that the most recent past one. Rows arrive newest-first.
+  const appointments = useQuery(
+    api.appointments.listForCustomer,
+    contactId ? { customerId: contactId } : "skip",
+  );
+  const appointment = useMemo(() => {
+    if (!appointments?.length) return null;
+    const now = Date.now();
+    const upcoming = [...appointments].reverse().find((a) => a.startAt >= now);
+    return upcoming ?? appointments[0];
+  }, [appointments]);
+
+  // Null until there is a real customer AND a real booking to render — the
+  // pane reads that as "nothing to show yet" rather than filling the gap.
+  //
+  // Every value below is built the way convex/wa.ts builds it at send time,
+  // including prices being MINOR units (the old sample divided by nothing and
+  // printed €350.00 for a 350-kuruş line).
   const previewValues = useMemo(() => {
-    const at = new Date();
-    at.setDate(at.getDate() + 1);
-    at.setHours(14, 0, 0, 0);
-    const appointmentAt = new Intl.DateTimeFormat(orgLanguage, {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(at);
+    if (!picked || !appointment) return null;
+    const formatMoney = (minor: number) =>
+      new Intl.NumberFormat(orgLanguage, {
+        style: "currency",
+        currency: orgCurrency,
+      }).format(minor / 100);
     // Every org field key present, empty when valueless — mirrors the send
     // path exactly, so a real field renders to nothing rather than staying a
     // literal token in the preview.
     const custom: Record<string, string> = {};
     for (const field of contactFields) {
-      custom[field.key] = (contactId && picked?.custom?.[field.key]) || "";
+      custom[field.key] = picked.custom?.[field.key] ?? "";
     }
-    // Same shapes the send path produces for [price] and [pricelist] —
-    // org currency, message language, believable numbers.
-    const formatMoney = (amount: number) =>
-      new Intl.NumberFormat(orgLanguage, {
-        style: "currency",
-        currency: orgCurrency,
-      }).format(amount);
-    const price = formatMoney(410);
-    const samplePrices = [350, 60];
-    const servicePriceList = t("settings.previewSampleService")
-      .split("\n")
-      .map((line, i) => `${line} — ${formatMoney(samplePrices[i] ?? 100)}`)
-      .join("\n");
-    if (contactId && picked) {
-      return {
-        firstName: picked.firstName,
-        lastName: picked.lastName,
-        phone: picked.phone,
-        email: picked.email,
-        businessName: orgName || "—",
-        appointmentAt,
-        staffName: t("settings.previewSampleStaff"),
-        serviceName: t("settings.previewSampleService"),
-        servicePriceList,
-        price,
-        custom,
-      };
-    }
+    const items = appointment.items ?? [];
+    const totalMinor = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
     return {
-      firstName: t("settings.previewSampleName"),
-      businessName: orgName || "—",
-      appointmentAt,
-      staffName: t("settings.previewSampleStaff"),
-      serviceName: t("settings.previewSampleService"),
-      servicePriceList,
-      price,
+      firstName: picked.firstName,
+      lastName: picked.lastName,
+      phone: picked.phone,
+      email: picked.email,
+      businessName: orgName,
+      appointmentAt: formatAppointmentTime(
+        appointment.startAt,
+        orgTimezone,
+        orgLanguage,
+      ),
+      staffName: appointment.staffName,
+      serviceName: items.map((item) => `• ${item.name}`).join("\n") || undefined,
+      servicePriceList:
+        items
+          .map(
+            (item) =>
+              `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
+          )
+          .join("\n") || undefined,
+      price: totalMinor > 0 ? formatMoney(totalMinor) : undefined,
       custom,
     };
-  }, [t, orgName, orgLanguage, orgCurrency, contactFields, contactId, picked]);
+  }, [
+    orgName,
+    orgLanguage,
+    orgCurrency,
+    orgTimezone,
+    contactFields,
+    picked,
+    appointment,
+  ]);
 
   if (!template) {
     return <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>;
@@ -661,15 +684,25 @@ function RuleEditor({
     });
   };
 
-  const showEmailPreview = rule.channel !== "whatsapp" && emailEnabled;
-  const showWaPreview = rule.channel !== "email";
+  // The lanes this rule could ACTUALLY travel — the rule's own channel
+  // narrowed by what the org has wired. WhatsApp used to preview whether or
+  // not a number existed, so a salon with email only was shown a green bubble
+  // for a message WhatsApp will never carry.
+  const lanes: ("email" | "whatsapp")[] = [];
+  if (rule.channel !== "whatsapp" && emailEnabled) lanes.push("email");
+  if (rule.channel !== "email" && waConnected) lanes.push("whatsapp");
+  // Nothing wired yet: still show the words, in whichever shape the editor is
+  // writing. The owner is authoring for a channel the operator will connect.
+  const lane = lanes.includes(lanePref)
+    ? lanePref
+    : (lanes[0] ?? (emailEnabled ? "email" : "whatsapp"));
   // What each lane would actually send: WhatsApp the derived plain text,
   // email the authored HTML — both through the same token renderer.
   const previewPlain = emailEnabled ? htmlToText(liveHtml) : body;
-  const rendered = renderTokens(previewPlain, previewValues);
+  const rendered = previewValues ? renderTokens(previewPlain, previewValues) : "";
   // Same swap the send path makes: inside HTML a bare \n is a space, so the
   // service list rides <br/>.
-  const renderedEmailHtml = showEmailPreview
+  const renderedEmailHtml = previewValues
     ? sanitizeEmailHtml(
         renderTokens(liveHtml, {
           ...previewValues,
@@ -774,14 +807,39 @@ function RuleEditor({
           beside a floating card. */}
       <div className="flex flex-col gap-2">
         <div className="flex h-10 items-center justify-between gap-2">
-          <span className="text-xs text-[var(--muted)]">{t("settings.rulePreview")}</span>
-          {/* Typeahead over real contacts. Picking one swaps every token to
-              that person's record; the × goes back to samples. */}
+          {/* Two lanes, one message: a toggle, not two cards. Only rendered
+              when the rule really can travel both ways — otherwise the label
+              alone says which lane you are looking at. */}
+          {lanes.length > 1 ? (
+            <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
+              {lanes.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setLanePref(option)}
+                  className={`rounded-full px-2.5 py-1 transition-colors ${
+                    lane === option
+                      ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp")}
+                </button>
+              ))}
+            </span>
+          ) : (
+            <span className="text-xs text-[var(--muted)]">
+              {t("settings.rulePreview")}
+            </span>
+          )}
+          {/* Typeahead over real contacts — the preview's only data source.
+              Picking one fills every token from their record and their next
+              booking; the × empties the pane again. */}
           <span className="relative min-w-0 flex-1 max-w-56">
             <input
               className="w-full text-xs"
               value={contactId ? pickedLabel : contactQuery}
-              placeholder={t("settings.previewTryContact")}
+              placeholder={t("settings.previewPickContact")}
               onChange={(e) => {
                 setContactId(null);
                 setContactQuery(e.target.value);
@@ -829,10 +887,21 @@ function RuleEditor({
             exactly where the editor box's does, which is what makes the two
             columns read as one aligned pair. */}
         <div className="flex flex-1 flex-col gap-3">
-          {/* The email as the customer's mail client shows it: white paper no
-              matter the app theme, subject on top, the authored HTML below.
-              flex-1 so the paper runs the full height beside the editor. */}
-          {showEmailPreview && (
+          {/* No contact, or a contact with nothing booked: say which, and say
+              nothing else. An empty pane with a reason beats a filled pane
+              with invented facts. */}
+          {!previewValues ? (
+            <p className="flex flex-1 items-center rounded-lg border border-dashed border-[var(--border)] px-3 py-4 text-xs leading-relaxed text-[var(--muted)]">
+              {!contactId
+                ? t("settings.previewNeedsContact")
+                : picked && !appointment
+                  ? t("settings.previewNoBooking")
+                  : t("common.loading")}
+            </p>
+          ) : lane === "email" ? (
+            /* The email as the customer's mail client shows it: white paper no
+               matter the app theme, subject on top, the authored HTML below.
+               flex-1 so the paper runs the full height beside the editor. */
             <div className="email-paper flex flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]">
               <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
                 {(renderTokens(subject, previewValues) ||
@@ -847,8 +916,7 @@ function RuleEditor({
                 }}
               />
             </div>
-          )}
-          {showWaPreview && (
+          ) : (
             <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
               {rendered || (
                 <span className="text-[var(--muted)]">
@@ -877,6 +945,7 @@ function RulesCard({
     name: string;
     language: string;
     currency: string;
+    timezone: string;
     quietHoursStart: number;
     quietHoursEnd: number;
     messageChannel: "whatsapp" | "email" | "both";
@@ -1163,6 +1232,7 @@ function RulesCard({
                     orgName={org.name}
                     orgLanguage={org.language}
                     orgCurrency={org.currency}
+                    orgTimezone={org.timezone}
                     emailEnabled={emailEnabled}
                     waConnected={waConnected}
                     onSaveTemplate={(templateId, patch) =>
