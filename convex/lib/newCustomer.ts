@@ -37,7 +37,8 @@ export type CustomerSource =
   | "form"
   | "whatsapp"
   | "email"
-  | "calcom";
+  | "calcom"
+  | "booking";
 
 // Localised here rather than passed in as text: the alert renders in the
 // recipients' language, so a call site handing over an English phrase would
@@ -70,6 +71,11 @@ const SOURCE_LABEL: Record<
     tr: "cal.com üzerinden randevu alarak",
     en: "by booking through cal.com",
     de: "über eine Buchung bei cal.com",
+  },
+  booking: {
+    tr: "online randevu sayfanızdan randevu alarak",
+    en: "by booking on your online booking page",
+    de: "über eine Buchung auf Ihrer Online-Buchungsseite",
   },
 };
 

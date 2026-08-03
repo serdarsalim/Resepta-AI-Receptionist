@@ -1464,19 +1464,63 @@ function MessageVariablesCard({ isOwner }: { isOwner: boolean }) {
   const settings = useQuery(api.orgs.current, {});
   const voiceNumbers = useQuery(api.orgs.voiceNumbers, {}) ?? [];
   const update = useMutation(api.orgs.update);
+  const enableBooking = useMutation(api.booking.enable);
   if (!settings) return null;
-  const { bookingUrl, publicPhone } = settings.org;
+  const { bookingUrl, publicPhone, bookingEnabled, publicSlug } = settings.org;
   const phone = publicPhone ?? "";
   const isAgentNumber = voiceNumbers.some((line) => line.number === phone);
+  const nativeBookingUrl = publicSlug
+    ? `${window.location.origin}/book/${publicSlug}`
+    : null;
 
   return (
     <Card title={t("settings.msgVariables")} tip={t("settings.msgVariablesHint")} disabled={!isOwner}>
       <div className={ROW_GRID}>
+        {/* The native booking page. Switching it on mints the page AND points
+            [booking_link] at it — the auto-fill the whole variable exists
+            for. Switching it off clears the link only if it was ours: a
+            pasted external URL is not ours to delete. */}
+        <RowLabel
+          label={t("settings.bookingPage")}
+          hint={t("settings.bookingPageHint")}
+        />
+        <div className="space-y-1">
+          <Toggle
+            checked={bookingEnabled ?? false}
+            onChange={(next) =>
+              void (async () => {
+                const slug = await enableBooking({ enabled: next });
+                if (next && slug) {
+                  await update({
+                    bookingUrl: `${window.location.origin}/book/${slug}`,
+                  });
+                } else if (!next && nativeBookingUrl && bookingUrl === nativeBookingUrl) {
+                  await update({ bookingUrl: "" });
+                }
+              })()
+            }
+          />
+          {(bookingEnabled ?? false) && nativeBookingUrl && (
+            <p className="break-all text-xs text-[var(--muted)]">
+              <a
+                href={nativeBookingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-[var(--foreground)]"
+              >
+                {nativeBookingUrl}
+              </a>
+            </p>
+          )}
+        </div>
+
         <RowLabel
           label={t("vars.bookingLink")}
           hint={t("settings.bookingUrlHint")}
         />
         <input
+          // Keyed so the auto-fill above refreshes the uncontrolled input.
+          key={bookingUrl ?? ""}
           defaultValue={bookingUrl ?? ""}
           placeholder="https://…"
           onBlur={(e) => void update({ bookingUrl: e.target.value })}

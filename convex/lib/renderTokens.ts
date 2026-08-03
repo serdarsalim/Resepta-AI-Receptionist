@@ -48,6 +48,10 @@ export type TokenValues = {
   // 2h reminder, the closed-hours reply and the winback can all say "book
   // here" without the owner pasting a URL into each one.
   bookingLink?: string;
+  // THIS appointment's self-serve page (/appt/<manageToken>) — reschedule and
+  // cancel without texting anyone. Only appointment-lifecycle sends can fill
+  // it; everywhere else the token resolves to nothing, cleanly.
+  manageLink?: string;
   // The appointment's line items, one bullet line each ("• Saç kesimi").
   serviceName?: string;
   // The same lines with each service's price appended
@@ -102,6 +106,8 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   // the underscore is the exact kind of detail an owner retypes wrong.
   booking_link: "bookingLink",
   bookinglink: "bookingLink",
+  manage_link: "manageLink",
+  managelink: "manageLink",
   // Service — the same word the voice agent's variables use, because a token
   // vocabulary that differs per screen is two vocabularies.
   service: "serviceName",

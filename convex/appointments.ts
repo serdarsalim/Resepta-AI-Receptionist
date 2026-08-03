@@ -257,6 +257,16 @@ export async function scheduleLifecycleMessages(
 ) {
   const org = await ctx.db.get(orgId);
   if (!org) return;
+  // Every booking the customer hears about carries a manage token, whichever
+  // door it came in through — [manage_link] in a confirmation has to resolve
+  // for a voice booking and a hand-typed one, not only for the booking page
+  // (which mints its own at insert).
+  if (trigger === "booking") {
+    const appointment = await ctx.db.get(appointmentId);
+    if (appointment && appointment.manageToken === undefined) {
+      await ctx.db.patch(appointmentId, { manageToken: crypto.randomUUID() });
+    }
+  }
   if (org.rulesMigratedAt !== undefined) {
     // Every matching live rule fires — two booking messages is a choice the
     // owner made by having two rows, not a bug to dedupe away.

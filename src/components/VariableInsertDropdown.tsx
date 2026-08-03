@@ -40,6 +40,9 @@ export function VariableInsertDropdown({
     // orgs.publicPhone) — "book here" and "call us" in any template.
     { key: "booking_link", label: t("vars.bookingLink") },
     { key: "phone", label: t("vars.phone") },
+    // This appointment's own reschedule/cancel page. Resolves only in
+    // appointment-lifecycle messages; empty elsewhere.
+    { key: "manage_link", label: t("vars.manageLink") },
   ];
   const all = [
     ...fields.map((field) => ({ key: field.key, label: field.label })),

@@ -150,8 +150,10 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   Record<TemplateKind, { body: string; subject: string }>
 > = {
   tr: {
+    // [manage_link] on its own line, like the out_of_hours tokens: an org
+    // whose deployment mints no link sends a clean message without it.
     confirmation: {
-      body: "Merhaba [name]! [business] randevunuz [date] için oluşturuldu.\n\n[service]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [name]! [business] randevunuz [date] için oluşturuldu.\n\n[service]\n\nDeğiştirmek veya iptal etmek için:\n[manage_link]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
       subject: "Randevunuz oluşturuldu",
     },
     reminder: {
@@ -180,7 +182,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   en: {
     confirmation: {
-      body: "Hello [name]! Your appointment at [business] is booked for [date].\n\n[service]\n\nAny questions? Just reply to this message.",
+      body: "Hello [name]! Your appointment at [business] is booked for [date].\n\n[service]\n\nNeed to change or cancel it?\n[manage_link]\n\nAny questions? Just reply to this message.",
       subject: "Your appointment is booked",
     },
     reminder: {
@@ -206,7 +208,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
   de: {
     confirmation: {
-      body: "Hallo [name]! Ihr Termin bei [business] ist für [date] gebucht.\n\n[service]\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
+      body: "Hallo [name]! Ihr Termin bei [business] ist für [date] gebucht.\n\n[service]\n\nZum Verschieben oder Stornieren:\n[manage_link]\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
       subject: "Ihr Termin ist gebucht",
     },
     reminder: {

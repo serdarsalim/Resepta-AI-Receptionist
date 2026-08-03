@@ -51,6 +51,7 @@ export const current = query({
       inboundAddress: v.optional(v.string()),
       publicSlug: v.optional(v.string()),
       formEnabled: v.optional(v.boolean()),
+      bookingEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
       // Drives the banner that tells a visitor this salon is not real.
       demoMode: v.optional(v.boolean()),
@@ -172,6 +173,7 @@ export const current = query({
         inboundAddress: org.inboundAddress,
         publicSlug: org.publicSlug,
         formEnabled: org.formEnabled,
+        bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
         demoMode: org.demoMode,
         inboundDomain: mailConfig.domain ?? undefined,

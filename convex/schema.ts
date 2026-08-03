@@ -122,6 +122,11 @@ export default defineSchema({
     // Off until switched on. A form URL that answers before anyone has looked
     // at what it asks is worse than a 404.
     formEnabled: v.optional(v.boolean()),
+    // The native booking page (/book/<slug>) — services, live slots, a real
+    // appointment at the end. Shares publicSlug with the request form; its own
+    // switch because publishing "ask us" and publishing "book yourself" are
+    // different amounts of trust in the calendar.
+    bookingEnabled: v.optional(v.boolean()),
     // Whether the takings tab exists at all. Off by default: an org that
     // never fills in prices would otherwise get a nav item leading to three
     // zeroes, which reads as the app being broken rather than unused.
@@ -781,6 +786,13 @@ export default defineSchema({
       ),
     ),
     externalUid: v.optional(v.string()),
+    // The self-serve capability: whoever holds this token may view, reschedule
+    // and cancel THIS appointment from the public manage page (/appt/<token>).
+    // A random UUID, minted when the appointment first earns a confirmation
+    // (appointments.scheduleLifecycleMessages) or on booking-page creation —
+    // so [manage_link] resolves for every booking the customer actually hears
+    // about, whichever door it came in through.
+    manageToken: v.optional(v.string()),
   })
     .index("by_org_start", ["orgId", "startAt"])
     .index("by_start", ["startAt"])
@@ -797,7 +809,9 @@ export default defineSchema({
     .index("by_status_start", ["status", "startAt"])
     // Due sends, cheapest read in the app: the cron asks for rows whose next
     // message has come due and gets back exactly those.
-    .index("by_next_message", ["nextMessageAt"]),
+    .index("by_next_message", ["nextMessageAt"])
+    // The public manage page's only key. The token is the capability.
+    .index("by_manage_token", ["manageToken"]),
 
   // One WhatsApp Cloud API number per org (Meta Business number, not personal).
   waAccounts: defineTable({

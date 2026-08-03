@@ -562,6 +562,87 @@ const dictionary = {
     en: "Thanks — we've got your request and will be in touch to confirm a time.",
     de: "Danke, Ihre Anfrage ist angekommen. Wir melden uns zur Terminbestätigung.",
   },
+  // The public booking page (/book/<slug>) and the manage page (/appt/<token>).
+  "booking.pickService": {
+    tr: "Hizmet seçin",
+    en: "Choose a service",
+    de: "Leistung wählen",
+  },
+  "booking.pickTime": {
+    tr: "Gün ve saat seçin",
+    en: "Pick a day and time",
+    de: "Tag und Uhrzeit wählen",
+  },
+  "booking.noSlots": {
+    tr: "Bu gün için uygun saat yok. Başka bir gün deneyin.",
+    en: "No free times on this day. Try another one.",
+    de: "An diesem Tag ist nichts frei. Versuchen Sie einen anderen.",
+  },
+  "booking.book": {
+    tr: "Randevuyu al",
+    en: "Book it",
+    de: "Termin buchen",
+  },
+  "booking.booked": {
+    tr: "Randevunuz alındı!",
+    en: "You're booked!",
+    de: "Ihr Termin ist gebucht!",
+  },
+  "booking.confirmationHint": {
+    tr: "Onay mesajınız WhatsApp veya e-posta ile geliyor.",
+    en: "Your confirmation is on its way by WhatsApp or email.",
+    de: "Ihre Bestätigung kommt per WhatsApp oder E-Mail.",
+  },
+  "booking.manageThis": {
+    tr: "Randevuyu görüntüle, değiştir veya iptal et",
+    en: "View, change or cancel this appointment",
+    de: "Termin ansehen, verschieben oder stornieren",
+  },
+  "booking.slotTaken": {
+    tr: "Bu saat az önce doldu. Lütfen başka bir saat seçin.",
+    en: "That time just filled up. Please pick another.",
+    de: "Diese Zeit wurde gerade vergeben. Bitte wählen Sie eine andere.",
+  },
+  "booking.tooMany": {
+    tr: "Bu numarada zaten birçok açık randevu var. Lütfen bizi arayın.",
+    en: "This number already holds several open bookings. Please call us.",
+    de: "Unter dieser Nummer laufen bereits mehrere Termine. Bitte rufen Sie uns an.",
+  },
+  "booking.callInstead": {
+    tr: "Online randevu şu anda kapalı. Lütfen bizi arayın veya mesaj atın.",
+    en: "Online booking isn't available right now. Please call or message us.",
+    de: "Die Online-Buchung ist derzeit nicht verfügbar. Bitte rufen Sie uns an oder schreiben Sie uns.",
+  },
+  "booking.reschedule": {
+    tr: "Saati değiştir",
+    en: "Reschedule",
+    de: "Verschieben",
+  },
+  "booking.cancel": {
+    tr: "Randevuyu iptal et",
+    en: "Cancel appointment",
+    de: "Termin stornieren",
+  },
+  "booking.cancelConfirm": {
+    tr: "Evet, iptal et",
+    en: "Yes, cancel it",
+    de: "Ja, stornieren",
+  },
+  "booking.cancelled": {
+    tr: "Bu randevu iptal edildi.",
+    en: "This appointment is cancelled.",
+    de: "Dieser Termin ist storniert.",
+  },
+  "booking.moved": {
+    tr: "Randevunuz yeni saate taşındı. Onay mesajınız yolda.",
+    en: "Your appointment has been moved. A new confirmation is on its way.",
+    de: "Ihr Termin wurde verschoben. Eine neue Bestätigung ist unterwegs.",
+  },
+  "booking.callToChange": {
+    tr: "Bu randevuyu değiştirmek için lütfen bizi arayın:",
+    en: "To change this appointment, please call us:",
+    de: "Um diesen Termin zu ändern, rufen Sie uns bitte an:",
+  },
   "forms.notFound": {
     tr: "Bu form bulunamadı.",
     en: "This form isn't available.",
@@ -868,6 +949,11 @@ const dictionary = {
     tr: "İşletme telefonu",
     en: "Business phone",
     de: "Telefonnummer des Betriebs",
+  },
+  "vars.manageLink": {
+    tr: "Randevu yönetim linki",
+    en: "Manage-appointment link",
+    de: "Termin-Verwaltungslink",
   },
   "editor.insertVariable": {
     tr: "Değişken ekle",
@@ -2153,6 +2239,16 @@ const dictionary = {
     tr: "Her şablonda kullanılabilir: [booking_link] randevu linkinizi, [phone] müşteriye verdiğiniz numarayı yazar. Değerler burada tek yerden yönetilir.",
     en: "Usable in every template: [booking_link] inserts your booking link, [phone] the number you give customers. The values are managed here, once.",
     de: "In jeder Vorlage nutzbar: [booking_link] fügt Ihren Buchungslink ein, [phone] die Nummer für Ihre Kundschaft. Die Werte werden hier zentral gepflegt.",
+  },
+  "settings.bookingPage": {
+    tr: "Online randevu sayfası",
+    en: "Online booking page",
+    de: "Online-Buchungsseite",
+  },
+  "settings.bookingPageHint": {
+    tr: "Randevu'nun kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
+    en: "Randevu's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
+    de: "Die eigene Buchungsseite von Randevu: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
   },
   "settings.bookingUrlHint": {
     tr: "Müşterilerin randevu aldığı sayfa. Mesajlardaki her [booking_link] bu adresi yazar.",

@@ -567,6 +567,13 @@ export const sendAppointmentMessage = internalAction({
       phone: org.publicPhone,
       email: customer.email,
       bookingLink: org.bookingUrl,
+      // The appointment's own reschedule/cancel page. SITE_URL is deployment
+      // config; without it the token renders as nothing rather than a
+      // localhost link in a customer's inbox.
+      manageLink:
+        appointment.manageToken && process.env.SITE_URL
+          ? `${process.env.SITE_URL}/appt/${appointment.manageToken}`
+          : undefined,
       // One bullet line per booked service — [service] renders as a LIST, so
       // the stock texts put it on its own paragraph rather than mid-sentence.
       serviceName: appointment.items
