@@ -34,6 +34,12 @@
      spreadsheet. These are the faintest lines that still divide. */
   --grid-line: color-mix(in srgb, var(--border) 75%, transparent);
   --grid-line-soft: color-mix(in srgb, var(--border) 38%, transparent);
+  /* Calendar dead space: closed hours, out-of-month cells. Mixed from the
+     foreground rather than painted with --muted-bg, because in dark mode
+     --muted-bg equals --card and anything wearing it disappears — the shading
+     literally did not exist there. var(--foreground) re-resolves under .dark,
+     so one definition serves both modes. */
+  --closed-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }

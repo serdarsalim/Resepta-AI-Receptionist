@@ -21,6 +21,10 @@ import {
   minuteAt,
   type DragGeometry,
 } from "@/lib/calendarDrag";
+import {
+  getLocalPartsSafe,
+  localWallTimeToUtcMs,
+} from "../../convex/lib/businessHours";
 import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { useBookingSheet } from "./useBookingSheet";
@@ -97,8 +101,12 @@ function periodHasToday(view: ViewMode, anchor: number): boolean {
 
 export function AppointmentsView({
   onOpenContact,
+  onEditHours,
 }: {
   onOpenContact: (id: Id<"customers">) => void;
+  // Deep link into Business → Hours — the closed shading's "where do I change
+  // this". Owned by the parent because the tab state lives there.
+  onEditHours: () => void;
 }) {
   const { t, language } = useLanguage();
   const [view, setView] = useState<ViewMode>("week");
@@ -331,6 +339,17 @@ export function AppointmentsView({
             coming and going moves nothing — the arrows are at the other end of
             the row, and New appointment is pinned to the edge. */}
         <div className="ml-auto flex items-center gap-2">
+          {/* Beside the grid that shows the shading it explains. Only on the
+              views that shade — and it doubles as "set hours" for an org that
+              hasn't, which is when it's needed most. */}
+          {(view === "day" || view === "week" || view === "month") && (
+            <button
+              className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              onClick={onEditHours}
+            >
+              {t("appointments.editHours")}
+            </button>
+          )}
           {view !== "list" && !periodHasToday(view, anchor) && (
             <button
               className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -361,6 +380,7 @@ export function AppointmentsView({
         <MonthGrid
           anchor={anchor}
           rows={withOptimistic}
+          businessHours={settings?.org.businessHours}
           onOpenDay={(dayMs) => {
             setAnchor(dayMs);
             setView("day");
@@ -421,6 +441,7 @@ export function AppointmentsView({
           view={view}
           anchor={anchor}
           businessHours={settings?.org.businessHours}
+          timezone={settings?.org.timezone}
           provisional={provisional}
           onOpenBlock={(row, anchor) => {
             booking.open({
@@ -964,6 +985,7 @@ function Calendar({
   onDraft,
   onMove,
   businessHours,
+  timezone,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
@@ -989,6 +1011,8 @@ function Calendar({
     startMinute?: number;
     endMinute?: number;
   };
+  // The BUSINESS's IANA zone — what the closed shading is computed in.
+  timezone?: string;
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -1211,22 +1235,69 @@ function Calendar({
   // Closed days and off-hours read as dead space rather than bookable grid.
   // Unset business hours mean nobody has said when this business is open, so
   // nothing is shaded — a guessed default would grey out a barber's Saturday.
+  //
+  // Computed in the BUSINESS's timezone, then projected onto this viewer-local
+  // day column. The old version compared the org's minutes against the
+  // viewer's wall clock, so an owner checking from Austria saw an Istanbul
+  // salon's whole day shifted by an hour — open hours shaded, closed ones not.
+  // The column can straddle two business-local dates (that shifted hour), so
+  // both civil dates contribute their open window and the bands are the
+  // complement of whatever overlaps.
   const closedBands = (day: number): { top: number; height: number }[] => {
     if (!businessHours) return [];
     const { activeDays, startMinute, endMinute } = businessHours;
-    const weekday = new Date(day).getDay();
-    const gridTop = dayStart * 60;
-    const gridBottom = dayEnd * 60;
-    const band = (fromMinute: number, toMinute: number) => ({
-      top: ((fromMinute - gridTop) / 60) * HOUR_PX,
-      height: ((toMinute - fromMinute) / 60) * HOUR_PX,
-    });
-    if (activeDays && activeDays.length > 0 && !activeDays.includes(weekday)) {
-      return [band(gridTop, gridBottom)];
+    const dayEndMs = day + DAY_MS;
+    const open: { from: number; to: number }[] = [];
+    const seen = new Set<string>();
+    for (const instant of [day, dayEndMs - 1]) {
+      const p = getLocalPartsSafe(instant, timezone);
+      const key = `${p.y}-${p.m0}-${p.d}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (activeDays && activeDays.length > 0 && !activeDays.includes(p.weekday)) {
+        continue;
+      }
+      const from = startMinute ?? 0;
+      const to = endMinute ?? 24 * 60;
+      try {
+        open.push({
+          from: localWallTimeToUtcMs(
+            p.y,
+            p.m0,
+            p.d,
+            Math.floor(from / 60),
+            from % 60,
+            timezone ?? "UTC",
+          ),
+          to: localWallTimeToUtcMs(
+            p.y,
+            p.m0,
+            p.d,
+            Math.floor(to / 60),
+            to % 60,
+            timezone ?? "UTC",
+          ),
+        });
+      } catch {
+        // A malformed org timezone must not paint a confidently wrong grid.
+        return [];
+      }
     }
+    const px = (ms: number) => ((ms - day) / 3_600_000) * HOUR_PX;
     const bands: { top: number; height: number }[] = [];
-    if (startMinute != null && startMinute > gridTop) bands.push(band(gridTop, startMinute));
-    if (endMinute != null && endMinute < gridBottom) bands.push(band(endMinute, gridBottom));
+    let cursor = day;
+    for (const range of [...open].sort((a, b) => a.from - b.from)) {
+      const from = Math.max(range.from, day);
+      const to = Math.min(range.to, dayEndMs);
+      if (to <= cursor) continue;
+      if (from > cursor) {
+        bands.push({ top: px(cursor), height: px(from) - px(cursor) });
+      }
+      cursor = Math.max(cursor, to);
+    }
+    if (cursor < dayEndMs) {
+      bands.push({ top: px(cursor), height: px(dayEndMs) - px(cursor) });
+    }
     return bands;
   };
 
@@ -1381,7 +1452,7 @@ function Calendar({
                   <div
                     key={index}
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 bg-[var(--muted-bg)] opacity-60"
+                    className="pointer-events-none absolute inset-x-0 bg-[var(--closed-bg)]"
                     style={{ top: band.top, height: band.height }}
                   />
                 ))}

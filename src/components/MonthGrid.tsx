@@ -65,6 +65,7 @@ export function MonthGrid({
   onOpenDay,
   onOpenBlock,
   onDraftDay,
+  businessHours,
 }: {
   anchor: number;
   rows: MonthRow[];
@@ -73,6 +74,10 @@ export function MonthGrid({
   // Empty space in a cell books that day. No time was chosen, so the caller
   // picks a sensible one, the same way the toolbar button does.
   onDraftDay: (dayMs: number) => void;
+  // Closed weekdays read as dead cells. Day-level only — a month answers
+  // "which day", so open/close TIMES don't shade here. No timezone math
+  // either: a cell is a civil date, and Monday is Monday in every zone.
+  businessHours?: { activeDays?: number[] };
 }) {
   const { t, language } = useLanguage();
 
@@ -119,6 +124,11 @@ export function MonthGrid({
         {days.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
           const isToday = day === today;
+          const activeDays = businessHours?.activeDays;
+          const closed =
+            activeDays !== undefined &&
+            activeDays.length > 0 &&
+            !activeDays.includes(new Date(day).getDay());
           const bookings = byDay.get(day) ?? [];
           const shown = bookings.slice(0, MAX_PER_DAY);
           const hidden = bookings.length - shown.length;
@@ -130,7 +140,7 @@ export function MonthGrid({
               // small "+" somebody has to find.
               onClick={() => onDraftDay(day)}
               className={`relative min-w-0 overflow-hidden border-b border-r border-[var(--grid-line)] p-1 text-left transition-colors hover:bg-[var(--row-hover-bg)] ${
-                inMonth ? "" : "bg-[var(--muted-bg)]/40"
+                inMonth && !closed ? "" : "bg-[var(--closed-bg)]"
               }`}
             >
               {/* The date opens the day. Its own button, because the cell
