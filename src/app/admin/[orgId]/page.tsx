@@ -222,7 +222,7 @@ export default function TenantPage() {
           <SecretRow
             key={`${row.provider}.${row.field}`}
             label={`${row.providerLabel} ${row.fieldLabel}`}
-            hint={row.label ?? undefined}
+            hint={[row.fieldHint, row.label].filter(Boolean).join(" ") || undefined}
             masked={row.masked}
             onSave={(value) =>
               setField({ orgId, provider: row.provider, field: row.field, value })

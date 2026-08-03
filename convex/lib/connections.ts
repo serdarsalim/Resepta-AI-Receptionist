@@ -33,12 +33,26 @@ type Ctx = QueryCtx | MutationCtx;
 export const CONNECTION_SPECS: {
   provider: string;
   label: string;
-  fields: { field: string; label: string; secret: boolean }[];
+  fields: { field: string; label: string; secret: boolean; hint?: string }[];
 }[] = [
   {
     provider: "retell",
     label: "Retell",
-    fields: [{ field: "apiKey", label: "API key", secret: true }],
+    // Named for what Retell calls it on their own API Keys page, because the
+    // operator is choosing between four keys that all look alike and only one
+    // works. Every key in a workspace authenticates API calls, so a wrong
+    // paste provisions agents perfectly and then fails signature checks — the
+    // call breaks mid-booking and nothing here looks misconfigured. One
+    // workspace has one signing key, so orgs sharing a workspace share this
+    // value; an org on its own Retell account gets that account's key.
+    fields: [
+      {
+        field: "apiKey",
+        label: "Secret Key",
+        secret: true,
+        hint: "The key badged Webhook in Retell → Settings → API Keys. The workspace's other keys authenticate API calls but fail webhook signature checks.",
+      },
+    ],
   },
   {
     // Self-hosted Evolution API, a Dockerized Baileys REST wrapper. Randevu
