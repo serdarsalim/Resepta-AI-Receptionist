@@ -408,7 +408,10 @@ http.route({
           orgId: org._id,
           startMs: Date.parse(startIso),
           endMs: Date.parse(endIso),
-        })) as { startAt: number; durationMinutes: number | null }[];
+        })) as {
+          capacity: number;
+          full: { startAt: number; durationMinutes: number | null }[];
+        };
         const hours = org.businessHours ?? null;
         const asClock = (minute: number) =>
           `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
@@ -416,7 +419,10 @@ http.route({
           date: dayIso,
           // Speakable ranges, not raw timestamps: this body goes to the LLM
           // verbatim and gets read down a phone line.
-          booked_slots: booked.map((slot) => ({
+          // FULL times, not merely booked ones — a shop with four people
+          // working can take four at once, so a single 14:00 booking is not a
+          // reason to turn anybody away. bookedBetween does that arithmetic.
+          booked_slots: booked.full.map((slot) => ({
             start: formatAppointmentTime(slot.startAt, org.timezone, org.language),
             duration_minutes: slot.durationMinutes ?? 30,
           })),
@@ -424,7 +430,8 @@ http.route({
             ? { open_hours: `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}` }
             : {}),
           note:
-            "These times are already booked. Offer times that avoid them" +
+            "These times are FULL — every person is already busy. Everything" +
+            " else is free. Offer times that avoid them" +
             (hours ? " and stay inside open_hours." : "."),
         });
       }

@@ -1023,6 +1023,25 @@ export const runtimeCallContext = internalQuery({
           (variable) =>
             variable.destination === "contact" || variable.destination === "customer",
         )
+        // A LOCKED field never reaches the agent — not its definition and not
+        // this caller's value. The lock (contactFields.source) started life as
+        // a write permission, and a read the agent could still perform meant
+        // "the agent may not change your address" quietly also meant "but it
+        // will happily read it back to whoever is on the phone".
+        //
+        // Withheld rather than marked. An instruction not to say something the
+        // model is holding is a request, and the model is talking to a caller
+        // who can ask the same question four different ways. Data that never
+        // arrives cannot be talked out of it.
+        //
+        // Built-ins (first name, last name, email) carry no contact field and
+        // are not lockable: they are how the agent addresses the person and
+        // where the confirmation goes.
+        .filter((variable) => {
+          if (!variable.contactFieldId) return true;
+          const field = fieldsById.get(String(variable.contactFieldId));
+          return !field || field.source === "voice";
+        })
         .map((variable) => {
           const field = variable.contactFieldId
             ? fieldsById.get(String(variable.contactFieldId))
@@ -1251,13 +1270,35 @@ export const voiceBook = internalMutation({
             .lt("startAt", endAt),
         )
         .collect();
-      const clash = nearby.find(
+      const overlapping = nearby.filter(
         (row) =>
           (row.status === "scheduled" || row.status === "confirmed") &&
           row.startAt < endAt &&
           args.startAt < row.startAt + (row.durationMinutes ?? 30) * 60_000,
+      ).length;
+      // How many people can be working at once. One booking at 14:00 used to
+      // close 14:00 for the whole shop, which in a salon with four chairs
+      // refuses three slots that are genuinely free — and refuses them more
+      // often the bigger the salon gets.
+      //
+      // Counted here rather than assigned: the booking still lands on the shop
+      // and not on a named person, so what this guards is CAPACITY, not
+      // Elif's afternoon. Which chair the caller gets is the salon's to decide
+      // when they look at the day. A staff argument on book_appointment is the
+      // version where the caller chooses, and that is a bigger conversation.
+      //
+      // An org with nobody on the roster still books one at a time: a shop
+      // that has not filled in its team is not a shop with no chairs.
+      const capacity = Math.max(
+        1,
+        (
+          await ctx.db
+            .query("staff")
+            .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+            .collect()
+        ).filter((row) => row.active).length,
       );
-      if (clash) {
+      if (overlapping >= capacity) {
         // The message is the tool result the agent reads back, so it names
         // the conflict in a way the agent can act on: offer another time.
         throw new Error("slot-taken");
@@ -1288,17 +1329,50 @@ export const voiceBook = internalMutation({
 // cancelled and no_show do not.
 export const bookedBetween = internalQuery({
   args: { orgId: v.id("orgs"), startMs: v.number(), endMs: v.number() },
-  returns: v.array(v.object({ startAt: v.number(), durationMinutes: v.union(v.number(), v.null()) })),
+  returns: v.object({
+    capacity: v.number(),
+    full: v.array(
+      v.object({ startAt: v.number(), durationMinutes: v.union(v.number(), v.null()) }),
+    ),
+  }),
   handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("appointments")
-      .withIndex("by_org_start", (q) =>
-        q.eq("orgId", args.orgId).gte("startAt", args.startMs).lt("startAt", args.endMs),
-      )
-      .collect();
-    return rows
-      .filter((row) => row.status === "scheduled" || row.status === "confirmed")
-      .map((row) => ({ startAt: row.startAt, durationMinutes: row.durationMinutes ?? null }));
+    const rows = (
+      await ctx.db
+        .query("appointments")
+        .withIndex("by_org_start", (q) =>
+          q.eq("orgId", args.orgId).gte("startAt", args.startMs).lt("startAt", args.endMs),
+        )
+        .collect()
+    ).filter((row) => row.status === "scheduled" || row.status === "confirmed");
+    // Every booked time used to come back as unavailable, which is only true
+    // of a one-chair shop. What the agent needs is the times that are FULL —
+    // where as many appointments already overlap as there are people to work
+    // them. A salon with four chairs and one 14:00 booking has three left, and
+    // saying otherwise turns down business.
+    const capacity = Math.max(
+      1,
+      (
+        await ctx.db
+          .query("staff")
+          .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+          .collect()
+      ).filter((row) => row.active).length,
+    );
+    const endOf = (row: { startAt: number; durationMinutes?: number }) =>
+      row.startAt + (row.durationMinutes ?? 30) * 60_000;
+    const full = rows.filter((row) => {
+      const overlapping = rows.filter(
+        (other) => other.startAt < endOf(row) && row.startAt < endOf(other),
+      ).length;
+      return overlapping >= capacity;
+    });
+    return {
+      capacity,
+      full: full.map((row) => ({
+        startAt: row.startAt,
+        durationMinutes: row.durationMinutes ?? null,
+      })),
+    };
   },
 });
 
