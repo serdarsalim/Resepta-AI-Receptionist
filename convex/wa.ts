@@ -15,6 +15,7 @@ import {
   sendEmail,
   withOpenPixel,
 } from "./lib/email";
+import { appointmentIcs } from "./lib/ics";
 import {
   fetchWaMedia,
   sendWaCloudImage,
@@ -755,6 +756,42 @@ export const sendAppointmentMessage = internalAction({
       // caveat apply as ever.
       const tracked = contentTemplate;
       const trackingToken = tracked ? crypto.randomUUID() : undefined;
+      // Confirmations carry the appointment as a real calendar invite;
+      // cancellations carry the retraction under the same UID, so the entry
+      // the invite created disappears again. Only these two kinds: a reminder
+      // re-attaching the invite would re-prompt "add to calendar" for an event
+      // the customer already holds, and a winback has no event at all.
+      const ics =
+        args.kind === "confirmation" || args.kind === "cancellation"
+          ? {
+              method: args.kind === "confirmation" ? ("REQUEST" as const) : ("CANCEL" as const),
+              content: appointmentIcs({
+                method: args.kind === "confirmation" ? "REQUEST" : "CANCEL",
+                uid: String(appointment._id),
+                startAtMs: appointment.startAt,
+                durationMinutes:
+                  appointment.durationMinutes ??
+                  appointment.items?.reduce(
+                    (sum: number, item: { durationMinutes: number }) =>
+                      sum + item.durationMinutes,
+                    0,
+                  ) ??
+                  30,
+                summary: appointment.items?.length
+                  ? `${org.name} — ${appointment.items
+                      .map((item: { name: string }) => item.name)
+                      .join(", ")}`
+                  : org.name,
+                ...(staffRow?.name ? { description: staffRow.name } : {}),
+                organizerName: org.name,
+                organizerEmail: sender,
+                attendeeName:
+                  [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
+                  customer.email,
+                attendeeEmail: customer.email,
+              }),
+            }
+          : undefined;
       const emailMessageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,
@@ -778,6 +815,7 @@ export const sendAppointmentMessage = internalAction({
         subject,
         html: withOpenPixel(emailHtml, trackingToken),
         replyTo,
+        ics,
       });
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId: emailMessageId,

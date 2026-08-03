@@ -104,6 +104,18 @@ export function withOpenPixel(html: string, token: string | undefined): string {
   return `${html}<img src="${site}/e/o/${token}" width="1" height="1" alt="" style="display:none;max-height:1px;max-width:1px;" />`;
 }
 
+// UTF-8-safe base64: btoa alone throws on anything past latin1, and an invite
+// for "Erkek saç kesimi" is past latin1 on its first ç. Chunked so the
+// fromCharCode spread never meets an argument-count ceiling.
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x1000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x1000));
+  }
+  return btoa(binary);
+}
+
 export async function sendEmail(args: {
   // The provider key, resolved by the caller from platformConfig.
   apiKey: string | null;
@@ -115,6 +127,10 @@ export async function sendEmail(args: {
   // address, so the answer comes back into the app instead of dead-ending in
   // whichever mailbox the From address belongs to.
   replyTo?: string;
+  // A calendar invite riding along (lib/ics.ts). The method repeats in the
+  // attachment's content type because that parameter — not the filename — is
+  // what mail clients key on to offer the event.
+  ics?: { content: string; method: "REQUEST" | "CANCEL" };
 }): Promise<EmailSendResult> {
   const apiKey = args.apiKey;
   if (!apiKey) return { ok: false, reason: "email-not-configured" };
@@ -131,6 +147,17 @@ export async function sendEmail(args: {
         subject: args.subject,
         html: args.html,
         ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+        ...(args.ics
+          ? {
+              attachments: [
+                {
+                  filename: "invite.ics",
+                  content: toBase64(args.ics.content),
+                  content_type: `text/calendar; method=${args.ics.method}; charset=utf-8`,
+                },
+              ],
+            }
+          : {}),
       }),
     });
     if (!res.ok) {
