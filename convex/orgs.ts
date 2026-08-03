@@ -118,6 +118,7 @@ export const current = query({
           v.literal("winback"),
           v.literal("followup"),
           v.literal("cancellation"),
+          v.literal("out_of_hours"),
           v.literal("campaign"),
         ),
         ruleId: v.optional(v.id("messageRules")),

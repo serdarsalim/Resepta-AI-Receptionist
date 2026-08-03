@@ -23,7 +23,7 @@ import {
   sendWaCloudText,
 } from "./lib/waCloud";
 import { isOrgSetupFailure } from "./lib/alerts";
-import { awayReplyText } from "./lib/awayReply";
+import { outOfHoursMessage } from "./lib/awayReply";
 import { renderTokens } from "./lib/renderTokens";
 import { sendEvolutionText } from "./lib/evolution";
 import {
@@ -124,8 +124,10 @@ export const sendSession = action({
       firstName: customer.firstName,
       lastName: customer.lastName,
       businessName: org?.name,
-      phone: customer.phone,
+      // Business number and link — one vocabulary across every surface.
+      phone: org?.publicPhone,
       email: customer.email,
+      bookingLink: org?.bookingUrl,
       custom: sessionCustom,
     });
     if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
@@ -233,7 +235,7 @@ export const sendSession = action({
 // ---- Out-of-hours away-reply ----
 
 export const loadAwayReplyContext = internalQuery({
-  args: { customerId: v.id("customers") },
+  args: { customerId: v.id("customers"), ruleId: v.id("messageRules") },
   returns: v.any(),
   handler: async (ctx, args) => {
     // No requireOrg: this one is triggered by an inbound webhook, not a signed-in
@@ -243,11 +245,22 @@ export const loadAwayReplyContext = internalQuery({
     if (!customer) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
-    const waAccount = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
-      .unique();
-    return { customer, org, waAccount };
+    const [waAccount, rule, templates, contactFields] = await Promise.all([
+      ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .unique(),
+      ctx.db.get(args.ruleId),
+      ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+    ]);
+    return { customer, org, waAccount, rule, templates, contactFields };
   },
 });
 
@@ -258,39 +271,50 @@ export const loadAwayReplyContext = internalQuery({
 // The once-per-window guard lives in webhook.ts, stamped before this is
 // scheduled, same ordering as the reminder tick's double-send guard.
 export const sendAwayReply = internalAction({
-  args: { customerId: v.id("customers") },
+  args: { customerId: v.id("customers"), ruleId: v.id("messageRules") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const context = await ctx.runQuery(internal.wa.loadAwayReplyContext, {
       customerId: args.customerId,
+      ruleId: args.ruleId,
     });
     if (!context) return null;
-    const { customer, org, waAccount } = context;
+    const { customer, org, waAccount, rule, templates, contactFields } = context;
     if (!waAccount) return null;
-    const body = awayReplyText({
-      businessName: org.name,
-      bookingUrl: org.bookingUrl,
-      publicPhone: org.publicPhone,
+    // Paused (or deleted) between the webhook's stamp and this action running.
+    // The stamp already happened, which errs toward not sending — the right
+    // kind of stale, same as sendAppointmentMessage's guard.
+    if (!rule || rule.paused) return null;
+    const custom: Record<string, string> = {};
+    for (const field of contactFields as { key: string }[]) {
+      custom[field.key] = customer.custom?.[field.key] ?? "";
+    }
+    const message = outOfHoursMessage({
+      templates,
+      ruleId: args.ruleId,
+      org,
       // The CUSTOMER's language, falling back to the org's.
       language: customer.language ?? org.language,
-      override: org.autoReplyText,
       firstName: customer.firstName,
+      lastName: customer.lastName,
+      custom,
     });
-    // Null means no link and no phone are configured, so the message would say
-    // "we're closed" and nothing else. The owner's notification is better.
-    if (!body) return null;
+    // Null means nothing useful to say — no wording of the org's own, and no
+    // link or phone for the stock text to hand over. The owner's notification
+    // is better than "we're closed" and silence after it.
+    if (!message) return null;
 
     const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
       orgId: customer.orgId,
       customerId: customer._id,
       kind: "session",
-      body,
+      body: message.body,
     });
     const result = await sendWaCloudText({
       accessToken: waAccount.accessToken,
       phoneNumberId: waAccount.phoneNumberId,
       to: customer.phone,
-      body,
+      body: message.body,
     });
     await ctx.runMutation(internal.messages.applySendResult, {
       messageId,
@@ -538,8 +562,11 @@ export const sendAppointmentMessage = internalAction({
       businessName: org.name,
       appointmentAt: when,
       staffName: staffRow?.name,
-      phone: customer.phone,
+      // The BUSINESS's number and link, not the customer's — [phone] is "call
+      // us here" in a message the salon sends. See renderTokens.
+      phone: org.publicPhone,
       email: customer.email,
+      bookingLink: org.bookingUrl,
       // One bullet line per booked service — [service] renders as a LIST, so
       // the stock texts put it on its own paragraph rather than mid-sentence.
       serviceName: appointment.items

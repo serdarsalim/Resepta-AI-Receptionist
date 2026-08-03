@@ -39,8 +39,15 @@ export type TokenValues = {
   // Already formatted in the org's timezone and language by lib/format.
   appointmentAt?: string;
   staffName?: string;
+  // The BUSINESS's number — orgs.publicPhone, the one the org chose to give
+  // customers (the voice agent's inbound line, usually). Never the customer's
+  // own phone: a message TO someone has no reason to tell them their number.
   phone?: string;
   email?: string;
+  // orgs.bookingUrl — the org's public booking page. In every template so the
+  // 2h reminder, the closed-hours reply and the winback can all say "book
+  // here" without the owner pasting a URL into each one.
+  bookingLink?: string;
   // The appointment's line items, one bullet line each ("• Saç kesimi").
   serviceName?: string;
   // The same lines with each service's price appended
@@ -91,6 +98,10 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   email: "email",
   eposta: "email",
   "e-posta": "email",
+  // Booking page. One canonical name; the second spelling is defensive, since
+  // the underscore is the exact kind of detail an owner retypes wrong.
+  booking_link: "bookingLink",
+  bookinglink: "bookingLink",
   // Service — the same word the voice agent's variables use, because a token
   // vocabulary that differs per screen is two vocabularies.
   service: "serviceName",

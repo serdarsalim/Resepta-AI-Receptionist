@@ -782,6 +782,23 @@ const dictionary = {
     en: "When cancelled",
     de: "Bei Stornierung",
   },
+  "settings.ruleOutOfHours": {
+    tr: "Kapalıyken otomatik yanıt",
+    en: "Away reply",
+    de: "Abwesenheitsantwort",
+  },
+  "settings.ruleWhenClosed": {
+    tr: "Kapalıyken mesaj gelince",
+    en: "When a message arrives while closed",
+    de: "Bei Nachricht außerhalb der Öffnungszeiten",
+  },
+  // What actually gates the send: opening hours have to exist (Business →
+  // Hours), and each customer gets at most one reply per day per channel.
+  "settings.ruleOutOfHoursHint": {
+    tr: "Çalışma saatleri dışında yazan müşteriye tek bir otomatik yanıt gider — kanal başına günde en fazla bir kez. Business → Saatler'de çalışma saatleri tanımlı olmalı.",
+    en: "One automatic reply to a customer who writes outside opening hours — at most once a day per channel. Opening hours must be set in Business → Hours.",
+    de: "Eine automatische Antwort an Kundinnen und Kunden, die außerhalb der Öffnungszeiten schreiben — höchstens einmal täglich pro Kanal. Die Öffnungszeiten müssen unter Business → Öffnungszeiten hinterlegt sein.",
+  },
   "settings.ruleHoursAfterEnd": {
     tr: "saat sonra, randevu bitince",
     en: "hours after the appointment",
@@ -837,6 +854,16 @@ const dictionary = {
   "settings.statOpens": { tr: "Açılma", en: "Opens", de: "Öffnungen" },
   "settings.statReplies": { tr: "Yanıt", en: "Replies", de: "Antworten" },
   "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
+  "vars.bookingLink": {
+    tr: "Randevu linki",
+    en: "Booking link",
+    de: "Buchungslink",
+  },
+  "vars.phone": {
+    tr: "İşletme telefonu",
+    en: "Business phone",
+    de: "Telefonnummer des Betriebs",
+  },
   "editor.insertVariable": {
     tr: "Değişken ekle",
     en: "Insert variable",

@@ -32,6 +32,7 @@ const triggerValidator = v.union(
   v.literal("after_end"),
   v.literal("cancellation"),
   v.literal("no_show"),
+  v.literal("out_of_hours"),
 );
 
 const channelValidator = v.union(
@@ -45,7 +46,13 @@ const channelValidator = v.union(
 // the editor cannot drift on what "the follow-up's template" means.
 export function kindForTrigger(
   trigger: RuleTrigger,
-): "confirmation" | "reminder" | "followup" | "cancellation" | "winback" {
+):
+  | "confirmation"
+  | "reminder"
+  | "followup"
+  | "cancellation"
+  | "winback"
+  | "out_of_hours" {
   switch (trigger) {
     case "booking":
       return "confirmation";
@@ -57,6 +64,8 @@ export function kindForTrigger(
       return "cancellation";
     case "no_show":
       return "winback";
+    case "out_of_hours":
+      return "out_of_hours";
   }
 }
 
@@ -70,6 +79,7 @@ function clampOffset(trigger: RuleTrigger, offsetHours: number): number {
   switch (trigger) {
     case "booking":
     case "cancellation":
+    case "out_of_hours":
       return 0;
     case "before_start":
       return Math.min(168, Math.max(1, h));
@@ -88,6 +98,9 @@ const TRIGGER_ORDER: RuleTrigger[] = [
   "after_end",
   "cancellation",
   "no_show",
+  // Last: it hangs off the clock, not the appointment journey the rest of the
+  // list walks through.
+  "out_of_hours",
 ];
 
 export function sortRules(rules: Doc<"messageRules">[]): Doc<"messageRules">[] {
@@ -116,13 +129,20 @@ export async function rulesForOrg(
 // because the founding seeds only ever spoke Turkish. Tokens are written in
 // English token names ([name], [business], [date], [service]) — the PROSE is
 // per language, the vocabulary never is. See lib/renderTokens.
-type TemplateKind = "confirmation" | "reminder" | "winback" | "followup" | "cancellation";
+type TemplateKind =
+  | "confirmation"
+  | "reminder"
+  | "winback"
+  | "followup"
+  | "cancellation"
+  | "out_of_hours";
 const TEMPLATE_KINDS: TemplateKind[] = [
   "confirmation",
   "reminder",
   "winback",
   "followup",
   "cancellation",
+  "out_of_hours",
 ];
 
 export const DEFAULT_TEMPLATE_TEXTS: Record<
@@ -150,6 +170,13 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       body: "Merhaba [name], [date] tarihli [business] randevunuz iptal edildi. Yeni bir randevu için bu mesajı yanıtlayabilirsiniz.",
       subject: "Randevunuz iptal edildi",
     },
+    // The two tokens sit on their own lines on purpose: renderTokens drops a
+    // line that resolves to nothing, so an org with only a phone (or only a
+    // link) sends a clean message instead of a dangling label.
+    out_of_hours: {
+      body: "Merhaba [name]! [business] şu anda kapalı.\n\nDilerseniz online randevu alabilir veya bizi arayabilirsiniz:\n[booking_link]\n[phone]\n\nAçıldığımızda size döneceğiz.",
+      subject: "Şu anda kapalıyız",
+    },
   },
   en: {
     confirmation: {
@@ -171,6 +198,10 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
     cancellation: {
       body: "Hi [name], your [business] appointment on [date] has been cancelled. Reply to this message to book a new one.",
       subject: "Your appointment was cancelled",
+    },
+    out_of_hours: {
+      body: "Hello [name]! [business] is closed right now.\n\nYou can book online or give us a call:\n[booking_link]\n[phone]\n\nWe'll get back to you as soon as we open.",
+      subject: "We're currently closed",
     },
   },
   de: {
@@ -194,6 +225,10 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       body: "Hallo [name], Ihr Termin bei [business] am [date] wurde storniert. Antworten Sie auf diese Nachricht für einen neuen Termin.",
       subject: "Ihr Termin wurde storniert",
     },
+    out_of_hours: {
+      body: "Hallo [name]! [business] ist gerade geschlossen.\n\nSie können online buchen oder uns anrufen:\n[booking_link]\n[phone]\n\nWir melden uns, sobald wir geöffnet haben.",
+      subject: "Wir sind derzeit geschlossen",
+    },
   },
 };
 
@@ -210,12 +245,20 @@ export async function seedDefaultRules(
   orgId: Id<"orgs">,
   channel: "whatsapp" | "email" | "both" = "both",
 ): Promise<void> {
-  const defaults: { trigger: Doc<"messageRules">["trigger"]; offsetHours: number }[] = [
+  const defaults: {
+    trigger: Doc<"messageRules">["trigger"];
+    offsetHours: number;
+    paused?: boolean;
+  }[] = [
     { trigger: "booking", offsetHours: 0 },
     { trigger: "before_start", offsetHours: 24 },
     { trigger: "before_start", offsetHours: 2 },
     { trigger: "cancellation", offsetHours: 0 },
     { trigger: "no_show", offsetHours: 14 * 24 },
+    // Present but off, like the legacy away-reply toggle defaulted off: an
+    // automated "we're closed" is a voice a business switches on, and it only
+    // says anything once hours and a link or phone exist anyway.
+    { trigger: "out_of_hours", offsetHours: 0, paused: true },
   ];
   for (const rule of defaults) {
     await db.insert("messageRules", { orgId, channel, ...rule });
@@ -511,6 +554,63 @@ export const migrateOrg = internalMutation({
     await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, {
       orgId: args.orgId,
     });
+    return null;
+  },
+});
+
+// ── Migration off the legacy away-reply fields ──────────────────────────────
+//
+// One out_of_hours rule per org that doesn't have one. Faithful, like
+// migrateOrg above: the toggle's state becomes the pause state, the channel is
+// whatsapp because that is the only channel the legacy away-reply ever had
+// (email out-of-hours is NEW behavior nobody gets switched into), and an org's
+// own autoReplyText becomes the rule's wording so nobody's message changes
+// mid-flight. Idempotent on the rule's existence.
+//
+// Run after deploying:
+//   npx convex run messageRules:migrateOutOfHoursAll --prod
+export const migrateOutOfHoursAll = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    for (const org of await ctx.db.query("orgs").collect()) {
+      await ctx.scheduler.runAfter(0, internal.messageRules.migrateOutOfHoursOrg, {
+        orgId: org._id,
+      });
+    }
+    return null;
+  },
+});
+
+export const migrateOutOfHoursOrg = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return null;
+    const existing = await rulesForOrg(ctx, args.orgId);
+    if (existing.some((rule) => rule.trigger === "out_of_hours")) return null;
+    const ruleId = await ctx.db.insert("messageRules", {
+      orgId: args.orgId,
+      trigger: "out_of_hours",
+      offsetHours: 0,
+      channel: "whatsapp",
+      paused: (org.autoReplyEnabled ?? false) ? undefined : true,
+    });
+    // The org's own wording travels with it. Filed under the org's language
+    // because the legacy field was single-language by nature — that limitation
+    // is exactly what it said on the tin.
+    const override = org.autoReplyText?.trim();
+    if (override) {
+      await ctx.db.insert("waTemplates", {
+        orgId: args.orgId,
+        ruleId,
+        kind: "out_of_hours",
+        language: org.language,
+        status: "draft",
+        body: override,
+      });
+    }
     return null;
   },
 });

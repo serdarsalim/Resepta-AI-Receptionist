@@ -49,7 +49,8 @@ type RuleTrigger =
   | "before_start"
   | "after_end"
   | "cancellation"
-  | "no_show";
+  | "no_show"
+  | "out_of_hours";
 
 type RuleRowData = {
   _id: Id<"messageRules">;
@@ -84,6 +85,7 @@ const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
   after_end: "followup",
   cancellation: "cancellation",
   no_show: "winback",
+  out_of_hours: "out_of_hours",
 };
 
 // What a rule can actually reach today, mirroring wa.sendAppointmentMessage:
@@ -524,6 +526,8 @@ function RuleEditor({
   orgLanguage,
   orgCurrency,
   orgTimezone,
+  orgBookingUrl,
+  orgPublicPhone,
   emailEnabled,
   waConnected,
   onSaveTemplate,
@@ -535,6 +539,8 @@ function RuleEditor({
   orgLanguage: string;
   orgCurrency: string;
   orgTimezone: string;
+  orgBookingUrl?: string;
+  orgPublicPhone?: string;
   emailEnabled: boolean;
   waConnected: boolean;
   onSaveTemplate: (
@@ -614,7 +620,10 @@ function RuleEditor({
   // including prices being MINOR units (the old sample divided by nothing and
   // printed €350.00 for a 350-kuruş line).
   const previewValues = useMemo(() => {
-    if (!picked || !appointment) return null;
+    if (!picked) return null;
+    // The away reply speaks to a person, not a booking — everyone else still
+    // needs the real appointment their tokens describe.
+    if (!appointment && rule.trigger !== "out_of_hours") return null;
     const formatMoney = (minor: number) =>
       new Intl.NumberFormat(orgLanguage, {
         style: "currency",
@@ -627,20 +636,21 @@ function RuleEditor({
     for (const field of contactFields) {
       custom[field.key] = picked.custom?.[field.key] ?? "";
     }
-    const items = appointment.items ?? [];
+    const items = appointment?.items ?? [];
     const totalMinor = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
     return {
       firstName: picked.firstName,
       lastName: picked.lastName,
-      phone: picked.phone,
+      // The BUSINESS's number and link — what [phone] and [booking_link]
+      // resolve to at send time (see convex/lib/renderTokens).
+      phone: orgPublicPhone,
       email: picked.email,
+      bookingLink: orgBookingUrl,
       businessName: orgName,
-      appointmentAt: formatAppointmentTime(
-        appointment.startAt,
-        orgTimezone,
-        orgLanguage,
-      ),
-      staffName: appointment.staffName,
+      appointmentAt: appointment
+        ? formatAppointmentTime(appointment.startAt, orgTimezone, orgLanguage)
+        : undefined,
+      staffName: appointment?.staffName,
       serviceName: items.map((item) => `• ${item.name}`).join("\n") || undefined,
       servicePriceList:
         items
@@ -657,9 +667,12 @@ function RuleEditor({
     orgLanguage,
     orgCurrency,
     orgTimezone,
+    orgPublicPhone,
+    orgBookingUrl,
     contactFields,
     picked,
     appointment,
+    rule.trigger,
   ]);
 
   if (!template) {
@@ -766,7 +779,9 @@ function RuleEditor({
             </div>
           </>
         )}
-        {waConnected && (
+        {/* Session text needs no Meta approval, so the Cloud note would
+            mislead on the away reply. */}
+        {waConnected && rule.trigger !== "out_of_hours" && (
           <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
         )}
         {/* Email engagement, once this message has actually sent one. Rates
@@ -904,8 +919,10 @@ function RuleEditor({
                flex-1 so the paper runs the full height beside the editor. */
             <div className="email-paper flex flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]">
               <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
-                {(renderTokens(subject, previewValues) ||
-                  `${orgName || "—"}, ${previewValues.appointmentAt}`)}
+                {renderTokens(subject, previewValues) ||
+                  [orgName || "—", previewValues.appointmentAt]
+                    .filter(Boolean)
+                    .join(", ")}
               </p>
               <div
                 className="email-body-editor flex-1 px-3 py-2 text-sm"
@@ -949,6 +966,8 @@ function RulesCard({
     quietHoursStart: number;
     quietHoursEnd: number;
     messageChannel: "whatsapp" | "email" | "both";
+    bookingUrl?: string;
+    publicPhone?: string;
   };
   templates: TemplateRow[];
   rules: RuleRowData[];
@@ -992,6 +1011,15 @@ function RulesCard({
   // and "off" are the same fact, and two controls for one fact is how the old
   // card confused people.
   const wiredFor = (rule: RuleRowData): ("whatsapp" | "email")[] => {
+    // The away reply is session text — an answer to a customer who just
+    // wrote, which Meta allows without any approved template. All WhatsApp
+    // needs here is the Cloud number itself (wa.sendAwayReply's lane).
+    if (rule.trigger === "out_of_hours") {
+      return [
+        ...(waConnected ? (["whatsapp"] as const) : []),
+        ...(emailEnabled ? (["email"] as const) : []),
+      ];
+    }
     const own = templates.find(
       (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
     );
@@ -1045,7 +1073,9 @@ function RulesCard({
           ? t("settings.ruleFollowup")
           : trigger === "cancellation"
             ? t("settings.ruleCancellation")
-            : t("settings.ruleWinback");
+            : trigger === "out_of_hours"
+              ? t("settings.ruleOutOfHours")
+              : t("settings.ruleWinback");
 
   const channelLabel = (channel: "whatsapp" | "email" | "both") =>
     channel === "whatsapp"
@@ -1121,6 +1151,8 @@ function RulesCard({
             {t("settings.ruleDaysAfterNoShow")}
           </span>
         );
+      case "out_of_hours":
+        return <>{t("settings.ruleWhenClosed")}</>;
     }
   };
 
@@ -1136,6 +1168,7 @@ function RulesCard({
       ["booking", "settings.ruleConfirmation"],
       ["cancellation", "settings.ruleCancellation"],
       ["no_show", "settings.ruleWinback"],
+      ["out_of_hours", "settings.ruleOutOfHours"],
     ] as const
   ).filter(([trigger]) => !rules.some((r) => r.trigger === trigger));
 
@@ -1176,6 +1209,9 @@ function RulesCard({
                     {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
                     {rule.trigger === "after_end" && (
                       <InfoTip text={t("settings.ruleFollowupHint")} />
+                    )}
+                    {rule.trigger === "out_of_hours" && (
+                      <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                     )}
                   </span>
                   <span className="text-sm text-[var(--muted)]">
@@ -1233,6 +1269,8 @@ function RulesCard({
                     orgLanguage={org.language}
                     orgCurrency={org.currency}
                     orgTimezone={org.timezone}
+                    orgBookingUrl={org.bookingUrl}
+                    orgPublicPhone={org.publicPhone}
                     emailEnabled={emailEnabled}
                     waConnected={waConnected}
                     onSaveTemplate={(templateId, patch) =>

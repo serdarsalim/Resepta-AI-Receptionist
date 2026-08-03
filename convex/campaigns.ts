@@ -338,8 +338,10 @@ export const fanOut = internalMutation({
         firstName: customer.firstName,
         lastName: customer.lastName,
         businessName: org.name,
-        phone: customer.phone,
+        // Business number and link, same binding as every other send path.
+        phone: org.publicPhone,
         email: customer.email,
+        bookingLink: org.bookingUrl,
         custom: customValues,
       };
       const line = renderTokens(campaign.body, tokenValues);

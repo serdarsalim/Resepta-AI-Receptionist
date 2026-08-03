@@ -9,8 +9,11 @@ import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 
-// Meta's session window: one away-reply per window, not per message.
-const SESSION_WINDOW_MS = 24 * 3600_000;
+// Meta's session window: one away-reply per window, not per message. Exported
+// because the email lane throttles its out-of-hours reply on the same clock —
+// not Meta's rule over there, but the same customer-facing fact: nobody wants
+// the identical bot reply twice in one evening.
+export const SESSION_WINDOW_MS = 24 * 3600_000;
 
 // Bare-text fallbacks. Button taps are the primary path; these cover a customer
 // who types instead of tapping.
@@ -246,9 +249,25 @@ export async function processInboundMessage(
     const alreadyReplied =
       customer?.lastAutoReplyAt !== undefined &&
       now - customer.lastAutoReplyAt < SESSION_WINDOW_MS;
+    // The out_of_hours rule owns whether (and on which channels) the salon
+    // answers a closed-hours message; orgs.autoReplyEnabled is legacy once
+    // the rule row exists (messageRules.migrateOutOfHoursOrg).
+    const rule = org
+      ? (
+          await ctx.db
+            .query("messageRules")
+            .withIndex("by_org", (q) => q.eq("orgId", org._id))
+            .collect()
+        ).find(
+          (r) =>
+            r.trigger === "out_of_hours" &&
+            !r.paused &&
+            (r.channel === "whatsapp" || r.channel === "both"),
+        )
+      : undefined;
     if (
       org &&
-      (org.autoReplyEnabled ?? false) &&
+      rule &&
       // Unset hours mean nobody has said when this salon is closed, so
       // we do not get to announce it. See lib/businessHours.ts.
       hasBusinessHours(hours) &&
@@ -261,6 +280,7 @@ export async function processInboundMessage(
       await ctx.db.patch(contactId, { lastAutoReplyAt: now });
       await ctx.scheduler.runAfter(0, internal.wa.sendAwayReply, {
         customerId: contactId,
+        ruleId: rule._id,
       });
     }
     return;

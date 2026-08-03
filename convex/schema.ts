@@ -265,21 +265,21 @@ export default defineSchema({
         endMinute: v.optional(v.number()),
       }),
     ),
-    // Reply once to an out-of-hours inbound that isn't a confirm/cancel, so a
-    // customer messaging at 23:00 gets the booking link instead of silence.
-    // Inside opening hours the staff answer it themselves — an auto-reply on
-    // top of a human who replies in five minutes reads like a robot on the one
-    // channel where the customer thinks they are talking to the salon.
+    // ── LEGACY away-reply fields ───────────────────────────────────────────
+    // Superseded by the out_of_hours messageRules row (and its waTemplates
+    // wording) once messageRules:migrateOutOfHoursAll has run. Kept readable
+    // for the same reason as the legacy rule trio above; never the source of
+    // truth for an org that has the rule row.
     autoReplyEnabled: v.optional(v.boolean()),
-    // Org's own wording, used verbatim when set. Single-language by nature, so
-    // an org serving mixed-language customers should leave it blank and take
-    // the per-language default instead.
     autoReplyText: v.optional(v.string()),
-    // The org's PUBLIC cal.com page — what the away-reply sends people to. The
-    // spec cut the idea of hosting our own booking page; this is that link.
+    // The org's public booking link — the [booking_link] template token, what
+    // the out-of-hours reply and the voice agent hand to customers. Once the
+    // native /book page exists for this org it auto-fills from there; until
+    // then it is whatever external page the org pasted (historically cal.com).
     bookingUrl: v.optional(v.string()),
-    // Number to tell a customer to call. Offered second, after the link: a
-    // phone number is a dead end at 23:00, which is when people message.
+    // Number to tell a customer to call — the [phone] template token. Single
+    // by design: one clear CTA in an automated message. The picker suggests
+    // the voice agent's inbound number, because that one answers 24/7.
     publicPhone: v.optional(v.string()),
     // DEAD. Nothing reads or writes this any more (Serdar, 2026-08-02).
     //
@@ -585,6 +585,10 @@ export default defineSchema({
     // Last out-of-hours away-reply. One per session window, or a customer
     // sending four messages in a row collects four identical bot replies.
     lastAutoReplyAt: v.optional(v.number()),
+    // Same throttle for the email lane's out-of-hours reply. Its own field
+    // because the two channels reply independently: a WhatsApp away-reply at
+    // 23:00 must not silence the answer to an email sent at 23:05.
+    lastEmailAutoReplyAt: v.optional(v.number()),
     // Values for the org-defined contact fields, keyed by contactFields.key.
     // Stored as strings; the field's type drives the editor, not the storage.
     custom: v.optional(v.record(v.string(), v.string())),
@@ -829,6 +833,13 @@ export default defineSchema({
       v.literal("after_end"),
       v.literal("cancellation"),
       v.literal("no_show"),
+      // A customer WROTE while the salon was closed — the only trigger whose
+      // anchor is an inbound message, not an appointment. WhatsApp inbound
+      // (webhook.ts) and email inbound (email.recordInbound) both fire it,
+      // throttled to one reply per session window per channel. Replaces
+      // orgs.autoReplyEnabled/autoReplyText, which are legacy once an org has
+      // this row.
+      v.literal("out_of_hours"),
     ),
     // Hours from the anchor: before startAt, after startAt+duration, after the
     // no-show. 0 for the two event triggers — they have no delay to express.
@@ -864,6 +875,11 @@ export default defineSchema({
       v.literal("followup"),
       // When the appointment is cancelled.
       v.literal("cancellation"),
+      // The out-of-hours auto-reply — the one kind whose send is a REPLY to an
+      // inbound message rather than an appointment-lifecycle send. Session
+      // text on WhatsApp (the customer just wrote, so the window is open);
+      // never a Meta template, so metaName/status never gate it.
+      v.literal("out_of_hours"),
       // Campaigns. Its {{3}} is NOT an appointment time — it is whatever line
       // the salon types for that campaign, which is what makes one approved
       // template serve every campaign they will ever run. See convex/campaigns.ts.

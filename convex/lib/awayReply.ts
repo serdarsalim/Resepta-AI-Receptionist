@@ -1,100 +1,87 @@
-// The out-of-hours WhatsApp auto-reply. Meta's own Business app ships this as
-// "away message", which is how standard it is; a salon customer who writes at
-// 23:00 should not get silence.
+// The out-of-hours reply's WORDS. Meta's own Business app ships this as "away
+// message", which is how standard it is; a salon customer who writes at 23:00
+// should not get silence.
 //
-// What is hardcoded here and what is not, deliberately:
-//   - the SENTENCE SHAPE is code, in three languages, so a salon does not have
-//     to write Turkish and German copy to serve Turkish and German customers.
-//   - every VALUE is org data: business name, booking link, phone, opening
-//     hours, the toggle, and an optional full override of the text.
-// If you find yourself adding a literal salon name, URL, or number below, that
-// is the bug this comment exists to prevent.
+// Content comes from the same engine as every other automated message now: the
+// out_of_hours rule's own waTemplates row first, the kind-level fallback row
+// second, the stock text in messageRules.DEFAULT_TEMPLATE_TEXTS last. This
+// file only RESOLVES and RENDERS — who may send, on which channel, and how
+// often is the callers' business (webhook.ts for WhatsApp, email.ts for mail),
+// because the throttle stamps live where the inbound lands.
 //
-// This is free-form session text, NOT a Meta template — allowed only because
-// the customer just messaged us, which opens the 24h window. Nothing here can
-// start a conversation; a cold "we're open, book here" needs an approved
-// template and belongs nowhere near this file.
+// On WhatsApp this is free-form session text, NOT a Meta template — allowed
+// only because the customer just messaged us, which opens the 24h window.
+// Nothing here can start a conversation; a cold "we're open, book here" needs
+// an approved template and belongs nowhere near this file.
 
+import type { Doc, Id } from "../_generated/dataModel";
+import { DEFAULT_TEMPLATE_TEXTS } from "../messageRules";
 import { renderTokens } from "./renderTokens";
 
-type ReplyLanguage = "tr" | "en" | "de";
-
-function resolveLanguage(raw: string | undefined): ReplyLanguage {
+// The same exact-language match as wa.sendAppointmentMessage — the customer's
+// language, falling back to the org's, and stock text has to cover whatever
+// that resolves to.
+function resolveLanguage(raw: string | undefined): string {
   const short = (raw ?? "").slice(0, 2).toLowerCase();
-  return short === "tr" || short === "en" || short === "de" ? short : "en";
+  return short || "en";
 }
 
-// Turkish is siz-form with real diacritics, German is Sie-form — same house
-// rules as lib/alerts.ts and src/lib/i18n.ts.
-const COPY: Record<
-  ReplyLanguage,
-  {
-    closed: (business: string) => string;
-    withLink: (url: string) => string;
-    withPhone: (phone: string) => string;
-    fallback: string;
-  }
-> = {
-  tr: {
-    closed: (business) => `Merhaba, ${business} şu anda kapalı.`,
-    withLink: (url) => `Randevu almak için: ${url}`,
-    withPhone: (phone) => `Dilerseniz ${phone} numaralı telefondan da ulaşabilirsiniz.`,
-    fallback: "Açıldığımızda size döneceğiz.",
-  },
-  en: {
-    closed: (business) => `Hello — ${business} is closed right now.`,
-    withLink: (url) => `You can book here: ${url}`,
-    withPhone: (phone) => `Or call us on ${phone}.`,
-    fallback: "We'll get back to you when we open.",
-  },
-  de: {
-    closed: (business) => `Hallo — ${business} ist gerade geschlossen.`,
-    withLink: (url) => `Hier können Sie einen Termin buchen: ${url}`,
-    withPhone: (phone) => `Oder rufen Sie uns an: ${phone}.`,
-    fallback: "Wir melden uns, sobald wir geöffnet haben.",
-  },
-};
+export type OutOfHoursTemplate = Pick<
+  Doc<"waTemplates">,
+  "ruleId" | "kind" | "language" | "body" | "bodyHtml" | "subject"
+>;
 
-// Returns null when there is nothing useful to say — no link and no phone means
-// the message would be "we're closed" and nothing else, which is worse than the
-// owner simply seeing the notification and replying in the morning.
-export function awayReplyText(args: {
-  businessName: string;
-  bookingUrl?: string;
-  publicPhone?: string;
+// Returns null when there is nothing useful to say: no authored wording, and
+// neither a booking link nor a phone to offer — the stock text would then be
+// "we're closed" and a dangling label, which is worse than the owner simply
+// seeing the notification and replying in the morning. A rendered body that
+// comes out empty is null for the same reason.
+export function outOfHoursMessage(args: {
+  templates: OutOfHoursTemplate[];
+  ruleId: Id<"messageRules">;
+  org: { name: string; bookingUrl?: string; publicPhone?: string };
   // customers.language ?? orgs.language — the customer's, not the salon's.
   language?: string;
-  // The org's own wording, used when set. Tokens in it resolve first.
-  override?: string;
-  // Who is being replied to, for those tokens. Absent for a customer we know
-  // nothing about beyond a phone number, which renderTokens handles by
-  // dropping the token rather than printing it.
+  // Absent for a customer we know nothing about beyond an address or number;
+  // renderTokens drops the token rather than printing it.
   firstName?: string;
-}): string | null {
-  const override = args.override?.trim();
-  // "Merhaba [name], şu anda kapalıyız" is the whole reason an override exists:
-  // the built-in copy cannot greet somebody by name. An unresolved token
-  // renders as nothing rather than as itself — see lib/renderTokens.
-  if (override) {
-    return (
-      renderTokens(override, {
-        firstName: args.firstName,
-        businessName: args.businessName,
-        phone: args.publicPhone,
-      }) || null
-    );
-  }
+  lastName?: string;
+  // contactFields keys → this customer's values, so an owner who wrote
+  // [hair_type] into their closed-hours wording resolves like anywhere else.
+  custom?: Record<string, string>;
+}): { body: string; subject: string; bodyHtml?: string } | null {
+  const language = resolveLanguage(args.language);
+  const ruleTemplate = args.templates.find(
+    (t) => t.ruleId === args.ruleId && t.language === language,
+  );
+  const kindTemplate = args.templates.find(
+    (t) =>
+      t.ruleId === undefined && t.kind === "out_of_hours" && t.language === language,
+  );
+  const authored = ruleTemplate ?? kindTemplate;
+  const stock = (DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en)
+    .out_of_hours;
 
-  const copy = COPY[resolveLanguage(args.language)];
-  const url = args.bookingUrl?.trim();
-  const phone = args.publicPhone?.trim();
-  if (!url && !phone) return null;
+  const bookingLink = args.org.bookingUrl?.trim() || undefined;
+  const phone = args.org.publicPhone?.trim() || undefined;
+  // Stock wording exists to hand over the link or the number; with neither
+  // configured it has nothing to hand over. An owner's OWN wording is sent on
+  // its own authority — they wrote it, they meant it.
+  if (!authored?.body && !bookingLink && !phone) return null;
 
-  const lines = [copy.closed(args.businessName)];
-  // Link first: it works at 23:00 and cal.com takes it from there. The phone
-  // number is the second option, not the first.
-  if (url) lines.push(copy.withLink(url));
-  if (phone) lines.push(copy.withPhone(phone));
-  if (!url) lines.push(copy.fallback);
-  return lines.join("\n\n");
+  const values = {
+    firstName: args.firstName,
+    lastName: args.lastName,
+    businessName: args.org.name,
+    phone,
+    bookingLink,
+    custom: args.custom,
+  };
+  const body = renderTokens(authored?.body ?? stock.body, values);
+  if (!body) return null;
+  const subject = renderTokens(authored?.subject ?? stock.subject, values) || args.org.name;
+  const bodyHtml = authored?.bodyHtml
+    ? renderTokens(authored.bodyHtml, values)
+    : undefined;
+  return { body, subject, bodyHtml: bodyHtml || undefined };
 }

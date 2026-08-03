@@ -16,6 +16,9 @@ import {
   splitName,
 } from "./lib/emailInbound";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
+import { outOfHoursMessage } from "./lib/awayReply";
+import { SESSION_WINDOW_MS } from "./webhook";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
 // wa.ts (the template lane that rides alongside WhatsApp); this file is what
@@ -161,6 +164,157 @@ export const recordInbound = internalMutation({
     // inbox; it does NOT open Meta's session window, which only a WhatsApp
     // inbound can do.
     await ctx.db.patch(customerId, { lastInboundAt: now });
+
+    // Out-of-hours auto-reply, the email half of the out_of_hours rule. Same
+    // shape as the WhatsApp gate in webhook.ts: the rule decides whether, the
+    // hours decide when, the throttle stamps BEFORE scheduling so two retries
+    // landing together cannot both send.
+    const org = await ctx.db.get(args.orgId);
+    const hours = org?.businessHours ?? {};
+    const customer = await ctx.db.get(customerId);
+    const alreadyReplied =
+      customer?.lastEmailAutoReplyAt !== undefined &&
+      now - customer.lastEmailAutoReplyAt < SESSION_WINDOW_MS;
+    const rule = org
+      ? (
+          await ctx.db
+            .query("messageRules")
+            .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+            .collect()
+        ).find(
+          (r) =>
+            r.trigger === "out_of_hours" &&
+            !r.paused &&
+            (r.channel === "email" || r.channel === "both"),
+        )
+      : undefined;
+    if (
+      org &&
+      rule &&
+      hasBusinessHours(hours) &&
+      !isWithinActiveWindow(now, org.timezone, hours) &&
+      !alreadyReplied &&
+      // Machines don't read replies. An auto-reply to a no-reply address is a
+      // bounce at best and a mail loop at worst.
+      !/no-?reply|mailer-daemon|postmaster|bounce/.test(from)
+    ) {
+      await ctx.db.patch(customerId, { lastEmailAutoReplyAt: now });
+      await ctx.scheduler.runAfter(0, internal.email.sendOutOfHoursReply, {
+        customerId,
+        ruleId: rule._id,
+        // The address they wrote FROM, which may differ from the record's —
+        // the reply must go where the person actually is tonight.
+        to: from,
+      });
+    }
+    return null;
+  },
+});
+
+// Everything the out-of-hours reply needs, in one read. Internal-only, no
+// requireOrg: like wa.loadAwayReplyContext it is triggered by an inbound
+// webhook, and the org comes from the customer row the webhook resolved.
+export const loadOutOfHoursContext = internalQuery({
+  args: { customerId: v.id("customers"), ruleId: v.id("messageRules") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return null;
+    const org = await ctx.db.get(customer.orgId);
+    if (!org) return null;
+    const [rule, templates, contactFields, mailConfig] = await Promise.all([
+      ctx.db.get(args.ruleId),
+      ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+      emailConfig(ctx),
+    ]);
+    return {
+      customer,
+      org,
+      rule,
+      templates,
+      contactFields,
+      sender: customerSender(org, mailConfig),
+      apiKey: mailConfig.apiKey,
+      inboundDomain: mailConfig.domain,
+    };
+  },
+});
+
+// The email half of the out_of_hours rule: answer a mail that arrived while
+// the salon was closed. Deliberately does NOT require consentAt, same
+// reasoning as wa.sendAwayReply — consent governs messages WE start; this is a
+// reply to someone who just wrote to us.
+export const sendOutOfHoursReply = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    ruleId: v.id("messageRules"),
+    to: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const context = await ctx.runQuery(internal.email.loadOutOfHoursContext, {
+      customerId: args.customerId,
+      ruleId: args.ruleId,
+    });
+    if (!context) return null;
+    const { customer, org, rule, templates, contactFields } = context;
+    // Paused or deleted between the stamp and this action — err toward silence.
+    if (!rule || rule.paused) return null;
+    if (!context.sender) return null;
+
+    const custom: Record<string, string> = {};
+    for (const field of contactFields as { key: string }[]) {
+      custom[field.key] = customer.custom?.[field.key] ?? "";
+    }
+    const message = outOfHoursMessage({
+      templates,
+      ruleId: args.ruleId,
+      org,
+      language: customer.language ?? org.language,
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      custom,
+    });
+    // Nothing useful to say — no authored wording, no link, no phone. The
+    // owner's notification beats a message that is only "we're closed".
+    if (!message) return null;
+
+    // Replies come back to US — same wiring as sendToCustomer above, and the
+    // whole reason the customer can keep the conversation going at 23:00.
+    const replyTo =
+      org.inboundAddress && context.inboundDomain
+        ? `${org.inboundAddress}@${context.inboundDomain}`
+        : undefined;
+
+    const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
+      orgId: customer.orgId,
+      customerId: customer._id,
+      // The `email_` prefix is the channel marker the feed reads.
+      kind: "email_autoreply",
+      body: message.body,
+      emailSubject: message.subject,
+      emailFrom: context.sender,
+    });
+    const result = await sendEmail({
+      apiKey: context.apiKey,
+      from: context.sender,
+      to: args.to,
+      subject: message.subject,
+      html: message.bodyHtml ?? `<p>${escapeHtml(message.body).replace(/\n/g, "<br/>")}</p>`,
+      replyTo,
+    });
+    await ctx.runMutation(internal.messages.applySendResult, {
+      messageId,
+      ok: result.ok,
+      error: result.ok ? undefined : result.reason,
+    });
     return null;
   },
 });
