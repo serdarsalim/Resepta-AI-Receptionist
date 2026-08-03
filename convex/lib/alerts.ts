@@ -455,8 +455,10 @@ export async function queueOrgAlert(
 //
 // Everything else is either the org's own missing template or the provider
 // refusing a send, and both are broken AND actionable. The failed row still
-// gets written in all cases: the Messages tab is where the steady-state ones
-// belong.
+// gets written in all cases — but it is not always SHOWN: no-consent is
+// filtered out of the conversation feed (see neverLeftSilently in messages.ts)
+// because the consent toggle on the card already says that fact once, and a
+// thread is for what a customer was told.
 const STEADY_STATE_FAILURES = new Set([
   "no-consent",
   "wa-not-configured",

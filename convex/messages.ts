@@ -377,11 +377,13 @@ export const feedForCustomer = query({
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) throw new Error("not-found");
 
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .order("desc")
-      .take(200);
+    const messages = (
+      await ctx.db
+        .query("messages")
+        .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+        .order("desc")
+        .take(200)
+    ).filter((m) => !neverLeftSilently(m));
     const calls = await ctx.db
       .query("calls")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -474,6 +476,23 @@ export type ConversationEntry = {
 
 // The expensive half: one window over messages and calls, grouped by customer.
 // Nothing from the customers table is touched here.
+// A row that never left the building because this customer has no consent.
+//
+// The failed row used to be written and shown on the reasoning that a
+// per-customer refusal belongs in that customer's thread rather than in the
+// owner's inbox at 06:00. Half of that still holds — it must not alert — but
+// the thread was the wrong home for it. Consent is one fact, and it is already
+// on the card as a toggle you can see and flip; the thread turned it into a
+// red row per reminder per customer, forever, in a surface whose job is to
+// show what a customer was actually told. Nothing was told. Nothing shows.
+//
+// Sibling case, deliberately left alone for now: `no-email-address`, which is
+// the same kind of fact and gets the same treatment the day it is as visible
+// on the card as consent is.
+function neverLeftSilently(message: { status: string; error?: string }): boolean {
+  return message.status === "failed" && message.error === "no-consent";
+}
+
 export async function conversationEntries(
   ctx: QueryCtx,
   orgId: Id<"orgs">,
@@ -497,6 +516,7 @@ export async function conversationEntries(
     byCustomer.set(customerId, bucket);
   };
   for (const m of messages) {
+    if (neverLeftSilently(m)) continue;
     push(m.customerId, {
       channel: channelOfMessage(m.kind),
       at: m._creationTime,
