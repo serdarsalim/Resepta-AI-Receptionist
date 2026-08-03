@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -347,6 +348,149 @@ export const agentListContext = internalQuery({
       connectedAgentId: agents[0]?.retellAgentId ?? null,
       hiddenAgentIds: org.hiddenRetellAgentIds ?? [],
     };
+  },
+});
+
+// ── Agent ownership tags ────────────────────────────────────────────────────
+//
+// One Retell workspace can serve several businesses on this deployment, and
+// the connect picker used to offer every agent in it — including agents that
+// already belong to somebody else. The fix is a marker saying "Randevu made
+// this one, for that org", and the marker lives AT RETELL rather than in a
+// column here: a row of ours dies when an agent is disconnected, and the fact
+// has to outlive that, or reconnecting your own agent means being shown
+// everyone else's again.
+//
+// Retell's tags are asymmetric — an array of strings when you write them, an
+// object keyed by tag when you read them back from the list endpoint — so both
+// shapes are handled here rather than at every call site.
+export function orgAgentTag(orgId: Id<"orgs">): string {
+  return `randevu:${orgId}`;
+}
+
+export function tagsOf(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((t): t is string => typeof t === "string");
+  if (raw && typeof raw === "object") return Object.keys(raw as Record<string, unknown>);
+  return [];
+}
+
+// Every org that has connected agents, with the key those agents live behind.
+// Operator-only by construction: it takes no user and is reachable only from
+// the backfill action below, which is itself CLI-only.
+export const agentTagBackfillContext = internalQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      orgId: v.id("orgs"),
+      orgName: v.string(),
+      apiKey: v.union(v.string(), v.null()),
+      agentIds: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("retellAgents").collect();
+    const byOrg = new Map<string, string[]>();
+    for (const row of rows) {
+      const key = String(row.orgId);
+      byOrg.set(key, [...(byOrg.get(key) ?? []), row.retellAgentId]);
+    }
+    const out = [];
+    for (const [orgKey, agentIds] of byOrg) {
+      const orgId = orgKey as Id<"orgs">;
+      const org = await ctx.db.get(orgId);
+      if (!org) continue;
+      out.push({
+        orgId,
+        orgName: org.name,
+        apiKey: await connectionField(ctx, orgId, "retell", "apiKey"),
+        agentIds,
+      });
+    }
+    return out;
+  },
+});
+
+// One-off, re-runnable, CLI-only:
+//
+//   npx convex run --prod retell:backfillAgentTags '{}'
+//
+// Stamps every already-connected agent with its org's tag so the picker can
+// start filtering on ownership without the agents that predate tagging
+// vanishing from it. Idempotent — an agent that already carries its tag is
+// skipped, and existing tags (staging, prod, whatever the workspace uses) are
+// merged rather than replaced. Nothing here disconnects, renames or reroutes
+// anything; tags are the only field written.
+export const backfillAgentTags = internalAction({
+  args: { dryRun: v.optional(v.boolean()) },
+  returns: v.any(),
+  handler: async (ctx, { dryRun }) => {
+    const orgs = await ctx.runQuery(internal.retell.agentTagBackfillContext, {});
+    const report: Array<Record<string, unknown>> = [];
+    for (const org of orgs) {
+      if (!org.apiKey) {
+        report.push({ org: org.orgName, skipped: "no-retell-key", agents: org.agentIds.length });
+        continue;
+      }
+      const headers = { authorization: `Bearer ${org.apiKey}` };
+      const tag = orgAgentTag(org.orgId);
+      // Tags come back on the LIST endpoint and not on get-agent, so the
+      // current set is read here once per org rather than per agent.
+      let current = new Map<string, string[]>();
+      try {
+        const res = await fetch("https://api.retellai.com/v2/list-agents", {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ limit: 200 }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { items?: Array<{ agent_id?: string; tags?: unknown }> };
+          current = new Map(
+            (data.items ?? [])
+              .filter((a) => a.agent_id)
+              .map((a) => [a.agent_id!, tagsOf(a.tags)]),
+          );
+        }
+      } catch {
+        report.push({ org: org.orgName, skipped: "list-unreachable" });
+        continue;
+      }
+      const tagged: string[] = [];
+      const already: string[] = [];
+      const failed: string[] = [];
+      for (const agentId of org.agentIds) {
+        const existing = current.get(agentId);
+        if (existing === undefined) {
+          // Connected here, absent from the workspace this key opens. Usually
+          // the org's key was rotated to a different Retell account.
+          failed.push(`${agentId} (not-in-workspace)`);
+          continue;
+        }
+        if (existing.includes(tag)) {
+          already.push(agentId);
+          continue;
+        }
+        if (dryRun) {
+          tagged.push(agentId);
+          continue;
+        }
+        try {
+          const res = await fetch(
+            `https://api.retellai.com/update-agent/${encodeURIComponent(agentId)}`,
+            {
+              method: "PATCH",
+              headers: { ...headers, "content-type": "application/json" },
+              body: JSON.stringify({ tags: [...existing, tag] }),
+            },
+          );
+          if (res.ok) tagged.push(agentId);
+          else failed.push(`${agentId} (http-${res.status})`);
+        } catch {
+          failed.push(`${agentId} (unreachable)`);
+        }
+      }
+      report.push({ org: org.orgName, tag, tagged, already, failed });
+    }
+    return { dryRun: dryRun === true, report };
   },
 });
 
