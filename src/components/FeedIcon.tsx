@@ -6,7 +6,11 @@
 
 export type Channel = "whatsapp" | "email" | "call";
 
-export const CHANNELS: readonly Channel[] = ["whatsapp", "email", "call"];
+// Ordered by how a salon actually reaches people: the phone rings first, mail
+// is the one every business has, and WhatsApp is the one many never connect.
+// This array is the single source of channel order — the filter pills and the
+// inbox row's "reachable on" strip both read it.
+export const CHANNELS: readonly Channel[] = ["call", "email", "whatsapp"];
 
 // A note is a row in the feed but not a way to reach anybody, so it gets a
 // glyph without joining CHANNELS — which drives the inbox row's "reachable on"
