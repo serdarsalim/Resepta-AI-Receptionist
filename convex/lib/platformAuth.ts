@@ -68,6 +68,17 @@ export function emailIsPlatformAdmin(email: string | undefined): boolean {
   return emails.has(email.toLowerCase());
 }
 
+// The allowlist itself, for the operator console to PRINT. Read-only on
+// purpose and read-only forever: there is no setter here and there must not be
+// one, because the whole argument above is that this list lives somewhere no
+// mutation can reach. Showing it is not the risk — the risk was ever letting
+// the app write it. Callers must gate on requirePlatformAdmin first; an
+// operator seeing the operator list is not a disclosure, everyone else seeing
+// it is.
+export function platformAdminEmails(): string[] {
+  return [...allowlist()].sort();
+}
+
 export async function requirePlatformAdmin(ctx: Ctx): Promise<Doc<"users">> {
   const userId = await getAuthUserId(ctx);
   if (!userId) throw new Error("not-signed-in");

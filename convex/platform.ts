@@ -22,7 +22,11 @@ import { internal } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { isPlatformAdmin, requirePlatformAdmin } from "./lib/platformAuth";
+import {
+  isPlatformAdmin,
+  platformAdminEmails,
+  requirePlatformAdmin,
+} from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
@@ -75,6 +79,9 @@ export const deploymentHealth = query({
   returns: v.object({
     emailLane: v.boolean(),
     inboundDomain: v.union(v.string(), v.null()),
+    // Who can see this page at all. Printed rather than managed: the console
+    // has no way to add one and is not getting one (lib/platformAuth.ts).
+    platformAdmins: v.array(v.string()),
   }),
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx);
@@ -82,6 +89,7 @@ export const deploymentHealth = query({
     return {
       emailLane: emailLaneConfigured(config),
       inboundDomain: config.domain,
+      platformAdmins: platformAdminEmails(),
     };
   },
 });

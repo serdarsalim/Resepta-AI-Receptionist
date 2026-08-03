@@ -72,6 +72,23 @@ export default function AdminPage() {
         </p>
       )}
 
+      {/* Who else can see this page. Printed because the answer lives in an
+          env var on the Convex deployment, which means the only way to check
+          it was to go and read the deployment — and the question ("wait, which
+          address is the operator here?") comes up while you are already
+          looking at this page. There is no add button on purpose: the list is
+          out of the app's reach by design, and that is what makes it safe.
+          See convex/lib/platformAuth.ts. */}
+      {deployment && deployment.platformAdmins.length > 0 && (
+        <p className="mb-4 text-xs text-[var(--muted)]">
+          Platform admins: {deployment.platformAdmins.join(" · ")}
+          <span className="ml-2 opacity-70">
+            — set with{" "}
+            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>
+          </span>
+        </p>
+      )}
+
       {fleet.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">No orgs on this deployment yet.</p>
       ) : (
