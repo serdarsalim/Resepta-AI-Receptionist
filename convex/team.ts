@@ -193,6 +193,41 @@ export const setRole = mutation({
   },
 });
 
+// Rename somebody who has a LOGIN but no staff row.
+//
+// Everyone with a staff row is already renameable inline — staff.rename, one
+// write, and the name is the org's own. A member who only has an account had
+// no editable name at all: the roster falls back to users.name, which an OAuth
+// provider filled in from whatever the person called their Google account, and
+// the Team card showed it as plain text you could read and not fix.
+//
+// This writes the USER row, which is shared across every org that person
+// belongs to — so it is a rename of the human, not an org-local alias. That is
+// the right reading for the case it exists for (an owner fixing their own
+// mangled sign-in name), and the reason it is gated: an owner may rename
+// people in their own org, and anybody may rename themselves. An org-local
+// alias would need a field to live in, and the field it would live in is the
+// staff row this person does not have.
+export const renameMember = mutation({
+  args: { userId: v.id("users"), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const isSelf = user._id === args.userId;
+    if (!isSelf) await requireOwner(ctx);
+    // Membership in THIS org is what makes them yours to rename. Without it an
+    // owner could patch any user row on the deployment by id.
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) => q.eq("userId", args.userId).eq("orgId", orgId))
+      .unique();
+    if (!membership) throw new Error("not-found");
+    const name = args.name.trim();
+    if (name) await ctx.db.patch(args.userId, { name });
+    return null;
+  },
+});
+
 // Revokes ACCESS, not existence. Any staff row stays exactly where it is and
 // keeps its appointments — the person simply stops being able to sign in.
 export const removeMember = mutation({

@@ -1271,6 +1271,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
   const setRole = useMutation(api.team.setRole);
   const removeMember = useMutation(api.team.removeMember);
   const linkStaff = useMutation(api.team.linkStaff);
+  const renameMember = useMutation(api.team.renameMember);
   const addStaff = useMutation(api.staff.add);
   const removeStaff = useMutation(api.staff.remove);
   const reorderStaff = useMutation(api.staff.reorder);
@@ -1407,12 +1408,26 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               )}
 
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                {/* Every row is renameable, whichever half of a person it is.
+                    A staff row's name is the org's own; a login-only member
+                    has no staff row to hold one, so the rename lands on the
+                    account — see team.renameMember. Without this branch the
+                    only unfixable name in the card was the one a sign-in
+                    provider chose for you. */}
                 {row.staffId ? (
                   <InlineEditValue
                     compact
                     value={row.name}
                     onSave={(next) =>
                       next && renameStaff({ staffId: row.staffId!, name: next })
+                    }
+                  />
+                ) : row.userId && (isOwner || row.isMe) ? (
+                  <InlineEditValue
+                    compact
+                    value={row.name}
+                    onSave={(next) =>
+                      next && renameMember({ userId: row.userId!, name: next })
                     }
                   />
                 ) : (
