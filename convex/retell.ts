@@ -972,7 +972,7 @@ export const runtimeCallContext = internalQuery({
           .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
           .unique()
       : null;
-    const [variables, fields, services] = await Promise.all([
+    const [variables, fields, services, staffRows] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -981,6 +981,7 @@ export const runtimeCallContext = internalQuery({
         .collect(),
       ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
       ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
+      ctx.db.query("staff").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
     ]);
     const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
     // What "tomorrow at 5" means. The agent was given a timezone and nothing
@@ -1050,6 +1051,16 @@ export const runtimeCallContext = internalQuery({
             currentValue: field && customer ? customer.custom?.[field.key] ?? null : builtIn,
           };
         }),
+      // Who works here. The agent has never been told, so a caller asking for
+      // a person by name — the most ordinary request a salon takes — got an
+      // agent that could not confirm the name exists, and book_appointment
+      // still takes no staff argument, so it books the shop rather than the
+      // person. Names only: which of them is free at 3pm is availability's
+      // job, and a rota is not something to read down a phone line.
+      staff: staffRows
+        .filter((row) => row.active)
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+        .map((row) => ({ name: row.name })),
       // With the PRICE, which this list never carried — so an agent asked
       // "how much is a discovery call?" had the service, its key and its
       // duration, and no honest answer. Spoken form as well as the number,
