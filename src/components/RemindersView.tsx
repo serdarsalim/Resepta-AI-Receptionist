@@ -1370,7 +1370,11 @@ function RulesCard({
 // finding "when are we open" behind a WhatsApp tab was a scavenger hunt. The
 // component keeps living in this file because the away-reply half of it is
 // still wired to everything else here.
-export function AwayReplyCard({
+// Pure schedule — days and open/close, nothing else. The away-reply that used
+// to live here is the out_of_hours rule in Reminders now, and the booking
+// link + public phone are template variables edited beside the rules
+// (MessageVariablesCard). What remained is exactly what the tab's name says.
+export function BusinessHoursCard({
   isOwner,
   org,
   update,
@@ -1382,10 +1386,6 @@ export function AwayReplyCard({
       startMinute?: number;
       endMinute?: number;
     };
-    autoReplyEnabled: boolean;
-    autoReplyText?: string;
-    bookingUrl?: string;
-    publicPhone?: string;
   };
   update: (args: Record<string, unknown>) => void;
 }) {
@@ -1393,15 +1393,6 @@ export function AwayReplyCard({
   const days = weekdayNames(language);
   const hours = org.businessHours ?? {};
   const activeDays = hours.activeDays ?? [];
-
-  // Mirrors hasBusinessHours + awayReplyText in the backend: hours must say
-  // something, and there must be a link or a number worth sending. Enabled but
-  // unconfigured sends nothing at all, and the owner should not have to find
-  // that out by a customer not hearing back.
-  const hasHours =
-    activeDays.length > 0 || hours.startMinute != null || hours.endMinute != null;
-  const hasSomethingToSay = Boolean(org.bookingUrl || org.publicPhone || org.autoReplyText);
-  const inactive = org.autoReplyEnabled && !(hasHours && hasSomethingToSay);
 
   const patchHours = (next: Partial<NonNullable<typeof org.businessHours>>) =>
     update({ businessHours: { ...hours, ...next } });
@@ -1457,43 +1448,85 @@ export function AwayReplyCard({
           defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
           onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
         />
-
-        <RowLabel label={t("settings.autoReply")} hint={t("settings.autoReplyHint")} />
-        <Toggle
-          checked={org.autoReplyEnabled}
-          onChange={(next) => update({ autoReplyEnabled: next })}
-        />
-
-        <RowLabel label={t("settings.bookingUrl")} hint={t("settings.bookingUrlHint")} />
-        <input
-          defaultValue={org.bookingUrl ?? ""}
-          placeholder="https://cal.com/…"
-          onBlur={(e) => update({ bookingUrl: e.target.value })}
-        />
-
-        <RowLabel label={t("settings.publicPhone")} />
-        <input
-          defaultValue={org.publicPhone ?? ""}
-          placeholder="+90…"
-          onBlur={(e) => update({ publicPhone: e.target.value })}
-        />
-
-        <RowLabel
-          label={t("settings.autoReplyText")}
-          hint={t("settings.autoReplyTextHint")}
-        />
-        <textarea
-          rows={3}
-          defaultValue={org.autoReplyText ?? ""}
-          onBlur={(e) => update({ autoReplyText: e.target.value })}
-        />
       </div>
+    </Card>
+  );
+}
 
-      {inactive && (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          {t("settings.autoReplyInactive")}
-        </p>
-      )}
+// What [booking_link] and [phone] insert — the values live on the org
+// (orgs.bookingUrl / orgs.publicPhone), and they are edited HERE, beside the
+// templates that use them, because "things you set" belong next to where they
+// act. The phone offers the voice agents' inbound lines first: a number an
+// agent answers 24/7 is the one worth printing in an automated message.
+// SINGLE number by design — one clear call-to-action, not a switchboard.
+function MessageVariablesCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const voiceNumbers = useQuery(api.orgs.voiceNumbers, {}) ?? [];
+  const update = useMutation(api.orgs.update);
+  if (!settings) return null;
+  const { bookingUrl, publicPhone } = settings.org;
+  const phone = publicPhone ?? "";
+  const isAgentNumber = voiceNumbers.some((line) => line.number === phone);
+
+  return (
+    <Card title={t("settings.msgVariables")} tip={t("settings.msgVariablesHint")} disabled={!isOwner}>
+      <div className={ROW_GRID}>
+        <RowLabel
+          label={t("vars.bookingLink")}
+          hint={t("settings.bookingUrlHint")}
+        />
+        <input
+          defaultValue={bookingUrl ?? ""}
+          placeholder="https://…"
+          onBlur={(e) => void update({ bookingUrl: e.target.value })}
+        />
+
+        <RowLabel label={t("vars.phone")} hint={t("settings.publicPhoneHint")} />
+        <div className="space-y-1.5">
+          {voiceNumbers.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {voiceNumbers.map((line) => {
+                const active = phone === line.number;
+                return (
+                  <button
+                    key={line.number}
+                    type="button"
+                    onClick={() =>
+                      void update({ publicPhone: active ? "" : line.number })
+                    }
+                    className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                      active
+                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {line.number}
+                    <span className="ml-1 opacity-70">
+                      · {line.agentName ?? t("settings.voiceAgentNumber")}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <input
+            // Keyed so picking a chip refreshes the uncontrolled input.
+            key={phone}
+            defaultValue={isAgentNumber ? "" : phone}
+            placeholder={
+              isAgentNumber ? t("settings.publicPhoneCustom") : "+90…"
+            }
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              // An empty custom field while a chip is picked is not a clear —
+              // the chip is the value; clearing means unpicking the chip.
+              if (!next && isAgentNumber) return;
+              void update({ publicPhone: next });
+            }}
+          />
+        </div>
+      </div>
     </Card>
   );
 }
@@ -1656,15 +1689,18 @@ export function RemindersView() {
       )}
 
       {migrated ? (
-        <RulesCard
-          isOwner={isOwner}
-          org={settings.org}
-          templates={settings.templates}
-          rules={rulesData.rules}
-          waConnected={settings.whatsapp.connected}
-          evolutionEnabled={settings.evolutionEnabled}
-          emailEnabled={settings.emailEnabled}
-        />
+        <>
+          <RulesCard
+            isOwner={isOwner}
+            org={settings.org}
+            templates={settings.templates}
+            rules={rulesData.rules}
+            waConnected={settings.whatsapp.connected}
+            evolutionEnabled={settings.evolutionEnabled}
+            emailEnabled={settings.emailEnabled}
+          />
+          <MessageVariablesCard isOwner={isOwner} />
+        </>
       ) : (
         <>
           <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-amber-700 dark:text-amber-400">

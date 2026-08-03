@@ -17,7 +17,7 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
-import { AwayReplyCard } from "./RemindersView";
+import { BusinessHoursCard } from "./RemindersView";
 import { McpCard } from "./McpCard";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
@@ -105,10 +105,12 @@ function HoursCard({
   org,
 }: {
   isOwner: boolean;
-  org: Parameters<typeof AwayReplyCard>[0]["org"];
+  org: Parameters<typeof BusinessHoursCard>[0]["org"];
 }) {
   const update = useMutation(api.orgs.update);
-  return <AwayReplyCard isOwner={isOwner} org={org} update={(args) => void update(args)} />;
+  return (
+    <BusinessHoursCard isOwner={isOwner} org={org} update={(args) => void update(args)} />
+  );
 }
 
 const SECTION_STORAGE_KEY = "randevu.business.section";

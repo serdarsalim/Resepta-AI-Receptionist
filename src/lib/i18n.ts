@@ -2139,45 +2139,35 @@ const dictionary = {
     en: "Closes",
     de: "Schließt",
   },
-  "settings.autoReply": {
-    tr: "Kapalıyken otomatik yanıt",
-    en: "Auto-reply when closed",
-    de: "Autoantwort bei geschlossen",
+  "settings.msgVariables": {
+    tr: "Mesaj değişkenleri",
+    en: "Message variables",
+    de: "Nachrichtenvariablen",
   },
-  "settings.autoReplyHint": {
-    tr: "Kapalı olduğunuz saatlerde yazan müşteriye bir kez randevu linkinizi gönderir. Açıkken kapalıdır: mesajı zaten siz okuyorsunuz ve beş dakikada cevap veren bir insanın üzerine gelen robot yanıtı kötü görünür.",
-    en: "Sends your booking link once to anyone who writes while you're closed. Off during opening hours on purpose: you're reading those messages, and a bot replying on top of a human who answers in five minutes reads badly.",
-    de: "Sendet Ihren Buchungslink einmal an alle, die außerhalb der Öffnungszeiten schreiben. Während der Öffnungszeiten absichtlich aus: Sie lesen diese Nachrichten selbst, und eine Bot-Antwort über einem Menschen wirkt schlecht.",
-  },
-  "settings.autoReplyText": {
-    tr: "Kendi metniniz",
-    en: "Your own wording",
-    de: "Ihr eigener Text",
-  },
-  "settings.autoReplyTextHint": {
-    tr: "Boş bırakırsanız müşterinin kendi diline göre hazır metin gönderilir. Doldurursanız aynen bu metin gider — tek dilde, yani farklı dillerde müşteriniz varsa boş bırakın. [name] ve [business] yazarsanız yerine müşterinin adı ve işletmenizin adı geçer.",
-    en: "Left blank, each customer gets the default in their own language. Filled in, exactly this text is sent — in one language only, so leave it blank if your customers don't share one. Write [name] or [business] to drop in the customer's name or your business name.",
-    de: "Leer gelassen erhält jeder Kunde die Vorlage in seiner Sprache. Ausgefüllt wird genau dieser Text gesendet — einsprachig, also leer lassen bei gemischtsprachigen Kunden. Mit [name] oder [business] werden Kundenname und Betriebsname eingesetzt.",
-  },
-  "settings.bookingUrl": {
-    tr: "Randevu linki",
-    en: "Booking link",
-    de: "Buchungslink",
+  "settings.msgVariablesHint": {
+    tr: "Her şablonda kullanılabilir: [booking_link] randevu linkinizi, [phone] müşteriye verdiğiniz numarayı yazar. Değerler burada tek yerden yönetilir.",
+    en: "Usable in every template: [booking_link] inserts your booking link, [phone] the number you give customers. The values are managed here, once.",
+    de: "In jeder Vorlage nutzbar: [booking_link] fügt Ihren Buchungslink ein, [phone] die Nummer für Ihre Kundschaft. Die Werte werden hier zentral gepflegt.",
   },
   "settings.bookingUrlHint": {
-    tr: "cal.com sayfanızın adresi. Otomatik yanıtta ilk sırada bu gider — gece yarısı bir telefon numarası çıkmaz yol, link çalışır.",
-    en: "Your cal.com page. The auto-reply offers this first: a phone number is a dead end at midnight, a link isn't.",
-    de: "Ihre cal.com-Seite. Die Autoantwort nennt zuerst diesen Link — eine Telefonnummer führt um Mitternacht nirgendwohin.",
+    tr: "Müşterilerin randevu aldığı sayfa. Mesajlardaki her [booking_link] bu adresi yazar.",
+    en: "The page customers book on. Every [booking_link] in your messages inserts this address.",
+    de: "Die Seite, auf der Ihre Kundschaft bucht. Jedes [booking_link] in Ihren Nachrichten fügt diese Adresse ein.",
   },
-  "settings.publicPhone": {
-    tr: "Müşteriye verilecek telefon",
-    en: "Phone to give customers",
-    de: "Telefonnummer für Kunden",
+  "settings.publicPhoneHint": {
+    tr: "Bilerek tek numara: otomatik bir mesajda tek ve net bir arama noktası olmalı. Önerimiz sesli asistanın hattı — 7/24 açık olan o.",
+    en: "One number on purpose: an automated message should have a single, clear line to call. Our suggestion is the voice agent's — it answers around the clock.",
+    de: "Bewusst eine einzige Nummer: eine automatische Nachricht braucht genau eine klare Rufnummer. Unsere Empfehlung ist die Leitung des Sprachassistenten — sie ist rund um die Uhr erreichbar.",
   },
-  "settings.autoReplyInactive": {
-    tr: "Şu anda hiçbir şey gönderilmiyor: otomatik yanıt için en az bir açık gün veya saat ile bir link ya da telefon gerekiyor.",
-    en: "Nothing is being sent right now: the auto-reply needs at least one open day or hour, plus a link or a phone number.",
-    de: "Derzeit wird nichts gesendet: die Autoantwort braucht mindestens einen Öffnungstag oder eine Zeit sowie einen Link oder eine Telefonnummer.",
+  "settings.publicPhoneCustom": {
+    tr: "Ya da başka bir numara yazın…",
+    en: "Or type another number…",
+    de: "Oder eine andere Nummer eingeben…",
+  },
+  "settings.voiceAgentNumber": {
+    tr: "Sesli asistan",
+    en: "Voice agent",
+    de: "Sprachassistent",
   },
   "settings.calcomApiKey": {
     tr: "cal.com API anahtarı",

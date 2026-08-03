@@ -233,6 +233,32 @@ export const current = query({
   },
 });
 
+// The voice agents' inbound lines — what the [phone] picker suggests, because
+// a number an agent answers 24/7 is the one worth printing in an automated
+// message. Deduped: two agents on one line are one suggestion.
+export const voiceNumbers = query({
+  args: {},
+  returns: v.array(
+    v.object({ number: v.string(), agentName: v.union(v.string(), v.null()) }),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const agents = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const seen = new Set<string>();
+    const numbers: { number: string; agentName: string | null }[] = [];
+    for (const agent of agents) {
+      const number = agent.inboundNumber?.trim();
+      if (!number || !agent.enabled || seen.has(number)) continue;
+      seen.add(number);
+      numbers.push({ number, agentName: agent.name ?? null });
+    }
+    return numbers;
+  },
+});
+
 export const update = mutation({
   args: {
     name: v.optional(v.string()),
