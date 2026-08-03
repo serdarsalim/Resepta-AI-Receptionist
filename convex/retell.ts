@@ -719,11 +719,17 @@ export const beforeCallContext = internalQuery({
     const priceDigits =
       new Intl.NumberFormat(lang, { style: "currency", currency }).resolvedOptions()
         .minimumFractionDigits ?? 2;
+    // Spoken, not written — this list is read down a phone line, and
+    // text-to-speech drops "₺" and leaves the caller hearing "five hundred"
+    // with no idea of what. Same treatment as the services in
+    // runtimeCallContext: the currency as a word, and no decimals on a whole
+    // amount.
     const priceOf = (minor: number) =>
       new Intl.NumberFormat(lang, {
         style: "currency",
         currency,
-        currencyDisplay: "narrowSymbol",
+        currencyDisplay: "name",
+        minimumFractionDigits: minor % 10 ** priceDigits === 0 ? 0 : priceDigits,
       }).format(minor / 10 ** priceDigits);
     const builtins: Record<string, string> = {
       business_name: org.name,
