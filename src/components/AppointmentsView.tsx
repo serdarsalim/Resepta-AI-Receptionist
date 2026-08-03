@@ -1287,8 +1287,12 @@ function Calendar({
     const bands: { top: number; height: number }[] = [];
     let cursor = day;
     for (const range of [...open].sort((a, b) => a.from - b.from)) {
-      const from = Math.max(range.from, day);
-      const to = Math.min(range.to, dayEndMs);
+      // BOTH ends clamped to the column. The second civil date's open window
+      // usually starts after this column ends, and an unclamped `from` drew
+      // the evening band straight through midnight into a phantom second
+      // grid below the real one.
+      const from = Math.min(Math.max(range.from, day), dayEndMs);
+      const to = Math.min(Math.max(range.to, day), dayEndMs);
       if (to <= cursor) continue;
       if (from > cursor) {
         bands.push({ top: px(cursor), height: px(from) - px(cursor) });
