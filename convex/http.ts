@@ -18,7 +18,13 @@ import {
   verifyResendSignature,
 } from "./lib/emailInbound";
 import { formatAppointmentTime } from "./lib/format";
-import { localDayRangeUtc, parseLocalStart, todayInZone } from "./lib/businessHours";
+import {
+  hasBusinessHours,
+  isWithinActiveWindow,
+  localDayRangeUtc,
+  parseLocalStart,
+  todayInZone,
+} from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 
 const http = httpRouter();
@@ -351,6 +357,50 @@ function contactUpdateSentence(result: {
   return parts.join(" ") || "Nothing to save.";
 }
 
+// When the salon is open, shaped for a body the LLM reads verbatim. Shared by
+// the tool that TELLS the agent the hours and the one that REFUSES a booking
+// outside them, so a rejection can quote the same hours the agent was given
+// rather than a second, subtly different phrasing of them.
+//
+// Day names go out in English and the model says them in the call's language —
+// the same split the `note` fields already use: times the caller hears are
+// localised, instructions to the model are not.
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+function openHoursForAgent(
+  hours:
+    | { activeDays?: number[]; startMinute?: number; endMinute?: number }
+    | null
+    | undefined,
+): { open_hours?: string; closed_days?: string[] } {
+  if (!hours) return {};
+  const asClock = (minute: number) =>
+    `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  const out: { open_hours?: string; closed_days?: string[] } = {};
+  if (hours.startMinute !== undefined && hours.endMinute !== undefined) {
+    out.open_hours = `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}`;
+  }
+  // Empty or absent activeDays means open every day (the schema's rule), so
+  // only a non-empty list closes anything. The agent needs the COMPLEMENT —
+  // the days it must not offer — because "we are open Mon-Sat" is a fact it
+  // has to invert under time pressure, and inverting it is how Sunday gets
+  // offered.
+  const days = hours.activeDays;
+  if (days && days.length > 0) {
+    const closed = WEEKDAY_NAMES.filter((_, day) => !days.includes(day));
+    if (closed.length > 0) out.closed_days = closed;
+  }
+  return out;
+}
+
 // Runs while an inbound call is still ringing. Retell knows the agent and the
 // caller number at this point, which is exactly enough to resolve an org and
 // inject the context that agent is allowed to know before saying hello.
@@ -454,8 +504,7 @@ http.route({
           full: { startAt: number; durationMinutes: number | null }[];
         };
         const hours = org.businessHours ?? null;
-        const asClock = (minute: number) =>
-          `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+        const openness = openHoursForAgent(hours);
         return respond({
           date: dayIso,
           // Speakable ranges, not raw timestamps: this body goes to the LLM
@@ -467,13 +516,17 @@ http.route({
             start: formatAppointmentTime(slot.startAt, org.timezone, org.language),
             duration_minutes: slot.durationMinutes ?? 30,
           })),
-          ...(hours && hours.startMinute !== undefined && hours.endMinute !== undefined
-            ? { open_hours: `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}` }
-            : {}),
+          // open_hours says when the doors are open; closed_days says which
+          // days they never open at all. The second used to be missing, so an
+          // agent that knew "09:00-18:00" would offer 09:00 on a Sunday the
+          // salon is shut.
+          ...openness,
           note:
             "These times are FULL — every person is already busy. Everything" +
             " else is free. Offer times that avoid them" +
-            (hours ? " and stay inside open_hours." : "."),
+            (openness.open_hours ? ", stay inside open_hours" : "") +
+            (openness.closed_days ? ", never offer a date on closed_days" : "") +
+            ".",
         });
       }
       const result = await getAvailableSlots({
@@ -512,6 +565,37 @@ http.route({
       }
       if (startAt > now + 400 * 24 * 60 * 60_000) {
         return respond({ error: "start-is-too-far-ahead" });
+      }
+      // check_availability TELLS the agent the hours, but being told is not
+      // being bound: on the call that exposed this, that tool failed its
+      // signature check and answered nothing, so the model proposed 08:00 at a
+      // salon opening at 09:00 and nothing here disagreed. The prompt is the
+      // cooperative layer; a write to the appointments table has to hold the
+      // invariant itself.
+      //
+      // Checked before cal.com too, and deliberately: businessHours is the
+      // salon's own statement of when it is open, so a slot outside it is
+      // wrong whichever calendar is holding the inventory — and refusing here
+      // avoids creating a provider booking we would then have to undo.
+      const openHours = org.businessHours;
+      if (
+        openHours &&
+        hasBusinessHours(openHours) &&
+        !isWithinActiveWindow(startAt, org.timezone, openHours)
+      ) {
+        // Speakable, not a bare code. An error the agent cannot act on becomes
+        // "something went wrong" down the phone and ends a call that was one
+        // sentence from booking; handed the hours, it counters with a time
+        // that works.
+        return respond({
+          error: "outside-open-hours",
+          attempted: formatAppointmentTime(startAt, org.timezone, org.language),
+          ...openHoursForAgent(openHours),
+          note:
+            "The salon is CLOSED then, so this was not booked. Tell the caller" +
+            " and offer the nearest time inside open_hours on a day that is not" +
+            " in closed_days.",
+        });
       }
       let externalUid: string | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
