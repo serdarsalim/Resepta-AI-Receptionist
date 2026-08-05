@@ -5,6 +5,13 @@
 > directory, Vercel project and selected internal identifiers retain the former
 > `randevu` name; do not rename infrastructure merely to match the brand.
 
+> **Public help center:** `https://docs.mahlas.xyz` is served by the same
+> Vercel project and rewritten to `/help` in `src/middleware.ts`. Its content
+> lives in `src/components/HelpCenter.tsx` so product and help ship together.
+> The Markdown `docs/` directory is the technical/operator source material,
+> not a public site. Translate its product facts into customer steps; never
+> expose provider names, credentials, internal IDs, or platform-admin recovery.
+
 > **Read [`docs/wwsd.md`](docs/wwsd.md) FIRST.** It is the decision model —
 > how Serdar picks, what he rejects, and the design-language violations he has
 > personally flagged. Every rule there came from a real correction. Consult it

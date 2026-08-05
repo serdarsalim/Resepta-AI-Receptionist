@@ -318,6 +318,9 @@ export function Landing() {
             <p className="mt-2">{copy.footerLine}</p>
           </div>
           <nav className="flex flex-wrap gap-5">
+            <a className="transition-colors hover:text-[var(--foreground)]" href="https://docs.mahlas.xyz">
+              {copy.help}
+            </a>
             <Link className="transition-colors hover:text-[var(--foreground)]" href="/privacy">
               {copy.privacy}
             </Link>

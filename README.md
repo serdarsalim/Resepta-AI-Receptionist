@@ -23,6 +23,14 @@ The public product and canonical frontend are **Mahlas** at
 infrastructure identifiers retain the former `randevu` name so the rebrand does
 not disturb deployment history or integrations.
 
+The customer-facing help center is published at
+[`docs.mahlas.xyz`](https://docs.mahlas.xyz). Its source lives in
+`src/app/help` and `src/components/HelpCenter.tsx` in this repository so help
+content changes with the interface it describes. The Markdown files under
+`docs/` remain engineering and operator documentation; do not expose secrets,
+provider identifiers, or operator-only recovery steps through the public help
+center.
+
 ## Stack
 
 Next.js App Router, React, Convex, Convex Auth with Google OAuth, Tailwind CSS

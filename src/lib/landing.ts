@@ -76,6 +76,7 @@ export type LandingCopy = {
   closingTitle: string;
   closingBody: string;
   footerLine: string;
+  help: string;
   privacy: string;
   terms: string;
 };
@@ -221,6 +222,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Mahlas'a Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
     footerLine: "Randevulu çalışan işletmeler için telefon ve müşteri otomasyonu.",
+    help: "Yardım merkezi",
     privacy: "Gizlilik politikası",
     terms: "Kullanım koşulları",
   },
@@ -365,6 +367,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Sign in with Google, create your business, and put the first connected appointment workflow to work.",
     footerLine: "Calls and customer automation for appointment-led businesses.",
+    help: "Help center",
     privacy: "Privacy policy",
     terms: "Terms of service",
   },
@@ -509,6 +512,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Melden Sie sich mit Google an, legen Sie Ihren Betrieb an und starten Sie den ersten durchgängigen Terminablauf.",
     footerLine: "Telefon- und Kundenautomatisierung für Betriebe mit Terminvergabe.",
+    help: "Hilfe-Center",
     privacy: "Datenschutzerklärung",
     terms: "Nutzungsbedingungen",
   },

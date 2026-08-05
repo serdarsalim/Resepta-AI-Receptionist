@@ -39,6 +39,11 @@ const dictionary = {
   },
 
   "menu.appearance": { tr: "Görünüm", en: "Appearance", de: "Darstellung" },
+  "menu.helpCenter": {
+    tr: "Yardım merkezi",
+    en: "Help center",
+    de: "Hilfe-Center",
+  },
   "menu.account": {
     tr: "Hesap menüsü",
     en: "Account menu",

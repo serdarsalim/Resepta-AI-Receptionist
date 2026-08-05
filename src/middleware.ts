@@ -3,6 +3,7 @@ import {
   createRouteMatcher,
   nextjsMiddlewareRedirect,
 } from "@convex-dev/auth/nextjs/server";
+import { NextResponse } from "next/server";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 
@@ -34,9 +35,25 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // and the real thing under <Authenticated>, and every Convex function behind
 // the app half still goes through requireOrg. Letting the request past this
 // redirect exposes a page, not a tenant.
-const isPublicPage = createRouteMatcher(["/r/(.*)", "/privacy", "/terms", "/"]);
+const isPublicPage = createRouteMatcher([
+  "/r/(.*)",
+  "/privacy",
+  "/terms",
+  "/help",
+  "/help/(.*)",
+  "/",
+]);
 
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+  // Keep help content in the product repository so it cannot drift from the
+  // shipped interface, while giving it a clean public docs origin.
+  const host = request.headers.get("host")?.split(":")[0];
+  if (host === "docs.mahlas.xyz" && request.nextUrl.pathname === "/") {
+    const helpUrl = request.nextUrl.clone();
+    helpUrl.pathname = "/help";
+    return NextResponse.rewrite(helpUrl);
+  }
+
   // First, and before the auth lookup: a stranger loading an embedded form
   // should not pay for a session check that cannot change the answer. This
   // also means a signed-in owner previewing their own form sees the form,

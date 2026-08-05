@@ -92,6 +92,12 @@ written for each market rather than translated line by line. Landing media is
 public under `/images`; middleware must never redirect those asset requests to
 sign-in.
 
+The public `/help` route is the customer-facing Mahlas help center and is also
+served at `https://docs.mahlas.xyz`. It turns the product facts in this file and
+the other technical runbooks into customer-safe setup and operating guidance.
+Provider identities, platform-admin controls, credentials and raw recovery
+steps stay out of the public help center.
+
 The signed-in sidebar is:
 
 1. **Customers**: customer table, custom information fields and history. The
