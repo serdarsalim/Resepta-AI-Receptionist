@@ -12,6 +12,11 @@
 > not a public site. Translate its product facts into customer steps; never
 > expose provider names, credentials, internal IDs, or platform-admin recovery.
 
+> **Public demo:** `https://demo.mahlas.xyz` rewrites signed-out root requests
+> to `/demo`, then signs visitors anonymously into the isolated showroom org.
+> It shares the production deployment by design. Preserve all three safety
+> boundaries documented under "The demo org" and never add credentials to it.
+
 > **Read [`docs/wwsd.md`](docs/wwsd.md) FIRST.** It is the decision model —
 > how Serdar picks, what he rejects, and the design-language violations he has
 > personally flagged. Every rule there came from a real correction. Consult it
@@ -224,6 +229,8 @@ after).
 
 Walk-in anonymous sign-in exists only when `DEMO_ORG_ID` is set — the provider
 is not registered otherwise. Never set `demoMode` on an org with credentials.
+The public entry origin is `https://demo.mahlas.xyz`; its session stays on that
+subdomain so trying the demo does not replace an owner's `mahlas.xyz` session.
 
 ## Open product questions (unresolved as of 2026-07-25)
 

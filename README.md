@@ -31,6 +31,11 @@ content changes with the interface it describes. The Markdown files under
 provider identifiers, or operator-only recovery steps through the public help
 center.
 
+The public product demo is published at
+[`demo.mahlas.xyz`](https://demo.mahlas.xyz). It signs visitors anonymously
+into the isolated showroom org, where all sends are simulated and the fixed
+fictional dataset is rebuilt nightly.
+
 ## Stack
 
 Next.js App Router, React, Convex, Convex Auth with Google OAuth, Tailwind CSS

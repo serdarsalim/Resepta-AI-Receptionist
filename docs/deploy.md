@@ -60,6 +60,11 @@ Only set `DEMO_ORG_ID` after the target org has `demoMode` enabled and has no
 real messaging credentials. With it unset, anonymous demo sign-in is not
 registered and Google is the only auth provider.
 
+The production demo origin is `https://demo.mahlas.xyz`. It serves `/demo` to
+signed-out visitors and the normal app root after anonymous sign-in. Point it
+at the same Vercel project as `mahlas.xyz`; the data boundary is the isolated
+demo org, not a second frontend deployment.
+
 The Google Cloud authorized redirect URI is:
 
 ```text

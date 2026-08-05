@@ -41,6 +41,7 @@ const isPublicPage = createRouteMatcher([
   "/terms",
   "/help",
   "/help/(.*)",
+  "/demo",
   "/",
 ]);
 
@@ -52,6 +53,19 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
     const helpUrl = request.nextUrl.clone();
     helpUrl.pathname = "/help";
     return NextResponse.rewrite(helpUrl);
+  }
+
+  // The demo origin opens on a purpose-built explanation for a new visitor,
+  // then becomes the real app on the same host once anonymous sign-in has
+  // created the demo-only session. Keeping the session on demo.mahlas.xyz
+  // prevents an owner's mahlas.xyz session from being replaced by a preview.
+  if (host === "demo.mahlas.xyz" && request.nextUrl.pathname === "/") {
+    const isAuthed = await convexAuth.isAuthenticated();
+    if (!isAuthed) {
+      const demoUrl = request.nextUrl.clone();
+      demoUrl.pathname = "/demo";
+      return NextResponse.rewrite(demoUrl);
+    }
   }
 
   // First, and before the auth lookup: a stranger loading an embedded form

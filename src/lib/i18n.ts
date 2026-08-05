@@ -2729,6 +2729,46 @@ const dictionary = {
     en: "This is an example account. Nothing is really sent, and it resets each night.",
     de: "Dies ist ein Beispielkonto. Es wird nichts wirklich gesendet, und es wird jede Nacht zurückgesetzt.",
   },
+  "demo.entryEyebrow": {
+    tr: "Canlı ürün turu",
+    en: "Live product tour",
+    de: "Live-Produkttour",
+  },
+  "demo.entryTitle": {
+    tr: "Mahlas’ı çalışan bir örnekle deneyin",
+    en: "Try Mahlas with a working example",
+    de: "Mahlas mit einem funktionierenden Beispiel testen",
+  },
+  "demo.entryBody": {
+    tr: "Moda Kuaför’ün örnek hesabında dolu bir takvimi, müşteri kayıtlarını ve gerçekçi konuşmaları keşfedin.",
+    en: "Explore a full calendar, customer records and realistic conversations inside Moda Kuaför’s fictional account.",
+    de: "Entdecken Sie einen vollen Kalender, Kundendaten und realistische Unterhaltungen im fiktiven Konto von Moda Kuaför.",
+  },
+  "demo.entryCta": {
+    tr: "Demoyu aç",
+    en: "Open the demo",
+    de: "Demo öffnen",
+  },
+  "demo.entryNoSignup": {
+    tr: "Kayıt gerekmez",
+    en: "No signup required",
+    de: "Keine Anmeldung nötig",
+  },
+  "demo.entrySimulated": {
+    tr: "Tüm gönderimler simüle edilir",
+    en: "Every send is simulated",
+    de: "Jeder Versand wird simuliert",
+  },
+  "demo.entryReset": {
+    tr: "Örnek veriler her gece yenilenir",
+    en: "Example data resets nightly",
+    de: "Beispieldaten werden nachts zurückgesetzt",
+  },
+  "demo.entryProduct": {
+    tr: "Mahlas hakkında",
+    en: "About Mahlas",
+    de: "Über Mahlas",
+  },
 
   // Campaigns. "Kampanya" is what a Turkish salon already calls this, so the
   // product uses their word rather than coining "toplu mesaj".
