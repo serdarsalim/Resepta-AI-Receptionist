@@ -1,10 +1,10 @@
-# Randevu production spec
+# Mahlas production spec
 
 Last reconciled with the shipped product: 2 August 2026.
 
 ## 1. Product
 
-Randevu is an AI front desk for appointment businesses, starting with salons,
+Mahlas is an AI front desk for appointment businesses, starting with salons,
 barbers, dentists and clinics in Türkiye. One shared, multi-org deployment gives
 each business a phone receptionist, customer records, appointments, WhatsApp
 confirmations and reminders, an inbox and a calendar.

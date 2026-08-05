@@ -2,8 +2,8 @@
 
 Last reconciled with the implementation: 2 August 2026.
 
-This is the canonical handoff for Randevu's phone-agent lane. Salon owners use
-one native Randevu surface. The current execution provider is an implementation
+This is the canonical handoff for Mahlas's phone-agent lane. Salon owners use
+one native Mahlas surface. The current execution provider is an implementation
 detail that appears only in backend code and the platform-admin console.
 
 ## Product contract

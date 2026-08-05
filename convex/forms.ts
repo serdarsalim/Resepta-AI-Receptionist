@@ -172,7 +172,7 @@ export const enable = mutation({
     }
     let slug = org.publicSlug;
     if (!slug) {
-      const base = slugify(org.name) || "randevu";
+      const base = slugify(org.name) || "mahlas";
       const taken = new Set(
         (await ctx.db.query("orgs").collect())
           .filter((other) => other._id !== orgId)
