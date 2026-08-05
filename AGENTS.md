@@ -1,4 +1,9 @@
-# Randevu — working in this codebase
+# Mahlas — working in this codebase
+
+> **Brand and infrastructure (decided 2026-08-05, Serdar):** the public product
+> is **Mahlas** and its canonical frontend is `https://mahlas.xyz`. The repo,
+> directory, Vercel project and selected internal identifiers retain the former
+> `randevu` name; do not rename infrastructure merely to match the brand.
 
 > **Read [`docs/wwsd.md`](docs/wwsd.md) FIRST.** It is the decision model —
 > how Serdar picks, what he rejects, and the design-language violations he has
@@ -8,7 +13,7 @@
 WhatsApp appointment automation for SMBs (salons, barbers, dentists). One shared
 deployment serves EVERY business — this is the multi-org sibling of Nudge
 (`../nudge`), which is instance-per-tenant. The two products deliberately do not
-share a codebase; Randevu borrows Nudge's proven pieces (the wa_cloud sender,
+share a codebase; Mahlas borrows Nudge's proven pieces (the wa_cloud sender,
 config conventions) by copy, not import.
 
 ## The one invariant that matters
@@ -27,7 +32,7 @@ style issue.
   NOT deal stages, NOT HubSpot. If a feature request looks like Nudge, it
   belongs in Nudge.
 - **The public product is vertical-agnostic** (Serdar, 2026-07-31). Lead with
-  Randevu's call → booking → follow-up workflow and product UI, never with one
+  Mahlas's call → booking → follow-up workflow and product UI, never with one
   industry's lifestyle photo. Industry photography belongs only inside
   labelled use-case tabs and never inside the product demo; it illustrates an
   example without redefining the app as salon, clinic or workshop software.

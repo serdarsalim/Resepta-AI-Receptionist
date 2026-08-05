@@ -263,7 +263,7 @@ function EmbedSnippet({ src }: { src: string }) {
   // the listener matches the iframe by its own contentWindow, so a page
   // carrying two of these sizes each one correctly.
   const snippet = [
-    `<iframe src="${src}" style="width:100%;border:0" height="620" title="Randevu"></iframe>`,
+    `<iframe src="${src}" style="width:100%;border:0" height="620" title="Mahlas"></iframe>`,
     `<script>addEventListener("message",function(e){if(!e.data||e.data.type!=="randevu:height")return;document.querySelectorAll("iframe").forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})})</script>`,
   ].join("\n");
   return (

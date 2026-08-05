@@ -1,22 +1,27 @@
-# Randevu
+# Mahlas
 
-Randevu is an AI front desk for appointment businesses such as salons,
+Mahlas is an AI front desk for appointment businesses such as salons,
 barbers, dentists and clinics. One multi-org deployment gives each business a
 native phone agent, customer records, appointments, WhatsApp confirmations and
 reminders, an inbox and a working calendar.
 
-The phone agent can be created or connected from Randevu, follows the
+The phone agent can be created or connected from Mahlas, follows the
 business's instructions, reads and updates configured customer information and
 writes call results back durably. The current voice provider is intentionally
 hidden from salon users. WhatsApp business-initiated messages use approved Meta
 templates, and customers can confirm or cancel by reply.
 
 cal.com is the intended availability system, but it is not assumed to be
-connected. Without an org API key and event type, Randevu can still hold manual
+connected. Without an org API key and event type, Mahlas can still hold manual
 and phone-created appointments but does not prevent double-booking.
 
 The app UI supports Turkish, English and German. Customer-facing message
 language resolves per customer, then falls back to the business language.
+
+The public product and canonical frontend are **Mahlas** at
+[`mahlas.xyz`](https://mahlas.xyz). The repository, local directory and some
+infrastructure identifiers retain the former `randevu` name so the rebrand does
+not disturb deployment history or integrations.
 
 ## Stack
 

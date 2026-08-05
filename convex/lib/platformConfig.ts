@@ -33,7 +33,7 @@ export const PLATFORM_KEYS = {
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;
 
-export const DEFAULT_PRODUCT_NAME = "Randevu";
+export const DEFAULT_PRODUCT_NAME = "Mahlas";
 
 // Everything the email lane needs, in one table read. Returned as a value
 // object rather than resolved field by field because every caller needs at

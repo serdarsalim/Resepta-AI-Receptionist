@@ -31,7 +31,7 @@ export const DEFAULT_LANGUAGE: Language = "tr";
 export const LANGUAGE_STORAGE_KEY = "randevu.lang";
 
 const dictionary = {
-  "app.name": { tr: "Randevu", en: "Randevu", de: "Randevu" },
+  "app.name": { tr: "Mahlas", en: "Mahlas", de: "Mahlas" },
   "app.tagline": {
     tr: "WhatsApp randevu hatırlatmaları",
     en: "WhatsApp appointment reminders",
@@ -1535,9 +1535,9 @@ const dictionary = {
     de: "Trennen",
   },
   "settings.voiceDisconnectConfirm": {
-    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Randevu'da kalır, ancak asistan artık bu işletmede görünmez.",
-    en: "Disconnect {name}? Its call history stays in Randevu, but the agent will no longer appear for this business.",
-    de: "{name} trennen? Der Anrufverlauf bleibt in Randevu, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
+    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Mahlas'ta kalır, ancak asistan artık bu işletmede görünmez.",
+    en: "Disconnect {name}? Its call history stays in Mahlas, but the agent will no longer appear for this business.",
+    de: "{name} trennen? Der Anrufverlauf bleibt in Mahlas, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
   "settings.voiceNotProvisioned": {
     tr: "Sesli asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
@@ -1603,9 +1603,9 @@ const dictionary = {
     de: "Die Anrufergebnisse dieses Assistenten erreichen die App nicht.",
   },
   "settings.voiceNotFullyConnected": {
-    tr: "Bu asistan Randevu'ya tam olarak bağlı değil.",
-    en: "This agent is not fully connected to Randevu.",
-    de: "Dieser Assistent ist nicht vollständig mit Randevu verbunden.",
+    tr: "Bu asistan Mahlas'a tam olarak bağlı değil.",
+    en: "This agent is not fully connected to Mahlas.",
+    de: "Dieser Assistent ist nicht vollständig mit Mahlas verbunden.",
   },
   "settings.voiceUpdateIncomplete": {
     tr: "Yakın tarihli bir aramanın verileri güvende, ancak bazı müşteri bilgileri eksik olabilir.",
@@ -1649,14 +1649,14 @@ const dictionary = {
     de: "Anrufergebnisse",
   },
   "voiceDetail.webhookHint": {
-    tr: "Her aramadan sonra kayıtların, özetlerin ve toplanan bilgilerin Randevu'ya ulaşmasını sağlar.",
-    en: "Keeps recordings, summaries and collected details in Randevu after every call.",
-    de: "Sorgt dafür, dass Aufzeichnungen, Zusammenfassungen und erfasste Angaben nach jedem Anruf in Randevu ankommen.",
+    tr: "Her aramadan sonra kayıtların, özetlerin ve toplanan bilgilerin Mahlas'a ulaşmasını sağlar.",
+    en: "Keeps recordings, summaries and collected details in Mahlas after every call.",
+    de: "Sorgt dafür, dass Aufzeichnungen, Zusammenfassungen und erfasste Angaben nach jedem Anruf in Mahlas ankommen.",
   },
   "voiceDetail.webhookWired": {
-    tr: "Sonuçlar Randevu'ya ulaşıyor.",
-    en: "Results are reaching Randevu.",
-    de: "Ergebnisse erreichen Randevu.",
+    tr: "Sonuçlar Mahlas'a ulaşıyor.",
+    en: "Results are reaching Mahlas.",
+    de: "Ergebnisse erreichen Mahlas.",
   },
   "voiceDetail.webhookElsewhere": {
     tr: "Başka bir adrese işaret ediyor. Arama sonuçları bu uygulamaya ulaşmıyor.",
@@ -1670,8 +1670,8 @@ const dictionary = {
   },
   "voiceDetail.signatureRejected": {
     tr: "Aramalar ulaşıyor ama reddediliyor: Retell anahtarı doğrulanmıyor.",
-    en: "Calls are reaching Randevu but being rejected: the Retell key does not verify.",
-    de: "Anrufe erreichen Randevu, werden aber abgewiesen: Der Retell-Schlüssel wird nicht verifiziert.",
+    en: "Calls are reaching Mahlas but being rejected: the Retell key does not verify.",
+    de: "Anrufe erreichen Mahlas, werden aber abgewiesen: Der Retell-Schlüssel wird nicht verifiziert.",
   },
   "voiceDetail.signatureRejectedHint": {
     tr: "Bu iş yeri için kayıtlı Retell anahtarı, o çalışma alanının imzalama anahtarı değil. Retell → Settings → API Keys içinde Webhook rozetli anahtarı kopyalayıp yönetici konsolundan güncelleyin. Düzeltilene kadar randevular arama sırasında kaydedilemez.",
@@ -1747,9 +1747,9 @@ const dictionary = {
   // Derived from engineType client-side so the copy translates; the backend
   // sends no English for these.
   "voiceDetail.flowAgent": {
-    tr: "Bu asistan yönlendirilmiş bir konuşma akışıyla çalışıyor. Senaryosu henüz Randevu'dan düzenlenemiyor.",
-    en: "This agent uses a guided call flow. Its script cannot be edited from Randevu yet.",
-    de: "Dieser Assistent nutzt einen geführten Gesprächsablauf. Sein Skript kann noch nicht in Randevu bearbeitet werden.",
+    tr: "Bu asistan yönlendirilmiş bir konuşma akışıyla çalışıyor. Senaryosu henüz Mahlas'tan düzenlenemiyor.",
+    en: "This agent uses a guided call flow. Its script cannot be edited from Mahlas yet.",
+    de: "Dieser Assistent nutzt einen geführten Gesprächsablauf. Sein Skript kann noch nicht in Mahlas bearbeitet werden.",
   },
   "voiceDetail.noPrompt": {
     tr: "Bu asistanın buradan düzenlenebilecek bir talimatı yok.",
@@ -1812,9 +1812,9 @@ const dictionary = {
     de: "Jede Zeile zeigt den gesamten Weg eines Werts: woher er vor dem Anruf kommt, wie er im Gespräch erfasst wird, ob er danach ergänzt wird und wo er gespeichert wird.",
   },
   "voiceVariables.importedHint": {
-    tr: "Bunlar asistanın mevcut ayarlarıdır. Yayınladığınızda diğer yetenekleri değişmeden Randevu tarafından yönetilmeye başlar.",
-    en: "These are the agent's current settings. Publishing brings them under Randevu management without changing its other abilities.",
-    de: "Dies sind die aktuellen Einstellungen des Assistenten. Beim Veröffentlichen übernimmt Randevu ihre Verwaltung, ohne andere Fähigkeiten zu ändern.",
+    tr: "Bunlar asistanın mevcut ayarlarıdır. Yayınladığınızda diğer yetenekleri değişmeden Mahlas tarafından yönetilmeye başlar.",
+    en: "These are the agent's current settings. Publishing brings them under Mahlas management without changing its other abilities.",
+    de: "Dies sind die aktuellen Einstellungen des Assistenten. Beim Veröffentlichen übernimmt Mahlas ihre Verwaltung, ohne andere Fähigkeiten zu ändern.",
   },
   "voiceVariables.variable": { tr: "Bilgi", en: "Variable", de: "Angabe" },
   "voiceVariables.add": {
@@ -2246,9 +2246,9 @@ const dictionary = {
     de: "Online-Buchungsseite",
   },
   "settings.bookingPageHint": {
-    tr: "Randevu'nun kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
-    en: "Randevu's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
-    de: "Die eigene Buchungsseite von Randevu: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
+    tr: "Mahlas'ın kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
+    en: "Mahlas's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
+    de: "Die eigene Buchungsseite von Mahlas: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
   },
   "settings.bookingUrlHint": {
     tr: "Müşterilerin randevu aldığı sayfa. Mesajlardaki her [booking_link] bu adresi yazar.",

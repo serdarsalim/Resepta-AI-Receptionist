@@ -242,11 +242,11 @@ export default function TenantPage() {
       <>
       <Section
         title="Agent setup"
-        description="Provisioning jobs for agents Randevu created, newest first. A failed job keeps its provider ids, so a retry repairs rather than duplicating."
+        description="Provisioning jobs for agents Mahlas created, newest first. A failed job keeps its provider ids, so a retry repairs rather than duplicating."
       >
         {detail.voiceProvisioning.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
-            No agent has been created from Randevu yet.
+            No agent has been created from Mahlas yet.
           </p>
         ) : (
           <div className="py-2.5">
@@ -281,7 +281,7 @@ export default function TenantPage() {
 
       <Section
         title="Connected agents"
-        description="Every agent mapped to this business, with whether Randevu's private runtime is published to it and whether call results are arriving."
+        description="Every agent mapped to this business, with whether Mahlas's private runtime is published to it and whether call results are arriving."
       >
         {detail.agents.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
@@ -302,7 +302,7 @@ export default function TenantPage() {
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
-                <Fact label="Randevu runtime">
+                <Fact label="Mahlas runtime">
                   {agent.runtimeConnectedAt ? (
                     <Pill tone="ok">{shortDate(agent.runtimeConnectedAt)}</Pill>
                   ) : (
@@ -473,7 +473,7 @@ export default function TenantPage() {
           <div />
           <div className="text-xs text-[var(--muted)]">
             {detail.voiceAgentSource === "randevu"
-              ? "Only agents Randevu created for this business. The safe default when the Retell key is shared with another business."
+              ? "Only agents Mahlas created for this business. The safe default when the Retell key is shared with another business."
               : "Every agent in the Retell workspace this key opens, including other businesses'. Agents already claimed elsewhere still cannot be connected."}
           </div>
         </div>

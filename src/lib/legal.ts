@@ -70,7 +70,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
     title: "Gizlilik politikası",
     updated: "30 Temmuz 2026",
     intro: [
-      "Randevu, küçük işletmelerin randevularını yönetmesini ve müşterilerine WhatsApp üzerinden hatırlatma göndermesini sağlar. Bu politika hangi verileri tuttuğumuzu, neden tuttuğumuzu ve kimlerle paylaştığımızı anlatır.",
+      "Mahlas, küçük işletmelerin randevularını yönetmesini ve müşterilerine WhatsApp üzerinden hatırlatma göndermesini sağlar. Bu politika hangi verileri tuttuğumuzu, neden tuttuğumuzu ve kimlerle paylaştığımızı anlatır.",
       "Burada iki ayrı rol var ve aradaki fark önemli. İşletme sahibinin kendi hesap bilgileri için veri sorumlusu biziz. İşletmenin müşteri kayıtları için veri sorumlusu işletmenin kendisidir, biz yalnızca onun talimatıyla veri işleyen tarafız.",
     ],
     sections: [
@@ -149,7 +149,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
     title: "Privacy policy",
     updated: "30 July 2026",
     intro: [
-      "Randevu helps small businesses manage appointments and send WhatsApp reminders to their customers. This page explains what we store, why, and who else sees it.",
+      "Mahlas helps small businesses manage appointments and send WhatsApp reminders to their customers. This page explains what we store, why, and who else sees it.",
       "There are two roles here and the difference matters. For a business owner's own account details, we are the data controller. For the records of that business's customers, the business is the controller and we are a processor acting on its instructions.",
     ],
     sections: [
@@ -206,7 +206,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
         heading: "Your rights",
         body: [
           "You can ask to see your data, correct it, delete it, or object to how it is processed. Send us a request and we will answer within thirty days.",
-          "If you are a customer of a business using Randevu and you want your record deleted, ask that business directly. The record belongs to them and we hold it on their behalf. If you contact us, we will pass your request to them.",
+          "If you are a customer of a business using Mahlas and you want your record deleted, ask that business directly. The record belongs to them and we hold it on their behalf. If you contact us, we will pass your request to them.",
         ],
       },
       {
@@ -228,7 +228,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
     title: "Datenschutzerklärung",
     updated: "30. Juli 2026",
     intro: [
-      "Randevu hilft kleinen Betrieben, Termine zu verwalten und Erinnerungen per WhatsApp zu verschicken. Diese Seite erklärt, welche Daten wir speichern, warum, und wer sie noch sieht.",
+      "Mahlas hilft kleinen Betrieben, Termine zu verwalten und Erinnerungen per WhatsApp zu verschicken. Diese Seite erklärt, welche Daten wir speichern, warum, und wer sie noch sieht.",
       "Es gibt hier zwei Rollen, und der Unterschied ist wichtig. Für die Kontodaten eines Inhabers sind wir Verantwortlicher. Für die Kundendaten des Betriebs ist der Betrieb der Verantwortliche und wir sind Auftragsverarbeiter nach seinen Weisungen.",
     ],
     sections: [
@@ -285,7 +285,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
         heading: "Ihre Rechte",
         body: [
           "Sie können Auskunft, Berichtigung oder Löschung Ihrer Daten verlangen und der Verarbeitung widersprechen. Wir antworten innerhalb von dreißig Tagen.",
-          "Wenn Sie Kunde eines Betriebs sind, der Randevu nutzt, und Ihren Datensatz löschen lassen möchten, wenden Sie sich direkt an diesen Betrieb. Die Daten gehören ihm, wir halten sie nur in seinem Auftrag. Erreicht uns Ihre Anfrage, leiten wir sie weiter.",
+          "Wenn Sie Kunde eines Betriebs sind, der Mahlas nutzt, und Ihren Datensatz löschen lassen möchten, wenden Sie sich direkt an diesen Betrieb. Die Daten gehören ihm, wir halten sie nur in seinem Auftrag. Erreicht uns Ihre Anfrage, leiten wir sie weiter.",
         ],
       },
       {
@@ -310,13 +310,13 @@ export const TERMS: Record<Language, LegalDoc> = {
     title: "Kullanım koşulları",
     updated: "30 Temmuz 2026",
     intro: [
-      "Randevu'yu kullanarak bu koşulları kabul etmiş olursunuz. Kısa tutmaya çalıştık.",
+      "Mahlas'ı kullanarak bu koşulları kabul etmiş olursunuz. Kısa tutmaya çalıştık.",
     ],
     sections: [
       {
         heading: "Hizmet ne yapar",
         body: [
-          "Randevu, işletmenizin randevularını tek yerde toplar, müşterilerinize WhatsApp üzerinden onay ve hatırlatma gönderir ve gelen telefon çağrılarını yanıtlayabilir. Takvim tarafında cal.com kullanılır.",
+          "Mahlas, işletmenizin randevularını tek yerde toplar, müşterilerinize WhatsApp üzerinden onay ve hatırlatma gönderir ve gelen telefon çağrılarını yanıtlayabilir. Takvim tarafında cal.com kullanılır.",
         ],
       },
       {
@@ -350,7 +350,7 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Üçüncü taraf hizmetler",
         body: [
-          "Randevu, WhatsApp için Meta, takvim için cal.com, telefon için Retell ve e-posta için Resend kullanır. Bu sağlayıcıların kendi koşulları da sizin için geçerlidir. Biri hizmetini değiştirdiğinde veya kestiğinde ilgili özellik etkilenebilir.",
+          "Mahlas, WhatsApp için Meta, takvim için cal.com, telefon için Retell ve e-posta için Resend kullanır. Bu sağlayıcıların kendi koşulları da sizin için geçerlidir. Biri hizmetini değiştirdiğinde veya kestiğinde ilgili özellik etkilenebilir.",
         ],
       },
       {
@@ -389,12 +389,12 @@ export const TERMS: Record<Language, LegalDoc> = {
   en: {
     title: "Terms of service",
     updated: "30 July 2026",
-    intro: ["By using Randevu you agree to these terms. We have kept them short."],
+    intro: ["By using Mahlas you agree to these terms. We have kept them short."],
     sections: [
       {
         heading: "What the service does",
         body: [
-          "Randevu keeps your appointments in one place, sends confirmations and reminders to your customers over WhatsApp, and can answer your inbound phone calls. cal.com handles the calendar side.",
+          "Mahlas keeps your appointments in one place, sends confirmations and reminders to your customers over WhatsApp, and can answer your inbound phone calls. cal.com handles the calendar side.",
         ],
       },
       {
@@ -428,7 +428,7 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Third-party services",
         body: [
-          "Randevu uses Meta for WhatsApp, cal.com for calendars, Retell for phone calls, and Resend for email. Those providers' own terms apply to you as well. If one of them changes or withdraws its service, the matching feature can be affected.",
+          "Mahlas uses Meta for WhatsApp, cal.com for calendars, Retell for phone calls, and Resend for email. Those providers' own terms apply to you as well. If one of them changes or withdraws its service, the matching feature can be affected.",
         ],
       },
       {
@@ -468,13 +468,13 @@ export const TERMS: Record<Language, LegalDoc> = {
     title: "Nutzungsbedingungen",
     updated: "30. Juli 2026",
     intro: [
-      "Mit der Nutzung von Randevu stimmen Sie diesen Bedingungen zu. Wir haben sie kurz gehalten.",
+      "Mit der Nutzung von Mahlas stimmen Sie diesen Bedingungen zu. Wir haben sie kurz gehalten.",
     ],
     sections: [
       {
         heading: "Was der Dienst leistet",
         body: [
-          "Randevu bündelt Ihre Termine an einer Stelle, verschickt Bestätigungen und Erinnerungen per WhatsApp und kann eingehende Anrufe annehmen. Den Kalender übernimmt cal.com.",
+          "Mahlas bündelt Ihre Termine an einer Stelle, verschickt Bestätigungen und Erinnerungen per WhatsApp und kann eingehende Anrufe annehmen. Den Kalender übernimmt cal.com.",
         ],
       },
       {
@@ -508,7 +508,7 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Dienste Dritter",
         body: [
-          "Randevu nutzt Meta für WhatsApp, cal.com für Kalender, Retell für Anrufe und Resend für E-Mail. Deren Bedingungen gelten auch für Sie. Ändert oder beendet einer dieser Anbieter seinen Dienst, kann die zugehörige Funktion betroffen sein.",
+          "Mahlas nutzt Meta für WhatsApp, cal.com für Kalender, Retell für Anrufe und Resend für E-Mail. Deren Bedingungen gelten auch für Sie. Ändert oder beendet einer dieser Anbieter seinen Dienst, kann die zugehörige Funktion betroffen sein.",
         ],
       },
       {

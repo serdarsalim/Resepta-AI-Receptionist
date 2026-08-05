@@ -91,7 +91,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     navCta: "Başlayın",
     eyebrow: "Telefon · Takvim · Mesajlar",
     headlineLead: "Siz işinize bakın. ",
-    headlineAccent: "Randevu gerisini halleder.",
+    headlineAccent: "Mahlas gerisini halleder.",
     subhead:
       "Arayan müşteriyi karşılar, uygun saati bulur, randevuyu takvime işler ve takibini yapar. Her şey tek yerde, siz müşterinizin yanındayken.",
     ctaPrimary: "Google ile başlayın",
@@ -118,7 +118,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     workflowEyebrow: "Tek bir akış",
     workflowTitle: "Telefon çalar. Takvim dolar. Müşteri haberdar olur.",
     workflowBody:
-      "Arada kopyalama, not bırakma ya da başka bir ekrana geçme yok. Bir adım bittiğinde Randevu sıradakini başlatır.",
+      "Arada kopyalama, not bırakma ya da başka bir ekrana geçme yok. Bir adım bittiğinde Mahlas sıradakini başlatır.",
     workflow: [
       {
         number: "01",
@@ -163,7 +163,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     useCasesEyebrow: "Her randevulu iş için",
     useCasesTitle: "Aynı ürün, işletmenize göre çalışan bir akış",
     useCasesBody:
-      "Randevu bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
+      "Mahlas bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
     useCases: [
       {
         id: "beauty",
@@ -199,7 +199,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "Size göre konuşan sesli asistan",
-        body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Randevu'da belirlersiniz.",
+        body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Mahlas'ta belirlersiniz.",
       },
       {
         channel: "calendar",
@@ -219,7 +219,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     ],
     closingTitle: "Bir sonraki arama takvimde yerini bulsun.",
     closingBody:
-      "Randevu'ya Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
+      "Mahlas'a Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
     footerLine: "Randevulu çalışan işletmeler için telefon ve müşteri otomasyonu.",
     privacy: "Gizlilik politikası",
     terms: "Kullanım koşulları",
@@ -235,7 +235,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     navCta: "Get started",
     eyebrow: "Calls · Calendar · Customer follow-up",
     headlineLead: "Stay with the work. ",
-    headlineAccent: "Randevu handles the appointment.",
+    headlineAccent: "Mahlas handles the appointment.",
     subhead:
       "It answers the call, finds a time, books it, and keeps the customer informed. One connected workflow for any business built around appointments.",
     ctaPrimary: "Start with Google",
@@ -262,7 +262,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     workflowEyebrow: "One joined-up workflow",
     workflowTitle: "The phone rings. The calendar fills. The customer stays informed.",
     workflowBody:
-      "No copying details, leaving notes, or switching systems. When one step finishes, Randevu starts the next.",
+      "No copying details, leaving notes, or switching systems. When one step finishes, Mahlas starts the next.",
     workflow: [
       {
         number: "01",
@@ -307,7 +307,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     useCasesEyebrow: "For any appointment business",
     useCasesTitle: "One product, shaped around the way you work",
     useCasesBody:
-      "Randevu is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
+      "Mahlas is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
     useCases: [
       {
         id: "beauty",
@@ -343,7 +343,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "A voice agent shaped around your business",
-        body: "Define your services, instructions, and the customer information that should be collected inside Randevu.",
+        body: "Define your services, instructions, and the customer information that should be collected inside Mahlas.",
       },
       {
         channel: "calendar",
@@ -379,9 +379,9 @@ export const LANDING: Record<Language, LandingCopy> = {
     navCta: "Loslegen",
     eyebrow: "Telefon · Kalender · Kundenkontakt",
     headlineLead: "Bleiben Sie bei Ihrer Arbeit. ",
-    headlineAccent: "Randevu kümmert sich um den Termin.",
+    headlineAccent: "Mahlas kümmert sich um den Termin.",
     subhead:
-      "Randevu nimmt den Anruf an, findet einen passenden Zeitpunkt, trägt den Termin ein und informiert den Kunden. Ein verlässlicher Ablauf für jeden Betrieb mit Terminen.",
+      "Mahlas nimmt den Anruf an, findet einen passenden Zeitpunkt, trägt den Termin ein und informiert den Kunden. Ein verlässlicher Ablauf für jeden Betrieb mit Terminen.",
     ctaPrimary: "Mit Google starten",
     ctaDemo: "Produkt ansehen",
     ctaNote: "Ein Google-Konto genügt. Keine Karte erforderlich.",
@@ -406,7 +406,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     workflowEyebrow: "Ein durchgängiger Ablauf",
     workflowTitle: "Das Telefon klingelt. Der Kalender füllt sich. Der Kunde bleibt informiert.",
     workflowBody:
-      "Keine Zettel, kein Übertragen, kein Wechsel zwischen Programmen. Sobald ein Schritt erledigt ist, beginnt Randevu mit dem nächsten.",
+      "Keine Zettel, kein Übertragen, kein Wechsel zwischen Programmen. Sobald ein Schritt erledigt ist, beginnt Mahlas mit dem nächsten.",
     workflow: [
       {
         number: "01",
@@ -451,7 +451,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     useCasesEyebrow: "Für jeden Betrieb mit Terminen",
     useCasesTitle: "Ein Produkt, das sich nach Ihrem Betrieb richtet",
     useCasesBody:
-      "Randevu ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
+      "Mahlas ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
     useCases: [
       {
         id: "beauty",
@@ -487,7 +487,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "Ein Sprachassistent nach Ihren Vorgaben",
-        body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Randevu fest.",
+        body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Mahlas fest.",
       },
       {
         channel: "calendar",

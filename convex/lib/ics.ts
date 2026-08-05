@@ -60,7 +60,7 @@ export function appointmentIcs(args: {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Randevu//Appointments//EN",
+    "PRODID:-//Mahlas//Appointments//EN",
     `METHOD:${args.method}`,
     "BEGIN:VEVENT",
     `UID:${escapeText(args.uid)}@randevu`,

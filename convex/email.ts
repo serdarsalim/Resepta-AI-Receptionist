@@ -433,19 +433,19 @@ export const sendToCustomer = action({
 // you about your account; it is not the salon mailing its customer.
 const INVITE_COPY = {
   tr: {
-    subject: (org: string) => `${org} sizi Randevu'ya ekledi`,
+    subject: (org: string) => `${org} sizi Mahlas'a ekledi`,
     line: (org: string, by: string) =>
       `${by}, sizi <strong>${org}</strong> işletmesine ekledi.`,
     action: "Google hesabınızla giriş yapın:",
   },
   en: {
-    subject: (org: string) => `${org} added you on Randevu`,
+    subject: (org: string) => `${org} added you on Mahlas`,
     line: (org: string, by: string) =>
       `${by} added you to <strong>${org}</strong>.`,
     action: "Sign in with your Google account:",
   },
   de: {
-    subject: (org: string) => `${org} hat Sie bei Randevu hinzugefügt`,
+    subject: (org: string) => `${org} hat Sie bei Mahlas hinzugefügt`,
     line: (org: string, by: string) =>
       `${by} hat Sie zu <strong>${org}</strong> hinzugefügt.`,
     action: "Melden Sie sich mit Ihrem Google-Konto an:",

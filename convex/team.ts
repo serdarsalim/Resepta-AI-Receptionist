@@ -321,8 +321,8 @@ export const invite = mutation({
     const notify = () =>
       ctx.scheduler.runAfter(0, internal.email.sendInvite, {
         to: email,
-        orgName: org?.name || "Randevu",
-        invitedByName: user.name?.trim() || user.email || "Randevu",
+        orgName: org?.name || "Mahlas",
+        invitedByName: user.name?.trim() || user.email || "Mahlas",
         language: org?.language ?? "tr",
       });
     // Workspace model: an EXISTING account joins immediately as a membership

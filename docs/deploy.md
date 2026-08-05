@@ -1,4 +1,4 @@
-# Deploying and operating Randevu
+# Deploying and operating Mahlas
 
 Last reconciled with the implementation: 31 July 2026.
 
@@ -47,7 +47,7 @@ npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <random retained value>
 npx convex env set --prod RESEND_API_KEY <Resend API key>
 npx convex env set --prod RESEND_INBOUND_DOMAIN <shared inbound email domain>
 npx convex env set --prod RESEND_WEBHOOK_SECRET <Resend whsec value>
-npx convex env set --prod SITE_URL <public Randevu app origin>
+npx convex env set --prod SITE_URL <public Mahlas app origin>
 ```
 
 Optional:

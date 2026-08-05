@@ -18,7 +18,8 @@ export const metadata: Metadata = {
   // lib/brand.ts. This is what everyone else reads.
   title: DEFAULT_TITLE,
   description:
-    "Randevu answers calls, books appointments and keeps customers informed in one connected workflow.",
+    "Mahlas answers calls, books appointments and keeps customers informed in one connected workflow.",
+  metadataBase: new URL("https://mahlas.xyz"),
 };
 
 export default function RootLayout({

@@ -44,7 +44,7 @@ export function Landing() {
         <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-5">
           <a href="#top" className="flex shrink-0 items-center gap-2.5">
             <Mark />
-            <span className="text-xl font-bold tracking-tight">Randevu</span>
+            <span className="text-xl font-bold tracking-tight">Mahlas</span>
           </a>
 
           <div className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex">
@@ -313,7 +313,7 @@ export function Landing() {
           <div>
             <div className="flex items-center gap-2.5 text-[var(--foreground)]">
               <Mark />
-              <span className="text-base font-semibold">Randevu</span>
+              <span className="text-base font-semibold">Mahlas</span>
             </div>
             <p className="mt-2">{copy.footerLine}</p>
           </div>
@@ -364,7 +364,7 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
         <div className="flex items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <Mark small />
-            <span className="text-sm font-semibold">Randevu</span>
+            <span className="text-sm font-semibold">Mahlas</span>
           </div>
           <span className="text-xs text-[var(--muted)]">{hero.today}</span>
         </div>
