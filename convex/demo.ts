@@ -172,11 +172,12 @@ export const provision = internalMutation({
   returns: v.id("orgs"),
   handler: async (ctx, args) => {
     const orgId = await ctx.db.insert("orgs", {
-      // The fiction: a salon in Kadıköy. Specific enough to read as a real
-      // business rather than "Demo Salon", which reads as nothing.
-      name: args.name ?? "Moda Kuaför",
-      timezone: "Europe/Istanbul",
-      language: "tr",
+      // Specific enough to read as a real business rather than "Demo Salon",
+      // while remaining immediately legible to an international prospect.
+      name: args.name ?? "Moda Hair Salon",
+      timezone: "Europe/London",
+      language: "en",
+      currency: "GBP",
       demoMode: true,
       sendBookingConfirmation: true,
       // Reminders and the winback both run, because watching one arrive is
@@ -209,6 +210,15 @@ export const nightlyReset = internalMutation({
     const orgs = await ctx.db.query("orgs").take(500);
     for (const org of orgs) {
       if (!isDemo(org)) continue;
+      // The public showroom has one canonical English identity. Patching the
+      // surviving org row here also migrates demos provisioned before the
+      // English fixture existed.
+      await ctx.db.patch(org._id, {
+        name: "Moda Hair Salon",
+        timezone: "Europe/London",
+        language: "en",
+        currency: "GBP",
+      });
       // Notes and activity are not part of the seed's own force-wipe, so they
       // are cleared here; everything else devSeed already replaces wholesale.
       await clearExtras(ctx, org._id);

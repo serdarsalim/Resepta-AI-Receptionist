@@ -2729,20 +2729,15 @@ const dictionary = {
     en: "This is an example account. Nothing is really sent, and it resets each night.",
     de: "Dies ist ein Beispielkonto. Es wird nichts wirklich gesendet, und es wird jede Nacht zurückgesetzt.",
   },
-  "demo.entryEyebrow": {
-    tr: "Canlı ürün turu",
-    en: "Live product tour",
-    de: "Live-Produkttour",
-  },
   "demo.entryTitle": {
     tr: "Mahlas’ı çalışan bir örnekle deneyin",
     en: "Try Mahlas with a working example",
     de: "Mahlas mit einem funktionierenden Beispiel testen",
   },
   "demo.entryBody": {
-    tr: "Moda Kuaför’ün örnek hesabında dolu bir takvimi, müşteri kayıtlarını ve gerçekçi konuşmaları keşfedin.",
-    en: "Explore a full calendar, customer records and realistic conversations inside Moda Kuaför’s fictional account.",
-    de: "Entdecken Sie einen vollen Kalender, Kundendaten und realistische Unterhaltungen im fiktiven Konto von Moda Kuaför.",
+    tr: "Moda Hair Salon’ın örnek hesabında dolu bir takvimi, müşteri kayıtlarını ve gerçekçi konuşmaları keşfedin.",
+    en: "Explore a full calendar, customer records and realistic conversations inside Moda Hair Salon’s fictional account.",
+    de: "Entdecken Sie einen vollen Kalender, Kundendaten und realistische Unterhaltungen im fiktiven Konto von Moda Hair Salon.",
   },
   "demo.entryCta": {
     tr: "Demoyu aç",

@@ -3,52 +3,53 @@ import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 
-// Dev-only demo data: 20 Turkish salon customers, services, a week of
+// Dev-only demo data: 20 English salon customers, services, a week of
 // appointments in both directions, and a believable message history. Run
 // against the dev deployment with:
 //
 //   npx convex run devSeed:seed
 //
-// Never wired to a cron or deploy — seeds are DATA (Nudge convention). Targets
-// the first org unless orgId is passed. Refuses to run twice unless force.
+// Internal rather than app-facing — seeds are DATA (Nudge convention). The
+// public demo reset calls it explicitly; CLI use targets the first org unless
+// orgId is passed. Refuses to run twice unless force.
 
 const FIRST_NAMES = [
-  "Ayşe", "Fatma", "Zeynep", "Elif", "Meryem", "Emine", "Hatice", "Merve",
-  "Selin", "Deniz", "Mehmet", "Mustafa", "Ahmet", "Emre", "Burak", "Can",
-  "Cem", "Kerem", "Serkan", "Tolga",
+  "Emily", "Olivia", "Sophia", "Amelia", "Charlotte", "Ava", "Mia", "Lily",
+  "Grace", "Chloe", "James", "Oliver", "Henry", "Noah", "Jack", "Daniel",
+  "Leo", "Ethan", "Lucas", "Benjamin",
 ];
 const LAST_NAMES = [
-  "Yılmaz", "Kaya", "Demir", "Çelik", "Şahin", "Öztürk", "Aydın", "Arslan",
-  "Doğan", "Kılıç", "Aslan", "Çetin", "Koç", "Kurt", "Özdemir", "Şimşek",
-  "Polat", "Erdoğan", "Yıldız", "Güneş",
+  "Carter", "Wilson", "Bennett", "Hughes", "Parker", "Collins", "Reed", "Morgan",
+  "Foster", "Bailey", "Turner", "Cooper", "Ward", "Murphy", "Brooks", "Hayes",
+  "Price", "Graham", "Bell", "Adams",
 ];
-// Prices in minor units — 35000 is ₺350,00, the same integer the real app
+// Prices in minor units — 5500 is £55.00, the same integer the real app
 // stores. Seeding round floats here would hide exactly the bug the integer
 // choice exists to prevent.
 const SERVICES: { name: string; durationMinutes: number; price: number }[] = [
-  { name: "Saç kesimi", durationMinutes: 30, price: 35000 },
-  { name: "Sakal tıraşı", durationMinutes: 15, price: 15000 },
-  { name: "Saç boyama", durationMinutes: 90, price: 120000 },
-  { name: "Manikür", durationMinutes: 45, price: 50000 },
-  { name: "Cilt bakımı", durationMinutes: 60, price: 80000 },
+  { name: "Haircut", durationMinutes: 45, price: 5500 },
+  { name: "Blow-dry", durationMinutes: 45, price: 4500 },
+  { name: "Hair colour", durationMinutes: 120, price: 14500 },
+  { name: "Manicure", durationMinutes: 45, price: 4000 },
+  { name: "Facial", durationMinutes: 60, price: 8500 },
 ];
-const STAFF = ["Hülya", "Murat", "Ebru"];
+const STAFF = ["Sophie Bennett", "Mia Collins", "Daniel Brooks"];
 
 // Voice calls. Seeded because the call lane is otherwise the one channel with
 // no sample data, which meant its UI could only ever be checked against an
 // empty state. Shapes match what the Retell webhook writes.
 const CALLS = [
   {
-    outcome: "Randevu alındı",
+    outcome: "Appointment booked",
     summary:
-      "Müşteri cumartesi için saç kesimi randevusu istedi. 14:00 uygun bulundu ve onaylandı.",
+      "The customer asked for a Saturday haircut. The 2:00 PM slot was available and confirmed.",
     transcript:
-      "Ajan: Merhaba, Autotakt. Size nasıl yardımcı olabilirim?\nMüşteri: Cumartesi saç kesimi için yer var mı?\nAjan: 14:00 uygun görünüyor, ayarlayayım mı?\nMüşteri: Olur, teşekkürler.",
+      "Agent: Hello, Moda Hair Salon. How can I help?\nCustomer: Do you have any time for a haircut on Saturday?\nAgent: We have 2:00 PM available. Shall I book that for you?\nCustomer: Yes, please. Thank you.",
     durationSec: 95,
   },
   {
-    outcome: "Cevapsız",
-    summary: "Müşteri açmadı, sesli mesaj bırakıldı.",
+    outcome: "No answer",
+    summary: "The customer did not answer, so a voicemail was left.",
     transcript: undefined,
     durationSec: 18,
   },
@@ -100,7 +101,20 @@ export const seed = internalMutation({
         .query("customers")
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
         .collect();
+      const olderServices = await ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      const olderStaff = await ctx.db
+        .query("staff")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
       for (const row of [...messages, ...calls, ...appointments, ...olderCustomers]) {
+        await ctx.db.delete(row._id);
+      }
+      // Appointments are gone first, so their service and staff references no
+      // longer point at rows we are about to replace with the canonical demo.
+      for (const row of [...olderServices, ...olderStaff]) {
         await ctx.db.delete(row._id);
       }
     }
@@ -188,7 +202,8 @@ export const seed = internalMutation({
     for (let i = 0; i < 20; i++) {
       const firstName = FIRST_NAMES[i];
       const lastName = LAST_NAMES[(i * 7) % LAST_NAMES.length];
-      const phone = `+9053${String(20000000 + i * 1234567).slice(0, 8)}`;
+      // Ofcom reserves +44 7700 900xxx for fictional use.
+      const phone = `+447700900${String(100 + i).slice(-3)}`;
       const consented = i % 5 !== 4; // 4 of 20 without consent — the pill shows
       const customerId = await ctx.db.insert("customers", {
         orgId: org._id,
@@ -245,8 +260,8 @@ export const seed = internalMutation({
             appointmentId,
             direction: "out",
             kind: "confirmation",
-            templateName: "randevu_onay",
-            body: `Merhaba ${firstName}! ${org.name || "Salon"} randevunuz oluşturuldu.`,
+            templateName: "appointment_confirmation",
+            body: `Hello ${firstName}! Your appointment at ${org.name || "the salon"} is booked.`,
             status: i % 6 === 5 ? "failed" : i % 2 === 0 ? "read" : "delivered",
             error: i % 6 === 5 ? "wa-not-configured" : undefined,
             wamid: `wamid.seed.${i}.${r}.conf`,
@@ -259,8 +274,8 @@ export const seed = internalMutation({
               appointmentId,
               direction: "out",
               kind: "reminder_24h",
-              templateName: "randevu_hatirlatma",
-              body: `Merhaba ${firstName}! Yarınki randevunuzu hatırlatırız.`,
+              templateName: "appointment_reminder",
+              body: `Hello ${firstName}! Just a reminder about your appointment tomorrow.`,
               status: "delivered",
               wamid: `wamid.seed.${i}.${r}.rem`,
             });
@@ -272,7 +287,7 @@ export const seed = internalMutation({
               customerId,
               direction: "in",
               kind: "reply",
-              body: "Evet, onaylıyorum 👍",
+              body: "Yes, I’ll be there 👍",
               status: "received",
               wamid: `wamid.seed.${i}.${r}.in`,
             });

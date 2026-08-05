@@ -5,12 +5,12 @@ import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
-import { useLanguage } from "@/lib/LanguageProvider";
 import { LEGAL_UI } from "@/lib/legal";
+import { translate, type TranslationKey } from "@/lib/i18n";
 
 export function DemoEntry() {
   const { signIn } = useAuthActions();
-  const { t, language } = useLanguage();
+  const t = (key: TranslationKey) => translate("en", key);
   const walkIn = useQuery(api.demo.walkInEnabled, {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -38,10 +38,7 @@ export function DemoEntry() {
           <span className="text-xl font-bold tracking-tight">Mahlas</span>
         </div>
 
-        <p className="mt-14 text-sm font-semibold text-[var(--brand)]">
-          {t("demo.entryEyebrow")}
-        </p>
-        <h1 className="mt-4 max-w-xl text-[clamp(2.6rem,7vw,4.8rem)] font-bold leading-[0.98] tracking-[-0.055em]">
+        <h1 className="mt-14 max-w-xl text-[clamp(2.6rem,7vw,4.8rem)] font-bold leading-[0.98] tracking-[-0.055em]">
           {t("demo.entryTitle")}
         </h1>
         <p className="mt-6 max-w-[54ch] text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
@@ -80,10 +77,10 @@ export function DemoEntry() {
             {t("demo.entryProduct")}
           </Link>
           <Link href="https://mahlas.xyz/privacy" className="transition-colors hover:text-[var(--foreground)]">
-            {LEGAL_UI[language].privacy}
+            {LEGAL_UI.en.privacy}
           </Link>
           <Link href="https://mahlas.xyz/terms" className="transition-colors hover:text-[var(--foreground)]">
-            {LEGAL_UI[language].terms}
+            {LEGAL_UI.en.terms}
           </Link>
         </nav>
       </div>

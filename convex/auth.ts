@@ -84,6 +84,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         if (!demoOrg?.demoMode) throw new Error("not-a-demo-org");
         const userId = await db.insert("users", {
           name: "Demo",
+          language: "en",
           orgId: demoId,
           role: "staff",
           isAnonymous: true,
