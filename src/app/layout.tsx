@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   description:
     "Mahlas answers calls, books appointments and keeps customers informed in one connected workflow.",
   metadataBase: new URL("https://mahlas.xyz"),
+  alternates: { canonical: "https://mahlas.xyz" },
 };
 
 export default function RootLayout({

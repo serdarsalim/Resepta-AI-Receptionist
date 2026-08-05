@@ -88,5 +88,5 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
 // page and renders a broken image. The /images directory contains landing-page
 // media only; it calls no backend function and carries no tenant data.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|images|favicon.ico|icon.svg|apple-icon.png|opengraph-image).*)"],
+  matcher: ["/((?!_next/static|_next/image|images|favicon.ico|icon.svg|apple-icon.png|opengraph-image|robots.txt|sitemap.xml).*)"],
 };
