@@ -31,8 +31,8 @@ export type LandingCopy = {
   subhead: string;
   ctaPrimary: string;
   ctaDemo: string;
-  ctaNote: string;
-  assurances: string[];
+  themeToLight: string;
+  themeToDark: string;
   hero: {
     incoming: string;
     answered: string;
@@ -47,7 +47,6 @@ export type LandingCopy = {
     calendarEntries: Array<{ time: string; name: string }>;
   };
   workflowTitle: string;
-  workflowBody: string;
   workflow: Array<{ number: string; title: string; body: string }>;
   productTitle: string;
   productBody: string;
@@ -71,6 +70,10 @@ export type LandingCopy = {
   closingTitle: string;
   closingBody: string;
   footerLine: string;
+  footerProduct: string;
+  footerResources: string;
+  footerCompany: string;
+  footerAutotaktLine: string;
   help: string;
   privacy: string;
   terms: string;
@@ -88,11 +91,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     headlineLead: "Siz işinize bakın. ",
     headlineAccent: "Mahlas gerisini halleder.",
     subhead:
-      "Arayan müşteriyi karşılar, uygun saati bulur, randevuyu takvime işler ve takibini yapar. Her şey tek yerde, siz müşterinizin yanındayken.",
+      "Aramaları yanıtlar, randevuları oluşturur ve takibi yapar—siz işinize devam ederken.",
     ctaPrimary: "Google ile başlayın",
     ctaDemo: "Ürünü inceleyin",
-    ctaNote: "Google hesabınız yeterli. Kredi kartı gerekmez.",
-    assurances: ["Gelen aramalar yanıtlanır", "Randevular tek takvimde", "Takip otomatik ilerler"],
+    themeToLight: "Açık temaya geç",
+    themeToDark: "Koyu temaya geç",
     hero: {
       incoming: "Gelen arama",
       answered: "Yanıtlandı",
@@ -111,8 +114,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       ],
     },
     workflowTitle: "Telefon çalar. Takvim dolar. Müşteri haberdar olur.",
-    workflowBody:
-      "Arada kopyalama, not bırakma ya da başka bir ekrana geçme yok. Bir adım bittiğinde Mahlas sıradakini başlatır.",
     workflow: [
       {
         number: "01",
@@ -212,6 +213,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Mahlas'a Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
     footerLine: "Randevulu çalışan işletmeler için telefon ve müşteri otomasyonu.",
+    footerProduct: "Ürün",
+    footerResources: "Kaynaklar",
+    footerCompany: "Şirket",
+    footerAutotaktLine:
+      "Yapay zekâ asistanları, bağlı iş akışları ve pratik işletme yazılımları.",
     help: "Yardım merkezi",
     privacy: "Gizlilik politikası",
     terms: "Kullanım koşulları",
@@ -228,11 +234,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     headlineLead: "Stay with the work. ",
     headlineAccent: "Mahlas handles the appointment.",
     subhead:
-      "It answers the call, finds a time, books it, and keeps the customer informed. One connected workflow for any business built around appointments.",
+      "Answers calls, books appointments, and follows up—while you stay with the work.",
     ctaPrimary: "Start with Google",
     ctaDemo: "Explore the product",
-    ctaNote: "Your Google account is enough. No card required.",
-    assurances: ["Calls are answered", "Bookings stay in one calendar", "Follow-up runs automatically"],
+    themeToLight: "Switch to light mode",
+    themeToDark: "Switch to dark mode",
     hero: {
       incoming: "Incoming call",
       answered: "Answered",
@@ -251,8 +257,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       ],
     },
     workflowTitle: "The phone rings. The calendar fills. The customer stays informed.",
-    workflowBody:
-      "No copying details, leaving notes, or switching systems. When one step finishes, Mahlas starts the next.",
     workflow: [
       {
         number: "01",
@@ -352,6 +356,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Sign in with Google, create your business, and put the first connected appointment workflow to work.",
     footerLine: "Calls and customer automation for appointment-led businesses.",
+    footerProduct: "Product",
+    footerResources: "Resources",
+    footerCompany: "Company",
+    footerAutotaktLine:
+      "AI assistants, connected workflows, and practical business software.",
     help: "Help center",
     privacy: "Privacy policy",
     terms: "Terms of service",
@@ -368,11 +377,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     headlineLead: "Bleiben Sie bei Ihrer Arbeit. ",
     headlineAccent: "Mahlas kümmert sich um den Termin.",
     subhead:
-      "Mahlas nimmt den Anruf an, findet einen passenden Zeitpunkt, trägt den Termin ein und informiert den Kunden. Ein verlässlicher Ablauf für jeden Betrieb mit Terminen.",
+      "Nimmt Anrufe an, bucht Termine und übernimmt die Nachbereitung – während Sie weiterarbeiten.",
     ctaPrimary: "Mit Google starten",
     ctaDemo: "Produkt ansehen",
-    ctaNote: "Ein Google-Konto genügt. Keine Karte erforderlich.",
-    assurances: ["Anrufe werden angenommen", "Termine bleiben in einem Kalender", "Die Nachbetreuung läuft automatisch"],
+    themeToLight: "Zum hellen Modus wechseln",
+    themeToDark: "Zum dunklen Modus wechseln",
     hero: {
       incoming: "Eingehender Anruf",
       answered: "Angenommen",
@@ -391,8 +400,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       ],
     },
     workflowTitle: "Das Telefon klingelt. Der Kalender füllt sich. Der Kunde bleibt informiert.",
-    workflowBody:
-      "Keine Zettel, kein Übertragen, kein Wechsel zwischen Programmen. Sobald ein Schritt erledigt ist, beginnt Mahlas mit dem nächsten.",
     workflow: [
       {
         number: "01",
@@ -492,6 +499,11 @@ export const LANDING: Record<Language, LandingCopy> = {
     closingBody:
       "Melden Sie sich mit Google an, legen Sie Ihren Betrieb an und starten Sie den ersten durchgängigen Terminablauf.",
     footerLine: "Telefon- und Kundenautomatisierung für Betriebe mit Terminvergabe.",
+    footerProduct: "Produkt",
+    footerResources: "Ressourcen",
+    footerCompany: "Unternehmen",
+    footerAutotaktLine:
+      "KI-Assistenten, vernetzte Arbeitsabläufe und praktische Unternehmenssoftware.",
     help: "Hilfe-Center",
     privacy: "Datenschutzerklärung",
     terms: "Nutzungsbedingungen",

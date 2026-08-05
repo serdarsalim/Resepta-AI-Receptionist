@@ -16,10 +16,12 @@ const RESOLVED_KEY = "randevu.theme-dark"; // "1" | "0", cached for no-flash pai
 const VALID: Theme[] = ["light", "dark", "auto"];
 
 function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "auto";
+  if (typeof window === "undefined") return "light";
   const v = window.localStorage.getItem(STORAGE_KEY);
-  // Legacy "system" (and anything unknown) falls through to auto.
-  return v && (VALID as string[]).includes(v) ? (v as Theme) : "auto";
+  // Light is the product default. Auto remains available as an explicit
+  // choice, but a first visit should never make the public site unexpectedly
+  // dark because it happens to be after sunset.
+  return v && (VALID as string[]).includes(v) ? (v as Theme) : "light";
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +175,7 @@ function persist(theme: Theme, resolved: ResolvedTheme) {
 }
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>("auto");
+  const [theme, setThemeState] = useState<Theme>("light");
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
   const [mounted, setMounted] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -253,7 +255,9 @@ export const NO_FOUC_SCRIPT = `(() => {
       return;
     }
     const stored = localStorage.getItem('${STORAGE_KEY}');
-    const theme = stored === 'light' || stored === 'dark' ? stored : 'auto';
+    const theme = stored === 'light' || stored === 'dark' || stored === 'auto'
+      ? stored
+      : 'light';
     let dark;
     if (theme === 'dark') dark = true;
     else if (theme === 'light') dark = false;
@@ -274,5 +278,4 @@ export const NO_FOUC_SCRIPT = `(() => {
 // to the UTC-offset estimate above. Ireland and Turkey — this app's two main
 // markets — are exact.
 // ---------------------------------------------------------------------------
-
 

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES, isLanguage } from "@/lib/i18n";
+import { useTheme } from "@/lib/theme";
 import {
   LANDING,
   type LandingCopy,
@@ -18,6 +19,7 @@ import {
 export function Landing() {
   const { signIn } = useAuthActions();
   const { t, language, setLanguage } = useLanguage();
+  const { resolvedTheme, setTheme, mounted } = useTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [activeUseCase, setActiveUseCase] =
@@ -63,6 +65,17 @@ export function Landing() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              aria-label={resolvedTheme === "dark" ? copy.themeToLight : copy.themeToDark}
+              title={resolvedTheme === "dark" ? copy.themeToLight : copy.themeToDark}
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+                mounted ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
             <select
               aria-label="Language"
               className="w-auto bg-transparent text-sm"
@@ -127,7 +140,6 @@ export function Landing() {
                   </a>
                 )}
               </div>
-              <p className="mt-4 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
               {error && (
                 <p className="mt-3 text-sm text-red-600 dark:text-red-400">
                   {t("auth.failed")}
@@ -138,22 +150,11 @@ export function Landing() {
             <HeroProduct copy={copy} />
           </div>
 
-          <div className="relative mt-14 grid gap-4 border-t border-[var(--border)] pt-6 text-sm sm:grid-cols-3 lg:mt-16">
-            {copy.assurances.map((item) => (
-              <div key={item} className="flex items-center gap-2.5 text-[var(--muted)]">
-                <CheckIcon />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
         </section>
 
         <section id="workflow" className="scroll-mt-24 bg-[var(--pane)]">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
-            <SectionIntro
-              title={copy.workflowTitle}
-              body={copy.workflowBody}
-            />
+            <SectionIntro title={copy.workflowTitle} />
             <div className="mt-12 grid gap-5 md:grid-cols-3">
               {copy.workflow.map((step, index) => (
                 <div
@@ -298,29 +299,61 @@ export function Landing() {
         </section>
       </main>
 
-      <footer>
-        <div className="mx-auto flex max-w-[76rem] flex-col gap-5 px-6 py-10 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between">
-          <div>
+      <footer className="border-t border-[var(--border)]">
+        <div className="mx-auto max-w-[76rem] px-6 py-12 text-sm text-[var(--muted)] sm:py-14">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.35fr_0.7fr_0.8fr_1.15fr] lg:gap-14">
+            <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2.5 text-[var(--foreground)]">
               <Mark />
               <span className="text-base font-semibold">Mahlas</span>
             </div>
-            <p className="mt-2">{copy.footerLine}</p>
+              <p className="mt-3 max-w-[30rem] leading-relaxed">{copy.footerLine}</p>
+            </div>
+
+            <FooterNav title={copy.footerProduct}>
+              <a href="#product">{copy.nav.product}</a>
+              <a href="#workflow">{copy.nav.workflow}</a>
+              <a href="#use-cases">{copy.nav.useCases}</a>
+              <a href="#features">{copy.nav.features}</a>
+            </FooterNav>
+
+            <FooterNav title={copy.footerResources}>
+              <a href="https://docs.mahlas.xyz">{copy.help}</a>
+              <Link href="/privacy">{copy.privacy}</Link>
+              <Link href="/terms">{copy.terms}</Link>
+            </FooterNav>
+
+            <div>
+              <p className="font-semibold text-[var(--foreground)]">{copy.footerCompany}</p>
+              <a
+                href="https://autotakt.dev"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center gap-1.5 font-semibold text-[var(--foreground)] transition-opacity hover:opacity-70"
+              >
+                autotakt.dev <span aria-hidden>↗</span>
+              </a>
+              <p className="mt-2 max-w-[28rem] leading-relaxed">{copy.footerAutotaktLine}</p>
+            </div>
           </div>
-          <nav className="flex flex-wrap gap-5">
-            <a className="transition-colors hover:text-[var(--foreground)]" href="https://docs.mahlas.xyz">
-              {copy.help}
-            </a>
-            <Link className="transition-colors hover:text-[var(--foreground)]" href="/privacy">
-              {copy.privacy}
-            </Link>
-            <Link className="transition-colors hover:text-[var(--foreground)]" href="/terms">
-              {copy.terms}
-            </Link>
-          </nav>
+
+          <div className="mt-10 border-t border-[var(--border)] pt-5 text-xs">
+            © {new Date().getFullYear()} Mahlas · Autotakt
+          </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+function FooterNav({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <nav className="flex flex-col items-start gap-3">
+      <p className="mb-1 font-semibold text-[var(--foreground)]">{title}</p>
+      <div className="flex flex-col items-start gap-3 [&_a]:transition-colors [&_a]:hover:text-[var(--foreground)]">
+        {children}
+      </div>
+    </nav>
   );
 }
 
@@ -416,8 +449,8 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
 function ProductPreview({ copy }: { copy: LandingCopy }) {
   const preview = copy.productPreview;
   return (
-    <div className="overflow-hidden rounded-[1.75rem] bg-[var(--pane)] p-3 shadow-[0_20px_55px_rgba(15,23,42,0.10)] sm:p-4">
-      <div className="overflow-hidden rounded-2xl bg-[var(--card)]">
+    <div className="overflow-hidden rounded-[1.75rem] bg-[color-mix(in_srgb,var(--accent)_10%,var(--pane))] p-3 shadow-[0_20px_55px_rgba(15,23,42,0.10)] sm:p-4">
+      <div className="overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--accent)_5%,var(--card))]">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <div>
             <p className="font-semibold">{preview.title}</p>
@@ -432,7 +465,7 @@ function ProductPreview({ copy }: { copy: LandingCopy }) {
         </div>
 
         <div className="grid lg:grid-cols-[1.08fr_0.92fr]">
-          <div className="bg-[var(--pane)] p-3 sm:p-4">
+          <div className="bg-[color-mix(in_srgb,var(--accent)_4%,var(--pane))] p-3 sm:p-4">
             <div className="space-y-2">
               {preview.appointments.map((appointment) => (
                 <div
@@ -536,6 +569,23 @@ function ArrowIcon() {
   return (
     <svg className="ml-1 inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg className="h-[1.125rem] w-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg className="h-[1.125rem] w-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5a8.5 8.5 0 1 0 11.7 11.7Z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
