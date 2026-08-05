@@ -26,7 +26,6 @@ export type LandingUseCase = {
 export type LandingCopy = {
   nav: { product: string; workflow: string; useCases: string; features: string };
   navCta: string;
-  eyebrow: string;
   headlineLead: string;
   headlineAccent: string;
   subhead: string;
@@ -47,11 +46,9 @@ export type LandingCopy = {
     calendar: string;
     calendarEntries: Array<{ time: string; name: string }>;
   };
-  workflowEyebrow: string;
   workflowTitle: string;
   workflowBody: string;
   workflow: Array<{ number: string; title: string; body: string }>;
-  productEyebrow: string;
   productTitle: string;
   productBody: string;
   productPoints: string[];
@@ -66,11 +63,9 @@ export type LandingCopy = {
     customerTitle: string;
     customerDetail: string;
   };
-  useCasesEyebrow: string;
   useCasesTitle: string;
   useCasesBody: string;
   useCases: LandingUseCase[];
-  featuresEyebrow: string;
   featuresTitle: string;
   features: LandingFeature[];
   closingTitle: string;
@@ -90,7 +85,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       features: "Özellikler",
     },
     navCta: "Başlayın",
-    eyebrow: "Telefon · Takvim · Mesajlar",
     headlineLead: "Siz işinize bakın. ",
     headlineAccent: "Mahlas gerisini halleder.",
     subhead:
@@ -116,7 +110,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "14:30", name: "Derya" },
       ],
     },
-    workflowEyebrow: "Tek bir akış",
     workflowTitle: "Telefon çalar. Takvim dolar. Müşteri haberdar olur.",
     workflowBody:
       "Arada kopyalama, not bırakma ya da başka bir ekrana geçme yok. Bir adım bittiğinde Mahlas sıradakini başlatır.",
@@ -137,7 +130,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         body: "Onay ve hatırlatma gider; cevaplar randevuya ve müşteri kartına geri yazılır.",
       },
     ],
-    productEyebrow: "İşletmenin ortak hafızası",
     productTitle: "Günün tamamı tek ekranda",
     productBody:
       "Aramalar, müşteriler, randevular ve mesajlar aynı kaydı paylaşır. Kim aradı, ne istedi ve sırada ne var diye aramanız gerekmez.",
@@ -161,7 +153,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       customerTitle: "Müşteri kartı güncellendi",
       customerDetail: "Tercih edilen saat · Öğleden sonra",
     },
-    useCasesEyebrow: "Her randevulu iş için",
     useCasesTitle: "Aynı ürün, işletmenize göre çalışan bir akış",
     useCasesBody:
       "Mahlas bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
@@ -194,7 +185,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         imageAlt: "Atölyesinde bir aracın motorunda çalışan usta",
       },
     ],
-    featuresEyebrow: "Arka planda çalışan ayrıntılar",
     featuresTitle: "Randevu almanın ötesinde",
     features: [
       {
@@ -235,7 +225,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       features: "Features",
     },
     navCta: "Get started",
-    eyebrow: "Calls · Calendar · Customer follow-up",
     headlineLead: "Stay with the work. ",
     headlineAccent: "Mahlas handles the appointment.",
     subhead:
@@ -261,7 +250,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "14:30", name: "Olivia" },
       ],
     },
-    workflowEyebrow: "One joined-up workflow",
     workflowTitle: "The phone rings. The calendar fills. The customer stays informed.",
     workflowBody:
       "No copying details, leaving notes, or switching systems. When one step finishes, Mahlas starts the next.",
@@ -282,7 +270,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         body: "Send confirmations and reminders, then write responses back to the booking and customer record.",
       },
     ],
-    productEyebrow: "A shared memory for the business",
     productTitle: "The whole day, in one view",
     productBody:
       "Calls, customers, appointments, and messages share the same record. Nobody has to work out who called, what they wanted, or what should happen next.",
@@ -306,7 +293,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       customerTitle: "Customer record updated",
       customerDetail: "Preferred time · Afternoon",
     },
-    useCasesEyebrow: "For any appointment business",
     useCasesTitle: "One product, shaped around the way you work",
     useCasesBody:
       "Mahlas is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
@@ -339,7 +325,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         imageAlt: "Mechanic working on a car in an independent workshop",
       },
     ],
-    featuresEyebrow: "The details working underneath",
     featuresTitle: "More than taking a booking",
     features: [
       {
@@ -380,7 +365,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       features: "Funktionen",
     },
     navCta: "Loslegen",
-    eyebrow: "Telefon · Kalender · Kundenkontakt",
     headlineLead: "Bleiben Sie bei Ihrer Arbeit. ",
     headlineAccent: "Mahlas kümmert sich um den Termin.",
     subhead:
@@ -406,7 +390,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "14:30", name: "Sophie" },
       ],
     },
-    workflowEyebrow: "Ein durchgängiger Ablauf",
     workflowTitle: "Das Telefon klingelt. Der Kalender füllt sich. Der Kunde bleibt informiert.",
     workflowBody:
       "Keine Zettel, kein Übertragen, kein Wechsel zwischen Programmen. Sobald ein Schritt erledigt ist, beginnt Mahlas mit dem nächsten.",
@@ -427,7 +410,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         body: "Bestätigung und Erinnerung senden und Antworten beim Termin sowie im Kundenprofil festhalten.",
       },
     ],
-    productEyebrow: "Das gemeinsame Gedächtnis des Betriebs",
     productTitle: "Der ganze Arbeitstag auf einen Blick",
     productBody:
       "Anrufe, Kunden, Termine und Nachrichten gehören zu demselben Vorgang. Ihr Team sieht sofort, wer angerufen hat, worum es ging und was als Nächstes ansteht.",
@@ -451,7 +433,6 @@ export const LANDING: Record<Language, LandingCopy> = {
       customerTitle: "Kundenprofil aktualisiert",
       customerDetail: "Bevorzugte Zeit · Nachmittag",
     },
-    useCasesEyebrow: "Für jeden Betrieb mit Terminen",
     useCasesTitle: "Ein Produkt, das sich nach Ihrem Betrieb richtet",
     useCasesBody:
       "Mahlas ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
@@ -484,7 +465,6 @@ export const LANDING: Record<Language, LandingCopy> = {
         imageAlt: "Mechaniker arbeitet in einer freien Werkstatt an einem Auto",
       },
     ],
-    featuresEyebrow: "Was im Hintergrund zusammenspielt",
     featuresTitle: "Mehr als nur ein Termin",
     features: [
       {

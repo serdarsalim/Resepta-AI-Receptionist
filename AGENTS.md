@@ -22,6 +22,11 @@
 > personally flagged. Every rule there came from a real correction. Consult it
 > before building a surface, not after it gets rejected.
 
+> **Public landing hierarchy (Serdar, 2026-08-05):** the headline is the first
+> text in every hero and section intro. Never place a kicker or eyebrow above
+> it. Product imagery supports the hero copy at a smaller scale; it must not
+> compete with the headline. Keep decorative layers and idle motion quiet.
+
 WhatsApp appointment automation for SMBs (salons, barbers, dentists). One shared
 deployment serves EVERY business — this is the multi-org sibling of Nudge
 (`../nudge`), which is instance-per-tenant. The two products deliberately do not

@@ -80,7 +80,7 @@ export function Landing() {
             <button
               disabled={busy}
               onClick={() => start("google")}
-              className="hidden rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-fg)] transition-[opacity,transform] duration-150 hover:-translate-y-px hover:opacity-90 disabled:opacity-60 sm:block"
+              className="hidden rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-fg)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60 sm:block"
             >
               {copy.navCta}
             </button>
@@ -89,17 +89,10 @@ export function Landing() {
       </nav>
 
       <main>
-        <section className="relative mx-auto max-w-[76rem] px-6 pb-16 pt-16 sm:pb-24 sm:pt-24">
-          <div className="pointer-events-none absolute -left-64 top-12 h-[28rem] w-[28rem] rounded-full bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] blur-3xl" />
-          <div className="pointer-events-none absolute -right-64 -top-24 h-[34rem] w-[34rem] rounded-full bg-[color-mix(in_srgb,var(--accent)_13%,transparent)] blur-3xl" />
-
-          <div className="relative grid items-center gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+        <section className="relative mx-auto max-w-[76rem] px-6 pb-16 pt-12 sm:pb-20 sm:pt-16">
+          <div className="relative grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:gap-12">
             <div className="landing-rise">
-              <p className="flex items-center gap-2 text-sm font-semibold text-[var(--brand)]">
-                <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
-                {copy.eyebrow}
-              </p>
-              <h1 className="mt-5 text-[clamp(2.7rem,5.4vw,4.75rem)] font-bold leading-[0.98] tracking-[-0.055em]">
+              <h1 className="text-[clamp(2.7rem,5vw,4.25rem)] font-bold leading-[0.98] tracking-[-0.055em]">
                 {copy.headlineLead}
                 <span className="bg-[linear-gradient(110deg,var(--brand),var(--accent))] bg-clip-text text-transparent">
                   {copy.headlineAccent}
@@ -113,7 +106,7 @@ export function Landing() {
                 <button
                   disabled={busy}
                   onClick={() => start("google")}
-                  className="rounded-lg bg-[var(--accent)] px-6 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-[opacity,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:opacity-90 disabled:opacity-60"
+                  className="rounded-lg bg-[var(--accent)] px-6 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
                 >
                   {copy.ctaPrimary}
                 </button>
@@ -158,7 +151,6 @@ export function Landing() {
         <section id="workflow" className="scroll-mt-24 bg-[var(--pane)]">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
             <SectionIntro
-              eyebrow={copy.workflowEyebrow}
               title={copy.workflowTitle}
               body={copy.workflowBody}
             />
@@ -166,14 +158,14 @@ export function Landing() {
               {copy.workflow.map((step, index) => (
                 <div
                   key={step.number}
-                  className="group relative overflow-hidden rounded-2xl bg-[var(--card)] p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-[transform,box-shadow] duration-200 hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
+                  className="relative overflow-hidden rounded-2xl bg-[var(--card)] p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-shadow duration-150 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
                 >
                   <span className="text-sm font-semibold text-[var(--brand)]">{step.number}</span>
                   <h3 className="mt-8 text-xl font-semibold tracking-tight">{step.title}</h3>
                   <p className="mt-3 leading-relaxed text-[var(--muted)]">{step.body}</p>
                   <span
                     aria-hidden
-                    className={`absolute right-0 top-0 h-24 w-24 rounded-bl-full opacity-60 transition-transform duration-300 group-hover:scale-110 ${
+                    className={`absolute right-0 top-0 h-24 w-24 rounded-bl-full opacity-60 ${
                       index === 1
                         ? "bg-[color-mix(in_srgb,var(--accent)_13%,transparent)]"
                         : "bg-[color-mix(in_srgb,var(--brand)_13%,transparent)]"
@@ -189,7 +181,6 @@ export function Landing() {
           <div className="mx-auto grid max-w-[76rem] items-center gap-14 px-6 py-20 sm:py-28 lg:grid-cols-[0.78fr_1.22fr] lg:gap-20">
             <div>
               <SectionIntro
-                eyebrow={copy.productEyebrow}
                 title={copy.productTitle}
                 body={copy.productBody}
               />
@@ -209,7 +200,6 @@ export function Landing() {
         <section id="use-cases" className="scroll-mt-24 bg-[var(--pane)]">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
             <SectionIntro
-              eyebrow={copy.useCasesEyebrow}
               title={copy.useCasesTitle}
               body={copy.useCasesBody}
               wide
@@ -217,7 +207,7 @@ export function Landing() {
 
             <div
               role="tablist"
-              aria-label={copy.useCasesEyebrow}
+              aria-label={copy.useCasesTitle}
               className="mt-10 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] p-1 no-scrollbar sm:w-fit"
             >
               {copy.useCases.map((item) => {
@@ -253,7 +243,7 @@ export function Landing() {
                   fill
                   loading="eager"
                   sizes="(max-width: 1024px) 100vw, 52vw"
-                  className="object-cover transition-transform duration-700 hover:scale-[1.02]"
+                  className="object-cover"
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_60%,rgba(0,0,0,0.18))]" />
               </div>
@@ -276,7 +266,7 @@ export function Landing() {
 
         <section id="features" className="scroll-mt-24">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
-            <SectionIntro eyebrow={copy.featuresEyebrow} title={copy.featuresTitle} />
+            <SectionIntro title={copy.featuresTitle} />
             <div className="mt-12 grid gap-x-14 gap-y-12 sm:grid-cols-2">
               {copy.features.map((feature) => (
                 <Feature key={feature.title} feature={feature} />
@@ -299,7 +289,7 @@ export function Landing() {
               <button
                 disabled={busy}
                 onClick={() => start("google")}
-                className="mt-8 rounded-lg bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_26px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-[opacity,transform] duration-150 hover:-translate-y-0.5 hover:opacity-90 disabled:opacity-60"
+                className="mt-8 rounded-lg bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_26px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
               >
                 {copy.ctaPrimary}
               </button>
@@ -335,20 +325,17 @@ export function Landing() {
 }
 
 function SectionIntro({
-  eyebrow,
   title,
   body,
   wide = false,
 }: {
-  eyebrow: string;
   title: string;
   body?: string;
   wide?: boolean;
 }) {
   return (
     <div className={wide ? "max-w-4xl" : "max-w-2xl"}>
-      <p className="text-sm font-semibold text-[var(--brand)]">{eyebrow}</p>
-      <h2 className="mt-3 text-3xl font-bold tracking-[-0.035em] sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08]">
+      <h2 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl lg:text-[2.75rem] lg:leading-[1.08]">
         {title}
       </h2>
       {body && <p className="mt-4 text-lg leading-relaxed text-[var(--muted)]">{body}</p>}
@@ -359,11 +346,8 @@ function SectionIntro({
 function HeroProduct({ copy }: { copy: LandingCopy }) {
   const hero = copy.hero;
   return (
-    <div className="landing-rise landing-rise-delay relative min-h-[34rem] overflow-hidden rounded-[2rem] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand)_19%,var(--card)),color-mix(in_srgb,var(--accent)_16%,var(--card))_58%,var(--card))] p-4 shadow-[0_28px_70px_rgba(15,23,42,0.12)] sm:min-h-[38rem] sm:p-6">
-      <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-[color-mix(in_srgb,var(--brand)_28%,transparent)] blur-3xl" />
-
-      <div className="relative overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--border)_70%,transparent)] bg-[color-mix(in_srgb,var(--card)_92%,transparent)] shadow-[0_18px_48px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+    <div className="landing-rise landing-rise-delay relative min-h-[25rem] w-full max-w-[32rem] justify-self-end overflow-hidden rounded-3xl bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand)_10%,var(--card)),color-mix(in_srgb,var(--accent)_7%,var(--card))_58%,var(--card))] p-3 shadow-[0_20px_50px_rgba(15,23,42,0.09)] sm:min-h-[28rem] sm:p-4 lg:min-h-[30rem]">
+      <div className="relative overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--card)_94%,transparent)] shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
         <div className="flex items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <Mark small />
@@ -401,7 +385,7 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
         </div>
       </div>
 
-      <div className="landing-float absolute bottom-6 left-3 w-[min(19rem,76%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_94%,transparent)] p-4 shadow-[0_20px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:bottom-9 sm:left-6 sm:p-5">
+      <div className="absolute bottom-4 left-3 w-[min(17rem,76%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_96%,transparent)] p-4 shadow-[0_16px_36px_rgba(15,23,42,0.13)] backdrop-blur-xl sm:bottom-6 sm:left-4">
         <div className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-xs font-medium text-[var(--muted)]">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_13%,var(--card))] text-[var(--accent)]">
@@ -418,7 +402,7 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
         <p className="mt-1 text-sm leading-snug text-[var(--muted)]">{hero.request}</p>
       </div>
 
-      <div className="landing-float landing-float-delay absolute bottom-20 right-3 w-[min(16rem,64%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_96%,transparent)] p-4 shadow-[0_20px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl sm:bottom-28 sm:right-6">
+      <div className="absolute bottom-16 right-3 w-[min(14rem,62%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_97%,transparent)] p-4 shadow-[0_16px_36px_rgba(15,23,42,0.13)] backdrop-blur-xl sm:bottom-20 sm:right-4">
         <div className="flex items-center gap-2 text-xs font-medium text-[var(--brand)]">
           <MessageIcon />
           {hero.confirmation}

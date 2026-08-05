@@ -107,9 +107,8 @@ thead {
   display: none;
 }
 
-/* Public landing-page motion. It changes opacity and transform only, so the
-   layout never moves under the reader. The slow float belongs only to the
-   decorative product cards in the hero; interactive controls stay still. */
+/* Public landing-page entrance motion. It changes opacity and transform only,
+   so the layout never moves under the reader. */
 @keyframes landing-rise {
   from {
     opacity: 0;
@@ -118,15 +117,6 @@ thead {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes landing-float {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-0.35rem);
   }
 }
 
@@ -149,21 +139,12 @@ thead {
   animation-delay: 100ms;
 }
 
-.landing-float {
-  animation: landing-float 4.5s ease-in-out infinite alternate;
-}
-
-.landing-float-delay {
-  animation-delay: -2.25s;
-}
-
 .landing-tab-enter {
   animation: landing-tab-enter 260ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-rise,
-  .landing-float,
   .landing-tab-enter {
     animation: none;
   }
