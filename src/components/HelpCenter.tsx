@@ -287,8 +287,13 @@ export function HelpCenter() {
 
   const resultCount = categories.reduce((total, category) => total + category.articles.length, 0);
 
+  // lang="en" because this page is English and nothing here goes through
+  // i18n — every string below is written inline. The document tag says
+  // whatever the visitor's own preference is (LanguageProvider sets it), so a
+  // Turkish owner reading these guides would otherwise have a screen reader
+  // pronouncing English prose with Turkish phonetics.
   return (
-    <div className="min-h-dvh bg-[var(--pane)] text-[var(--foreground)]">
+    <div lang="en" className="min-h-dvh bg-[var(--pane)] text-[var(--foreground)]">
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_88%,transparent)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
           <a href="https://docs.mahlas.xyz" className="flex items-center gap-3">

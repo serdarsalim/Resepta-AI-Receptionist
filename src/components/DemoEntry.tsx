@@ -28,7 +28,13 @@ export function DemoEntry() {
   };
 
   return (
-    <main className="relative flex min-h-dvh items-center overflow-hidden bg-[var(--background)] px-6 py-12">
+    // lang="en" to match the translate("en", …) above: this page is English
+    // whatever the visitor's stored preference is, and the document tag
+    // follows that preference rather than this page.
+    <main
+      lang="en"
+      className="relative flex min-h-dvh items-center overflow-hidden bg-[var(--background)] px-6 py-12"
+    >
       <div className="pointer-events-none absolute -left-48 top-0 h-96 w-96 rounded-full bg-[color-mix(in_srgb,var(--brand)_14%,transparent)] blur-3xl" />
       <div className="pointer-events-none absolute -right-48 bottom-0 h-96 w-96 rounded-full bg-[color-mix(in_srgb,var(--accent)_13%,transparent)] blur-3xl" />
 

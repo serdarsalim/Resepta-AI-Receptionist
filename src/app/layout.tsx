@@ -6,6 +6,8 @@ import { LanguageProvider } from "@/lib/LanguageProvider";
 import { ToastProvider } from "@/lib/ToastProvider";
 import { NO_FOUC_SCRIPT } from "@/lib/theme";
 import { DEFAULT_TITLE } from "@/lib/brand";
+import { APEX_ORIGIN } from "@/lib/hosts";
+import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 import "./globals.css";
 // Country flags are flag-icons CSS sprites, never Unicode flag emoji: Windows
 // Chrome has no flag glyphs and renders those as the bare letters "TR".
@@ -19,8 +21,14 @@ export const metadata: Metadata = {
   title: DEFAULT_TITLE,
   description:
     "Mahlas answers calls, books appointments and keeps customers informed in one connected workflow.",
-  metadataBase: new URL("https://mahlas.xyz"),
-  alternates: { canonical: "https://mahlas.xyz" },
+  metadataBase: new URL(APEX_ORIGIN),
+  // Relative, so metadataBase stays the single place the origin is written.
+  //
+  // Inherited by every route that does not set its own `alternates`, which is
+  // the behaviour /privacy, /terms, /help and /demo each override with theirs.
+  // The three "use client" public pages cannot override anything, so they get
+  // a server layout carrying UNLISTED from src/lib/seo.ts instead.
+  alternates: { canonical: "/" },
 };
 
 export default function RootLayout({
@@ -28,7 +36,15 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <ConvexAuthNextjsServerProvider>
-      <html lang="tr" suppressHydrationWarning className={`${geistSans.variable} h-full`}>
+      {/* The server render has to use the default for the markup to match on
+          hydration; LanguageProvider corrects this attribute once it knows what
+          the visitor actually reads. Taking the value from i18n.ts rather than
+          writing "tr" twice keeps the two from drifting apart. */}
+      <html
+        lang={DEFAULT_LANGUAGE}
+        suppressHydrationWarning
+        className={`${geistSans.variable} h-full`}
+      >
         <body className="min-h-full antialiased">
           {/* Correct .dark class before hydration — no theme flash. */}
           <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
