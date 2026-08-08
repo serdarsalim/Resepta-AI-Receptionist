@@ -4,6 +4,7 @@ import {
   nextjsMiddlewareRedirect,
 } from "@convex-dev/auth/nextjs/server";
 import { NextResponse } from "next/server";
+import { DEMO_HOST, DOCS_HOST, hostFromHeader } from "@/lib/hosts";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 
@@ -35,8 +36,22 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // and the real thing under <Authenticated>, and every Convex function behind
 // the app half still goes through requireOrg. Letting the request past this
 // redirect exposes a page, not a tenant.
+// /book/<slug> and /appt/<token> clear the bar the same way /r does, and they
+// shipped without being added here — which meant the booking page an owner
+// shares and the manage link we send over WhatsApp (convex/wa.ts) both bounced
+// the customer to a Google sign-in screen. Neither audience has an account.
+//
+// The functions behind them are keyed the same way the request form's are:
+// convex/booking.ts `page`, `slots` and `book` take the org's public slug;
+// `manage`, `reschedule` and `cancel` take the appointment's manage token and
+// nothing else. The token IS the permission, scoped to one appointment, so a
+// stranger who guesses one gets that appointment and no other. `enable`, the
+// owner-side toggle in the same file, takes neither and stays behind requireOrg
+// where it belongs.
 const isPublicPage = createRouteMatcher([
   "/r/(.*)",
+  "/book/(.*)",
+  "/appt/(.*)",
   "/privacy",
   "/terms",
   "/help",
@@ -48,8 +63,8 @@ const isPublicPage = createRouteMatcher([
 export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   // Keep help content in the product repository so it cannot drift from the
   // shipped interface, while giving it a clean public docs origin.
-  const host = request.headers.get("host")?.split(":")[0];
-  if (host === "docs.mahlas.xyz" && request.nextUrl.pathname === "/") {
+  const host = hostFromHeader(request.headers.get("host"));
+  if (host === DOCS_HOST && request.nextUrl.pathname === "/") {
     const helpUrl = request.nextUrl.clone();
     helpUrl.pathname = "/help";
     return NextResponse.rewrite(helpUrl);
@@ -59,7 +74,7 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   // then becomes the real app on the same host once anonymous sign-in has
   // created the demo-only session. Keeping the session on demo.mahlas.xyz
   // prevents an owner's mahlas.xyz session from being replaced by a preview.
-  if (host === "demo.mahlas.xyz" && request.nextUrl.pathname === "/") {
+  if (host === DEMO_HOST && request.nextUrl.pathname === "/") {
     const isAuthed = await convexAuth.isAuthenticated();
     if (!isAuthed) {
       const demoUrl = request.nextUrl.clone();
@@ -87,6 +102,14 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
 // check catches an image request, the browser receives a 307 to an HTML sign-in
 // page and renders a broken image. The /images directory contains landing-page
 // media only; it calls no backend function and carries no tenant data.
+//
+// Every dot here is escaped, because this string is compiled to a regex and an
+// unescaped one matches any character: `favicon.ico` was also excusing
+// /faviconXico from the auth check. Nothing routes there, so nothing leaked —
+// but the exclusion list should name paths, not patterns that happen to
+// contain them.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|images|favicon.ico|icon.svg|apple-icon.png|opengraph-image|robots.txt|sitemap.xml).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|images|favicon\\.ico|icon\\.svg|apple-icon\\.png|opengraph-image|robots\\.txt|sitemap\\.xml).*)",
+  ],
 };
