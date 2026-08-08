@@ -7,6 +7,7 @@ import { useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { DEMO_ORIGIN, DOCS_ORIGIN } from "@/lib/hosts";
 import { LANGUAGES, isLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
@@ -61,6 +62,17 @@ export function Landing() {
             </a>
             <a className="transition-colors hover:text-[var(--foreground)]" href="#features">
               {copy.nav.features}
+            </a>
+            {/* The only nav entry that leaves the page, so it opens in its own
+                tab: the help centre lives on the docs origin and a visitor
+                reading a guide has not finished with the landing page. */}
+            <a
+              className="transition-colors hover:text-[var(--foreground)]"
+              href={DOCS_ORIGIN}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {copy.help}
             </a>
           </div>
 
@@ -124,13 +136,23 @@ export function Landing() {
                   {copy.ctaPrimary}
                 </button>
                 {walkIn ? (
-                  <button
-                    disabled={busy}
-                    onClick={() => start("anonymous")}
-                    className="rounded-lg px-5 py-3.5 text-base font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-60"
+                  // The demo opens on its own origin, in its own tab.
+                  //
+                  // This used to call signIn("anonymous") right here, which
+                  // created the demo session on resepta.xyz — precisely what
+                  // demo.resepta.xyz exists to prevent. An owner who clicked
+                  // it while signed in had their real session replaced by a
+                  // preview (see the comment in src/proxy.ts). Sending them to
+                  // the demo origin keeps the two sessions apart, and a new
+                  // tab leaves the landing page where they left it.
+                  <a
+                    href={DEMO_ORIGIN}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg px-5 py-3.5 text-base font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
                   >
                     {copy.ctaDemo} <ArrowIcon />
-                  </button>
+                  </a>
                 ) : (
                   <a
                     href="#product"
@@ -318,7 +340,9 @@ export function Landing() {
             </FooterNav>
 
             <FooterNav title={copy.footerResources}>
-              <a href="https://docs.resepta.xyz">{copy.help}</a>
+              <a href={DOCS_ORIGIN} target="_blank" rel="noreferrer">
+                {copy.help}
+              </a>
               <Link href="/privacy">{copy.privacy}</Link>
               <Link href="/terms">{copy.terms}</Link>
             </FooterNav>
