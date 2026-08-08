@@ -2,7 +2,7 @@
 // are spelled out.
 //
 // One Vercel project serves all three. Which one a request arrived on decides
-// what the middleware rewrites (src/middleware.ts), which sitemap gets built
+// what the proxy rewrites (src/proxy.ts), which sitemap gets built
 // (src/app/sitemap.ts) and which origin robots.txt advertises
 // (src/app/robots.ts). Those three files each used to carry their own copy of
 // this table in a slightly different shape, which meant renaming a domain was

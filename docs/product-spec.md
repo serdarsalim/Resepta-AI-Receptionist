@@ -89,7 +89,7 @@ uses Randevu's own call, calendar and follow-up interface rather than an
 industry photo. Beauty, clinic and local-service photography appears only in
 the use-case tabs below the product story. Turkish, English and German copy is
 written for each market rather than translated line by line. Landing media is
-public under `/images`; middleware must never redirect those asset requests to
+public under `/images`; the proxy must never redirect those asset requests to
 sign-in.
 
 The public `/help` route is the customer-facing Mahlas help center and is also
