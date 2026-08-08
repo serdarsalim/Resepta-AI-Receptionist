@@ -65,6 +65,13 @@ export const LEGAL_UI: Record<
   },
 };
 
+// The same date the documents print, in the form a machine reads. The sitemap
+// tells crawlers when /privacy and /terms last changed, and it has to agree
+// with what the page itself says or the claim is worthless. Six `updated`
+// strings below (three languages, two documents) and this constant move
+// together or not at all.
+export const LEGAL_UPDATED_ISO = "2026-07-30";
+
 export const PRIVACY: Record<Language, LegalDoc> = {
   tr: {
     title: "Gizlilik politikası",
