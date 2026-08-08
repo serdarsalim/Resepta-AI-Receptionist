@@ -1,4 +1,4 @@
-# Deploying and operating Mahlas
+# Deploying and operating Resepta
 
 Last reconciled with the implementation: 31 July 2026.
 
@@ -47,7 +47,7 @@ npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <random retained value>
 npx convex env set --prod RESEND_API_KEY <Resend API key>
 npx convex env set --prod RESEND_INBOUND_DOMAIN <shared inbound email domain>
 npx convex env set --prod RESEND_WEBHOOK_SECRET <Resend whsec value>
-npx convex env set --prod SITE_URL <public Mahlas app origin>
+npx convex env set --prod SITE_URL <public Resepta app origin>
 ```
 
 Optional:
@@ -60,9 +60,9 @@ Only set `DEMO_ORG_ID` after the target org has `demoMode` enabled and has no
 real messaging credentials. With it unset, anonymous demo sign-in is not
 registered and Google is the only auth provider.
 
-The production demo origin is `https://demo.mahlas.xyz`. It serves `/demo` to
+The production demo origin is `https://demo.resepta.xyz`. It serves `/demo` to
 signed-out visitors and the normal app root after anonymous sign-in. Point it
-at the same Vercel project as `mahlas.xyz`; the data boundary is the isolated
+at the same Vercel project as `resepta.xyz`; the data boundary is the isolated
 demo org, not a second frontend deployment.
 
 The Google Cloud authorized redirect URI is:

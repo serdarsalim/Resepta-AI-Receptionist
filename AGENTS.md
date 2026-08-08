@@ -1,18 +1,18 @@
-# Mahlas — working in this codebase
+# Resepta — working in this codebase
 
 > **Brand and infrastructure (decided 2026-08-05, Serdar):** the public product
-> is **Mahlas** and its canonical frontend is `https://mahlas.xyz`. The repo,
+> is **Resepta** and its canonical frontend is `https://resepta.xyz`. The repo,
 > directory, Vercel project and selected internal identifiers retain the former
 > `randevu` name; do not rename infrastructure merely to match the brand.
 
-> **Public help center:** `https://docs.mahlas.xyz` is served by the same
+> **Public help center:** `https://docs.resepta.xyz` is served by the same
 > Vercel project and rewritten to `/help` in `src/proxy.ts`. Its content
 > lives in `src/components/HelpCenter.tsx` so product and help ship together.
 > The Markdown `docs/` directory is the technical/operator source material,
 > not a public site. Translate its product facts into customer steps; never
 > expose provider names, credentials, internal IDs, or platform-admin recovery.
 
-> **Public demo:** `https://demo.mahlas.xyz` rewrites signed-out root requests
+> **Public demo:** `https://demo.resepta.xyz` rewrites signed-out root requests
 > to `/demo`, then signs visitors anonymously into the isolated showroom org.
 > It shares the production deployment by design. Preserve all three safety
 > boundaries documented under "The demo org" and never add credentials to it.
@@ -30,7 +30,7 @@
 WhatsApp appointment automation for SMBs (salons, barbers, dentists). One shared
 deployment serves EVERY business — this is the multi-org sibling of Nudge
 (`../nudge`), which is instance-per-tenant. The two products deliberately do not
-share a codebase; Mahlas borrows Nudge's proven pieces (the wa_cloud sender,
+share a codebase; Resepta borrows Nudge's proven pieces (the wa_cloud sender,
 config conventions) by copy, not import.
 
 ## The one invariant that matters
@@ -49,7 +49,7 @@ style issue.
   NOT deal stages, NOT HubSpot. If a feature request looks like Nudge, it
   belongs in Nudge.
 - **The public product is vertical-agnostic** (Serdar, 2026-07-31). Lead with
-  Mahlas's call → booking → follow-up workflow and product UI, never with one
+  Resepta's call → booking → follow-up workflow and product UI, never with one
   industry's lifestyle photo. Industry photography belongs only inside
   labelled use-case tabs and never inside the product demo; it illustrates an
   example without redefining the app as salon, clinic or workshop software.
@@ -234,8 +234,8 @@ after).
 
 Walk-in anonymous sign-in exists only when `DEMO_ORG_ID` is set — the provider
 is not registered otherwise. Never set `demoMode` on an org with credentials.
-The public entry origin is `https://demo.mahlas.xyz`; its session stays on that
-subdomain so trying the demo does not replace an owner's `mahlas.xyz` session.
+The public entry origin is `https://demo.resepta.xyz`; its session stays on that
+subdomain so trying the demo does not replace an owner's `resepta.xyz` session.
 
 ## Open product questions (unresolved as of 2026-07-25)
 

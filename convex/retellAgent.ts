@@ -181,7 +181,7 @@ const RUNTIME_MCP_TOOLS = [
     mcp_id: "randevu",
     name: "get_call_context",
     description:
-      "Read the latest Mahlas customer record, configured information and active services for the caller. Call this before asking for customer details and pass {{user_number}} as phone.",
+      "Read the latest Resepta customer record, configured information and active services for the caller. Call this before asking for customer details and pass {{user_number}} as phone.",
     speak_during_execution: false,
     speak_after_execution: false,
   },
@@ -1040,7 +1040,7 @@ async function provisionAgent(
     if (!initial.is_published) {
       await call(key, "POST", `publish-agent-version/${encodeURIComponent(agentId)}`, {
         version: initialVersion,
-        version_title: `Mahlas template v${VOICE_AGENT_TEMPLATE_VERSION}`,
+        version_title: `Resepta template v${VOICE_AGENT_TEMPLATE_VERSION}`,
       });
     }
     await ctx.runMutation(internal.voiceProvisioning.checkpoint, {

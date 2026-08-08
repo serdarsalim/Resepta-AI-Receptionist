@@ -72,8 +72,8 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
 
   // The demo origin opens on a purpose-built explanation for a new visitor,
   // then becomes the real app on the same host once anonymous sign-in has
-  // created the demo-only session. Keeping the session on demo.mahlas.xyz
-  // prevents an owner's mahlas.xyz session from being replaced by a preview.
+  // created the demo-only session. Keeping the session on demo.resepta.xyz
+  // prevents an owner's resepta.xyz session from being replaced by a preview.
   if (host === DEMO_HOST && request.nextUrl.pathname === "/") {
     const isAuthed = await convexAuth.isAuthenticated();
     if (!isAuthed) {

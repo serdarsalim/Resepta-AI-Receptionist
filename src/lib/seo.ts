@@ -12,7 +12,7 @@ import type { Metadata } from "next";
 // only job is to carry this object.
 //
 // Left alone, every salon's request form shipped a canonical claiming it was
-// the Mahlas homepage. Google reads that as "this page is a duplicate, index
+// the Resepta homepage. Google reads that as "this page is a duplicate, index
 // the other one", which is a worse outcome than either indexing the form or
 // hiding it, because it is the site telling a lie about itself.
 export const UNLISTED: Metadata = {

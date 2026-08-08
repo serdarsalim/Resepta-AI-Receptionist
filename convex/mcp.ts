@@ -385,7 +385,7 @@ const TOOLS: ToolDef[] = [
     name: "list_phone_agents",
     title: "The phone agents this business has",
     description:
-      "Every phone agent connected to this workspace, whether it is enabled, which inbound number it answers on, and whether Mahlas's private runtime is published to it. An agent without the runtime can take a call but cannot read or write customer data.",
+      "Every phone agent connected to this workspace, whether it is enabled, which inbound number it answers on, and whether Resepta's private runtime is published to it. An agent without the runtime can take a call but cannot read or write customer data.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, idempotentHint: true },
     handler: async (ctx, _args, who) =>
@@ -512,7 +512,7 @@ const TOOLS: ToolDef[] = [
     name: "assign_phone_number",
     title: "Move an inbound line to an agent",
     description:
-      "Point an inbound number at one agent, or pass null to unassign. A line answers for exactly one agent, so assigning a number another agent holds MOVES it — that agent stops taking calls immediately. Use list_phone_agents to see who holds what. Mahlas never buys numbers; this only routes ones the business already has. Owner only.",
+      "Point an inbound number at one agent, or pass null to unassign. A line answers for exactly one agent, so assigning a number another agent holds MOVES it — that agent stops taking calls immediately. Use list_phone_agents to see who holds what. Resepta never buys numbers; this only routes ones the business already has. Owner only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -579,7 +579,7 @@ const TOOLS: ToolDef[] = [
         inboundNumber: {
           type: "string",
           description:
-            "An unassigned line already provisioned at the provider. Mahlas never buys numbers, so a number it does not already hold will fail.",
+            "An unassigned line already provisioned at the provider. Resepta never buys numbers, so a number it does not already hold will fail.",
         },
         requestId: {
           type: "string",

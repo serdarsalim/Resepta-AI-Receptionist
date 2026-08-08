@@ -211,7 +211,7 @@ export default function AdminPage() {
               label="Product name"
               hint="How invites and alerts sign themselves. Not what customers see — salon mail carries the salon's name."
               current={mail.productName}
-              placeholder="Mahlas"
+              placeholder="Resepta"
               onSave={(value) => setConfig({ key: "productName", value })}
             />
           </Section>

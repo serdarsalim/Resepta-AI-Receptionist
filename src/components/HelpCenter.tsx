@@ -22,16 +22,16 @@ const CATEGORIES: Category[] = [
   {
     id: "start",
     title: "Start here",
-    description: "Set up the business basics and understand what Mahlas connects.",
+    description: "Set up the business basics and understand what Resepta connects.",
     articles: [
       {
         id: "create-workspace",
-        title: "Create your Mahlas workspace",
+        title: "Create your Resepta workspace",
         summary: "Sign in with Google and give the workspace your business name.",
         steps: [
-          "Open mahlas.xyz and choose Start with Google.",
+          "Open resepta.xyz and choose Start with Google.",
           "Use the Google account that should own the business workspace.",
-          "Enter the business name when Mahlas asks for it. You can update the business details later under Business.",
+          "Enter the business name when Resepta asks for it. You can update the business details later under Business.",
         ],
         keywords: ["sign in", "google", "account", "workspace", "business name"],
       },
@@ -42,11 +42,11 @@ const CATEGORIES: Category[] = [
         steps: [
           "Add the services customers can book and the team members who deliver them.",
           "Add any customer information fields the phone agent should collect.",
-          "Ask your Mahlas operator to connect scheduling, phone, WhatsApp, or email accounts that your setup needs.",
+          "Ask your Resepta operator to connect scheduling, phone, WhatsApp, or email accounts that your setup needs.",
           "Create the phone agent, assign an available line, and make a test call.",
           "Review the default confirmation and reminder rules before going live.",
         ],
-        note: "Mahlas can store appointments without an external calendar, but conflict checking requires a connected scheduling account.",
+        note: "Resepta can store appointments without an external calendar, but conflict checking requires a connected scheduling account.",
         keywords: ["setup", "onboarding", "checklist", "go live"],
       },
     ],
@@ -54,7 +54,7 @@ const CATEGORIES: Category[] = [
   {
     id: "business",
     title: "Business setup",
-    description: "Tell Mahlas what you offer, who can be booked, and what you need to know about customers.",
+    description: "Tell Resepta what you offer, who can be booked, and what you need to know about customers.",
     articles: [
       {
         id: "services-team",
@@ -70,7 +70,7 @@ const CATEGORIES: Category[] = [
       },
       {
         id: "customer-fields",
-        title: "Choose the customer details Mahlas keeps",
+        title: "Choose the customer details Resepta keeps",
         summary: "Add fields such as preferences, notes, or identifiers and decide how they can be filled.",
         steps: [
           "Open Business and find Customer information.",
@@ -86,12 +86,12 @@ const CATEGORIES: Category[] = [
         title: "Connect scheduling and availability",
         summary: "Use a connected scheduling account when the agent must check real availability and prevent collisions.",
         steps: [
-          "Ask your Mahlas operator to connect your scheduling account and event type.",
+          "Ask your Resepta operator to connect your scheduling account and event type.",
           "Make sure every service duration you offer is allowed by that event type.",
-          "Disable duplicate attendee emails in the scheduling tool when Mahlas owns confirmations and reminders.",
+          "Disable duplicate attendee emails in the scheduling tool when Resepta owns confirmations and reminders.",
           "Test creating, moving, and cancelling one appointment before opening the phone line to customers.",
         ],
-        note: "Without a connected scheduling account, manual and phone-created appointments still appear in Mahlas, but double-booking protection is not available.",
+        note: "Without a connected scheduling account, manual and phone-created appointments still appear in Resepta, but double-booking protection is not available.",
         keywords: ["calendar", "cal.com", "availability", "double booking", "conflict"],
       },
     ],
@@ -104,14 +104,14 @@ const CATEGORIES: Category[] = [
       {
         id: "create-agent",
         title: "Create or connect a phone agent",
-        summary: "Start with a new Mahlas receptionist or connect one that already exists.",
+        summary: "Start with a new Resepta receptionist or connect one that already exists.",
         steps: [
           "Open Phone agent and choose Add agent.",
           "Choose Create new, then select a name, language, and voice. Connect existing is available when an agent is already prepared for the business.",
           "Assign an available phone line if one has been provisioned for the workspace.",
           "Wait for setup to finish, then open the agent by selecting its name.",
         ],
-        note: "Mahlas can assign an available line, but phone-number purchasing and regulatory setup are completed outside the app.",
+        note: "Resepta can assign an available line, but phone-number purchasing and regulatory setup are completed outside the app.",
         keywords: ["phone", "voice", "agent", "line", "number", "create"],
       },
       {
@@ -122,7 +122,7 @@ const CATEGORIES: Category[] = [
           "Open Phone agent, then select the agent name.",
           "Write the business instructions and the opening line in the order a real receptionist would use them.",
           "Insert customer or business variables with @ where the conversation needs them.",
-          "Choose the voice and save once. Mahlas publishes the voice and script together.",
+          "Choose the voice and save once. Resepta publishes the voice and script together.",
         ],
         keywords: ["instructions", "prompt", "opening line", "voice", "publish"],
       },
@@ -147,7 +147,7 @@ const CATEGORIES: Category[] = [
           "Open Phone agent and switch to Calls.",
           "Open a call to see its recording, summary, collected values, transcript, and why it ended.",
           "Open the same call from the customer activity history when you need the surrounding context.",
-          "If Mahlas reports that call results are not arriving, open the agent and choose Fix, then place another test call.",
+          "If Resepta reports that call results are not arriving, open the agent and choose Fix, then place another test call.",
         ],
         keywords: ["calls", "recording", "transcript", "summary", "fix", "webhook"],
       },
@@ -206,12 +206,12 @@ const CATEGORIES: Category[] = [
         title: "Understand WhatsApp templates and languages",
         summary: "Business-initiated WhatsApp messages use approved templates in the customer’s language.",
         steps: [
-          "Connect the business WhatsApp account with your Mahlas operator.",
+          "Connect the business WhatsApp account with your Resepta operator.",
           "Register and approve the templates used for confirmations, reminders, cancellations, and campaigns.",
           "Keep a matching template for every customer language you serve.",
           "Check failed messages in the customer conversation when a template is missing or rejected.",
         ],
-        note: "Mahlas does not send a template in the wrong language as a fallback. A missing language fails visibly so the customer never receives misleading copy.",
+        note: "Resepta does not send a template in the wrong language as a fallback. A missing language fails visibly so the customer never receives misleading copy.",
         keywords: ["whatsapp", "meta", "template", "language", "approval"],
       },
       {
@@ -242,7 +242,7 @@ const CATEGORIES: Category[] = [
           "No call result: open the phone agent, check its result health, choose Fix if offered, and place a fresh test call.",
           "WhatsApp failed: open the customer conversation and check that the exact language template is approved.",
           "Email failed: confirm the customer has an email address and ask your operator to verify the workspace email connection.",
-          "Cannot sign in: use the Google account that belongs to the workspace. Mahlas does not use password-based accounts.",
+          "Cannot sign in: use the Google account that belongs to the workspace. Resepta does not use password-based accounts.",
         ],
         keywords: ["problem", "error", "failed", "double booking", "sign in", "support"],
       },
@@ -296,14 +296,14 @@ export function HelpCenter() {
     <div lang="en" className="min-h-dvh bg-[var(--pane)] text-[var(--foreground)]">
       <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--card)_88%,transparent)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-          <a href="https://docs.mahlas.xyz" className="flex items-center gap-3">
+          <a href="https://docs.resepta.xyz" className="flex items-center gap-3">
             <Mark />
-            <span className="text-lg font-bold tracking-tight">Mahlas</span>
+            <span className="text-lg font-bold tracking-tight">Resepta</span>
             <span className="hidden h-5 w-px bg-[var(--border)] sm:block" />
             <span className="hidden text-sm text-[var(--muted)] sm:block">Help Center</span>
           </a>
-          <a href="https://mahlas.xyz" className="rounded-lg bg-[var(--muted-bg)] px-3.5 py-2 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--brand-soft)]">
-            Open Mahlas <span aria-hidden>↗</span>
+          <a href="https://resepta.xyz" className="rounded-lg bg-[var(--muted-bg)] px-3.5 py-2 text-sm font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--brand-soft)]">
+            Open Resepta <span aria-hidden>↗</span>
           </a>
         </div>
       </header>
@@ -327,7 +327,7 @@ export function HelpCenter() {
           </nav>
           <div className="mt-8 hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--muted)] lg:block">
             <p className="font-semibold text-[var(--foreground)]">Still stuck?</p>
-            <p className="mt-1 leading-relaxed">Open Mahlas and share the exact screen, customer, call, or message involved with your operator.</p>
+            <p className="mt-1 leading-relaxed">Open Resepta and share the exact screen, customer, call, or message involved with your operator.</p>
           </div>
         </aside>
 
@@ -365,8 +365,8 @@ export function HelpCenter() {
 
       <footer className="border-t border-[var(--border)] bg-[var(--card)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <div className="flex items-center gap-2.5"><Mark /><span className="font-semibold text-[var(--foreground)]">Mahlas</span></div>
-          <nav className="flex flex-wrap gap-5"><a href="https://mahlas.xyz/privacy" className="hover:text-[var(--foreground)]">Privacy</a><a href="https://mahlas.xyz/terms" className="hover:text-[var(--foreground)]">Terms</a><a href="https://mahlas.xyz" className="hover:text-[var(--foreground)]">Product</a></nav>
+          <div className="flex items-center gap-2.5"><Mark /><span className="font-semibold text-[var(--foreground)]">Resepta</span></div>
+          <nav className="flex flex-wrap gap-5"><a href="https://resepta.xyz/privacy" className="hover:text-[var(--foreground)]">Privacy</a><a href="https://resepta.xyz/terms" className="hover:text-[var(--foreground)]">Terms</a><a href="https://resepta.xyz" className="hover:text-[var(--foreground)]">Product</a></nav>
         </div>
       </footer>
     </div>

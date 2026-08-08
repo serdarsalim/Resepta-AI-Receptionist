@@ -31,7 +31,7 @@ export const DEFAULT_LANGUAGE: Language = "tr";
 export const LANGUAGE_STORAGE_KEY = "randevu.lang";
 
 const dictionary = {
-  "app.name": { tr: "Mahlas", en: "Mahlas", de: "Mahlas" },
+  "app.name": { tr: "Resepta", en: "Resepta", de: "Resepta" },
   "app.tagline": {
     tr: "WhatsApp randevu hatırlatmaları",
     en: "WhatsApp appointment reminders",
@@ -1540,9 +1540,9 @@ const dictionary = {
     de: "Trennen",
   },
   "settings.voiceDisconnectConfirm": {
-    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Mahlas'ta kalır, ancak asistan artık bu işletmede görünmez.",
-    en: "Disconnect {name}? Its call history stays in Mahlas, but the agent will no longer appear for this business.",
-    de: "{name} trennen? Der Anrufverlauf bleibt in Mahlas, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
+    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Resepta'da kalır, ancak asistan artık bu işletmede görünmez.",
+    en: "Disconnect {name}? Its call history stays in Resepta, but the agent will no longer appear for this business.",
+    de: "{name} trennen? Der Anrufverlauf bleibt in Resepta, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
   "settings.voiceNotProvisioned": {
     tr: "Sesli asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
@@ -1608,9 +1608,9 @@ const dictionary = {
     de: "Die Anrufergebnisse dieses Assistenten erreichen die App nicht.",
   },
   "settings.voiceNotFullyConnected": {
-    tr: "Bu asistan Mahlas'a tam olarak bağlı değil.",
-    en: "This agent is not fully connected to Mahlas.",
-    de: "Dieser Assistent ist nicht vollständig mit Mahlas verbunden.",
+    tr: "Bu asistan Resepta'ya tam olarak bağlı değil.",
+    en: "This agent is not fully connected to Resepta.",
+    de: "Dieser Assistent ist nicht vollständig mit Resepta verbunden.",
   },
   "settings.voiceUpdateIncomplete": {
     tr: "Yakın tarihli bir aramanın verileri güvende, ancak bazı müşteri bilgileri eksik olabilir.",
@@ -1654,14 +1654,14 @@ const dictionary = {
     de: "Anrufergebnisse",
   },
   "voiceDetail.webhookHint": {
-    tr: "Her aramadan sonra kayıtların, özetlerin ve toplanan bilgilerin Mahlas'a ulaşmasını sağlar.",
-    en: "Keeps recordings, summaries and collected details in Mahlas after every call.",
-    de: "Sorgt dafür, dass Aufzeichnungen, Zusammenfassungen und erfasste Angaben nach jedem Anruf in Mahlas ankommen.",
+    tr: "Her aramadan sonra kayıtların, özetlerin ve toplanan bilgilerin Resepta'ya ulaşmasını sağlar.",
+    en: "Keeps recordings, summaries and collected details in Resepta after every call.",
+    de: "Sorgt dafür, dass Aufzeichnungen, Zusammenfassungen und erfasste Angaben nach jedem Anruf in Resepta ankommen.",
   },
   "voiceDetail.webhookWired": {
-    tr: "Sonuçlar Mahlas'a ulaşıyor.",
-    en: "Results are reaching Mahlas.",
-    de: "Ergebnisse erreichen Mahlas.",
+    tr: "Sonuçlar Resepta'ya ulaşıyor.",
+    en: "Results are reaching Resepta.",
+    de: "Ergebnisse erreichen Resepta.",
   },
   "voiceDetail.webhookElsewhere": {
     tr: "Başka bir adrese işaret ediyor. Arama sonuçları bu uygulamaya ulaşmıyor.",
@@ -1675,8 +1675,8 @@ const dictionary = {
   },
   "voiceDetail.signatureRejected": {
     tr: "Aramalar ulaşıyor ama reddediliyor: Retell anahtarı doğrulanmıyor.",
-    en: "Calls are reaching Mahlas but being rejected: the Retell key does not verify.",
-    de: "Anrufe erreichen Mahlas, werden aber abgewiesen: Der Retell-Schlüssel wird nicht verifiziert.",
+    en: "Calls are reaching Resepta but being rejected: the Retell key does not verify.",
+    de: "Anrufe erreichen Resepta, werden aber abgewiesen: Der Retell-Schlüssel wird nicht verifiziert.",
   },
   "voiceDetail.signatureRejectedHint": {
     tr: "Bu iş yeri için kayıtlı Retell anahtarı, o çalışma alanının imzalama anahtarı değil. Retell → Settings → API Keys içinde Webhook rozetli anahtarı kopyalayıp yönetici konsolundan güncelleyin. Düzeltilene kadar randevular arama sırasında kaydedilemez.",
@@ -1752,9 +1752,9 @@ const dictionary = {
   // Derived from engineType client-side so the copy translates; the backend
   // sends no English for these.
   "voiceDetail.flowAgent": {
-    tr: "Bu asistan yönlendirilmiş bir konuşma akışıyla çalışıyor. Senaryosu henüz Mahlas'tan düzenlenemiyor.",
-    en: "This agent uses a guided call flow. Its script cannot be edited from Mahlas yet.",
-    de: "Dieser Assistent nutzt einen geführten Gesprächsablauf. Sein Skript kann noch nicht in Mahlas bearbeitet werden.",
+    tr: "Bu asistan yönlendirilmiş bir konuşma akışıyla çalışıyor. Senaryosu henüz Resepta'dan düzenlenemiyor.",
+    en: "This agent uses a guided call flow. Its script cannot be edited from Resepta yet.",
+    de: "Dieser Assistent nutzt einen geführten Gesprächsablauf. Sein Skript kann noch nicht in Resepta bearbeitet werden.",
   },
   "voiceDetail.noPrompt": {
     tr: "Bu asistanın buradan düzenlenebilecek bir talimatı yok.",
@@ -1817,9 +1817,9 @@ const dictionary = {
     de: "Jede Zeile zeigt den gesamten Weg eines Werts: woher er vor dem Anruf kommt, wie er im Gespräch erfasst wird, ob er danach ergänzt wird und wo er gespeichert wird.",
   },
   "voiceVariables.importedHint": {
-    tr: "Bunlar asistanın mevcut ayarlarıdır. Yayınladığınızda diğer yetenekleri değişmeden Mahlas tarafından yönetilmeye başlar.",
-    en: "These are the agent's current settings. Publishing brings them under Mahlas management without changing its other abilities.",
-    de: "Dies sind die aktuellen Einstellungen des Assistenten. Beim Veröffentlichen übernimmt Mahlas ihre Verwaltung, ohne andere Fähigkeiten zu ändern.",
+    tr: "Bunlar asistanın mevcut ayarlarıdır. Yayınladığınızda diğer yetenekleri değişmeden Resepta tarafından yönetilmeye başlar.",
+    en: "These are the agent's current settings. Publishing brings them under Resepta management without changing its other abilities.",
+    de: "Dies sind die aktuellen Einstellungen des Assistenten. Beim Veröffentlichen übernimmt Resepta ihre Verwaltung, ohne andere Fähigkeiten zu ändern.",
   },
   "voiceVariables.variable": { tr: "Bilgi", en: "Variable", de: "Angabe" },
   "voiceVariables.add": {
@@ -2251,9 +2251,9 @@ const dictionary = {
     de: "Online-Buchungsseite",
   },
   "settings.bookingPageHint": {
-    tr: "Mahlas'ın kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
-    en: "Mahlas's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
-    de: "Die eigene Buchungsseite von Mahlas: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
+    tr: "Resepta'nın kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
+    en: "Resepta's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
+    de: "Die eigene Buchungsseite von Resepta: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
   },
   "settings.bookingUrlHint": {
     tr: "Müşterilerin randevu aldığı sayfa. Mesajlardaki her [booking_link] bu adresi yazar.",
@@ -2730,9 +2730,9 @@ const dictionary = {
     de: "Dies ist ein Beispielkonto. Es wird nichts wirklich gesendet, und es wird jede Nacht zurückgesetzt.",
   },
   "demo.entryTitle": {
-    tr: "Mahlas’ı çalışan bir örnekle deneyin",
-    en: "Try Mahlas with a working example",
-    de: "Mahlas mit einem funktionierenden Beispiel testen",
+    tr: "Resepta’yı çalışan bir örnekle deneyin",
+    en: "Try Resepta with a working example",
+    de: "Resepta mit einem funktionierenden Beispiel testen",
   },
   "demo.entryBody": {
     tr: "Moda Hair Salon’ın örnek hesabında dolu bir takvimi, müşteri kayıtlarını ve gerçekçi konuşmaları keşfedin.",
@@ -2760,9 +2760,9 @@ const dictionary = {
     de: "Beispieldaten werden nachts zurückgesetzt",
   },
   "demo.entryProduct": {
-    tr: "Mahlas hakkında",
-    en: "About Mahlas",
-    de: "Über Mahlas",
+    tr: "Resepta hakkında",
+    en: "About Resepta",
+    de: "Über Resepta",
   },
 
   // Campaigns. "Kampanya" is what a Turkish salon already calls this, so the

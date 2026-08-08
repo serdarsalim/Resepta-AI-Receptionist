@@ -12,7 +12,7 @@ import { LEGAL_UPDATED_ISO } from "@/lib/legal";
 
 // One deployment, three domains, three different sitemaps. Each host lists
 // only the pages that canonicalise to it, which is why the apex sitemap has no
-// /help or /demo in it: those pages exist on mahlas.xyz, but they point their
+// /help or /demo in it: those pages exist on resepta.xyz, but they point their
 // canonical at docs. and demo. respectively, and a sitemap that contradicts a
 // canonical is a sitemap Google ignores.
 //

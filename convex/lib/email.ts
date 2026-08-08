@@ -35,7 +35,7 @@ export type EmailSendResult = { ok: true } | { ok: false; reason: string };
 // onboarding, and `"" <addr>` is not a thing to send to a customer.
 function displayName(raw: string | undefined): string {
   const cleaned = (raw ?? "").replace(/[\r\n"\\]/g, " ").replace(/\s+/g, " ").trim();
-  return cleaned || "Mahlas";
+  return cleaned || "Resepta";
 }
 
 // Mail RANDEVU writes: invites, alerts about the account. From the product,

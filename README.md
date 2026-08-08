@@ -1,30 +1,30 @@
-# Mahlas
+# Resepta
 
-Mahlas is an AI front desk for appointment businesses such as salons,
+Resepta is an AI front desk for appointment businesses such as salons,
 barbers, dentists and clinics. One multi-org deployment gives each business a
 native phone agent, customer records, appointments, WhatsApp confirmations and
 reminders, an inbox and a working calendar.
 
-The phone agent can be created or connected from Mahlas, follows the
+The phone agent can be created or connected from Resepta, follows the
 business's instructions, reads and updates configured customer information and
 writes call results back durably. The current voice provider is intentionally
 hidden from salon users. WhatsApp business-initiated messages use approved Meta
 templates, and customers can confirm or cancel by reply.
 
 cal.com is the intended availability system, but it is not assumed to be
-connected. Without an org API key and event type, Mahlas can still hold manual
+connected. Without an org API key and event type, Resepta can still hold manual
 and phone-created appointments but does not prevent double-booking.
 
 The app UI supports Turkish, English and German. Customer-facing message
 language resolves per customer, then falls back to the business language.
 
-The public product and canonical frontend are **Mahlas** at
-[`mahlas.xyz`](https://mahlas.xyz). The repository, local directory and some
+The public product and canonical frontend are **Resepta** at
+[`resepta.xyz`](https://resepta.xyz). The repository, local directory and some
 infrastructure identifiers retain the former `randevu` name so the rebrand does
 not disturb deployment history or integrations.
 
 The customer-facing help center is published at
-[`docs.mahlas.xyz`](https://docs.mahlas.xyz). Its source lives in
+[`docs.resepta.xyz`](https://docs.resepta.xyz). Its source lives in
 `src/app/help` and `src/components/HelpCenter.tsx` in this repository so help
 content changes with the interface it describes. The Markdown files under
 `docs/` remain engineering and operator documentation; do not expose secrets,
@@ -32,7 +32,7 @@ provider identifiers, or operator-only recovery steps through the public help
 center.
 
 The public product demo is published at
-[`demo.mahlas.xyz`](https://demo.mahlas.xyz). It signs visitors anonymously
+[`demo.resepta.xyz`](https://demo.resepta.xyz). It signs visitors anonymously
 into the isolated showroom org, where all sends are simulated and the fixed
 fictional dataset is rebuilt nightly.
 

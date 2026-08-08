@@ -9,9 +9,9 @@
 // three edits with no error if you missed one — robots.txt would just keep
 // pointing crawlers at a sitemap that no longer existed.
 
-export const APEX_HOST = "mahlas.xyz";
-export const DOCS_HOST = "docs.mahlas.xyz";
-export const DEMO_HOST = "demo.mahlas.xyz";
+export const APEX_HOST = "resepta.xyz";
+export const DOCS_HOST = "docs.resepta.xyz";
+export const DEMO_HOST = "demo.resepta.xyz";
 
 export const APEX_ORIGIN = `https://${APEX_HOST}`;
 export const DOCS_ORIGIN = `https://${DOCS_HOST}`;

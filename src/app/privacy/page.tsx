@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { LegalDocument } from "@/components/LegalDocument";
 
 export const metadata: Metadata = {
-  title: "Gizlilik politikası | Mahlas",
-  description: "Mahlas'ın hangi verileri tuttuğunu ve kimlerle paylaştığını anlatır.",
+  title: "Gizlilik politikası | Resepta",
+  description: "Resepta'nın hangi verileri tuttuğunu ve kimlerle paylaştığını anlatır.",
   alternates: { canonical: "/privacy" },
 };
 

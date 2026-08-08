@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   // lib/brand.ts. This is what everyone else reads.
   title: DEFAULT_TITLE,
   description:
-    "Mahlas answers calls, books appointments and keeps customers informed in one connected workflow.",
+    "Resepta answers calls, books appointments and keeps customers informed in one connected workflow.",
   metadataBase: new URL(APEX_ORIGIN),
   // Relative, so metadataBase stays the single place the origin is written.
   //

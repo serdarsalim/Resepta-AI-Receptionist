@@ -89,7 +89,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     navCta: "Başlayın",
     headlineLead: "Siz işinize bakın. ",
-    headlineAccent: "Mahlas gerisini halleder.",
+    headlineAccent: "Resepta gerisini halleder.",
     subhead:
       "Aramaları yanıtlar, randevuları oluşturur ve takibi yapar—siz işinize devam ederken.",
     ctaPrimary: "Google ile başlayın",
@@ -156,7 +156,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     useCasesTitle: "Aynı ürün, işletmenize göre çalışan bir akış",
     useCasesBody:
-      "Mahlas bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
+      "Resepta bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
     useCases: [
       {
         id: "beauty",
@@ -191,7 +191,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "Size göre konuşan sesli asistan",
-        body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Mahlas'ta belirlersiniz.",
+        body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Resepta'da belirlersiniz.",
       },
       {
         channel: "calendar",
@@ -211,7 +211,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     ],
     closingTitle: "Bir sonraki arama takvimde yerini bulsun.",
     closingBody:
-      "Mahlas'a Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
+      "Resepta'ya Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
     footerLine: "Randevulu çalışan işletmeler için telefon ve müşteri otomasyonu.",
     footerProduct: "Ürün",
     footerResources: "Kaynaklar",
@@ -232,7 +232,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     navCta: "Get started",
     headlineLead: "Stay with the work. ",
-    headlineAccent: "Mahlas handles the appointment.",
+    headlineAccent: "Resepta handles the appointment.",
     subhead:
       "Answers calls, books appointments, and follows up—while you stay with the work.",
     ctaPrimary: "Start with Google",
@@ -299,7 +299,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     useCasesTitle: "One product, shaped around the way you work",
     useCasesBody:
-      "Mahlas is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
+      "Resepta is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
     useCases: [
       {
         id: "beauty",
@@ -334,7 +334,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "A voice agent shaped around your business",
-        body: "Define your services, instructions, and the customer information that should be collected inside Mahlas.",
+        body: "Define your services, instructions, and the customer information that should be collected inside Resepta.",
       },
       {
         channel: "calendar",
@@ -375,7 +375,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     navCta: "Loslegen",
     headlineLead: "Bleiben Sie bei Ihrer Arbeit. ",
-    headlineAccent: "Mahlas kümmert sich um den Termin.",
+    headlineAccent: "Resepta kümmert sich um den Termin.",
     subhead:
       "Nimmt Anrufe an, bucht Termine und übernimmt die Nachbereitung – während Sie weiterarbeiten.",
     ctaPrimary: "Mit Google starten",
@@ -442,7 +442,7 @@ export const LANDING: Record<Language, LandingCopy> = {
     },
     useCasesTitle: "Ein Produkt, das sich nach Ihrem Betrieb richtet",
     useCasesBody:
-      "Mahlas ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
+      "Resepta ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
     useCases: [
       {
         id: "beauty",
@@ -477,7 +477,7 @@ export const LANDING: Record<Language, LandingCopy> = {
       {
         channel: "call",
         title: "Ein Sprachassistent nach Ihren Vorgaben",
-        body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Mahlas fest.",
+        body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Resepta fest.",
       },
       {
         channel: "calendar",

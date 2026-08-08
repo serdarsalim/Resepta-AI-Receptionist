@@ -7,7 +7,7 @@
 // importing it from a client component to reach one constant would drag all of
 // that across the boundary. A plain module is the whole fix.
 
-export const PRODUCT_NAME = "Mahlas";
+export const PRODUCT_NAME = "Resepta";
 
 // The public tab title: what a visitor who has never signed in should read.
 export const DEFAULT_TITLE = `${PRODUCT_NAME} — calls, bookings and customer follow-up`;
@@ -15,7 +15,7 @@ export const DEFAULT_TITLE = `${PRODUCT_NAME} — calls, bookings and customer f
 // The signed-in tab title. Business first, because that is the half a tab
 // strip still shows once it truncates, and an operator with three salons open
 // is choosing between businesses rather than between products. The favicon
-// stays Mahlas's for the opposite reason: the mark is how they find the app
+// stays Resepta's for the opposite reason: the mark is how they find the app
 // among thirty tabs, so it has to be the constant.
 export function workspaceTitle(name: string): string {
   const workspace = name.trim();

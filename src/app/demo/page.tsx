@@ -3,9 +3,9 @@ import { DemoEntry } from "@/components/DemoEntry";
 import { DEMO_ORIGIN } from "@/lib/hosts";
 
 export const metadata: Metadata = {
-  title: "Mahlas demo",
+  title: "Resepta demo",
   description:
-    "Explore Mahlas with a fictional appointment business. No signup and no real messages.",
+    "Explore Resepta with a fictional appointment business. No signup and no real messages.",
   alternates: { canonical: DEMO_ORIGIN },
 };
 

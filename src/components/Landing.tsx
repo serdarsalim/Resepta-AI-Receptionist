@@ -46,7 +46,7 @@ export function Landing() {
         <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-5">
           <a href="#top" className="flex shrink-0 items-center gap-2.5">
             <Mark />
-            <span className="text-xl font-bold tracking-tight">Mahlas</span>
+            <span className="text-xl font-bold tracking-tight">Resepta</span>
           </a>
 
           <div className="hidden items-center gap-6 text-sm text-[var(--muted)] md:flex">
@@ -305,7 +305,7 @@ export function Landing() {
             <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2.5 text-[var(--foreground)]">
               <Mark />
-              <span className="text-base font-semibold">Mahlas</span>
+              <span className="text-base font-semibold">Resepta</span>
             </div>
               <p className="mt-3 max-w-[30rem] leading-relaxed">{copy.footerLine}</p>
             </div>
@@ -318,7 +318,7 @@ export function Landing() {
             </FooterNav>
 
             <FooterNav title={copy.footerResources}>
-              <a href="https://docs.mahlas.xyz">{copy.help}</a>
+              <a href="https://docs.resepta.xyz">{copy.help}</a>
               <Link href="/privacy">{copy.privacy}</Link>
               <Link href="/terms">{copy.terms}</Link>
             </FooterNav>
@@ -338,7 +338,7 @@ export function Landing() {
           </div>
 
           <div className="mt-10 border-t border-[var(--border)] pt-5 text-xs">
-            © {new Date().getFullYear()} Mahlas · Autotakt
+            © {new Date().getFullYear()} Resepta · Autotakt
           </div>
         </div>
       </footer>
@@ -384,7 +384,7 @@ function HeroProduct({ copy }: { copy: LandingCopy }) {
         <div className="flex items-center justify-between px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
             <Mark small />
-            <span className="text-sm font-semibold">Mahlas</span>
+            <span className="text-sm font-semibold">Resepta</span>
           </div>
           <span className="text-xs text-[var(--muted)]">{hero.today}</span>
         </div>

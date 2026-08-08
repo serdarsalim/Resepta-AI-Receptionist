@@ -12,7 +12,7 @@ Serdar's point when he asked for this: he has repeated the same rules across
 20+ apps. **When he corrects something new, add it to the Mana files** — a
 rule written only in a repo is a rule the next project won't inherit.
 
-## Mahlas-specific decisions
+## Resepta-specific decisions
 
 Those live in [`../AGENTS.md`](../AGENTS.md) (org scoping, current IA and
 implementation invariants) and [`product-spec.md`](product-spec.md) (current

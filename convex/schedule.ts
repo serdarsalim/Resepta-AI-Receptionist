@@ -335,7 +335,7 @@ export const move = action({
           apiKey: org.calcomApiKey,
           uid: appointment.externalUid,
           startIso: new Date(args.startAt).toISOString(),
-          reason: "Moved on the Mahlas calendar",
+          reason: "Moved on the Resepta calendar",
           allowConflicts: args.force,
           allowBookingOutOfBounds: args.force,
         });
@@ -364,7 +364,7 @@ export const move = action({
         const cancelled = await cancelBooking({
           apiKey: org.calcomApiKey,
           uid: appointment.externalUid,
-          reason: "Replaced by a resize on the Mahlas calendar",
+          reason: "Replaced by a resize on the Resepta calendar",
         });
         if (!cancelled.ok) {
           return { ok: false, reason: cancelled.reason };

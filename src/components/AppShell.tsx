@@ -753,7 +753,7 @@ function UserMenu({
             )}
             <div className="border-t border-[var(--border)]">
               <a
-                href="https://docs.mahlas.xyz"
+                href="https://docs.resepta.xyz"
                 target="_blank"
                 rel="noreferrer"
                 role="menuitem"

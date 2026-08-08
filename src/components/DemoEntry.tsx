@@ -41,7 +41,7 @@ export function DemoEntry() {
       <div className="landing-rise relative mx-auto w-full max-w-2xl">
         <div className="flex items-center gap-3">
           <Mark />
-          <span className="text-xl font-bold tracking-tight">Mahlas</span>
+          <span className="text-xl font-bold tracking-tight">Resepta</span>
         </div>
 
         <h1 className="mt-14 max-w-xl text-[clamp(2.6rem,7vw,4.8rem)] font-bold leading-[0.98] tracking-[-0.055em]">
@@ -61,7 +61,7 @@ export function DemoEntry() {
             {busy ? t("common.loading") : t("demo.entryCta")}
           </button>
           <a
-            href="https://docs.mahlas.xyz"
+            href="https://docs.resepta.xyz"
             className="rounded-lg px-5 py-3.5 font-medium transition-colors hover:bg-[var(--muted-bg)]"
           >
             {t("menu.helpCenter")}
@@ -79,13 +79,13 @@ export function DemoEntry() {
         </div>
 
         <nav className="mt-8 flex flex-wrap gap-5 text-sm text-[var(--muted)]">
-          <Link href="https://mahlas.xyz" className="transition-colors hover:text-[var(--foreground)]">
+          <Link href="https://resepta.xyz" className="transition-colors hover:text-[var(--foreground)]">
             {t("demo.entryProduct")}
           </Link>
-          <Link href="https://mahlas.xyz/privacy" className="transition-colors hover:text-[var(--foreground)]">
+          <Link href="https://resepta.xyz/privacy" className="transition-colors hover:text-[var(--foreground)]">
             {LEGAL_UI.en.privacy}
           </Link>
-          <Link href="https://mahlas.xyz/terms" className="transition-colors hover:text-[var(--foreground)]">
+          <Link href="https://resepta.xyz/terms" className="transition-colors hover:text-[var(--foreground)]">
             {LEGAL_UI.en.terms}
           </Link>
         </nav>

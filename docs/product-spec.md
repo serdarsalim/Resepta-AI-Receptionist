@@ -1,10 +1,10 @@
-# Mahlas production spec
+# Resepta production spec
 
 Last reconciled with the shipped product: 2 August 2026.
 
 ## 1. Product
 
-Mahlas is an AI front desk for appointment businesses, starting with salons,
+Resepta is an AI front desk for appointment businesses, starting with salons,
 barbers, dentists and clinics in Türkiye. One shared, multi-org deployment gives
 each business a phone receptionist, customer records, appointments, WhatsApp
 confirmations and reminders, an inbox and a calendar.
@@ -92,8 +92,8 @@ written for each market rather than translated line by line. Landing media is
 public under `/images`; the proxy must never redirect those asset requests to
 sign-in.
 
-The public `/help` route is the customer-facing Mahlas help center and is also
-served at `https://docs.mahlas.xyz`. It turns the product facts in this file and
+The public `/help` route is the customer-facing Resepta help center and is also
+served at `https://docs.resepta.xyz`. It turns the product facts in this file and
 the other technical runbooks into customer-safe setup and operating guidance.
 Provider identities, platform-admin controls, credentials and raw recovery
 steps stay out of the public help center.
