@@ -489,7 +489,7 @@ http.route({
         });
       }
       const { startIso, endIso } = localDayRangeUtc(dayIso, org.timezone);
-      // No cal.com is not "no calendar". Randevu holds every appointment this
+      // No cal.com is not "no calendar". Resepta holds every appointment this
       // org has, so the agent gets the day's bookings from our own table and
       // works around them. It used to answer "no-calendar-connected", which
       // the agent relayed to a caller as "the calendar isn't linked" — an

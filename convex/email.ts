@@ -429,7 +429,7 @@ export const sendToCustomer = action({
 // surfaced. An owner who added a colleague should not see a red error because
 // a Resend domain is not verified yet.
 //
-// Sent from the product, not from the salon. An invite is Randevu writing to
+// Sent from the product, not from the salon. An invite is Resepta writing to
 // you about your account; it is not the salon mailing its customer.
 const INVITE_COPY = {
   tr: {

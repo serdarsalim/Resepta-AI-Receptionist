@@ -8,7 +8,7 @@ detail that appears only in backend code and the platform-admin console.
 
 ## Product contract
 
-- Randevu is the source of truth for business instructions, customer fields,
+- Resepta is the source of truth for business instructions, customer fields,
   variable lifecycle, call history and appointment writes.
 - A salon owner can create a new appointment receptionist or connect an
   existing agent from **Phone agent**.
@@ -17,7 +17,7 @@ detail that appears only in backend code and the platform-admin console.
   webhook configuration.
 - Provider credentials and raw setup diagnostics belong to the platform
   operator at `/admin`.
-- Randevu may assign an already-provisioned, unclaimed phone line. It does not
+- Resepta may assign an already-provisioned, unclaimed phone line. It does not
   buy or import a new number.
 
 The Phone agent destination has two sections:
@@ -42,7 +42,7 @@ one version rather than leaving a window where a caller hears the new voice
 reading the old script.
 
 Variables are edited **inline**, grouped under Before / During / After by each
-row's most active phase. Because a Randevu variable is a lifecycle rather than
+row's most active phase. Because a Resepta variable is a lifecycle rather than
 one moment, the row's popover — type, choices, phase, destination, required —
 is what moves it between groups; the row itself carries only its name (a
 picker selection) and description. A published key never follows a label edit; renaming it
@@ -67,7 +67,7 @@ unanswered call it is the only thing there is to show.
 ## Create and connect flows
 
 **Create new** is the default path in the Add agent sheet. The owner chooses a
-name, Turkish/English/German, a voice and optionally an unclaimed line. Randevu
+name, Turkish/English/German, a voice and optionally an unclaimed line. Resepta
 then:
 
 1. compiles the versioned appointment-receptionist template in
@@ -76,7 +76,7 @@ then:
 3. publishes the initial agent version;
 4. connects the new agent to the org;
 5. assigns the selected line, if any; and
-6. publishes the private Randevu runtime connection and call-result route.
+6. publishes the private Resepta runtime connection and call-result route.
 
 `voiceAgentProvisioning` checkpoints every external resource ID and protects
 the job with a short lease. A refresh, duplicate click or retried request
@@ -85,15 +85,15 @@ states are `pending`, `creating_engine`, `creating_agent`, `publishing`,
 `connecting`, `complete` and `failed`.
 
 **Connect existing** lists agents in that org's provider account. Adding one is
-one operation from the owner's perspective: Randevu creates the org mapping,
+one operation from the owner's perspective: Resepta creates the org mapping,
 adopts its current line and publishes the call-result route plus the private
 runtime tools. Existing provider variables are imported on first open. The
-first Variables publish adopts them into Randevu without removing unrelated
+first Variables publish adopts them into Resepta without removing unrelated
 provider tools or system analysis presets.
 
 Archive and disconnect are deliberately non-destructive. Archive only hides an
 unconnected provider agent from the normal picker. Disconnect removes the
-Randevu mapping; neither action deletes the underlying provider resource.
+Resepta mapping; neither action deletes the underlying provider resource.
 
 ## Variables have one lifecycle
 
@@ -109,7 +109,7 @@ after lists:
 | Destination | Keep on the call or write to an allowed customer field |
 
 Publishing Variables compiles this registry into provider defaults, live
-extraction tools and post-call analysis fields. Randevu remains the editable
+extraction tools and post-call analysis fields. Resepta remains the editable
 schema; the provider configuration is generated output.
 
 A variable's name is always a selection, never free text: "+ Add variable"
@@ -180,13 +180,13 @@ Two things worth knowing before using it:
   recompiles the provider's default dynamic variables from the given set
   alone, so a set without it silently blanks `{{business_name}}` and the agent
   opens by greeting nobody.
-- Agents are addressed by their RANDEVU id, never the provider's. Making an
+- Agents are addressed by their RESEPTA id, never the provider's. Making an
   owner pass provider ids around would be the loudest possible violation of
   "Retell is an implementation detail".
 
 Provisioning reads `agentEditorContext` at the END, for the runtime wiring. A
 sessionless caller that could not reach it got the worst half: a real provider
-agent, connected and enabled, with no Randevu runtime — able to answer a call
+agent, connected and enabled, with no Resepta runtime — able to answer a call
 and neither read nor write anything.
 
 ## Runtime and call-result flow
@@ -195,7 +195,7 @@ The runtime connection is private and agent-specific:
 
 - `/retell/inbound` injects current before-call context for an incoming caller.
 - `/retell/mcp` exposes only `get_call_context` and `save_customer_details`.
-  The clear runtime token is written once to the provider; Randevu stores only
+  The clear runtime token is written once to the provider; Resepta stores only
   its hash.
 - `/retell/functions` handles appointment availability, booking, lookup,
   cancellation and rescheduling.
@@ -208,7 +208,7 @@ the request. Processing retries with backoff, materializes or merges the
 `calls` row, and applies allowed customer updates. Event keys make provider
 retries idempotent.
 
-The provider sends `call_ended` before its analysis is ready. Randevu records
+The provider sends `call_ended` before its analysis is ready. Resepta records
 the call immediately, then waits for `call_analyzed`. If that later event is
 missed, a bounded recovery fetches the provider's per-call analysis. Exhausted
 updates produce a provider-free warning for the salon and retain raw details
@@ -218,7 +218,7 @@ plus a replay action in platform admin.
 
 - Every voice table carries `orgId`; all customer-facing reads and writes are
   scoped through the caller's org.
-- An inbound provider payload names an agent, never an org. Randevu resolves
+- An inbound provider payload names an agent, never an org. Resepta resolves
   the globally unique agent ID to its org and then verifies the signature with
   that org's own API key.
 - Provider keys live in org-scoped `connections` rows. There is no shared
@@ -237,11 +237,11 @@ plus a replay action in platform admin.
    under Voice. The secret is stored per org and only shown back as a masked
    tail.
 3. If the customer needs an inbound line, provision it in the provider account
-   first and leave it unassigned. Randevu will offer it in the Create new
+   first and leave it unassigned. Resepta will offer it in the Create new
    picker. Number purchasing stays outside the app.
 4. Have the org owner open **Phone agent → Add agent** and create the native
    receptionist. Connecting an existing agent is the fallback path.
-5. In platform admin, confirm the provisioning job completed, the Randevu
+5. In platform admin, confirm the provisioning job completed, the Resepta
    runtime is connected, and call-result events are arriving.
 6. Make a test call. Confirm the call appears under Calls, allowed customer
    details update, and a later analysis enriches the same call instead of
@@ -257,17 +257,17 @@ development deployment and steals results from production.
 ## Scheduling dependency
 
 The default receptionist knows how to check, create, cancel and reschedule
-appointments through Randevu. Availability is truthful only when the operator
+appointments through Resepta. Availability is truthful only when the operator
 has installed that org's cal.com API key and event type in platform admin.
 
-Without those values, a call can still create a Randevu-only appointment, but
+Without those values, a call can still create a Resepta-only appointment, but
 no availability or conflict check runs. Double-booking is therefore possible.
 The agent template is instructed to ask for the caller's preferred exact time
 without claiming that the slot was checked.
 
 ## Current limits
 
-- Randevu does not purchase phone numbers.
+- Resepta does not purchase phone numbers.
 - Native creation currently supports `tr-TR`, `en-US` and `de-DE`.
 - Detailed audio engineering such as latency and interruption behavior remains
   provider-operated.

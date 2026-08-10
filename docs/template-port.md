@@ -1,4 +1,4 @@
-# Port Nudge's template engine into Randevu
+# Port Nudge's template engine into Resepta
 
 Scoped with Serdar on 2 Aug 2026, against real code — paths verified. Build
 order: schema + send path → email lane → editor UI → pixel tracking last.
@@ -7,7 +7,7 @@ push.
 
 ## Why
 
-Randevu's "Message templates" card is a transcription of Meta's dashboard:
+Resepta's "Message templates" card is a transcription of Meta's dashboard:
 metaName + hand-set approval status, no body anywhere. Email can't send at all
 (`ruleChannels` in RemindersView requires a `bodyPreview` nothing can create).
 The card also mislabels the winback row as "Reminders" — fix in passing.
@@ -23,12 +23,12 @@ The card also mislabels the winback row as "Reminders" — fix in passing.
   it. Caveat agreed: Apple/Gmail prefetch inflates opens — show rates on
   campaign/winback templates only, never per-customer "opened" badges.
 - Nudge has TWO WhatsApp lanes: Cloud API (Meta-approved templates) and
-  Evolution native instance (free-form, no approval). Randevu already has the
+  Evolution native instance (free-form, no approval). Resepta already has the
   Evolution lane (ShopPhoneCard, admin-provisioned) BUT convex/evolution.ts is
   provisioning/status/qr only — NO send function exists. The port must add
   the Evolution send (copy from Nudge's send path) and route reminder/
   confirmation sends through it when the instance is linked. Bodies sent via
-  Evolution need NO Meta approval — that's what makes authored-in-Randevu
+  Evolution need NO Meta approval — that's what makes authored-in-Resepta
   bodies viable. metaName+status survive only for the Cloud API lane, demoted
   to a technical detail row shown only when that lane is active.
 
@@ -49,13 +49,13 @@ Lane surfaces as one status line per template:
 Channel column in the rules table stays plain "WhatsApp · Email" — lanes are
 plumbing, never shown there.
 
-## Randevu integration points
+## Resepta integration points
 
 - `convex/schema.ts` — extend existing `templates` table (kind, language,
   metaName, status, bodyPreview today).
 - `convex/wa.ts` — `sendAppointmentMessage` is the send path; wire the email
   lane to render authored bodies; org.emailFrom gates email.
-- Token vocabulary: reuse Randevu's voice-variable names (customer name,
+- Token vocabulary: reuse Resepta's voice-variable names (customer name,
   appointment time, service, business name) — NOT Nudge's token names. One
   vocabulary across screens is a hard rule.
 - Editor UI replaces the name/status rows in `src/components/RemindersView.tsx`
@@ -66,7 +66,7 @@ plumbing, never shown there.
 - Voice agent: capture variables MUST land in a contact field or customer
   column (firstName/lastName/email) — call-only capture is validator-rejected.
   First/Last name are separate variables; the agent splits, code never does.
-- check_availability falls back to Randevu's own appointments when no cal.com;
+- check_availability falls back to Resepta's own appointments when no cal.com;
   voiceBook rejects overlapping slots and past/far-future dates.
 - Hours moved to Business → Hours; Reminders is flat; WhatsApp credentials
   are /admin-only (salon UI shows a read-only connected line).

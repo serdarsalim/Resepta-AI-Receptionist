@@ -6,7 +6,7 @@
 // callers, not more copies.
 //
 // Nudge's clampToWindow is deliberately NOT ported. It rolls a scheduled send
-// forward to the next open moment, which Randevu's reminder tick does not need:
+// forward to the next open moment, which Resepta's reminder tick does not need:
 // a reminder held by the send window simply stays unstamped and the next tick
 // picks it up. Port it the day something actually schedules forward.
 //

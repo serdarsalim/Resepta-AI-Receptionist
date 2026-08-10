@@ -21,7 +21,7 @@ export type CatalogueVoice = {
 };
 
 // The raw library contains the same named voice many times from different
-// engines. Randevu offers the provider's own maintained set when present, then
+// engines. Resepta offers the provider's own maintained set when present, then
 // removes any remaining human-visible duplicates. The provider name never
 // reaches the browser and the picker stays useful instead of becoming a
 // catalogue of implementation choices.

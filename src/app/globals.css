@@ -4,7 +4,7 @@
 
 /* Token structure ported from Nudge (src/app/globals.css there): .dark class
    flips the palette (driven by src/lib/theme.ts — sun-based auto), every
-   surface derives from the same small set. Only --brand differs: Randevu's
+   surface derives from the same small set. Only --brand differs: Resepta's
    mark is its own green, not the Nudge mint. */
 :root {
   --background: #ffffff;
@@ -17,7 +17,7 @@
   --brand: #10b981;
   /* Identity only: the logo tile and the favicon. Separate from --brand on
      purpose. --brand drives row hover, selection wash and table headers, and
-     red there would read as danger on every hover. This is what tells Randevu
+     red there would read as danger on every hover. This is what tells Resepta
      apart from Nudge at a glance; --brand is what makes the app legible. */
   --logo: #e11d48;
   --table-header-bg: color-mix(in srgb, var(--brand) 8%, var(--card));

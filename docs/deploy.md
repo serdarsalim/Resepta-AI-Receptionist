@@ -108,16 +108,16 @@ All endpoints below use the production `.convex.site` origin:
 | Meta WhatsApp | `/whatsapp/webhook` | Configure in the Meta app. The verification token must equal `WA_WEBHOOK_VERIFY_TOKEN`. |
 | Resend inbound | `/email/inbound` | Subscribe a Resend webhook to `email.received`; store its signing secret as `RESEND_WEBHOOK_SECRET`. |
 | cal.com | `/calcom/webhook?token=<org token>` | Operator-only per-org setup. Subscribe to created, rescheduled and cancelled booking events. |
-| Phone agent | `/retell/inbound`, `/retell/functions`, `/retell/mcp`, `/retell/call-ended` | Randevu publishes these automatically when an agent is created, connected or fixed. Never ask a salon owner to copy them. |
+| Phone agent | `/retell/inbound`, `/retell/functions`, `/retell/mcp`, `/retell/call-ended` | Resepta publishes these automatically when an agent is created, connected or fixed. Never ask a salon owner to copy them. |
 
 The cal.com token is how an inbound booking resolves to an org because the
 payload does not carry tenant identity. A missing or unknown token is rejected.
 cal.com API keys and event-type IDs are installed per org in platform admin;
 they are not salon-facing settings.
 
-For cal.com event types used by Randevu:
+For cal.com event types used by Resepta:
 
-- disable cal.com's attendee emails so Randevu remains the customer-messaging
+- disable cal.com's attendee emails so Resepta remains the customer-messaging
   owner; and
 - include every service duration in the event type's duration options so a
   90-minute service does not occupy only the default slot length.
@@ -135,7 +135,7 @@ Open `/admin` as an email in `PLATFORM_ADMIN_EMAILS`, then choose the org.
 4. Install outbound/inbound email addresses if the email lane is part of the
    customer setup.
 5. Provision an inbound phone line externally if needed. Leave it unassigned
-   so the org owner can select it while creating a Phone agent. Randevu does
+   so the org owner can select it while creating a Phone agent. Resepta does
    not buy numbers.
 6. Let the org owner create the appointment receptionist under
    **Phone agent → Add agent**. Connecting an existing agent is the second path.

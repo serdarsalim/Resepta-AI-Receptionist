@@ -8,7 +8,7 @@
 // instance-per-tenant: the deployment IS the customer, so the env var can only
 // ever be that customer's own key.
 //
-// Randevu is one deployment for every salon. Here the same fallback means an
+// Resepta is one deployment for every salon. Here the same fallback means an
 // org that has not been configured yet quietly resolves to whatever key the
 // deployment happens to hold, which is some OTHER business's provider account.
 // It would list their agents, and (once anything writes) act as them. That is
@@ -55,7 +55,7 @@ export const CONNECTION_SPECS: {
     ],
   },
   {
-    // Self-hosted Evolution API, a Dockerized Baileys REST wrapper. Randevu
+    // Self-hosted Evolution API, a Dockerized Baileys REST wrapper. Resepta
     // picks this lane PER ORG (orgs.waLane) rather than per number the way
     // Nudge does, because here a salon is an org and has one number.
     //

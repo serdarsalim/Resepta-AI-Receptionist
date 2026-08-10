@@ -286,7 +286,7 @@ export const create = action({
       }
       externalUid = booking.uid;
     }
-    // No cal.com key: the appointment is Randevu's alone. Legitimate for an org
+    // No cal.com key: the appointment is Resepta's alone. Legitimate for an org
     // that has not connected a calendar yet, and the only reason externalUid is
     // optional everywhere downstream.
 
@@ -356,7 +356,7 @@ export const move = action({
         // still holds it would collide with itself. That opens a gap where the
         // slot is free, so if the rebook fails we immediately restore the
         // original: same start, original length. Our own row is never touched
-        // until a rebook succeeds, so a total failure leaves Randevu showing
+        // until a rebook succeeds, so a total failure leaves Resepta showing
         // exactly what cal.com still holds.
         if (!org.calcomEventTypeId) {
           return { ok: false, reason: "no-calendar-connected" };
@@ -408,7 +408,7 @@ export const move = action({
               externalUid: restored.uid,
             });
           } else {
-            // Both the rebook and the restore failed. Randevu still shows the
+            // Both the rebook and the restore failed. Resepta still shows the
             // original, cal.com holds nothing, and only a human can reconcile
             // that — so say so out loud rather than leaving it in a log.
             await queueOrgAlert(ctx, {

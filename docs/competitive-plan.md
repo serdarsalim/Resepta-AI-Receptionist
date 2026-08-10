@@ -1,11 +1,11 @@
-# Randevu competitive plan
+# Resepta competitive plan
 
 Written 25 July 2026, from twelve research passes plus a read of this repo at commit `7f29b2c`.
 
 > **Historical research snapshot.** The market research and strategic argument
 > remain useful, but statements about the repository describe commit `7f29b2c`,
-> not the current product. By 31 July 2026 Randevu had shipped native phone-agent
-> creation and existing-agent connection, a Randevu-owned variable registry, a
+> not the current product. By 31 July 2026 Resepta had shipped native phone-agent
+> creation and existing-agent connection, a Resepta-owned variable registry, a
 > private runtime connection, a durable call-event inbox and operator recovery.
 > Agents and Calls now live as two sections inside one **Phone agent** sidebar
 > destination; there is no separate Calls destination and no Settings page.
@@ -42,7 +42,7 @@ Brazil. Across every fonio-owned page eight researchers fetched, Turkish appears
 
 ---
 
-## 2. What fonio does well that Randevu does not
+## 2. What fonio does well that Resepta does not
 
 Ranked by how much it costs you to be behind.
 
@@ -55,13 +55,13 @@ into cal.com. Nothing else on this list matters until this one is closed.
 
 **2. Onboarding that a non-technical owner completes.** Paste your website URL, hit Generate, and
 the knowledge base fills itself. One agency reviewer on OMR reported about 30 minutes per business
-end to end, which is a single self-reported data point, not a benchmark. Randevu's equivalent is an
+end to end, which is a single self-reported data point, not a benchmark. Resepta's equivalent is an
 empty settings form and a box where you paste a Retell agent id. The scrape is worth copying, with
 the caveat section 5 item 6 spells out: it assumes the business has a website.
 
 **3. Failure is visible to the customer.** fonio's Conversations view has outcome filters
 (`Appointment Booked`, `Transferred`, `Abandoned`, `Spam`), a waveform player, an AI summary, and a
-usage meter. Randevu's worst failure modes are silent, and two of them share one line of code. An
+usage meter. Resepta's worst failure modes are silent, and two of them share one line of code. An
 inbound WhatsApp from an unknown number is written with `customerId: undefined` (`webhook.ts:75`),
 and an inbound call from an unknown number gets a `calls` row the same way (`retell.ts:455`). Both
 rows exist; both are dropped by the single `if (!customerId) return;` guard inside `push` at
@@ -84,7 +84,7 @@ Act claims on the homepage. You have one client.
 
 **6. Voice maturity.** 20+ voices, 25 to 35 languages depending on which of their pages you read,
 mid-call language switching, prompt-defined transfer targets, voicemail detection at 2 to 3
-seconds, an interruption toggle, KYC-gated outbound, contact blocking, UK/US accent splits. Randevu
+seconds, an interruption toggle, KYC-gated outbound, contact blocking, UK/US accent splits. Resepta
 has no `reschedule` (`http.ts:309` falls through to `unknown-function`), no `transfer_to_human`
 despite storing `transferNumber`, and no number management.
 
@@ -198,7 +198,7 @@ USD against a lira that loses 20 to 30% a year.
 
 ### The wedge I would actually take
 
-**Randevu should be the only product that closes the whole appointment loop, in Turkish and German,
+**Resepta should be the only product that closes the whole appointment loop, in Turkish and German,
 for Turkish-owned service businesses in Austria and Germany.**
 
 "The whole loop" is specific: a call or a message comes in, the AI resolves it against **real
@@ -404,7 +404,7 @@ platform difference. Measure on your client's actual phone.
 call.
 
 **Reply buttons do not work on Evolution's Baileys connector.** `sendButtons` returns HTTP 201 and
-never delivers. Evolution issue #2404, open since 3 February 2026. Randevu's entire confirm/cancel
+never delivers. Evolution issue #2404, open since 3 February 2026. Resepta's entire confirm/cancel
 loop is quick-reply buttons (`wa.ts` sends them, `webhook.ts` maps the payload back to an
 appointment). The community workarounds are a stranger's unaudited Docker image and a "DM me on
 Discord" comment. You are not putting a salon's session keys in a stranger's container.
@@ -413,7 +413,7 @@ Discord" comment. You are not putting a salon's session keys in a stranger's con
 it fails silently.** ACK error 463. Baileys issue #2707 (14 July 2026) and Evolution #2650 and #2653
 (22 July, v2.3.7) all describe an instance showing `open`, receiving fine, sends returning success,
 nothing arriving. Your connection-state alerting would call that number healthy. Every first
-reminder Randevu sends is a cold reachout, because a walk-in has never messaged the salon.
+reminder Resepta sends is a cold reachout, because a walk-in has never messaged the salon.
 
 **The economics never justified it.** Meta's live pricing endpoint returns **$0.0009** per Turkish
 utility message, so a salon doing 400 appointments a month sends 800 messages for **$0.72**, and
@@ -449,7 +449,7 @@ bite:
    evident on your website. Workable at five customers, absurd at two hundred.
 
 **Exception, capped: a concierge tier.** For owners who will not create a Meta account, keep a
-Randevu-held portfolio capped at **15 numbers** so you never touch the 20 ceiling, priced high
+Resepta-held portfolio capped at **15 numbers** so you never touch the 20 ceiling, priced high
 enough to cover message spend plus the shared-limit risk, never marketed as the default.
 
 Be honest about "self-serve." The BYO flow is a Facebook login, seven screens, SMS verification,
@@ -480,7 +480,7 @@ utility, about three times cheaper than Germany. **That bucket assignment is a r
 inference, not a Meta statement. Verify it before you price an Austrian customer**, because if it
 holds, Vienna is your cheapest DACH city as well as your home one.
 
-Turkey: WhatsApp is free and voice unsellable. Germany: voice cheap, WhatsApp expensive. Randevu is
+Turkey: WhatsApp is free and voice unsellable. Germany: voice cheap, WhatsApp expensive. Resepta is
 built WhatsApp-first with a voice lane, right for Turkey and backwards for Germany.
 
 ### Turkey
@@ -493,7 +493,7 @@ KDV dahil, WhatsApp gated at ₺2,400 or a ₺225 add-on; Hızlıappy free / ₺
 which is one more reason not to open the market yet. Below is the reference price for hand-invoiced
 lab customers.
 
-**Randevu TR: ₺899/month, KDV dahil.** Unlimited WhatsApp confirmations and reminders, cal.com
+**Resepta TR: ₺899/month, KDV dahil.** Unlimited WhatsApp confirmations and reminders, cal.com
 calendar, inbox, winback.
 
 ```
@@ -531,7 +531,7 @@ and the lira loses 20 to 30% a year. Turkish vendors re-price and customers expe
 Market anchors: Shore €59.90 booking / €79.90 / €129.90; Treatwell from €49.90; fonio €99 voice
 **plus** €79 WhatsApp = €178 for both; term-in.app €29 chat-only.
 
-**Randevu DACH: €79/month, one bill, both channels.** 200 voice minutes, 400 utility messages, then
+**Resepta DACH: €79/month, one bill, both channels.** 200 voice minutes, 400 utility messages, then
 metered.
 
 ```

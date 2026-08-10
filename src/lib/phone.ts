@@ -17,7 +17,7 @@
 //   - Country names in Turkish, German and English, so the picker stops showing
 //     "Germany" to a Turkish salon.
 //
-// Randevu's backend rule (convex/lib/orgAuth.ts, assertE164) is stricter than a
+// Resepta's backend rule (convex/lib/orgAuth.ts, assertE164) is stricter than a
 // display concern: a stored number is `+<dial code><national>` or the mutation
 // throws. Everything here exists so the UI can never hand it anything else.
 

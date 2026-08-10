@@ -12,7 +12,7 @@ confirmations and reminders, an inbox and a calendar.
 - **Business owner:** the phone and customer messaging are handled, bookings
   land in one calendar, and customer details stay current.
 - **Automation partner:** install the customer's external accounts once, then
-  let the business configure and operate its own front desk in Randevu.
+  let the business configure and operate its own front desk in Resepta.
 - **Platform:** voice, WhatsApp, email, forms and staff actions write into one
   org-scoped customer and appointment model.
 
@@ -41,8 +41,8 @@ pipeline features belong elsewhere.
 - Its adapter, webhook and voice booking path exist, but an org is connected
   only when an operator installs both `calcomApiKey` and `calcomEventTypeId`.
 - Without those values, manual and phone-created appointments are stored only
-  in Randevu. No conflict check runs, so double-booking is possible.
-- Walk-in entry remains native to Randevu. `appointments.source` distinguishes
+  in Resepta. No conflict check runs, so double-booking is possible.
+- Walk-in entry remains native to Resepta. `appointments.source` distinguishes
   manual, voice and external bookings.
 - Blocked time is not modelled. Do not create fake-customer appointments for
   breaks; revisit the cal.com availability decision before adding closures.
@@ -53,7 +53,7 @@ pipeline features belong elsewhere.
 - Business-initiated confirmation, reminder, win-back and campaign sends use
   approved Meta templates.
 - Customer language resolves from the customer first, then the org. Missing
-  template language fails visibly; Randevu never falls back to the wrong
+  template language fails visibly; Resepta never falls back to the wrong
   language.
 - Inbound WhatsApp resolves the org from Meta's phone-number ID, never from the
   customer's number alone.
@@ -64,20 +64,20 @@ pipeline features belong elsewhere.
 
 ### Phone agent
 
-- Randevu is the phone-agent control plane. The execution provider is hidden
+- Resepta is the phone-agent control plane. The execution provider is hidden
   from salon users.
 - The owner can create a native appointment receptionist or connect an existing
   agent from **Phone agent → Add agent**.
-- New agents start from a versioned Randevu template and can speak Turkish,
+- New agents start from a versioned Resepta template and can speak Turkish,
   English or German.
-- Randevu owns Instructions, Variables, runtime tools, call history and customer
+- Resepta owns Instructions, Variables, runtime tools, call history and customer
   writes. Provider configuration is compiled output.
 - A variable is declared once across before-call context, live collection,
   post-call fallback and storage destination.
 - Signed call events first land in a durable inbox, then update the call and
   customer with retries. Live caller-confirmed values beat transcript
   inference; post-call analysis only fills missing customer data.
-- Randevu can assign an unclaimed line but does not purchase phone numbers.
+- Resepta can assign an unclaimed line but does not purchase phone numbers.
 
 See [`phone-agent.md`](phone-agent.md) for the full architecture and operator
 runbook.
@@ -85,7 +85,7 @@ runbook.
 ## 3. Shipped product surface
 
 The signed-out `/` route is a vertical-agnostic product landing page. Its hero
-uses Randevu's own call, calendar and follow-up interface rather than an
+uses Resepta's own call, calendar and follow-up interface rather than an
 industry photo. Beauty, clinic and local-service photography appears only in
 the use-case tabs below the product story. Turkish, English and German copy is
 written for each market rather than translated line by line. Landing media is
@@ -137,10 +137,10 @@ message language is a separate per-customer/per-org decision.
   Voice, Variables, plus call-result health and a test-call action. Variables
   are edited in place, grouped by when in the call they are captured.
 - Unsaved edits are kept until saved or discarded, and are marked as not live.
-- Broken delivery is described as call results not reaching Randevu and has a
+- Broken delivery is described as call results not reaching Resepta and has a
   one-click Fix. Raw webhook language is platform-admin-only.
 - Archive hides unused external agents from the picker. Disconnect removes the
-  Randevu connection without deleting the external resource.
+  Resepta connection without deleting the external resource.
 
 ### Calls
 
@@ -164,7 +164,7 @@ message language is a separate per-customer/per-org decision.
 | `messages` | Outbound queue and inbound conversation history with retry/dead-letter state. |
 | `retellAgents` | Internal provider-to-org mapping and phone-agent health. Provider-specific by design, never salon-facing. |
 | `voiceAgentProvisioning` | Durable checkpoints and lease for native agent creation. |
-| `voiceAgentVariables` | Randevu-owned variable lifecycle registry. |
+| `voiceAgentVariables` | Resepta-owned variable lifecycle registry. |
 | `calls` | One row per phone call with recording, transcript, summary and collected values. |
 | `voiceEvents` | Idempotent durable inbox for ended, analyzed and recovery events. |
 
@@ -188,7 +188,7 @@ to:
 - replay exhausted phone-call updates; and
 - work inside an org when support is required.
 
-The business uses Randevu to create agents, edit instructions and variables,
+The business uses Resepta to create agents, edit instructions and variables,
 connect a line, run calls, manage reminders and work its calendar. It should not
 need to know which voice provider executes the calls.
 
@@ -198,7 +198,7 @@ need to know which voice provider executes the calls.
 - [ ] Google OAuth works on the production Convex and frontend origins.
 - [ ] Meta webhook signatures are enforced and one pilot WABA has the required
       approved templates.
-- [ ] One org creates a new Phone agent from Randevu, receives a real call and
+- [ ] One org creates a new Phone agent from Resepta, receives a real call and
       gets one durable call row plus the later analysis merge.
 - [ ] A live-confirmed variable updates an allowed customer field and post-call
       extraction fills only a missing value.

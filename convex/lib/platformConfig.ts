@@ -27,7 +27,7 @@ export const PLATFORM_KEYS = {
   // alerts). Configurable because the name is not settled, and because the
   // verified domain may belong to a sibling product before this one has its
   // own — a deployment mailing from mail.autotakt.com should be able to say so
-  // rather than insisting it is Randevu.
+  // rather than insisting it is Resepta.
   productName: null,
 } as const;
 

@@ -89,7 +89,7 @@ type Turn = { agent: boolean; text: string };
 // The labels are NOT always English — a Turkish call comes back "Ajan:" /
 // "Müşteri:". So this doesn't match on a word list. It reads whatever labels
 // the transcript actually uses, then decides which one is the agent: the known
-// agent words in any language Randevu speaks, and failing that the label that
+// agent words in any language Resepta speaks, and failing that the label that
 // speaks FIRST, because the agent always opens the call. Getting that backwards
 // only mirrors the layout, which is recoverable; refusing to parse at all is
 // the wall of grey text this replaced.

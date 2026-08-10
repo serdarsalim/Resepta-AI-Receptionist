@@ -62,7 +62,7 @@ the env vars, which remain as a fallback.
 
 Needs a Resend account and a domain verified there. A subdomain is the
 convention, so customer mail and the app's own domain do not share a sending
-reputation: `mail.example.com`. Until Randevu has its own domain, pointing this
+reputation: `mail.example.com`. Until Resepta has its own domain, pointing this
 at an already-verified sibling domain works — set the product name to match so
 the invites and alerts do not sign themselves with the wrong name.
 
@@ -90,8 +90,8 @@ From address in three tiers:
    From and Reply-To match, so a customer hitting reply lands in the Inbox.
 3. `noreply@RESEND_INBOUND_DOMAIN` — for a salon that has set nothing at all.
 
-`productSender()` is `Randevu <noreply@RESEND_INBOUND_DOMAIN>` and carries mail
-Randevu writes to the owner: invites and alerts.
+`productSender()` is `Resepta <noreply@RESEND_INBOUND_DOMAIN>` and carries mail
+Resepta writes to the owner: invites and alerts.
 
 So the moment those two variables exist on prod, email works for every org
 without anyone touching a salon's settings.

@@ -135,7 +135,7 @@ export const sendSession = action({
     // Meta's 24h session window is Meta's rule. Evolution is a linked handset
     // and has no such window — the salon can answer an old message from their
     // phone whenever they like, and refusing to do the same from inside
-    // Randevu would just teach them to pick the phone up instead.
+    // Resepta would just teach them to pick the phone up instead.
     if (
       lane !== "evolution" &&
       (!customer.lastInboundAt ||

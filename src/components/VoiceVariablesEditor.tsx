@@ -447,7 +447,7 @@ export function VoiceVariablesEditor({
     });
   }, [dirty, busy, draft, onSaveStateChange]);
 
-  // Which group a row lives in. A Randevu variable is a LIFECYCLE, not a
+  // Which group a row lives in. A Resepta variable is a LIFECYCLE, not a
   // single moment — one row can be seeded before the call, asked during it and
   // recovered from the analysis after. So the group is its most active phase,
   // and the phase picker in the Type popover is what moves it between groups.
@@ -714,7 +714,7 @@ export function VoiceVariablesEditor({
   );
 }
 
-// A variable that Randevu knows about, offered by the picker. Built-ins map
+// A variable that Resepta knows about, offered by the picker. Built-ins map
 // to their before-call source so picking "Customer name" builds the same row
 // quick-add used to.
 type PickerBuiltin = {

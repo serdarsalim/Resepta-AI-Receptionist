@@ -2,7 +2,7 @@
 
 // The operator's fleet view. NOT a salon-facing surface.
 //
-// Randevu is one Convex deployment serving every org, so this can be a route
+// Resepta is one Convex deployment serving every org, so this can be a route
 // in the app itself rather than the separate control-plane project Nudge needs
 // — there, each tenant has its own backend and nothing inside one of them can
 // see the others. A second project here would need its own auth and its own

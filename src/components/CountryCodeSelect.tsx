@@ -12,7 +12,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { Language } from "@/lib/i18n";
 
 // The country dial-code picker, ported from Nudge (src/components/CountryCodeSelect.tsx)
-// with two corrections that Randevu's own rules demand:
+// with two corrections that Resepta's own rules demand:
 //
 //   1. The panel PORTALS to document.body. Nudge renders it fixed but in place;
 //      here every card and the shell's main pane are overflow-hidden scrollers,

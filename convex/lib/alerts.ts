@@ -29,7 +29,7 @@
 //
 // Delivery rides the same provider as customer email (lib/email.ts), from the
 // PRODUCT's address (lib/email productSender) rather than the salon's own: an
-// alert is Randevu writing to the owner, not the salon mailing anybody. It
+// alert is Resepta writing to the owner, not the salon mailing anybody. It
 // used to demand orgs.emailFrom, which silently cost every salon without one
 // their alerts. What remains is deployment config — no RESEND_API_KEY or no
 // RESEND_INBOUND_DOMAIN means nobody has an email lane — which logs, and is
@@ -381,7 +381,7 @@ export const deliverOrgAlert = internalAction({
         orgId: args.orgId,
         kind: copy.kind,
       });
-      // An alert is Randevu writing to the owner about their account, exactly
+      // An alert is Resepta writing to the owner about their account, exactly
       // like an invite — so it goes out from the product, not wearing the
       // salon's own name. It used to require orgs.emailFrom, which meant a
       // salon that never set one got no failed-send alerts at all while the

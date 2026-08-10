@@ -51,7 +51,7 @@ export type BookingResult =
 
 // lengthInMinutes is how a 90-minute colour blocks 90 minutes on the salon's
 // Google Calendar. Without it cal.com applies the event type's default length,
-// so Randevu said 90 and cal.com blocked 30 — the two calendars disagreed about
+// so Resepta said 90 and cal.com blocked 30 — the two calendars disagreed about
 // every appointment whose service wasn't the default duration. cal.com only
 // accepts it when the event type declares lengthInMinutesOptions covering that
 // value, so a rejection here is a setup problem and says so.

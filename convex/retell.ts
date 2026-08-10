@@ -360,7 +360,7 @@ export const agentListContext = internalQuery({
 //
 // One Retell workspace can serve several businesses on this deployment, and
 // the connect picker used to offer every agent in it — including agents that
-// already belong to somebody else. The fix is a marker saying "Randevu made
+// already belong to somebody else. The fix is a marker saying "Resepta made
 // this one, for that org", and the marker lives AT RETELL rather than in a
 // column here: a row of ours dies when an agent is disconnected, and the fact
 // has to outlive that, or reconnecting your own agent means being shown
@@ -514,7 +514,7 @@ export const agentEditorContext = internalQuery({
     //
     // Provisioning is why this exists. The runtime wiring at the END of
     // creating an agent reads this context, so without it every non-UI
-    // creation got a real provider agent and no Randevu runtime.
+    // creation got a real provider agent and no Resepta runtime.
     orgId: v.optional(v.id("orgs")),
   },
   returns: v.any(),
@@ -558,7 +558,7 @@ export const agentEditorContext = internalQuery({
 });
 
 // Provider publication happens before this mutation. If Retell rejects the
-// draft, the Randevu registry stays untouched and the editor can retry without
+// draft, the Resepta registry stays untouched and the editor can retry without
 // presenting a configuration that never went live.
 export const replaceAgentVariables = internalMutation({
   args: {
@@ -783,7 +783,7 @@ type AgentListResult = {
     languages: string[];
     collects: string[];
     webhookUrl: string | null;
-    // Carries this org's tag at Retell — i.e. Randevu made it for this
+    // Carries this org's tag at Retell — i.e. Resepta made it for this
     // business. Reported rather than filtered on here, so a connected agent
     // that predates tagging keeps its details (and its webhook health check)
     // while the PICKER is the only thing ownership narrows.
@@ -1531,7 +1531,7 @@ export const voiceBook = internalMutation({
     const line = args.service
       ? await matchService(ctx, args.orgId, args.service)
       : undefined;
-    // Double-booking guard, but only when Randevu's own book is the truth. An
+    // Double-booking guard, but only when Resepta's own book is the truth. An
     // externalUid means cal.com already accepted this slot — it owns the
     // inventory, and refusing here after it said yes would leave the two
     // calendars telling different stories.
@@ -1600,7 +1600,7 @@ export const voiceBook = internalMutation({
   },
 });
 
-// The salon's own book, for agents with no cal.com. Randevu IS a calendar —
+// The salon's own book, for agents with no cal.com. Resepta IS a calendar —
 // every appointment in the org lives in this table — so "calendar not
 // connected" was never true, just the only answer check_availability had when
 // its single backend was missing. Scheduled and confirmed block a slot;
@@ -1657,7 +1657,7 @@ export const bookedBetween = internalQuery({
 // Cancel and reschedule are split into a lookup and a write because a Convex
 // mutation cannot reach the network, and cal.com has to be told first: it owns
 // the slot inventory, the salon's Google Calendar and the notification emails.
-// The old single mutation patched status locally and stopped, so Randevu said
+// The old single mutation patched status locally and stopped, so Resepta said
 // cancelled while cal.com kept the slot blocked for a customer who was not
 // coming. http.ts calls this, then cal.com, then the write below.
 export const nextAppointmentForPhone = internalQuery({

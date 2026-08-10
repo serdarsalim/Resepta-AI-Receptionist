@@ -147,7 +147,7 @@ async function runtimeMcpConfig(
   // masked header returned by a read API could replace the usable credential.
   if (existing && context.runtimeConnectedAt !== null) return undefined;
 
-  // The clear credential lives only in the provider configuration. Randevu
+  // The clear credential lives only in the provider configuration. Resepta
   // stores its digest, so a database read cannot recover a live runtime key.
   const token = createVoiceRuntimeToken(agentId);
   await ctx.runMutation(internal.retell.setRuntimeToken, {

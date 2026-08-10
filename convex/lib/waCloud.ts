@@ -1,6 +1,6 @@
 // Meta WhatsApp Cloud API send helpers. The session-message half is ported
 // from Nudge (convex/lib/waCloud.ts there); the template-message half is new —
-// Randevu's core sends (confirmations, reminders) are business-initiated, so
+// Resepta's core sends (confirmations, reminders) are business-initiated, so
 // they ride pre-approved template messages and work outside the 24h window.
 
 export const WA_CLOUD_GRAPH_BASE = "https://graph.facebook.com/v23.0";
@@ -51,7 +51,7 @@ async function postWaCloud(
   }
 }
 
-// ---- Template messages (business-initiated; the Randevu send path) ----
+// ---- Template messages (business-initiated; the Resepta send path) ----
 
 // Body params fill {{1}}..{{n}} in order. Buttons attach payloads to the
 // template's pre-registered quick-reply buttons by index; the payload comes

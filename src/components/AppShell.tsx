@@ -1095,7 +1095,7 @@ export function AppShell({
   // truncates from the right, so whatever leads is the only part that survives
   // — and an operator with several salons open is telling businesses apart,
   // not apps. The favicon is left alone on purpose: the mark is how they find
-  // Randevu among thirty tabs, so it has to stay the constant.
+  // Resepta among thirty tabs, so it has to stay the constant.
   //
   // Restored on unmount because signing out unmounts this shell without a
   // document load, and the sign-in page would otherwise keep wearing the name

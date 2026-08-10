@@ -179,7 +179,7 @@ export function VoiceCard({
   // Ownership narrows the PICKER and nothing else. A connected agent that
   // predates tagging keeps its row, its details and its webhook check; what
   // this decides is which agents you may newly connect. On "randevu" that is
-  // only the ones Randevu made for this business — the rest belong to whoever
+  // only the ones Resepta made for this business — the rest belong to whoever
   // else shares the Retell workspace, and offering them was how one salon got
   // shown another's agents.
   const ownedOnly = (roster?.agentSource ?? "randevu") === "randevu";
@@ -306,7 +306,7 @@ export function VoiceCard({
         name: roster?.agents.find((a) => a.id === agentId)?.name,
       });
       // One operation from the owner's point of view: adding an agent also
-      // connects call results, pre-call context and the Randevu runtime tools.
+      // connects call results, pre-call context and the Resepta runtime tools.
       await wireWebhook({ agentId });
       load();
     } catch {

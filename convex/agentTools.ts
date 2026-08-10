@@ -381,7 +381,7 @@ export const listPhoneAgents = internalQuery({
       name: row.name,
       enabled: row.enabled,
       inboundNumber: row.inboundNumber ?? null,
-      // Whether Randevu's private runtime is published to it. An agent without
+      // Whether Resepta's private runtime is published to it. An agent without
       // this can take a call but cannot read or write customer data.
       runtimeConnected: row.runtimeConnectedAt !== undefined,
       lastCallAt: row.lastCallEventAt ? new Date(row.lastCallEventAt).toISOString() : null,

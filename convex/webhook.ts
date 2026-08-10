@@ -292,7 +292,7 @@ export async function processInboundMessage(
   if (!appointment || appointment.orgId !== orgId) return;
   if (appointment.status === "completed") return;
 
-  // Confirming is Randevu's own concept — cal.com bookings are already
+  // Confirming is Resepta's own concept — cal.com bookings are already
   // accepted, so there is nothing to tell it.
   if (intent === "confirm") {
     await ctx.db.patch(appointment._id, { status: "confirmed" });
@@ -329,7 +329,7 @@ export async function processInboundMessage(
 //
 // Baileys is a LINKED DEVICE, not an API endpoint, and that one fact is what
 // this handler is for. A Cloud API number is removed from the consumer
-// WhatsApp app, so every staff reply has to be typed into Randevu. An
+// WhatsApp app, so every staff reply has to be typed into Resepta. An
 // Evolution number stays an ordinary WhatsApp account the salon uses on their
 // own phone, and we see everything on it — including what THEY send.
 //
@@ -413,7 +413,7 @@ export const handleEvolutionEvent = internalMutation({
           orgId: org._id,
           customerId: customer._id,
           direction: "out",
-          // Its own kind, because it is not something Randevu sent. A staff
+          // Its own kind, because it is not something Resepta sent. A staff
           // reply typed on a phone has no template, no delivery guarantee and
           // no retry — treating it as a normal send would put it in the reach
           // of the retry queue, which has nothing to retry it with.

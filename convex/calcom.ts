@@ -20,7 +20,7 @@ import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { formatAppointmentTime } from "./lib/format";
 
 // cal.com intake. The salon keeps booking in cal.com (or its customers book
-// themselves there); Randevu is the WhatsApp layer on top. The org is resolved
+// themselves there); Resepta is the WhatsApp layer on top. The org is resolved
 // from a per-org token in the webhook URL — cal.com's payload carries no
 // tenant identity of its own.
 //
@@ -261,7 +261,7 @@ export const calcomKeyOf = internalQuery({
 // mutation cannot reach the network — so the tap schedules this instead of
 // patching status itself. Same order as the voice lane: cal.com first, our row
 // second. If cal.com refuses, the appointment deliberately stays as it was and
-// the owner gets told, because the alternative is Randevu showing "cancelled"
+// the owner gets told, because the alternative is Resepta showing "cancelled"
 // over a slot cal.com still holds blocked for a customer who is not coming.
 export const pushCancelToCalcom = internalAction({
   args: {

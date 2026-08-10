@@ -70,7 +70,7 @@ style issue.
   public booking page only.
 
   With no key configured, `schedule.create` takes its documented no-key path
-  and the appointment is Randevu's alone. **Consequence: today nothing checks
+  and the appointment is Resepta's alone. **Consequence: today nothing checks
   for conflicts in the salon-facing calendar.** Double-booking a slot is
   possible and is caught only by a human looking at the grid; the `force` /
   `canForce` "book anyway" flow only ever fires when a key exists. Do not
@@ -285,7 +285,7 @@ went, and the reasoning to preserve:
   exception to the sheet rule below, because a grid you retype a description
   in is not a form you open. Rows group under Before / During / After by their
   MOST ACTIVE phase (`duringMode` wins, then `afterCall`, else before-only): a
-  Randevu variable is a lifecycle, not one moment, and the row's popover —
+  Resepta variable is a lifecycle, not one moment, and the row's popover —
   type, choices, phase, destination, required — is what moves it between
   groups. The row itself carries no state pills: what a variable is comes
   from its name (a picker selection), the rest lives in the popover. A key that is
@@ -316,10 +316,10 @@ went, and the reasoning to preserve:
   `calls.disconnectionReason` is stored raw and humanized in the UI — it is
   the only thing that explains a row with no summary and no transcript, which
   is every unanswered call.
-- **Randevu is the phone-agent control plane.** The business declares customer
-  information once in Randevu; provider variables, analysis fields and runtime
+- **Resepta is the phone-agent control plane.** The business declares customer
+  information once in Resepta; provider variables, analysis fields and runtime
   tools are compiled output, never a second user-managed schema. Adding or
-  fixing an agent publishes its private Randevu runtime connection. Confirmed
+  fixing an agent publishes its private Resepta runtime connection. Confirmed
   details are written during the call, every signed call event first lands in
   the durable `voiceEvents` inbox, and a per-call analysis recovery closes the
   gap when the later analysis event is missed. Normal retries are invisible to
@@ -327,10 +327,10 @@ went, and the reasoning to preserve:
   and raw diagnostics plus replay live only in platform admin.
   **Retell is an implementation detail.** Salon-facing UI never names Retell,
   exposes provider IDs or URLs, or asks the owner to copy provider
-  configuration. Use native Randevu language such as Phone agent, Call
+  configuration. Use native Resepta language such as Phone agent, Call
   results, Instructions and Variables. Provider identity and diagnostics stay
   in platform admin and backend code; existing configuration is imported
-  silently into the Randevu editor.
+  silently into the Resepta editor.
 - **Reminders** (`RemindersView`, tab id `messages`): the old SettingsView,
   renamed. Reminder rules + the WhatsApp connection.
 - **Business → Team** (`PeopleCard`, rewritten 2026-08-02). ONE list of
@@ -384,7 +384,7 @@ went, and the reasoning to preserve:
 
   Provisioning reads `agentEditorContext` at the END, for the runtime wiring.
   A sessionless caller that skips this gets the worst half: a real provider
-  agent, connected and enabled, with no Randevu runtime — able to answer a
+  agent, connected and enabled, with no Resepta runtime — able to answer a
   call and neither read nor write anything.
 - **Bookings (cal.com) config**: operator-only, admin console
   (`platform.setOrgConfig`). Never show a salon a cal.com key field again.
@@ -410,7 +410,7 @@ Keys, not with whichever key an org has installed — a different stored key
 passes every API call yet 401s every webhook, which reads as "no call results"
 with zero rows in `voiceEvents`.
 
-Native phone-agent creation is Randevu-owned. **Add agent** defaults to creating
+Native phone-agent creation is Resepta-owned. **Add agent** defaults to creating
 an appointment receptionist from the versioned template in
 `convex/lib/voiceAgentTemplate.ts`; connecting an existing agent is the second
 path in that same sheet. `voiceAgentProvisioning` checkpoints the response
@@ -434,7 +434,7 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
 
 ### Phone-agent variable lifecycle (decided 2026-07-31, Serdar)
 
-Randevu is the source of truth for a phone agent's variables; Retell is the
+Resepta is the source of truth for a phone agent's variables; Retell is the
 execution target. A variable is ONE lifecycle row, never three unrelated
 lists: its pre-call source, live collection policy, post-call fallback and
 storage destination stay together in `voiceAgentVariables`. Before-call values
@@ -443,7 +443,7 @@ transcript inference; post-call extraction only fills a missing customer value;
 pre-call context is recorded with the call but never writes back by itself.
 
 Existing agents import Retell defaults, extract-variable tools and custom
-post-call fields on first open. Publishing adopts them into the Randevu
+post-call fields on first open. Publishing adopts them into the Resepta
 registry, preserves unrelated Retell tools and system analysis presets, and
 publishes the agent + LLM changes as one Retell draft version. New agents use
 the same registry from their first publish. Customer destinations still pass

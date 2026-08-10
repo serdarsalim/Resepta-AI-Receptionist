@@ -204,7 +204,7 @@ export default defineSchema({
     // agents that are real without touching anything in Retell.
     hiddenRetellAgentIds: v.optional(v.array(v.string())),
     // Which agents the connect picker may offer. "randevu" (the default when
-    // unset) offers only agents carrying this org's tag — the ones Randevu
+    // unset) offers only agents carrying this org's tag — the ones Resepta
     // created for this business. "account" offers everything in the Retell
     // workspace the key opens.
     //
@@ -231,7 +231,7 @@ export default defineSchema({
     // business-initiated templates without the silent Reachout Timelock drops
     // that make Evolution unfit for reminders. Evolution is a linked device,
     // so the shop phone stays an ordinary WhatsApp the staff use as they
-    // always have, and Randevu still sees every word of it — which Cloud
+    // always have, and Resepta still sees every word of it — which Cloud
     // cannot do at any price (see convex/webhook.ts handleEvolutionEvent).
     //
     // There is deliberately no lane SELECTOR. Which lanes an org has is read
@@ -387,7 +387,7 @@ export default defineSchema({
     variablesSyncedAt: v.optional(v.number()),
     variablesRetellVersion: v.optional(v.number()),
     // Runtime credentials are one-way hashes. The clear token is written to
-    // the provider once and never stored in Randevu.
+    // the provider once and never stored in Resepta.
     runtimeTokenHash: v.optional(v.string()),
     runtimeConnectedAt: v.optional(v.number()),
     // Customer-facing health is derived from these stamps. Provider detail
@@ -444,7 +444,7 @@ export default defineSchema({
     .index("by_org_request", ["orgId", "requestId"])
     .index("by_org_updated", ["orgId", "updatedAt"]),
 
-  // Randevu's provider-neutral definition of the information a phone agent
+  // Resepta's provider-neutral definition of the information a phone agent
   // knows and collects. One row owns the whole lifecycle of one value: where
   // its pre-call value comes from, whether the caller is asked for it, whether
   // Retell should recover it from the transcript afterwards, and where the
@@ -693,7 +693,7 @@ export default defineSchema({
   // calcomHostId is deliberately unused for now. cal.com models people as
   // hosts PER EVENT TYPE, so honouring staff assignment on their side means
   // either one event type per person or round-robin config, which would
-  // multiply onboarding. Assignment stays Randevu-side until that is worth it;
+  // multiply onboarding. Assignment stays Resepta-side until that is worth it;
   // the column exists so the day it is, no migration is needed.
   staff: defineTable({
     orgId: v.id("orgs"),
@@ -774,7 +774,7 @@ export default defineSchema({
     nextMessageAt: v.optional(v.number()),
     confirmationSentAt: v.optional(v.number()),
     winbackSentAt: v.optional(v.number()),
-    // Intake: unset = typed into Randevu; "calcom" = arrived via the cal.com
+    // Intake: unset = typed into Resepta; "calcom" = arrived via the cal.com
     // webhook. externalUid is cal.com's booking uid — how RESCHEDULED and
     // CANCELLED events find the row they refer to.
     source: v.optional(

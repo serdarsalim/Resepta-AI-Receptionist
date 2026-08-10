@@ -12,7 +12,7 @@
 // credentials, so an empty env is the safety boundary: even a bug cannot send
 // a real message, because there is nothing to send with.
 //
-// Randevu is one deployment serving every salon. That boundary does not exist
+// Resepta is one deployment serving every salon. That boundary does not exist
 // here, and pretending otherwise would be the dangerous move. What holds
 // instead:
 //

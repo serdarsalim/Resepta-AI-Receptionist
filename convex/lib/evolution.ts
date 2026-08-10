@@ -9,7 +9,7 @@
 //
 //  1. QUICK-REPLY BUTTONS DO NOT DELIVER. `sendButtons` returns HTTP 201 and
 //     the message never arrives (Evolution issue #2404, open since Feb 2026).
-//     Randevu's whole confirm/cancel loop is buttons, so this lane sends TEXT
+//     Resepta's whole confirm/cancel loop is buttons, so this lane sends TEXT
 //     carrying the reply words and relies on the bare EVET/İPTAL fallback that
 //     convex/http.ts already resolves against the customer's next appointment.
 //     There is deliberately no button sender in this file. Do not add one:
@@ -26,7 +26,7 @@
 
 export type EvolutionSendResult = { ok: true; messageId?: string } | { ok: false; reason: string };
 
-// Evolution wants a bare number, no plus. Randevu stores E.164 with the dial
+// Evolution wants a bare number, no plus. Resepta stores E.164 with the dial
 // code (lib/orgAuth assertE164), so this is the one place that strips it.
 function toEvolutionNumber(phone: string): string {
   return phone.replace(/[^\d]/g, "");

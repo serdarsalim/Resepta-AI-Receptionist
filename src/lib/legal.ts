@@ -6,9 +6,9 @@
 // bury the 400 interface strings it exists to hold.
 //
 // TWO ROLES, and the split is the reason this policy reads the way it does.
-// For a salon owner's own account (their Google name, email, avatar) Randevu is
+// For a salon owner's own account (their Google name, email, avatar) Resepta is
 // the data controller. For the salon's CUSTOMER records, the salon is the
-// controller and Randevu is the processor acting on its instructions. Getting
+// controller and Resepta is the processor acting on its instructions. Getting
 // that backwards would promise customers rights we cannot grant and relieve
 // owners of duties they actually carry. Turkish law here is KVKK, not GDPR.
 //
@@ -95,7 +95,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
         ],
         bullets: [
           "Ad, soyad, telefon numarası, varsa e-posta adresi ve tercih edilen dil",
-          "Randevu geçmişi, hizmet türü, personel ve süre bilgisi",
+          "Resepta geçmişi, hizmet türü, personel ve süre bilgisi",
           "WhatsApp yazışmalarının içeriği ve gönderim durumu",
           "Telefonla gelen aramaların ses kaydı, dökümü ve özeti",
           "İşletmenin kendi tanımladığı ek alanlar ve müşteri notları",

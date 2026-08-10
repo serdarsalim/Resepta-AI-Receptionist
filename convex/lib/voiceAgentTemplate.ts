@@ -1,4 +1,4 @@
-// Randevu owns the business behavior of agents it creates. The provider gets
+// Resepta owns the business behavior of agents it creates. The provider gets
 // a compiled copy of this versioned template; it is not the source of truth.
 // Changing the behavior is a new version so existing agents do not silently
 // change under a salon owner.

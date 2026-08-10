@@ -2707,7 +2707,7 @@ const dictionary = {
   "common.yes": { tr: "Evet", en: "Yes", de: "Ja" },
   "common.no": { tr: "Hayır", en: "No", de: "Nein" },
   // Deliberately short and generic. The box sizes itself to its longest text,
-  // so a 19-character "Randevu ara" would pin it at the clamp ceiling on every
+  // so a 19-character "Resepta ara" would pin it at the clamp ceiling on every
   // tab; the page title beside it already says what you are searching.
   "common.search": { tr: "Ara…", en: "Search…", de: "Suchen…" },
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },

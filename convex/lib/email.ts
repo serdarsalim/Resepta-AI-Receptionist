@@ -20,7 +20,7 @@ export type EmailSendResult = { ok: true } | { ok: false; reason: string };
 // ── Who the mail says it is from ────────────────────────────────────────────
 //
 // Resend will only accept a From on a domain verified in the account. There is
-// exactly ONE such domain here — Randevu's own (RESEND_INBOUND_DOMAIN, the one
+// exactly ONE such domain here — Resepta's own (RESEND_INBOUND_DOMAIN, the one
 // that already carries every org's incoming address) — and a salon that has
 // verified a domain of their own on top.
 //
