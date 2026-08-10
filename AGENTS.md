@@ -450,8 +450,12 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
 - **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
   the voice template's twin. Behaviour changes are version bumps; owners
   never edit prompts (vertical presets are the answer to customisation).
-- **LLM key:** org `connections` row ("llm"/"apiKey") wins, else the platform
-  key (`platformConfig.anthropicApiKey`). The platform key is the Resend
+- **LLM provider/key/model resolve in ONE place:** `lib/chatLlm.ts`
+  (org `connections` "llm" rows win, then the platform's
+  `chatAgentProvider` + per-provider key + optional `chatAgentModel`).
+  Both dialects — Anthropic and OpenAI — live behind `lib/llm.ts`'s one
+  result shape; `appendToolRound` owns their tool-replay asymmetry, and the
+  agent loop must stay provider-blind. The platform keys are the Resend
   doctrine, not a hole in the connections rule. The Retell platform default
   is different: it is STAMPED into the org's connections row at
   auto-provision time, never resolved as a fallback.
