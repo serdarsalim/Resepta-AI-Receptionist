@@ -27,10 +27,12 @@ import {
   platformAdminEmails,
   requirePlatformAdmin,
 } from "./lib/platformAuth";
-import { maskSecret } from "./lib/connections";
+import { connectionField, maskSecret } from "./lib/connections";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
-import { emailConfig } from "./lib/platformConfig";
+import { emailConfig, platformValue } from "./lib/platformConfig";
+import { recordActivity } from "./lib/activity";
+import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -664,6 +666,182 @@ export const stopActingAs = mutation({
   handler: async (ctx) => {
     const admin = await requirePlatformAdmin(ctx);
     await ctx.db.patch(admin._id, { actingAsOrgId: undefined });
+    return null;
+  },
+});
+
+// ── The chat agent's control plane (docs/chat-agent.md §5, §9) ──────────────
+// Everything the operator sees and flips about an org's assistant, in one
+// query and three mutations. Every flip writes the org's activity feed —
+// "nothing changes agent behaviour except a recorded, reversible action".
+
+export const orgAssistant = query({
+  args: { orgId: v.id("orgs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      mode: v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
+      status: v.union(v.literal("active"), v.literal("suspended")),
+      budgetMicroUsd: v.union(v.number(), v.null()),
+      defaultBudgetMicroUsd: v.number(),
+      killSwitch: v.boolean(),
+      llmKeyConfigured: v.boolean(),
+      month: v.string(),
+      usage: v.union(
+        v.null(),
+        v.object({
+          llmTurns: v.number(),
+          llmInputTokens: v.number(),
+          llmOutputTokens: v.number(),
+          llmCostMicroUsd: v.number(),
+        }),
+      ),
+      turns: v.array(
+        v.object({
+          at: v.number(),
+          customerName: v.string(),
+          status: v.string(),
+          reply: v.optional(v.string()),
+          toolCalls: v.optional(v.string()),
+          model: v.string(),
+          templateVersion: v.number(),
+          inputTokens: v.number(),
+          outputTokens: v.number(),
+          costMicroUsd: v.number(),
+          latencyMs: v.optional(v.number()),
+          error: v.optional(v.string()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return null;
+    const month = new Date().toISOString().slice(0, 7);
+    const usage = await ctx.db
+      .query("usageMonthly")
+      .withIndex("by_org_month", (q) => q.eq("orgId", args.orgId).eq("month", month))
+      .unique();
+    const turns = await ctx.db
+      .query("chatAgentTurns")
+      .withIndex("by_org_at", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(25);
+    // One read per distinct customer, not per turn — same shape as the notes
+    // author resolution in messages.ts.
+    const names = new Map<string, string>();
+    for (const customerId of new Set(turns.map((t) => t.customerId))) {
+      const customer = await ctx.db.get(customerId);
+      names.set(
+        customerId,
+        customer
+          ? `${customer.firstName} ${customer.lastName ?? ""}`.trim() || customer.phone
+          : "—",
+      );
+    }
+    const llmKey =
+      (await connectionField(ctx, args.orgId, "llm", "apiKey")) ??
+      (await platformValue(ctx, "anthropicApiKey"));
+    return {
+      mode: org.chatAgentMode ?? "off",
+      status: org.status ?? "active",
+      budgetMicroUsd: org.chatAgentMonthlyBudgetMicroUsd ?? null,
+      defaultBudgetMicroUsd: DEFAULT_MONTHLY_BUDGET_MICRO_USD,
+      killSwitch: (await platformValue(ctx, "chatAgentDisabled")) === "true",
+      llmKeyConfigured: Boolean(llmKey),
+      month,
+      usage: usage
+        ? {
+            llmTurns: usage.llmTurns,
+            llmInputTokens: usage.llmInputTokens,
+            llmOutputTokens: usage.llmOutputTokens,
+            llmCostMicroUsd: usage.llmCostMicroUsd,
+          }
+        : null,
+      turns: turns.map((t) => ({
+        at: t.at,
+        customerName: names.get(t.customerId) ?? "—",
+        status: t.status,
+        reply: t.reply,
+        toolCalls: t.toolCalls,
+        model: t.model,
+        templateVersion: t.templateVersion,
+        inputTokens: t.inputTokens,
+        outputTokens: t.outputTokens,
+        costMicroUsd: t.costMicroUsd,
+        latencyMs: t.latencyMs,
+        error: t.error,
+      })),
+    };
+  },
+});
+
+export const setChatAgentMode = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    mode: v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, { chatAgentMode: args.mode });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: `chat agent → ${args.mode}`,
+    });
+    return null;
+  },
+});
+
+export const setChatAgentBudget = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    // null clears the override back to the code default.
+    budgetMicroUsd: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, {
+      chatAgentMonthlyBudgetMicroUsd:
+        args.budgetMicroUsd === null
+          ? undefined
+          : Math.max(0, Math.round(args.budgetMicroUsd)),
+    });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: "chat agent budget",
+    });
+    return null;
+  },
+});
+
+// Suspension (docs/chat-agent.md §8): outbound stops at the send chokepoints,
+// inbound keeps recording. The activity row is the record a billing dispute
+// reads back later, so it names the state, not just "settings changed".
+export const setOrgStatus = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    status: v.union(v.literal("active"), v.literal("suspended")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, { status: args.status });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: args.status === "suspended" ? "account suspended" : "account reactivated",
+    });
     return null;
   },
 });

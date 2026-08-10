@@ -109,10 +109,19 @@ export default function TenantPage() {
   const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
   const setField = useMutation(api.connections.setField);
   const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
+  const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
+  const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
+  const setChatAgentBudget = useMutation(api.platform.setChatAgentBudget);
+  const setOrgStatus = useMutation(api.platform.setOrgStatus);
+  const setPlatformFlag = useMutation(api.platformConfig.set);
+  // Suspend is two clicks, not a dialog: the admin shell has no confirm
+  // provider, and a state that arms and disarms itself is the same protection
+  // with less machinery.
+  const [armedSuspend, setArmedSuspend] = useState(false);
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
-  const [tab, setTab] = useState<"setup" | "agents" | "members" | "activity">("setup");
+  const [tab, setTab] = useState<"setup" | "agents" | "assistant" | "members" | "activity">("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
@@ -167,15 +176,48 @@ export default function TenantPage() {
             button is for the rest: the things that only exist inside the
             product, where the fix is three taps in their own Appointments
             screen and no amount of admin fields would have reached it. */}
-        <button
-          type="button"
-          onClick={() => {
-            void actAs({ orgId }).then(() => router.push("/"));
-          }}
-          className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-        >
-          Work in this account as {detail.name} →
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Suspension (docs/chat-agent.md §8): outbound stops, inbound keeps
+              recording. Two-click arm/confirm instead of a dialog. */}
+          {assistant && assistant.status === "suspended" ? (
+            <button
+              type="button"
+              onClick={() => void setOrgStatus({ orgId, status: "active" })}
+              className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+            >
+              Suspended · Reactivate
+            </button>
+          ) : assistant ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!armedSuspend) {
+                  setArmedSuspend(true);
+                  setTimeout(() => setArmedSuspend(false), 4000);
+                  return;
+                }
+                setArmedSuspend(false);
+                void setOrgStatus({ orgId, status: "suspended" });
+              }}
+              className={`rounded-lg px-2 py-1 text-xs ${
+                armedSuspend
+                  ? "bg-red-50 font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+              }`}
+            >
+              {armedSuspend ? "Click again to suspend — all sends stop" : "Suspend"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              void actAs({ orgId }).then(() => router.push("/"));
+            }}
+            className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+          >
+            Work in this account as {detail.name} →
+          </button>
+        </div>
       </header>
 
       <div className="flex gap-1">
@@ -183,6 +225,7 @@ export default function TenantPage() {
           [
             { id: "setup" as const, label: "Setup" },
             { id: "agents" as const, label: "Agents" },
+            { id: "assistant" as const, label: "Assistant" },
             { id: "members" as const, label: "Members" },
             { id: "activity" as const, label: "Activity" },
           ]
@@ -374,6 +417,151 @@ export default function TenantPage() {
               )}
             </div>
           ))
+        )}
+      </Section>
+      </>
+      )}
+
+      {tab === "assistant" && assistant && (
+      <>
+      <Section
+        title="Chat agent"
+        description="The WhatsApp assistant's lifecycle (docs/chat-agent.md). Shadow runs the full agent on real inbound and records every would-be reply without sending — read a week of it before going live."
+      >
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Mode</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["off", "shadow", "live"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => void setChatAgentMode({ orgId, mode: option })}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  assistant.mode === option
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5 sm:grid-cols-4">
+          <Fact label="LLM key">
+            {assistant.llmKeyConfigured ? (
+              <Pill tone="ok">Configured</Pill>
+            ) : (
+              <Pill tone="warn">Missing — agent skips every turn</Pill>
+            )}
+          </Fact>
+          <Fact label="Platform kill switch">
+            {assistant.killSwitch ? (
+              <Pill tone="warn">ON — every org stopped</Pill>
+            ) : (
+              <span className="text-[var(--muted)]">off</span>
+            )}
+          </Fact>
+          <Fact label={`Cost (${assistant.month})`}>
+            ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
+            {" of "}
+            ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)}
+          </Fact>
+          <Fact label="Turns this month">
+            {assistant.usage?.llmTurns ?? 0} · {(((assistant.usage?.llmInputTokens ?? 0) + (assistant.usage?.llmOutputTokens ?? 0)) / 1000).toFixed(1)}k tok
+          </Fact>
+        </div>
+        <Row
+          label="Monthly budget (USD)"
+          hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible below."
+          current={
+            assistant.budgetMicroUsd === null
+              ? undefined
+              : String(assistant.budgetMicroUsd / 1_000_000)
+          }
+          placeholder={String(assistant.defaultBudgetMicroUsd / 1_000_000)}
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setChatAgentBudget({
+              orgId,
+              budgetMicroUsd:
+                !value.trim() || Number.isNaN(parsed)
+                  ? null
+                  : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Platform kill switch</div>
+          <div>
+            <button
+              type="button"
+              onClick={() =>
+                void setPlatformFlag({
+                  key: "chatAgentDisabled",
+                  value: assistant.killSwitch ? "" : "true",
+                })
+              }
+              className={`rounded-lg px-2 py-1 text-xs ${
+                assistant.killSwitch
+                  ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+              }`}
+            >
+              {assistant.killSwitch
+                ? "Every agent is stopped — click to re-enable"
+                : "Stop every org's agent"}
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Flight recorder"
+        description="The last 25 turns, newest first — sent, shadowed, skipped and failed alike. Expand one to read the reply and every tool call with its arguments and result."
+      >
+        {assistant.turns.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">No turns yet.</p>
+        ) : (
+          <div className="space-y-1 py-2">
+            {assistant.turns.map((turn, index) => (
+              <details key={`${turn.at}-${index}`} className="text-xs">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 py-1 [&::-webkit-details-marker]:hidden">
+                  <Pill
+                    tone={
+                      turn.status === "sent"
+                        ? "ok"
+                        : turn.status === "error"
+                          ? "warn"
+                          : "muted"
+                    }
+                  >
+                    {turn.status}
+                  </Pill>
+                  <span className="font-medium">{turn.customerName}</span>
+                  {turn.error && (
+                    <span className="text-amber-700 dark:text-amber-400">{turn.error}</span>
+                  )}
+                  <span className="ml-auto text-[var(--muted)]">
+                    {(turn.inputTokens + turn.outputTokens).toLocaleString()} tok ·
+                    ${(turn.costMicroUsd / 1_000_000).toFixed(4)} · v{turn.templateVersion} ·{" "}
+                    {shortDate(turn.at)}
+                  </span>
+                </summary>
+                <div className="ml-1 space-y-1.5 border-l-2 border-[var(--border)] py-1 pl-3">
+                  {turn.reply && <p className="whitespace-pre-wrap">{turn.reply}</p>}
+                  {turn.toolCalls && (
+                    <pre className="overflow-x-auto rounded-lg bg-[var(--muted-bg)] p-2 font-mono text-[11px]">
+                      {JSON.stringify(JSON.parse(turn.toolCalls), null, 2)}
+                    </pre>
+                  )}
+                  {turn.latencyMs !== undefined && (
+                    <p className="text-[var(--muted)]">{turn.latencyMs} ms · {turn.model}</p>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
         )}
       </Section>
       </>

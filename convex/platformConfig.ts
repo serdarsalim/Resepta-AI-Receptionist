@@ -81,6 +81,11 @@ const settableKey = v.union(
   v.literal("resendInboundDomain"),
   v.literal("resendWebhookSecret"),
   v.literal("productName"),
+  // Chat-agent platform keys (docs/chat-agent.md §3, §5) and the Retell
+  // default auto-provisioning stamps (§7).
+  v.literal("anthropicApiKey"),
+  v.literal("retellApiKey"),
+  v.literal("chatAgentDisabled"),
 );
 
 // One key at a time, so a form that submits every field cannot blank the three
