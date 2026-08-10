@@ -299,6 +299,28 @@ export default defineSchema({
     // clearing every row first, then a second deploy — worth doing on a quiet
     // day, not worth breaking a running dev deployment for one dead string.
     staffLabel: v.optional(v.string()),
+    // Suspension (docs/chat-agent.md §8). Unset = active. Suspended stops
+    // SPEND and OUTBOUND — reminders, campaigns, composer sends, the chat
+    // agent — at the send chokepoints, each failing permanent with
+    // "org-suspended" so the stop is visible rather than silent. Inbound keeps
+    // recording on purpose: un-suspending must restore a complete world, and
+    // losing a customer's messages during a billing dispute is how a late
+    // payer becomes an ex-customer. Operator-set from /admin only.
+    status: v.optional(v.union(v.literal("active"), v.literal("suspended"))),
+    // Chat agent lifecycle (docs/chat-agent.md §5). Unset = off. "shadow"
+    // runs the full agent on real inbound and records the turn WITHOUT
+    // sending — the pre-launch QA state, the owner trust ramp and the canary
+    // in one value. "live" sends. Operator-set from /admin; going live
+    // without a week of shadow is possible and inadvisable.
+    chatAgentMode: v.optional(
+      v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
+    ),
+    // Per-org monthly LLM budget override, in micro-USD. Unset = the code
+    // default (lib/llm.ts). A hard cap, not advisory: the turn that would
+    // cross it is skipped with a "budget-exhausted" turn row and the agent
+    // pauses politely. Protects the platform key from a runaway loop and one
+    // org from becoming everyone's bill.
+    chatAgentMonthlyBudgetMicroUsd: v.optional(v.number()),
     // The showroom. An org with this set never reaches a provider: sends are
     // simulated, replies are invented, and a nightly cron wipes it back to a
     // fixed dataset (convex/demo.ts).
@@ -615,6 +637,13 @@ export default defineSchema({
     // arrivals worth noticing invisible. Compared against
     // attentionClearedAt like every other attention source.
     arrivedAt: v.optional(v.number()),
+    // Chat-agent takeover (docs/chat-agent.md §5). Stamped when a human sends
+    // a manual reply in this conversation (wa.sendSession) or when the agent
+    // escalates itself; while set, the agent is silent for this customer and
+    // a human owns the thread. Cleared from the conversation header to hand
+    // the thread back. Per CUSTOMER, not per org: taking over one
+    // conversation must not silence the agent for every other customer.
+    agentPausedAt: v.optional(v.number()),
     // Mute — the ATTENTION switch, and only that. A muted customer stays fully
     // live: you can send to them, they still appear in search, their timeline
     // still records everything. What changes is that they stop asking for a
@@ -783,6 +812,10 @@ export default defineSchema({
         v.literal("calcom"),
         v.literal("voice"),
         v.literal("booking_page"),
+        // Booked by the WhatsApp chat agent (docs/chat-agent.md). Same
+        // machinery as voice (retell.voiceBook with a source override) —
+        // recorded honestly rather than wearing voice's label.
+        v.literal("chat"),
       ),
     ),
     externalUid: v.optional(v.string()),
@@ -1307,6 +1340,88 @@ export default defineSchema({
     .index("by_org", ["orgId", "at"])
     .index("by_connection", ["connectionId", "at"])
     .index("by_target", ["targetTable", "targetId", "at"]),
+
+  // What the business knows, in the owner's own words — policies, parking,
+  // "do you do balayage" answers. Prose ONLY: services, prices, hours and
+  // staff live in their structured tables and the chat agent reads those
+  // directly, so a knowledge block can never contradict the calendar. One
+  // block per topic keeps the editor scannable and lets the agent's context
+  // name its sources.
+  knowledge: defineTable({
+    orgId: v.id("orgs"),
+    // Short topic label ("Otopark", "İptal politikası"). Shown in the editor
+    // list and used as the section header in the agent's context.
+    title: v.string(),
+    body: v.string(),
+    order: v.number(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_org", ["orgId"]),
+
+  // The chat agent's flight recorder (docs/chat-agent.md §5) and the raw LLM
+  // usage ledger (§6) in one row: every turn — sent, shadowed, skipped or
+  // failed — with what the model was shown, what tools it called, what it
+  // cost and what came out. This is the replay surface for "why did it say
+  // that" and the audit trail no prompt can fake after the fact.
+  //
+  // Retention: rows carry customer text, so they are org data — pruned from
+  // platform admin and deleted with the org, never kept aside.
+  chatAgentTurns: defineTable({
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    // The inbound message that triggered this turn, when one did.
+    inboundMessageId: v.optional(v.id("messages")),
+    // The outbound row the reply landed as. Unset for shadow/skipped/error.
+    sentMessageId: v.optional(v.id("messages")),
+    status: v.union(
+      // Reply generated and sent.
+      v.literal("sent"),
+      // Reply generated, deliberately not sent (org in shadow mode).
+      v.literal("shadow"),
+      // Turn refused before the model ran; `error` names the guard that
+      // stopped it (rate-limited, budget-exhausted, llm-not-configured…).
+      v.literal("skipped"),
+      // The model or a tool failed; `error` carries the reason.
+      v.literal("error"),
+    ),
+    // The reply text as generated (shadow keeps it too — that is the point).
+    reply: v.optional(v.string()),
+    // JSON array of {name, args, result} — every tool round in order. A
+    // string rather than v.any() so the row stays greppable and the shape is
+    // documented here instead of drifting.
+    toolCalls: v.optional(v.string()),
+    model: v.string(),
+    templateVersion: v.number(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    // What this turn cost in micro-USD, at the price table version current
+    // when it ran. Snapshotted so a later price change never rewrites history.
+    costMicroUsd: v.number(),
+    latencyMs: v.optional(v.number()),
+    error: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_org_at", ["orgId", "at"])
+    .index("by_customer_at", ["customerId", "at"]),
+
+  // Per-org, per-month cost rollup — the admin panel's "what does this org
+  // cost" read, one document instead of a scan over turns. Incremented in the
+  // same mutation that writes the turn row, so the two cannot drift. Keyed
+  // per org per month deliberately: counters shared wider than one org would
+  // serialize every org's agent traffic through one document's write lock.
+  //
+  // The SHAPE is the org cost ledger, not an LLM artifact: WhatsApp fees can
+  // join later as their own counters on the same row.
+  usageMonthly: defineTable({
+    orgId: v.id("orgs"),
+    // "2026-08" in the ORG's timezone, from the turn's own clock.
+    month: v.string(),
+    llmTurns: v.number(),
+    llmInputTokens: v.number(),
+    llmOutputTokens: v.number(),
+    llmCostMicroUsd: v.number(),
+    updatedAt: v.number(),
+  }).index("by_org_month", ["orgId", "month"]),
 
   // Staff-written notes on a customer — "allergic to ammonia", "always late,
   // book the 10:30". Their own table, NOT a row in `messages`: a note has no

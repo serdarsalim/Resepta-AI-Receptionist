@@ -93,6 +93,7 @@ const enrichedAppointment = v.object({
       v.literal("calcom"),
       v.literal("voice"),
       v.literal("booking_page"),
+      v.literal("chat"),
     ),
   ),
   reminderSentOffsets: v.optional(v.array(v.number())),
