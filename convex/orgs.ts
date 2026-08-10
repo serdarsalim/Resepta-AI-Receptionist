@@ -414,6 +414,17 @@ export const update = mutation({
     // Self-healing rather than a migration: any save on an org missing one
     // fills it, which covers the orgs that predate this. It never overwrites —
     // once a customer has replied to an address, changing it costs mail.
+    // Onboarding completion — the first save that names an unnamed org — is
+    // the auto-provisioning trigger (docs/chat-agent.md §7): the org wakes up
+    // with a phone agent built from the versioned template, on its own key or
+    // the stamped platform default. Fire-and-forget; the precheck refuses
+    // every case that is not a blank slate.
+    if (org0 && !org0.name && typeof patch.name === "string" && patch.name) {
+      await ctx.scheduler.runAfter(0, internal.retellAgent.autoProvision, {
+        orgId,
+      });
+    }
+
     const org = await ctx.db.get(orgId);
     if (org && !org.inboundAddress && patch.inboundAddress === undefined) {
       const name = (patch.name as string | undefined) ?? org.name;

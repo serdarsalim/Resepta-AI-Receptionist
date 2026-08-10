@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { connectionField } from "./lib/connections";
+import { platformValue } from "./lib/platformConfig";
 import { requireOwner } from "./lib/orgAuth";
 import {
   VOICE_AGENT_TEMPLATE_KEY,
@@ -258,6 +259,90 @@ export const fail = internalMutation({
       error: args.error.slice(0, 500),
       leaseToken: undefined,
       leaseUntil: undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+
+// ── Auto-provisioning (docs/chat-agent.md §7) ───────────────────────────────
+// The two db-side halves of the onboarding hook in retellAgent.autoProvision:
+// whether this org should get an agent made for it, and the key STAMP.
+
+export const autoProvisionPrecheck = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    eligible: v.boolean(),
+    reason: v.optional(v.string()),
+    name: v.string(),
+    language: v.string(),
+    // The org has no retell key of its own; the caller stamps the platform
+    // default before provisioning. Null when the org has its own or when
+    // there is no default to stamp.
+    keyToStamp: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    const no = (reason: string) => ({
+      eligible: false,
+      reason,
+      name: "",
+      language: "",
+      keyToStamp: null,
+    });
+    if (!org || !org.name) return no("no-org-or-unnamed");
+    if (org.demoMode) return no("demo-org");
+    if ((org.status ?? "active") === "suspended") return no("org-suspended");
+    // An org that already has an agent — connected OR mid-provisioning — is
+    // not a blank slate, and auto-creating a second agent is exactly the
+    // duplicate the checkpointed job design exists to prevent.
+    const existing = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (existing) return no("agent-exists");
+    const job = await ctx.db
+      .query("voiceAgentProvisioning")
+      .withIndex("by_org_updated", (q) => q.eq("orgId", args.orgId))
+      .first();
+    if (job) return no("provisioning-exists");
+    const ownKey = await connectionField(ctx, args.orgId, "retell", "apiKey");
+    const defaultKey = ownKey ? null : await platformValue(ctx, "retellApiKey");
+    if (!ownKey && !defaultKey) return no("no-retell-key");
+    return {
+      eligible: true,
+      reason: undefined,
+      name: org.name,
+      language: org.language,
+      keyToStamp: defaultKey,
+    };
+  },
+});
+
+// The stamp, not a fallback (docs/chat-agent.md §7): the platform default is
+// COPIED into this org's own connections row at provision time, so
+// connectionField resolution stays exactly as the doctrine demands and the
+// operator can re-key this one client later without touching the default.
+export const stampDefaultRetellKey = internalMutation({
+  args: { orgId: v.id("orgs"), value: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("connections")
+      .withIndex("by_org_provider_field", (q) =>
+        q.eq("orgId", args.orgId).eq("provider", "retell").eq("field", "apiKey"),
+      )
+      .unique();
+    // Never overwrite: a row that appeared since the precheck is the operator
+    // installing a real key, which beats the default by definition.
+    if (existing) return null;
+    await ctx.db.insert("connections", {
+      orgId: args.orgId,
+      provider: "retell",
+      field: "apiKey",
+      value: args.value,
+      label: "Platform default (auto-provisioned)",
       updatedAt: Date.now(),
     });
     return null;

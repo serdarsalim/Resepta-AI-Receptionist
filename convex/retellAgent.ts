@@ -1128,6 +1128,70 @@ export const createAgentForOrg = internalAction({
   }> => await provisionAgent(ctx, args),
 });
 
+// Onboarding's auto-provision (docs/chat-agent.md §7): every org that
+// finishes naming itself wakes up with a working receptionist, built from the
+// same checkpointed job the Add-agent sheet uses. The phone LINE stays a
+// manual step — the app assigns unclaimed numbers but never buys them —
+// "auto-agent, assisted dial tone". Fire-and-forget from orgs.update; a
+// failure lands in the provisioning list on /admin like any other job.
+export const autoProvision = internalAction({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const check = (await ctx.runQuery(
+      internal.voiceProvisioning.autoProvisionPrecheck,
+      { orgId: args.orgId },
+    )) as {
+      eligible: boolean;
+      reason?: string;
+      name: string;
+      language: string;
+      keyToStamp: string | null;
+    };
+    if (!check.eligible) return null;
+    if (check.keyToStamp) {
+      await ctx.runMutation(internal.voiceProvisioning.stampDefaultRetellKey, {
+        orgId: args.orgId,
+        value: check.keyToStamp,
+      });
+    }
+    const language: VoiceAgentLanguage =
+      check.language === "tr" ? "tr-TR" : check.language === "de" ? "de-DE" : "en-US";
+    // The owner sees this name in Phone agent; their own language, their own
+    // industry-neutral word. They can rename it any time.
+    const agentName =
+      language === "tr-TR"
+        ? "Randevu asistanı"
+        : language === "de-DE"
+          ? "Terminassistent"
+          : "Appointment assistant";
+    let voiceId: string;
+    try {
+      const voices = (await ctx.runAction(internal.retellAgent.voiceOptionsForOrg, {
+        orgId: args.orgId,
+      })) as { id: string }[];
+      if (voices.length === 0) return null;
+      voiceId = voices[0].id;
+    } catch (err) {
+      // A voice list that will not load is a key problem, and a key problem is
+      // platform-wide the day the default was stamped. Nothing to retry here;
+      // the operator's own smoke test hits it immediately.
+      console.error("autoProvision voice list failed", err);
+      return null;
+    }
+    // Deterministic per org: a second trigger resumes THIS job through the
+    // lease instead of deliberately creating a second agent.
+    await ctx.runAction(internal.retellAgent.createAgentForOrg, {
+      orgId: args.orgId,
+      requestId: `auto-${args.orgId}`,
+      name: agentName,
+      language,
+      voiceId,
+    });
+    return null;
+  },
+});
+
 export const wireWebhook = action({
   args: { agentId: v.string() },
   returns: v.object({ ok: v.boolean(), url: v.string(), version: v.union(v.number(), v.null()) }),
