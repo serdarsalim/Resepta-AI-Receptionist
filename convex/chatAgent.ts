@@ -4,6 +4,7 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  type ActionCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -684,7 +685,9 @@ type TurnContext = {
 };
 
 async function executeTool(
-  ctx: { runQuery: Function; runMutation: Function },
+  // Only the two members the tools actually use, picked off the real ActionCtx
+  // so the call sites keep their full types.
+  ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
   context: TurnContext,
   name: string,
   input: Record<string, unknown>,

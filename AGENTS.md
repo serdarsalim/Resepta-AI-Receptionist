@@ -432,6 +432,36 @@ Google-only) and Activity.
 The complete create/connect flow, variable lifecycle, call-event pipeline and
 operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent.md).
 
+## The chat agent (2026-08-10) — invariants, spec in docs/chat-agent.md
+
+- **Tool identity comes from the channel, never the conversation.** Every chat
+  tool executes bound to the (orgId, customerId) the webhook resolved; the
+  model chooses arguments, never identities. No tool reads another customer,
+  and no prompt text is load-bearing for safety. Do not add a tool that takes
+  a customerId or searches customers.
+- **The disclosure line is mechanical.** `chatAgent.respond` prepends it to
+  the first SENT message per customer; it is never the model's job and never
+  removable per org (WhatsApp 2026 AI policy + EU AI Act Art. 50).
+- **off → shadow → live** (`orgs.chatAgentMode`) is operator-set from /admin
+  only. Shadow runs everything and sends nothing; its replies live in
+  `chatAgentTurns`, the flight recorder that is also the raw LLM ledger.
+  `usageMonthly` is incremented in the same mutation as the turn — never
+  write one without the other.
+- **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
+  the voice template's twin. Behaviour changes are version bumps; owners
+  never edit prompts (vertical presets are the answer to customisation).
+- **LLM key:** org `connections` row ("llm"/"apiKey") wins, else the platform
+  key (`platformConfig.anthropicApiKey`). The platform key is the Resend
+  doctrine, not a hole in the connections rule. The Retell platform default
+  is different: it is STAMPED into the org's connections row at
+  auto-provision time, never resolved as a fallback.
+- **Suspension** (`orgs.status`) stops outbound at the send chokepoints with
+  visible `org-suspended` failures and keeps recording inbound. A new send
+  path must add the same guard.
+- **Knowledge is prose only.** Services, prices, hours and staff are read
+  from their tables into the agent's context; never duplicate them into
+  `knowledge` rows.
+
 ### Phone-agent variable lifecycle (decided 2026-07-31, Serdar)
 
 Resepta is the source of truth for a phone agent's variables; Retell is the
