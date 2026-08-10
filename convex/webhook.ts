@@ -291,6 +291,9 @@ export async function processInboundMessage(
       : undefined;
     if (
       org &&
+      // Suspended stops every outbound, the away-reply included; the inbound
+      // above was still logged, which is the whole shape of suspension.
+      (org.status ?? "active") !== "suspended" &&
       rule &&
       // Unset hours mean nobody has said when this salon is closed, so
       // we do not get to announce it. See lib/businessHours.ts.

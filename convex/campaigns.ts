@@ -448,6 +448,12 @@ export const send = action({
 
     // Sending twice is not something a campaign gets to do by accident.
     if (campaign.status !== "draft") return { ok: false, reason: "already-sent" };
+    // Suspension (docs/chat-agent.md §8): a run is the largest outbound the
+    // product has, so it is refused whole rather than fanned out into a
+    // thousand failed rows.
+    if ((org.status ?? "active") === "suspended") {
+      return { ok: false, reason: "org-suspended" };
+    }
     if (recipientIds.length === 0) return { ok: false, reason: "no-recipients" };
 
     // Exact language match, no cross-language fallback — the same rule the

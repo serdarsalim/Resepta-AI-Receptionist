@@ -139,6 +139,11 @@ export const sendSession = action({
       custom: sessionCustom,
     });
     if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
+    // Suspension (docs/chat-agent.md §8): outbound stops, and the person
+    // typing sees why instead of a silent nothing.
+    if (org && (org.status ?? "active") === "suspended") {
+      return { ok: false, reason: "org-suspended" };
+    }
     if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
     // Meta's 24h session window is Meta's rule. Evolution is a linked handset
     // and has no such window — the salon can answer an old message from their
@@ -450,6 +455,25 @@ export const sendAppointmentMessage = internalAction({
     // running says nothing should leave. The stamp already happened, which is
     // fine — a guard that errs toward not sending is the right kind of stale.
     if (args.ruleId && (!rule || rule.paused)) return null;
+
+    // Suspension (docs/chat-agent.md §8). One failed row per owed send keeps
+    // the stop visible in the thread and the failure counts; the alert lane
+    // stays quiet (STEADY_STATE_FAILURES) because the operator did this on
+    // purpose and one email per blocked reminder helps nobody.
+    if ((org.status ?? "active") === "suspended") {
+      const suspendedRow = await ctx.runMutation(internal.messages.logOutQueued, {
+        orgId: org._id,
+        customerId: customer._id,
+        appointmentId: appointment._id,
+        kind: args.kind,
+      });
+      await ctx.runMutation(internal.messages.applySendResult, {
+        messageId: suspendedRow,
+        ok: false,
+        error: "org-suspended",
+      });
+      return null;
+    }
 
     const messageKind =
       (args.kind === "reminder" || args.kind === "followup") &&
@@ -1020,6 +1044,16 @@ export const sendDueScheduled = internalAction({
         continue;
       }
       const { customer, waAccount, evolution } = context;
+      // Suspension re-checked at dispatch, like the window below: the org may
+      // have been suspended between parking the message and its moment.
+      if ((context.org?.status ?? "active") === "suspended") {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId: item.messageId,
+          ok: false,
+          error: "org-suspended",
+        });
+        continue;
+      }
       // Re-checked HERE, not at scheduling time. The 24h window a message was
       // written inside may have shut before its moment arrived, and Meta will
       // reject the send rather than deliver it late. Evolution is a linked

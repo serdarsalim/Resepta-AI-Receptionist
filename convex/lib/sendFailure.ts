@@ -31,6 +31,9 @@ const LOCAL_REFUSALS = new Set([
   "no-email-address",
   "customer-missing",
   "no-body",
+  // The operator suspended the org (docs/chat-agent.md §8). Nothing heals
+  // this but the operator, so retrying would only delay the honest answer.
+  "org-suspended",
 ]);
 
 // Meta error codes that mean "too fast", not "no". Worth naming individually

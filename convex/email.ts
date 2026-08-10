@@ -339,6 +339,9 @@ export const loadSendContext = internalQuery({
       inboundDomain: v.union(v.string(), v.null()),
       inboundAddress: v.optional(v.string()),
       customerEmail: v.optional(v.string()),
+      // Suspension rides the context read so the action can refuse without a
+      // second query (docs/chat-agent.md §8).
+      suspended: v.boolean(),
     }),
     v.null(),
   ),
@@ -359,6 +362,7 @@ export const loadSendContext = internalQuery({
       inboundDomain: mailConfig.domain,
       inboundAddress: org.inboundAddress,
       customerEmail: customer.email,
+      suspended: (org.status ?? "active") === "suspended",
     };
   },
 });
@@ -378,6 +382,10 @@ export const sendToCustomer = action({
       customerId: args.customerId,
     });
     if (!context) return { ok: false, reason: "not-found" };
+    // Suspension (docs/chat-agent.md §8): outbound stops, visibly.
+    if (context.suspended) {
+      return { ok: false, reason: "org-suspended" };
+    }
     if (!context.customerEmail) return { ok: false, reason: "missing-email" };
     if (!context.sender) return { ok: false, reason: "email-not-configured" };
 

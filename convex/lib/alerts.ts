@@ -467,6 +467,9 @@ const STEADY_STATE_FAILURES = new Set([
   // per-customer fact whose row belongs in that customer's thread, not in the
   // owner's inbox at 06:00 for every reminder.
   "no-email-address",
+  // Suspension is the operator's own deliberate act; a per-message alert
+  // would mail the suspended org's owner once per blocked reminder.
+  "org-suspended",
 ]);
 
 // A narrower set: failures that say nothing about the customer or the message,

@@ -106,6 +106,10 @@ export const claimForRetry = internalMutation({
         : Promise.resolve(null),
     ]);
     if (!org || !customer) return null;
+    // Suspension (docs/chat-agent.md §8): a queued retry for a suspended org
+    // is refused here, at claim time, and the caller reports it through
+    // applySendResult like any other outcome.
+    if ((org.status ?? "active") === "suspended") return { suspended: true as const };
 
     const waAccount = await ctx.db
       .query("waAccounts")
@@ -198,6 +202,14 @@ export const retryDue = internalAction({
       const job = await ctx.runMutation(internal.delivery.claimForRetry, { messageId });
       if (!job) continue;
 
+      if ("suspended" in job && job.suspended) {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId,
+          ok: false,
+          error: "org-suspended",
+        });
+        continue;
+      }
       const result = await attempt(job);
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId,
