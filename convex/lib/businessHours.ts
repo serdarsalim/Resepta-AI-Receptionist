@@ -222,3 +222,45 @@ export function parseLocalStart(raw: string, tz: string): number {
     return Date.parse(`${text}Z`);
   }
 }
+
+// ── The agent-facing description of open hours ──────────────────────────────
+// Shared by the voice tool endpoint (convex/http.ts) and the chat agent
+// (convex/chatAgent.ts): one wording of "when may an agent offer a slot", so
+// the two agents can never disagree about the doors. English on purpose —
+// this goes to a model, not a person, and the model answers in the
+// customer's language.
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+export function openHoursForAgent(
+  hours:
+    | { activeDays?: number[]; startMinute?: number; endMinute?: number }
+    | null
+    | undefined,
+): { open_hours?: string; closed_days?: string[] } {
+  if (!hours) return {};
+  const asClock = (minute: number) =>
+    `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+  const out: { open_hours?: string; closed_days?: string[] } = {};
+  if (hours.startMinute !== undefined && hours.endMinute !== undefined) {
+    out.open_hours = `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}`;
+  }
+  // Empty or absent activeDays means open every day (the schema's rule), so
+  // only a non-empty list closes anything. The agent needs the COMPLEMENT —
+  // the days it must not offer — because "we are open Mon-Sat" is a fact it
+  // has to invert under time pressure, and inverting it is how Sunday gets
+  // offered.
+  const days = hours.activeDays;
+  if (days && days.length > 0) {
+    const closed = WEEKDAY_NAMES.filter((_, day) => !days.includes(day));
+    if (closed.length > 0) out.closed_days = closed;
+  }
+  return out;
+}

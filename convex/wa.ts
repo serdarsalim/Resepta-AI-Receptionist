@@ -100,6 +100,14 @@ export const sendSession = action({
     });
     if (!context) return { ok: false, reason: "not-found" };
     const { customer, waAccount, org, evolution, contactFields } = context;
+    // A human is answering this thread, so the chat agent stands down for it
+    // (docs/chat-agent.md §5). Stamped before the send on purpose: even a
+    // send that fails downstream is a person engaging, and the agent talking
+    // over a human mid-repair is the worse failure. Idempotent; hand-back is
+    // chatAgent.setPaused from the conversation header.
+    await ctx.runMutation(internal.chatAgent.pauseForCustomer, {
+      customerId: args.customerId,
+    });
     // org is non-null for every real send here; the demo path below is the
     // only caller that reaches this with one missing.
     const available = org

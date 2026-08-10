@@ -1463,6 +1463,10 @@ export const voiceBook = internalMutation({
     // than by the agent, so a salon renaming a service does not mean editing
     // a prompt in Retell.
     service: v.optional(v.string()),
+    // Which agent made this booking. Unset = "voice", which every existing
+    // caller means; the chat agent passes "chat" so the appointment row says
+    // honestly which lane wrote it (docs/chat-agent.md).
+    source: v.optional(v.union(v.literal("voice"), v.literal("chat"))),
   },
   // The matched name goes back to the agent so it can read the booking back
   // to the caller in the salon's own vocabulary — and so a miss is visible to
@@ -1591,7 +1595,7 @@ export const voiceBook = internalMutation({
       durationMinutes: line?.durationMinutes ?? args.durationMinutes,
       items: line ? [line] : undefined,
       status: "scheduled",
-      source: "voice",
+      source: args.source ?? "voice",
       externalUid: args.externalUid,
     });
     await syncAppointmentSchedule(ctx, appointmentId);

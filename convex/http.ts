@@ -18,6 +18,7 @@ import {
   verifyResendSignature,
 } from "./lib/emailInbound";
 import { formatAppointmentTime } from "./lib/format";
+import { openHoursForAgent } from "./lib/businessHours";
 import {
   hasBusinessHours,
   isWithinActiveWindow,
@@ -365,42 +366,6 @@ function contactUpdateSentence(result: {
 // Day names go out in English and the model says them in the call's language —
 // the same split the `note` fields already use: times the caller hears are
 // localised, instructions to the model are not.
-const WEEKDAY_NAMES = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
-function openHoursForAgent(
-  hours:
-    | { activeDays?: number[]; startMinute?: number; endMinute?: number }
-    | null
-    | undefined,
-): { open_hours?: string; closed_days?: string[] } {
-  if (!hours) return {};
-  const asClock = (minute: number) =>
-    `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-  const out: { open_hours?: string; closed_days?: string[] } = {};
-  if (hours.startMinute !== undefined && hours.endMinute !== undefined) {
-    out.open_hours = `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}`;
-  }
-  // Empty or absent activeDays means open every day (the schema's rule), so
-  // only a non-empty list closes anything. The agent needs the COMPLEMENT —
-  // the days it must not offer — because "we are open Mon-Sat" is a fact it
-  // has to invert under time pressure, and inverting it is how Sunday gets
-  // offered.
-  const days = hours.activeDays;
-  if (days && days.length > 0) {
-    const closed = WEEKDAY_NAMES.filter((_, day) => !days.includes(day));
-    if (closed.length > 0) out.closed_days = closed;
-  }
-  return out;
-}
-
 // Runs while an inbound call is still ringing. Retell knows the agent and the
 // caller number at this point, which is exactly enough to resolve an org and
 // inject the context that agent is allowed to know before saying hello.

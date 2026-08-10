@@ -111,10 +111,13 @@ that `(orgId, customerId)`:
 - `cancel_appointment` / `reschedule_appointment(start)` — refuse any
   appointment row not owned by this customer; cal.com is told first when an
   `externalUid` exists, exactly like the voice tools in `convex/http.ts`.
-- `save_my_details(...)` — writes only voice-sourced contact fields and the
-  customer-name/email columns, through the same gate as the voice lane.
 - `escalate_to_staff(reason)` — stamps the conversation for takeover and stops
   the agent; the attention dot does the rest.
+
+(A `save_my_details` tool was considered and deferred: the voice lane already
+owns gated customer-data writes, and chat's v1 job is booking and answers.
+`book_appointment` still names an unnamed customer through voiceBook's
+existing name-adoption path.)
 
 There is no customer search, no read of any other customer, no org
 configuration surface. A fully manipulated model can at worst mismanage the

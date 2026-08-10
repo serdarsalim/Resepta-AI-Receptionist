@@ -28,6 +28,16 @@ const customerFields = {
   attentionClearedAt: v.optional(v.number()),
   arrivedAt: v.optional(v.number()),
   mutedAt: v.optional(v.number()),
+  // Chat-agent takeover stamp (docs/chat-agent.md §5) — set means a human
+  // owns this conversation and the agent is silent in it.
+  agentPausedAt: v.optional(v.number()),
+  // The three columns the warning above is about, found MISSING while adding
+  // agentPausedAt: each is stamped by the message lanes (webhook.ts, wa.ts),
+  // so a customer who wrote in or got an away-reply made every raw-doc read
+  // here fail validation.
+  lastInboundLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
+  lastAutoReplyAt: v.optional(v.number()),
+  lastEmailAutoReplyAt: v.optional(v.number()),
 };
 
 // Only the LIST carries the dot. Resolving it costs a scan of the org's recent

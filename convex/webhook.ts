@@ -244,6 +244,30 @@ export async function processInboundMessage(
   // talking to the salon. The owner alert above already fired either way.
   if (!appointmentId) {
     const org = await ctx.db.get(orgId);
+    // The chat agent (docs/chat-agent.md §2): anything non-deterministic is
+    // its job when the org runs one. Buttons and bare EVET/İPTAL never reach
+    // here — the deterministic paths above are cheaper, safer and already
+    // correct. Guards repeat inside the action authoritatively; this check
+    // only avoids scheduling work that would refuse itself.
+    const contact = customer ?? (await ctx.db.get(contactId));
+    const agentMode = org?.chatAgentMode ?? "off";
+    const agentEligible =
+      (agentMode === "live" || agentMode === "shadow") &&
+      !org?.demoMode &&
+      (org?.status ?? "active") !== "suspended" &&
+      contact?.agentPausedAt === undefined &&
+      Boolean(text.trim());
+    if (agentEligible) {
+      await ctx.scheduler.runAfter(0, internal.chatAgent.respond, {
+        customerId: contactId,
+        inboundMessageId: loggedId,
+      });
+    }
+    // A LIVE agent answers at any hour, which supersedes "we're closed, book
+    // here". Shadow deliberately changes nothing the customer sees: the
+    // away-reply below still runs and the agent's would-be reply lands only
+    // in the flight recorder.
+    if (agentMode === "live" && agentEligible) return;
     const hours = org?.businessHours ?? {};
     const now = Date.now();
     const alreadyReplied =

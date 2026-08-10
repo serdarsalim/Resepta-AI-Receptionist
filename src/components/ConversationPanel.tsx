@@ -126,6 +126,18 @@ export function ConversationPanel({
 }) {
   const { t, language } = useLanguage();
   const feed = useQuery(api.messages.feedForCustomer, { customerId });
+  // The takeover chip's two facts: whether this org runs a live agent at all
+  // (operator-set), and whether THIS conversation is currently a human's.
+  // orgs.current is already open app-wide, so this adds one cheap read.
+  const settings = useQuery(api.orgs.current, {});
+  const customerRecord = useQuery(api.customers.get, { customerId });
+  const setAgentPaused = useMutation(api.chatAgent.setPaused);
+  const agentChipState =
+    settings?.org.chatAgentMode === "live" && customerRecord
+      ? customerRecord.agentPausedAt !== undefined
+        ? ("paused" as const)
+        : ("answering" as const)
+      : null;
   const sendSession = useAction(api.wa.sendSession);
   const sendEmail = useAction(api.email.sendToCustomer);
   const addNote = useMutation(api.notes.add);
@@ -804,6 +816,30 @@ export function ConversationPanel({
         })}
       </div>
 
+      {canCompose && agentChipState && (
+        /* The takeover chip (docs/chat-agent.md §5). One line above the
+           composer, two states: the agent has this chat, or a human does.
+           Sending any manual message also takes over (stamped server-side in
+           wa.sendSession); the chip is how the thread is handed BACK, which
+           no message can express. */
+        <div className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)]">
+          <span>
+            {agentChipState === "paused" ? t("agent.paused") : t("agent.answering")}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              void setAgentPaused({
+                customerId,
+                paused: agentChipState !== "paused",
+              })
+            }
+            className="shrink-0 rounded-lg px-2 py-1 font-medium text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            {agentChipState === "paused" ? t("agent.handBack") : t("agent.takeOver")}
+          </button>
+        </div>
+      )}
       {canCompose && (
         <>
           <form

@@ -55,6 +55,12 @@ export const current = query({
       revenueEnabled: v.optional(v.boolean()),
       // Drives the banner that tells a visitor this salon is not real.
       demoMode: v.optional(v.boolean()),
+      // The chat agent's lifecycle state (docs/chat-agent.md §5). Read by the
+      // conversation panel for the takeover chip; WRITTEN only from platform
+      // admin — the owner sees the agent, the operator owns the switch.
+      chatAgentMode: v.optional(
+        v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
+      ),
       // The domain half, from deployment env — the client needs it to show the
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
@@ -176,6 +182,7 @@ export const current = query({
         bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
         demoMode: org.demoMode,
+        chatAgentMode: org.chatAgentMode,
         inboundDomain: mailConfig.domain ?? undefined,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         pausedReminderHours: org.pausedReminderHours ?? [],

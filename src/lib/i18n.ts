@@ -2505,6 +2505,24 @@ const dictionary = {
     de: "\"{name}\" löschen?",
   },
 
+  // The chat-agent takeover chip above the composer (docs/chat-agent.md §5).
+  "agent.answering": {
+    tr: "Asistan bu sohbeti yanıtlıyor",
+    en: "The assistant is answering this chat",
+    de: "Der Assistent beantwortet diesen Chat",
+  },
+  "agent.takeOver": { tr: "Devral", en: "Take over", de: "Übernehmen" },
+  "agent.paused": {
+    tr: "Asistan duraklatıldı — sohbet sizde",
+    en: "Assistant paused — this chat is yours",
+    de: "Assistent pausiert — dieser Chat gehört Ihnen",
+  },
+  "agent.handBack": {
+    tr: "Asistana geri ver",
+    en: "Hand back to assistant",
+    de: "An den Assistenten zurückgeben",
+  },
+
   "fields.reorder": {
     tr: "Sürükleyip sırala",
     en: "Drag to reorder",
