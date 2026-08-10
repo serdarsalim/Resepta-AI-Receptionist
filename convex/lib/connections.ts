@@ -72,6 +72,23 @@ export const CONNECTION_SPECS: {
       { field: "adminKey", label: "Admin key (provisioning; optional)", secret: true },
     ],
   },
+  {
+    // Chat-agent LLM override (docs/chat-agent.md §3). Almost every org
+    // leaves this empty and rides the platform key in platformConfig — the
+    // Resend doctrine, not a hole in this file's: the platform key is not a
+    // tenant's credential. A row here is the operator moving ONE client onto
+    // their own Anthropic billing, and it wins whenever it exists.
+    provider: "llm",
+    label: "Chat agent LLM",
+    fields: [
+      {
+        field: "apiKey",
+        label: "Anthropic API key (override)",
+        secret: true,
+        hint: "Leave empty to use the platform key. Set only for a client on their own Anthropic billing.",
+      },
+    ],
+  },
 ];
 
 export function connectionSpec(provider: string) {

@@ -29,6 +29,21 @@ export const PLATFORM_KEYS = {
   // own — a deployment mailing from mail.autotakt.com should be able to say so
   // rather than insisting it is Resepta.
   productName: null,
+  // The platform's own LLM key (docs/chat-agent.md §3) — the Resend case
+  // exactly: one deployment-wide key shared BY INTENT, because the platform
+  // owns the LLM relationship and meters tokens per org. A per-org override
+  // lives in `connections` ("llm"/"apiKey") and wins when present.
+  anthropicApiKey: "ANTHROPIC_API_KEY",
+  // The shared Retell workspace key auto-provisioning stamps into a new org's
+  // connections row (docs/chat-agent.md §7). The env var is the same one the
+  // webhook guard already reads, which is not a coincidence: one workspace
+  // has one signing key. A STAMP source, never a runtime fallback — the
+  // connections doctrine stands.
+  retellApiKey: "RETELL_API_KEY",
+  // Platform-wide chat agent kill switch (§5): "true" stops every org's
+  // agent before the model runs. Table-only on purpose — flipping it is an
+  // operator action from /admin, not a deploy.
+  chatAgentDisabled: null,
 } as const;
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;
@@ -63,6 +78,23 @@ export async function emailConfig(ctx: Ctx): Promise<EmailConfig> {
     domain: resolve("resendInboundDomain"),
     productName: resolve("productName") ?? DEFAULT_PRODUCT_NAME,
   };
+}
+
+// One platform value, table row first then env fallback — the general read
+// the newer keys (LLM, Retell default, kill switch) share. emailConfig above
+// predates it and stays as the batched read the email lane wants.
+export async function platformValue(
+  ctx: Ctx,
+  key: PlatformKey,
+): Promise<string | null> {
+  const row = await ctx.db
+    .query("platformConfig")
+    .withIndex("by_key", (q) => q.eq("key", key))
+    .unique();
+  const stored = clean(row?.value);
+  if (stored) return stored;
+  const envName = PLATFORM_KEYS[key];
+  return envName ? clean(process.env[envName]) : null;
 }
 
 // Inbound webhook signature checking, which runs in an httpAction and so needs
