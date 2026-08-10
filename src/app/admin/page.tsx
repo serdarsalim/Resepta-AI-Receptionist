@@ -215,6 +215,38 @@ export default function AdminPage() {
               onSave={(value) => setConfig({ key: "productName", value })}
             />
           </Section>
+
+          {/* The two agent keys, same doctrine split (docs/chat-agent.md):
+              the LLM key is shared BY INTENT and resolved at call time — one
+              paste here turns every org's chat agent on. The Retell default
+              is a STAMP source: it is copied into each new org's own
+              connections row at auto-provision time, so editing it here
+              changes future orgs only, never running ones. */}
+          <Section
+            title="AI & Voice defaults"
+            description="Platform keys for the chat agent and phone-agent auto-provisioning. Per-org overrides live on each business's Setup tab and always win."
+          >
+            <SecretRow
+              label="Anthropic API key"
+              hint={
+                mail.fromEnv.anthropicApiKey
+                  ? "Currently coming from the ANTHROPIC_API_KEY env var. Saving here overrides it. Powers every org's chat agent unless the org has its own key."
+                  : "Powers every org's chat agent unless the org has its own key. Missing = every turn skips with llm-not-configured."
+              }
+              masked={mail.anthropicApiKey}
+              onSave={(value) => setConfig({ key: "anthropicApiKey", value })}
+            />
+            <SecretRow
+              label="Retell default key"
+              hint={
+                mail.fromEnv.retellApiKey
+                  ? "Currently coming from the RETELL_API_KEY env var. Saving here overrides it. Stamped into each NEW org at auto-provisioning; existing orgs keep the key on their row."
+                  : "Stamped into each NEW org's own connections row at auto-provisioning. Existing orgs keep the key on their row. Must be the workspace's webhook signing key."
+              }
+              masked={mail.retellApiKey}
+              onSave={(value) => setConfig({ key: "retellApiKey", value })}
+            />
+          </Section>
         </div>
       )}
     </main>

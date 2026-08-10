@@ -13,6 +13,7 @@ import {
   DEFAULT_PRODUCT_NAME,
   emailConfig,
   inboundWebhookSecret,
+  platformValue,
   type PlatformKey,
 } from "./lib/platformConfig";
 
@@ -47,6 +48,10 @@ export const status = query({
     domain: v.union(v.string(), v.null()),
     webhookSecret: v.union(v.string(), v.null()),
     productName: v.string(),
+    // The chat agent's platform key and the Retell default auto-provisioning
+    // stamps (docs/chat-agent.md §3, §7). Masked like every secret here.
+    anthropicApiKey: v.union(v.string(), v.null()),
+    retellApiKey: v.union(v.string(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
     // deployment still configured the old way.
@@ -54,6 +59,8 @@ export const status = query({
       apiKey: v.boolean(),
       domain: v.boolean(),
       webhookSecret: v.boolean(),
+      anthropicApiKey: v.boolean(),
+      retellApiKey: v.boolean(),
     }),
   }),
   handler: async (ctx) => {
@@ -62,15 +69,21 @@ export const status = query({
     const row = (key: PlatformKey) => rows.find((r) => r.key === key)?.value.trim() || null;
     const config = await emailConfig(ctx);
     const secret = await inboundWebhookSecret(ctx);
+    const anthropicKey = await platformValue(ctx, "anthropicApiKey");
+    const retellKey = await platformValue(ctx, "retellApiKey");
     return {
       apiKey: config.apiKey ? maskSecret(config.apiKey) : null,
       domain: config.domain,
       webhookSecret: secret ? maskSecret(secret) : null,
       productName: config.productName,
+      anthropicApiKey: anthropicKey ? maskSecret(anthropicKey) : null,
+      retellApiKey: retellKey ? maskSecret(retellKey) : null,
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
         webhookSecret: Boolean(secret) && !row("resendWebhookSecret"),
+        anthropicApiKey: Boolean(anthropicKey) && !row("anthropicApiKey"),
+        retellApiKey: Boolean(retellKey) && !row("retellApiKey"),
       },
     };
   },
