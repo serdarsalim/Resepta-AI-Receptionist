@@ -27,7 +27,8 @@ import {
   platformAdminEmails,
   requirePlatformAdmin,
 } from "./lib/platformAuth";
-import { connectionField, maskSecret } from "./lib/connections";
+import { maskSecret } from "./lib/connections";
+import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig, platformValue } from "./lib/platformConfig";
@@ -686,6 +687,8 @@ export const orgAssistant = query({
       defaultBudgetMicroUsd: v.number(),
       killSwitch: v.boolean(),
       llmKeyConfigured: v.boolean(),
+      llmProvider: v.union(v.literal("anthropic"), v.literal("openai")),
+      llmModel: v.string(),
       month: v.string(),
       usage: v.union(
         v.null(),
@@ -740,16 +743,16 @@ export const orgAssistant = query({
           : "—",
       );
     }
-    const llmKey =
-      (await connectionField(ctx, args.orgId, "llm", "apiKey")) ??
-      (await platformValue(ctx, "anthropicApiKey"));
+    const llm = await resolveChatLlm(ctx, args.orgId);
     return {
       mode: org.chatAgentMode ?? "off",
       status: org.status ?? "active",
       budgetMicroUsd: org.chatAgentMonthlyBudgetMicroUsd ?? null,
       defaultBudgetMicroUsd: DEFAULT_MONTHLY_BUDGET_MICRO_USD,
       killSwitch: (await platformValue(ctx, "chatAgentDisabled")) === "true",
-      llmKeyConfigured: Boolean(llmKey),
+      llmKeyConfigured: Boolean(llm.apiKey),
+      llmProvider: llm.provider,
+      llmModel: llm.model,
       month,
       usage: usage
         ? {

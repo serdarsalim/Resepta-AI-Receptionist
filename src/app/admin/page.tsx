@@ -226,15 +226,73 @@ export default function AdminPage() {
             title="AI & Voice defaults"
             description="Platform keys for the chat agent and phone-agent auto-provisioning. Per-org overrides live on each business's Setup tab and always win."
           >
+            {/* Which dialect every org's chat agent speaks by default. The
+                key rows below both stay settable — switching provider is one
+                click, not a re-paste — and the active one is marked so a
+                pill flipped without its key configured is visible here, not
+                discovered in the flight recorder. */}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="text-sm font-medium">Chat agent provider</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(["anthropic", "openai"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() =>
+                      void setConfig({ key: "chatAgentProvider", value: option })
+                    }
+                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                      mail.chatAgentProvider === option
+                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {option === "anthropic" ? "Anthropic (Claude)" : "OpenAI (GPT)"}
+                  </button>
+                ))}
+                <span className="text-xs text-[var(--muted)]">
+                  {mail.chatAgentProvider === "openai"
+                    ? mail.openaiApiKey
+                      ? "using the OpenAI key below"
+                      : "⚠ no OpenAI key set — every turn will skip"
+                    : mail.anthropicApiKey
+                      ? "using the Anthropic key below"
+                      : "⚠ no Anthropic key set — every turn will skip"}
+                </span>
+              </div>
+            </div>
             <SecretRow
               label="Anthropic API key"
               hint={
                 mail.fromEnv.anthropicApiKey
-                  ? "Currently coming from the ANTHROPIC_API_KEY env var. Saving here overrides it. Powers every org's chat agent unless the org has its own key."
-                  : "Powers every org's chat agent unless the org has its own key. Missing = every turn skips with llm-not-configured."
+                  ? "Currently coming from the ANTHROPIC_API_KEY env var. Saving here overrides it."
+                  : mail.chatAgentProvider === "anthropic"
+                    ? "The active key: powers every org's chat agent unless the org has its own."
+                    : "Kept for when the provider switches back; inactive while OpenAI is selected."
               }
               masked={mail.anthropicApiKey}
               onSave={(value) => setConfig({ key: "anthropicApiKey", value })}
+            />
+            <SecretRow
+              label="OpenAI API key"
+              hint={
+                mail.fromEnv.openaiApiKey
+                  ? "Currently coming from the OPENAI_API_KEY env var. Saving here overrides it."
+                  : mail.chatAgentProvider === "openai"
+                    ? "The active key: powers every org's chat agent unless the org has its own."
+                    : "Kept for when the provider switches; inactive while Anthropic is selected."
+              }
+              masked={mail.openaiApiKey}
+              onSave={(value) => setConfig({ key: "openaiApiKey", value })}
+            />
+            <Row
+              label="Model override"
+              hint="Optional exact model name for the selected provider (defaults: claude-sonnet-5 / gpt-5.2). Applies only while an org resolves to the platform provider. Unknown names fail visibly in the flight recorder and meter at $0 until priced in lib/llm.ts."
+              current={mail.chatAgentModel ?? undefined}
+              placeholder={
+                mail.chatAgentProvider === "openai" ? "gpt-5.2" : "claude-sonnet-5"
+              }
+              onSave={(value) => setConfig({ key: "chatAgentModel", value })}
             />
             <SecretRow
               label="Retell default key"

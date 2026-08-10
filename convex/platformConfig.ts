@@ -51,6 +51,9 @@ export const status = query({
     // The chat agent's platform key and the Retell default auto-provisioning
     // stamps (docs/chat-agent.md §3, §7). Masked like every secret here.
     anthropicApiKey: v.union(v.string(), v.null()),
+    openaiApiKey: v.union(v.string(), v.null()),
+    chatAgentProvider: v.union(v.literal("anthropic"), v.literal("openai")),
+    chatAgentModel: v.union(v.string(), v.null()),
     retellApiKey: v.union(v.string(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
@@ -60,6 +63,7 @@ export const status = query({
       domain: v.boolean(),
       webhookSecret: v.boolean(),
       anthropicApiKey: v.boolean(),
+      openaiApiKey: v.boolean(),
       retellApiKey: v.boolean(),
     }),
   }),
@@ -70,6 +74,8 @@ export const status = query({
     const config = await emailConfig(ctx);
     const secret = await inboundWebhookSecret(ctx);
     const anthropicKey = await platformValue(ctx, "anthropicApiKey");
+    const openaiKey = await platformValue(ctx, "openaiApiKey");
+    const provider = (await platformValue(ctx, "chatAgentProvider"))?.toLowerCase();
     const retellKey = await platformValue(ctx, "retellApiKey");
     return {
       apiKey: config.apiKey ? maskSecret(config.apiKey) : null,
@@ -77,12 +83,16 @@ export const status = query({
       webhookSecret: secret ? maskSecret(secret) : null,
       productName: config.productName,
       anthropicApiKey: anthropicKey ? maskSecret(anthropicKey) : null,
+      openaiApiKey: openaiKey ? maskSecret(openaiKey) : null,
+      chatAgentProvider: provider === "openai" ? ("openai" as const) : ("anthropic" as const),
+      chatAgentModel: (await platformValue(ctx, "chatAgentModel"))?.trim() || null,
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
         webhookSecret: Boolean(secret) && !row("resendWebhookSecret"),
         anthropicApiKey: Boolean(anthropicKey) && !row("anthropicApiKey"),
+        openaiApiKey: Boolean(openaiKey) && !row("openaiApiKey"),
         retellApiKey: Boolean(retellKey) && !row("retellApiKey"),
       },
     };
@@ -97,6 +107,9 @@ const settableKey = v.union(
   // Chat-agent platform keys (docs/chat-agent.md §3, §5) and the Retell
   // default auto-provisioning stamps (§7).
   v.literal("anthropicApiKey"),
+  v.literal("openaiApiKey"),
+  v.literal("chatAgentProvider"),
+  v.literal("chatAgentModel"),
   v.literal("retellApiKey"),
   v.literal("chatAgentDisabled"),
 );

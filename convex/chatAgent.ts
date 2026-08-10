@@ -9,15 +9,18 @@ import {
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
-import { connectionField } from "./lib/connections";
+
 import { platformValue } from "./lib/platformConfig";
 import {
-  DEFAULT_CHAT_MODEL,
   DEFAULT_MONTHLY_BUDGET_MICRO_USD,
+  appendToolRound,
   chatComplete,
   costMicroUsd,
-  type LlmMessage,
+  textMessage,
+  type LlmProvider,
+  type ProviderMessage,
 } from "./lib/llm";
+import { resolveChatLlm } from "./lib/chatLlm";
 import {
   CHAT_AGENT_TEMPLATE_VERSION,
   MAX_REPLIES_PER_CUSTOMER_PER_HOUR,
@@ -84,12 +87,11 @@ export const loadTurnContext = internalQuery({
     else if ((await platformValue(ctx, "chatAgentDisabled")) === "true")
       skip = "platform-kill-switch";
 
-    // The LLM key: this org's own row when the operator set one, the platform
-    // key otherwise (spec §3).
-    const apiKey =
-      (await connectionField(ctx, customer.orgId, "llm", "apiKey")) ??
-      (await platformValue(ctx, "anthropicApiKey"));
-    if (!skip && !apiKey) skip = "llm-not-configured";
+    // Which model, whose dialect, whose key — ONE resolution shared with the
+    // admin panel (lib/chatLlm.ts), so the health fact and the runtime can
+    // never disagree.
+    const llm = await resolveChatLlm(ctx, customer.orgId);
+    if (!skip && !llm.apiKey) skip = "llm-not-configured";
 
     // Rate limit: generated turns (sent or shadowed) in the last hour. A
     // skipped turn does not count, or the limit would extend itself.
@@ -221,7 +223,7 @@ export const loadTurnContext = internalQuery({
         lastName: customer.lastName ?? null,
         language,
       },
-      apiKey,
+      llm,
       lane,
       waAccount: waAccount
         ? { accessToken: waAccount.accessToken, phoneNumberId: waAccount.phoneNumberId }
@@ -431,7 +433,12 @@ export const respond = internalAction({
       customerId: args.customerId,
     });
     if (!context) return null;
-    const model = DEFAULT_CHAT_MODEL;
+    const llm = context.llm as {
+      provider: LlmProvider;
+      model: string;
+      apiKey: string | null;
+    };
+    const model = llm.model;
 
     const record = (fields: {
       status: "sent" | "shadow" | "skipped" | "error";
@@ -526,16 +533,15 @@ export const respond = internalAction({
 
     // The skip verdict already refused a missing key; this narrows the type
     // and stands guard against a future reordering of those checks.
-    const apiKey = context.apiKey;
+    const apiKey = llm.apiKey;
     if (!apiKey) {
       await record({ status: "skipped", error: "llm-not-configured" });
       return null;
     }
 
-    const messages: LlmMessage[] = merged.map((m) => ({
-      role: m.role,
-      content: m.text,
-    }));
+    const messages: ProviderMessage[] = merged.map((m) =>
+      textMessage(m.role, m.text),
+    );
     const tools = chatAgentTools();
     const toolLog: ToolCallLog[] = [];
     let inputTokens = 0;
@@ -544,6 +550,7 @@ export const respond = internalAction({
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
       const result = await chatComplete({
+        provider: llm.provider,
         apiKey,
         model,
         system,
@@ -570,19 +577,14 @@ export const respond = internalAction({
         break;
       }
       // Execute every requested tool, then hand the results back in the
-      // provider's own shape (the raw assistant blocks must be replayed).
-      messages.push({ role: "assistant", content: result.rawContent });
-      const resultBlocks: Array<Record<string, unknown>> = [];
+      // provider's own dialect — appendToolRound owns that asymmetry.
+      const toolResults: { id: string; content: string }[] = [];
       for (const use of result.toolUses) {
         const toolResult = await executeTool(ctx, context, use.name, use.input);
         toolLog.push({ name: use.name, args: use.input, result: toolResult });
-        resultBlocks.push({
-          type: "tool_result",
-          tool_use_id: use.id,
-          content: JSON.stringify(toolResult),
-        });
+        toolResults.push({ id: use.id, content: JSON.stringify(toolResult) });
       }
-      messages.push({ role: "user", content: resultBlocks });
+      appendToolRound(llm.provider, messages, result, toolResults);
     }
 
     if (!finalText.trim()) {

@@ -35,6 +35,7 @@ import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_chatAgentTemplate from "../lib/chatAgentTemplate.js";
+import type * as lib_chatLlm from "../lib/chatLlm.js";
 import type * as lib_connections from "../lib/connections.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
   "lib/chatAgentTemplate": typeof lib_chatAgentTemplate;
+  "lib/chatLlm": typeof lib_chatLlm;
   "lib/connections": typeof lib_connections;
   "lib/email": typeof lib_email;
   "lib/emailInbound": typeof lib_emailInbound;

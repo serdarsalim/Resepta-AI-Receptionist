@@ -448,11 +448,15 @@ export default function TenantPage() {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5 sm:grid-cols-4">
-          <Fact label="LLM key">
+          <Fact label="Model">
             {assistant.llmKeyConfigured ? (
-              <Pill tone="ok">Configured</Pill>
+              <Pill tone="ok">
+                {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} · {assistant.llmModel}
+              </Pill>
             ) : (
-              <Pill tone="warn">Missing — agent skips every turn</Pill>
+              <Pill tone="warn">
+                No {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} key — agent skips every turn
+              </Pill>
             )}
           </Fact>
           <Fact label="Platform kill switch">

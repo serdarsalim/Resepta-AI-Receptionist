@@ -77,9 +77,16 @@ with per-visitor rate limits if the demo needs it.
 
 ## 3. The LLM seam
 
-- `convex/lib/llm.ts` — provider-neutral `chatComplete()` over the Anthropic
-  Messages API (fetch from actions only). Model, prices and the template
-  version are recorded on every turn.
+- `convex/lib/llm.ts` — provider-neutral `chatComplete()` speaking BOTH the
+  Anthropic Messages API and the OpenAI Chat Completions API behind one
+  result shape; `appendToolRound` hides the two dialects' tool-replay
+  asymmetry from the agent loop. Model, prices and the template version are
+  recorded on every turn.
+- **Provider choice** is a fleet-page setting (`chatAgentProvider`,
+  anthropic | openai) with both keys storable at once, an optional
+  deployment-wide model override (`chatAgentModel`), and a per-org provider
+  + key override in `connections` ("llm"). `lib/chatLlm.ts` is the ONE
+  resolution, shared by the runtime and the admin health fact.
 - **Key resolution (two patterns, each matching an existing doctrine):**
   - The platform key lives in `platformConfig` (`anthropicApiKey`, env fallback
     `ANTHROPIC_API_KEY`) — the Resend pattern: one deployment-wide key shared
@@ -92,9 +99,10 @@ with per-visitor rate limits if the demo needs it.
   - This is NOT the forbidden connections fallback: that rule protects
     per-tenant credentials from leaking across tenants. The platform LLM key is
     not a tenant's credential.
-- Default model: `claude-sonnet-5`. The price table in `lib/llm.ts` is
-  versioned; every turn snapshots the rate it was billed at, so a later price
-  change never rewrites history.
+- Default models: `claude-sonnet-5` / `gpt-5.2` per provider. The price
+  table in `lib/llm.ts` is versioned; every turn snapshots the rate it was
+  billed at, so a later price change never rewrites history. An unknown
+  model meters at $0 — visibly wrong on purpose, the nudge to price it.
 
 ## 4. Isolation — the invariant that makes the agent safe
 

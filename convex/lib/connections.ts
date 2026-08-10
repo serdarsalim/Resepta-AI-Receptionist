@@ -82,10 +82,16 @@ export const CONNECTION_SPECS: {
     label: "Chat agent LLM",
     fields: [
       {
+        field: "provider",
+        label: "Provider (override)",
+        secret: false,
+        hint: "anthropic or openai. Leave empty to follow the platform default. Deciding the dialect and paying the bill are separate: this can differ from the platform while the key below stays empty.",
+      },
+      {
         field: "apiKey",
-        label: "Anthropic API key (override)",
+        label: "API key (override)",
         secret: true,
-        hint: "Leave empty to use the platform key. Set only for a client on their own Anthropic billing.",
+        hint: "Leave empty to use the platform key for the resolved provider. Set only for a client on their own billing.",
       },
     ],
   },

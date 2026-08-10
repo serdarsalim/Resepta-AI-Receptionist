@@ -34,6 +34,13 @@ export const PLATFORM_KEYS = {
   // owns the LLM relationship and meters tokens per org. A per-org override
   // lives in `connections` ("llm"/"apiKey") and wins when present.
   anthropicApiKey: "ANTHROPIC_API_KEY",
+  openaiApiKey: "OPENAI_API_KEY",
+  // Which dialect the chat agent speaks by default ("anthropic" | "openai")
+  // and an optional model-name override for that provider. Table-only: both
+  // are admin decisions, not deploy artifacts. Resolution order and the
+  // per-org override live in lib/chatLlm.ts.
+  chatAgentProvider: null,
+  chatAgentModel: null,
   // The shared Retell workspace key auto-provisioning stamps into a new org's
   // connections row (docs/chat-agent.md §7). The env var is the same one the
   // webhook guard already reads, which is not a coincidence: one workspace
