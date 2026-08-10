@@ -19,6 +19,7 @@ import {
 import { Card } from "./Card";
 import { BusinessHoursCard } from "./RemindersView";
 import { McpCard } from "./McpCard";
+import { KnowledgeCard } from "./KnowledgeCard";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
@@ -55,7 +56,7 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue" | "people" | "ai" | "activity";
+type Section = "general" | "hours" | "catalogue" | "knowledge" | "people" | "ai" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
@@ -66,6 +67,9 @@ const SECTIONS: { id: Section; key: TranslationKey }[] = [
   // was a genuine scavenger hunt.
   { id: "hours", key: "settings.hours" },
   { id: "catalogue", key: "settings.catalogue" },
+  // What the chat agent knows beyond the structured tables — prose only, by
+  // the rule in the card's own hint (docs/chat-agent.md).
+  { id: "knowledge", key: "knowledge.section" },
   { id: "people", key: "staff.title" },
   // AI connectors live with the business, not in Settings: like People, a key
   // is a member of the team — it acts as a person and shows up in the feed
@@ -170,6 +174,7 @@ export function BusinessView() {
           <FieldsCard isOwner={isOwner} />
         </>
       )}
+      {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
       {section === "ai" && <McpCard site={resolveSiteUrl()} />}
       {section === "activity" && <ActivityCard />}

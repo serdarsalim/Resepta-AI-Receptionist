@@ -27,6 +27,7 @@ import type * as email from "../email.js";
 import type * as evolution from "../evolution.js";
 import type * as forms from "../forms.js";
 import type * as http from "../http.js";
+import type * as knowledge from "../knowledge.js";
 import type * as lib_activity from "../lib/activity.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
@@ -108,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   evolution: typeof evolution;
   forms: typeof forms;
   http: typeof http;
+  knowledge: typeof knowledge;
   "lib/activity": typeof lib_activity;
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;

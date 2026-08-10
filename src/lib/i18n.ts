@@ -2464,6 +2464,47 @@ const dictionary = {
     en: "Delete \"{name}\"? Values already saved stay on customer cards.",
     de: "\"{name}\" löschen? Bereits gespeicherte Werte bleiben auf den Kundenkarten.",
   },
+  // Business → Knowledge (docs/chat-agent.md): the prose the chat agent
+  // knows. The hint carries the one rule that keeps the card honest —
+  // structured facts live in their own tables and are not repeated here.
+  "knowledge.section": { tr: "Bilgi", en: "Knowledge", de: "Wissen" },
+  "knowledge.title": {
+    tr: "İşletme bilgisi",
+    en: "Business knowledge",
+    de: "Betriebswissen",
+  },
+  "knowledge.hint": {
+    tr: "Sohbet asistanının işletmeniz hakkında bildikleri. Hizmetleri, fiyatları ve çalışma saatlerini buraya yazmayın — asistan onları zaten uygulamadan okur. Politikalar, otopark, sık sorulan sorular gibi serbest bilgiler buraya girer.",
+    en: "What the chat assistant knows about your business. Don't repeat services, prices or opening hours — the assistant already reads those from the app. This is for policies, parking, frequent questions and anything else customers ask.",
+    de: "Was der Chat-Assistent über Ihren Betrieb weiß. Leistungen, Preise und Öffnungszeiten gehören nicht hierher — die liest der Assistent bereits aus der App. Hier stehen Richtlinien, Parken, häufige Fragen und Ähnliches.",
+  },
+  "knowledge.add": {
+    tr: "Bilgi ekle",
+    en: "Add knowledge",
+    de: "Wissen hinzufügen",
+  },
+  "knowledge.addHint": {
+    tr: "Bir konu başlığı ve müşterilere söylenebilecek bilgi.",
+    en: "One topic, and what customers should be told about it.",
+    de: "Ein Thema und was Kunden dazu erfahren dürfen.",
+  },
+  "knowledge.titlePlaceholder": { tr: "Otopark", en: "Parking", de: "Parken" },
+  "knowledge.bodyPlaceholder": {
+    tr: "Salonun arkasında ücretsiz otopark var; giriş Çınar Sokak'tan.",
+    en: "Free parking behind the salon; entrance on Elm Street.",
+    de: "Kostenlose Parkplätze hinter dem Salon; Einfahrt über die Lindenstraße.",
+  },
+  "knowledge.empty": {
+    tr: "Henüz bilgi eklenmedi.",
+    en: "No knowledge added yet.",
+    de: "Noch kein Wissen hinterlegt.",
+  },
+  "knowledge.deleteConfirm": {
+    tr: "\"{name}\" silinsin mi?",
+    en: "Delete \"{name}\"?",
+    de: "\"{name}\" löschen?",
+  },
+
   "fields.reorder": {
     tr: "Sürükleyip sırala",
     en: "Drag to reorder",
@@ -2696,6 +2737,11 @@ const dictionary = {
   },
   "common.saved": { tr: "Kaydedildi", en: "Saved", de: "Gespeichert" },
   "common.add": { tr: "Ekle", en: "Add", de: "Hinzufügen" },
+  "common.error": {
+    tr: "Bir şeyler ters gitti. Tekrar deneyin.",
+    en: "Something went wrong. Try again.",
+    de: "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+  },
   "common.cancel": { tr: "Vazgeç", en: "Cancel", de: "Abbrechen" },
   "common.close": { tr: "Kapat", en: "Close", de: "Schließen" },
   "common.delete": { tr: "Sil", en: "Delete", de: "Löschen" },
