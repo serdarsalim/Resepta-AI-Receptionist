@@ -962,6 +962,32 @@ export const downloadInboundMedia = internalAction({
 
 // ---- Scheduled sends ----
 
+// Context for the DISPATCH of a parked message. Deliberately not
+// loadSessionContext: that one begins with requireOrg because its caller is a
+// signed-in composer, and this one's caller is a CRON — scheduled functions
+// carry no auth identity, so requireOrg throws "not-signed-in" and the whole
+// dispatch tick died on the first due message (found 2026-08-11; the claimed
+// row then hung in flight until the reaper failed it as "stuck"). The org
+// comes from the CUSTOMER row instead, which the message row named — the same
+// sessionless resolution loadAwayReplyContext uses, and the same scoping
+// guarantee: the org is read off our own stored rows, never off caller input.
+export const loadScheduledSendContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return null;
+    const org = await ctx.db.get(customer.orgId);
+    if (!org) return null;
+    const waAccount = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+      .unique();
+    const evolution = await loadEvolutionCreds(ctx, customer.orgId, org.evolutionInstance);
+    return { customer, org, waAccount, evolution };
+  },
+});
+
 export const dueScheduled = internalQuery({
   args: {},
   returns: v.array(
@@ -1028,9 +1054,24 @@ export const sendDueScheduled = internalAction({
         messageId: item.messageId,
       });
       if (!claimed) continue;
-      const context = await ctx.runQuery(internal.wa.loadSessionContext, {
+      // The sessionless context — see loadScheduledSendContext above for why
+      // loadSessionContext must never be called from this cron.
+      const context = await ctx.runQuery(internal.wa.loadScheduledSendContext, {
         customerId: item.customerId,
       });
+      // The demo boundary, restored: sendSession parks a scheduled row BEFORE
+      // its demo branch, so this dispatch is the first point a demo org's
+      // parked message could reach a provider. Simulate it instead — the same
+      // promise every immediate send path keeps, checked before credentials
+      // for the same reason (the demo org has none by design).
+      if (context && isDemo(context.org)) {
+        await ctx.runMutation(internal.demo.landSimulated, {
+          messageId: item.messageId,
+          orgId: context.org._id,
+          customerId: item.customerId,
+        });
+        continue;
+      }
       // The lane comes off the ROW, set when the salon wrote the message. A
       // reply parked at 23:00 for 10:00 has to leave from the number the
       // conversation is on, not from whatever the org has configured by then.
