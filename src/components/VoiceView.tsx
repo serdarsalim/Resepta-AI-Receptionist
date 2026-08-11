@@ -10,13 +10,19 @@ import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
+import { KnowledgeCard } from "./KnowledgeCard";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
 // stays an implementation detail; hearing yesterday's call never means opening
 // another product.
 
-type VoiceSection = "agents" | "calls";
+// Knowledge joins the strip this view already had rather than getting a
+// container of its own. It is what the agent KNOWS beyond the structured
+// tables, so it belongs beside the agent that reads it — it spent its first
+// life under Business, which is a fact-about-the-salon container, and that is
+// the same scavenger hunt the Hours comment in BusinessView describes.
+type VoiceSection = "agents" | "calls" | "knowledge";
 
 function fmtDuration(sec: number | null): string {
   if (sec === null) return "";
@@ -161,6 +167,7 @@ export function VoiceView() {
           [
             { id: "agents" as const, label: t("voice.agents") },
             { id: "calls" as const, label: t("settings.voiceCalls") },
+            { id: "knowledge" as const, label: t("knowledge.section") },
           ] as { id: VoiceSection; label: string }[]
         ).map((entry) => (
           <button
@@ -183,6 +190,7 @@ export function VoiceView() {
         <VoiceCard isOwner={isOwner} site={site} onOpenAgent={openAgent} />
       )}
       {section === "calls" && <CallHistory />}
+      {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
     </div>
   );
 }

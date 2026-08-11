@@ -8,7 +8,6 @@ import { CustomersView } from "@/components/CustomersView";
 import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
 import { CampaignsView } from "@/components/CampaignsView";
-import { RemindersView } from "@/components/RemindersView";
 import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
 import { AccountView } from "@/components/AccountView";
@@ -42,6 +41,21 @@ export function AppHome() {
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
     const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+    // Reminders was a sidebar entry until 2026-08-12 and is now a Business
+    // section. Translate rather than drop: ?tab=messages is bookmarkable, and
+    // localStorage is holding that exact string for every existing user right
+    // now, so without this they open the app to the calendar wondering where
+    // Reminders went. Section goes in before the tab, the order BusinessView
+    // reads them in on mount.
+    if (wanted === "messages" || (wanted === null && stored === "messages")) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("section", "reminders");
+      url.searchParams.set("tab", "business");
+      window.history.replaceState(null, "", url);
+      window.localStorage.setItem(TAB_STORAGE_KEY, "business");
+      setTabState("business");
+      return;
+    }
     const next = [wanted, stored].find(
       (id): id is TabId => id !== null && TAB_IDS.includes(id as TabId),
     );
@@ -89,7 +103,6 @@ export function AppHome() {
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
           {tab === "business" && <BusinessView />}
-          {tab === "messages" && <RemindersView />}
           {/* Personal, not org config. Only the avatar menu routes here. */}
           {tab === "account" && <AccountView />}
         </>
@@ -109,7 +122,6 @@ const TAB_IDS: TabId[] = [
   "inbox",
   "campaigns",
   "voice",
-  "messages",
   "revenue",
   "business",
   "account",

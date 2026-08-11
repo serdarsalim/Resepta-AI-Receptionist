@@ -17,9 +17,8 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
-import { BusinessHoursCard } from "./RemindersView";
 import { McpCard } from "./McpCard";
-import { KnowledgeCard } from "./KnowledgeCard";
+import { BusinessHoursCard, RemindersView } from "./RemindersView";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
@@ -56,7 +55,7 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue" | "knowledge" | "people" | "ai" | "activity";
+type Section = "general" | "hours" | "catalogue" | "reminders" | "people" | "ai" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
@@ -67,9 +66,14 @@ const SECTIONS: { id: Section; key: TranslationKey }[] = [
   // was a genuine scavenger hunt.
   { id: "hours", key: "settings.hours" },
   { id: "catalogue", key: "settings.catalogue" },
-  // What the chat agent knows beyond the structured tables — prose only, by
-  // the rule in the card's own hint (docs/chat-agent.md).
-  { id: "knowledge", key: "knowledge.section" },
+  // Reminder rules: which message runs when, on which channel, and what it
+  // says. Config by every measure — set once, revisited when something is
+  // wrong, no records arrive in it — and it sat in the sidebar for a year with
+  // its own comment calling it "the last of Settings". Knowledge went the other
+  // way, to the voice agent, because that is what the agent KNOWS rather than
+  // what the business does. Sits next to Hours on purpose: both answer "what
+  // happens automatically, and when".
+  { id: "reminders", key: "nav.reminders" },
   { id: "people", key: "staff.title" },
   // AI connectors live with the business, not in Settings: like People, a key
   // is a member of the team — it acts as a person and shows up in the feed
@@ -148,8 +152,13 @@ export function BusinessView() {
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
   const isOwner = settings.me.role !== "staff";
 
+  // Reminders is a rules TABLE and carries its own max-w-5xl; nested inside the
+  // 3xl the cards want, the outer clamp wins and the table loses two columns
+  // of room. The container widens for it rather than the table shrinking.
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div
+      className={`mx-auto space-y-4 ${section === "reminders" ? "max-w-5xl" : "max-w-3xl"}`}
+    >
       <div className="flex flex-wrap items-center gap-1">
         {SECTIONS.map((entry) => (
           <SectionChip
@@ -174,7 +183,7 @@ export function BusinessView() {
           <FieldsCard isOwner={isOwner} />
         </>
       )}
-      {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
+      {section === "reminders" && <RemindersView />}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
       {section === "ai" && <McpCard site={resolveSiteUrl()} />}
       {section === "activity" && <ActivityCard />}
