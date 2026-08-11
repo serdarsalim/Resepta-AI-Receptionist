@@ -60,7 +60,7 @@ function CallHistory() {
           border. */}
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("calls.caller")}</th>
                 <th className="px-3 py-2 font-medium">{t("calls.when")}</th>
@@ -80,12 +80,12 @@ function CallHistory() {
                       <td className="whitespace-nowrap px-3 py-2 font-medium">
                         {c.customerName || c.fromNumber || t("calls.unknown")}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                      <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted-strong)]">
                         {/* The org's format, not the browser's: a Turkish
                             salon was reading "7/26/2026, 8:42:26 PM". */}
                         {formatDateTime(c.startedAt, language)}
                       </td>
-                      <td className="px-3 py-2 text-xs text-[var(--muted)]">
+                      <td className="px-3 py-2 text-xs text-[var(--muted-strong)]">
                         {fmtDuration(c.durationSec)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">

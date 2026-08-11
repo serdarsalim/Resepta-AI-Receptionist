@@ -490,7 +490,7 @@ export function AppointmentModal({
                       a short window, or with a conflict banner showing. It
                       currently happens not to clip, and "happens not to" is
                       what this repo keeps shipping and regretting. */}
-                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-customer">
+                  <label className="block text-xs font-medium" htmlFor="modal-customer">
                     {t("appointments.findCustomer")}
                     <input
                       id="modal-customer"
@@ -609,7 +609,7 @@ export function AppointmentModal({
                   aria-hidden={mode !== "new"}
                 >
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="block text-xs text-[var(--muted)]">
+                    <label className="block text-xs font-medium">
                       {t("customers.firstName")}
                       <input
                         ref={firstFieldRef}
@@ -622,12 +622,12 @@ export function AppointmentModal({
                         className="mt-1"
                       />
                     </label>
-                    <label className="block text-xs text-[var(--muted)]">
+                    <label className="block text-xs font-medium">
                       {t("customers.lastName")}
                       <input name="lastName" className="mt-1" />
                     </label>
                   </div>
-                  <label className="block text-xs text-[var(--muted)]" htmlFor="modal-phone">
+                  <label className="block text-xs font-medium" htmlFor="modal-phone">
                     {t("customers.phone")}
                     <PhoneInput
                       id="modal-phone"
@@ -636,7 +636,7 @@ export function AppointmentModal({
                       className="mt-1"
                     />
                   </label>
-                  <label className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                  <label className="flex items-start gap-2 text-xs font-medium">
                     <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
                     <span>{t("customers.consent")}</span>
                   </label>
@@ -646,7 +646,7 @@ export function AppointmentModal({
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs text-[var(--muted)]">
+            <label className="block text-xs font-medium">
               {t("appointments.when")}
               <input
                 type="datetime-local"
@@ -658,7 +658,7 @@ export function AppointmentModal({
                 }}
               />
             </label>
-            <label className="block text-xs text-[var(--muted)]">
+            <label className="block text-xs font-medium">
               {t("appointments.duration")}
               <input
                 type="number"
@@ -744,7 +744,7 @@ export function AppointmentModal({
               rows and a whole textarea's worth of height on two fields that
               are each one line of answer. */}
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs text-[var(--muted)]">
+            <label className="block text-xs font-medium">
               {staffLabel}
               <select
                 className="mt-1"
@@ -761,7 +761,7 @@ export function AppointmentModal({
                   ))}
               </select>
             </label>
-            <label className="block text-xs text-[var(--muted)]">
+            <label className="block text-xs font-medium">
               {t("appointments.notes")}
               {/* One row, and it grows as you type rather than reserving space
                   for words nobody has written. Most bookings carry no note at

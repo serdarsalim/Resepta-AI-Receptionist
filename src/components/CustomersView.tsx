@@ -591,7 +591,7 @@ export function CustomersView({
                   <col key={column.key} style={{ width: widthOf(column) }} />
                 ))}
               </colgroup>
-              <thead className="text-left text-[var(--muted)]">
+              <thead className="text-left text-[var(--muted-strong)]">
                 <tr>
                   <Th
                     label={t("customers.name")}
@@ -748,22 +748,22 @@ function NewCustomerSheet({ onClose }: { onClose: () => void }) {
         {/* Two names on one line: they are one answer to one question, and
             stacking them spends a row on a nine-character field. */}
         <div className="flex gap-2">
-          <label className="min-w-0 flex-1 text-xs text-[var(--muted)]">
+          <label className="min-w-0 flex-1 text-xs font-medium">
             {t("customers.firstName")}
             <input name="firstName" required autoFocus className="mt-1" />
           </label>
-          <label className="min-w-0 flex-1 text-xs text-[var(--muted)]">
+          <label className="min-w-0 flex-1 text-xs font-medium">
             {t("customers.lastName")}
             <input name="lastName" className="mt-1" />
           </label>
         </div>
 
-        <label className="block text-xs text-[var(--muted)]" htmlFor="new-customer-phone">
+        <label className="block text-xs font-medium" htmlFor="new-customer-phone">
           {t("customers.phone")}
           <PhoneInput id="new-customer-phone" name="phone" required className="mt-1" />
         </label>
 
-        <label className="block text-xs text-[var(--muted)]">
+        <label className="block text-xs font-medium">
           {t("customers.email")}
           <input name="email" type="email" className="mt-1" />
         </label>

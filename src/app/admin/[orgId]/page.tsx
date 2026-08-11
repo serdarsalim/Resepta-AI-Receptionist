@@ -83,7 +83,7 @@ function CopyId({ value }: { value: string }) {
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</div>
+      <div className="text-[11px] text-[var(--muted-strong)]">{label}</div>
       <div className="mt-0.5 truncate text-xs">{children}</div>
     </div>
   );

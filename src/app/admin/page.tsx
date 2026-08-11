@@ -117,7 +117,7 @@ export default function AdminPage() {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
               <tr>
                 <th className="px-3 py-2 font-medium">Business</th>
                 <th className="px-3 py-2 font-medium">Setup</th>
@@ -183,10 +183,10 @@ export default function AdminPage() {
                   <td className="px-3 py-2">
                     <Count value={org.stuck} tone="bad" />
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted)]">
+                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                     {org.upcomingAppointments}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted)]">
+                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                     {ago(org.lastActivityAt)}
                   </td>
                 </tr>

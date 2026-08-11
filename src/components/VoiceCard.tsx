@@ -367,7 +367,7 @@ export function VoiceCard({
               grab. min-w-full lets the table size to its content so the
               overflow-x-auto above actually has something to scroll. */}
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
@@ -827,7 +827,7 @@ export function VoiceCard({
               <>
                 <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
                   <table className="w-full min-w-[680px] text-sm">
-                    <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted)]">
+                    <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
                       <tr>
                         <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                         <th className="px-3 py-2 font-medium">{t("settings.voiceLanguage")}</th>
@@ -853,7 +853,7 @@ export function VoiceCard({
                             <td className="whitespace-nowrap px-3 py-2 font-medium">
                               {agent.name}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                            <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted-strong)]">
                               {agent.languages
                                 .map((tag) =>
                                   languageLabel(
@@ -864,7 +864,7 @@ export function VoiceCard({
                                 )
                                 .join(", ")}
                             </td>
-                            <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted)]">
+                            <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted-strong)]">
                               {agent.collects.length > 0 && (
                                 <span className="inline-flex items-center gap-2">
                                   {t("settings.voiceCollectsCount").replace(
@@ -879,7 +879,7 @@ export function VoiceCard({
                               )}
                             </td>
                             {pickerHasLines && (
-                              <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted)]">
+                              <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted-strong)]">
                                 {line
                                   ? line.nickname === line.number
                                     ? line.number

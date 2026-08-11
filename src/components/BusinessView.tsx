@@ -820,7 +820,7 @@ function FieldTableRow({
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
       >
-        <td className="pl-0.5 text-[var(--muted)]">
+        <td className="pl-0.5 text-[var(--muted-strong)]">
           <span
             draggable
             onDragStart={onDragStart}
@@ -1028,7 +1028,7 @@ function FieldsCard({ isOwner }: { isOwner: boolean }) {
             <col className="w-32" />
             <col className="w-10" />
           </colgroup>
-          <thead className="text-left text-xs text-[var(--muted)]">
+          <thead className="text-left text-xs text-[var(--muted-strong)]">
             <tr>
               <th aria-label={t("fields.reorder")} />
               <th className="py-2 pr-3 font-medium">{t("fields.label")}</th>
@@ -1843,7 +1843,7 @@ function AddPersonSheet({ onClose }: { onClose: () => void }) {
 
         {/* Optional, and labelled as such rather than left to be guessed at:
             an empty box under a required one reads as a field you forgot. */}
-        <label className="block text-xs text-[var(--muted)]">
+        <label className="block text-xs font-medium">
           {t("roster.emailOptional")}
           <div className="mt-1 flex gap-2">
             <input

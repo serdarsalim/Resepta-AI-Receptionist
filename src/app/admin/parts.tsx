@@ -169,7 +169,7 @@ function ActivityTable({ rows }: { rows: ActivityRow[] }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row._id} className="border-t border-[var(--border)]">
-              <td className="whitespace-nowrap px-3 py-1.5 text-[var(--muted)] tabular-nums">
+              <td className="whitespace-nowrap px-3 py-1.5 text-[var(--muted-strong)] tabular-nums">
                 {ago(row.at)} ago
               </td>
               <td className="whitespace-nowrap px-3 py-1.5">

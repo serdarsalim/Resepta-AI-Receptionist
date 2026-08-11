@@ -706,7 +706,7 @@ function UserMenu({
               {t("nav.account")}
             </button>
             <div className="border-t border-[var(--border)] pt-1.5">
-              <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted)]">
+              <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted-strong)]">
                 {t("menu.appearance")}
               </div>
               {THEME_OPTIONS.map(({ value, key, Icon }) => {
@@ -891,7 +891,7 @@ function WorkspaceSwitcher({
             style={{ position: "fixed", width: WORKSPACE_MENU_WIDTH, ...pos }}
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
           >
-            <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted)]">
+            <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted-strong)]">
               {t("workspace.switch")}
             </div>
             {data.workspaces.map((workspace) => (
@@ -965,7 +965,7 @@ function SidebarButton({
             `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
               collapsed ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]" : ""
             }`
-          : "font-medium text-[var(--muted)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+          : "font-medium text-[var(--muted-strong)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
       }`}
     >
       {/* Symbol carries the hue. Muted when idle so it accents rather than
