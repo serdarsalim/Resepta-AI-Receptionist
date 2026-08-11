@@ -75,11 +75,6 @@ const dictionary = {
   // the business's own word for this, and a salon owner does not think of the
   // salon as a workspace.
   "nav.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
-  // The sidebar group holding everything the agent DOES on your behalf: voice,
-  // its knowledge, reminders, campaigns. Turkish takes "Resepsiyon" rather than
-  // the literal "Ön büro" — a salon has a reception desk, not a front office,
-  // and it echoes the product's own name.
-  "nav.frontdesk": { tr: "Resepsiyon", en: "Front desk", de: "Empfang" },
   "nav.settings": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   "nav.menu": { tr: "Menü", en: "Menu", de: "Menü" },
   "nav.closeMenu": {
@@ -2135,11 +2130,6 @@ const dictionary = {
   // ChatGPT. Keys are per person, so this surface is open to staff too — the
   // backend scopes create to self and revoke-others to owners.
   "settings.ai": { tr: "Yapay zekâ", en: "AI", de: "KI" },
-  // The Business tab formerly labelled "AI". It holds connector keys, and a key
-  // is a member of the team that acts as a person — so it belongs beside Team
-  // under what the business IS, and "AI" was describing the vendor rather than
-  // the job. Nothing about the agent's behaviour lives here; that is Front desk.
-  "settings.access": { tr: "Erişim", en: "Access", de: "Zugriff" },
   "mcp.intro": {
     tr: "İşletmenizle Claude veya ChatGPT üzerinden konuşun: takvime bakın, müşteri arayın, not bırakın. Her ekip üyesi kendi anahtarıyla bağlanır ve yapılan her işlem etkinlik akışına onun adıyla yazılır.",
     en: "Talk to your business from Claude or ChatGPT: check the calendar, look up customers, leave notes. Each team member connects with their own key, and everything done shows up in the activity feed under their name.",

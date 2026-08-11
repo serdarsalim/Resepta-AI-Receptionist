@@ -19,6 +19,7 @@ import {
 import { Card } from "./Card";
 import { BusinessHoursCard } from "./RemindersView";
 import { McpCard } from "./McpCard";
+import { KnowledgeCard } from "./KnowledgeCard";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
@@ -55,7 +56,7 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue" | "people" | "ai" | "activity";
+type Section = "general" | "hours" | "catalogue" | "knowledge" | "people" | "ai" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
@@ -66,21 +67,14 @@ const SECTIONS: { id: Section; key: TranslationKey }[] = [
   // was a genuine scavenger hunt.
   { id: "hours", key: "settings.hours" },
   { id: "catalogue", key: "settings.catalogue" },
-  // Knowledge MOVED to Front desk (2026-08-12). It is what the agent knows, not
-  // a fact about the business, and keeping it here split the agent's behaviour
-  // across two nav levels. Its id must not come back: FrontDeskView owns
-  // "knowledge" now, and both views read the same ?section param.
+  // What the chat agent knows beyond the structured tables — prose only, by
+  // the rule in the card's own hint (docs/chat-agent.md).
+  { id: "knowledge", key: "knowledge.section" },
   { id: "people", key: "staff.title" },
-  // Connector keys live with the business, not with the agent: like People, a
-  // key is a member of the team — it acts as a person and shows up in the feed
-  // under their name. Labelled "Access" rather than "AI" because it answers who
-  // may act here, which is the People question. What the agent DOES is Front
-  // desk. The id stays "ai" so existing ?section=ai links keep landing.
-  { id: "ai", key: "settings.access" },
-  // The one deliberate exception to "Business is config": an audit log is a
-  // record that accumulates on its own, so by the rule it is work. It stays
-  // because it is admin-only and low traffic, and a log does not earn a sidebar
-  // row. If it ever gets opened daily, move it or fold it into Inbox.
+  // AI connectors live with the business, not in Settings: like People, a key
+  // is a member of the team — it acts as a person and shows up in the feed
+  // under their name.
+  { id: "ai", key: "settings.ai" },
   { id: "activity", key: "activity.title" },
 ];
 
@@ -180,6 +174,7 @@ export function BusinessView() {
           <FieldsCard isOwner={isOwner} />
         </>
       )}
+      {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
       {section === "ai" && <McpCard site={resolveSiteUrl()} />}
       {section === "activity" && <ActivityCard />}

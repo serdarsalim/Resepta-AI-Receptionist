@@ -29,20 +29,12 @@ export type TabId =
   | "appointments"
   | "customers"
   | "inbox"
-  | "frontdesk"
+  | "campaigns"
+  | "voice"
+  | "messages"
   | "revenue"
   | "business"
   | "account";
-
-// Retired sidebar entries, now sections inside Front desk. Kept as a map rather
-// than deleted: ?tab= is user-editable and bookmarkable, and localStorage holds
-// the last tab across the release that renamed these. Landing someone on the
-// calendar because their bookmark aged out is worse than one redirect.
-export const LEGACY_TABS: Record<string, { tab: TabId; section: string }> = {
-  voice: { tab: "frontdesk", section: "voice" },
-  messages: { tab: "frontdesk", section: "reminders" },
-  campaigns: { tab: "frontdesk", section: "campaigns" },
-};
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
@@ -121,11 +113,26 @@ const RevenueIcon = makeIcon(
   </>,
 );
 
+// A megaphone: one thing said to many people, which is exactly what separates
+// this from the Inbox above it.
+const CampaignsIcon = makeIcon(
+  <>
+    <path d="M3 11v2a1 1 0 0 0 1 1h2l4 3V7L6 10H4a1 1 0 0 0-1 1z" />
+    <path d="M14 8a4 4 0 0 1 0 8" />
+    <path d="M17 5a8 8 0 0 1 0 14" />
+  </>,
+);
+
 const BellIcon = makeIcon(
   <>
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
   </>,
+);
+
+// The handset without a person: the agent answers, nobody is held to the desk.
+const VoicePhoneIcon = makeIcon(
+  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
 );
 
 const NAV_TABS: {
@@ -134,22 +141,35 @@ const NAV_TABS: {
   Icon: (props: IconProps) => React.ReactElement;
   color: string;
 }[] = [
-  // The day, in the order you meet it: what is booked, who wrote in, who they
-  // are, what it earned. These four are the whole of the work zone, and they
-  // share one property nothing below them has — records arrive in them on their
-  // own, without anyone configuring anything.
-  {
-    id: "appointments",
-    key: "nav.appointments",
-    Icon: AppointmentsIcon,
-    color: "var(--brand)",
-  },
-  { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
   {
     id: "customers",
     key: "nav.customers",
     Icon: CustomersIcon,
     color: "#8b5cf6",
+  },
+  { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
+  // Beside Inbox, not under Business: both are places you send messages from,
+  // and a campaign is work rather than configuration.
+  {
+    id: "campaigns",
+    key: "campaign.title",
+    Icon: CampaignsIcon,
+    color: "#ec4899",
+  },
+  // Work, not config: calls arrive daily, the agent gets retuned weekly.
+  {
+    id: "voice",
+    key: "nav.voice",
+    Icon: VoicePhoneIcon,
+    color: "#10b981",
+  },
+  // The last of Settings: reminder rules and the WhatsApp connection, i.e.
+  // the messaging half of the product, below the phone half of it.
+  {
+    id: "messages",
+    key: "nav.reminders",
+    Icon: BellIcon,
+    color: "#6366f1",
   },
   {
     id: "revenue",
@@ -157,33 +177,25 @@ const NAV_TABS: {
     Icon: RevenueIcon,
     color: "#f59e0b",
   },
-  // Everything the agent does on your behalf, in ONE place: voice, its
-  // knowledge, reminders, campaigns. Those were four entries across two nav
-  // levels (Knowledge was inside Business), so "where do I change what the
-  // agent does" had four answers in a product that IS an AI front desk.
-  // Sections live in FrontDeskView; see the rule written at the top of it.
   {
-    id: "frontdesk",
-    key: "nav.frontdesk",
-    Icon: BellIcon,
-    color: "#6366f1",
+    id: "appointments",
+    key: "nav.appointments",
+    Icon: AppointmentsIcon,
+    color: "var(--brand)",
   },
 ];
 
-// What the business IS, below the rule: team, services, contact fields, hours,
-// access. It wears --foreground rather than a hue because it is not a place you
-// work, and the nav sorts on exactly that: above the rule, records arrive on
-// their own; below it, nothing happens until a person changes something.
+// Config is not a place you work, so it closes the nav in its own group
+// (Nudge's grammar). Both entries wear --foreground rather than a hue for the
+// same reason. Business is what the business IS (team, services, contact
+// fields); Settings is what it is CONNECTED to.
 //
 // The tab is "business", not "workspace": Fresha, Booksy, Square and Treatwell
 // all call this Business, and a salon owner does not think of the salon as a
 // workspace. "Workspace" stays only where it means the switcher between
 // several client businesses on one login.
-//
-// Settings is long gone. What the AGENT does went to Front desk above; what the
-// business IS stayed here. Those are the only two config destinations, and the
-// split is the whole point — the previous arrangement had agent behaviour in
-// both and nothing told you which to open.
+// Settings is gone — dissolved into the tabs above (voice, messages) and into
+// Business (AI connectors). One config destination remains.
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
@@ -1002,6 +1014,7 @@ export function AppShell({
   // tab appearing afterwards is the reward for having done it.
   const navTabs = NAV_TABS.filter((entry) => {
     if (entry.id === "revenue") return Boolean(settings?.org.revenueEnabled);
+    if (entry.id === "campaigns") return Boolean(settings?.whatsapp.connected);
     return true;
   });
   // ?tab=revenue on an org that has it switched off would render a tab with
@@ -1011,6 +1024,7 @@ export function AppShell({
   useEffect(() => {
     if (!settings) return;
     if (tab === "revenue" && !settings.org.revenueEnabled) onTab("appointments");
+    if (tab === "campaigns" && !settings.whatsapp.connected) onTab("appointments");
   }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
