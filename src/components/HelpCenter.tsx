@@ -194,7 +194,7 @@ const CATEGORIES: Category[] = [
         title: "Set confirmation and reminder rules",
         summary: "Choose when each message runs, which channel it uses, and what it says.",
         steps: [
-          "Open Reminders. New workspaces begin with a confirmation and one 24-hour reminder.",
+          "Open Front desk from the sidebar, then Reminders. New workspaces begin with a confirmation and one 24-hour reminder.",
           "Add or open a rule, then choose its timing and WhatsApp, email, or both.",
           "Edit the wording and use the preview to check customer details and appointment tokens.",
           "Pause a rule when it should stop sending without deleting its setup.",
@@ -221,7 +221,7 @@ const CATEGORIES: Category[] = [
         steps: [
           "Open Inbox to work with WhatsApp and email replies in the same customer context.",
           "Reply from the connected channel and use the attention marker to find conversations that still need someone.",
-          "Open Campaigns when a WhatsApp number is connected and choose an approved template for outreach.",
+          "Open Front desk, then Campaigns, once a WhatsApp number is connected, and choose an approved template for outreach.",
           "Review send outcomes on the customer timeline instead of treating the campaign as a separate list.",
         ],
         keywords: ["inbox", "reply", "campaign", "email", "conversation", "failed"],
