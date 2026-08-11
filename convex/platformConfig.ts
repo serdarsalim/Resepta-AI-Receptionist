@@ -54,6 +54,7 @@ export const status = query({
     openaiApiKey: v.union(v.string(), v.null()),
     chatAgentProvider: v.union(v.literal("anthropic"), v.literal("openai")),
     chatAgentModel: v.union(v.string(), v.null()),
+    chatAgentDisabled: v.boolean(),
     retellApiKey: v.union(v.string(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
@@ -86,6 +87,7 @@ export const status = query({
       openaiApiKey: openaiKey ? maskSecret(openaiKey) : null,
       chatAgentProvider: provider === "openai" ? ("openai" as const) : ("anthropic" as const),
       chatAgentModel: (await platformValue(ctx, "chatAgentModel"))?.trim() || null,
+      chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),

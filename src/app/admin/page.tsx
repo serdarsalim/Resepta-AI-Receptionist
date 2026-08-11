@@ -18,6 +18,7 @@
 // page has exactly one reader and translating it would mean maintaining a
 // second copy of every operational term for nobody.
 
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
@@ -34,6 +35,11 @@ export default function AdminPage() {
   const deployment = useQuery(api.platform.deploymentHealth, allowed ? {} : "skip");
   const mail = useQuery(api.platformConfig.status, allowed ? {} : "skip");
   const setConfig = useMutation(api.platformConfig.set);
+  // Two rooms, not one scroll: the tenant list is what the operator opens
+  // this page FOR, and deployment settings are visited a handful of times
+  // ever. Living below the table meant the settings had no address and the
+  // table had a basement. Same pill pattern as the org detail page.
+  const [tab, setTab] = useState<"businesses" | "platform">("businesses");
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -55,11 +61,36 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-6xl p-6">
       <header className="mb-4 flex items-baseline justify-between">
-        <h1 className="text-lg font-semibold">Fleet</h1>
-        <p className="text-xs text-[var(--muted)]">
-          {fleet.length} {fleet.length === 1 ? "org" : "orgs"} · noisiest first
-        </p>
+        <h1 className="text-lg font-semibold">Resepta admin</h1>
+        {tab === "businesses" && (
+          <p className="text-xs text-[var(--muted)]">
+            {fleet.length} {fleet.length === 1 ? "org" : "orgs"} · noisiest first
+          </p>
+        )}
       </header>
+
+      <div className="mb-4 flex gap-1">
+        {(
+          [
+            { id: "businesses" as const, label: "Businesses" },
+            { id: "platform" as const, label: "Platform" },
+          ]
+        ).map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setTab(entry.id)}
+            aria-current={tab === entry.id ? "page" : undefined}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              tab === entry.id
+                ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
+                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
 
       {/* One line for the whole deployment. Email is operator plumbing that
           arrives for every org at once, so a missing key is one fact stated
@@ -67,29 +98,21 @@ export default function AdminPage() {
       {deployment && !deployment.emailLane && (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
           No email lane on this deployment, so nothing sends by email for any
-          org — reminders, invites and your own failure alerts included. Set the
-          Resend key below.
+          org — reminders, invites and your own failure alerts included.{" "}
+          {tab !== "platform" && (
+            <button
+              type="button"
+              onClick={() => setTab("platform")}
+              className="font-medium underline hover:no-underline"
+            >
+              Set the Resend key →
+            </button>
+          )}
         </p>
       )}
 
-      {/* Who else can see this page. Printed because the answer lives in an
-          env var on the Convex deployment, which means the only way to check
-          it was to go and read the deployment — and the question ("wait, which
-          address is the operator here?") comes up while you are already
-          looking at this page. There is no add button on purpose: the list is
-          out of the app's reach by design, and that is what makes it safe.
-          See convex/lib/platformAuth.ts. */}
-      {deployment && deployment.platformAdmins.length > 0 && (
-        <p className="mb-4 text-xs text-[var(--muted)]">
-          Platform admins: {deployment.platformAdmins.join(" · ")}
-          <span className="ml-2 opacity-70">
-            — set with{" "}
-            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>
-          </span>
-        </p>
-      )}
 
-      {fleet.length === 0 ? (
+      {tab === "businesses" && (fleet.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">No orgs on this deployment yet.</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
@@ -171,15 +194,28 @@ export default function AdminPage() {
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
-      {/* Deployment settings, below the fleet because the fleet is why the
-          operator opened this page. One Resend account serves every salon —
-          that is what lets a salon send mail without owning a domain — so it
-          is configured here rather than per tenant, and rather than in an env
-          var only a terminal can reach. */}
-      {mail && (
-        <div className="mt-6">
+      {/* Deployment settings. One Resend account and one AI key serve every
+          salon — configured here rather than per tenant, and rather than in
+          an env var only a terminal can reach. Per-org overrides live on each
+          business's own Setup tab. */}
+      {tab === "platform" && deployment && deployment.platformAdmins.length > 0 && (
+        <p className="mb-4 text-xs text-[var(--muted)]">
+          {/* Printed because the answer otherwise lives in an env var only a
+              terminal can read — and the question ("which address is the
+              operator?") comes up while looking at this page. No add button
+              on purpose: the allowlist being out of the app's reach is what
+              makes it safe. See convex/lib/platformAuth.ts. */}
+          Platform admins: {deployment.platformAdmins.join(" · ")}
+          <span className="ml-2 opacity-70">
+            — set with{" "}
+            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>
+          </span>
+        </p>
+      )}
+      {tab === "platform" && mail && (
+        <div className="space-y-4">
           <Section
             title="Email (Resend)"
             description="One account and one verified domain for the whole deployment. Every salon sends from it unless they set a domain of their own."
@@ -294,6 +330,33 @@ export default function AdminPage() {
               }
               onSave={(value) => setConfig({ key: "chatAgentModel", value })}
             />
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="text-sm font-medium">Kill switch</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void setConfig({
+                      key: "chatAgentDisabled",
+                      value: mail.chatAgentDisabled ? "" : "true",
+                    })
+                  }
+                  className={`rounded-lg px-2 py-1 text-xs ${
+                    mail.chatAgentDisabled
+                      ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+                  }`}
+                >
+                  {mail.chatAgentDisabled
+                    ? "Every agent is stopped — click to re-enable"
+                    : "Stop every org&apos;s chat agent"}
+                </button>
+                <span className="text-xs text-[var(--muted)]">
+                  Immediate, platform-wide, reversible. Also visible on each
+                  business&apos;s Assistant tab.
+                </span>
+              </div>
+            </div>
             <SecretRow
               label="Retell default key"
               hint={
