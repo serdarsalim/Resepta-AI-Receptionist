@@ -4,8 +4,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { LANGUAGES } from "@/lib/i18n";
+import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useToast } from "@/lib/ToastProvider";
 import { Card } from "./Card";
+import { McpCard } from "./McpCard";
 import { InlineEditValue } from "./RecordField";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
@@ -126,6 +128,14 @@ export function AccountView() {
           />
         </div>
       </Card>
+
+      {/* Moved here from Business (2026-08-12). An MCP key is per PERSON, not
+          per salon: McpCard is deliberately outside the owner-only fieldset,
+          a stylist mints and revokes their own, and only an owner can revoke
+          somebody else's. Filed under Business it read as salon configuration
+          that an owner administers, which is the opposite of how it works.
+          This page is the one that means "me, in this workspace". */}
+      <McpCard site={resolveSiteUrl()} />
     </div>
   );
 }

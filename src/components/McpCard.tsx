@@ -54,11 +54,14 @@ export function McpCard({ site }: { site: SiteUrl }) {
 
   const when = (ms: number) => new Date(ms).toLocaleDateString();
 
+  // Titled since the move to Account: in Business the chip strip named this
+  // card, and here it is the third card in a stack with nothing to name it.
+  // The intro moved onto the title's (i) at the same time, which is where
+  // explanatory copy belongs. A two-line paragraph at the top of a card is the
+  // verbose card intro the design language rules out.
   return (
-    <Card>
+    <Card title={t("settings.ai")} tip={t("mcp.intro")}>
       <div className="space-y-4">
-        <p className="text-sm text-[var(--muted)]">{t("mcp.intro")}</p>
-
         {refused && (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
             {t("mcp.actingAsCannotMint")}

@@ -175,10 +175,12 @@ export function VoiceView() {
             type="button"
             onClick={() => setSection(entry.id)}
             aria-current={section === entry.id ? "page" : undefined}
+            // --muted-strong, matching Business's strip: a chip you read to
+            // navigate is the middle tier, never the timestamp grey.
             className={`rounded-full px-3 py-1 text-sm transition-colors ${
               section === entry.id
                 ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
             }`}
           >
             {entry.label}

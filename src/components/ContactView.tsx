@@ -207,7 +207,7 @@ export function ContactView({
               className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
                 mobilePane === pane
                   ? "bg-[var(--accent)]/10 text-[var(--accent)]"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
               }`}
             >
               {t(key)}

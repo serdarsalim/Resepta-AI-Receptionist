@@ -17,10 +17,8 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { Card } from "./Card";
-import { McpCard } from "./McpCard";
 import { BusinessHoursCard } from "./RemindersView";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
-import { resolveSiteUrl } from "@/lib/siteUrl";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
@@ -55,7 +53,7 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue" | "people" | "ai" | "activity";
+type Section = "general" | "hours" | "catalogue" | "people" | "activity";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
@@ -67,10 +65,10 @@ const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "hours", key: "settings.hours" },
   { id: "catalogue", key: "settings.catalogue" },
   { id: "people", key: "staff.title" },
-  // AI connectors live with the business, not in Settings: like People, a key
-  // is a member of the team — it acts as a person and shows up in the feed
-  // under their name.
-  { id: "ai", key: "settings.ai" },
+  // AI moved to Account (2026-08-12). An MCP key is minted by and revoked by
+  // one PERSON, so it was never a fact about the salon; the earlier reasoning
+  // here ("a key is a member of the team") described what the feed shows, not
+  // who owns the credential. Do not take the section id back.
   { id: "activity", key: "activity.title" },
 ];
 
@@ -88,10 +86,13 @@ function SectionChip({
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
+      // Idle chips sit on --muted-strong, not --muted. This strip is read to
+      // NAVIGATE, which is the middle tier's whole job; --muted is the
+      // timestamp grey and put a primary control at the WCAG AA floor.
       className={`rounded-full px-3 py-1 text-sm transition-colors ${
         active
           ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
       }`}
     >
       {label}
@@ -236,7 +237,6 @@ export function BusinessView() {
         </>
       )}
       {section === "people" && <PeopleCard isOwner={isOwner} />}
-      {section === "ai" && <McpCard site={resolveSiteUrl()} />}
       {section === "activity" && <ActivityCard />}
     </div>
   );
