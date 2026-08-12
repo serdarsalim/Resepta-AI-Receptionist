@@ -209,13 +209,34 @@ export function PromptEditor({
   }, [value, variables]);
 
   // Applied to BOTH layers, or the pills drift off the words they mark.
-  // The multiline editor breathes: a wall of instructions flush against the
-  // border reads as crowded, and the highlight overlay below shares this
-  // class, so the padding must live here once or the coloured variable chips
-  // drift off the text they sit under. The single-line variant (opening line)
-  // keeps input-sized padding.
-  const fieldClass = `w-full rounded-lg border text-xs leading-relaxed ${
-    singleLine ? "px-2 py-1.5" : "px-3.5 py-3 font-mono"
+  //
+  // EVERYTHING THAT DECIDES WHERE A LINE BREAKS BELONGS IN HERE. The two
+  // layers only stay aligned while they wrap at exactly the same character,
+  // and one line of divergence anywhere puts every line below it one row out
+  // — the caret then sits on one line while typing edits the one above.
+  //
+  // The scrollbar is the one that bit. A textarea long enough to scroll grows
+  // one INSIDE its content box, so it wrapped against 595px while the mirror,
+  // overflow-hidden and barless, wrapped against 610. Measured, not assumed —
+  // and the same measurement showed the two still landing on equal line counts
+  // for one sample of this prompt, so the 15px is a divergence waiting for
+  // text that breaks near the boundary rather than a guaranteed one.
+  // stable-gutter reserves the track in BOTH layers, which closes it either
+  // way.
+  //
+  // thin-scroll is the in-card rail the inbox and every other pane already
+  // use: a 3px hairline that grows to 6px under the pointer, against Chrome's
+  // default 15px slab. It also shrinks the reserved gutter to 9px, so the
+  // alignment fix costs almost no width.
+  //
+  // Neither on the single line: the opening line is field-sized to its content
+  // and never scrolls, so a reserved gutter there is just a gap on the right.
+  //
+  // whitespace and overflow-wrap sit here rather than on the mirror alone for
+  // the same reason — a textarea's defaults are close enough to be invisible
+  // until a long unbroken word disagrees.
+  const fieldClass = `w-full rounded-lg border text-xs leading-relaxed whitespace-pre-wrap break-words ${
+    singleLine ? "px-2 py-1.5" : "px-3.5 py-3 font-mono thin-scroll stable-gutter"
   }`;
 
   return (
@@ -227,7 +248,7 @@ export function PromptEditor({
         <div
           ref={mirrorRef}
           aria-hidden
-          className={`${fieldClass} pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border-transparent`}
+          className={`${fieldClass} pointer-events-none absolute inset-0 overflow-hidden border-transparent`}
         >
           {renderTokens(value)}
           {/* Stops a trailing blank line collapsing out of the mirror. */}
