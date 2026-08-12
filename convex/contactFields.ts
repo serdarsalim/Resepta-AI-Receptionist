@@ -42,6 +42,38 @@ export const list = query({
   },
 });
 
+// Which identity columns the voice agent may not write. Its own query rather
+// than a field on list: list's return is the fields array everywhere, and
+// callers that do not render the identity rows should not learn org settings.
+export const identityLocks = query({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    return org?.voiceLockedIdentity ?? [];
+  },
+});
+
+// The identity rows' half of the same toggle updateField gives custom rows.
+export const setIdentityLock = mutation({
+  args: {
+    key: v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
+    locked: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { key, locked }) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    const current = new Set(org.voiceLockedIdentity ?? []);
+    if (locked) current.add(key);
+    else current.delete(key);
+    await ctx.db.patch(orgId, { voiceLockedIdentity: [...current] });
+    return null;
+  },
+});
+
 export const create = mutation({
   args: {
     label: v.string(),

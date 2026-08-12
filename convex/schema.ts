@@ -292,6 +292,15 @@ export default defineSchema({
     // This is a PREFERENCE, unlike the lane selector deliberately absent
     // above: WhatsApp-vs-email is a real decision the salon owns, whereas
     // cloud-vs-shop-phone is plumbing read off what is configured.
+    // Identity columns the voice agent may NOT write, chosen in Business →
+    // Fields. Phone is not listed because it is not a choice: callers are
+    // matched by it. Unset means none locked — a receptionist that can
+    // correct a misspelt name is the default, not the upgrade.
+    voiceLockedIdentity: v.optional(
+      v.array(
+        v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
+      ),
+    ),
     messageChannel: v.optional(
       v.union(v.literal("whatsapp"), v.literal("email"), v.literal("both")),
     ),

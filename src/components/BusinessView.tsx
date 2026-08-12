@@ -728,10 +728,10 @@ const FIELD_SOURCES: { id: FieldSource; key: TranslationKey }[] = [
 // that number, and a call that could rewrite its own match key would detach
 // the record from the line it arrived on.
 const SYSTEM_FIELDS = [
-  { labelKey: "customers.firstName", typeKey: "fields.type.text", key: "firstname", voice: true },
-  { labelKey: "customers.lastName", typeKey: "fields.type.text", key: "lastname", voice: true },
+  { labelKey: "customers.firstName", typeKey: "fields.type.text", key: "firstname" as const, voice: true },
+  { labelKey: "customers.lastName", typeKey: "fields.type.text", key: "lastname" as const, voice: true },
   { labelKey: "customers.phone", typeKey: "fields.type.phone", key: "phone", voice: false },
-  { labelKey: "customers.email", typeKey: "fields.type.email", key: "email", voice: true },
+  { labelKey: "customers.email", typeKey: "fields.type.email", key: "email" as const, voice: true },
 ] as const;
 
 // Backend refusals said as sentences. Anything unmapped falls back to the
@@ -936,6 +936,8 @@ function FieldTableRow({
 export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
+  const identityLocks = useQuery(api.contactFields.identityLocks, {});
+  const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
   const usage = useQuery(api.retell.fieldUsage, {});
   const createField = useMutation(api.contactFields.create);
   const updateField = useMutation(api.contactFields.update);
@@ -1021,11 +1023,38 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   <code className="block truncate font-mono text-xs">{field.key}</code>
                 </td>
                 <td className="py-2 pr-3 text-xs">{t(field.typeKey)}</td>
-                <td
-                  className="py-2 pr-3 text-xs"
-                  title={field.voice ? undefined : t("fields.phoneLockedHint")}
-                >
-                  {t(field.voice ? "fields.source.voice" : "fields.source.manual")}
+                <td className="py-2 pr-3 text-xs">
+                  {field.voice ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void setIdentityLock({
+                          key: field.key,
+                          locked: !(identityLocks ?? []).includes(field.key),
+                        })
+                      }
+                      title={t(
+                        (identityLocks ?? []).includes(field.key)
+                          ? "fields.unlockHint"
+                          : "fields.lockHint",
+                      )}
+                      className={
+                        (identityLocks ?? []).includes(field.key)
+                          ? "rounded px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                          : "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-100"
+                      }
+                    >
+                      {t(
+                        (identityLocks ?? []).includes(field.key)
+                          ? "fields.source.manual"
+                          : "fields.source.voice",
+                      )}
+                    </button>
+                  ) : (
+                    <span title={t("fields.phoneLockedHint")}>
+                      {t("fields.source.manual")}
+                    </span>
+                  )}
                 </td>
                 <td />
               </tr>

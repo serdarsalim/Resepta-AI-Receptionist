@@ -803,10 +803,14 @@ export const beforeCallContext = internalQuery({
         ];
         return parts.join(", ");
       })(),
+      // Identity keys drop out when the salon locked them — the write list
+      // must match what the gate will accept or the agent invents excuses.
+      // They stay on the card above either way: the lock is a WRITE lock, and
+      // withholding the caller's own name would break the greeting.
       information: [
-        "firstname",
-        "lastname",
-        "email",
+        ...["firstname", "lastname", "email"].filter(
+          (key) => !(org.voiceLockedIdentity ?? []).includes(key as "email"),
+        ),
         ...fields
           .filter((field) => field.source === "voice")
           .map((field) => field.key),
@@ -2090,6 +2094,21 @@ export async function applyVoiceContactValues(
     .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
     .collect();
   const byKey = new Map(fields.map((field) => [field.key, field]));
+  // Enforced HERE, not in each caller, so the live save and the post-call
+  // reconciliation cannot disagree about what locked means.
+  const lockedIdentity = new Set(
+    (await ctx.db.get(args.orgId))?.voiceLockedIdentity ?? [],
+  );
+  if (args.identity) {
+    for (const key of Object.keys(args.identity)) {
+      const canonical = args.identity[key].field === "firstName"
+        ? "firstname"
+        : args.identity[key].field === "lastName"
+          ? "lastname"
+          : "email";
+      if (lockedIdentity.has(canonical)) delete args.identity[key];
+    }
+  }
 
   const custom = { ...(customer.custom ?? {}) };
   const identityPatch: { firstName?: string; lastName?: string; email?: string } = {};
