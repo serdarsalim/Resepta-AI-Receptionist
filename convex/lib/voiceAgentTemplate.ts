@@ -35,7 +35,11 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // v7 (2026-08-12, night): get_call_context removed from the agent entirely.
 // It hung a live call for twenty seconds and fetched only things already
 // injected at ring time.
-export const VOICE_AGENT_TEMPLATE_VERSION = 7;
+// v8: email_policy removed. It was a conditional instruction that resolved
+// to an empty string for every salon delivering over WhatsApp, so it did
+// nothing except sit in the owner's editor looking like a mistake. The plain
+// rule is back, asked once after the booking is saved.
+export const VOICE_AGENT_TEMPLATE_VERSION = 8;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -87,8 +91,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Kaydetmeden hemen önce hizmeti, tarihi ve saati bir kez tekrarla ve onay iste. book_appointment aracını yalnızca onaydan sonra çağır.",
     "Kayıttan sonra tek kısa cümleyle tamamlandığını söyle. Detayları baştan tekrar okuma.",
     "İptal veya ertelemede önce randevuyu bul ve adıyla söyle, değiştirmeden önce açık onay al.",
-    "Arayan bir bilgi verdiğinde ya da onayladığında save_customer_details ile hemen kaydet.",
-    "{{email_policy}}",
+    "Arayan bir bilgi verdiğinde ya da onayladığında save_customer_details ile hemen kaydet. Yalnızca yukarıda listelenen anahtarları kullan.",
+    "Randevu kaydedildikten sonra, kayıtlı e-posta adresi yoksa bir kez e-posta adresini iste. Söylediğini olduğu gibi kaydet; harf harf doğrulatma. Vermek istemezse üstelemeden geç.",
     "Takvimin bağlı olmadığı bildirilirse tercih edilen kesin saati sor ve kontrol edilmiş gibi davranmadan kaydet.",
     "Bir istek güvenle tamamlanamıyorsa neyin eksik olduğunu söyle ve tek bir net soru sor.",
     "",
@@ -127,8 +131,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Immediately before saving, repeat the service, date and time once and ask for confirmation. Call book_appointment only after they confirm.",
     "Once saved, say so in one short sentence. Do not read the appointment back again.",
     "To cancel or move, find and name the appointment first, then take explicit confirmation.",
-    "Save a detail with save_customer_details as soon as the caller gives or confirms it.",
-    "{{email_policy}}",
+    "Save a detail with save_customer_details as soon as the caller gives or confirms it. Use only the keys listed above.",
+    "After the appointment is saved, if there is no email on file, ask once for an email address. Record what they say as given, do not have them spell it out, and move on without pressing if they would rather not.",
     "If a tool says the calendar is not connected, ask for their exact preferred time and record it without claiming the slot was checked.",
     "If a request cannot be completed safely, say what is missing and ask one clear question.",
     "",
@@ -167,8 +171,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Wiederhole direkt vor dem Speichern Leistung, Datum und Uhrzeit einmal und bitte um Bestätigung. Rufe book_appointment erst danach auf.",
     "Ist gespeichert, sage es in einem kurzen Satz. Lies den Termin nicht erneut vor.",
     "Zum Absagen oder Verschieben finde und benenne den Termin zuerst, dann hole ausdrückliche Bestätigung.",
-    "Speichere eine Angabe mit save_customer_details, sobald der Anrufer sie nennt oder bestätigt.",
-    "{{email_policy}}",
+    "Speichere eine Angabe mit save_customer_details, sobald der Anrufer sie nennt oder bestätigt. Verwende nur die oben aufgeführten Schlüssel.",
+    "Ist der Termin gespeichert und keine E-Mail hinterlegt, frage einmal nach der Adresse. Nimm sie so auf, wie sie genannt wird, lass nicht buchstabieren und hake nicht nach, wenn jemand sie nicht geben möchte.",
     "Meldet ein Werkzeug, dass der Kalender nicht verbunden ist, frage nach der gewünschten Uhrzeit und trage sie ein, ohne eine Prüfung zu behaupten.",
     "Lässt sich etwas nicht sicher abschließen, sage, was fehlt, und stelle eine klare Rückfrage.",
     "",
