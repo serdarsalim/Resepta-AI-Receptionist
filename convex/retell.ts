@@ -1334,8 +1334,9 @@ export const runtimeCallContext = internalQuery({
         time: `${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}`,
         timezone: org.timezone,
         spoken: spokenDateTime(nowMs, org.timezone, org.language),
-        note:
-          "Local date and time at the business right now. Resolve every relative time the caller says — today, tomorrow, next Tuesday, 5pm — against this, and book with the full local date and time.",
+        // Terse on purpose: this note rides along in every later turn, and the
+        // prompt already carries the same rule once.
+        note: "Business local time now. Resolve relative times against this.",
       },
       caller: customer
         ? {
@@ -1424,7 +1425,10 @@ export const runtimeCallContext = internalQuery({
         .map((service) => ({
           key: serviceKey(service),
           name: service.name,
-          durationMinutes: service.durationMinutes,
+          // Spoken form only. The numeric minutes were the agent's to add up,
+          // and book_appointment now tells it not to — the visit's length is
+          // worked out server side. Dropping them takes a field off every
+          // service on every turn this result survives into.
           durationSpoken: spokenDuration(service.durationMinutes, org.language),
           // SPOKEN, not written — lib/speech, same wording as the ring-time
           // list in beforeCallContext. The inline Intl call this replaces got

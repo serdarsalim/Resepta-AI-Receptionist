@@ -48,11 +48,22 @@ const TOOLS: ToolDef<ActionCtx, Who>[] = [
     handler: async (ctx, args, who) => {
       const phone = str(args, "phone");
       if (!phone) throw new Error("phone is required");
-      return await ctx.runQuery(internal.retell.runtimeCallContext, {
+      const context = await ctx.runQuery(internal.retell.runtimeCallContext, {
         orgId: who.orgId,
         retellAgentId: who.retellAgentId,
         phone,
       });
+      // Stringified HERE rather than left to toolContent, which pretty-prints
+      // with two-space indentation. That is right for the office MCP, whose
+      // results a person may well end up reading, and wrong down a phone line:
+      // this result stays in the conversation and is re-sent on every turn
+      // that follows, so the indentation is a tax charged once per turn for
+      // the rest of the call. Measured on a real one — 4141 characters, of
+      // which 1225 were whitespace.
+      //
+      // toolContent passes a string through untouched, so this needs no change
+      // to the vendored protocol file that both apps share.
+      return JSON.stringify(context);
     },
   },
   {
