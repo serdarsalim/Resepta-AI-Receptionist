@@ -1221,34 +1221,44 @@ const dictionary = {
     en: "No conversations yet. When a customer writes or calls, it lands here.",
     de: "Noch keine Unterhaltungen. Sobald ein Kunde schreibt oder anruft, sehen Sie es hier.",
   },
-  "inbox.needsReply": {
-    tr: "Yanıt bekliyor",
-    en: "Needs reply",
-    de: "Antwort offen",
-  },
-  // The sidebar badge and the row dot say the same thing, so they share a
-  // string: somebody still has to look at this.
+  // The sidebar badge. It counts mail that arrived since this person last had
+  // the tab open, which is a different question from the row markers below:
+  // this one is "there is something new in there", they are "this one is why".
   "inbox.needsAttention": {
-    tr: "İlgi bekliyor",
-    en: "Needs attention",
-    de: "Wartet auf Sie",
-  },
-  "inbox.failedSend": {
-    tr: "Gönderilemedi",
-    en: "Failed to send",
-    de: "Nicht gesendet",
+    tr: "Yeni mesaj var",
+    en: "New messages",
+    de: "Neue Nachrichten",
   },
   "inbox.search": {
     tr: "Konuşmalarda ara",
     en: "Search conversations",
     de: "Unterhaltungen durchsuchen",
   },
-  "inbox.dismiss": {
-    tr: "İlgilenildi olarak işaretle",
-    en: "Mark as handled",
-    de: "Als erledigt markieren",
+  // Row marker, three states in one control. The labels name the STATE for a
+  // screen reader; the hints add what a click will do, because the two differ
+  // (clicking grey pins it, clicking green unpins).
+  "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
+  "inbox.unseen": { tr: "Yeni mesaj", en: "New reply", de: "Neue Nachricht" },
+  "inbox.notPinned": {
+    tr: "Sabitlenmedi",
+    en: "Not pinned",
+    de: "Nicht angeheftet",
   },
-  "inbox.restore": { tr: "Geri getir", en: "Bring back", de: "Zurückholen" },
+  "inbox.pinnedHint": {
+    tr: "Yanıtlamanız için sabitlendi. Kaldırmak için tıklayın",
+    en: "Pinned for you to answer. Click to unpin",
+    de: "Zum Beantworten angeheftet. Zum Lösen klicken",
+  },
+  "inbox.unseenHint": {
+    tr: "Yeni mesaj. Sonrası için sabitlemek üzere tıklayın",
+    en: "New reply. Click to pin it for later",
+    de: "Neue Nachricht. Zum Merken anheften",
+  },
+  "inbox.pinHint": {
+    tr: "Sonrası için sabitlemek üzere tıklayın",
+    en: "Click to pin this for later",
+    de: "Zum Merken anheften",
+  },
   "inbox.openContact": {
     tr: "Müşteriyi aç",
     en: "Open contact",

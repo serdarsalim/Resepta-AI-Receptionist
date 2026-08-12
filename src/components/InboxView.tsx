@@ -11,9 +11,8 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
-import { FeedIcon, CHANNELS } from "./FeedIcon";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
-import { FeedFilterPills, CHANNEL_LABEL } from "./FeedFilterPills";
+import { FeedFilterPills } from "./FeedFilterPills";
 
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -32,13 +31,36 @@ export function InboxView({
 }) {
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
-  const setAttention = useMutation(api.messages.setAttention);
+  const setInboxPin = useMutation(api.messages.setInboxPin);
+  const markInboxSeen = useMutation(api.messages.markInboxSeen);
+  const markInboxLeft = useMutation(api.messages.markInboxLeft);
   const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.
   const [filter, setFilter] = useState<FeedFilter>("all");
+
+  // Clear the SIDEBAR dot. This view only mounts while the Inbox tab is open,
+  // so mounting IS "the user is looking at it". Re-runs when the newest inbound
+  // moves, so mail arriving while they sit here counts as seen rather than
+  // re-lighting the dot behind them.
+  const newestInboundAt = Math.max(
+    0,
+    ...(conversations ?? []).map((c) => c.lastInboundAt),
+  );
+  useEffect(() => {
+    void markInboxSeen({}).catch(() => {});
+  }, [markInboxSeen, newestInboundAt]);
+  // Grey's boundary, stamped on the way OUT — this is what makes a reply show
+  // once and then go quiet. Separate clock from the sidebar's above: a boundary
+  // that advanced on arrival would clear every grey marker before the reader
+  // had a chance to read the row it was on. Empty deps: unmount only.
+  useEffect(() => {
+    return () => {
+      void markInboxLeft({}).catch(() => {});
+    };
+  }, [markInboxLeft]);
 
   // Select once, when the list first arrives. Behind a ref so the mobile Back
   // action can return to the list without being immediately overridden.
@@ -60,7 +82,20 @@ export function InboxView({
   return (
     // h-full, not flex-1: `main` in the shell is a block, so there's no flex
     // context to grow into — the height comes from the parent's resolved box.
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    //
+    // max-w-6xl is Nudge's page cap, and the reason the rows here were wider
+    // than its rows despite an identical 2fr/3fr split: Nudge wraps every view
+    // in `max-w-6xl w-full mx-auto`, Resepta's shell lets content run the full
+    // width of `main`. Measured at a 1680px viewport, that was a 549px list
+    // against Nudge's 462px. Kept local to the Inbox rather than moved into
+    // AppShell because the calendar grid and the customers table are built to
+    // spend whatever width they are given; a master-detail pane is not.
+    // The lg:px-6 is part of the measurement, not decoration: Nudge's cap is
+    // `max-w-6xl px-6`, so its content settles at 1224 - 51 = 1173 and its list
+    // at 462. Capping without the padding left this 20px wide. Gated to lg
+    // because the shell's own p-4 already pads the one-column phone layout, and
+    // stacking both would eat the row.
+    <div className="mx-auto flex h-full w-full min-h-0 min-w-0 max-w-6xl flex-col lg:px-6">
       <div
         className={`grid min-h-0 min-w-0 flex-1 gap-4 ${
           active
@@ -106,8 +141,8 @@ export function InboxView({
                   };
                   return (
                     <li key={c.customerId}>
-                      {/* A div, not a button: it holds the channel buttons, and
-                          a button can't nest inside a button. */}
+                      {/* A div, not a button: it holds the pin toggle, and a
+                          button can't nest inside a button. */}
                       <div
                         role="button"
                         tabIndex={0}
@@ -124,12 +159,11 @@ export function InboxView({
                         //
                         // The bar is NEUTRAL, not brand green, and that is a
                         // decision. Green in this product means exactly one
-                        // thing, "somebody still has to look at this", and it
-                        // is the attention dot on this row plus the same dot
-                        // on the sidebar's inbox tab. A green selection bar
-                        // put that hue on a second job inside a single row,
-                        // so the reader had to tell two greens apart at a
-                        // glance. The bar only ever needed position and
+                        // thing, "I pinned this", and it is the marker on this
+                        // row plus the dot on the sidebar's inbox tab. A green
+                        // selection bar put that hue on a second job inside a
+                        // single row, so the reader had to tell two greens
+                        // apart at a glance. The bar only ever needed position and
                         // shape, and --foreground gives it both without
                         // borrowing the status hue. This is the only left-bar
                         // selection in the app, so nothing else drifts.
@@ -146,134 +180,69 @@ export function InboxView({
                       >
                         <span
                           className={`min-w-0 flex-1 truncate text-sm ${
-                            c.awaitingReply ? "font-semibold" : "font-medium"
+                            c.unseen || c.pinned ? "font-semibold" : "font-medium"
                           }`}
                         >
                           {c.name || c.phone}
                         </span>
-                        {/* Channel strip. A channel with an unanswered inbound
-                            is PINNED open so the list stays scannable and so
-                            clicking it drops you straight into THAT thread;
-                            the rest fade in on row hover. All three always
-                            render and the strip is a fixed width, so nothing
-                            reflows when the row is hovered.
 
-                            LIT CHANNELS SORT LAST. That is the whole trick. A
-                            fixed slot per channel sounds tidy and reads as
-                            scatter: whether a glyph appears in slot 1, 2 or 3
-                            depends on the row, so the column fills with holes
-                            in a different place every line. Ordering the
-                            waiting ones to the end pins them against the
-                            attention dot, so however many there are they end
-                            on ONE edge and the eye follows a column instead of
-                            a constellation. The dark ones fade in to their
-                            left, into space that is empty at rest anyway.
+                        {/* THREE states, one hit area, ported from Nudge:
+                            green (I pinned this) beats grey (they wrote since
+                            my last visit) beats hollow (nothing). Rendered on
+                            every row so the slot never changes width — the
+                            hollow state simply fades in on row hover.
 
-                            Colour, not a filled chip, marks the lit ones. The
-                            mint boxes this used to draw were the other half of
-                            why it read as noise. */}
-                        <span className="flex w-[5.25rem] shrink-0 items-center justify-end gap-0.5">
-                          {[...CHANNELS].sort(
-                            (a, b) =>
-                              Number(c.awaitingChannels.includes(a)) -
-                              Number(c.awaitingChannels.includes(b)),
-                          ).map((ch) => {
-                            const needsReply = c.awaitingChannels.includes(ch);
-                            return (
-                              <button
-                                key={ch}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  open(ch);
-                                }}
-                                aria-label={t(CHANNEL_LABEL[ch])}
-                                // Hover bg is an ALPHA, not a solid: this
-                                // button sits on three different row
-                                // backgrounds and any solid would be wrong on
-                                // at least two of them.
-                                className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-[opacity,background-color] hover:bg-black/[0.07] dark:hover:bg-white/[0.12] ${
-                                  needsReply
-                                    ? "opacity-100"
-                                    : "text-[var(--muted)] opacity-0 focus-visible:opacity-100 group-hover:opacity-60 hover:!opacity-100"
-                                }`}
-                              >
-                                <FeedIcon type={ch} size={16} tinted={needsReply} />
-                              </button>
-                            );
-                          })}
-                        </span>
+                            Only the PIN is a persistent act. Grey clears
+                            itself when you leave the tab, so it is never a
+                            backlog to work through by hand and never something
+                            you have to dismiss. Clicking a grey row pins it;
+                            clicking green unpins, and the row falls back to
+                            grey if they wrote during this visit.
 
-                        <span className="flex shrink-0 items-center">
-                          {/* ONE dot, one colour, one meaning: this row still
-                              needs somebody. A second hue only made the reader
-                              learn a legend. What KIND of attention it is
-                              (unanswered reply vs failed send) used to live in
-                              a native title, which does not exist on a phone
-                              and never reached a screen reader, so it now
-                              leads the accessible name and the action follows
-                              it.
+                            This replaced a channel strip of phone/mail/
+                            WhatsApp glyphs. They were an action nobody took:
+                            the row already opens on whichever channel the
+                            newest message is on, so clicking a specific glyph
+                            only mattered for STARTING a channel with no
+                            history — rare enough to belong on the contact
+                            page, not on every row of a triage list. */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void setInboxPin({
+                              customerId: c.customerId,
+                              pinned: !c.pinned,
+                            });
+                          }}
+                          title={
+                            c.pinned
+                              ? t("inbox.pinnedHint")
+                              : c.unseen
+                                ? t("inbox.unseenHint")
+                                : t("inbox.pinHint")
+                          }
+                          aria-label={
+                            c.pinned
+                              ? t("inbox.pinned")
+                              : c.unseen
+                                ? t("inbox.unseen")
+                                : t("inbox.notPinned")
+                          }
+                          aria-pressed={c.pinned}
+                          className={
+                            c.pinned
+                              ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)] transition-transform hover:scale-125"
+                              : c.unseen
+                                ? // --muted already flips per theme, so grey
+                                  // needs no dark: variant. Smaller than the
+                                  // pin inside the same slot, so the two
+                                  // differ by size as well as hue.
+                                  "h-2 w-2 shrink-0 cursor-pointer rounded-full bg-[var(--muted)] transition-transform hover:scale-125"
+                                : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                          }
+                        />
 
-                              Tapping it clears the row, and tapping again
-                              brings it back: a dismissed row keeps a hollow
-                              ring, so nothing is ever cleared beyond recall.
-                              Anything that arrives after the dismissal lights
-                              it again on its own.
-
-                              The dot stays 10px, but its button is a 40px box
-                              so a thumb can hit it without opening the
-                              conversation underneath. All three states use the
-                              same box, so the row never reflows. */}
-                          {c.needsAttention ? (
-                            <button
-                              type="button"
-                              aria-label={`${
-                                c.hasFailed
-                                  ? t("inbox.failedSend")
-                                  : t("inbox.needsReply")
-                              }. ${t("inbox.dismiss")}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void setAttention({
-                                  customerId: c.customerId,
-                                  cleared: true,
-                                });
-                              }}
-                              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-black/[0.07] dark:hover:bg-white/[0.12]"
-                            >
-                              <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
-                            </button>
-                          ) : c.awaitingReply || c.hasFailed ? (
-                            <button
-                              type="button"
-                              aria-label={t("inbox.restore")}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void setAttention({
-                                  customerId: c.customerId,
-                                  cleared: false,
-                                });
-                              }}
-                              // Hover reveals it on a pointer, focus-visible
-                              // reveals it on a keyboard, and on a touch
-                              // screen there is no hover to wait for, so it
-                              // just stays visible. A control you can only
-                              // reach by hovering does not exist on a phone.
-                              className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-[opacity,background-color] duration-[120ms] hover:bg-black/[0.07] focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-white/[0.12] [@media(hover:none)]:opacity-100"
-                            >
-                              {/* An inset shadow, not a border: buttons in
-                                  this design language never carry one. Reads
-                                  as the same hollow ring. */}
-                              <span className="h-2.5 w-2.5 rounded-full shadow-[inset_0_0_0_2px_var(--brand)]" />
-                            </button>
-                          ) : (
-                            <span className="h-10 w-10 shrink-0" />
-                          )}
-                        </span>
-
-                        {/* Last, so it pins to the row's right edge. The fixed
-                            width keeps the channel strip from shuffling
-                            between a "5d" row and a "13d" one. */}
                         <span className="w-8 shrink-0 text-right text-xs tabular-nums text-[var(--muted)]">
                           {formatAgo(c.lastAt)}
                         </span>

@@ -549,6 +549,13 @@ type ConversationSummary = {
   // ACTIVITY meant any later message, even one the salon itself sent, dragged
   // a months-old failure back into view. Failure included, same clock.
   attentionAt: number;
+  // Newest entry in each direction, 0 when there is none. The inbox row's
+  // marker is decided entirely by these two: an inbound newer than my last
+  // visit is what "they wrote while I was away" means, and a pin is spent the
+  // moment an outbound lands after it. Derived here rather than stored on the
+  // customer, because the entries are already loaded and already sorted.
+  lastInboundAt: number;
+  lastOutboundAt: number;
 };
 
 // Everything the entries alone decide. Sorts in place; the caller owns the
@@ -574,30 +581,44 @@ export function summariseEntries(entries: ConversationEntry[]): ConversationSumm
     awaitingChannels,
     hasFailed: newestFailure !== undefined,
     attentionAt,
+    // Already sorted newest-first, so the first match in each direction is the
+    // newest one.
+    lastInboundAt: entries.find((e) => e.direction === "in")?.at ?? 0,
+    lastOutboundAt: entries.find((e) => e.direction === "out")?.at ?? 0,
   };
 }
 
-// The sidebar's Inbox dot. Same meaning as a row's dot, counted: rows nobody
-// has dealt with yet. It is deliberately the same green, because two colours
-// of dot in one app is a legend the reader has to learn.
-export const attentionCount = query({
+// The sidebar's Inbox dot: mail that arrived since I last had the tab OPEN.
+//
+// It reads inboxSeenAt, while the grey row markers read inboxLeftAt, and the
+// two are deliberately different clocks. The sidebar dot means "there is
+// something new in there" and must go out the moment you look; the row markers
+// mean "this arrived while you were away" and must survive the visit that
+// shows them. One stamp for both jobs makes opening the Inbox erase the very
+// thing it was opened to show.
+export const inboxUnseenCount = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
+    const { user, orgId } = await requireOrg(ctx);
+    const visit = await inboxVisit(ctx, orgId, user._id);
+    // Never opened it: no boundary to measure against, so no dot rather than a
+    // badge counting the salon's entire history back to its first customer.
+    if (!visit?.seenAt) return 0;
+    const seenAt = visit.seenAt;
     const byCustomer = await conversationEntries(ctx, orgId);
     let count = 0;
     for (const [customerId, entries] of byCustomer) {
-      const { attentionAt } = summariseEntries(entries);
-      // A conversation with nothing waiting can never be lit, whatever the
-      // customer row says, so it never earns a read of that row.
-      if (attentionAt === 0) continue;
+      const { lastInboundAt } = summariseEntries(entries);
+      // Nothing inbound can never be new, whatever the customer row says, so
+      // it never earns a read of that row.
+      if (lastInboundAt <= seenAt) continue;
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
       // A muted customer is not in the inbox at all, so counting them here
       // would leave a badge pointing at rows that aren't there.
       if (customer.mutedAt) continue;
-      if (attentionAt > (customer.attentionClearedAt ?? 0)) count += 1;
+      count += 1;
     }
     return count;
   },
@@ -621,6 +642,108 @@ export const setAttention = mutation({
   },
 });
 
+// ---- Inbox row markers: grey is objective, green is mine ----
+//
+// Ported from Nudge, whose shared dot failed the same way this one did. The
+// model is two independent marks sharing one hit area:
+//
+//   GREY  they wrote while I was away. Objective, automatic, and it clears
+//         itself when I leave the tab — so it is never a backlog to work
+//         through by hand, and it never asks a colleague to care.
+//   GREEN I pinned this. Manual, sticky, mine alone, and spent the moment
+//         somebody replies, so answering a thread clears its pin without any
+//         send path knowing pins exist.
+//
+// The old shared dot (attentionClearedAt, still on the customer and still read
+// by the Customers table) put both jobs on one stamp and made dismissing a row
+// an edit to everyone else's screen.
+
+// This person's visit boundaries for THIS workspace, or null before their
+// first visit. Keyed by org + user rather than hung off `memberships`, because
+// a platform operator has no membership row — see the inboxVisits comment in
+// schema.ts.
+async function inboxVisit(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"orgs">,
+  userId: Id<"users">,
+) {
+  return await ctx.db
+    .query("inboxVisits")
+    .withIndex("by_org_user", (q) => q.eq("orgId", orgId).eq("userId", userId))
+    .unique();
+}
+
+// Both stamps are monotonic and share this path: upsert, never move backwards.
+async function stampInboxVisit(
+  ctx: MutationCtx,
+  field: "seenAt" | "leftAt",
+): Promise<null> {
+  const { user, orgId } = await requireOrg(ctx);
+  const visit = await inboxVisit(ctx, orgId, user._id);
+  const now = Date.now();
+  if (!visit) {
+    await ctx.db.insert("inboxVisits", { orgId, userId: user._id, [field]: now });
+    return null;
+  }
+  if ((visit[field] ?? 0) >= now) return null;
+  await ctx.db.patch(visit._id, { [field]: now });
+  return null;
+}
+
+// Pin or unpin, for me. Unpinning deletes; re-pinning an existing pin refreshes
+// the stamp, which is what un-spends a pin that an outbound message has since
+// overtaken.
+export const setInboxPin = mutation({
+  args: { customerId: v.id("customers"), pinned: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    const existing = await ctx.db
+      .query("inboxPins")
+      .withIndex("by_org_user_customer", (q) =>
+        q
+          .eq("orgId", orgId)
+          .eq("userId", user._id)
+          .eq("customerId", args.customerId),
+      )
+      .unique();
+    if (args.pinned) {
+      if (existing) await ctx.db.patch(existing._id, { pinnedAt: Date.now() });
+      else
+        await ctx.db.insert("inboxPins", {
+          orgId,
+          userId: user._id,
+          customerId: args.customerId,
+          pinnedAt: Date.now(),
+        });
+    } else if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+    return null;
+  },
+});
+
+// "I have the Inbox open." Drives the SIDEBAR dot only. Called on mount and
+// again whenever mail lands while the tab is open, so the dot cannot reappear
+// behind the reader's back while they are staring at the list. Monotonic.
+export const markInboxSeen = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => await stampInboxVisit(ctx, "seenAt"),
+});
+
+// "I have left the Inbox" — the boundary the grey ROW markers compare against.
+// Stamped on unmount alone. Closing the browser skips it, which only means the
+// next visit marks everything since the last clean exit; it self-corrects on
+// the first tab switch.
+export const markInboxLeft = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => await stampInboxVisit(ctx, "leftAt"),
+});
+
 // Inbox left pane: one row per customer, newest activity first, carrying the
 // last preview plus which channels are waiting on a reply from the business.
 export const conversations = query({
@@ -640,19 +763,36 @@ export const conversations = query({
       lastChannel: feedChannel,
       hasFailed: v.boolean(),
       awaitingReply: v.boolean(),
-      // ONE dot, one meaning: somebody still has to look at this row. It
-      // covers an unanswered inbound and a send that failed, because both are
-      // "the salon has to act" and a second colour just made the reader learn
-      // a legend. Which one it is lives in the dot's title.
-      needsAttention: v.boolean(),
-      // Channels whose most recent activity is an unanswered inbound. Drives
-      // the pinned, tinted icons in the row's channel strip.
-      awaitingChannels: v.array(channel),
+      // Newest inbound, 0 when they have never written. The row does not draw
+      // it; the view watches it so that mail landing while the Inbox is open
+      // re-stamps inboxSeenAt instead of re-lighting the sidebar dot behind
+      // the reader's back.
+      lastInboundAt: v.number(),
+      // They wrote since I last LEFT the Inbox. A visit boundary and nothing
+      // more — it makes no claim about whether anyone answered.
+      unseen: v.boolean(),
+      // I pinned this conversation. Manual, sticky, and mine alone.
+      pinned: v.boolean(),
     }),
   ),
   handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
+    const { user, orgId } = await requireOrg(ctx);
     const byCustomer = await conversationEntries(ctx, orgId);
+    const visit = await inboxVisit(ctx, orgId, user._id);
+    // Unset (never left the Inbox) reads as "nothing to mark" rather than
+    // marking every row on a first visit, which would teach the reader to
+    // ignore the colour immediately.
+    const leftBoundary = visit?.leftAt ?? Number.MAX_SAFE_INTEGER;
+    // Read whole: unpinning deletes, so this holds only live pins.
+    const pins = await ctx.db
+      .query("inboxPins")
+      .withIndex("by_org_user", (q) =>
+        q.eq("orgId", orgId).eq("userId", user._id),
+      )
+      .collect();
+    const pinnedAtByCustomer = new Map(
+      pins.map((p) => [p.customerId as string, p.pinnedAt]),
+    );
 
     const out = [];
     for (const [customerId, entries] of byCustomer) {
@@ -676,12 +816,12 @@ export const conversations = query({
         lastChannel: summary.last.channel,
         hasFailed: summary.hasFailed,
         awaitingReply: summary.awaitingChannels.length > 0,
-        // Dismissing stamps the moment; anything that WANTS attention after
-        // that lights the dot again on its own, so clearing a row is never a
-        // way to lose a customer who wrote back an hour later, and never a way
-        // for an old failure to come back either.
-        needsAttention: summary.attentionAt > (customer.attentionClearedAt ?? 0),
-        awaitingChannels: summary.awaitingChannels,
+        lastInboundAt: summary.lastInboundAt,
+        unseen: summary.lastInboundAt > leftBoundary,
+        // A pin older than the newest outbound is SPENT: you pinned the debt
+        // and then paid it. That is how replying clears a pin without the send
+        // path ever hearing about pins.
+        pinned: (pinnedAtByCustomer.get(customer._id) ?? 0) > summary.lastOutboundAt,
       });
     }
     return out.sort((a, b) => b.lastAt - a.lastAt);

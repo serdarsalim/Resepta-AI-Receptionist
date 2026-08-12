@@ -87,6 +87,49 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_user_org", ["userId", "orgId"]),
 
+  // MY pins — the green half of an inbox row's dot. Manual, sticky, and per
+  // PERSON, which is exactly why it cannot live on the customer the way
+  // attentionClearedAt does: a pin is one member of staff saying "I am coming
+  // back to this", and pushing that onto a colleague's screen is the thing the
+  // shared dot got wrong.
+  //
+  // Unpinning DELETES the row, so this table is the size of what is pinned
+  // right now rather than of everything ever pinned, and the inbox can read a
+  // person's pins whole without an index scan over history.
+  inboxPins: defineTable({
+    orgId: v.id("orgs"),
+    userId: v.id("users"),
+    customerId: v.id("customers"),
+    pinnedAt: v.number(),
+  })
+    .index("by_org_user", ["orgId", "userId"])
+    .index("by_org_user_customer", ["orgId", "userId", "customerId"]),
+
+  // When this person last looked at this workspace's Inbox — the objective
+  // half of the row marker, and the grey one.
+  //
+  // Two stamps, not one, because they answer different questions. seenAt is
+  // "I have the tab open" and drives the SIDEBAR dot, so it is written on
+  // mount and again whenever mail lands while you are looking. leftAt is "I
+  // walked away" and is the boundary the grey ROW markers compare against, so
+  // it is written on unmount alone — a boundary that advanced on arrival would
+  // clear every marker before the reader had read the row it sat on.
+  //
+  // Its own table rather than two columns on `memberships`, which is where
+  // this started: a platform operator working inside a tenant resolves an org
+  // through actingAsOrgId and has NO membership row (see lib/orgAuth for why
+  // that is deliberate and not going to change). Hanging the stamps off
+  // membership therefore made both markers permanently invisible in the exact
+  // mode the product is demoed and debugged in. Keyed by org + user like
+  // inboxPins beside it, so both surfaces work for anyone who can open the
+  // Inbox at all.
+  inboxVisits: defineTable({
+    orgId: v.id("orgs"),
+    userId: v.id("users"),
+    seenAt: v.optional(v.number()),
+    leftAt: v.optional(v.number()),
+  }).index("by_org_user", ["orgId", "userId"]),
+
   // Team invites. No token is mailed and none is checked (Nudge's model):
   // Google has already proven the signer-in controls the address, so matching
   // on the address IS the verification. An open invite = acceptedAt unset.

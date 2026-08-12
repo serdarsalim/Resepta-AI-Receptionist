@@ -1035,7 +1035,7 @@ export function AppShell({
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
   // somebody still has to look at this.
-  const attentionCount = useQuery(api.messages.attentionCount, {});
+  const attentionCount = useQuery(api.messages.inboxUnseenCount, {});
 
   // Read on mount, not during render: the server has no localStorage, so
   // seeding state from it directly would hydrate-mismatch. One frame expanded
