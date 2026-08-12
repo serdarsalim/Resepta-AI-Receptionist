@@ -452,6 +452,12 @@ export default defineSchema({
     // line is not a greeting. Injected as {{agent_name}} at ring time, so
     // renaming her takes effect on the next call with no republish.
     personaName: v.optional(v.string()),
+    // Whether the agent may hang up. Unset reads as ON, matching the template
+    // default and what a new agent is provisioned with. Stored here so the
+    // toggle can render without a provider round trip and so syncTemplate does
+    // not hand the tool back to a salon that turned it off, but the tool
+    // ITSELF lives at the provider — see setEndCallEnabled.
+    canEndCall: v.optional(v.boolean()),
     // Which Resepta template generation last touched this agent's voice
     // engineering — stamped at creation and by syncTemplate, compared against
     // VOICE_AGENT_TEMPLATE_VERSION to offer the update. Absent on agents from

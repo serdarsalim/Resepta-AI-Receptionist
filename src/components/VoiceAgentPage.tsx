@@ -7,6 +7,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
+import { Toggle } from "./Toggle";
 import {
   VoiceVariablesEditor,
   builtinVoiceVariables,
@@ -66,6 +67,7 @@ type Detail = {
   inboundNumber: string | null;
   prompt: { general: string; beginMessage: string } | null;
   personaName: string | null;
+  canEndCall: boolean;
   webhook: {
     expected: string | null;
     actual: string | null;
@@ -136,6 +138,7 @@ export function VoiceAgentPage({
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
   const syncTemplate = useAction(api.retellAgent.syncTemplate);
   const setAgentPersona = useMutation(api.retell.setAgentPersona);
+  const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
   const assignLine = useAction(api.retellAgent.assignLine);
   const testCall = useAction(api.retellAgent.testCall);
 
@@ -590,6 +593,28 @@ export function VoiceAgentPage({
                     provider: it is injected as {{agent_name}} while the phone
                     rings, so renaming her takes effect on the next call with
                     no republish. */}
+                {/* Its own switch, not part of the draft. Turning it on edits
+                    the response engine at the provider and publishes, so it
+                    cannot wait behind an unsaved prompt — the same reasoning
+                    the phone line dropdown above runs on. */}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-1.5 text-xs font-medium">
+                    {t("voiceDetail.canEndCall")}
+                    <InfoTip text={t("voiceDetail.canEndCallHint")} />
+                  </span>
+                  <Toggle
+                    checked={detail.canEndCall}
+                    disabled={saving}
+                    label={t("voiceDetail.canEndCall")}
+                    onChange={(next) =>
+                      void run(t("common.saving"), async () => {
+                        await setEndCallEnabled({ agentId, enabled: next });
+                        load();
+                      })
+                    }
+                  />
+                </div>
+
                 <label className="mt-3 block">
                   <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
                     {t("voiceDetail.persona")}

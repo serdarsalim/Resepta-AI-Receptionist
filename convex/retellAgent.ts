@@ -23,6 +23,7 @@ import {
 import {
   appointmentReceptionistTemplate,
   summaryAnalysisField,
+  END_CALL_TOOL_NAME,
   VOICE_AGENT_TEMPLATE_VERSION,
   VOICE_SUMMARY_FIELD,
   type VoiceAgentLanguage,
@@ -98,6 +99,7 @@ type EditorContext = {
   variablesRetellVersion: number | null;
   templateVersion: number | null;
   personaName: string | null;
+  canEndCall: boolean;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -447,6 +449,7 @@ export const read = action({
       // current template's tuning, and the card this drives is an offer the
       // owner clicks, not an automatic rewrite.
       personaName: context.personaName,
+      canEndCall: context.canEndCall,
       template: {
         synced: context.templateVersion,
         current: VOICE_AGENT_TEMPLATE_VERSION,
@@ -1259,6 +1262,10 @@ export const syncTemplate = action({
       language,
       businessName: context.orgName,
       site,
+      // The salon's choice survives a sync. Without this the template's
+      // default would hand the tool back to a shop that deliberately took it
+      // away, every time they clicked Update.
+      canEndCall: context.canEndCall,
     });
 
     const draft = (await (
@@ -1281,7 +1288,12 @@ export const syncTemplate = action({
       const templateTools = template.llm.general_tools as Record<string, unknown>[];
       const templateNames = new Set(templateTools.map((tool) => String(tool.name)));
       const kept = (liveLlm.general_tools ?? []).filter(
-        (tool) => !templateNames.has(String(tool.name ?? "")),
+        (tool) =>
+          !templateNames.has(String(tool.name ?? "")) &&
+          // Dropped rather than merely absent from the template: `kept` exists
+          // to preserve tools the owner added, and end_call switched off has
+          // to be REMOVED, not left behind as something we no longer mention.
+          !(context.canEndCall === false && String(tool.name ?? "") === END_CALL_TOOL_NAME),
       );
       const llmVersion = draftAgent.response_engine?.version;
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
@@ -1317,6 +1329,72 @@ export const syncTemplate = action({
     await ctx.runMutation(internal.retell.markTemplateSynced, {
       retellAgentId: agentId,
       templateVersion: VOICE_AGENT_TEMPLATE_VERSION,
+    });
+    return { ok: true, version: draft.version };
+  },
+});
+
+// Hanging up, switched from here instead of the provider's dashboard.
+//
+// This one cannot take the persona name's shortcut. A name is a value, so it
+// rides in as a dynamic variable while the phone rings and needs no publish;
+// a tool is part of the response engine, so turning it on means editing the
+// engine and publishing a version. Hence an action, and hence the flag being
+// written only after the provider says yes.
+export const setEndCallEnabled = action({
+  args: { agentId: v.string(), enabled: v.boolean() },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, { agentId, enabled }) => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const id = encodeURIComponent(agentId);
+    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    const llmId = live.response_engine?.llm_id;
+    if (live.response_engine?.type !== "retell-llm" || !llmId) {
+      throw new Error("Ending a call is only configurable on a Retell LLM agent.");
+    }
+    if (live.version === undefined) throw new Error("Agent has no version to clone.");
+
+    const draft = (await (
+      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+    ).json()) as { version?: number };
+    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    const draftAgent = (await (
+      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+    ).json()) as AgentDoc;
+    const liveLlm = (await (
+      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+    ).json()) as LlmDoc;
+
+    // Everything except the end_call tool survives untouched, then it is put
+    // back or left out. Matched on TYPE rather than name, so an agent that
+    // arrived from the provider with its own differently-named hang-up tool
+    // does not end up with two.
+    const others = (liveLlm.general_tools ?? []).filter(
+      (tool) => tool.type !== "end_call",
+    );
+    const template = appointmentReceptionistTemplate({
+      language: (["tr-TR", "en-US", "de-DE"].includes(live.language ?? "")
+        ? live.language
+        : "en-US") as VoiceAgentLanguage,
+      businessName: context.orgName,
+      site: siteUrl() ?? "",
+      canEndCall: enabled,
+    });
+    const endCallTool = (template.llm.general_tools as Record<string, unknown>[]).find(
+      (tool) => tool.type === "end_call",
+    );
+    const llmVersion = draftAgent.response_engine?.version;
+    await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+      ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+      general_tools: withRuntimeMcpTools(
+        enabled && endCallTool ? [...others, endCallTool] : others,
+      ),
+    });
+    await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+    await ctx.runMutation(internal.retell.markEndCallEnabled, {
+      retellAgentId: agentId,
+      enabled,
     });
     return { ok: true, version: draft.version };
   },

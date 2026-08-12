@@ -1716,6 +1716,16 @@ const dictionary = {
     en: "Connection fixed.",
     de: "Verbindung behoben.",
   },
+  "voiceDetail.canEndCall": {
+    tr: "Görüşmeyi kapatabilsin",
+    en: "Let her end the call",
+    de: "Darf das Gespräch beenden",
+  },
+  "voiceDetail.canEndCallHint": {
+    tr: "Açıkken arayan vedalaştıktan sonra kısaca veda edip telefonu kapatır. Kapalıyken hattı arayan kapatana kadar açık tutar. Değişiklik hemen yayınlanır.",
+    en: "On, she says a short goodbye and hangs up once the caller is done. Off, the line stays open until the caller hangs up. The change publishes straight away.",
+    de: "An verabschiedet sie sich kurz und legt auf, sobald der Anrufer fertig ist. Aus bleibt die Leitung offen, bis der Anrufer auflegt. Die Änderung wird sofort veröffentlicht.",
+  },
   "voiceDetail.persona": {
     tr: "Ajanın adı",
     en: "Agent name",

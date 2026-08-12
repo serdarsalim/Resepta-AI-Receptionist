@@ -552,6 +552,7 @@ export const agentEditorContext = internalQuery({
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
       templateVersion: agent.templateVersion ?? null,
       personaName: agent.personaName ?? null,
+      canEndCall: agent.canEndCall ?? true,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
@@ -1206,6 +1207,24 @@ export const markRuntimeConnected = internalMutation({
 // mutation, not an action: nothing about it lives at the provider, so naming
 // her costs no draft, no publish and no provider round trip, and takes effect
 // on the very next call.
+// Stores the flag only. The tool is added or removed at the provider by
+// retellAgent.setEndCallEnabled, which calls this once the publish succeeds —
+// same order as every other provider-backed setting here, so a row never
+// claims a capability the agent does not have.
+export const markEndCallEnabled = internalMutation({
+  args: { retellAgentId: v.string(), enabled: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, enabled }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { canEndCall: enabled });
+    return null;
+  },
+});
+
 export const setAgentPersona = mutation({
   args: { retellAgentId: v.string(), personaName: v.string() },
   returns: v.null(),
