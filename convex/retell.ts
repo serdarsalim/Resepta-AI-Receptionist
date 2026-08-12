@@ -646,7 +646,7 @@ export const beforeCallContext = internalQuery({
           )
           .unique()
       : null;
-    const [variables, fields, appointments, services] = await Promise.all([
+    const [variables, fields, appointments, services, staffRows] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -665,6 +665,10 @@ export const beforeCallContext = internalQuery({
         : Promise.resolve([]),
       ctx.db
         .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+        .collect(),
+      ctx.db
+        .query("staff")
         .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
         .collect(),
     ]);
@@ -721,6 +725,21 @@ export const beforeCallContext = internalQuery({
     // row with the same key is deliberate configuration and wins.
     const lang = customer?.language ?? org.language;
     const currency = org.currency ?? "TRY";
+    // Everything the agent needs BEFORE it can be useful, handed over while the
+    // phone is still ringing.
+    //
+    // This list grew on purpose. get_call_context used to supply the local
+    // time, the roster and the collectable fields, which meant the first thing
+    // every conversation did was stop for a tool call: two LLM round trips and
+    // an HTTP hop, in silence, at the exact moment the caller has just said
+    // what they want. Measured on a real call, that is where "neyi
+    // bekliyorsun?" landed.
+    //
+    // None of it was worth waiting for. The roster and the field list are
+    // static, the business is static, the caller is resolved from the number
+    // that is ringing, and the clock is knowable here. So it arrives up front
+    // and the tool becomes what it should always have been — a way to
+    // re-check something mid-call, not a toll on the first sentence.
     const builtins: Record<string, string> = {
       business_name: org.name,
       // Empty when the salon never named her. The prompt line that reads this
@@ -741,6 +760,32 @@ export const beforeCallContext = internalQuery({
       next_appointment: next
         ? spokenDateTime(next.startAt, org.timezone, lang)
         : "",
+      // What "yarın" means, resolved here rather than by a tool. The agent has
+      // no clock of its own and the salon may be in another timezone than the
+      // caller; both spellings go over because one is for saying out loud and
+      // the other is what book_appointment needs to receive.
+      now: (() => {
+        const parts = getLocalPartsSafe(Date.now(), org.timezone);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const iso = `${parts.y}-${pad(parts.m0 + 1)}-${pad(parts.d)}`;
+        return `${spokenDateTime(Date.now(), org.timezone, lang)} (${iso} ${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}, ${org.timezone})`;
+      })(),
+      // Names only. Which of them is free at three o'clock is availability's
+      // job; this exists so a caller asking for a person by name gets an agent
+      // that knows whether that person works here.
+      staff: staffRows
+        .filter((row) => row.active)
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+        .map((row) => row.name)
+        .join(", "),
+      // The fields this business collects by voice, as "key — label" pairs.
+      // Terse because it rides in every turn: the agent needs the KEY to save
+      // against and the label to know what it is asking for, and a paragraph
+      // of description per field is what made this expensive to fetch.
+      information: fields
+        .filter((field) => field.source !== "manual")
+        .map((field) => `${field.key} (${field.label})`)
+        .join(", "),
       // Spoken, not written — this variable is read down a phone line
       // verbatim. This exact line is where Bella got "90 dk için ₺3.000":
       // "dk" was hardcoded here, and the price came from Intl with its
