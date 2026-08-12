@@ -37,20 +37,18 @@ export default function ManageAppointmentPage({
   const [moved, setMoved] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
-  const canPickSlots = Boolean(
-    appointment?.canModify && appointment.slug && appointment.serviceId,
-  );
+  // Only canModify. It used to also require the org's public booking slug and
+  // a serviceId on the line, which is why a phone-booked appointment at a
+  // salon with no public booking page showed Cancel alone — while the
+  // confirmation message it arrived with promised the customer could change
+  // it. slotsForToken asks with the token instead, and reads the length off
+  // the appointment, so neither is needed.
+  const canPickSlots = Boolean(appointment?.canModify);
   const dateValue =
     date ?? (appointment ? todayIn(appointment.timezone) : "");
   const slots = useQuery(
-    api.booking.slots,
-    moving && appointment && canPickSlots
-      ? {
-          slug: appointment.slug!,
-          date: dateValue,
-          serviceId: appointment.serviceId!,
-        }
-      : "skip",
+    api.booking.slotsForToken,
+    moving && appointment && canPickSlots ? { token, date: dateValue } : "skip",
   );
 
   // Formatter per call — cheap at this scale, and the React Compiler owns

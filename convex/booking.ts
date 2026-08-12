@@ -183,22 +183,26 @@ export const page = query({
   },
 });
 
-// Free starts for one service on one local calendar day, as UTC ms. The
-// client formats them in the org's timezone — a Vienna customer booking an
-// Istanbul salon is choosing among Istanbul wall times, and the label must
-// say what the salon's clock will say.
-export const slots = query({
-  args: { slug: v.string(), date: v.string(), serviceId: v.id("services") },
-  returns: v.array(v.number()),
-  handler: async (ctx, args) => {
-    const org = await orgBySlug(ctx, args.slug);
-    if (!org) return [];
-    const service = await ctx.db.get(args.serviceId);
-    if (!service || service.orgId !== org._id || !service.active) return [];
+// Free starts for one org, one local day, one duration. Extracted from the
+// public slots query so the manage page can ask the same question through an
+// appointment token instead of a public slug — see slotsForToken.
+//
+// ignoreId keeps an appointment from blocking the slot it already occupies;
+// customerId keeps the grid from offering a time the caller is already busy
+// at, which the write would then refuse. A picker that offers what the
+// mutation rejects is worse than one that offers less.
+async function freeStarts(
+  ctx: ReadCtx,
+  org: Doc<"orgs">,
+  date: string,
+  duration: number,
+  opts?: { ignoreId?: Id<"appointments">; customerId?: Id<"customers"> },
+): Promise<number[]> {
+  {
     const hours = org.businessHours;
     if (!hours || !hasBusinessHours(hours)) return [];
 
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.date.trim());
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
     if (!match) return [];
     const [, y, m, d] = match;
     const civil = { y: Number(y), m0: Number(m) - 1, d: Number(d) };
@@ -214,7 +218,6 @@ export const slots = query({
 
     const openFrom = hours.startMinute ?? 0;
     const openTo = hours.endMinute ?? 24 * 60;
-    const duration = service.durationMinutes;
     const now = Date.now();
 
     // The day's UTC bounds, for the overlap read.
@@ -253,10 +256,72 @@ export const slots = query({
         continue;
       }
       if (startMs < now + MIN_NOTICE_MS) continue;
-      if (overlapCount(rows, startMs, duration) >= capacity) continue;
+      if (overlapCount(rows, startMs, duration, opts?.ignoreId) >= capacity) continue;
+      if (
+        opts?.customerId &&
+        customerConflict(rows, opts.customerId, startMs, duration, opts.ignoreId)
+      ) {
+        continue;
+      }
       starts.push(startMs);
     }
     return starts;
+  }
+}
+
+// Free starts as UTC ms. The client formats them in the org's timezone — a
+// Vienna customer booking an Istanbul salon is choosing among Istanbul wall
+// times, and the label must say what the salon's clock will say.
+export const slots = query({
+  args: { slug: v.string(), date: v.string(), serviceId: v.id("services") },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const org = await orgBySlug(ctx, args.slug);
+    if (!org) return [];
+    const service = await ctx.db.get(args.serviceId);
+    if (!service || service.orgId !== org._id || !service.active) return [];
+    return await freeStarts(ctx, org, args.date, service.durationMinutes);
+  },
+});
+
+// The same grid, reached with an appointment's manage token instead of a
+// public slug.
+//
+// This exists because the manage page could only offer Reschedule when the
+// org had a PUBLIC BOOKING PAGE switched on, since the picker needed a slug.
+// Those are different permissions: letting strangers book yourself is a
+// business decision, letting a customer move the appointment they already
+// hold is what the confirmation message promises them ("randevunuzu
+// değiştirmek veya iptal etmek için"). A salon with the public page off was
+// sending that promise and then showing only Cancel.
+//
+// The token is the whole capability, same as manage/reschedule/cancel, and
+// this returns nothing but a list of times — no org, no services, no names.
+export const slotsForToken = query({
+  args: { token: v.string(), date: v.string() },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const found = await appointmentByToken(ctx, args.token);
+    if (!found) return [];
+    const { appointment, org } = found;
+    if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+      return [];
+    }
+    // Provider-owned bookings are cal.com's inventory to offer, not ours.
+    if (appointment.externalUid && org.calcomApiKey && org.calcomEventTypeId) {
+      return [];
+    }
+    // The appointment's own length, which survives a service the salon has
+    // since renamed or stopped offering — the reason this does not go looking
+    // for a serviceId the way the public picker does.
+    const duration =
+      appointment.durationMinutes ??
+      appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
+      30;
+    return await freeStarts(ctx, org, args.date, duration, {
+      ignoreId: appointment._id,
+      customerId: appointment.customerId,
+    });
   },
 });
 
@@ -422,10 +487,10 @@ export const manage = query({
       durationMinutes: v.number(),
       status: v.string(),
       services: v.array(v.string()),
-      // What the reschedule picker needs to ask for slots. Null when the org
-      // has no booking page — then the page offers cancel only.
-      slug: v.union(v.string(), v.null()),
-      serviceId: v.union(v.id("services"), v.null()),
+      // The org's public slug and the line's serviceId used to ride along for
+      // the reschedule picker. slotsForToken made both unnecessary, and this
+      // is an unauthenticated endpoint: what it stops needing, it stops
+      // returning (the forms.ts doctrine).
       // False for provider-owned bookings (cal.com holds the inventory) —
       // then the page says "call the salon" instead of half-working buttons.
       canModify: v.boolean(),
@@ -440,7 +505,6 @@ export const manage = query({
     const providerOwned = Boolean(
       appointment.externalUid && org.calcomApiKey && org.calcomEventTypeId,
     );
-    const line = appointment.items?.[0];
     return {
       orgName: org.name,
       timezone: org.timezone,
@@ -452,8 +516,6 @@ export const manage = query({
         30,
       status: appointment.status,
       services: (appointment.items ?? []).map((item) => item.name),
-      slug: org.bookingEnabled ? (org.publicSlug ?? null) : null,
-      serviceId: line?.serviceId ?? null,
       canModify: !providerOwned,
       // The number the salon answers on, for the "call us" fallback.
       phone: org.publicPhone ?? null,
