@@ -333,7 +333,7 @@ export function VoiceAgentPage({
       {/* Wider than the rest of Voice agent on purpose: the variables grid is
           six columns and the prompt is prose. At the list's width the grid
           horizontally scrolled on every visit. */}
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="mx-auto max-w-4xl space-y-4 page-stack">
         {/* The header carries the way back, the agent's name, and every action
             that applies to the whole agent. It stays put while the prompt
             scrolls under it. */}

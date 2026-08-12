@@ -164,6 +164,25 @@ thead {
   }
 }
 
+/* Every page that STACKS cards and scrolls the shell ends with room below the
+   last card. Without it the final card butts against the bottom of the window,
+   which reads as the page having been cut off rather than having ended, and
+   there is nowhere to scroll to prove otherwise.
+
+   6rem, matching how generous Vercel is about the same gap. It is padding on
+   the page rather than margin on the card, so a view never has to know which
+   of its children is last.
+
+   NOT on `main` in the shell, even though that would apply it everywhere in
+   one line. The master-detail views (Inbox, Calendar, the contact record) are
+   `h-full` and scroll INSIDE their own cards, so shell padding would shrink
+   those cards and leave a dead strip under a pane that never scrolls the page.
+   A card that fills the window has no "last card" to give room to. So this is
+   opt-in, and the views that stack cards opt in. */
+.page-stack {
+  padding-bottom: 6rem;
+}
+
 /* Thin themed scrollbar for internal overflow containers. */
 /* Reserve the scrollbar track always — content must never shift when a list
    grows past the fold (Nudge behavior). Pairs with .thin-scroll. */

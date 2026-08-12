@@ -161,7 +161,7 @@ export function VoiceView() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       <div className="flex flex-wrap items-center gap-1">
         {(
           [

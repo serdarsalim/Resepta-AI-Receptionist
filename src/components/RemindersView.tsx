@@ -1746,7 +1746,7 @@ export function RemindersView() {
   return (
     // Wider than the settings default: the expanded rule panel is a real
     // split-pane (editor beside a rendered email) and 3xl squeezed both.
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-4 page-stack">
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}

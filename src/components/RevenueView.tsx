@@ -30,7 +30,7 @@ export function RevenueView() {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 page-stack">
       <section className="card-raised grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         {figures.map((figure) => (
           <div key={figure.key} className="px-4 py-4">

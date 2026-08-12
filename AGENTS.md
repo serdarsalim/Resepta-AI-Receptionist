@@ -726,6 +726,23 @@ shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
 implementations. Serdar has flagged this repeatedly across projects; treat a
 clipped popup as a bug you introduced knowingly.
 
+## Every scrolling page ends with room below the last card
+
+Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),
+because Serdar has asked for it on every project. `.page-stack` in
+`globals.css` is 6rem of bottom padding, and it goes on the ROOT of every view
+that stacks cards and scrolls.
+
+**Do not move it onto `main` in `AppShell`.** One line there would cover every
+route and it would be wrong: the master-detail views (Inbox, Calendar,
+ContactView) are `h-full` and scroll inside their own cards, so shell padding
+shrinks those cards and leaves a dead strip under a pane that never scrolls the
+page. A card that fills the window has no last card to give room to. Opt-in is
+the point.
+
+When you add a stacked-card view, add the class. The last card butting against
+the bottom of the window reads as the page being cut off rather than ending.
+
 ## Scrollbars: two weights, width-only hover
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),

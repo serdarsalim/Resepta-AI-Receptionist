@@ -47,7 +47,7 @@ export function CampaignsView() {
   const draftExists = settings.templates.some((row) => row.kind === "campaign");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {/* The gate, not a warning to skim past: without this nothing sends. */}
       {!template && (
         <Card title={t("campaign.title")} tip={t("campaign.whyTemplate")}>

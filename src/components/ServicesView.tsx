@@ -34,7 +34,7 @@ export function ServicesView() {
   const isOwner = settings.me.role !== "staff";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}

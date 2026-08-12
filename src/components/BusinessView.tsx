@@ -163,7 +163,7 @@ export function BusinessView() {
   // you somewhere. It scrolls rather than switches now that this is one page.
   if (search.active) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4 page-stack">
         {hits.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
         ) : (
@@ -193,7 +193,7 @@ export function BusinessView() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}

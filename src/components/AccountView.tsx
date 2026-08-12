@@ -115,7 +115,7 @@ export function AccountView() {
   // moment it has taken you somewhere. The difference is where it takes you.
   if (search.active) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-4 page-stack">
         {hits.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
         ) : (
@@ -145,7 +145,7 @@ export function AccountView() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       <div ref={(node) => void (cardRefs.current.profile = node)}>
       <Card>
         <div className={ROW_GRID}>

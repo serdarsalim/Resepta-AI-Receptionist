@@ -465,7 +465,7 @@ export function CustomersView({
   const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 page-stack">
       <div className="flex flex-wrap items-center gap-2">
         {/* Search moved to the header, where it is in the same place on
             every tab. What is left here belongs to this table specifically. */}
