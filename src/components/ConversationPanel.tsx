@@ -566,11 +566,11 @@ export function ConversationPanel({
                       ? t("calls.inbound")
                       : t("calls.outbound")}
                   </span>
-                  {"outcome" in item && item.outcome && (
-                    <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
-                      {item.outcome}
-                    </span>
-                  )}
+                  {/* No outcome pill here. It rendered Retell's raw
+                      `call_successful` boolean, so every row read "true" or
+                      "false" — and even spelled out it is the provider's guess
+                      about a call the owner can read the summary of on the
+                      same line. The summary is the outcome. */}
                   {"durationSec" in item && item.durationSec !== undefined && (
                     <span className="text-xs text-[var(--muted)]">
                       {formatDuration(item.durationSec)}
