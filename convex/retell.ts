@@ -22,6 +22,7 @@ import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenDuration, spokenPrice } from "./lib/speech";
+import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
@@ -1560,6 +1561,27 @@ export const voiceBook = internalMutation({
             .lt("startAt", endAt),
         )
         .collect();
+      // Before capacity, the caller themselves. Capacity asks whether the shop
+      // has a free chair; a two-chair salon says yes to 14:00 twice, and on a
+      // real call that booked one man a haircut and a beard trim at the same
+      // minute. The message is the tool result the agent reads back, so it
+      // says what to do instead — the prompt already tells it to run a second
+      // service back to back.
+      const clash = customerConflict(nearby, customer._id, args.startAt, duration);
+      if (clash) {
+        // A sentence, not a slug: http.ts hands err.message to the agent
+        // verbatim, and "customer-busy" alone leaves it guessing at the
+        // remedy. This names the remedy the prompt already asks for.
+        const freeAt = clash.startAt + (clash.durationMinutes ?? 30) * 60_000;
+        // Read only on the failure path — the happy path must not pay for it.
+        const bookingOrg = await ctx.db.get(args.orgId);
+        const when = bookingOrg
+          ? formatAppointmentTime(freeAt, bookingOrg.timezone, bookingOrg.language)
+          : new Date(freeAt).toISOString();
+        throw new Error(
+          `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`,
+        );
+      }
       const overlapping = nearby.filter(
         (row) =>
           (row.status === "scheduled" || row.status === "confirmed") &&

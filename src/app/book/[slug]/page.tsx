@@ -261,9 +261,11 @@ export default function BookingPage({
                   ? t("forms.badPhone")
                   : error === "slot-taken"
                     ? t("booking.slotTaken")
-                    : error === "too-many"
-                      ? t("booking.tooMany")
-                      : t("forms.failed")}
+                    : error === "customer-busy"
+                      ? t("booking.customerBusy")
+                      : error === "too-many"
+                        ? t("booking.tooMany")
+                        : t("forms.failed")}
               </p>
             )}
             <button

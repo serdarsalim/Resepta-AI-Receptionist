@@ -17,6 +17,7 @@ import {
   scheduleLifecycleMessages,
 } from "./appointments";
 import { slugify } from "./forms";
+import { customerConflict } from "./lib/overlap";
 
 // The native booking page: /book/<slug>. The fifth intake, and the first one
 // that writes an APPOINTMENT — the form (forms.ts) lands a message for staff
@@ -357,6 +358,15 @@ export const book = mutation({
     if (allUpcoming.length >= MAX_UPCOMING_PER_PHONE) {
       return { ok: false, reason: "too-many" };
     }
+    // Checked here rather than beside the capacity guard above, because until
+    // the block just above it we did not know WHO was booking — the form
+    // resolves the customer by phone after the slot is validated. Reads from
+    // `rows`, not allUpcoming: this window's rows include an appointment that
+    // started before now and is still running, which is precisely the one a
+    // caller can collide with.
+    if (customerConflict(rows, customerId, args.startMs, service.durationMinutes)) {
+      return { ok: false, reason: "customer-busy" };
+    }
 
     const manageToken = crypto.randomUUID();
     const appointmentId = await ctx.db.insert("appointments", {
@@ -491,6 +501,20 @@ export const reschedule = mutation({
       overlapCount(rows, args.startMs, duration, appointment._id) >= capacity
     ) {
       return { ok: false, reason: "slot-taken" };
+    }
+    // Nor may it land on top of this customer's OTHER appointment. Capacity
+    // would allow it in any salon with a second chair, and the person cannot
+    // be in both.
+    if (
+      customerConflict(
+        rows,
+        appointment.customerId,
+        args.startMs,
+        duration,
+        appointment._id,
+      )
+    ) {
+      return { ok: false, reason: "customer-busy" };
     }
     await ctx.db.patch(appointment._id, { startAt: args.startMs });
     await syncAppointmentSchedule(ctx, appointment._id);

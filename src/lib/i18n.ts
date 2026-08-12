@@ -608,6 +608,14 @@ const dictionary = {
     en: "That time just filled up. Please pick another.",
     de: "Diese Zeit wurde gerade vergeben. Bitte wählen Sie eine andere.",
   },
+  // Not the same as slotTaken, and saying so matters: the salon has room, the
+  // person does not. Told plainly, the reader knows to pick a later time
+  // rather than assume the shop is full.
+  "booking.customerBusy": {
+    tr: "Bu saatte zaten bir randevunuz var. Lütfen daha sonrası için bir saat seçin.",
+    en: "You already have an appointment at that time. Please pick a later one.",
+    de: "Sie haben zu dieser Zeit bereits einen Termin. Bitte wählen Sie eine spätere Zeit.",
+  },
   "booking.tooMany": {
     tr: "Bu numarada zaten birçok açık randevu var. Lütfen bizi arayın.",
     en: "This number already holds several open bookings. Please call us.",

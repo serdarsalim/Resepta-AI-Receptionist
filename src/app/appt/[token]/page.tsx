@@ -218,7 +218,11 @@ export default function ManageAppointmentPage({
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">
-            {error === "slot-taken" ? t("booking.slotTaken") : t("forms.failed")}
+            {error === "slot-taken"
+              ? t("booking.slotTaken")
+              : error === "customer-busy"
+                ? t("booking.customerBusy")
+                : t("forms.failed")}
           </p>
         )}
       </div>
