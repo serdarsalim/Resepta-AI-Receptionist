@@ -21,6 +21,7 @@ import { recordCustomerCreated } from "./lib/newCustomer";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
 import { voiceVariableInput } from "./lib/voiceVariables";
+import { spokenDuration, spokenPrice } from "./lib/speech";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
@@ -717,21 +718,6 @@ export const beforeCallContext = internalQuery({
     // row with the same key is deliberate configuration and wins.
     const lang = customer?.language ?? org.language;
     const currency = org.currency ?? "TRY";
-    const priceDigits =
-      new Intl.NumberFormat(lang, { style: "currency", currency }).resolvedOptions()
-        .minimumFractionDigits ?? 2;
-    // Spoken, not written — this list is read down a phone line, and
-    // text-to-speech drops "₺" and leaves the caller hearing "five hundred"
-    // with no idea of what. Same treatment as the services in
-    // runtimeCallContext: the currency as a word, and no decimals on a whole
-    // amount.
-    const priceOf = (minor: number) =>
-      new Intl.NumberFormat(lang, {
-        style: "currency",
-        currency,
-        currencyDisplay: "name",
-        minimumFractionDigits: minor % 10 ** priceDigits === 0 ? 0 : priceDigits,
-      }).format(minor / 10 ** priceDigits);
     const builtins: Record<string, string> = {
       business_name: org.name,
       customer_name: customer
@@ -748,12 +734,22 @@ export const beforeCallContext = internalQuery({
       next_appointment: next
         ? formatAppointmentTime(next.startAt, org.timezone, lang)
         : "",
+      // Spoken, not written — this variable is read down a phone line
+      // verbatim. This exact line is where Bella got "90 dk için ₺3.000":
+      // "dk" was hardcoded here, and the price came from Intl with its
+      // grouping separator and symbol still in. lib/speech owns the wording
+      // now, for this and for runtimeCallContext, so the ring-time list and
+      // the mid-call list can never disagree again.
       services: services
         .filter((service) => service.active)
         .map((service) => {
-          const duration = `${service.durationMinutes} ${lang === "tr" ? "dk" : "min"}`;
-          return service.price !== undefined
-            ? `${service.name} (${duration}, ${priceOf(service.price)})`
+          const duration = spokenDuration(service.durationMinutes, lang);
+          const price =
+            service.price !== undefined
+              ? spokenPrice(service.price, currency, lang)
+              : null;
+          return price
+            ? `${service.name} (${duration}, ${price})`
             : `${service.name} (${duration})`;
         })
         .join("; "),
@@ -1362,23 +1358,16 @@ export const runtimeCallContext = internalQuery({
           key: serviceKey(service),
           name: service.name,
           durationMinutes: service.durationMinutes,
-          // SPOKEN, not written. "₺500,00" is right on a screen and useless
-          // down a phone line: text-to-speech drops the symbol and the caller
-          // hears "five hundred" with no idea of what. currencyDisplay:"name"
-          // gives "500 Türk lirası" / "40 euros" / "40 Euro" — the currency as
-          // a word, in the language the agent is speaking.
-          //
-          // And no decimals on a whole amount, because "five hundred lira
-          // zero zero" is how a person reads a spreadsheet, not a price.
+          durationSpoken: spokenDuration(service.durationMinutes, org.language),
+          // SPOKEN, not written — lib/speech, same wording as the ring-time
+          // list in beforeCallContext. The inline Intl call this replaces got
+          // most of the way there and still said "₺3.000 Türk lirası": the
+          // grouping separator, the symbol ICU prepends even in name mode,
+          // and the catalogue name where a person says "lira".
           price:
             service.price === undefined
               ? null
-              : new Intl.NumberFormat(org.language, {
-                  style: "currency",
-                  currency: org.currency ?? "TRY",
-                  currencyDisplay: "name",
-                  minimumFractionDigits: service.price % 100 === 0 ? 0 : 2,
-                }).format(service.price / 100),
+              : spokenPrice(service.price, org.currency ?? "TRY", org.language),
           priceNote:
             service.price === undefined
               ? "No price set for this service. Say it is confirmed when booking rather than quoting a figure."
