@@ -446,6 +446,13 @@ export default defineSchema({
     inboundNumber: v.optional(v.string()),
     transferNumber: v.optional(v.string()),
     enabled: v.boolean(),
+    // Which Resepta template generation last touched this agent's voice
+    // engineering — stamped at creation and by syncTemplate, compared against
+    // VOICE_AGENT_TEMPLATE_VERSION to offer the update. Absent on agents from
+    // before stamping existed and on externally-built agents the org merely
+    // connected; both read as "behind", which is honest — neither carries the
+    // current template's tuning.
+    templateVersion: v.optional(v.number()),
     // Set only after a variable publication succeeds at Retell. This separate
     // marker matters because an intentionally empty registry is still a real,
     // managed configuration and must not re-import deleted provider fields.

@@ -96,6 +96,7 @@ type EditorContext = {
   variables: Array<VoiceVariableInput & { order: number }>;
   variablesSyncedAt: number | null;
   variablesRetellVersion: number | null;
+  templateVersion: number | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -440,6 +441,15 @@ export const read = action({
       // rather than folding into webhook.wired: the URL is right, the
       // credential is not, and the fix is a different one.
       signatureRejectedAt: context.signatureRejectedAt,
+      // null synced reads as behind, on purpose: an agent from before
+      // stamping existed and a hand-built one the org connected both lack the
+      // current template's tuning, and the card this drives is an offer the
+      // owner clicks, not an automatic rewrite.
+      template: {
+        synced: context.templateVersion,
+        current: VOICE_AGENT_TEMPLATE_VERSION,
+        behind: context.templateVersion !== VOICE_AGENT_TEMPLATE_VERSION,
+      },
       variables: {
         preCall: Object.entries(llm?.default_dynamic_variables ?? {}).map(
           ([name, value]) => ({ name, value }),
@@ -1203,6 +1213,110 @@ export const autoProvision = internalAction({
       voiceId,
     });
     return null;
+  },
+});
+
+// Push the current template's voice engineering onto an agent that already
+// exists. Until this, VOICE_AGENT_TEMPLATE_VERSION was read exactly once, at
+// creation — every improvement to the template reached new salons only, and
+// an existing tenant's agent kept last month's tuning forever unless someone
+// walked into the provider dashboard.
+//
+// ENGINEERING ONLY, deliberately. What syncs: the turn-taking knobs, the
+// model pin, the tool plumbing (speak_during_execution and fresh function
+// URLs), and the call-summary analysis field. What never syncs: the prompt
+// and the begin message. Those are the owner's — the app hands them an
+// editor, and a sync that rewrote their wording back to factory copy would
+// be the template silently changing under the salon, the exact thing the
+// version constant exists to prevent. The one prompt-line difference between
+// template versions rides in through the MCP instructions we serve at call
+// time instead.
+export const syncTemplate = action({
+  args: { agentId: v.string() },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, { agentId }) => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const site = siteUrl();
+    if (!site) {
+      throw new Error("This deployment exposes no site URL, so there is nothing to point at.");
+    }
+    const id = encodeURIComponent(agentId);
+    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    if (live.version === undefined) throw new Error("Agent has no version to clone.");
+
+    // The template needs a language for the summary field's instruction; an
+    // agent whose language is outside the template's three gets English,
+    // which is at least an instruction rather than a crash.
+    const language = (
+      ["tr-TR", "en-US", "de-DE"].includes(live.language ?? "")
+        ? live.language
+        : "en-US"
+    ) as VoiceAgentLanguage;
+    const template = appointmentReceptionistTemplate({
+      language,
+      businessName: context.orgName,
+      site,
+    });
+
+    const draft = (await (
+      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+    ).json()) as { version?: number };
+    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    const draftAgent = (await (
+      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+    ).json()) as AgentDoc;
+
+    const llmId = draftAgent.response_engine?.llm_id;
+    if (draftAgent.response_engine?.type === "retell-llm" && llmId) {
+      const liveLlm = (await (
+        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      ).json()) as LlmDoc;
+      // The template's five function tools replace their live namesakes —
+      // that is where speak_during_execution and the function URL live.
+      // Everything else on the engine survives: extract_dynamic_variable
+      // from the variables registry, end_call, anything the owner added.
+      const templateTools = template.llm.general_tools as Record<string, unknown>[];
+      const templateNames = new Set(templateTools.map((tool) => String(tool.name)));
+      const kept = (liveLlm.general_tools ?? []).filter(
+        (tool) => !templateNames.has(String(tool.name ?? "")),
+      );
+      const llmVersion = draftAgent.response_engine?.version;
+      await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+        ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+        model: template.llm.model,
+        model_temperature: template.llm.model_temperature,
+        general_tools: withRuntimeMcpTools([...templateTools, ...kept]),
+        mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
+      });
+    }
+
+    // template.agent, minus what must not follow the template: the agent
+    // keeps its own language, and the analysis list is a merge — the live
+    // fields stay (system presets, the owner's collected fields), only OUR
+    // summary field is replaced so its language instruction tracks the agent.
+    const {
+      language: _templateLanguage,
+      post_call_analysis_data: _templateAnalysis,
+      ...engineering
+    } = template.agent;
+    const liveAnalysis = (live.post_call_analysis_data ?? []).filter(
+      (item) => String(item.name ?? "") !== VOICE_SUMMARY_FIELD,
+    );
+    await call(key, "PATCH", `update-agent/${id}`, {
+      version: draft.version,
+      ...engineering,
+      post_call_analysis_data: [...liveAnalysis, summaryAnalysisField(language)],
+    });
+    await call(key, "POST", `publish-agent-version/${id}`, {
+      version: draft.version,
+      version_title: `Resepta template v${VOICE_AGENT_TEMPLATE_VERSION}`,
+    });
+    await ctx.runMutation(internal.retell.markTemplateSynced, {
+      retellAgentId: agentId,
+      templateVersion: VOICE_AGENT_TEMPLATE_VERSION,
+    });
+    return { ok: true, version: draft.version };
   },
 });
 

@@ -210,6 +210,9 @@ export const connect = internalMutation({
       if (claimed.name !== job.name) {
         await ctx.db.patch(claimed._id, { name: job.name });
       }
+      // A resumed job re-connects the same agent it built; the build was from
+      // the current template either way.
+      await ctx.db.patch(claimed._id, { templateVersion: job.templateVersion });
       return claimed._id;
     }
     return await ctx.db.insert("retellAgents", {
@@ -218,6 +221,7 @@ export const connect = internalMutation({
       name: job.name,
       inboundNumber: args.inboundNumber,
       enabled: true,
+      templateVersion: job.templateVersion,
     });
   },
 });

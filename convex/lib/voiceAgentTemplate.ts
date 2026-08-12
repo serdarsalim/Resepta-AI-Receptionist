@@ -203,11 +203,14 @@ export function appointmentReceptionistTemplate(args: {
       language: args.language,
       webhook_url: `${args.site}/retell/call-ended`,
       webhook_timeout_ms: 10000,
-      // Turn-taking. enable_dynamic_responsiveness used to be here and is
-      // gone on purpose: it lets the provider decide the caller might not be
-      // finished and hold the reply back, which buys fewer interruptions at
-      // the cost of the exact pause an owner hears as "it's slow". A salon
-      // receptionist answers the moment you stop talking.
+      // Turn-taking. Dynamic responsiveness is explicitly OFF, not merely
+      // unset: it lets the provider decide the caller might not be finished
+      // and hold the reply back, which buys fewer interruptions at the cost
+      // of the exact pause an owner hears as "it's slow". A salon
+      // receptionist answers the moment you stop talking. Explicit false
+      // because syncTemplate PATCHes this object onto v1 agents that have it
+      // true — an omitted key would leave them slow.
+      enable_dynamic_responsiveness: false,
       responsiveness: 0.99,
       // The other half of the same trade. The agent yields quickly when the
       // caller talks over it, so an over-long answer costs a second, not the

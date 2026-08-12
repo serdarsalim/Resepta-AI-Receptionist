@@ -550,6 +550,7 @@ export const agentEditorContext = internalQuery({
       variables: variables.sort((a, b) => a.order - b.order),
       variablesSyncedAt: agent.variablesSyncedAt ?? null,
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
+      templateVersion: agent.templateVersion ?? null,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
@@ -1192,6 +1193,24 @@ export const markRuntimeConnected = internalMutation({
       .unique();
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, { runtimeConnectedAt: Date.now() });
+    return null;
+  },
+});
+
+// Stamped only after the provider publish succeeds, mirroring the
+// variablesSyncedAt rule: a version this row claims is a version that is
+// actually live at Retell, so a sync that dies mid-flight keeps offering
+// the update instead of pretending it landed.
+export const markTemplateSynced = internalMutation({
+  args: { retellAgentId: v.string(), templateVersion: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, templateVersion }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { templateVersion });
     return null;
   },
 });
