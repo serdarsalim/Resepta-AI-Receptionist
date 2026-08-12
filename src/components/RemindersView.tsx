@@ -1455,20 +1455,39 @@ export function BusinessHoursCard({
           })}
         </div>
 
-        <RowLabel label={t("settings.openFrom")} />
-        <input
-          type="time"
-          defaultValue={
-            hours.startMinute == null ? "" : minutesToTimeValue(hours.startMinute)
-          }
-          onChange={(e) => patchHours({ startMinute: timeValueToMinutes(e.target.value) })}
-        />
-        <RowLabel label={t("settings.openTo")} />
-        <input
-          type="time"
-          defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
-          onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
-        />
+        {/* ONE row, not two. Opening and closing are not two settings, they
+            are the two ends of one range, and giving each its own labelled row
+            made the reader parse a relationship the word "to" states outright.
+            It also cost the card a third of its height to say one thing.
+
+            Still two inputs, which is the rule ("split compound values into
+            two labelled inputs"): what that forbids is one box parsing two
+            syntaxes, not two boxes sharing a row. Each keeps its own accessible
+            name, since the visible label now covers the pair.
+
+            Phrased to match "Days you're open" directly above it. */}
+        <RowLabel label={t("settings.openHours")} />
+        <div className="flex items-center gap-2">
+          <input
+            type="time"
+            aria-label={t("settings.openFrom")}
+            className="min-w-0 flex-1"
+            defaultValue={
+              hours.startMinute == null ? "" : minutesToTimeValue(hours.startMinute)
+            }
+            onChange={(e) => patchHours({ startMinute: timeValueToMinutes(e.target.value) })}
+          />
+          <span className="shrink-0 text-sm text-[var(--muted)]">
+            {t("settings.openUntil")}
+          </span>
+          <input
+            type="time"
+            aria-label={t("settings.openTo")}
+            className="min-w-0 flex-1"
+            defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
+            onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
+          />
+        </div>
       </div>
     </Card>
   );

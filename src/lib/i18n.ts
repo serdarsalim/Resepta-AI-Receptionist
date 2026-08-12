@@ -2235,6 +2235,15 @@ const dictionary = {
     en: "Drives the WhatsApp auto-reply and the voice agent's scheduling — saying \"we're closed\" when you are, and never offering an appointment outside these hours. Reminder timing is set by quiet hours under Reminders, not here.",
     de: "Steuert die WhatsApp-Autoantwort und die Terminvorschläge des Sprachassistenten — \"geschlossen\" nur wenn zu ist, und keine Termine außerhalb dieser Zeiten. Die Zeit für Erinnerungen steuern die Ruhezeiten unter Erinnerungen, nicht dies.",
   },
+  // The visible label for the pair, phrased to match "Days you're open" that
+  // sits directly above it.
+  "settings.openHours": {
+    tr: "Açık olduğunuz saatler",
+    en: "Hours you're open",
+    de: "Ihre Öffnungszeiten",
+  },
+  // openFrom and openTo are now ACCESSIBLE names on the two inputs rather than
+  // visible row labels, so a screen reader still hears which end is which.
   "settings.openFrom": {
     tr: "Açılış",
     en: "Opens",
@@ -2244,6 +2253,13 @@ const dictionary = {
     tr: "Kapanış",
     en: "Closes",
     de: "Schließt",
+  },
+  // The word BETWEEN the two inputs. Its own string because "Closes" reads as
+  // nonsense sitting between two times.
+  "settings.openUntil": {
+    tr: "-",
+    en: "to",
+    de: "bis",
   },
   "settings.msgVariables": {
     tr: "Mesaj değişkenleri",
