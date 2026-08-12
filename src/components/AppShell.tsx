@@ -1282,7 +1282,7 @@ export function AppShell({
           remoteTheme={settings?.me.themePreference}
           onOpenAccount={() => onTab("account")}
         />
-        <main className="thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
           {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it

@@ -221,9 +221,34 @@ thead {
   border: 3px solid transparent;
   background-clip: padding-box;
 }
+/* WIDTH ONLY. Vercel's bar keeps one colour through hover and just grows from
+   3px to 6px; ours was growing AND jumping to --scrollbar-thumb-hover, and two
+   changes at once is what made it land heavy instead of slick. The darker
+   token stays defined for anything that wants a genuine hover colour, but the
+   rail is not that. */
 .thin-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
   border-width: 1.5px;
+}
+
+/* The PAGE rail — the shell's own, outside every card — sits one step thicker
+   than the in-card ones. It is scrolling the whole screen rather than a pane
+   inside it, and at 3px it read as another card's rail that had drifted to the
+   window edge. Same colour and same shape, just more of it: 6px at rest, 8px
+   under the pointer.
+
+   Add-on to .thin-scroll rather than a replacement, so it inherits the colour,
+   the radius and the padding-box trick and only overrides the widths. It must
+   stay BELOW those rules — same specificity, so source order is what makes it
+   win. Pairs with .stable-gutter, which reserves the wider track. */
+.page-scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.page-scroll::-webkit-scrollbar-thumb {
+  border-width: 3px;
+}
+.page-scroll::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
 }
 
 /* The raised card, ported from Nudge's master-detail surfaces (its InboxView
