@@ -748,7 +748,8 @@ clipped popup as a bug you introduced knowingly.
 
 ## Tabs are underlined, never pills
 
-Measured off Vercel, not eyeballed. A filled accent pill beside plain grey text
+Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),
+because it applies to every project. Measured off Vercel, not eyeballed. A filled accent pill beside plain grey text
 is two different KINDS of control in one row: the selected item reads as a
 button and the rest read as labels, which is what the pill strip here looked
 like until 2026-08-12.
