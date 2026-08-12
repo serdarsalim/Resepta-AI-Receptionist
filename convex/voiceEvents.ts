@@ -10,6 +10,7 @@ import {
 import { connectionField } from "./lib/connections";
 import { requireOrg } from "./lib/orgAuth";
 import { coerceVoiceValues } from "./lib/voicePayload";
+import { VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 
 const PROCESS_BACKOFF = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
 const ANALYSIS_BACKOFF = [2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
@@ -215,8 +216,16 @@ export const process = internalAction({
       const endedAt = Number(call.end_timestamp ?? 0);
       const duringValues =
         (call.collected_dynamic_variables as Record<string, unknown> | undefined) ?? {};
-      const afterValues =
-        (analysis.custom_analysis_data as Record<string, unknown> | undefined) ?? {};
+      const afterValues = {
+        ...((analysis.custom_analysis_data as Record<string, unknown> | undefined) ?? {}),
+      };
+      // Our summary rides in on the custom-analysis bag because that is the
+      // only channel Retell offers, but it is not something the caller told
+      // us, so it is lifted out before the rest becomes "what was collected".
+      // Left in, every call card would show the whole summary a second time as
+      // an unnamed collected value.
+      const localizedSummary = String(afterValues[VOICE_SUMMARY_FIELD] ?? "");
+      delete afterValues[VOICE_SUMMARY_FIELD];
       // Confirmed live values win over transcript inference.
       //
       // beforeValues is deliberately NOT merged in. It is Retell's whole
@@ -236,7 +245,10 @@ export const process = internalAction({
         durationSec:
           endedAt > startedAt ? Math.round((endedAt - startedAt) / 1000) : undefined,
         outcome: String(analysis.call_successful ?? "") || undefined,
-        summary: String(analysis.call_summary ?? "") || undefined,
+        // Ours first, Retell's built-in as the fallback. The fallback is what
+        // an agent provisioned before the field existed still sends, and what
+        // arrives if the analysis pass skipped the field.
+        summary: localizedSummary || String(analysis.call_summary ?? "") || undefined,
         transcript: String(call.transcript ?? "") || undefined,
         recordingUrl: String(call.recording_url ?? "") || undefined,
         collected: Object.keys(collected).length > 0 ? collected : undefined,

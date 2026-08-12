@@ -22,7 +22,9 @@ import {
 } from "./lib/voiceRuntime";
 import {
   appointmentReceptionistTemplate,
+  summaryAnalysisField,
   VOICE_AGENT_TEMPLATE_VERSION,
+  VOICE_SUMMARY_FIELD,
   type VoiceAgentLanguage,
 } from "./lib/voiceAgentTemplate";
 
@@ -309,6 +311,12 @@ function importVariables(
   }
   for (const item of agent.post_call_analysis_data ?? []) {
     if (item.type === "system-presets") continue;
+    // Ours, not the salon's. It shares the analysis list with the contact
+    // fields because that is the only list Retell gives us, but it is the call
+    // summary — surfacing it here would offer the owner a "field" to rename
+    // and retype, and publishing that back would rewrite the instruction that
+    // keeps summaries in their language.
+    if (String(item.name ?? "") === VOICE_SUMMARY_FIELD) continue;
     const row = ensure(String(item.name ?? ""));
     const type = analysisType(item.type);
     if (!row || !type) continue;
@@ -741,6 +749,12 @@ async function publishVariableSet(
     ...(live.post_call_analysis_data ?? []).filter(
       (item) => item.type === "system-presets",
     ),
+    // Rebuilt from the agent's CURRENT language rather than carried over from
+    // the live copy, so switching an agent to German also switches the
+    // summaries. Also the line that installs it on agents provisioned before
+    // it existed: this list is rewritten in full on every publish, so the
+    // field arrives the next time anything here saves.
+    summaryAnalysisField(live.language ?? "en-US"),
     ...next.filter((variable) => variable.afterCall).map(variableForRetell),
   ];
 

@@ -31,6 +31,42 @@ const BEGIN_MESSAGES: Record<VoiceAgentLanguage, string> = {
   "de-DE": "Guten Tag bei {{business_name}}. Wie kann ich Ihnen helfen?",
 };
 
+// The summary the owner reads on the call, asked for by name.
+//
+// Retell's built-in call_summary has no language setting and comes back
+// English for a Turkish call. It is not even reliably English: the analysis
+// pass drifts toward whatever language its prompt happens to be full of, so an
+// agent with Turkish field descriptions gets Turkish summaries by accident and
+// one without gets English. Emergent is not a feature — this asks outright.
+//
+// Namespaced so it can never collide with a contact field the salon names
+// itself; the key derivation in contactFields would otherwise be free to
+// produce "summary".
+export const VOICE_SUMMARY_FIELD = "resepta_call_summary";
+
+// Summarised in the language the CALL was held in, not the dashboard's. A
+// summary is worth reading because it carries the caller's own words for what
+// they wanted, and translating those into a second language loses the exact
+// phrasing that makes it evidence. A Turkish salon reads a Turkish dashboard
+// anyway, so the two only diverge for a business taking calls in a language it
+// does not administer in — and there the call's language is still the honest
+// one for a quote.
+export function summaryAnalysisField(language: string) {
+  const key = (language ?? "").toLowerCase().slice(0, 2);
+  const name =
+    key === "tr" ? "Turkish" : key === "de" ? "German" : key === "en" ? "English" : "English";
+  return {
+    type: "string",
+    name: VOICE_SUMMARY_FIELD,
+    description: [
+      `Two or three sentences on what the caller wanted and what happened.`,
+      `Write it in ${name}. Always ${name}, whatever language this instruction is in.`,
+      `Name the service, the date and time, and whether it was booked, moved or cancelled.`,
+      `If nothing was settled, say what was missing.`,
+    ].join(" "),
+  };
+}
+
 type JsonSchema = {
   type: "object";
   properties: Record<string, Record<string, unknown>>;
@@ -181,6 +217,7 @@ export function appointmentReceptionistTemplate(args: {
       // "hello?" — which is most of what slow feels like on a phone.
       enable_backchannel: true,
       normalize_for_speech: true,
+      post_call_analysis_data: [summaryAnalysisField(args.language)],
     },
   };
 }
