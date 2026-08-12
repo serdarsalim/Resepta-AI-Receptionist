@@ -20,6 +20,7 @@ import { recordActivity } from "./lib/activity";
 import { connectionField } from "./lib/connections";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 import { serviceKey } from "./services";
+import { spokenDuration, spokenPrice } from "./lib/speech";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -127,6 +128,10 @@ export const getCustomer = internalQuery({
       .withIndex("by_customer", (q) => q.eq("customerId", c._id))
       .order("desc")
       .take(10);
+    // The org's, not c.language. This is the wording the agent SAYS, and the
+    // agent speaks the language it was built in; the customer's own language
+    // steers written follow-ups, which is a different decision made elsewhere.
+    const orgLanguage = (await ctx.db.get(orgId))?.language ?? null;
     return {
       id: c._id,
       name: fullName(c),
@@ -148,6 +153,7 @@ export const getCustomer = internalQuery({
         startAt: new Date(a.startAt).toISOString(),
         status: a.status,
         durationMinutes: a.durationMinutes ?? null,
+        durationSpoken: spokenDuration(a.durationMinutes ?? null, orgLanguage),
         services: (a.items ?? []).map((i) => i.name),
       })),
     };
@@ -331,17 +337,26 @@ export const listServices = internalQuery({
       .query("services")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    const language = org?.language ?? null;
+    const currency = org?.currency ?? null;
     return {
       // Prices are minor units OF THIS. A bare integer is not an amount
       // anybody can read back to a caller.
-      currency: org?.currency ?? null,
+      currency: currency,
+      // Said, not shown. The numeric fields stay because booking and
+      // comparison need them, but a voice agent given only those writes the
+      // price list it has read a million of — "90 dk için ₺3.000" — and the
+      // caller hears the letters d and k. These two are the words for the
+      // same values, and the tool description tells the agent to use them.
       services: rows.map((row) => ({
         id: row._id,
         name: row.name,
         key: serviceKey(row),
         durationMinutes: row.durationMinutes,
+        durationSpoken: spokenDuration(row.durationMinutes, language),
         active: row.active,
         price: row.price ?? null,
+        priceSpoken: spokenPrice(row.price ?? null, currency, language),
       })),
     };
   },

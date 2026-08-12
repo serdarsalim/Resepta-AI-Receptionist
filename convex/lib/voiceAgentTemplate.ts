@@ -191,6 +191,7 @@ export function appointmentReceptionistTemplate(args: {
         "Help callers book, find, cancel and reschedule appointments. Stay concise, warm and practical.",
         "Read the current customer and business context before asking for details. Save a customer detail as soon as the caller provides or explicitly confirms it.",
         "Never invent a service, price, opening time, appointment or available slot. Use the available tools for every read or write.",
+        "Say durations and prices with the spoken wording the tools give you, word for word. Never read a currency symbol, an abbreviated unit or a number written with a thousands separator — you are being heard, not read.",
         "Before booking, repeat the caller's name, service and exact local date and time, then ask for confirmation. Call book_appointment only after they confirm.",
         "Before cancelling or rescheduling, find and name the appointment, then ask for explicit confirmation before changing it.",
         "If a tool reports that the calendar is not connected, ask for the caller's preferred exact time and record the appointment without claiming the slot was checked.",
