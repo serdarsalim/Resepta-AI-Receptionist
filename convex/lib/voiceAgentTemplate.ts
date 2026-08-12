@@ -16,7 +16,12 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // them, so a bump for a prompt edit would light every tenant's update banner
 // and then visibly change nothing. Prompt improvements reach new agents by
 // existing, and reach old ones through their owner's editor.
-export const VOICE_AGENT_TEMPLATE_VERSION = 2;
+// v3 (2026-08-12, evening): claude-4.5-haiku replaces gpt-4.1. A/B'd on real
+// calls to Bella the same day: same adherence to the 13-rule Turkish prompt,
+// ~700ms first token against ~800, at half the per-minute price. Retell's own
+// guidance warns the gpt-5.x family off voice entirely (per-turn reasoning
+// tax), which also closes the "just use a newer mini" door.
+export const VOICE_AGENT_TEMPLATE_VERSION = 3;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -245,7 +250,7 @@ export function appointmentReceptionistTemplate(args: {
       // the same salon can get a different answer speed after a provider
       // change nobody here made. If this still reads slow, a mini tier is the
       // next lever — it is one string, and this is where it lives.
-      model: "gpt-4.1",
+      model: "claude-4.5-haiku",
       model_temperature: 0.1,
       general_prompt: GENERAL_PROMPTS[args.language].join("\n"),
       general_tools: tools,
