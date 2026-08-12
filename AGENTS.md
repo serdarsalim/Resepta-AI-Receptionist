@@ -679,6 +679,29 @@ shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
 implementations. Serdar has flagged this repeatedly across projects; treat a
 clipped popup as a bug you introduced knowingly.
 
+## Scrollbars: two weights, width-only hover
+
+Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),
+because it applies to every project. This repo holds the reference
+implementation in `src/app/globals.css`. The short form:
+
+- `.thin-scroll` is the in-card rail: 3px at rest, 6px on hover. Everything
+  that scrolls inside a card uses it.
+- `.page-scroll` sits on top of it for the shell's own `main` only: 6px at
+  rest, 8px on hover. It overrides widths ONLY and must stay below
+  `.thin-scroll` in the file, since equal specificity makes source order the
+  tiebreaker.
+- Hover changes width, never colour. Doing both is what makes a rail read
+  heavy.
+- The visible rail is carved out of a wider track by a transparent border plus
+  `background-clip: padding-box`. That floats it off the card edge AND keeps
+  the thumb's hit box at full track width, which is what makes a 3px bar
+  clickable.
+- **`scrollbar-width` must stay inside the `@supports not
+  selector(::-webkit-scrollbar)` guard.** Declaring it unguarded switches
+  Chrome's webkit pseudo-elements off wholesale, which is exactly how the
+  previous rules sat here as dead code while Chrome painted its own 11px bar.
+
 ## Borders only when absolutely necessary (Serdar's design language)
 
 Borders belong to CONTAINERS (cards, inputs, dropdown panels) — never to
