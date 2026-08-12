@@ -9,6 +9,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // deliberately waits longer before answering, so the one setting v1 made was
 // the slow one. Values here are copied from a hand-tuned Turkish agent that
 // does not feel slow on the phone, not guessed.
+//
+// WHAT BUMPS THIS NUMBER: changes syncTemplate can deliver — the agent-level
+// knobs, the tool definitions, the model, the analysis fields. Prompt text
+// does NOT: existing agents own their prompts and the sync never touches
+// them, so a bump for a prompt edit would light every tenant's update banner
+// and then visibly change nothing. Prompt improvements reach new agents by
+// existing, and reach old ones through their owner's editor.
 export const VOICE_AGENT_TEMPLATE_VERSION = 2;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
@@ -192,6 +199,9 @@ export function appointmentReceptionistTemplate(args: {
         "Read the current customer and business context before asking for details. Save a customer detail as soon as the caller provides or explicitly confirms it.",
         "Never invent a service, price, opening time, appointment or available slot. Use the available tools for every read or write.",
         "Say durations and prices with the spoken wording the tools give you, word for word. Never read a currency symbol, an abbreviated unit or a number written with a thousands separator — you are being heard, not read.",
+        // Field-tested on Bella: asked "what do you offer", the agent recited
+        // the entire service list with prices. No receptionist does that.
+        "When asked what the business offers, name three or four services briefly, without prices, and ask what the caller is looking for. Never recite the full service list. Give a price only for the specific service the caller asks about.",
         "Before booking, repeat the caller's name, service and exact local date and time, then ask for confirmation. Call book_appointment only after they confirm.",
         "Before cancelling or rescheduling, find and name the appointment, then ask for explicit confirmation before changing it.",
         "If a tool reports that the calendar is not connected, ask for the caller's preferred exact time and record the appointment without claiming the slot was checked.",
