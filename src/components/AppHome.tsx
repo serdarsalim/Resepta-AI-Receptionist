@@ -10,6 +10,7 @@ import { InboxView } from "@/components/InboxView";
 import { RemindersView } from "@/components/RemindersView";
 import { CampaignsView } from "@/components/CampaignsView";
 import { VoiceView } from "@/components/VoiceView";
+import { ActivityView } from "@/components/ActivityView";
 import { BusinessView } from "@/components/BusinessView";
 import { AccountView } from "@/components/AccountView";
 import { ContactView } from "@/components/ContactView";
@@ -90,6 +91,9 @@ export function AppHome() {
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
           {tab === "business" && <BusinessView />}
+          {/* Its own destination, not a Business chip: a record the workspace
+              writes about itself is not a setting. */}
+          {tab === "activity" && <ActivityView />}
           {/* Personal, not org config. Only the avatar menu routes here. */}
           {tab === "account" && <AccountView />}
         </>
@@ -112,5 +116,6 @@ const TAB_IDS: TabId[] = [
   "messages",
   "revenue",
   "business",
+  "activity",
   "account",
 ];

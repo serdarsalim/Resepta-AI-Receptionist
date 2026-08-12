@@ -75,6 +75,7 @@ const dictionary = {
   // the business's own word for this, and a salon owner does not think of the
   // salon as a workspace.
   "nav.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
+  "nav.activity": { tr: "Son hareketler", en: "Recent activity", de: "Letzte Aktivität" },
   "nav.settings": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   "nav.menu": { tr: "Menü", en: "Menu", de: "Menü" },
   "nav.closeMenu": {
@@ -2225,6 +2226,13 @@ const dictionary = {
     en: "Hours",
     de: "Zeiten",
   },
+  // The merged tab. Named for both halves because the roster carries sign-in
+  // access as well as who can be booked, so "Availability" would mislabel it.
+  "settings.hoursTeam": {
+    tr: "Saatler ve ekip",
+    en: "Hours & team",
+    de: "Zeiten & Team",
+  },
   "settings.businessHours": {
     tr: "Açık olduğunuz günler",
     en: "Days you're open",
@@ -2954,8 +2962,8 @@ const dictionary = {
   // rather than "Termin verschieben".
   "activity.title": { tr: "Son işlemler", en: "Recent activity", de: "Letzte Aktivität" },
   "activity.hint": {
-    tr: "Kim ne yaptı. Mesajlar burada değil — onlar müşterinin kendi yazışmasında.",
-    en: "Who did what. Messages are not here — they live in the customer's own thread.",
+    tr: "Kim ne yaptı. Mesajlar burada değil, onlar müşterinin kendi yazışmasında.",
+    en: "Who did what. Messages are not here: they live in the customer's own thread.",
     de: "Wer was getan hat. Nachrichten stehen nicht hier, sondern im Verlauf des Kunden.",
   },
   "activity.empty": {

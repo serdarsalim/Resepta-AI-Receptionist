@@ -53,23 +53,25 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue" | "people" | "activity";
+type Section = "general" | "hours" | "catalogue";
 
 const SECTIONS: { id: Section; key: TranslationKey }[] = [
   { id: "general", key: "settings.general" },
-  // Hours are a fact about the business, so they live here — second, right
-  // beside General. They spent their first life inside the WhatsApp tab under
-  // Reminders because only the away-reply read them; now the voice agent
-  // schedules by them, and "when are we open" filed under a messaging channel
-  // was a genuine scavenger hunt.
-  { id: "hours", key: "settings.hours" },
+  // Hours AND the roster, because they are the two inputs to one calculation:
+  // getAvailableSlots derives a bookable slot from the business hours and from
+  // orgCapacity, which is the count of active staff. Two chips apart meant
+  // changing capacity took you off the screen showing when you are open.
+  //
+  // Named for both halves rather than "Availability" — the roster also carries
+  // sign-in access, which that word would mislabel — and the compound reads
+  // parallel to "Services & fields" beside it.
+  { id: "hours", key: "settings.hoursTeam" },
   { id: "catalogue", key: "settings.catalogue" },
-  { id: "people", key: "staff.title" },
-  // AI moved to Account (2026-08-12). An MCP key is minted by and revoked by
-  // one PERSON, so it was never a fact about the salon; the earlier reasoning
-  // here ("a key is a member of the team") described what the feed shows, not
-  // who owns the credential. Do not take the section id back.
-  { id: "activity", key: "activity.title" },
+  // AI moved to Account and Recent activity became its own sidebar row, both
+  // on 2026-08-12. An MCP key is minted and revoked by one PERSON, so it was
+  // never a fact about the salon. Activity is not configured at all: it is a
+  // record the workspace writes about itself, which is what the sidebar's foot
+  // group is for. Do not take either section id back.
 ];
 
 function SectionChip({
@@ -134,7 +136,8 @@ const SEARCH_INDEX: { section: Section; key: TranslationKey }[] = [
   { section: "general", key: "settings.language" },
   { section: "general", key: "settings.currency" },
   { section: "catalogue", key: "services.active" },
-  { section: "people", key: "roster.bookable" },
+  { section: "hours", key: "roster.bookable" },
+  { section: "hours", key: "staff.title" },
 ];
 
 const SECTION_STORAGE_KEY = "randevu.business.section";
@@ -229,85 +232,21 @@ export function BusinessView() {
         </p>
       )}
       {section === "general" && <DetailsCard isOwner={isOwner} />}
-      {section === "hours" && <HoursCard isOwner={isOwner} org={settings.org} />}
+      {section === "hours" && (
+        <>
+          <HoursCard isOwner={isOwner} org={settings.org} />
+          <PeopleCard isOwner={isOwner} />
+        </>
+      )}
       {section === "catalogue" && (
         <>
           <ServicesCard isOwner={isOwner} />
           <FieldsCard isOwner={isOwner} />
         </>
       )}
-      {section === "people" && <PeopleCard isOwner={isOwner} />}
-      {section === "activity" && <ActivityCard />}
     </div>
   );
 }
-
-// Who did what, newest first. No owner gate: a stylist wondering who moved
-// their 14:00 has the same right to the answer as the owner does, and every
-// row here describes something that person could already see in the app.
-function ActivityCard() {
-  const { t, language } = useLanguage();
-  const rows = useQuery(api.activity.recent, {});
-  const when = new Intl.DateTimeFormat(language, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  return (
-    <Card title={t("activity.title")} tip={t("activity.hint")}>
-      {rows === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">{t("activity.empty")}</p>
-      ) : (
-        <ul className="divide-y divide-[var(--border)]">
-          {rows.map((row) => (
-            // One line per entry: what happened, who it was about, who did it.
-            // Stacking these would make a morning's work three screens tall.
-            <li key={row._id} className="flex items-baseline gap-3 py-1.5 text-sm">
-              <span className="w-28 shrink-0 text-xs tabular-nums text-[var(--muted)]">
-                {when.format(row.at)}
-              </span>
-              <span className="min-w-0 flex-1 truncate">
-                {ACTIVITY_LABELS[row.kind] ? t(ACTIVITY_LABELS[row.kind]) : row.kind}
-                {row.customerName && (
-                  <span className="text-[var(--muted)]"> · {row.customerName}</span>
-                )}
-                {row.detail && (
-                  <span className="text-[var(--muted)]"> · {row.detail}</span>
-                )}
-              </span>
-              <span className="shrink-0 text-xs text-[var(--muted)]">
-                {row.actor ?? t("activity.system")}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-// Explicit rather than a template cast: translate() throws on a key it does
-// not hold, so building the key from the kind string would turn one entry
-// written by a newer deploy than this bundle into a blank card. Unknown kinds
-// fall through to the raw value, which is ugly and readable and does not take
-// the rest of the history down with it.
-const ACTIVITY_LABELS: Record<string, TranslationKey> = {
-  appointment_created: "activity.appointment_created",
-  appointment_status: "activity.appointment_status",
-  appointment_moved: "activity.appointment_moved",
-  appointment_deleted: "activity.appointment_deleted",
-  customer_created: "activity.customer_created",
-  customer_deleted: "activity.customer_deleted",
-  settings_changed: "activity.settings_changed",
-  member_invited: "activity.member_invited",
-  member_removed: "activity.member_removed",
-  whatsapp_connected: "activity.whatsapp_connected",
-  booking_dropped: "activity.booking_dropped",
-};
 
 // Rows use the shared ROW_GRID from RowLabel, the same string SettingsView and
 // AccountView import: the three surfaces must line up when you flip between

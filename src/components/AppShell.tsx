@@ -34,6 +34,7 @@ export type TabId =
   | "messages"
   | "revenue"
   | "business"
+  | "activity"
   | "account";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
@@ -93,6 +94,15 @@ const BusinessIcon = makeIcon(
   <>
     <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
     <path d="M1 14h6M9 8h6M17 16h6" />
+  </>,
+);
+// Clock with a counter-clockwise arrow: history, not scheduling. Deliberately
+// not the calendar's glyph, which already means "when things are booked".
+const ActivityIcon = makeIcon(
+  <>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M12 7v5l3 2" />
   </>,
 );
 // One gear definition, used at 18px in the sidebar and 16px in the user menu.
@@ -202,11 +212,21 @@ const NAV_TABS: {
 // Settings is gone — dissolved into the tabs above (voice, messages) and into
 // Business (AI connectors, knowledge moved on to the voice agent since). One
 // config destination remains.
+// Below the divider: "about this workspace", as opposed to today's work above
+// it. Activity joined Business here on 2026-08-12, out of Business's chip strip
+// — it was never a setting, it is the record the workspace keeps about itself,
+// and a row below the line costs nothing to the morning scan.
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
     key: "nav.business",
     Icon: BusinessIcon,
+    color: "var(--foreground)",
+  },
+  {
+    id: "activity",
+    key: "nav.activity",
+    Icon: ActivityIcon,
     color: "var(--foreground)",
   },
 ];
