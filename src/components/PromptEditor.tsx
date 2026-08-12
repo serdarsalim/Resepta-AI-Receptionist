@@ -209,8 +209,13 @@ export function PromptEditor({
   }, [value, variables]);
 
   // Applied to BOTH layers, or the pills drift off the words they mark.
-  const fieldClass = `w-full rounded-lg border px-2 py-1.5 text-xs leading-relaxed ${
-    singleLine ? "" : "font-mono"
+  // The multiline editor breathes: a wall of instructions flush against the
+  // border reads as crowded, and the highlight overlay below shares this
+  // class, so the padding must live here once or the coloured variable chips
+  // drift off the text they sit under. The single-line variant (opening line)
+  // keeps input-sized padding.
+  const fieldClass = `w-full rounded-lg border text-xs leading-relaxed ${
+    singleLine ? "px-2 py-1.5" : "px-3.5 py-3 font-mono"
   }`;
 
   return (
