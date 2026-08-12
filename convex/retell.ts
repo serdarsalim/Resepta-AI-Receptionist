@@ -19,9 +19,8 @@ import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
-import { formatAppointmentTime } from "./lib/format";
 import { voiceVariableInput } from "./lib/voiceVariables";
-import { spokenDuration, spokenPrice } from "./lib/speech";
+import { spokenClock, spokenDateTime, spokenDuration, spokenPrice } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
@@ -701,7 +700,7 @@ export const beforeCallContext = internalQuery({
           break;
         case "next_appointment":
           value = next
-            ? formatAppointmentTime(next.startAt, org.timezone, customer?.language ?? org.language)
+            ? spokenDateTime(next.startAt, org.timezone, customer?.language ?? org.language)
             : "";
           break;
         case "contact_field": {
@@ -734,7 +733,7 @@ export const beforeCallContext = internalQuery({
       customer_email: customer?.email ?? "",
       customer_language: lang,
       next_appointment: next
-        ? formatAppointmentTime(next.startAt, org.timezone, lang)
+        ? spokenDateTime(next.startAt, org.timezone, lang)
         : "",
       // Spoken, not written — this variable is read down a phone line
       // verbatim. This exact line is where Bella got "90 dk için ₺3.000":
@@ -1286,7 +1285,7 @@ export const runtimeCallContext = internalQuery({
         date: `${parts.y}-${pad(parts.m0 + 1)}-${pad(parts.d)}`,
         time: `${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}`,
         timezone: org.timezone,
-        spoken: formatAppointmentTime(nowMs, org.timezone, org.language),
+        spoken: spokenDateTime(nowMs, org.timezone, org.language),
         note:
           "Local date and time at the business right now. Resolve every relative time the caller says — today, tomorrow, next Tuesday, 5pm — against this, and book with the full local date and time.",
       },
@@ -1576,7 +1575,7 @@ export const voiceBook = internalMutation({
         // Read only on the failure path — the happy path must not pay for it.
         const bookingOrg = await ctx.db.get(args.orgId);
         const when = bookingOrg
-          ? formatAppointmentTime(freeAt, bookingOrg.timezone, bookingOrg.language)
+          ? spokenClock(freeAt, bookingOrg.timezone, bookingOrg.language)
           : new Date(freeAt).toISOString();
         throw new Error(
           `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`,

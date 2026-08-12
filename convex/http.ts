@@ -17,7 +17,7 @@ import {
   localPart,
   verifyResendSignature,
 } from "./lib/emailInbound";
-import { formatAppointmentTime } from "./lib/format";
+import { spokenDateTime } from "./lib/speech";
 import { openHoursForAgent } from "./lib/businessHours";
 import {
   hasBusinessHours,
@@ -478,7 +478,7 @@ http.route({
           // working can take four at once, so a single 14:00 booking is not a
           // reason to turn anybody away. bookedBetween does that arithmetic.
           booked_slots: booked.full.map((slot) => ({
-            start: formatAppointmentTime(slot.startAt, org.timezone, org.language),
+            start: spokenDateTime(slot.startAt, org.timezone, org.language),
             duration_minutes: slot.durationMinutes ?? 30,
           })),
           // open_hours says when the doors are open; closed_days says which
@@ -504,7 +504,7 @@ http.route({
       return respond({
         available_slots: result.slots.slice(0, 10).map((iso) => ({
           start: iso,
-          spoken: formatAppointmentTime(Date.parse(iso), org.timezone, org.language),
+          spoken: spokenDateTime(Date.parse(iso), org.timezone, org.language),
         })),
       });
     }
@@ -554,7 +554,7 @@ http.route({
         // that works.
         return respond({
           error: "outside-open-hours",
-          attempted: formatAppointmentTime(startAt, org.timezone, org.language),
+          attempted: spokenDateTime(startAt, org.timezone, org.language),
           ...openHoursForAgent(openHours),
           note:
             "The salon is CLOSED then, so this was not booked. Tell the caller" +
@@ -593,7 +593,7 @@ http.route({
       }
       return respond({
         booked: true,
-        spoken_time: formatAppointmentTime(startAt, org.timezone, org.language),
+        spoken_time: spokenDateTime(startAt, org.timezone, org.language),
         // Absent means the spoken service matched nothing the salon offers.
         // The booking still stands; the agent can read this back to confirm,
         // and its absence is the cue to ask again rather than assume.
@@ -659,7 +659,7 @@ http.route({
         phone,
       });
       const spokenOf = (at: number) =>
-        formatAppointmentTime(at, org.timezone, org.language);
+        spokenDateTime(at, org.timezone, org.language);
 
       // Lets the agent name the appointment before acting on it, instead of
       // cancelling whatever happens to be next for a caller with two bookings.
