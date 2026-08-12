@@ -11,6 +11,7 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { KnowledgeCard } from "./KnowledgeCard";
+import { FieldsCard } from "./BusinessView";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -22,7 +23,22 @@ import { KnowledgeCard } from "./KnowledgeCard";
 // tables, so it belongs beside the agent that reads it — it spent its first
 // life under Business, which is a fact-about-the-salon container, and that is
 // the same scavenger hunt the Hours comment in BusinessView describes.
-type VoiceSection = "agents" | "calls" | "knowledge";
+//
+// Fields joined the strip on 2026-08-12 after three wrong homes. Contact fields
+// are what the agent COLLECTS the way knowledge is what it KNOWS, so the two
+// sit together here. The objection that killed the first attempt still stands
+// on paper (the agent is one consumer among forms, campaigns, email, wa, mcp
+// and the contact record) and it loses force as the chat, WhatsApp and email
+// agents ship: chatAgentTemplate already reads knowledge, and this row goes
+// multi-channel when they land.
+//
+// What it is NOT: buried at the foot of the Customers column picker, which is
+// where it briefly lived. Fields ARE those columns, so the rule about rare
+// actions fit the letter and missed the point. Defining what you store about a
+// customer is a SETUP surface, one of the first things a new business touches,
+// and a setup surface hidden inside a dropdown labelled "Columns" is not
+// findable by the person who needs it most.
+type VoiceSection = "agents" | "calls" | "knowledge" | "fields";
 
 function fmtDuration(sec: number | null): string {
   if (sec === null) return "";
@@ -162,12 +178,27 @@ export function VoiceView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
-      <div className="flex flex-wrap items-center gap-1">
+      {/* Underline tabs, ported from Vercel and measured off it rather than
+          eyeballed. The strip this replaced put a filled accent pill next to
+          plain grey text, which is two different KINDS of control in one row:
+          the selected item read as a button and the rest read as labels.
+
+          Active is DARKER PLUS AN UNDERLINE, never bolder. Vercel keeps weight
+          at 400 across both states and so do we, because a weight change
+          reflows the strip every time you switch tabs and "nothing shifts" is
+          a standing rule. Idle is --muted-strong (#4d4d4d), which is what
+          Vercel uses here too; hover lifts it to --foreground.
+
+          The hairline belongs to the STRIP and each tab overlaps it with
+          -mb-px, so the active underline replaces that segment of the rule
+          instead of sitting under it. */}
+      <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
         {(
           [
             { id: "agents" as const, label: t("voice.agents") },
             { id: "calls" as const, label: t("settings.voiceCalls") },
             { id: "knowledge" as const, label: t("knowledge.section") },
+            { id: "fields" as const, label: t("fields.title") },
           ] as { id: VoiceSection; label: string }[]
         ).map((entry) => (
           <button
@@ -175,12 +206,10 @@ export function VoiceView() {
             type="button"
             onClick={() => setSection(entry.id)}
             aria-current={section === entry.id ? "page" : undefined}
-            // --muted-strong, matching Business's strip: a chip you read to
-            // navigate is the middle tier, never the timestamp grey.
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
               section === entry.id
-                ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-                : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                ? "border-[var(--foreground)] text-[var(--foreground)]"
+                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
             }`}
           >
             {entry.label}
@@ -193,6 +222,7 @@ export function VoiceView() {
       )}
       {section === "calls" && <CallHistory />}
       {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
+      {section === "fields" && <FieldsCard isOwner={isOwner} />}
     </div>
   );
 }

@@ -746,6 +746,28 @@ shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
 implementations. Serdar has flagged this repeatedly across projects; treat a
 clipped popup as a bug you introduced knowingly.
 
+## Tabs are underlined, never pills
+
+Measured off Vercel, not eyeballed. A filled accent pill beside plain grey text
+is two different KINDS of control in one row: the selected item reads as a
+button and the rest read as labels, which is what the pill strip here looked
+like until 2026-08-12.
+
+- Strip owns the hairline: `flex items-center gap-5 border-b border-[var(--border)]`.
+- Tab: `-mb-px border-b-2 px-0.5 py-2.5 text-sm`, so it overlaps the strip's
+  rule and the active underline REPLACES that segment rather than sitting under
+  it.
+- Active: `border-[var(--foreground)] text-[var(--foreground)]`.
+- Idle: `border-transparent text-[var(--muted-strong)]`, hover to
+  `--foreground`. #4d4d4d is what Vercel uses for an idle tab too.
+- **Weight never changes between states.** Vercel holds 400 across both and so
+  do we: bolding the active tab reflows the whole strip on every switch, and
+  nothing shifts is a standing rule. Darker plus an underline is the whole cue.
+
+`VoiceView` is the reference implementation. Value pickers that happen to look
+like a strip (the message-channel pills in Reminders, feed filters) are NOT
+tabs and keep their own treatment.
+
 ## Every scrolling page ends with room below the last card
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),

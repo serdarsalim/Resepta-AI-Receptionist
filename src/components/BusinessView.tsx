@@ -979,10 +979,10 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   if (!isOwner && fields !== undefined && rows.length === 0) return null;
 
   return (
-    // Untitled: this renders inside a Sheet that already carries the name and
-    // the (i), and a card restating its own container's title is the stutter
-    // ActivityView had to answer for.
-    <Card disabled={!isOwner}>
+    // Titled again: it renders under the Voice agent's Fields chip, and the
+    // strip names the SECTION while the card carries the (i) that explains what
+    // a field is for. KnowledgeCard beside it works the same way.
+    <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
       {/* One sortable table, ported from Nudge's fields admin: system rows
           are pinned and undeletable, org rows drag to reorder, a List type
           expands into its options editor, and Filled by is the column that
