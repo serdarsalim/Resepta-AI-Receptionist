@@ -250,7 +250,82 @@ These change what gets built next — don't paper over them:
   template names into the Reminders tab. If the partner owns the WABA,
   templates are approved once centrally and this UI gets much smaller.
 
+## The IA after 2026-08-12 (read this before the 2026-07-31 section below)
+
+Sidebar: Customers · Inbox · Campaigns · **Voice agent** · Revenue (flag) ·
+Calendar · **Reminders** · Business. Two things moved and one scar is worth
+more than either.
+
+- **Knowledge left Business for the voice agent.** It is now the third chip on
+  `VoiceView`'s own strip: Agents · Calls · Knowledge. It is what the agent
+  KNOWS, so it belongs beside the agent that reads it; under Business it was
+  filed as a fact about the salon, which is the same scavenger hunt the Hours
+  comment in `BusinessView` describes. `BusinessView` must not take the
+  `knowledge` section id back.
+- **Reminders stays in the sidebar, directly under Calendar.** It was moved
+  into Business as a config section and Serdar rejected it on sight. The
+  config argument is right on paper — rules you set once, nothing arrives in
+  them, its own old comment called it "the last of Settings" — and wrong in
+  use: reminders are the thing this product does to keep chairs full, and they
+  sit under Calendar because every rule fires off an appointment. Don't
+  re-propose the move.
+- **⚠️ NEVER wrap a view that already has a chip strip in another chip strip.**
+  The first attempt at this session's IA work built a `FrontDeskView` holding
+  Voice / Knowledge / Reminders as chips. `VoiceView` renders its OWN chips at
+  its top, so the result was two identical chip rows stacked, one indented
+  under the other. Reverted in `f2e9918`. The lesson generalises past this one
+  bug: before grouping views under a new container, open each one and look at
+  what it renders first. Grouping in this app means adding a tab to the strip
+  a view already owns, or adding a sidebar row — never a third level.
+- **Hours keeps its own Business tab.** Folding it into General as a card was
+  proposed and declined: General already carries nine rows across three
+  unrelated jobs (identity, intake channels, a feature flag), and an open/close
+  grid appended to it lands below the fold on the screen people open
+  specifically to change hours. `BusinessView`'s `SECTIONS` comment already
+  records this exact failure from the last time sections were merged. If the
+  strip feels long, General is the section to split, not Hours to absorb.
+
+### Business searches from the header, and has no ✕
+
+`BusinessView` claims the shell's search box with `useHeaderSearch`, the same
+call Customers and Inbox make, so it renders the same component in the same
+corner and collapses to the magnifier on phones for free. The ✕ is gone: the
+header fits one control on the right, and the sidebar is the way out of every
+other tab. **Account keeps its ✕** — it is the one destination with no sidebar
+row to return from, so `closable` is now `tab === "account"` alone.
+
+The search looks ACROSS sections, not inside the open one: the question is
+"which screen is this setting on", so a hit renders the setting's name with its
+section beside it, and picking one opens that section and clears the query.
+`SEARCH_INDEX` is **hand-maintained** — the settings are spread over seven card
+components with no runtime register to enumerate — so add a line when you add a
+row. Forgetting costs one unfindable name and nothing else. Never index a key
+that does not exist in `i18n.ts`.
+
+### Text has three tiers, not two
+
+Ported from Nudge the same day, and the reasoning is identical because the
+palette was byte-identical. `--foreground` (#171717) is primary: page titles,
+table data, field labels, active nav. `--muted-strong` (#4d4d4d light, #cccccc
+dark) is text you read to NAVIGATE: idle nav, column headers, group labels.
+`--muted` (#737373) is genuine de-emphasis only: timestamps, hints,
+placeholders, empty and loading states.
+
+Shipping only the outer two put navigation and table data in the timestamp
+grey, which reads defensive — `--muted` on white is 4.7:1, the WCAG AA floor,
+against Vercel's 8.4:1 for the same job. **Only ABSENCE is de-emphasised:** a
+cell with a value is `--foreground`, its em-dash placeholder is `--muted`. A
+`<td>` with `colSpan` is an empty or loading state and stays quiet; one without
+is data. `--page-title` was `#334155`, slate-tinted AND lighter than the body
+text beneath it; it is `var(--foreground)` now. Cross-project version lives in
+Mana, `40_Patterns/preferences.md`.
+
 ## The IA after 2026-07-31 (Settings is gone — don't reintroduce it)
+
+> **Partly superseded by the 2026-08-12 section above.** The sidebar list below
+> is stale (Phone agent is Voice agent, Knowledge moved onto it, Reminders sits
+> under Calendar). Everything about `VoiceAgentPage`, variables and drafts still
+> holds.
 
 Sidebar: Customers · Inbox · Campaigns · **Phone agent** · **Reminders** ·
 Calendar · Revenue (flag) · Business. There is no Settings tab. Where things
