@@ -446,6 +446,12 @@ export default defineSchema({
     inboundNumber: v.optional(v.string()),
     transferNumber: v.optional(v.string()),
     enabled: v.boolean(),
+    // What the agent calls itself to a caller — "ben Deniz". Resepta's, not
+    // the provider's: agent_name at Retell is the label the OWNER picks a row
+    // by in a list ("Bella Randevu Asistanı"), and reading that down a phone
+    // line is not a greeting. Injected as {{agent_name}} at ring time, so
+    // renaming her takes effect on the next call with no republish.
+    personaName: v.optional(v.string()),
     // Which Resepta template generation last touched this agent's voice
     // engineering — stamped at creation and by syncTemplate, compared against
     // VOICE_AGENT_TEMPLATE_VERSION to offer the update. Absent on agents from

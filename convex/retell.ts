@@ -551,6 +551,7 @@ export const agentEditorContext = internalQuery({
       variablesSyncedAt: agent.variablesSyncedAt ?? null,
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
       templateVersion: agent.templateVersion ?? null,
+      personaName: agent.personaName ?? null,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
@@ -721,6 +722,10 @@ export const beforeCallContext = internalQuery({
     const currency = org.currency ?? "TRY";
     const builtins: Record<string, string> = {
       business_name: org.name,
+      // Empty when the salon never named her. The prompt line that reads this
+      // says what empty means, rather than leaving the model to invent a name
+      // for itself — see GENERAL_PROMPTS in lib/voiceAgentTemplate.
+      agent_name: agent.personaName ?? "",
       customer_name: customer
         ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
         : "",
@@ -1193,6 +1198,30 @@ export const markRuntimeConnected = internalMutation({
       .unique();
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, { runtimeConnectedAt: Date.now() });
+    return null;
+  },
+});
+
+// The caller-facing name, owned by Resepta and read at ring time. A plain
+// mutation, not an action: nothing about it lives at the provider, so naming
+// her costs no draft, no publish and no provider round trip, and takes effect
+// on the very next call.
+export const setAgentPersona = mutation({
+  args: { retellAgentId: v.string(), personaName: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, personaName }) => {
+    const { orgId } = await requireOwner(ctx);
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || agent.orgId !== orgId) throw new Error("no-such-agent");
+    const trimmed = personaName.trim().slice(0, 40);
+    await ctx.db.patch(agent._id, {
+      // Cleared rather than stored blank, so "has a name" is one check
+      // everywhere instead of two.
+      personaName: trimmed || undefined,
+    });
     return null;
   },
 });

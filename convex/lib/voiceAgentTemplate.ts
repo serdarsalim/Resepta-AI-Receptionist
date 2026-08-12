@@ -43,6 +43,7 @@ export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
   "tr-TR": [
     "{{business_name}} için randevu resepsiyonistisin. Her zaman Türkçe konuş.",
+    "Adın: {{agent_name}}. Adın sorulursa bu ismi söyle. Boşsa kendine isim uydurma; {{business_name}} randevu görevlisi olduğunu söyle.",
     "Arayanlara randevu oluşturma, bulma, iptal etme ve erteleme konusunda yardım et. Kısa, sıcak ve pratik konuş.",
     "Detay sormadan önce mevcut müşteri ve işletme bağlamını oku. Arayan bir bilgiyi verdiği veya açıkça onayladığı anda kaydet.",
     "Arayanın kayıtlı adı: {{customer_name}}. Doluysa bu arayanı tanıyorsun demektir; adıyla hitap et ve adını yeniden sorma. Boşsa yeni müşteri olarak davran ve adını sor.",
@@ -59,6 +60,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
   ],
   "en-US": [
     "You are the appointment receptionist for {{business_name}}. Always speak English.",
+    "Your name: {{agent_name}}. If you are asked your name, give that one. If it is empty, do not invent a name for yourself; say you are the appointment desk at {{business_name}}.",
     "Help callers book, find, cancel and reschedule appointments. Stay concise, warm and practical.",
     "Read the current customer and business context before asking for details. Save a customer detail as soon as the caller provides or explicitly confirms it.",
     "The caller's name on record: {{customer_name}}. If it is filled you know this caller; address them by name and do not ask for it again. If it is empty, treat them as a new customer and ask their name.",
@@ -75,6 +77,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
   ],
   "de-DE": [
     "Du bist die Terminrezeption für {{business_name}}. Sprich immer Deutsch.",
+    "Dein Name: {{agent_name}}. Wirst du nach deinem Namen gefragt, nenne diesen. Ist er leer, erfinde keinen; sage, du bist die Terminannahme von {{business_name}}.",
     "Hilf Anrufern, Termine zu buchen, zu finden, abzusagen und zu verschieben. Bleib knapp, warm und praktisch.",
     "Lies den aktuellen Kunden- und Geschäftskontext, bevor du nach Details fragst. Speichere eine Kundenangabe, sobald der Anrufer sie nennt oder ausdrücklich bestätigt.",
     "Der gespeicherte Name des Anrufers: {{customer_name}}. Ist er gefüllt, kennst du diesen Anrufer; sprich ihn mit Namen an und frage nicht erneut danach. Ist er leer, behandle ihn als neuen Kunden und frage nach dem Namen.",
@@ -101,6 +104,21 @@ const BEGIN_MESSAGES: Record<VoiceAgentLanguage, string> = {
   "tr-TR": "Merhaba, burası {{business_name}}. Size nasıl yardımcı olabilirim?",
   "en-US": "Hello, you've reached {{business_name}}. How can I help?",
   "de-DE": "Guten Tag bei {{business_name}}. Wie kann ich Ihnen helfen?",
+};
+
+// The same greeting with her name in it. Built at provisioning rather than
+// left to {{agent_name}} at ring time, because an unnamed agent would greet
+// with "ben ." — the introduction is a CLAUSE, and a clause cannot be
+// substituted away by an empty variable. New agents are born with whichever
+// version fits; renaming an agent later is the owner editing their opening
+// line, which is theirs to write anyway.
+const BEGIN_MESSAGES_NAMED: Record<VoiceAgentLanguage, (name: string) => string> = {
+  "tr-TR": (name) =>
+    `Merhaba, burası {{business_name}}, ben ${name}. Size nasıl yardımcı olabilirim?`,
+  "en-US": (name) =>
+    `Hello, you've reached {{business_name}}. This is ${name}, how can I help?`,
+  "de-DE": (name) =>
+    `Guten Tag bei {{business_name}}, hier ist ${name}. Wie kann ich Ihnen helfen?`,
 };
 
 // The summary the owner reads on the call, asked for by name.
@@ -176,6 +194,10 @@ export function appointmentReceptionistTemplate(args: {
   language: VoiceAgentLanguage;
   businessName: string;
   site: string;
+  // What she calls herself to a caller. Optional: a salon that never named
+  // her gets an agent that says it is the appointment desk, not one that
+  // invents a name for itself.
+  personaName?: string | null;
 }) {
   const empty = { type: "object" as const, properties: {} };
   const tools = [
@@ -248,7 +270,9 @@ export function appointmentReceptionistTemplate(args: {
   return {
     llm: {
       start_speaker: "agent",
-      begin_message: BEGIN_MESSAGES[args.language],
+      begin_message: args.personaName
+        ? BEGIN_MESSAGES_NAMED[args.language](args.personaName)
+        : BEGIN_MESSAGES[args.language],
       default_dynamic_variables: { business_name: args.businessName },
       // Pinned, not left to the provider's default. A template that does not
       // name its model gets whatever the account defaults to that month, so

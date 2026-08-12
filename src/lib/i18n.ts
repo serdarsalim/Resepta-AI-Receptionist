@@ -1716,6 +1716,21 @@ const dictionary = {
     en: "Connection fixed.",
     de: "Verbindung behoben.",
   },
+  "voiceDetail.persona": {
+    tr: "Ajanın adı",
+    en: "Agent name",
+    de: "Name der Agentin",
+  },
+  "voiceDetail.personaHint": {
+    tr: "Arayana kendini bu isimle tanıtır. Boş bırakırsanız isim uydurmaz, randevu görevlisi olduğunu söyler. Değişiklik bir sonraki aramada geçerli olur.",
+    en: "The name she gives a caller who asks. Left empty she invents nothing and says she is the appointment desk. A change takes effect on the next call.",
+    de: "Der Name, den sie einem Anrufer nennt. Leer erfindet sie keinen und sagt, sie ist die Terminannahme. Eine Änderung gilt ab dem nächsten Anruf.",
+  },
+  "voiceDetail.personaPlaceholder": {
+    tr: "Örneğin Deniz",
+    en: "For example Deniz",
+    de: "Zum Beispiel Deniz",
+  },
   "voiceDetail.templateBehind": {
     tr: "Bu ajan için daha yeni ses ayarları hazır.",
     en: "Newer voice tuning is available for this agent.",

@@ -97,6 +97,7 @@ type EditorContext = {
   variablesSyncedAt: number | null;
   variablesRetellVersion: number | null;
   templateVersion: number | null;
+  personaName: string | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -445,6 +446,7 @@ export const read = action({
       // stamping existed and a hand-built one the org connected both lack the
       // current template's tuning, and the card this drives is an offer the
       // owner clicks, not an automatic rewrite.
+      personaName: context.personaName,
       template: {
         synced: context.templateVersion,
         current: VOICE_AGENT_TEMPLATE_VERSION,

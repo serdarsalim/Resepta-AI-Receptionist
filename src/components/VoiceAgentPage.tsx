@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -65,6 +65,7 @@ type Detail = {
   lines: { number: string; nickname: string; agentId: string | null }[];
   inboundNumber: string | null;
   prompt: { general: string; beginMessage: string } | null;
+  personaName: string | null;
   webhook: {
     expected: string | null;
     actual: string | null;
@@ -90,6 +91,7 @@ type StoredDraft = {
   prompt?: string;
   begin?: string;
   voice?: string;
+  persona?: string;
   rows?: VoiceVariable[];
 };
 
@@ -133,6 +135,7 @@ export function VoiceAgentPage({
   const publishPrompt = useAction(api.retellAgent.publishPrompt);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
   const syncTemplate = useAction(api.retellAgent.syncTemplate);
+  const setAgentPersona = useMutation(api.retell.setAgentPersona);
   const assignLine = useAction(api.retellAgent.assignLine);
   const testCall = useAction(api.retellAgent.testCall);
 
@@ -140,6 +143,7 @@ export function VoiceAgentPage({
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [begin, setBegin] = useState("");
+  const [persona, setPersona] = useState("");
   const [voice, setVoice] = useState("");
   // Only one preview plays at a time — clicking down the list otherwise leaves
   // four voices talking over each other.
@@ -176,6 +180,7 @@ export function VoiceAgentPage({
         setDraft(detail.prompt?.general ?? "");
         setBegin(detail.prompt?.beginMessage ?? "");
         setVoice(detail.voiceId ?? "");
+        setPersona(detail.personaName ?? "");
         // A draft left behind on this browser wins over what the server says,
         // because it is the newer intent. The amber pill keeps it honest about
         // not being live.
@@ -184,6 +189,7 @@ export function VoiceAgentPage({
           if (stored.prompt !== undefined) setDraft(stored.prompt);
           if (stored.begin !== undefined) setBegin(stored.begin);
           if (stored.voice !== undefined) setVoice(stored.voice);
+          if (stored.persona !== undefined) setPersona(stored.persona);
           setSeed(stored.rows ?? null);
         }
         setRestored(true);
@@ -207,10 +213,13 @@ export function VoiceAgentPage({
   const onVarsSaveState = useCallback((s: VoiceEditorSaveState) => setVarsState(s), []);
 
   const voiceDirty = !!detail && voice !== (detail.voiceId ?? "");
+  const personaDirty = !!detail && persona.trim() !== (detail.personaName ?? "");
   const promptDirty =
     (detail?.prompt
       ? draft !== detail.prompt.general || begin !== detail.prompt.beginMessage
-      : false) || voiceDirty;
+      : false) ||
+    voiceDirty ||
+    personaDirty;
   const dirty = promptDirty || !!varsState?.dirty;
   const saving = busy || !!varsState?.busy;
 
@@ -221,11 +230,11 @@ export function VoiceAgentPage({
   useEffect(() => {
     if (!restored) return;
     if (dirty) {
-      writeDraft(agentId, { prompt: draft, begin, voice, rows: varsState?.rows });
+      writeDraft(agentId, { prompt: draft, begin, voice, persona, rows: varsState?.rows });
     } else {
       clearDraft(agentId);
     }
-  }, [restored, dirty, agentId, draft, begin, voice, varsState?.rows]);
+  }, [restored, dirty, agentId, draft, begin, voice, persona, varsState?.rows]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -259,6 +268,14 @@ export function VoiceAgentPage({
   const saveAll = () => {
     setSeed(null);
     if (varsState?.dirty) varsState.save();
+    // Separate from savePrompt on purpose: the name never goes to the
+    // provider, so it must not ride a provider publish that could fail, and
+    // it must still save when the prompt itself is untouched.
+    if (personaDirty) {
+      void setAgentPersona({ retellAgentId: agentId, personaName: persona.trim() })
+        .then(load)
+        .catch(() => setError(t("forms.failed")));
+    }
     if (promptDirty) void savePrompt();
     clearDraft(agentId);
   };
@@ -270,6 +287,7 @@ export function VoiceAgentPage({
     setDraft(detail?.prompt?.general ?? "");
     setBegin(detail?.prompt?.beginMessage ?? "");
     setVoice(detail?.voiceId ?? "");
+    setPersona(detail?.personaName ?? "");
     clearDraft(agentId);
     setStatus(null);
   };
@@ -563,6 +581,26 @@ export function VoiceAgentPage({
                     onChange={setBegin}
                     variables={promptVariables}
                     singleLine
+                  />
+                </label>
+
+                {/* Her name, beside the voice she says it in — the two
+                    together are who the caller thinks they are talking to.
+                    Rides the same Save, though it alone never reaches the
+                    provider: it is injected as {{agent_name}} while the phone
+                    rings, so renaming her takes effect on the next call with
+                    no republish. */}
+                <label className="mt-3 block">
+                  <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+                    {t("voiceDetail.persona")}
+                    <InfoTip text={t("voiceDetail.personaHint")} />
+                  </span>
+                  <input
+                    value={persona}
+                    onChange={(event) => setPersona(event.target.value)}
+                    maxLength={40}
+                    placeholder={t("voiceDetail.personaPlaceholder")}
+                    className="w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs"
                   />
                 </label>
 
