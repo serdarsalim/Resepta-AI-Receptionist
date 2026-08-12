@@ -56,11 +56,29 @@ export function FeedFilterPills({
   const waConnected = Boolean(
     settings && (settings.whatsapp.connected || settings.evolutionEnabled),
   );
-  const tabs = waConnected ? TABS : TABS.filter((tab) => tab !== "whatsapp");
   const countOf = (tab: FeedFilter) =>
     tab === "all"
       ? (feed?.length ?? 0)
       : (feed ?? []).filter((item) => item.channel === tab).length;
+
+  // Form hides when this customer has never sent one, which is the same
+  // judgement as WhatsApp's above reached from the other direction. An empty
+  // Call or Email tab means "we haven't yet" — those are ways to REACH this
+  // person, and the tab is a standing offer. The form is not: it is a link a
+  // stranger either used or didn't, and there is no action on this page that
+  // fills it. So on a customer who phoned, an empty Form tab advertises
+  // something that will never arrive for them.
+  //
+  // Notes stays visible at zero on the same test — you can write one from
+  // there, so the empty tab is a place to do something, not a dead end.
+  //
+  // Kept while it is the open tab, or the pills would renumber under someone
+  // who is looking at them.
+  const hasForm = countOf("form") > 0 || value === "form";
+  const tabs = TABS.filter(
+    (tab) =>
+      (tab !== "whatsapp" || waConnected) && (tab !== "form" || hasForm),
+  );
 
   const pill = (tab: FeedFilter) => {
     const count = countOf(tab);
