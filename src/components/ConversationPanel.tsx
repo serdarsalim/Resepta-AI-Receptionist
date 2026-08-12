@@ -454,11 +454,9 @@ export function ConversationPanel({
               <path d="m12 19-7-7 7-7" />
             </svg>
           </button>
-          {"outcome" in openCall && openCall.outcome && (
-            <span className="shrink-0 rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]">
-              {openCall.outcome}
-            </span>
-          )}
+          {/* The outcome pill was here too, printing the same raw
+              `call_successful` boolean as the index did. Gone for the same
+              reason: the summary is directly below it and says more. */}
           <h3 className="min-w-0 truncate text-sm font-semibold">
             {formatDateTime(openCall.at, language)}
           </h3>
