@@ -1270,7 +1270,11 @@ export function AppShell({
       >
         <ShellHeader
           titleKey={titleKey}
-          closable={tab === "business" || tab === "account"}
+          // Business gave its ✕ up for the search box: the header has room for
+          // one thing on the right, and the sidebar is already the way out of
+          // every other tab. Account keeps its ✕ because it is the one
+          // destination with no sidebar row to come back from.
+          closable={tab === "account"}
           onClose={() => onTab("appointments")}
           onOpenMenu={() => setMobileOpen(true)}
           name={settings?.me.name}

@@ -19,6 +19,7 @@ import {
 import { Card } from "./Card";
 import { McpCard } from "./McpCard";
 import { BusinessHoursCard } from "./RemindersView";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
@@ -113,6 +114,29 @@ function HoursCard({
   );
 }
 
+// What the header's search box looks through. Hand-maintained, because the
+// settings it points at are spread over seven card components and there is no
+// runtime register to read them from. The cost of forgetting an entry is that
+// one setting is unfindable by name, not that anything breaks — so add a line
+// here when you add a row, and never add a key that does not exist.
+//
+// Every section is indexed by its own label too, so "hours" finds Hours even
+// though no row inside it is called that.
+const SEARCH_INDEX: { section: Section; key: TranslationKey }[] = [
+  ...SECTIONS.map((entry) => ({ section: entry.id, key: entry.key })),
+  { section: "general", key: "settings.businessName" },
+  { section: "general", key: "settings.timezone" },
+  { section: "general", key: "settings.revenueEnabled" },
+  { section: "general", key: "settings.formEnabled" },
+  { section: "general", key: "settings.formEmbed" },
+  { section: "general", key: "settings.inboundAddress" },
+  { section: "general", key: "settings.emailFrom" },
+  { section: "general", key: "settings.language" },
+  { section: "general", key: "settings.currency" },
+  { section: "catalogue", key: "services.active" },
+  { section: "people", key: "roster.bookable" },
+];
+
 const SECTION_STORAGE_KEY = "randevu.business.section";
 
 export function BusinessView() {
@@ -139,10 +163,52 @@ export function BusinessView() {
     window.history.replaceState(null, "", url);
   };
 
+  // Claims the header's box, same component and same corner as Customers and
+  // Inbox. The shell owns the input; a view only says what it should say.
+  const search = useHeaderSearch(t("common.search"));
+  const hits = search.active
+    ? SEARCH_INDEX.filter((entry) => search.matches(t(entry.key)))
+    : [];
+
   const settings = useQuery(api.orgs.current, {});
   if (!settings) return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
   const isOwner = settings.me.role !== "staff";
+
+  // Searching replaces the section body rather than filtering inside it: the
+  // question being asked is "which screen is this setting on", and the answer
+  // is a list of places to go. Picking one clears the query, because the search
+  // is done the moment it has taken you somewhere.
+  if (search.active) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        {hits.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+            {hits.map((entry, i) => (
+              <button
+                key={`${entry.section}:${entry.key}`}
+                type="button"
+                onClick={() => {
+                  setSection(entry.section);
+                  search.setQuery("");
+                }}
+                className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
+                  i > 0 ? "border-t border-[var(--border)]" : ""
+                }`}
+              >
+                <span className="text-sm">{t(entry.key)}</span>
+                <span className="shrink-0 text-xs text-[var(--muted)]">
+                  {t(SECTIONS.find((s) => s.id === entry.section)!.key)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
