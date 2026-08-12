@@ -626,6 +626,14 @@ export const replaceAgentVariables = internalMutation({
 // The inbound call webhook has no signed-in user. Tenant resolution therefore
 // starts from the Retell agent id, exactly like the function and call-ended
 // webhooks, and every subsequent read stays on that org.
+// One line, in the caller's language, injected only for a business that
+// cannot deliver a booking link any other way. See email_policy below.
+const EMAIL_POLICY: Record<"tr" | "en" | "de", string> = {
+  tr: "Bu işletme randevu onayını ve değiştirme bağlantısını e-posta ile gönderiyor, bu yüzden arayanın e-posta adresine ihtiyacın var. Randevu KAYDEDİLDİKTEN sonra bir kez iste, söylediğini olduğu gibi yaz, harf harf doğrulatmaya çalışma.",
+  en: "This business sends the confirmation and change link by email, so you need the caller's address. Ask once AFTER the appointment is saved, take what they say as given, and do not have them spell it out.",
+  de: "Dieser Betrieb verschickt Bestätigung und Änderungslink per E-Mail, du brauchst also die Adresse des Anrufers. Frage einmal danach, NACHDEM der Termin gespeichert ist, schreibe auf, was gesagt wird, und lass sie nicht buchstabieren.",
+};
+
 export const beforeCallContext = internalQuery({
   args: { retellAgentId: v.string(), phone: v.string() },
   returns: v.any(),
@@ -778,6 +786,26 @@ export const beforeCallContext = internalQuery({
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
         .map((row) => row.name)
         .join(", "),
+      // Ask for an email ONLY when this business cannot reach the caller
+      // without one. A blanket "always request it" rule cost 45 seconds and a
+      // hung-up call: an address spelled down a phone line and transcribed by
+      // a Turkish speech model came out as serdar.dom from "don", after the
+      // caller had already lost patience. And for most salons it buys nothing,
+      // because the confirmation and its manage link go over WhatsApp.
+      //
+      // It is not nothing for everyone, though. An org whose messageChannel is
+      // "email" has no other way to deliver that link, so a new caller with no
+      // address on file leaves with no way to change or cancel. Those are the
+      // only calls that should spend time on it.
+      //
+      // Shipped as a whole instruction rather than a yes/no flag so the prompt
+      // holds one line that is either the rule or nothing at all. A flag would
+      // need a rule next to it explaining what each value means, which is a
+      // second thing to keep true.
+      email_policy:
+        (org.messageChannel ?? "both") === "email" && !customer?.email
+          ? EMAIL_POLICY[lang === "tr" ? "tr" : lang === "de" ? "de" : "en"]
+          : "",
       // The fields this business collects by voice, as "key — label" pairs.
       // Terse because it rides in every turn: the agent needs the KEY to save
       // against and the label to know what it is asking for, and a paragraph
