@@ -184,8 +184,12 @@ thead {
    border-width rather than width — the track can't resize without reflowing
    the content beside it.
 
-   Hover is on .thin-scroll, not on the thumb: a 3px target is too thin to
-   aim at, so the region reveals its own bar the way Vercel's track does.
+   Hover is on the THUMB, not on .thin-scroll. Widening whenever the pointer
+   was anywhere in the scrolling region meant the bar went fat the moment you
+   scrolled, which is not what Vercel does. A 3px rail sounds impossible to
+   aim at, but the thumb's hit box is the full 9px track — the slimness comes
+   from a transparent border, not from a narrower box — so :hover lands the
+   same way Vercel's 12px track does.
 
    THE @supports GUARD IS LOAD-BEARING, don't unwrap it. Chrome supports the
    standard `scrollbar-width` AND the webkit pseudo-elements, but declaring
@@ -217,11 +221,9 @@ thead {
   border: 3px solid transparent;
   background-clip: padding-box;
 }
-.thin-scroll:hover::-webkit-scrollbar-thumb {
-  border-width: 1.5px;
-}
 .thin-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+  border-width: 1.5px;
 }
 
 /* The raised card, ported from Nudge's master-detail surfaces (its InboxView
