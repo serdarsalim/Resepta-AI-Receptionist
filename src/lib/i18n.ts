@@ -2487,6 +2487,11 @@ const dictionary = {
   // on a bad call must not overwrite what a person typed.
   "fields.source": { tr: "Sesli asistan", en: "Voice agent", de: "Sprachassistent" },
   "fields.source.manual": { tr: "Kilitli", en: "Locked", de: "Gesperrt" },
+  "fields.phoneLockedHint": {
+    tr: "Arayan bu numarayla eşleştirilir; telefon numarası aramadan değiştirilemez.",
+    en: "Callers are matched by this number, so a call cannot change it.",
+    de: "Anrufer werden über diese Nummer zugeordnet; ein Anruf kann sie nicht ändern.",
+  },
   "fields.source.voice": {
     tr: "Düzenleyebilir",
     en: "Can edit",

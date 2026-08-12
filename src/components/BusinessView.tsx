@@ -719,14 +719,19 @@ const FIELD_SOURCES: { id: FieldSource; key: TranslationKey }[] = [
   { id: "voice", key: "fields.source.voice" },
 ];
 
-// The identity columns every customer has. Their keys are the reserved write
-// addresses the voice pipeline refuses to touch — real keys, shown for the
-// same reason field keys are: they are the vocabulary agents and exports use.
+// The identity columns every customer has — real keys, shown for the same
+// reason field keys are: they are the vocabulary agents and exports use.
+//
+// Name and email are voice-writable like any unlocked field; a receptionist
+// who cannot correct a misspelt name is not much of a receptionist. Phone is
+// the exception and the cell says why on hover: the caller is MATCHED by
+// that number, and a call that could rewrite its own match key would detach
+// the record from the line it arrived on.
 const SYSTEM_FIELDS = [
-  { labelKey: "customers.firstName", typeKey: "fields.type.text", key: "firstname" },
-  { labelKey: "customers.lastName", typeKey: "fields.type.text", key: "lastname" },
-  { labelKey: "customers.phone", typeKey: "fields.type.phone", key: "phone" },
-  { labelKey: "customers.email", typeKey: "fields.type.email", key: "email" },
+  { labelKey: "customers.firstName", typeKey: "fields.type.text", key: "firstname", voice: true },
+  { labelKey: "customers.lastName", typeKey: "fields.type.text", key: "lastname", voice: true },
+  { labelKey: "customers.phone", typeKey: "fields.type.phone", key: "phone", voice: false },
+  { labelKey: "customers.email", typeKey: "fields.type.email", key: "email", voice: true },
 ] as const;
 
 // Backend refusals said as sentences. Anything unmapped falls back to the
@@ -1016,7 +1021,12 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   <code className="block truncate font-mono text-xs">{field.key}</code>
                 </td>
                 <td className="py-2 pr-3 text-xs">{t(field.typeKey)}</td>
-                <td className="py-2 pr-3 text-xs">{t("fields.source.manual")}</td>
+                <td
+                  className="py-2 pr-3 text-xs"
+                  title={field.voice ? undefined : t("fields.phoneLockedHint")}
+                >
+                  {t(field.voice ? "fields.source.voice" : "fields.source.manual")}
+                </td>
                 <td />
               </tr>
             ))}

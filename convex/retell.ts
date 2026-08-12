@@ -778,21 +778,39 @@ export const beforeCallContext = internalQuery({
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
         .map((row) => row.name)
         .join(", "),
-      // What save_customer_details will actually accept, as "key (label)".
+      // The whole customer card and the writable keys, from ONE list: the
+      // Contact fields table. Identity columns first under their table keys,
+      // then every unlocked custom field. Locked fields are withheld
+      // entirely, value and definition both — the standing doctrine: data
+      // that never arrives cannot be read back to whoever is on the phone.
       //
-      // Built from the AGENT'S variables, not the org's contact fields. That
-      // distinction cost a live call: updateContactFromVoice resolves keys
-      // from voiceAgentVariables — that is the only place a key is allowed to
-      // reach a built-in column like email — while this listed contactFields,
-      // which holds the custom ones only. So the agent was handed
-      // "sac_tipi, alerji_ve_hassasiyet, ..." with no email key in it, tried
-      // to save an address anyway, was refused, and told the caller the
-      // system had no room for email addresses. It has room; it was given the
-      // wrong list.
-      information: variables
-        .filter((row) => row.duringMode !== "none")
-        .map((row) => `${row.key} (${row.label})`)
-        .join(", "),
+      // contact says what IS; information says what may be WRITTEN. Empty
+      // values ride along as a dash so the agent also knows what is missing.
+      contact: (() => {
+        const labels =
+          lang === "tr"
+            ? { firstname: "Ad", lastname: "Soyad", email: "E-posta" }
+            : lang === "de"
+              ? { firstname: "Vorname", lastname: "Nachname", email: "E-Mail" }
+              : { firstname: "First name", lastname: "Last name", email: "Email" };
+        const parts = [
+          `${labels.firstname}: ${customer?.firstName || "-"}`,
+          `${labels.lastname}: ${customer?.lastName || "-"}`,
+          `${labels.email}: ${customer?.email || "-"}`,
+          ...fields
+            .filter((field) => field.source === "voice")
+            .map((field) => `${field.label}: ${String(customer?.custom?.[field.key] ?? "") || "-"}`),
+        ];
+        return parts.join(", ");
+      })(),
+      information: [
+        "firstname",
+        "lastname",
+        "email",
+        ...fields
+          .filter((field) => field.source === "voice")
+          .map((field) => field.key),
+      ].join(", "),
       // Spoken, not written — this variable is read down a phone line
       // verbatim. This exact line is where Bella got "90 dk için ₺3.000":
       // "dk" was hardcoded here, and the price came from Intl with its
@@ -2196,7 +2214,19 @@ export const updateContactFromVoice = internalMutation({
     const identity: Record<
       string,
       { field: "firstName" | "lastName" | "email"; label: string }
-    > = {};
+    > = {
+      // The identity columns are ALWAYS writable by voice, under the exact
+      // keys the Contact fields table shows. This used to require a per-agent
+      // variable to nominate each one — a second vocabulary ("Müşteri
+      // e-postası") beside the field list the whole app runs on, and the two
+      // disagreeing is how an agent told a live caller the system had no room
+      // for email addresses. One list now. Phone is deliberately not here:
+      // the caller was matched by it, and letting a call rewrite its own
+      // match key would detach the record from the number on the line.
+      firstname: { field: "firstName", label: "firstname" },
+      lastname: { field: "lastName", label: "lastname" },
+      email: { field: "email", label: "email" },
+    };
     for (const row of rows) {
       if (row.destination === "customer" && row.customerField) {
         identity[row.key] = { field: row.customerField, label: row.label };
