@@ -187,8 +187,12 @@ const RUNTIME_MCP_TOOLS = [
     mcp_id: "randevu",
     name: "get_call_context",
     description:
-      "Read the latest Resepta customer record, configured information and active services for the caller. Call this before asking for customer details and pass {{user_number}} as phone.",
-    speak_during_execution: false,
+      "Read the caller's Resepta record and the information this business collects. The caller's name, their next appointment and the service list are ALREADY in your instructions, injected before the call — do not call this to learn those. Pass {{user_number}} as phone.",
+    // Talk while it runs. These two were the only tools still silent, and a
+    // caller hears silence as the line having died: the last recording has
+    // him asking "neyi bekliyorsun?" during exactly this call and "iki saat?"
+    // during the one below.
+    speak_during_execution: true,
     speak_after_execution: false,
   },
   {
@@ -197,7 +201,7 @@ const RUNTIME_MCP_TOOLS = [
     name: "save_customer_details",
     description:
       "Save information immediately after the caller provides or explicitly confirms it. Use only configured keys, never guess, and pass {{user_number}} as phone.",
-    speak_during_execution: false,
+    speak_during_execution: true,
     speak_after_execution: false,
   },
 ] satisfies Record<string, unknown>[];
