@@ -1485,6 +1485,41 @@ async function matchService(
   };
 }
 
+// Several spoken services against the salon's list, in the order the caller
+// said them. Deduplicated by id: one visit does not contain the same service
+// twice, so a repeat is the matcher having caught the same thing twice (a
+// caller saying "saç kesimi, normal saç kesimi") rather than a real second
+// booking. Unmatched words are dropped rather than guessed at, exactly as the
+// singular path drops them — the appointment still stands and the agent reads
+// back what DID match, which is its cue to ask again.
+async function matchServices(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  spoken: string[],
+): Promise<
+  Array<{
+    serviceId: Id<"services">;
+    name: string;
+    price?: number;
+    durationMinutes: number;
+  }>
+> {
+  const lines: Array<{
+    serviceId: Id<"services">;
+    name: string;
+    price?: number;
+    durationMinutes: number;
+  }> = [];
+  const seen = new Set<string>();
+  for (const one of spoken) {
+    const hit = await matchService(ctx, orgId, one);
+    if (!hit || seen.has(String(hit.serviceId))) continue;
+    seen.add(String(hit.serviceId));
+    lines.push(hit);
+  }
+  return lines;
+}
+
 // Voice booking: find/create the customer by phone, insert the appointment.
 // externalUid (cal.com's uid when the booking went through cal.com) is what
 // dedupes the webhook echo via by_org_external.
@@ -1499,7 +1534,12 @@ export const voiceBook = internalMutation({
     // What the caller asked for, in their own words. Matched below rather
     // than by the agent, so a salon renaming a service does not mean editing
     // a prompt in Retell.
+    //
+    // Both shapes, because an agent provisioned before template v4 still
+    // sends the singular one and must keep working until its owner clicks the
+    // update banner. `services` wins when present.
     service: v.optional(v.string()),
+    services: v.optional(v.array(v.string())),
     // Which agent made this booking. Unset = "voice", which every existing
     // caller means; the chat agent passes "chat" so the appointment row says
     // honestly which lane wrote it (docs/chat-agent.md).
@@ -1510,7 +1550,10 @@ export const voiceBook = internalMutation({
   // whoever is reading the call rather than silent.
   returns: v.object({
     appointmentId: v.id("appointments"),
+    // The first match, kept for the singular caller. serviceNames carries the
+    // whole visit.
     serviceName: v.optional(v.string()),
+    serviceNames: v.optional(v.array(v.string())),
   }),
   handler: async (ctx, args) => {
     const phone = assertE164(args.phone);
@@ -1569,15 +1612,26 @@ export const voiceBook = internalMutation({
     if (customer.consentAt === undefined) {
       await ctx.db.patch(customer._id, { consentAt: Date.now() });
     }
-    const line = args.service
-      ? await matchService(ctx, args.orgId, args.service)
-      : undefined;
+    const spokenServices =
+      args.services && args.services.length > 0
+        ? args.services
+        : args.service
+          ? [args.service]
+          : [];
+    const lines = await matchServices(ctx, args.orgId, spokenServices);
+    const line = lines[0];
     // Double-booking guard, but only when Resepta's own book is the truth. An
     // externalUid means cal.com already accepted this slot — it owns the
     // inventory, and refusing here after it said yes would leave the two
     // calendars telling different stories.
+    // The whole visit, not the first service. A haircut then a beard trim is
+    // one 45-minute block, and guarding only the first 30 would leave the
+    // second half of it bookable by somebody else.
+    const totalMinutes = lines.length
+      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
+      : undefined;
     if (!args.externalUid) {
-      const duration = line?.durationMinutes ?? args.durationMinutes ?? 30;
+      const duration = totalMinutes ?? args.durationMinutes ?? 30;
       const endAt = args.startAt + duration * 60_000;
       // One day either side is enough: nothing a salon books runs longer.
       const nearby = await ctx.db
@@ -1648,17 +1702,21 @@ export const voiceBook = internalMutation({
       orgId: args.orgId,
       customerId: customer._id,
       startAt: args.startAt,
-      // The service's own duration wins over anything the call reported: it is
-      // what the salon says the work takes, and the block staff read.
-      durationMinutes: line?.durationMinutes ?? args.durationMinutes,
-      items: line ? [line] : undefined,
+      // The services' own durations win over anything the call reported: they
+      // are what the salon says the work takes, and the block staff read.
+      durationMinutes: totalMinutes ?? args.durationMinutes,
+      items: lines.length ? lines : undefined,
       status: "scheduled",
       source: args.source ?? "voice",
       externalUid: args.externalUid,
     });
     await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
-    return { appointmentId, serviceName: line?.name };
+    return {
+      appointmentId,
+      serviceName: line?.name,
+      serviceNames: lines.length ? lines.map((item) => item.name) : undefined,
+    };
   },
 });
 

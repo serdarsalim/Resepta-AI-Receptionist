@@ -21,7 +21,12 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // ~700ms first token against ~800, at half the per-minute price. Retell's own
 // guidance warns the gpt-5.x family off voice entirely (per-turn reasoning
 // tax), which also closes the "just use a newer mini" door.
-export const VOICE_AGENT_TEMPLATE_VERSION = 3;
+// v4 (2026-08-12, late): book_appointment takes SERVICES, plural. The schema
+// always said a haircut plus a beard trim is one appointment with two lines
+// (see appointments.items); the tool only accepted one, so the agent booked
+// twice and put one man in two chairs. A tool definition is sync-deliverable,
+// so this bump is one the update banner can actually honour.
+export const VOICE_AGENT_TEMPLATE_VERSION = 4;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -50,6 +55,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Arayanın bir sonraki randevusu: {{next_appointment}}. Randevusunu sorarsa önce bunu söyle, araç çağırarak doğrula.",
     "Hizmet, fiyat, çalışma saati, randevu veya müsait saat asla uydurma. Her okuma ve yazma için araçları kullan.",
     "Randevu oluşturmadan önce arayanın adını, hizmeti ve tam yerel tarih ile saati tekrar et, sonra onay iste. book_appointment aracını yalnızca onaydan sonra çağır.",
+    "Arayan aynı ziyarette birden fazla hizmet istiyorsa hepsini tek bir book_appointment çağrısında services listesine koy. Bu bir tek randevudur; süresi toplanır ve hizmetler arka arkaya yapılır. Asla ikinci bir çağrı yapma.",
     "İptal veya erteleme öncesinde randevuyu bulup adıyla söyle, değiştirmeden önce açık onay iste.",
     "Bir araç takvimin bağlı olmadığını bildirirse arayanın tercih ettiği kesin saati sor ve müsaitlik kontrol edilmiş gibi davranmadan randevuyu kaydet.",
     "Bir istek güvenle tamamlanamıyorsa hangi bilginin eksik olduğunu söyle ve tek bir net soru sor.",
@@ -67,6 +73,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "The caller's next appointment: {{next_appointment}}. If they ask about their appointment, say this first, then verify with a tool before changing anything.",
     "Never invent a service, price, opening time, appointment or available slot. Use the available tools for every read or write.",
     "Before booking, repeat the caller's name, service and exact local date and time, then ask for confirmation. Call book_appointment only after they confirm.",
+    "If the caller wants more than one service in the same visit, put them all in the services list of a SINGLE book_appointment call. That is one appointment; its length is the sum and the services run back to back. Never make a second call.",
     "Before cancelling or rescheduling, find and name the appointment, then ask for explicit confirmation before changing it.",
     "If a tool reports that the calendar is not connected, ask for the caller's preferred exact time and record the appointment without claiming the slot was checked.",
     "If a request cannot be completed safely, say what information is missing and ask one clear follow-up question.",
@@ -84,6 +91,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Der nächste Termin des Anrufers: {{next_appointment}}. Fragt er nach seinem Termin, nenne zuerst diesen und prüfe erst mit einem Werkzeug nach, bevor du etwas änderst.",
     "Erfinde niemals eine Leistung, einen Preis, eine Öffnungszeit, einen Termin oder einen freien Slot. Nutze für jedes Lesen und Schreiben die Werkzeuge.",
     "Wiederhole vor der Buchung Name, Leistung und das genaue lokale Datum mit Uhrzeit und bitte um Bestätigung. Rufe book_appointment erst nach der Bestätigung auf.",
+    "Will der Anrufer mehrere Leistungen im selben Besuch, gib sie alle in der services-Liste EINES book_appointment-Aufrufs an. Das ist ein Termin; seine Dauer ist die Summe und die Leistungen laufen nacheinander. Rufe niemals ein zweites Mal auf.",
     "Finde und benenne den Termin, bevor du absagst oder verschiebst, und bitte vor der Änderung um ausdrückliche Bestätigung.",
     "Meldet ein Werkzeug, dass der Kalender nicht verbunden ist, frage nach der gewünschten genauen Uhrzeit und trage den Termin ein, ohne zu behaupten, die Verfügbarkeit sei geprüft.",
     "Lässt sich eine Anfrage nicht sicher abschließen, sage, welche Angabe fehlt, und stelle eine klare Rückfrage.",
@@ -220,18 +228,26 @@ export function appointmentReceptionistTemplate(args: {
     customTool(
       args.site,
       "book_appointment",
-      "Create the appointment only after the caller confirms their name, requested service and exact start time.",
+      "Create the appointment only after the caller confirms their name, everything they want done and one exact start time. A caller who wants two things booked together is ONE call to this tool listing both, never two calls.",
       {
         type: "object",
         properties: {
           name: { type: "string", description: "Caller's full name." },
-          service: {
-            type: "string",
-            description: "Service in the caller's own words.",
+          // Plural, because a haircut and a beard trim are one visit. Sending
+          // them as two bookings put the same man in two chairs at the same
+          // minute on a real call; the server now refuses that outright, so
+          // an agent that does not know about this field gets a rejection
+          // where it wants an appointment.
+          services: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Every service the caller asked for, in their own words, in the order they said them. One entry for a single service.",
           },
           start: {
             type: "string",
-            description: "Confirmed appointment start as an ISO 8601 timestamp.",
+            description:
+              "Confirmed start of the WHOLE visit as an ISO 8601 timestamp. Do not add up the services yourself; the booking is one block and its length is worked out here.",
           },
         },
         required: ["name", "start"],

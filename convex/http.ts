@@ -576,7 +576,7 @@ http.route({
         if (!booking.ok) return respond({ error: booking.reason });
         externalUid = booking.uid;
       }
-      let booking: { serviceName?: string };
+      let booking: { serviceName?: string; serviceNames?: string[] };
       try {
         booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
@@ -584,8 +584,20 @@ http.route({
           phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
           startAt,
           externalUid,
-          // Whatever the caller called it. Matching against the org's own list
-          // happens in voiceBook, not here and not in the agent's prompt.
+          // Whatever the caller called them. Matching against the org's own
+          // list happens in voiceBook, not here and not in the agent's prompt.
+          //
+          // Both shapes accepted: template v4 sends `services`, and an agent
+          // whose owner has not clicked the update banner still sends the
+          // singular `service`. A model improvising a comma-separated string
+          // into the array field is caught here too, because one entry of
+          // "saç kesimi, sakal" would otherwise match nothing at all.
+          services: Array.isArray(args.services)
+            ? args.services
+                .flatMap((one) => String(one ?? "").split(","))
+                .map((one) => one.trim())
+                .filter(Boolean)
+            : undefined,
           service: String(args.service ?? "").trim() || undefined,
         });
       } catch (err) {
@@ -598,6 +610,10 @@ http.route({
         // The booking still stands; the agent can read this back to confirm,
         // and its absence is the cue to ask again rather than assume.
         service: booking.serviceName,
+        // Every service on the visit, so the agent confirms the whole thing
+        // rather than the first line of it. Shorter than what was asked for
+        // means the rest matched nothing.
+        services: booking.serviceNames,
       });
     }
 
