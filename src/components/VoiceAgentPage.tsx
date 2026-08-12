@@ -72,6 +72,7 @@ type Detail = {
     pointsElsewhere: boolean;
   };
   signatureRejectedAt: number | null;
+  template: { synced: number | null; current: number; behind: boolean };
   variableConfig: {
     managed: boolean;
     items: VoiceVariable[];
@@ -131,6 +132,7 @@ export function VoiceAgentPage({
   const read = useAction(api.retellAgent.read);
   const publishPrompt = useAction(api.retellAgent.publishPrompt);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
+  const syncTemplate = useAction(api.retellAgent.syncTemplate);
   const assignLine = useAction(api.retellAgent.assignLine);
   const testCall = useAction(api.retellAgent.testCall);
 
@@ -492,6 +494,32 @@ export function VoiceAgentPage({
                   className="rounded-lg border border-current px-2 py-0.5 font-medium hover:bg-amber-500/10 disabled:opacity-50"
                 >
                   {t("voiceDetail.webhookFix")}
+                </button>
+              </div>
+            )}
+
+            {/* Same quiet-line register as the webhook fix above, but muted
+                rather than amber: nothing is broken, a better tuning exists.
+                An update the owner clicks, never one that happens to them —
+                and the hint says the one thing they would fear: their own
+                instructions are not touched. */}
+            {detail.template.behind && (
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                <span>{t("voiceDetail.templateBehind")}</span>
+                <InfoTip text={t("voiceDetail.templateBehindHint")} />
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void run(t("voiceDetail.templateUpdating"), async () => {
+                      await syncTemplate({ agentId });
+                      setStatus(t("voiceDetail.templateUpdated"));
+                      load();
+                    })
+                  }
+                  className="rounded-lg border border-[var(--border)] px-2 py-0.5 font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                >
+                  {t("voiceDetail.templateUpdate")}
                 </button>
               </div>
             )}

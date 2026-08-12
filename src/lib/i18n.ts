@@ -1708,6 +1708,31 @@ const dictionary = {
     en: "Connection fixed.",
     de: "Verbindung behoben.",
   },
+  "voiceDetail.templateBehind": {
+    tr: "Bu ajan için daha yeni ses ayarları hazır.",
+    en: "Newer voice tuning is available for this agent.",
+    de: "Für diesen Agenten steht eine neuere Abstimmung bereit.",
+  },
+  "voiceDetail.templateBehindHint": {
+    tr: "Güncelleme ajanın yanıt hızını iyileştirir, takvime bakarken konuşmasını sağlar ve arama özetlerini kendi dilinizde yazdırır. Talimat metnine dokunmaz.",
+    en: "Updating makes the agent answer faster, talk while it checks the calendar, and write call summaries in your language. Your instructions are not touched.",
+    de: "Die Aktualisierung lässt den Agenten schneller antworten, beim Kalenderblick weitersprechen und Anrufzusammenfassungen in Ihrer Sprache schreiben. Ihre Anweisung bleibt unverändert.",
+  },
+  "voiceDetail.templateUpdate": {
+    tr: "Güncelle",
+    en: "Update",
+    de: "Aktualisieren",
+  },
+  "voiceDetail.templateUpdating": {
+    tr: "Güncelleniyor…",
+    en: "Updating…",
+    de: "Wird aktualisiert…",
+  },
+  "voiceDetail.templateUpdated": {
+    tr: "Ajan güncellendi.",
+    en: "Agent updated.",
+    de: "Agent aktualisiert.",
+  },
   "voiceDetail.prompt": {
     tr: "Talimat",
     en: "Instructions",
