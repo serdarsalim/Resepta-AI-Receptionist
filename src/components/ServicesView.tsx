@@ -1,14 +1,18 @@
 "use client";
 
-// Services & fields — what this business sells, and what it collects about the
-// people who buy it.
+// Services — what this business sells.
 //
 // Its own sidebar destination since 2026-08-12, out of Business's chip strip.
 // The distinction that moved it: a price list is a body of CONTENT you
-// maintain, the way Customers is, not a setting you configure once. It also
-// earns the click. The voice agent reads both at call time and the public
-// booking page reads services to build its slots, so between them they decide
-// what the product can actually say and sell.
+// maintain, the way Customers is, not a setting you configure once. The voice
+// agent reads it at call time and the public booking page builds its slots
+// from it, so it decides what the product can actually sell.
+//
+// CONTACT FIELDS USED TO BE HERE and moved to the Voice agent's chip strip the
+// same day. The tab was called "Services & fields", which Serdar called stupid
+// and was right about: the ampersand was papering over two unrelated nouns.
+// Services are what you sell; fields are what you know about a customer. The
+// name stopped being a problem the moment they stopped being one tab.
 //
 // Placed directly under Voice agent in the sidebar rather than in the foot
 // group beside Business. The foot group means "about this business", which is
@@ -22,7 +26,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { FieldsCard, ServicesCard } from "./BusinessView";
+import { ServicesCard } from "./BusinessView";
 
 export function ServicesView() {
   const { t } = useLanguage();
@@ -41,7 +45,6 @@ export function ServicesView() {
         </p>
       )}
       <ServicesCard isOwner={isOwner} />
-      <FieldsCard isOwner={isOwner} />
     </div>
   );
 }

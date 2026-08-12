@@ -303,12 +303,32 @@ Calendar · Reminders · Business.
   until you know whose 09:00, and the calendar already treats them as one
   setting when it projects closed bands from the business timezone onto the
   viewer's.
-- **Services & fields is a sidebar destination**, not a Business chip. A price
-  list is content you maintain, not a setting you configure, and the voice
-  agent plus the booking page both read it at call time. It sits under Voice
-  agent for that reason. Putting it in the FOOT group was considered and
-  rejected: that group means "about this business", which is the category it
-  already occupied, so it would have bought one click and said nothing.
+- **Services is a sidebar destination**, not a Business chip, and it holds
+  services ALONE. A price list is content you maintain, not a setting you
+  configure, and the voice agent plus the booking page both read it at call
+  time. It sits under Voice agent for that reason. Putting it in the FOOT group
+  was considered and rejected: that group means "about this business", which is
+  the category it already occupied, so it would have bought one click and said
+  nothing.
+- **Contact fields are edited from the Customers column picker**, at its foot,
+  in a Sheet. They ARE the columns of that table, and the standing rule puts
+  rare actions at the foot of the picker rather than on a permanent toolbar
+  button. The tab was called "Services & fields" for half a day and Serdar was
+  right that it sounded stupid: the ampersand was holding two unrelated nouns
+  together. Services are what the business sells; fields are what it knows
+  about a customer.
+  **Two homes were tried and rejected on the way**: the Voice agent strip (the
+  agent's Locked / Can edit column makes it LOOK like the agent owns them, but
+  it is one consumer among forms, campaigns, email, wa, mcp and the contact
+  record), and a fourth Business card (re-grows the page that was just
+  slimmed). `FieldsCard` still lives in `BusinessView`, which owns its helpers,
+  and renders untitled because the Sheet carries the name and the (i).
+- **Knowledge stays on the Voice agent strip FOR NOW, and this is temporary.**
+  `convex/lib/chatAgentTemplate.ts` already reads it, so it is shared between
+  the voice and chat agents today, and Serdar intends WhatsApp and email agents
+  to read it too. When those ship it earns its own destination with them, and
+  the Voice agent row probably becomes multi-channel. Do not file it under
+  Business on the way; that was the scavenger hunt it was moved out of.
 - **`?section=hours` still works.** The Calendar's "Edit hours" button deep
   links with it. There are no sections to switch to now, so the param means
   "scroll to that card" — the destination it always meant.

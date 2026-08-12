@@ -15,6 +15,7 @@ import {
 } from "@/lib/useTableState";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
+import { FieldsCard } from "./BusinessView";
 import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
 
@@ -183,6 +184,20 @@ export function CustomersView({
   const { t, language } = useLanguage();
   const customers = useQuery(api.customers.list, {});
   const contactFields = useQuery(api.contactFields.list, {});
+  // Contact fields ARE the columns of this table, so they are edited from the
+  // column picker rather than from a settings page in another tab. They spent
+  // the morning bundled with Services under "Services & fields", which was two
+  // unrelated nouns held together by an ampersand: services are what the
+  // business sells, fields are what it knows about a customer. Voice agent was
+  // tried and rejected on the way here — the agent fills some of these, the
+  // same as the request form and the contact record do, but it does not own
+  // them.
+  //
+  // At the FOOT of the picker, which is the standing rule for rare actions: a
+  // permanent toolbar button for something touched twice a year is noise on a
+  // screen opened every day.
+  const org = useQuery(api.orgs.current, {});
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
 
@@ -512,6 +527,14 @@ export function CustomersView({
                     >
                       {t("table.exportCsv")}
                     </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        setFieldsOpen(true);
+                        close();
+                      }}
+                    >
+                      {t("fields.title")}
+                    </MenuItem>
                   </>
                 )}
               />
@@ -700,6 +723,20 @@ export function CustomersView({
             </table>
           </div>
         </div>
+      )}
+      {/* A sheet, not a route: editing the field list is a secondary action
+          reached from the table it shapes, and coming back to the same scroll
+          position with the same filters is the point. FieldsCard is the same
+          component Business used to render, borrowed rather than copied. */}
+      {fieldsOpen && (
+        <Sheet
+          title={t("fields.title")}
+          hint={t("fields.hint")}
+          wide
+          onClose={() => setFieldsOpen(false)}
+        >
+          <FieldsCard isOwner={org ? org.me.role !== "staff" : false} />
+        </Sheet>
       )}
     </div>
   );

@@ -174,12 +174,15 @@ const NAV_TABS: {
     Icon: VoicePhoneIcon,
     color: "#10b981",
   },
-  // Directly under Voice agent: the agent reads services and contact fields at
-  // call time, and the public booking page builds its slots from the same
-  // services. That adjacency is the real relationship, not alphabetical order.
+  // Directly under Voice agent: the agent reads the service list at call time
+  // and the public booking page builds its slots from it. That adjacency is the
+  // real relationship, not alphabetical order.
+  //
+  // "Services", not "Services & fields". Contact fields live on the Voice
+  // agent's strip; the ampersand was holding two unrelated nouns together.
   {
     id: "services",
-    key: "settings.catalogue",
+    key: "services.title",
     Icon: ServicesIcon,
     color: "#14b8a6",
   },
