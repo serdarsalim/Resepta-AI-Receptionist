@@ -32,7 +32,10 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // syncTemplate honours a salon that switched it off.
 // v6 (2026-08-12, night): turn-taking. interruption_sensitivity 0.7 -> 0.4
 // and a greeting short enough to survive being greeted back.
-export const VOICE_AGENT_TEMPLATE_VERSION = 6;
+// v7 (2026-08-12, night): get_call_context removed from the agent entirely.
+// It hung a live call for twenty seconds and fetched only things already
+// injected at ring time.
+export const VOICE_AGENT_TEMPLATE_VERSION = 7;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 

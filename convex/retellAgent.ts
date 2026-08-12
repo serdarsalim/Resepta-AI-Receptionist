@@ -182,25 +182,29 @@ async function runtimeMcpConfig(
 // string-valued input_schema.properties/required and 400s on object schemas,
 // while tool discovery pulls the real schemas from /retell/mcp anyway.
 const RUNTIME_MCP_TOOLS = [
-  {
-    type: "mcp",
-    mcp_id: "randevu",
-    name: "get_call_context",
-    description:
-      "Read the caller's Resepta record and the information this business collects. The caller's name, their next appointment and the service list are ALREADY in your instructions, injected before the call — do not call this to learn those. Pass {{user_number}} as phone.",
-    // Talk while it runs. These two were the only tools still silent, and a
-    // caller hears silence as the line having died: the last recording has
-    // him asking "neyi bekliyorsun?" during exactly this call and "iki saat?"
-    // during the one below.
-    speak_during_execution: true,
-    speak_after_execution: false,
-  },
+  // get_call_context USED TO BE HERE AND IS DELIBERATELY GONE.
+  //
+  // It cost a caller twenty seconds of silence on a recorded call — he gave
+  // his name at 13.1s and the agent said nothing until he asked what had
+  // happened at 33.2s. That gap never showed up in the latency percentiles,
+  // because a turn where the agent never speaks produces no end-to-end
+  // sample; the only clue was e2e n=2 on a 37-second call.
+  //
+  // And it was fetching nothing. Every field it returned — the caller, the
+  // clock, the roster, the collectable fields, the services — is injected by
+  // beforeCallContext while the phone is still ringing. Verified on that same
+  // call: all 21 variables arrived. So the agent had every fact already, was
+  // told in its prompt not to call a tool for them, and reached for the tool
+  // anyway. A tool that exists WILL be called. The only reliable way to stop
+  // an agent using a tool is to take it away.
   {
     type: "mcp",
     mcp_id: "randevu",
     name: "save_customer_details",
     description:
-      "Save information immediately after the caller provides or explicitly confirms it. Use only configured keys, never guess, and pass {{user_number}} as phone.",
+      "Save information immediately after the caller provides or explicitly confirms it. Use only the keys listed in your instructions, never guess, and pass {{user_number}} as phone.",
+    // Talk while it runs. This is now the only MCP tool left, so it is the
+    // only remaining place a caller can be left listening to nothing.
     speak_during_execution: true,
     speak_after_execution: false,
   },
