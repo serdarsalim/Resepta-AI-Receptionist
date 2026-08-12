@@ -785,6 +785,17 @@ async function executeTool(
           phone: customer.phone,
           startAt,
           externalUid,
+          // Plural now, with the same tolerance the voice handler has: a
+          // model that packs "saç kesimi, sakal" into one entry gets it split
+          // rather than matched against nothing. `service` stays accepted
+          // because nothing stops an older conversation mid-flight from
+          // having already been handed the previous tool shape.
+          services: Array.isArray(input.services)
+            ? input.services
+                .flatMap((one) => String(one ?? "").split(","))
+                .map((one) => one.trim())
+                .filter(Boolean)
+            : undefined,
           service: String(input.service ?? "").trim() || undefined,
           source: "chat",
         });
@@ -792,6 +803,9 @@ async function executeTool(
           booked: true,
           spoken_time: spokenOf(startAt),
           service: booking.serviceName,
+          // The whole visit, so the confirmation names everything booked and
+          // a short list tells the agent the rest matched nothing.
+          services: booking.serviceNames,
         };
       } catch (err) {
         return { error: err instanceof Error ? err.message : "book-failed" };
