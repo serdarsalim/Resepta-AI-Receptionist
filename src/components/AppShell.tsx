@@ -281,8 +281,6 @@ function PanelLeftIcon({ size = 16 }: { size?: number }) {
 // search on phones to gain a fixed position would be a bad trade.
 function ShellHeader({
   titleKey,
-  closable,
-  onClose,
   onOpenMenu,
   name,
   email,
@@ -290,8 +288,6 @@ function ShellHeader({
   onOpenAccount,
 }: {
   titleKey: TranslationKey;
-  closable: boolean;
-  onClose: () => void;
   onOpenMenu: () => void;
   name?: string;
   email?: string;
@@ -373,16 +369,6 @@ function ShellHeader({
               }}
             />
           </div>
-        )}
-        {closable && (
-          <button
-            type="button"
-            aria-label={t("common.close")}
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            ×
-          </button>
         )}
         {/* Phones only. On desktop this lives in the sidebar footer, and two
             avatars on one screen would be two answers to "where is my
@@ -1268,14 +1254,13 @@ export function AppShell({
           tab === "appointments" ? "bg-[var(--card)]" : "bg-[var(--pane)]"
         }`}
       >
+        {/* No ✕ on any tab. Business traded its close button for the search box
+            first, and Account followed (2026-08-12) once it had grown enough
+            rows to be worth searching. The header holds ONE control on the
+            right, search is the more useful one, and every sidebar row is
+            already a way out, which is all the ✕ ever did. */}
         <ShellHeader
           titleKey={titleKey}
-          // Business gave its ✕ up for the search box: the header has room for
-          // one thing on the right, and the sidebar is already the way out of
-          // every other tab. Account keeps its ✕ because it is the one
-          // destination with no sidebar row to come back from.
-          closable={tab === "account"}
-          onClose={() => onTab("appointments")}
           onOpenMenu={() => setMobileOpen(true)}
           name={settings?.me.name}
           email={settings?.me.email}

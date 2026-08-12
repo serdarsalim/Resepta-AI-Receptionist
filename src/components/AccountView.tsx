@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANGUAGES } from "@/lib/i18n";
+import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useToast } from "@/lib/ToastProvider";
 import { Card } from "./Card";
@@ -28,11 +30,66 @@ function StaticValue({ children }: { children: React.ReactNode }) {
   return <span className="block min-w-0 break-words text-sm">{children}</span>;
 }
 
+// Which card each row lives on. Hand-maintained for the same reason Business's
+// index is: the rows are spread across three card bodies with no runtime
+// register to enumerate, so add a line when you add a row. Forgetting costs one
+// unfindable name and nothing else. Never index a key that is not in i18n.ts.
+const SEARCH_INDEX: { card: AccountCard; key: TranslationKey }[] = [
+  { card: "profile", key: "account.name" },
+  { card: "profile", key: "account.email" },
+  { card: "profile", key: "account.role" },
+  { card: "profile", key: "account.language" },
+  { card: "notifications", key: "account.notifications" },
+  { card: "notifications", key: "account.notifyInbound" },
+  { card: "notifications", key: "account.notifyFailed" },
+  { card: "notifications", key: "account.notifyNewContact" },
+  { card: "ai", key: "settings.ai" },
+  { card: "ai", key: "mcp.endpoint" },
+];
+
+type AccountCard = "profile" | "notifications" | "ai";
+
+const CARD_LABEL: Record<AccountCard, TranslationKey> = {
+  profile: "account.title",
+  notifications: "account.notifications",
+  ai: "settings.ai",
+};
+
 export function AccountView() {
   const { t } = useLanguage();
   const profile = useQuery(api.users.myProfile, {});
   const saveProfile = useMutation(api.users.setMyProfile);
   const toast = useToast();
+  // Claims the header's box, the same corner Business, Customers and Inbox use.
+  // Account took the ✕'s place here: the header holds one control on the right,
+  // and this page now runs past the fold, so a way to jump down it beats a way
+  // to close it that the sidebar already provides.
+  const search = useHeaderSearch(t("common.search"));
+  // Scrolled to rather than switched to, because unlike Business's sections all
+  // three cards live on one page. The answer to "where is that setting" is a
+  // position, not a different pane.
+  const cardRefs = useRef<Record<AccountCard, HTMLDivElement | null>>({
+    profile: null,
+    notifications: null,
+    ai: null,
+  });
+  // Held in state and consumed by an effect rather than scrolled inline on the
+  // click. Clearing the query unmounts the results list and remounts the cards,
+  // so at click time every ref is null and there is nothing to scroll to yet. A
+  // requestAnimationFrame is not enough either: one frame does not cover
+  // React's re-render plus the ref callbacks. An effect runs after both, by
+  // definition, which is the only timing that is actually guaranteed.
+  const [pendingScroll, setPendingScroll] = useState<AccountCard | null>(null);
+  useEffect(() => {
+    if (!pendingScroll) return;
+    // No behavior: "smooth". It silently does nothing on this shell's `main`
+    // (verified: same call scrolls 0 to 109 with the default, and stays at 0
+    // with smooth), so asking for it buys an animation that never runs and
+    // costs the scroll that does. Instant is also the honest answer here, since
+    // the reader asked to be taken somewhere.
+    cardRefs.current[pendingScroll]?.scrollIntoView({ block: "start" });
+    setPendingScroll(null);
+  }, [pendingScroll]);
 
   // Every write on this page goes through here, so there is no way to add a
   // field that saves silently. Autosave is right and it is also invisible —
@@ -49,8 +106,47 @@ export function AccountView() {
 
   const storedName = profile.name ?? "";
 
+  const hits = search.active
+    ? SEARCH_INDEX.filter((entry) => search.matches(t(entry.key)))
+    : [];
+
+  // Same grammar as Business: searching replaces the body with a list of places
+  // to go, and picking one clears the query, because the search is done the
+  // moment it has taken you somewhere. The difference is where it takes you.
+  if (search.active) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        {hits.length === 0 ? (
+          <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+            {hits.map((entry, i) => (
+              <button
+                key={`${entry.card}:${entry.key}`}
+                type="button"
+                onClick={() => {
+                  search.setQuery("");
+                  setPendingScroll(entry.card);
+                }}
+                className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
+                  i > 0 ? "border-t border-[var(--border)]" : ""
+                }`}
+              >
+                <span className="text-sm">{t(entry.key)}</span>
+                <span className="shrink-0 text-xs text-[var(--muted)]">
+                  {t(CARD_LABEL[entry.card])}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <div ref={(node) => void (cardRefs.current.profile = node)}>
       <Card>
         <div className={ROW_GRID}>
           {/* Values, not a form. Same pattern the contact record uses: read as
@@ -94,7 +190,9 @@ export function AccountView() {
           />
         </div>
       </Card>
+      </div>
 
+      <div ref={(node) => void (cardRefs.current.notifications = node)}>
       <Card title={t("account.notifications")}>
         <div className={ROW_GRID}>
           <RowLabel
@@ -128,6 +226,7 @@ export function AccountView() {
           />
         </div>
       </Card>
+      </div>
 
       {/* Moved here from Business (2026-08-12). An MCP key is per PERSON, not
           per salon: McpCard is deliberately outside the owner-only fieldset,
@@ -135,7 +234,9 @@ export function AccountView() {
           somebody else's. Filed under Business it read as salon configuration
           that an owner administers, which is the opposite of how it works.
           This page is the one that means "me, in this workspace". */}
-      <McpCard site={resolveSiteUrl()} />
+      <div ref={(node) => void (cardRefs.current.ai = node)}>
+        <McpCard site={resolveSiteUrl()} />
+      </div>
     </div>
   );
 }

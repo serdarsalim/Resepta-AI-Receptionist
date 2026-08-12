@@ -61,7 +61,12 @@ export function McpCard({ site }: { site: SiteUrl }) {
   // verbose card intro the design language rules out.
   return (
     <Card title={t("settings.ai")} tip={t("mcp.intro")}>
-      <div className="space-y-4">
+      {/* pb-2 on top of Card's own p-4. This card ends in a list of bordered
+          key rows rather than a form control, and a bordered row landing 16px
+          off the card's own border reads as two edges crowding each other.
+          Local to this card, not pushed into Card, because every other card
+          ends in an input where p-4 is right. */}
+      <div className="space-y-4 pb-2">
         {refused && (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
             {t("mcp.actingAsCannotMint")}
