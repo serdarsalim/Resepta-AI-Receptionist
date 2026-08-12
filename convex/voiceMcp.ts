@@ -32,7 +32,7 @@ const TOOLS: ToolDef<ActionCtx, Who>[] = [
     name: "get_call_context",
     title: "Get the latest customer and business context",
     description:
-      "Read the latest Resepta record for this caller, the information this business wants collected, its active services with their prices, and the business's local date and time right now. Each service carries durationSpoken and priceSpoken — say those aloud verbatim rather than composing your own wording from the numbers beside them. Call this before asking for customer details, before quoting any price, and before turning anything the caller says about timing into a booking. For a phone call, pass the system {{user_number}} value as phone.",
+      "Read this caller's Resepta record, the information this business collects, who works here, and the local date and time right now. Services and prices are NOT here and do not need to be — they are already in your instructions, injected before the call. Call this before asking for customer details, and before turning anything the caller says about timing into a booking. For a phone call, pass the system {{user_number}} value as phone.",
     inputSchema: {
       type: "object",
       properties: {
@@ -129,6 +129,6 @@ export const handler = httpAction(async (ctx, req) => {
     tools: TOOLS,
     serverInfo: SERVER_INFO,
     instructions:
-      "Resepta is the source of truth — for what this business sells, what it charges, and what time it is where it is. Quote prices only from the services it returns, and resolve every relative time the caller says against the local date and time it returns. When you say a duration or a price out loud, read the service's durationSpoken and priceSpoken exactly as written; they are already worded for speech. Never speak the numeric durationMinutes or price fields, and never add a currency symbol or a thousands separator to either — those are for your arithmetic, not for the caller's ear. Read call context before collecting customer information. Save only details the caller actually provided or confirmed, using the exact configured keys. Never invent or infer a value during the live call; post-call reconciliation handles missed information separately.",
+      "Resepta is the source of truth for what this business sells, what it charges and what time it is where it is. Quote prices only from the service list in your instructions, never from memory, and read the wording there aloud as written — it is already shaped for speech, with no symbols, abbreviations or thousands separators. Resolve every relative time the caller says against the local date and time this returns. Read call context before collecting customer information. Save only details the caller actually provided or confirmed, using the exact configured keys. Never invent or infer a value during the live call; post-call reconciliation handles missed information separately.",
   });
 });

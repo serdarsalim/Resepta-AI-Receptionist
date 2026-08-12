@@ -1303,7 +1303,9 @@ export const runtimeCallContext = internalQuery({
           .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
           .unique()
       : null;
-    const [variables, fields, services, staffRows] = await Promise.all([
+    // The services table is deliberately NOT read here any more. Nothing in
+    // the response needs it, and this query runs while a caller is holding.
+    const [variables, fields, staffRows] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -1311,7 +1313,6 @@ export const runtimeCallContext = internalQuery({
         )
         .collect(),
       ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
-      ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
       ctx.db.query("staff").withIndex("by_org", (q) => q.eq("orgId", args.orgId)).collect(),
     ]);
     const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
@@ -1412,38 +1413,15 @@ export const runtimeCallContext = internalQuery({
         .filter((row) => row.active)
         .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
         .map((row) => ({ name: row.name })),
-      // With the PRICE, which this list never carried — so an agent asked
-      // "how much is a discovery call?" had the service, its key and its
-      // duration, and no honest answer. Spoken form as well as the number,
-      // because the number is minor units and a phone agent reading "4000"
-      // out loud is worse than not answering.
-      //
-      // A service with no price set returns null and says why in one line the
-      // agent can read: an unpriced service must not become an invented one.
-      services: services
-        .filter((service) => service.active)
-        .map((service) => ({
-          key: serviceKey(service),
-          name: service.name,
-          // Spoken form only. The numeric minutes were the agent's to add up,
-          // and book_appointment now tells it not to — the visit's length is
-          // worked out server side. Dropping them takes a field off every
-          // service on every turn this result survives into.
-          durationSpoken: spokenDuration(service.durationMinutes, org.language),
-          // SPOKEN, not written — lib/speech, same wording as the ring-time
-          // list in beforeCallContext. The inline Intl call this replaces got
-          // most of the way there and still said "₺3.000 Türk lirası": the
-          // grouping separator, the symbol ICU prepends even in name mode,
-          // and the catalogue name where a person says "lira".
-          price:
-            service.price === undefined
-              ? null
-              : spokenPrice(service.price, org.currency ?? "TRY", org.language),
-          priceNote:
-            service.price === undefined
-              ? "No price set for this service. Say it is confirmed when booking rather than quoting a figure."
-              : undefined,
-        })),
+      // NO SERVICE LIST HERE. It used to be the biggest thing this returned —
+      // 1411 of 4141 characters on a measured call — and every one of them was
+      // a duplicate: beforeCallContext injects {{services}}, already worded for
+      // speech, into the prompt before the phone is answered. So the agent was
+      // handed the menu, then spent a silent round trip fetching the menu, and
+      // then re-sent the menu to the model on every turn for the rest of the
+      // call. Prices are answered from the prompt; this tool is for the things
+      // the prompt does NOT carry — who the caller is, what this business
+      // collects, and what time it is here.
     };
   },
 });
