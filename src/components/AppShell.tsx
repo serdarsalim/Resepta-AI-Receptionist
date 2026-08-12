@@ -31,6 +31,7 @@ export type TabId =
   | "inbox"
   | "campaigns"
   | "voice"
+  | "messages"
   | "revenue"
   | "business"
   | "account";
@@ -102,6 +103,13 @@ const SettingsIcon = makeIcon(
   </>,
 );
 
+const BellIcon = makeIcon(
+  <>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </>,
+);
+
 // Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
 // neutral — hue on the symbol plus a bold label is the selected cue, so the
 // sidebar never turns into a stack of coloured blocks.
@@ -148,10 +156,9 @@ const NAV_TABS: {
     Icon: CampaignsIcon,
     color: "#ec4899",
   },
-  // The bread and butter of this product, so it stays a top-level destination and
-// gets the tabs INSIDE it (agents, calls, knowledge) rather than being tucked
-// under a group. Reminders left for Business: rules you set once are config, and
-// nothing arrives in them.
+  // The bread and butter of this product, so it stays a top-level destination
+  // and carries its own tabs (agents, calls, knowledge) rather than being
+  // tucked inside a group.
   {
     id: "voice",
     key: "nav.voice",
@@ -170,6 +177,17 @@ const NAV_TABS: {
     Icon: AppointmentsIcon,
     color: "var(--brand)",
   },
+  // Directly below Calendar, because that is what it acts on: every rule here
+  // fires off an appointment. It spent a session inside Business on the
+  // argument that rules are config — true on paper, wrong in use. Reminders is
+  // the thing this product does to keep chairs full, so it stays one click
+  // away and adjacent to the bookings it chases.
+  {
+    id: "messages",
+    key: "nav.reminders",
+    Icon: BellIcon,
+    color: "#6366f1",
+  },
 ];
 
 // Config is not a place you work, so it closes the nav in its own group
@@ -182,7 +200,8 @@ const NAV_TABS: {
 // workspace. "Workspace" stays only where it means the switcher between
 // several client businesses on one login.
 // Settings is gone — dissolved into the tabs above (voice, messages) and into
-// Business (AI connectors). One config destination remains.
+// Business (AI connectors, knowledge moved on to the voice agent since). One
+// config destination remains.
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
