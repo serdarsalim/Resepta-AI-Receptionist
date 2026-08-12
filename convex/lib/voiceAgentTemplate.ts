@@ -4,7 +4,12 @@
 // change under a salon owner.
 
 export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
-export const VOICE_AGENT_TEMPLATE_VERSION = 1;
+// v2 (2026-08-12): turn-taking and tool dead air. v1 left every latency knob
+// unset EXCEPT enable_dynamic_responsiveness, which it turned on — and that one
+// deliberately waits longer before answering, so the one setting v1 made was
+// the slow one. Values here are copied from a hand-tuned Turkish agent that
+// does not feel slow on the phone, not guessed.
+export const VOICE_AGENT_TEMPLATE_VERSION = 2;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -37,6 +42,13 @@ function customTool(
   name: string,
   description: string,
   parameters: JsonSchema,
+  // Whether the agent talks WHILE the tool runs. Off, the caller hears nothing
+  // from the moment they finish asking until the round trip comes back — us,
+  // then possibly the calendar provider — and silence on a phone reads as the
+  // agent being slow even when the answer is quick. On only for the two tools
+  // that can leave the deployment; the pure reads return fast enough that
+  // filler would just make the agent chattier.
+  speakDuringExecution = false,
 ) {
   return {
     type: "custom",
@@ -46,7 +58,7 @@ function customTool(
     method: "POST",
     parameter_type: "json",
     parameters,
-    speak_during_execution: false,
+    speak_during_execution: speakDuringExecution,
     speak_after_execution: true,
     timeout_ms: 15000,
   };
@@ -74,6 +86,7 @@ export function appointmentReceptionistTemplate(args: {
         },
         required: ["date"],
       },
+      true,
     ),
     customTool(
       args.site,
@@ -94,6 +107,7 @@ export function appointmentReceptionistTemplate(args: {
         },
         required: ["name", "start"],
       },
+      true,
     ),
     customTool(
       args.site,
@@ -129,6 +143,12 @@ export function appointmentReceptionistTemplate(args: {
       start_speaker: "agent",
       begin_message: BEGIN_MESSAGES[args.language],
       default_dynamic_variables: { business_name: args.businessName },
+      // Pinned, not left to the provider's default. A template that does not
+      // name its model gets whatever the account defaults to that month, so
+      // the same salon can get a different answer speed after a provider
+      // change nobody here made. If this still reads slow, a mini tier is the
+      // next lever — it is one string, and this is where it lives.
+      model: "gpt-4.1",
       model_temperature: 0.1,
       general_prompt: [
         `You are the appointment receptionist for {{business_name}}. Always speak ${languageName}.`,
@@ -146,7 +166,20 @@ export function appointmentReceptionistTemplate(args: {
       language: args.language,
       webhook_url: `${args.site}/retell/call-ended`,
       webhook_timeout_ms: 10000,
-      enable_dynamic_responsiveness: true,
+      // Turn-taking. enable_dynamic_responsiveness used to be here and is
+      // gone on purpose: it lets the provider decide the caller might not be
+      // finished and hold the reply back, which buys fewer interruptions at
+      // the cost of the exact pause an owner hears as "it's slow". A salon
+      // receptionist answers the moment you stop talking.
+      responsiveness: 0.99,
+      // The other half of the same trade. The agent yields quickly when the
+      // caller talks over it, so an over-long answer costs a second, not the
+      // whole turn.
+      interruption_sensitivity: 0.7,
+      // "hı hı" while the caller is still speaking. It does not make a single
+      // reply arrive sooner; it removes the dead line that makes a caller ask
+      // "hello?" — which is most of what slow feels like on a phone.
+      enable_backchannel: true,
       normalize_for_speech: true,
     },
   };
