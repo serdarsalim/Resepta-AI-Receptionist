@@ -41,9 +41,9 @@ const CATEGORIES: Category[] = [
         summary: "A short path from a new workspace to the first connected appointment.",
         steps: [
           "Add the services customers can book and the team members who deliver them.",
-          "Add any customer information fields the phone agent should collect.",
+          "Add any customer information fields the voice agent should collect.",
           "Ask your Resepta operator to connect scheduling, phone, WhatsApp, or email accounts that your setup needs.",
-          "Create the phone agent, assign an available line, and make a test call.",
+          "Create the voice agent, assign an available line, and make a test call.",
           "Review the default confirmation and reminder rules before going live.",
         ],
         note: "Resepta can store appointments without an external calendar, but conflict checking requires a connected scheduling account.",
@@ -59,11 +59,11 @@ const CATEGORIES: Category[] = [
       {
         id: "services-team",
         title: "Add services and team members",
-        summary: "Create the bookable work that appears in appointments and phone-agent conversations.",
+        summary: "Create the bookable work that appears in appointments and voice-agent conversations.",
         steps: [
-          "Open Business from the sidebar.",
+          "Open Services from the sidebar.",
           "Add each service with a clear name and duration.",
-          "Add team members and mark the people customers can book.",
+          "Open Business and add your team, marking the people customers can book.",
           "Archive a team member when they should stop appearing in new bookings. Archive before deleting so historic appointments stay understandable.",
         ],
         keywords: ["service", "duration", "team", "staff", "bookable"],
@@ -73,12 +73,12 @@ const CATEGORIES: Category[] = [
         title: "Choose the customer details Resepta keeps",
         summary: "Add fields such as preferences, notes, or identifiers and decide how they can be filled.",
         steps: [
-          "Open Business and find Customer information.",
+          "Open Voice agent from the sidebar and choose Contact fields.",
           "Create a field with a name, type, and choices where needed.",
-          "Choose whether staff, the phone agent, or both may fill it.",
+          "Choose whether staff, the voice agent, or both may fill it.",
           "Use the Customers table Columns menu to show the fields that matter for day-to-day work.",
         ],
-        note: "A field used by a published phone agent keeps its internal key even if you later rename its label. This protects previously collected answers.",
+        note: "A field used by a published voice agent keeps its internal key even if you later rename its label. This protects previously collected answers.",
         keywords: ["customer field", "custom field", "columns", "variables", "information"],
       },
       {
@@ -98,15 +98,15 @@ const CATEGORIES: Category[] = [
   },
   {
     id: "phone",
-    title: "Phone agent",
+    title: "Voice agent",
     description: "Create the receptionist, shape the conversation, and review every call result.",
     articles: [
       {
         id: "create-agent",
-        title: "Create or connect a phone agent",
+        title: "Create or connect a voice agent",
         summary: "Start with a new Resepta receptionist or connect one that already exists.",
         steps: [
-          "Open Phone agent and choose Add agent.",
+          "Open Voice agent and choose Add agent.",
           "Choose Create new, then select a name, language, and voice. Connect existing is available when an agent is already prepared for the business.",
           "Assign an available phone line if one has been provisioned for the workspace.",
           "Wait for setup to finish, then open the agent by selecting its name.",
@@ -119,7 +119,7 @@ const CATEGORIES: Category[] = [
         title: "Edit instructions, opening line, and voice",
         summary: "Control how the receptionist sounds and what it should do during a call.",
         steps: [
-          "Open Phone agent, then select the agent name.",
+          "Open Voice agent, then select the agent name.",
           "Write the business instructions and the opening line in the order a real receptionist would use them.",
           "Insert customer or business variables with @ where the conversation needs them.",
           "Choose the voice and save once. Resepta publishes the voice and script together.",
@@ -144,7 +144,7 @@ const CATEGORIES: Category[] = [
         title: "Review calls and fix missing results",
         summary: "Read the recording, summary, transcript, collected values, and end reason in one place.",
         steps: [
-          "Open Phone agent and switch to Calls.",
+          "Open Voice agent and switch to Calls.",
           "Open a call to see its recording, summary, collected values, transcript, and why it ended.",
           "Open the same call from the customer activity history when you need the surrounding context.",
           "If Resepta reports that call results are not arriving, open the agent and choose Fix, then place another test call.",
@@ -239,7 +239,7 @@ const CATEGORIES: Category[] = [
         summary: "A compact checklist for availability, calls, messages, and sign-in.",
         steps: [
           "Double booking: confirm that scheduling is connected and the service duration exists in the external event type.",
-          "No call result: open the phone agent, check its result health, choose Fix if offered, and place a fresh test call.",
+          "No call result: open the voice agent, check its result health, choose Fix if offered, and place a fresh test call.",
           "WhatsApp failed: open the customer conversation and check that the exact language template is approved.",
           "Email failed: confirm the customer has an email address and ask your operator to verify the workspace email connection.",
           "Cannot sign in: use the Google account that belongs to the workspace. Resepta does not use password-based accounts.",
@@ -314,7 +314,7 @@ export function HelpCenter() {
           <p className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-[var(--muted)]">Practical guides for setting up your AI front desk, managing the working day, and keeping every customer informed.</p>
           <label className="mx-auto mt-8 flex max-w-2xl items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4 text-[var(--muted)] shadow-[0_18px_48px_color-mix(in_srgb,var(--foreground)_9%,transparent)] focus-within:border-[var(--brand)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--brand)_10%,transparent)]">
             <SearchIcon />
-            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search setup, phone agent, reminders…" className="w-full border-0 bg-transparent p-0 text-base text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:ring-0" />
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search setup, voice agent, reminders…" className="w-full border-0 bg-transparent p-0 text-base text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:ring-0" />
           </label>
           {normalized && <p className="mt-3 text-sm text-[var(--muted)]">{resultCount} {resultCount === 1 ? "guide" : "guides"} found</p>}
         </div>
