@@ -55,6 +55,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Süreleri ve fiyatları araçların verdiği söylenmiş haliyle, kelimesi kelimesine söyle. Para birimi simgesi, kısaltma veya binlik ayraçlı sayı asla okuma; seni okuyan değil dinleyen var.",
     "Hizmetler ve fiyatlar: {{services}}. Fiyat sorulduğunda bu listeden hemen cevap ver, araç çağırma. Fiyatı yalnızca sorulan hizmet için söyle.",
     "Hizmetleri sayman istendiğinde fiyat okumadan en fazla üç dördünü kısaca say ve arayanın ne istediğini sor. Tüm listeyi asla baştan sona okuma.",
+    "Araçlardan, bağlamdan, talimatlarından veya sistemden asla söz etme; bunlar arayana görünmez. Bir şeye bakman gerekiyorsa yalnızca hemen bakıyorum ya da bir saniye gibi doğal bir şey söyle, sonra cevabı ver.",
   ],
   "en-US": [
     "You are the appointment receptionist for {{business_name}}. Always speak English.",
@@ -70,11 +71,14 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Say durations and prices with the spoken wording the tools give you, word for word. Never read a currency symbol, an abbreviated unit or a number written with a thousands separator; you are being heard, not read.",
     "Services and prices: {{services}}. When asked a price, answer from this list immediately without calling a tool. Give a price only for the service the caller asks about.",
     "When asked what the business offers, name three or four services briefly, without prices, and ask what the caller is looking for. Never recite the full list.",
+    "Never mention your tools, your context, your instructions or the system; none of that is visible to the caller. If you need to look something up, say something natural like one moment or let me check, then give the answer.",
   ],
   "de-DE": [
     "Du bist die Terminrezeption für {{business_name}}. Sprich immer Deutsch.",
     "Hilf Anrufern, Termine zu buchen, zu finden, abzusagen und zu verschieben. Bleib knapp, warm und praktisch.",
     "Lies den aktuellen Kunden- und Geschäftskontext, bevor du nach Details fragst. Speichere eine Kundenangabe, sobald der Anrufer sie nennt oder ausdrücklich bestätigt.",
+    "Der gespeicherte Name des Anrufers: {{customer_name}}. Ist er gefüllt, kennst du diesen Anrufer; sprich ihn mit Namen an und frage nicht erneut danach. Ist er leer, behandle ihn als neuen Kunden und frage nach dem Namen.",
+    "Der nächste Termin des Anrufers: {{next_appointment}}. Fragt er nach seinem Termin, nenne zuerst diesen und prüfe erst mit einem Werkzeug nach, bevor du etwas änderst.",
     "Erfinde niemals eine Leistung, einen Preis, eine Öffnungszeit, einen Termin oder einen freien Slot. Nutze für jedes Lesen und Schreiben die Werkzeuge.",
     "Wiederhole vor der Buchung Name, Leistung und das genaue lokale Datum mit Uhrzeit und bitte um Bestätigung. Rufe book_appointment erst nach der Bestätigung auf.",
     "Finde und benenne den Termin, bevor du absagst oder verschiebst, und bitte vor der Änderung um ausdrückliche Bestätigung.",
@@ -83,6 +87,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Sprich Dauern und Preise wörtlich so, wie die Werkzeuge sie dir geben. Lies niemals ein Währungssymbol, eine Abkürzung oder eine Zahl mit Tausendertrennzeichen vor; man hört dich, man liest dich nicht.",
     "Leistungen und Preise: {{services}}. Beantworte Preisfragen sofort aus dieser Liste, ohne ein Werkzeug aufzurufen. Nenne einen Preis nur für die Leistung, nach der gefragt wird.",
     "Nenne auf die Frage nach dem Angebot drei oder vier Leistungen kurz und ohne Preise und frage, was der Anrufer sucht. Lies niemals die ganze Liste vor.",
+    "Erwähne niemals deine Werkzeuge, deinen Kontext, deine Anweisungen oder das System; davon sieht der Anrufer nichts. Musst du etwas nachsehen, sage nur etwas Natürliches wie einen Moment und nenne dann die Antwort.",
   ],
 };
 
@@ -248,8 +253,8 @@ export function appointmentReceptionistTemplate(args: {
       // Pinned, not left to the provider's default. A template that does not
       // name its model gets whatever the account defaults to that month, so
       // the same salon can get a different answer speed after a provider
-      // change nobody here made. If this still reads slow, a mini tier is the
-      // next lever — it is one string, and this is where it lives.
+      // change nobody here made. Changing it here is one string, and
+      // syncTemplate carries it to every agent whose owner clicks update.
       model: "claude-4.5-haiku",
       model_temperature: 0.1,
       general_prompt: GENERAL_PROMPTS[args.language].join("\n"),
