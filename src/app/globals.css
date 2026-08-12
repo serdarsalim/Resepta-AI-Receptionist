@@ -171,13 +171,42 @@ thead {
   scrollbar-gutter: stable;
 }
 
-.thin-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+/* Widths are Vercel's, measured off its dashboard sidebar rather than guessed:
+   a 3px rail at rest that grows to 6px when the pointer is anywhere over the
+   scrolling region. Vercel hides the native bar and draws its own div, which
+   buys it a width transition; we get the same two widths out of the native
+   pseudo-elements and lose only the 150ms tween, because WebKit doesn't
+   animate scrollbar parts.
+
+   The track stays 9px the whole time and the visible rail is carved out of it
+   by a TRANSPARENT BORDER plus background-clip: padding-box. That is what
+   keeps the rail off the card's edge, and it is why hover changes
+   border-width rather than width — the track can't resize without reflowing
+   the content beside it.
+
+   Hover is on .thin-scroll, not on the thumb: a 3px target is too thin to
+   aim at, so the region reveals its own bar the way Vercel's track does.
+
+   THE @supports GUARD IS LOAD-BEARING, don't unwrap it. Chrome supports the
+   standard `scrollbar-width` AND the webkit pseudo-elements, but declaring
+   the standard property switches the legacy ones off wholesale — so the plain
+   `scrollbar-width: thin` this used to carry silently won, and every
+   ::-webkit-scrollbar rule below it was dead code painting Chrome's own 11px
+   bar. Measured, not guessed: the gutter read 13px on a card whose border
+   accounts for 2 of them.
+
+   `selector(::-webkit-scrollbar)` is true in Chrome/Safari and false in
+   Firefox, so the standard properties now reach only the engine that has no
+   pseudo-elements to lose. */
+@supports not selector(::-webkit-scrollbar) {
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
 }
 .thin-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 .thin-scroll::-webkit-scrollbar-track {
   background: transparent;
@@ -185,13 +214,14 @@ thead {
 .thin-scroll::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 9999px;
-  border: 2px solid transparent;
+  border: 3px solid transparent;
   background-clip: padding-box;
+}
+.thin-scroll:hover::-webkit-scrollbar-thumb {
+  border-width: 1.5px;
 }
 .thin-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 
 /* The raised card, ported from Nudge's master-detail surfaces (its InboxView
