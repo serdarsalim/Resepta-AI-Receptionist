@@ -498,29 +498,41 @@ export function VoiceAgentPage({
               </div>
             )}
 
-            {/* Same quiet-line register as the webhook fix above, but muted
-                rather than amber: nothing is broken, a better tuning exists.
-                An update the owner clicks, never one that happens to them —
-                and the hint says the one thing they would fear: their own
+            {/* A full banner, deliberately louder than the quiet warning
+                lines above it. The webhook line earned its whisper because it
+                describes standing config; this is a one-click action that
+                deletes itself, and Serdar's finding was that as a grey line
+                he had to be told it existed. Loud is fine for something that
+                appears once per template generation and then vanishes.
+                The body text explains what clicking changes and ends on the
+                one reassurance that unblocks the click: the owner's own
                 instructions are not touched. */}
             {detail.template.behind && (
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                <span>{t("voiceDetail.templateBehind")}</span>
-                <InfoTip text={t("voiceDetail.templateBehindHint")} />
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() =>
-                    void run(t("voiceDetail.templateUpdating"), async () => {
-                      await syncTemplate({ agentId });
-                      setStatus(t("voiceDetail.templateUpdated"));
-                      load();
-                    })
-                  }
-                  className="rounded-lg border border-[var(--border)] px-2 py-0.5 font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)] disabled:opacity-50"
-                >
-                  {t("voiceDetail.templateUpdate")}
-                </button>
+              <div className="rounded-lg border border-amber-300/60 bg-amber-500/10 px-4 py-3 dark:border-amber-500/30">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0 flex-1 basis-64">
+                    <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                      {t("voiceDetail.templateBehind")}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                      {t("voiceDetail.templateBehindHint")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      void run(t("voiceDetail.templateUpdating"), async () => {
+                        await syncTemplate({ agentId });
+                        setStatus(t("voiceDetail.templateUpdated"));
+                        load();
+                      })
+                    }
+                    className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+                  >
+                    {t("voiceDetail.templateUpdate")}
+                  </button>
+                </div>
               </div>
             )}
 
