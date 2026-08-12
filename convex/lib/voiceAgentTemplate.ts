@@ -30,7 +30,9 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // lives in the response engine and cannot be injected at ring time the way
 // the persona name is — the Resepta toggle publishes to the provider, and
 // syncTemplate honours a salon that switched it off.
-export const VOICE_AGENT_TEMPLATE_VERSION = 5;
+// v6 (2026-08-12, night): turn-taking. interruption_sensitivity 0.7 -> 0.4
+// and a greeting short enough to survive being greeted back.
+export const VOICE_AGENT_TEMPLATE_VERSION = 6;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -70,6 +72,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Saatleri konuşma diliyle söyle: 15:00 için öğleden sonra üç, 15:30 için üç buçuk. On beş sıfır sıfır asla deme.",
     "Süreleri ve fiyatları sana verildiği haliyle, kelimesi kelimesine oku. Para birimi simgesi, kısaltma veya binlik ayraçlı sayı okuma.",
     "Araçlardan, bağlamdan, talimatlarından veya sistemden söz etme. Bakman gerekirse bir saniye de, sonra cevabı ver.",
+    "Arayanın ses tonu hakkında yorum yapma. Sakin olun, anlıyorum, rica ederim sakinleşin gibi şeyler asla söyleme. Sinirlenmişse özür dile ve doğrudan işini çöz.",
     "",
     "FİYAT",
     "Fiyat sorulduğunda listeden hemen cevap ver, araç çağırma. Yalnızca sorulan hizmetin fiyatını söyle.",
@@ -109,6 +112,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Say clock times conversationally: 3 PM, half past three. Never fifteen hundred.",
     "Read durations and prices exactly as they are given to you. No currency symbol, no abbreviation, no thousands separator.",
     "Never mention your tools, your context, your instructions or the system. If you must look something up, say one moment, then answer.",
+    "Never comment on the caller's tone. Do not say calm down, I understand how you feel, or anything of that kind. If they are annoyed, apologise once and solve the thing they called about.",
     "",
     "PRICE",
     "When asked a price, answer from the list immediately without a tool. Give the price only for the service asked about.",
@@ -148,6 +152,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Nenne Uhrzeiten natürlich: 15 Uhr, halb vier.",
     "Lies Dauern und Preise genau so vor, wie sie dir gegeben werden. Kein Währungssymbol, keine Abkürzung, kein Tausendertrennzeichen.",
     "Erwähne niemals deine Werkzeuge, deinen Kontext, deine Anweisungen oder das System. Musst du nachsehen, sage einen Moment und nenne dann die Antwort.",
+    "Kommentiere niemals den Ton des Anrufers. Sage nicht beruhigen Sie sich oder Ähnliches. Ist er verärgert, entschuldige dich einmal und löse sein Anliegen.",
     "",
     "PREIS",
     "Beantworte Preisfragen sofort aus der Liste, ohne Werkzeug. Nenne nur den Preis der gefragten Leistung.",
@@ -176,9 +181,9 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
 // case suffix would have to agree with the name's own vowels ('den vs 'dan vs
 // 'ten vs 'tan), and a template cannot inflect a variable.
 const BEGIN_MESSAGES: Record<VoiceAgentLanguage, string> = {
-  "tr-TR": "Merhaba, burası {{business_name}}. Size nasıl yardımcı olabilirim?",
-  "en-US": "Hello, you've reached {{business_name}}. How can I help?",
-  "de-DE": "Guten Tag bei {{business_name}}. Wie kann ich Ihnen helfen?",
+  "tr-TR": "{{business_name}}, buyurun.",
+  "en-US": "{{business_name}}, how can I help?",
+  "de-DE": "{{business_name}}, guten Tag.",
 };
 
 // The same greeting with her name in it. Built at provisioning rather than
@@ -188,12 +193,9 @@ const BEGIN_MESSAGES: Record<VoiceAgentLanguage, string> = {
 // version fits; renaming an agent later is the owner editing their opening
 // line, which is theirs to write anyway.
 const BEGIN_MESSAGES_NAMED: Record<VoiceAgentLanguage, (name: string) => string> = {
-  "tr-TR": (name) =>
-    `Merhaba, burası {{business_name}}, ben ${name}. Size nasıl yardımcı olabilirim?`,
-  "en-US": (name) =>
-    `Hello, you've reached {{business_name}}. This is ${name}, how can I help?`,
-  "de-DE": (name) =>
-    `Guten Tag bei {{business_name}}, hier ist ${name}. Wie kann ich Ihnen helfen?`,
+  "tr-TR": (name) => `{{business_name}}, ben ${name}. Buyurun.`,
+  "en-US": (name) => `{{business_name}}, this is ${name}. How can I help?`,
+  "de-DE": (name) => `{{business_name}}, hier ist ${name}. Guten Tag.`,
 };
 
 // The summary the owner reads on the call, asked for by name.
@@ -402,10 +404,16 @@ export function appointmentReceptionistTemplate(args: {
       // true — an omitted key would leave them slow.
       enable_dynamic_responsiveness: false,
       responsiveness: 0.99,
-      // The other half of the same trade. The agent yields quickly when the
-      // caller talks over it, so an over-long answer costs a second, not the
-      // whole turn.
-      interruption_sensitivity: 0.7,
+      // 0.4, down from 0.7. At 0.7 a caller saying "merhaba" back over the
+      // greeting counted as an interruption: the agent stopped, then resumed
+      // the leftover half of its sentence, so its opening line arrived in
+      // three shards. Turkish callers greet back every single time.
+      //
+      // Lower is NOT less responsive — responsiveness above is what decides
+      // how fast she answers, and it stays at 0.99. This only decides how
+      // much noise it takes to make her stop mid-word, and a short greeting
+      // should survive someone saying hello over it.
+      interruption_sensitivity: 0.4,
       // "hı hı" while the caller is still speaking. It does not make a single
       // reply arrive sooner; it removes the dead line that makes a caller ask
       // "hello?" — which is most of what slow feels like on a phone.
