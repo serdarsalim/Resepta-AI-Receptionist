@@ -23,6 +23,7 @@ import {
   weekdayNames,
 } from "@/lib/datetime";
 import { ROW_GRID, RowLabel } from "./RowLabel";
+import { TimezoneSelect } from "./TimezoneSelect";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
@@ -1381,6 +1382,7 @@ export function BusinessHoursCard({
 }: {
   isOwner: boolean;
   org: {
+    timezone: string;
     businessHours?: {
       activeDays?: number[];
       startMinute?: number;
@@ -1400,6 +1402,23 @@ export function BusinessHoursCard({
   return (
     <Card disabled={!isOwner}>
       <div className={ROW_GRID}>
+        {/* The clock the rows below are read in, and it leads them because
+            "09:00 to 18:00" means nothing until you know whose 09:00. It used
+            to sit in General, one chip away, which split a single thought
+            across two screens: the calendar shades closed bands by projecting
+            these hours from the business timezone onto the viewer's, so the
+            two settings are one setting wearing two labels.
+
+            Folding Hours INTO General was the other way to close that gap and
+            was rejected twice, most recently 2026-08-12. General already
+            carries nine rows across three unrelated jobs, and a chip strip
+            where one chip scrolls while five swap the pane is two grammars in
+            one control. Moving the single coupled row is the smaller fix. */}
+        <RowLabel label={t("settings.timezone")} hint={t("settings.timezoneHint")} />
+        <TimezoneSelect
+          value={org.timezone}
+          onChange={(zone) => update({ timezone: zone })}
+        />
         <RowLabel
           label={t("settings.businessHours")}
           hint={t("settings.businessHoursHint")}

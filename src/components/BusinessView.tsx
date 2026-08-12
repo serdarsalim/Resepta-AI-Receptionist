@@ -21,7 +21,6 @@ import { McpCard } from "./McpCard";
 import { BusinessHoursCard } from "./RemindersView";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { resolveSiteUrl } from "@/lib/siteUrl";
-import { TimezoneSelect } from "./TimezoneSelect";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
@@ -125,7 +124,7 @@ function HoursCard({
 const SEARCH_INDEX: { section: Section; key: TranslationKey }[] = [
   ...SECTIONS.map((entry) => ({ section: entry.id, key: entry.key })),
   { section: "general", key: "settings.businessName" },
-  { section: "general", key: "settings.timezone" },
+  { section: "hours", key: "settings.timezone" },
   { section: "general", key: "settings.revenueEnabled" },
   { section: "general", key: "settings.formEnabled" },
   { section: "general", key: "settings.formEmbed" },
@@ -349,7 +348,7 @@ function EmbedSnippet({ src }: { src: string }) {
   );
 }
 
-// Name, timezone, language, sender address. This used to be Settings' first
+// Name, language, sender address. This used to be Settings' first
 // chip, which put the business's own identity behind a page about
 // connections. It is not a connection, so it leads here instead.
 function DetailsCard({ isOwner }: { isOwner: boolean }) {
@@ -383,11 +382,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             defaultValue={settings.org.name}
             onBlur={(e) => void update({ name: e.target.value })}
           />
-          <RowLabel label={t("settings.timezone")} hint={t("settings.timezoneHint")} />
-          <TimezoneSelect
-            value={settings.org.timezone}
-            onChange={(zone) => void update({ timezone: zone })}
-          />
+          {/* Timezone moved to Hours (2026-08-12). It is the clock the open and
+              close times are read in, so it belongs on that screen; here it was
+              a lone qualifier for a setting one chip away. */}
           {/* The address customers write TO. One verified domain serves every
               business; this left-hand part is what routes an incoming email to
               THIS org, so it has to be unique and the save rejects a clash. */}
