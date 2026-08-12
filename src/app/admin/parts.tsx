@@ -8,7 +8,7 @@
 // one reader.
 
 import { useState } from "react";
-import { usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { InfoTip } from "@/components/InfoTip";
@@ -114,6 +114,83 @@ type ActivityRow = {
   attempts?: number;
   deadLettered: boolean;
 };
+
+
+// Plain English, matching the rest of /admin. The tenant app translates these
+// same kinds through i18n; this surface has one reader and it is an operator.
+// Explicit map rather than a template lookup so a kind written by a newer
+// deploy than this bundle falls through to its raw value instead of blanking
+// the row.
+const USER_ACTIVITY_LABELS: Record<string, string> = {
+  appointment_created: "Appointment created",
+  appointment_status: "Appointment status changed",
+  appointment_moved: "Appointment moved",
+  appointment_deleted: "Appointment deleted",
+  customer_created: "Customer created",
+  customer_deleted: "Customer deleted",
+  settings_changed: "Settings changed",
+  member_invited: "Member invited",
+  member_removed: "Member removed",
+  whatsapp_connected: "WhatsApp connected",
+  booking_dropped: "Booking dropped",
+};
+
+type UserActivityRow = {
+  _id: string;
+  at: number;
+  kind: string;
+  detail?: string;
+  actor?: string;
+  customerName?: string;
+};
+
+// Who did what INSIDE the app, as opposed to <Activity> below it, which is the
+// message feed. Both were called "activity" and answer different questions, so
+// they sit one above the other and each says which it is.
+//
+// Operator names are real here, not masked behind the brand: the reader is the
+// operator, and "which of us changed this" is the question the page exists for.
+export function UserActivity({ orgId }: { orgId: Id<"orgs"> }) {
+  const rows = useQuery(api.platform.orgUserActivity, { orgId }) as
+    | UserActivityRow[]
+    | undefined;
+  const when = new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (rows === undefined) {
+    return <p className="text-sm text-[var(--muted)]">Loading…</p>;
+  }
+  if (rows.length === 0) {
+    return <p className="text-sm text-[var(--muted)]">Nothing yet.</p>;
+  }
+  return (
+    <ul className="divide-y divide-[var(--border)]">
+      {rows.map((row) => (
+        <li key={row._id} className="flex items-baseline gap-3 py-1.5 text-sm">
+          <span className="w-28 shrink-0 text-xs tabular-nums text-[var(--muted)]">
+            {when.format(row.at)}
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {USER_ACTIVITY_LABELS[row.kind] ?? row.kind}
+            {row.customerName && (
+              <span className="text-[var(--muted)]"> · {row.customerName}</span>
+            )}
+            {row.detail && (
+              <span className="text-[var(--muted)]"> · {row.detail}</span>
+            )}
+          </span>
+          <span className="shrink-0 text-xs text-[var(--muted)]">
+            {row.actor ?? "system"}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function Activity({ orgId }: { orgId: Id<"orgs"> }) {
   const [filter, setFilter] = useState<MessageStatus | "">("");

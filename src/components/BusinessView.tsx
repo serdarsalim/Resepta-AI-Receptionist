@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -53,54 +53,53 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 // the service catalogue and the contact fields — three things an owner opens
 // on completely different schedules, stacked into one scroll, which is how
 // Services ended up below the fold on the screen it is most edited from.
-type Section = "general" | "hours" | "catalogue";
 
-const SECTIONS: { id: Section; key: TranslationKey }[] = [
-  { id: "general", key: "settings.general" },
-  // Hours AND the roster, because they are the two inputs to one calculation:
-  // getAvailableSlots derives a bookable slot from the business hours and from
-  // orgCapacity, which is the count of active staff. Two chips apart meant
-  // changing capacity took you off the screen showing when you are open.
-  //
-  // Named for both halves rather than "Availability" — the roster also carries
-  // sign-in access, which that word would mislabel — and the compound reads
-  // parallel to "Services & fields" beside it.
-  { id: "hours", key: "settings.hoursTeam" },
-  { id: "catalogue", key: "settings.catalogue" },
-  // AI moved to Account and Recent activity became its own sidebar row, both
-  // on 2026-08-12. An MCP key is minted and revoked by one PERSON, so it was
-  // never a fact about the salon. Activity is not configured at all: it is a
-  // record the workspace writes about itself, which is what the sidebar's foot
-  // group is for. Do not take either section id back.
+// Which card each row lives on. Business is ONE page now: General, Hours and
+// Team stacked, no chip strip. The strip went away because it had shrunk to
+// three entries whose contents all answer "what is this business", and because
+// hours and capacity are two halves of one calculation (getAvailableSlots
+// reads the business hours AND orgCapacity, the count of active staff) that a
+// chip boundary kept apart.
+//
+// Services and contact fields left for their own sidebar destination the same
+// day: a price list is a body of content you maintain, not a setting, and the
+// voice agent and booking page both read it at call time.
+//
+// The old objection to stacking these (recorded twice: General carried nine
+// rows across three unrelated jobs, so an open/close grid appended to it landed
+// under the fold) is answered rather than ignored. General shed Timezone to
+// Hours, and the header search now SCROLLS to a card instead of switching
+// sections, so "where do I change opening times" is one query rather than a
+// scroll hunt.
+//
+// Hand-maintained, same as Account's: the rows live in card bodies with no
+// runtime register to enumerate, so add a line when you add a row. Forgetting
+// costs one unfindable name. Never index a key that is not in i18n.ts.
+const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
+  { card: "general", key: "settings.general" },
+  { card: "general", key: "settings.businessName" },
+  { card: "general", key: "settings.revenueEnabled" },
+  { card: "general", key: "settings.formEnabled" },
+  { card: "general", key: "settings.formEmbed" },
+  { card: "general", key: "settings.inboundAddress" },
+  { card: "general", key: "settings.emailFrom" },
+  { card: "general", key: "settings.language" },
+  { card: "general", key: "settings.currency" },
+  { card: "hours", key: "settings.hours" },
+  { card: "hours", key: "settings.timezone" },
+  { card: "hours", key: "settings.businessHours" },
+  { card: "team", key: "staff.title" },
+  { card: "team", key: "roster.bookable" },
 ];
 
-function SectionChip({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      // Idle chips sit on --muted-strong, not --muted. This strip is read to
-      // NAVIGATE, which is the middle tier's whole job; --muted is the
-      // timestamp grey and put a primary control at the WCAG AA floor.
-      className={`rounded-full px-3 py-1 text-sm transition-colors ${
-        active
-          ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-          : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
+type BusinessCard = "general" | "hours" | "team";
+
+const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
+  general: "settings.general",
+  hours: "settings.hours",
+  team: "staff.title",
+};
+
 
 // Thin wrapper owning the mutation, so the shared card stays a dumb form.
 function HoursCard({
@@ -116,59 +115,40 @@ function HoursCard({
   );
 }
 
-// What the header's search box looks through. Hand-maintained, because the
-// settings it points at are spread over seven card components and there is no
-// runtime register to read them from. The cost of forgetting an entry is that
-// one setting is unfindable by name, not that anything breaks — so add a line
-// here when you add a row, and never add a key that does not exist.
-//
-// Every section is indexed by its own label too, so "hours" finds Hours even
-// though no row inside it is called that.
-const SEARCH_INDEX: { section: Section; key: TranslationKey }[] = [
-  ...SECTIONS.map((entry) => ({ section: entry.id, key: entry.key })),
-  { section: "general", key: "settings.businessName" },
-  { section: "hours", key: "settings.timezone" },
-  { section: "general", key: "settings.revenueEnabled" },
-  { section: "general", key: "settings.formEnabled" },
-  { section: "general", key: "settings.formEmbed" },
-  { section: "general", key: "settings.inboundAddress" },
-  { section: "general", key: "settings.emailFrom" },
-  { section: "general", key: "settings.language" },
-  { section: "general", key: "settings.currency" },
-  { section: "catalogue", key: "services.active" },
-  { section: "hours", key: "roster.bookable" },
-  { section: "hours", key: "staff.title" },
-];
-
-const SECTION_STORAGE_KEY = "randevu.business.section";
-
 export function BusinessView() {
   const { t } = useLanguage();
-  const [section, setSectionState] = useState<Section>("general");
-
-  // Same deal as Reminders: the section lives in the URL so a refresh stays
-  // put, with the last-used one as fallback for a bare URL. Section ids don't
-  // overlap between views, so sharing the ?section param is collision-free.
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get("section");
-    const stored = window.localStorage.getItem(SECTION_STORAGE_KEY);
-    const next = [wanted, stored].find(
-      (id): id is Section => id !== null && SECTIONS.some((s) => s.id === id),
-    );
-    if (next) setSectionState(next);
-  }, []);
-
-  const setSection = (next: Section) => {
-    setSectionState(next);
-    window.localStorage.setItem(SECTION_STORAGE_KEY, next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("section", next);
-    window.history.replaceState(null, "", url);
-  };
-
   // Claims the header's box, same component and same corner as Customers and
   // Inbox. The shell owns the input; a view only says what it should say.
   const search = useHeaderSearch(t("common.search"));
+  const cardRefs = useRef<Record<BusinessCard, HTMLDivElement | null>>({
+    general: null,
+    hours: null,
+    team: null,
+  });
+  // Held in state and consumed by an effect rather than scrolled on the click.
+  // Clearing the query remounts the cards, so at click time every ref is null,
+  // and one requestAnimationFrame does not cover React's re-render plus the ref
+  // callbacks. Same mechanism AccountView uses, and the same reason.
+  const [pendingScroll, setPendingScroll] = useState<BusinessCard | null>(null);
+  useEffect(() => {
+    if (!pendingScroll) return;
+    // No behavior: "smooth". It silently does nothing on this shell's `main`,
+    // measured, so asking for it costs the scroll it was meant to prettify.
+    cardRefs.current[pendingScroll]?.scrollIntoView({ block: "start" });
+    setPendingScroll(null);
+  }, [pendingScroll]);
+
+  // The Calendar's "Edit hours" button still deep-links here with
+  // ?section=hours. There are no sections left to switch to, so the param now
+  // means "scroll to that card" — the destination it always meant, expressed
+  // against a page instead of a chip strip. Read once on mount.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("section");
+    if (wanted === "hours" || wanted === "team" || wanted === "general") {
+      setPendingScroll(wanted);
+    }
+  }, []);
+
   const hits = search.active
     ? SEARCH_INDEX.filter((entry) => search.matches(t(entry.key)))
     : [];
@@ -178,10 +158,9 @@ export function BusinessView() {
   // The backend enforces this too (requireOwner); the fieldsets are honest UI.
   const isOwner = settings.me.role !== "staff";
 
-  // Searching replaces the section body rather than filtering inside it: the
-  // question being asked is "which screen is this setting on", and the answer
-  // is a list of places to go. Picking one clears the query, because the search
-  // is done the moment it has taken you somewhere.
+  // Searching replaces the page body with a list of places to go, and picking
+  // one clears the query, because the search is done the moment it has taken
+  // you somewhere. It scrolls rather than switches now that this is one page.
   if (search.active) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
@@ -191,11 +170,11 @@ export function BusinessView() {
           <div className="overflow-hidden rounded-lg border border-[var(--border)]">
             {hits.map((entry, i) => (
               <button
-                key={`${entry.section}:${entry.key}`}
+                key={`${entry.card}:${entry.key}`}
                 type="button"
                 onClick={() => {
-                  setSection(entry.section);
                   search.setQuery("");
+                  setPendingScroll(entry.card);
                 }}
                 className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
                   i > 0 ? "border-t border-[var(--border)]" : ""
@@ -203,7 +182,7 @@ export function BusinessView() {
               >
                 <span className="text-sm">{t(entry.key)}</span>
                 <span className="shrink-0 text-xs text-[var(--muted)]">
-                  {t(SECTIONS.find((s) => s.id === entry.section)!.key)}
+                  {t(CARD_LABEL[entry.card])}
                 </span>
               </button>
             ))}
@@ -215,35 +194,25 @@ export function BusinessView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <div className="flex flex-wrap items-center gap-1">
-        {SECTIONS.map((entry) => (
-          <SectionChip
-            key={entry.id}
-            active={section === entry.id}
-            label={t(entry.key)}
-            onClick={() => setSection(entry.id)}
-          />
-        ))}
-      </div>
-
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
         </p>
       )}
-      {section === "general" && <DetailsCard isOwner={isOwner} />}
-      {section === "hours" && (
-        <>
-          <HoursCard isOwner={isOwner} org={settings.org} />
-          <PeopleCard isOwner={isOwner} />
-        </>
-      )}
-      {section === "catalogue" && (
-        <>
-          <ServicesCard isOwner={isOwner} />
-          <FieldsCard isOwner={isOwner} />
-        </>
-      )}
+      <div ref={(node) => void (cardRefs.current.general = node)}>
+        <DetailsCard isOwner={isOwner} />
+      </div>
+      {/* Hours and Team are adjacent because they are the two inputs to one
+          calculation: getAvailableSlots reads the business hours AND
+          orgCapacity, the count of active staff. A chip boundary between them
+          meant changing capacity took you off the screen showing when you are
+          open. */}
+      <div ref={(node) => void (cardRefs.current.hours = node)}>
+        <HoursCard isOwner={isOwner} org={settings.org} />
+      </div>
+      <div ref={(node) => void (cardRefs.current.team = node)}>
+        <PeopleCard isOwner={isOwner} />
+      </div>
     </div>
   );
 }
@@ -520,7 +489,7 @@ function ServiceKeyCell({
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
 // nothing to pick and every appointment falls back to 30 minutes.
-function ServicesCard({ isOwner }: { isOwner: boolean }) {
+export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const { t, language } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
@@ -959,7 +928,7 @@ function FieldTableRow({
   );
 }
 
-function FieldsCard({ isOwner }: { isOwner: boolean }) {
+export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {});
   const usage = useQuery(api.retell.fieldUsage, {});

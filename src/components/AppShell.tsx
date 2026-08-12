@@ -33,8 +33,8 @@ export type TabId =
   | "voice"
   | "messages"
   | "revenue"
+  | "services"
   | "business"
-  | "activity"
   | "account";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
@@ -96,15 +96,6 @@ const BusinessIcon = makeIcon(
     <path d="M1 14h6M9 8h6M17 16h6" />
   </>,
 );
-// Clock with a counter-clockwise arrow: history, not scheduling. Deliberately
-// not the calendar's glyph, which already means "when things are booked".
-const ActivityIcon = makeIcon(
-  <>
-    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-    <path d="M3 3v5h5" />
-    <path d="M12 7v5l3 2" />
-  </>,
-);
 // One gear definition, used at 18px in the sidebar and 16px in the user menu.
 const SettingsIcon = makeIcon(
   <>
@@ -130,6 +121,14 @@ const RevenueIcon = makeIcon(
   </>,
 );
 
+// A tag with its hole: a priced thing. Not a list glyph, which would describe
+// the shape of the screen rather than what is on it.
+const ServicesIcon = makeIcon(
+  <>
+    <path d="M20.6 13.4 12.4 21.6a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a2 2 0 0 1 2-2h9a2 2 0 0 1 1.4.6l6.4 6.4a2 2 0 0 1 0 2.8z" />
+    <circle cx="7.5" cy="7.5" r="1.5" />
+  </>,
+);
 // A megaphone: one thing said to many people, which is exactly what separates
 // this from the Inbox above it.
 const CampaignsIcon = makeIcon(
@@ -175,6 +174,15 @@ const NAV_TABS: {
     Icon: VoicePhoneIcon,
     color: "#10b981",
   },
+  // Directly under Voice agent: the agent reads services and contact fields at
+  // call time, and the public booking page builds its slots from the same
+  // services. That adjacency is the real relationship, not alphabetical order.
+  {
+    id: "services",
+    key: "settings.catalogue",
+    Icon: ServicesIcon,
+    color: "#14b8a6",
+  },
   {
     id: "revenue",
     key: "nav.revenue",
@@ -213,20 +221,14 @@ const NAV_TABS: {
 // Business (AI connectors, knowledge moved on to the voice agent since). One
 // config destination remains.
 // Below the divider: "about this workspace", as opposed to today's work above
-// it. Activity joined Business here on 2026-08-12, out of Business's chip strip
-// — it was never a setting, it is the record the workspace keeps about itself,
-// and a row below the line costs nothing to the morning scan.
+// it. Recent activity spent an hour here on 2026-08-12 and went to the platform
+// admin's org page instead: an audit log is a debugging surface whose readers
+// are operators, and a salon owner has no use for a page of "settings changed".
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
     key: "nav.business",
     Icon: BusinessIcon,
-    color: "var(--foreground)",
-  },
-  {
-    id: "activity",
-    key: "nav.activity",
-    Icon: ActivityIcon,
     color: "var(--foreground)",
   },
 ];

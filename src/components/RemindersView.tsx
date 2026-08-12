@@ -1400,7 +1400,9 @@ export function BusinessHoursCard({
     update({ businessHours: { ...hours, ...next } });
 
   return (
-    <Card disabled={!isOwner}>
+    // Titled since Business became one page: the chip strip used to name this
+    // card, and a middle card in a stack has nothing to name it.
+    <Card title={t("settings.hours")} disabled={!isOwner}>
       <div className={ROW_GRID}>
         {/* The clock the rows below are read in, and it leads them because
             "09:00 to 18:00" means nothing until you know whose 09:00. It used

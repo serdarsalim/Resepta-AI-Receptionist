@@ -19,7 +19,7 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Activity, Row, Section, SecretRow } from "../parts";
+import { Activity, Row, Section, SecretRow, UserActivity } from "../parts";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -246,13 +246,31 @@ export default function TenantPage() {
         ))}
       </div>
 
+      {/* Two feeds, deliberately separate and deliberately in this order. The
+          first answers "who touched this account", the second "did our messages
+          land". Both used to be called activity, which is why each one now says
+          which it is.
+
+          The user feed lives HERE and not in the salon's own app: it was a
+          sidebar destination there for about an hour on 2026-08-12 and came
+          straight back out. An audit log is a debugging surface, its readers
+          are operators, and a salon owner has no use for a page of "settings
+          changed / businessHours". */}
       {tab === "activity" && (
-        <Section
-          title="Recent activity"
-          description="The org's latest messages in both directions with their delivery outcome, newest first."
-        >
-          <Activity orgId={orgId} />
-        </Section>
+        <>
+          <Section
+            title="Account activity"
+            description="Who did what inside the app: bookings, customers, settings, members. Operator actions are attributed to the person, not the brand."
+          >
+            <UserActivity orgId={orgId} />
+          </Section>
+          <Section
+            title="Message activity"
+            description="The org's latest messages in both directions with their delivery outcome, newest first."
+          >
+            <Activity orgId={orgId} />
+          </Section>
+        </>
       )}
 
       {tab === "setup" && (

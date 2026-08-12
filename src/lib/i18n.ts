@@ -75,7 +75,6 @@ const dictionary = {
   // the business's own word for this, and a salon owner does not think of the
   // salon as a workspace.
   "nav.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
-  "nav.activity": { tr: "Son hareketler", en: "Recent activity", de: "Letzte Aktivität" },
   "nav.settings": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   "nav.menu": { tr: "Menü", en: "Menu", de: "Menü" },
   "nav.closeMenu": {
@@ -2225,13 +2224,6 @@ const dictionary = {
     tr: "Saatler",
     en: "Hours",
     de: "Zeiten",
-  },
-  // The merged tab. Named for both halves because the roster carries sign-in
-  // access as well as who can be booked, so "Availability" would mislabel it.
-  "settings.hoursTeam": {
-    tr: "Saatler ve ekip",
-    en: "Hours & team",
-    de: "Zeiten & Team",
   },
   "settings.businessHours": {
     tr: "Açık olduğunuz günler",

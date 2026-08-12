@@ -277,13 +277,60 @@ more than either.
   bug: before grouping views under a new container, open each one and look at
   what it renders first. Grouping in this app means adding a tab to the strip
   a view already owns, or adding a sidebar row — never a third level.
-- **Hours keeps its own Business tab.** Folding it into General as a card was
-  proposed and declined: General already carries nine rows across three
-  unrelated jobs (identity, intake channels, a feature flag), and an open/close
-  grid appended to it lands below the fold on the screen people open
-  specifically to change hours. `BusinessView`'s `SECTIONS` comment already
-  records this exact failure from the last time sections were merged. If the
-  strip feels long, General is the section to split, not Hours to absorb.
+- **SUPERSEDED by the 2026-08-12 (later) section below.** Hours no longer keeps
+  its own Business tab; Business has no tabs at all. The reasoning that kept
+  them apart, and what changed to answer it, is recorded there.
+
+## Business is one page (2026-08-12, later the same day)
+
+Supersedes the chip-strip parts of the section above. Sidebar: Customers ·
+Inbox · Campaigns · **Voice agent** · **Services & fields** · Revenue (flag) ·
+Calendar · Reminders · Business.
+
+- **`BusinessView` has no chip strip.** It is one page stacking three cards:
+  General, Hours, Team. The strip had shrunk to three entries that all answer
+  "what is this business", and it kept apart two things that are halves of one
+  calculation: `getAvailableSlots` derives a bookable slot from the business
+  hours AND `orgCapacity`, the count of active staff. Changing capacity used to
+  mean leaving the screen showing when you are open.
+- **The old objection was answered, not ignored.** Stacking Hours under General
+  was declined twice on the grounds that General carried nine rows across three
+  unrelated jobs, so an open/close grid appended to it landed below the fold.
+  Two things changed: General shed Timezone to Hours, and the header search now
+  SCROLLS to a card instead of switching sections. "Where do I change opening
+  times" is one query, not a scroll hunt.
+- **Timezone lives on Hours**, not General. "09:00 to 18:00" means nothing
+  until you know whose 09:00, and the calendar already treats them as one
+  setting when it projects closed bands from the business timezone onto the
+  viewer's.
+- **Services & fields is a sidebar destination**, not a Business chip. A price
+  list is content you maintain, not a setting you configure, and the voice
+  agent plus the booking page both read it at call time. It sits under Voice
+  agent for that reason. Putting it in the FOOT group was considered and
+  rejected: that group means "about this business", which is the category it
+  already occupied, so it would have bought one click and said nothing.
+- **`?section=hours` still works.** The Calendar's "Edit hours" button deep
+  links with it. There are no sections to switch to now, so the param means
+  "scroll to that card" — the destination it always meant.
+- **Recent activity is NOT in the tenant app.** It was a sidebar row for about
+  an hour and came straight back out. An audit log is a debugging surface, its
+  readers are operators, and a salon owner has no use for a page of "settings
+  changed / businessHours". It lives on the platform admin's org page under
+  Activity, as **Account activity** above the existing **Message activity** —
+  two feeds that answer different questions and were both called activity.
+  `convex/activity.ts` `enrichActivity` is shared by both reads and takes
+  `maskOperator`: the salon's own feed attributes operator work to the brand
+  and never ships an operator's name to that browser, while the platform feed
+  names the person, which is the question that page exists to answer.
+- **AI is on Account, not Business.** An MCP key is minted and revoked by one
+  PERSON; `McpCard` sits outside the owner-only fieldset on purpose.
+- **Nothing is closable.** `ShellHeader` has no ✕ and no `closable` prop.
+  Business and Account both traded it for the header search box; the sidebar is
+  the way out.
+- **`TAB_IDS` in `AppHome` is a second whitelist beside the `TabId` type, and
+  it fails SOFT.** A tab missing from it falls back to the calendar, so a new
+  destination's sidebar row works while its deep link silently does not.
+  Typecheck cannot catch this. Add the id in both places.
 
 ### Business searches from the header, and has no ✕
 

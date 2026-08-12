@@ -27,6 +27,7 @@ import {
   platformAdminEmails,
   requirePlatformAdmin,
 } from "./lib/platformAuth";
+import { enrichActivity } from "./activity";
 import { maskSecret } from "./lib/connections";
 import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
@@ -228,6 +229,31 @@ const messageStatus = v.union(
   v.literal("read"),
   v.literal("received"),
 );
+
+// The org's USER-level activity: who changed what inside the app, as opposed to
+// orgActivity below, which is the message feed (what was sent, to whom, and
+// whether it landed). Two different questions that both got called "activity",
+// so the admin page shows them one above the other and names each.
+//
+// Platform-only by design. This was briefly a sidebar destination in the salon's
+// own app and came straight back out (2026-08-12): an audit log is a debugging
+// surface, its readers are operators, and a salon owner has no use for a page
+// of "settings changed / businessHours".
+//
+// Actor names are NOT masked here, unlike the tenant read. See enrichActivity.
+export const orgUserActivity = query({
+  args: { orgId: v.id("orgs"), limit: v.optional(v.number()) },
+  returns: v.any(),
+  handler: async (ctx, { orgId, limit }) => {
+    await requirePlatformAdmin(ctx);
+    const rows = await ctx.db
+      .query("activityLog")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(Math.min(limit ?? 50, 200));
+    return await enrichActivity(ctx, rows, { maskOperator: false });
+  },
+});
 
 export const orgActivity = query({
   args: {

@@ -10,8 +10,8 @@ import { InboxView } from "@/components/InboxView";
 import { RemindersView } from "@/components/RemindersView";
 import { CampaignsView } from "@/components/CampaignsView";
 import { VoiceView } from "@/components/VoiceView";
-import { ActivityView } from "@/components/ActivityView";
 import { BusinessView } from "@/components/BusinessView";
+import { ServicesView } from "@/components/ServicesView";
 import { AccountView } from "@/components/AccountView";
 import { ContactView } from "@/components/ContactView";
 
@@ -85,15 +85,15 @@ export function AppHome() {
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
           {tab === "campaigns" && <CampaignsView />}
           {tab === "voice" && <VoiceView />}
+          {/* Content the business maintains, not configuration: the voice agent
+              and the booking page both read it. */}
+          {tab === "services" && <ServicesView />}
           {tab === "revenue" && <RevenueView />}
           {tab === "messages" && <RemindersView />}
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
           {tab === "business" && <BusinessView />}
-          {/* Its own destination, not a Business chip: a record the workspace
-              writes about itself is not a setting. */}
-          {tab === "activity" && <ActivityView />}
           {/* Personal, not org config. Only the avatar menu routes here. */}
           {tab === "account" && <AccountView />}
         </>
@@ -115,7 +115,7 @@ const TAB_IDS: TabId[] = [
   "voice",
   "messages",
   "revenue",
+  "services",
   "business",
-  "activity",
   "account",
 ];
