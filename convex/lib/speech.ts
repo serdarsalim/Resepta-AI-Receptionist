@@ -15,13 +15,23 @@
 // cannot do is symbols, abbreviations and thousands separators. So: no ₺, no
 // grouping, and every unit spelled out.
 //
-// NO TABLES IN HERE. A four-currency map would just relocate the bug to the
-// fifth currency, and a minute/hour map would relocate it to the fourth
-// language. Intl already knows the word for every unit and every ISO currency
-// in every locale, including the plural rules — "1 ABD doları" against
-// "3000 ABD doları", "1 hour" against "2 hours" — and it is right in languages
-// nobody on this team reads. Convex ships the full ICU data; this was checked
-// against the live runtime, not assumed.
+// Intl does the arithmetic, the units and the plural rules — every ISO
+// currency in every locale, right in languages nobody on this team reads.
+// Convex ships the full ICU data; that was checked against the live runtime,
+// not assumed. So there is no minute/hour table and no exponent table.
+//
+// There is exactly ONE table, below, and it is worth knowing why it has to
+// exist. ICU currency names are built to DISAMBIGUATE — they answer "which of
+// the world's dollars is this" in a list that might hold three. Out loud there
+// is nothing to disambiguate: the salon has one currency and the caller
+// already knows which money they are paying in. So ICU says "Türk lirası" and
+// a person in Turkey says "lira"; it says "US dollar" and a person says
+// "dollar". Nobody has ever said "İngiliz sterlini" to a hairdresser. What
+// people actually say is not a thing ICU stores, so it is stored here.
+//
+// It degrades rather than breaks: a currency with no entry falls back to the
+// ICU name, which is correct and merely formal. Adding one to CURRENCIES in
+// money.ts still works on day one and can be made colloquial later.
 //
 // (convex/lib/money.ts says formatting lives on the client because "the server
 // has no reader to format for". That stopped being true when the reader became
@@ -45,6 +55,46 @@ export function spokenDuration(
     unitDisplay: "long",
     useGrouping: false,
   }).format(hours ? total / 60 : total);
+}
+
+// The word a customer would use, by currency and then language, keyed by the
+// Intl plural category so English can say one dollar and 3000 dollars. Turkish
+// does not inflect a noun after a numeral, so its two forms are the same word
+// and that is not a mistake.
+//
+// EUR is deliberately absent: ICU already returns Euro, Euro and euros/euro,
+// which is what people say in all three languages. An entry would only be a
+// place for it to drift.
+const SPOKEN_CURRENCY: Record<
+  string,
+  Record<string, { one: string; other: string }>
+> = {
+  TRY: {
+    tr: { one: "lira", other: "lira" },
+    en: { one: "lira", other: "lira" },
+    de: { one: "Lira", other: "Lira" },
+  },
+  USD: {
+    tr: { one: "dolar", other: "dolar" },
+    en: { one: "dollar", other: "dollars" },
+    de: { one: "Dollar", other: "Dollar" },
+  },
+  GBP: {
+    tr: { one: "sterlin", other: "sterlin" },
+    en: { one: "pound", other: "pounds" },
+    de: { one: "Pfund", other: "Pfund" },
+  },
+};
+
+function spokenCurrencyWord(
+  code: string,
+  locale: string,
+  amount: number,
+): string | null {
+  const forms = SPOKEN_CURRENCY[code]?.[locale.toLowerCase().slice(0, 2)];
+  if (!forms) return null;
+  const category = new Intl.PluralRules(locale).select(amount);
+  return category === "one" ? forms.one : forms.other;
 }
 
 // Minor units in, a sayable amount out.
@@ -76,6 +126,7 @@ export function spokenPrice(
   // Trailing zeroes dropped: an appointment price is a whole number of lira
   // almost every time, and "3000 tam sıfır sıfır lira" is not what anyone says.
   const exact = Number.isInteger(amount) ? 0 : digits;
+  const word = spokenCurrencyWord(code, tag, amount);
 
   return (
     new Intl.NumberFormat(tag, {
@@ -92,7 +143,12 @@ export function spokenPrice(
       // part with no letter in it is that symbol, and it is the single
       // character this whole file exists to remove.
       .filter((part) => !(part.type === "currency" && !/\p{L}/u.test(part.value)))
-      .map((part) => part.value)
+      // The name is swapped in place rather than appended, so ICU keeps
+      // deciding where the word goes and what separates it from the number.
+      // Those differ by locale and are not ours to guess.
+      .map((part) =>
+        part.type === "currency" ? (word ?? part.value) : part.value,
+      )
       .join("")
       .replace(/\s+/g, " ")
       .trim()
