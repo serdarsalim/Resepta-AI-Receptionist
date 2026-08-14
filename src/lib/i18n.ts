@@ -1305,6 +1305,44 @@ const dictionary = {
   "calls.when": { tr: "Zaman", en: "When", de: "Zeit" },
   "calls.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
   "calls.outcome": { tr: "Sonuç", en: "Outcome", de: "Ergebnis" },
+  // The per-call price line in the expanded detail. {amount} is pre-formatted
+  // ("$0.42") — USD because the meter runs in USD, whatever the org currency.
+  "calls.billedLine": {
+    tr: "Arama tutarı: {amount}",
+    en: "Call cost: {amount}",
+    de: "Anrufkosten: {amount}",
+  },
+  // The owner's Usage section on the voice page (convex/billing.ts). Spend is
+  // owner-only; staff never see this strip entry.
+  "voiceBilling.title": { tr: "Kullanım", en: "Usage", de: "Nutzung" },
+  "voiceBilling.rateLine": {
+    tr: "Dakika başı {rate}, saniye bazında ücretlendirilir.",
+    en: "{rate} per minute, billed per second.",
+    de: "{rate} pro Minute, sekundengenau abgerechnet.",
+  },
+  "voiceBilling.month": { tr: "Ay", en: "Month", de: "Monat" },
+  "voiceBilling.calls": { tr: "Arama", en: "Calls", de: "Anrufe" },
+  "voiceBilling.talkTime": {
+    tr: "Konuşma süresi",
+    en: "Talk time",
+    de: "Gesprächszeit",
+  },
+  "voiceBilling.amount": { tr: "Tutar", en: "Amount", de: "Betrag" },
+  "voiceBilling.budget": {
+    tr: "Aylık bütçe (USD)",
+    en: "Monthly budget (USD)",
+    de: "Monatsbudget (USD)",
+  },
+  "voiceBilling.budgetHint": {
+    tr: "İsteğe bağlı. Harcama bütçenin %80'ine ve %100'üne ulaştığında e-posta ile haber veririz. Aramalar hiçbir zaman kesilmez. Boş bırakmak uyarıları kapatır.",
+    en: "Optional. We email you when spend reaches 80% and 100% of it. Calls are never cut off. Leave it empty to turn the alerts off.",
+    de: "Optional. Wir benachrichtigen Sie per E-Mail, wenn die Kosten 80 % und 100 % des Budgets erreichen. Anrufe werden nie unterbrochen. Leer lassen schaltet die Hinweise aus.",
+  },
+  "voiceBilling.empty": {
+    tr: "Henüz ücretlendirilen arama yok.",
+    en: "No metered calls yet.",
+    de: "Noch keine abgerechneten Anrufe.",
+  },
   // Per-call, so "what was collected", not the agent card's "what it collects".
   "calls.collected": {
     tr: "Toplanan bilgiler",

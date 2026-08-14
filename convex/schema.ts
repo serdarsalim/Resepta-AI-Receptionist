@@ -380,6 +380,14 @@ export default defineSchema({
     // stamp time (retell.recordCall) and frozen onto the row — changing it
     // never rewrites a past call.
     voiceRateMicroUsdPerMinute: v.optional(v.number()),
+    // The one OWNER-set number on the voice meter: a soft monthly budget for
+    // the billed side, in micro-USD. Crossing 80% and 100% emails the org's
+    // owner once per threshold per month. An alert, deliberately not a cap:
+    // the chat lane's hard cap protects OUR platform LLM key from a runaway
+    // loop, but a voice call is the salon's own customer on the line, and
+    // hanging up on them mid-month is worse than any bill. Suspension stays
+    // the operator's lever for the org that will not pay.
+    voiceMonthlyBudgetMicroUsd: v.optional(v.number()),
     // The showroom. An org with this set never reaches a provider: sends are
     // simulated, replies are invented, and a nightly cron wipes it back to a
     // fixed dataset (convex/demo.ts).
@@ -1519,6 +1527,12 @@ export default defineSchema({
     voiceSeconds: v.optional(v.number()),
     voiceBilledMicroUsd: v.optional(v.number()),
     voiceCostMicroUsd: v.optional(v.number()),
+    // Budget-alert stamps: set when the month's billed spend crossed 80% /
+    // 100% of orgs.voiceMonthlyBudgetMicroUsd, so each alert fires once per
+    // threshold per month. On the month row rather than the org so a new
+    // month re-arms both by existing.
+    voiceBudgetAlert80At: v.optional(v.number()),
+    voiceBudgetAlert100At: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_org_month", ["orgId", "month"]),
 

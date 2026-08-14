@@ -12,6 +12,7 @@ import type * as activity from "../activity.js";
 import type * as agentTools from "../agentTools.js";
 import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
+import type * as billing from "../billing.js";
 import type * as booking from "../booking.js";
 import type * as calcom from "../calcom.js";
 import type * as calls from "../calls.js";
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   agentTools: typeof agentTools;
   appointments: typeof appointments;
   auth: typeof auth;
+  billing: typeof billing;
   booking: typeof booking;
   calcom: typeof calcom;
   calls: typeof calls;

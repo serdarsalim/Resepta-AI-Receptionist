@@ -45,12 +45,13 @@ import { emailLaneConfigured, productSender, sendEmail } from "./email";
 import { emailConfig } from "./platformConfig";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
-export type AlertKind = "inbound" | "failed-send" | "new-contact";
+export type AlertKind = "inbound" | "failed-send" | "new-contact" | "billing";
 
 export const alertKindValidator = v.union(
   v.literal("inbound"),
   v.literal("failed-send"),
   v.literal("new-contact"),
+  v.literal("billing"),
 );
 
 // THE default that matters: unset reads as ON. A customer reply nobody sees is
@@ -65,6 +66,10 @@ export function alertEnabled(
   },
   kind: AlertKind,
 ): boolean {
+  // Billing has no per-user switch: the owner setting a budget IS the opt-in,
+  // and clearing the budget is the mute. A toggle on top would be two places
+  // for one intention.
+  if (kind === "billing") return true;
   const stored =
     kind === "inbound"
       ? prefs.notifyInbound
@@ -93,7 +98,9 @@ export type AlertTemplate =
   | "failedNoText"
   | "failedOther"
   | "failedCalendarCancel"
-  | "newContact";
+  | "newContact"
+  | "voiceBudget80"
+  | "voiceBudget100";
 
 export const alertTemplateValidator = v.union(
   v.literal("inboundText"),
@@ -105,6 +112,8 @@ export const alertTemplateValidator = v.union(
   v.literal("failedOther"),
   v.literal("failedCalendarCancel"),
   v.literal("newContact"),
+  v.literal("voiceBudget80"),
+  v.literal("voiceBudget100"),
 );
 
 // One row per alert a salon can receive. `kind` is on the row, not on the call
@@ -228,6 +237,36 @@ const ALERT_COPY: Record<
       de: "{who} wurde zu Ihren Kontakten hinzugefügt ({detail}). Der Datensatz enthält Verlauf und Kontaktdaten.",
     },
   },
+  // The voice meter's budget alerts (schema: orgs.voiceMonthlyBudgetMicroUsd).
+  // {detail} carries the figures ("$83.10 / $100.00"); {who} is the business
+  // name. Both bodies say in-band that calls keep going: an owner reading
+  // "budget exceeded" must not think their phone line just went dead.
+  voiceBudget80: {
+    kind: "billing",
+    subject: {
+      tr: "Arama harcaması bütçenin %80'ine ulaştı",
+      en: "Call spend reached 80% of your budget",
+      de: "Anrufkosten haben 80 % Ihres Budgets erreicht",
+    },
+    body: {
+      tr: "Telefon asistanının bu ayki harcaması {detail}. Aramalar kesintisiz devam ediyor — bu bir uyarıdır, sınır değil. Bütçeyi Telefon sayfasındaki Kullanım bölümünden değiştirebilirsiniz.",
+      en: "This month's phone agent spend is {detail}. Calls keep going — this is an alert, not a cutoff. You can change the budget in the Usage section of the Phone page.",
+      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail}. Anrufe laufen unverändert weiter — dies ist ein Hinweis, keine Sperre. Das Budget können Sie im Bereich Nutzung auf der Telefonseite ändern.",
+    },
+  },
+  voiceBudget100: {
+    kind: "billing",
+    subject: {
+      tr: "Arama bütçesi aşıldı",
+      en: "Call budget exceeded",
+      de: "Anrufbudget überschritten",
+    },
+    body: {
+      tr: "Telefon asistanının bu ayki harcaması {detail} — belirlediğiniz bütçenin üzerinde. Aramalar kesilmez, müşterileriniz aramaya devam edebilir. Bütçeyi Telefon sayfasındaki Kullanım bölümünden güncelleyebilirsiniz.",
+      en: "This month's phone agent spend is {detail} — above the budget you set. Calls are not cut off; your customers can keep calling. You can update the budget in the Usage section of the Phone page.",
+      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail} — über Ihrem festgelegten Budget. Anrufe werden nicht unterbrochen, Ihre Kunden können weiterhin anrufen. Das Budget können Sie im Bereich Nutzung auf der Telefonseite anpassen.",
+    },
+  },
   failedCalendarCancel: {
     kind: "failed-send",
     subject: {
@@ -282,6 +321,10 @@ export const alertRecipients = internalQuery({
       .collect();
     const emails: string[] = [];
     for (const membership of memberships) {
+      // Billing goes to owners only — the first owner-scoped kind. Spend is
+      // the business's finances: staff can neither change the budget nor act
+      // on the number. Every other kind stays all-members, as before.
+      if (args.kind === "billing" && membership.role !== "owner") continue;
       const user = await ctx.db.get(membership.userId);
       // No address, nothing to send to. Not an error: a member can exist
       // before their profile carries an email.

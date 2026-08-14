@@ -44,6 +44,9 @@ export const list = query({
         recordingUrl: c.recordingUrl ?? null,
         collected: c.collected ?? null,
         disconnectionReason: c.disconnectionReason ?? null,
+        // The meter's frozen price only — retellCostMicroUsd stays out of
+        // every org-facing read (schema.ts: operator margin data).
+        billedMicroUsd: c.billedMicroUsd ?? null,
         customerName: (c.customerId && names.get(c.customerId)) || null,
       })),
     };

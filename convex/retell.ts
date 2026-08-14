@@ -20,6 +20,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { monthKey } from "./lib/usage";
 import { platformValue } from "./lib/platformConfig";
+import { queueOrgAlert } from "./lib/alerts";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenDuration, spokenPrice } from "./lib/speech";
@@ -2318,6 +2319,33 @@ async function meterCall(
     voiceBilledMicroUsd: billedMicroUsd ?? 0,
     voiceCostMicroUsd: stampCost ? (args.retellCostMicroUsd ?? 0) : 0,
   };
+  // Budget alerts — the whole budget feature; there is deliberately no cap on
+  // the dispatch path (schema: orgs.voiceMonthlyBudgetMicroUsd). Once per
+  // threshold per month via the stamps on this row. Current month only, so a
+  // call analysed late into LAST month cannot fire a stale alert. A single
+  // call jumping straight past 100% stamps BOTH thresholds — firing the 80%
+  // alert afterwards would read as spend going backwards.
+  const budget = org.voiceMonthlyBudgetMicroUsd;
+  const spentAfter = (usage?.voiceBilledMicroUsd ?? 0) + bump.voiceBilledMicroUsd;
+  let alertTemplate: "voiceBudget80" | "voiceBudget100" | null = null;
+  let alertStamps: Record<string, number> = {};
+  if (
+    stampBilled &&
+    budget &&
+    budget > 0 &&
+    month === monthKey(Date.now(), org.timezone)
+  ) {
+    const crossed100 = spentAfter >= budget && !usage?.voiceBudgetAlert100At;
+    const crossed80 =
+      spentAfter >= Math.floor(budget * 0.8) && !usage?.voiceBudgetAlert80At;
+    if (crossed100 || crossed80) {
+      alertTemplate = crossed100 ? "voiceBudget100" : "voiceBudget80";
+      alertStamps = {
+        voiceBudgetAlert80At: Date.now(),
+        ...(crossed100 ? { voiceBudgetAlert100At: Date.now() } : {}),
+      };
+    }
+  }
   if (usage) {
     await ctx.db.patch(usage._id, {
       voiceCalls: (usage.voiceCalls ?? 0) + bump.voiceCalls,
@@ -2326,6 +2354,7 @@ async function meterCall(
         (usage.voiceBilledMicroUsd ?? 0) + bump.voiceBilledMicroUsd,
       voiceCostMicroUsd:
         (usage.voiceCostMicroUsd ?? 0) + bump.voiceCostMicroUsd,
+      ...alertStamps,
       updatedAt: Date.now(),
     });
   } else {
@@ -2337,7 +2366,17 @@ async function meterCall(
       llmOutputTokens: 0,
       llmCostMicroUsd: 0,
       ...bump,
+      ...alertStamps,
       updatedAt: Date.now(),
+    });
+  }
+  if (alertTemplate && budget) {
+    const fmt = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
+    await queueOrgAlert(ctx, {
+      orgId,
+      template: alertTemplate,
+      who: org.name || "—",
+      detail: `${fmt(spentAfter)} / ${fmt(budget)}`,
     });
   }
   return {

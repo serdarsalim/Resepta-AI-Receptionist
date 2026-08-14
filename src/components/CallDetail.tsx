@@ -228,6 +228,11 @@ export type CallDetailItem = {
   recordingUrl?: string | null;
   collected?: Record<string, unknown> | null;
   disconnectionReason?: string | null;
+  // What this call cost the business (calls.billedMicroUsd) — the meter's
+  // frozen price, never Retell's own cost. Optional and shown only when
+  // non-zero: a $0.00 line on every unanswered call is noise, not billing
+  // transparency.
+  billedMicroUsd?: number | null;
 };
 
 export function CallDetail({
@@ -259,6 +264,14 @@ export function CallDetail({
           unanswered one it is the only line there is, which is why it renders
           even when nothing else does. */}
       {ended && <p className="text-xs text-[var(--muted)]">{ended}</p>}
+      {typeof call.billedMicroUsd === "number" && call.billedMicroUsd > 0 && (
+        <p className="text-xs text-[var(--muted)]">
+          {t("calls.billedLine").replace(
+            "{amount}",
+            `$${(call.billedMicroUsd / 1_000_000).toFixed(2)}`,
+          )}
+        </p>
+      )}
       {hasCollected && <CollectedList values={call.collected!} />}
       {call.transcript && (
         <div>
