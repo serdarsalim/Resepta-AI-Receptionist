@@ -7,11 +7,18 @@
 // staff read the product in their own language, and this surface has exactly
 // one reader.
 
-import { useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { InfoTip } from "@/components/InfoTip";
+import type { Search } from "@/lib/useTableState";
 
 export function ago(at: number | undefined): string {
   if (!at) return "never";
@@ -275,6 +282,59 @@ function ActivityTable({ rows }: { rows: ActivityRow[] }) {
 
 // ---- Settings primitives, shared by the fleet page and a tenant's page ----
 
+// Settings search. Both admin pages are long lists of labelled rows inside
+// titled cards, which is exactly what a search box is for — "where do I set
+// the voice rate" should not be a scroll. The salon app answers this with a
+// hand-maintained index of translation keys (BusinessView's SEARCH_INDEX); the
+// console cannot, because its labels are plain English literals scattered
+// through two files with no dictionary to enumerate. So the rows report
+// themselves instead: a Row knows its own label, hides when it does not match,
+// and tells its Section whether it matched so an empty card can hide too. No
+// index to keep in sync, and a row added later is searchable for free.
+const AdminSearchContext = createContext<Search | null>(null);
+
+type SectionReport = {
+  // A section whose TITLE matches keeps all its rows: you searched for the
+  // card, so you want what is in it.
+  titleMatched: boolean;
+  report: (label: string, hit: boolean) => void;
+};
+const SectionContext = createContext<SectionReport | null>(null);
+
+export function AdminSearchProvider({
+  search,
+  children,
+}: {
+  search: Search;
+  children: React.ReactNode;
+}) {
+  return (
+    <AdminSearchContext.Provider value={search}>
+      {children}
+    </AdminSearchContext.Provider>
+  );
+}
+
+// Rows outside a provider (there are none today, but a new admin surface
+// should not have to opt in to render) behave as if nothing is being searched.
+function useAdminSearch(): Search | null {
+  return useContext(AdminSearchContext);
+}
+
+// Shared by Row and SecretRow: am I hidden right now, and does my section know
+// whether I matched? Returns null when there is nothing to hide from.
+function useRowSearch(label: string): { hidden: boolean } {
+  const search = useAdminSearch();
+  const section = useContext(SectionContext);
+  const hit = search ? search.matches(label) : true;
+  const { report } = section ?? {};
+  useEffect(() => {
+    report?.(label, hit);
+  }, [report, label, hit]);
+  if (!search?.active) return { hidden: false };
+  return { hidden: !hit && !section?.titleMatched };
+}
+
 // The app's underline tabs, same measurements VoiceView documents (ported
 // from Vercel): active is DARKER PLUS AN UNDERLINE, never bolder — weight
 // stays 400 so nothing reflows on switch — and the hairline belongs to the
@@ -326,6 +386,8 @@ export function Row({
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const { hidden } = useRowSearch(label);
+  if (hidden) return null;
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       {/* The hint rides an (i) beside the label, same affordance as Section's
@@ -374,6 +436,8 @@ export function SecretRow({
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState("");
+  const { hidden } = useRowSearch(label);
+  if (hidden) return null;
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       {/* The masked tail stays visible — it is data ("which key is in
@@ -416,7 +480,28 @@ export function Section({
   description?: string;
   children: React.ReactNode;
 }) {
+  const search = useAdminSearch();
+  const titleMatched = search ? search.matches(title) : true;
+  // Which of my rows matched. Keyed by label so a row re-reporting the same
+  // answer is a no-op rather than a render loop.
+  const [hits, setHits] = useState<Record<string, boolean>>({});
+  const report = useCallback((label: string, hit: boolean) => {
+    setHits((prev) => (prev[label] === hit ? prev : { ...prev, [label]: hit }));
+  }, []);
+  const value = { titleMatched, report };
+  // A card with nothing left in it is noise, so it goes — including a card
+  // whose contents are not Rows at all (a table, a lone toggle). Those are
+  // reachable by their title and nothing else while a search is running, which
+  // is the usual bargain in a settings search and costs only a cleared query.
+  if (search?.active && !titleMatched && !Object.values(hits).some(Boolean)) {
+    return (
+      <SectionContext.Provider value={value}>
+        <div className="hidden">{children}</div>
+      </SectionContext.Provider>
+    );
+  }
   return (
+    <SectionContext.Provider value={value}>
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
       {/* The description is a sentence explaining what the section governs,
           and a sentence per card is what made this page a wall of prose. It
@@ -430,6 +515,7 @@ export function Section({
       </div>
       <div className="mt-2">{children}</div>
     </section>
+    </SectionContext.Provider>
   );
 }
 

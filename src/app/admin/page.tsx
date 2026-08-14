@@ -23,8 +23,19 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { ago, Count, Row, Section, SecretRow, Setup, TabStrip } from "./parts";
+import {
+  ago,
+  AdminSearchProvider,
+  Count,
+  Row,
+  Section,
+  SecretRow,
+  Setup,
+  TabStrip,
+} from "./parts";
 import { InfoTip } from "@/components/InfoTip";
+import { SearchInput } from "@/components/DataTable";
+import { useSearch } from "@/lib/useTableState";
 
 export default function AdminPage() {
   // Asked FIRST, and fleet is skipped until it comes back true. platform.fleet
@@ -41,6 +52,10 @@ export default function AdminPage() {
   // ever. Living below the table meant the settings had no address and the
   // table had a basement. Same pill pattern as the org detail page.
   const [tab, setTab] = useState<"businesses" | "platform">("businesses");
+  // One box, two jobs, decided by the tab under it: on Businesses it narrows
+  // the table, on Platform it narrows the settings rows. The salon app's own
+  // search box, so the console does not invent a second one.
+  const search = useSearch();
   const router = useRouter();
 
   if (allowed === undefined) {
@@ -59,17 +74,25 @@ export default function AdminPage() {
     );
   }
 
+  // Name and timezone: the two things an operator actually has in their head
+  // when they come looking for one salon out of the list.
+  const shownFleet = fleet.filter((org) => search.matches(org.name, org.timezone));
+
   return (
     <main className="mx-auto max-w-6xl p-6">
-      <header className="mb-4 flex items-baseline justify-between">
+      <header className="mb-4 flex items-center justify-between gap-3">
         {/* page-title, like every header in the salon app: one variable owns
             what a page heading looks like in both themes. */}
         <h1 className="page-title text-lg font-semibold">Resepta admin</h1>
-        {tab === "businesses" && (
-          <p className="text-xs text-[var(--muted)]">
-            {fleet.length} {fleet.length === 1 ? "org" : "orgs"} · noisiest first
-          </p>
-        )}
+        {/* The org count and sort order used to sit here. Both were facts the
+            table states by being a table, and they were holding the only spot
+            on the page where a control can go. Same box as the salon app's
+            header search, so the console does not invent a second one. */}
+        <SearchInput
+          value={search.query}
+          onChange={search.setQuery}
+          placeholder={tab === "businesses" ? "Search businesses" : "Search settings"}
+        />
       </header>
 
       <div className="mb-4">
@@ -103,8 +126,12 @@ export default function AdminPage() {
       )}
 
 
-      {tab === "businesses" && (fleet.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No orgs on this deployment yet.</p>
+      {tab === "businesses" && (shownFleet.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">
+          {fleet.length === 0
+            ? "No orgs on this deployment yet."
+            : "No business matches that."}
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="w-full text-sm">
@@ -141,7 +168,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {fleet.map((org) => (
+              {shownFleet.map((org) => (
                 // A row opens the tenant's own page. This used to expand in
                 // place, which was fine for a failure list and stopped being
                 // fine once the row had to hold every credential the salon
@@ -225,6 +252,7 @@ export default function AdminPage() {
         </p>
       )}
       {tab === "platform" && mail && (
+        <AdminSearchProvider search={search}>
         <div className="space-y-4">
           <Section
             title="Email (Resend)"
@@ -398,6 +426,7 @@ export default function AdminPage() {
             />
           </Section>
         </div>
+        </AdminSearchProvider>
       )}
     </main>
   );
