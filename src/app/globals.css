@@ -50,7 +50,12 @@
      the edge is a soft shadow, which is why its corners read as softer than
      ours at the same radius: a 1px line makes a curve explicit in a way a
      shadow never does. */
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+  /* Two layers doing different jobs. The tight one seats the card on the
+     plane; the wide one is the halo that makes the edge read as lifted rather
+     than cut. The first attempt had only tight layers, so the top and left
+     corners — where a downward drop shadow puts nothing — met the gradient at
+     a hard line, which is the opposite of the reference's soft edge. */
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(0, 0, 0, 0.08);
   /* The plane the view's cards float on. The reference washes its page from a
      cool tint into a warm one, corner to corner, so the white cards read as
      paper on something rather than white on white. Theirs runs lavender to

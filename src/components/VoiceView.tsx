@@ -13,6 +13,7 @@ import { VoiceCard } from "./VoiceCard";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { FieldsCard } from "./BusinessView";
 import { ROW_GRID, RowLabel } from "./RowLabel";
+import { Card } from "./Card";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -163,13 +164,17 @@ function BillingSection() {
 
   const usd = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
 
+  // One card, not three loose things on the plane. The rate, the budget that
+  // caps it and the months it was spent over are one subject, and every other
+  // section in this strip already arrives as a card — Usage was the only one
+  // sitting bare on the background.
   return (
-    <div className="space-y-4">
+    <Card>
       <p className="text-sm text-[var(--muted-strong)]">
         {t("voiceBilling.rateLine").replace("{rate}", usd(data.rateMicroUsdPerMinute))}
       </p>
 
-      <div className={ROW_GRID}>
+      <div className={`mt-4 ${ROW_GRID}`}>
         <RowLabel label={t("voiceBilling.budget")} hint={t("voiceBilling.budgetHint")} />
         <input
           inputMode="decimal"
@@ -190,21 +195,25 @@ function BillingSection() {
       </div>
 
       {data.months.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">{t("voiceBilling.empty")}</p>
+        <p className="mt-4 border-t border-[var(--table-divider)] pt-4 text-sm text-[var(--muted)]">
+          {t("voiceBilling.empty")}
+        </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        // No card of its own any more: it is inside one. A bordered box inside
+        // a bordered box was two frames around one table.
+        <div className="thin-scroll mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs">
               <tr>
-                <th className="px-3 py-2 font-medium">{t("voiceBilling.month")}</th>
-                <th className="px-3 py-2 font-medium">{t("voiceBilling.calls")}</th>
-                <th className="px-3 py-2 font-medium">{t("voiceBilling.talkTime")}</th>
-                <th className="px-3 py-2 font-medium">{t("voiceBilling.amount")}</th>
+                <th className="px-3 py-2 font-semibold">{t("voiceBilling.month")}</th>
+                <th className="px-3 py-2 font-semibold">{t("voiceBilling.calls")}</th>
+                <th className="px-3 py-2 font-semibold">{t("voiceBilling.talkTime")}</th>
+                <th className="px-3 py-2 font-semibold">{t("voiceBilling.amount")}</th>
               </tr>
             </thead>
             <tbody>
               {data.months.map((m) => (
-                <tr key={m.month} className="border-t border-[var(--border)] tabular-nums">
+                <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
                   <td className="px-3 py-2">{m.month}</td>
                   <td className="px-3 py-2">{m.calls}</td>
                   <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
@@ -215,7 +224,7 @@ function BillingSection() {
           </table>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
