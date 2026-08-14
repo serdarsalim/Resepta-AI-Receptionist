@@ -98,6 +98,17 @@ function shortDate(ms: number): string {
   });
 }
 
+// Both sides of the meter are micro-USD integers (schema: usageMonthly).
+function usd(microUsd: number): string {
+  return `$${(microUsd / 1_000_000).toFixed(2)}`;
+}
+
+// "12 min 05 s" rather than raw seconds: the operator reads this to sanity-
+// check an invoice, and nobody invoices in seconds.
+function minSec(seconds: number): string {
+  return `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
+}
+
 export default function TenantPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId as Id<"orgs">;
@@ -110,6 +121,8 @@ export default function TenantPage() {
   const setField = useMutation(api.connections.setField);
   const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
+  const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
+  const setVoiceRate = useMutation(api.platform.setVoiceRate);
   const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
   const setChatAgentBudget = useMutation(api.platform.setChatAgentBudget);
   const setOrgStatus = useMutation(api.platform.setOrgStatus);
@@ -121,7 +134,7 @@ export default function TenantPage() {
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
-  const [tab, setTab] = useState<"setup" | "agents" | "assistant" | "members" | "activity">("setup");
+  const [tab, setTab] = useState<"setup" | "agents" | "assistant" | "usage" | "members" | "activity">("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
@@ -226,6 +239,7 @@ export default function TenantPage() {
             { id: "setup" as const, label: "Setup" },
             { id: "agents" as const, label: "Agents" },
             { id: "assistant" as const, label: "Assistant" },
+            { id: "usage" as const, label: "Usage" },
             { id: "members" as const, label: "Members" },
             { id: "activity" as const, label: "Activity" },
           ]
@@ -583,6 +597,75 @@ export default function TenantPage() {
                 </div>
               </details>
             ))}
+          </div>
+        )}
+      </Section>
+      </>
+      )}
+
+      {tab === "usage" && voice && (
+      <>
+      <Section
+        title="Voice meter"
+        description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands — changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
+      >
+        <Row
+          label="Rate (USD per minute)"
+          hint="Empty = no rate: calls still meter (minutes and Retell cost stay visible) but bill at $0. History keeps the rate it was stamped with."
+          current={
+            voice.rateMicroUsdPerMinute === null
+              ? undefined
+              : String(voice.rateMicroUsdPerMinute / 1_000_000)
+          }
+          placeholder="0.30"
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setVoiceRate({
+              orgId,
+              rateMicroUsdPerMinute:
+                !value.trim() || Number.isNaN(parsed)
+                  ? null
+                  : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        {voice.months.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">No metered calls yet.</p>
+        ) : (
+          <div className="overflow-x-auto py-2">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-[var(--muted-strong)]">
+                <tr>
+                  <th className="py-1.5 pr-3 font-medium">Month</th>
+                  <th className="py-1.5 pr-3 font-medium">Calls</th>
+                  <th className="py-1.5 pr-3 font-medium">Talk time</th>
+                  <th className="py-1.5 pr-3 font-medium">Billed</th>
+                  <th className="py-1.5 pr-3 font-medium">Retell cost</th>
+                  <th className="py-1.5 font-medium">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {voice.months.map((m) => {
+                  const margin = m.billedMicroUsd - m.costMicroUsd;
+                  return (
+                    <tr key={m.month} className="border-t border-[var(--border)] tabular-nums">
+                      <td className="py-1.5 pr-3">{m.month}</td>
+                      <td className="py-1.5 pr-3">{m.calls}</td>
+                      <td className="py-1.5 pr-3">{minSec(m.seconds)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.billedMicroUsd)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.costMicroUsd)}</td>
+                      <td
+                        className={`py-1.5 ${
+                          margin < 0 ? "text-red-600 dark:text-red-400" : ""
+                        }`}
+                      >
+                        {usd(margin)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </Section>

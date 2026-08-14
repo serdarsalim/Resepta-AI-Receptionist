@@ -28,6 +28,7 @@ import {
   requirePlatformAdmin,
 } from "./lib/platformAuth";
 import { enrichActivity } from "./activity";
+import { monthKey } from "./lib/usage";
 import { maskSecret } from "./lib/connections";
 import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
@@ -72,6 +73,13 @@ const orgHealth = v.object({
   // onboarded, and the two look identical from a billing table.
   lastActivityAt: v.optional(v.number()),
   upcomingAppointments: v.number(),
+  // Voice meter, month to date (the org's own month, so this always agrees
+  // with the org page). Billed is what they owe us, cost is what Retell
+  // charged us — both micro-USD, shown together so the fleet table answers
+  // "who is burning money" without opening every org.
+  voiceSecondsMtd: v.number(),
+  voiceBilledMicroUsdMtd: v.number(),
+  voiceCostMicroUsdMtd: v.number(),
 });
 
 // Deployment-wide facts, the ones that are true for every org at once. Kept
@@ -189,6 +197,13 @@ async function healthFor(
     .withIndex("by_org_start", (q) => q.eq("orgId", org._id).gte("startAt", now))
     .take(SCAN_CAP);
 
+  const monthUsage = await ctx.db
+    .query("usageMonthly")
+    .withIndex("by_org_month", (q) =>
+      q.eq("orgId", org._id).eq("month", monthKey(now, org.timezone)),
+    )
+    .unique();
+
   return {
     orgId: org._id,
     // An org that never finished onboarding has an empty name. Say so rather
@@ -209,6 +224,9 @@ async function healthFor(
     stuck,
     lastActivityAt: lastMessage?._creationTime,
     upcomingAppointments: upcoming.length,
+    voiceSecondsMtd: monthUsage?.voiceSeconds ?? 0,
+    voiceBilledMicroUsdMtd: monthUsage?.voiceBilledMicroUsd ?? 0,
+    voiceCostMicroUsdMtd: monthUsage?.voiceCostMicroUsd ?? 0,
   };
 }
 
@@ -847,6 +865,92 @@ export const setChatAgentBudget = mutation({
       orgId: args.orgId,
       kind: "settings_changed",
       detail: "chat agent budget",
+    });
+    return null;
+  },
+});
+
+// ── The voice meter's control plane ─────────────────────────────────────────
+// The operator's answer to "what does this org's phone agent cost, and what
+// do I bill them". Reads the same usageMonthly ledger the chat lane writes;
+// the voice counters land there from retell.recordCall. Rate changes only
+// affect calls stamped AFTER the change — history is frozen line items.
+
+export const orgVoiceUsage = query({
+  args: { orgId: v.id("orgs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      rateMicroUsdPerMinute: v.union(v.number(), v.null()),
+      months: v.array(
+        v.object({
+          month: v.string(),
+          calls: v.number(),
+          seconds: v.number(),
+          billedMicroUsd: v.number(),
+          costMicroUsd: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return null;
+    // Newest month first. Rows with no voice activity are dropped rather than
+    // rendered as a table of zeros — most ledger rows are LLM-only.
+    const rows = await ctx.db
+      .query("usageMonthly")
+      .withIndex("by_org_month", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(24);
+    return {
+      rateMicroUsdPerMinute: org.voiceRateMicroUsdPerMinute ?? null,
+      months: rows
+        .filter(
+          (r) =>
+            (r.voiceCalls ?? 0) > 0 ||
+            (r.voiceSeconds ?? 0) > 0 ||
+            (r.voiceBilledMicroUsd ?? 0) > 0 ||
+            (r.voiceCostMicroUsd ?? 0) > 0,
+        )
+        .map((r) => ({
+          month: r.month,
+          calls: r.voiceCalls ?? 0,
+          seconds: r.voiceSeconds ?? 0,
+          billedMicroUsd: r.voiceBilledMicroUsd ?? 0,
+          costMicroUsd: r.voiceCostMicroUsd ?? 0,
+        })),
+    };
+  },
+});
+
+export const setVoiceRate = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    // null clears the rate: the org meters at rate zero from the next call.
+    rateMicroUsdPerMinute: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, {
+      voiceRateMicroUsdPerMinute:
+        args.rateMicroUsdPerMinute === null
+          ? undefined
+          : Math.max(0, Math.round(args.rateMicroUsdPerMinute)),
+    });
+    // The activity row names the number: this is the record a billing
+    // question reads back later, and "settings changed" answers nothing.
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail:
+        args.rateMicroUsdPerMinute === null
+          ? "voice rate cleared"
+          : `voice rate → $${(args.rateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min`,
     });
     return null;
   },
