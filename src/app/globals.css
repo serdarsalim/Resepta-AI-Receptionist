@@ -50,20 +50,17 @@
      dropping the 1px line is what softens the corners — a line makes a curve
      explicit in a way a shadow never does.
 
-     Three layers, each with a job. The spread ring at 3% is an edge you can
-     find without it reading as a border — it is what keeps a white card legible
-     where the gradient goes palest, top-left. The tight drop seats the card on
-     the plane. The wide one is the halo that makes the edge read as lifted
-     rather than cut; its negative spread pulls it back under the card so it
-     pools beneath rather than bleeding out sideways.
+     Two layers doing different jobs. The tight one seats the card on the
+     plane; the wide one is the halo that makes the edge read as lifted rather
+     than cut. An earlier pass had only tight layers, so the top and left
+     corners — where a downward drop puts nothing — met the gradient at a hard
+     line, which is the opposite of the reference's soft edge.
 
-     An earlier pass had only tight layers, so the top and left corners — where
-     a downward drop puts nothing — met the gradient at a hard line, which is
-     the opposite of the reference's soft edge. */
-  --card-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.03),
-    0 2px 4px rgba(0, 0, 0, 0.04),
-    0 8px 20px -6px rgba(0, 0, 0, 0.12);
+     A three-layer version with a 3% spread ring was tried and backed out: the
+     ring gave the edge more definition, which is the thing the reference does
+     NOT do. Both layers then came down again — the halo is meant to be felt
+     before it is seen, and at 8% it was announcing itself. */
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.05);
   /* The plane the view's cards float on. The reference washes its page from a
      cool tint into a warm one, corner to corner, so the white cards read as
      paper on something rather than white on white. Theirs runs lavender to

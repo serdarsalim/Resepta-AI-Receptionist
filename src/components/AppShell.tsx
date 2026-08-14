@@ -1329,7 +1329,7 @@ export function AppShell({
           the plane to separate — grey just tints the whole grid and the day
           columns stop reading as paper. */}
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden md:rounded-xl md:border md:border-[var(--border)] ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden md:rounded-xl md:shadow-[var(--card-shadow)] ${
           tab === "appointments" ? "bg-[var(--card)]" : "bg-[image:var(--content-bg)]"
         }`}
       >
