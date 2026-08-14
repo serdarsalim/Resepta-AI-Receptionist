@@ -341,7 +341,7 @@ function ShellHeader({
   }, [placeholder]);
 
   return (
-    // min-h-14 is the whole reason every tab's first row lands in the same
+    // min-h-13 is the whole reason every tab's first row lands in the same
     // place. Without it the header is as tall as whatever it happens to hold:
     // ~55px on a tab with a search box, ~42px on one without — so switching
     // from Customers to Reminders jumped the card and its Add button 13px up

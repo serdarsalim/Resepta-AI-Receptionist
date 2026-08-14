@@ -342,26 +342,7 @@ thead {
   border-width: 2px;
 }
 
-/* The raised card, ported from Nudge's master-detail surfaces (its InboxView
-   and ContactView).
-
-   These used to sit on white and the shadow did all the work — a wide soft
-   halo was the only thing stopping white-on-white reading as an outlined box.
-   The content surface is --pane now, so contrast separates the card from what
-   it sits on and the lift is only a hint: a tight 1px layer draws the edge, a
-   short one grounds it. Keep it short. A grey plane AND a wide halo is paying
-   twice for the same separation, and it reads as heavy. The hairline border is
-   black at 8% rather than --border, so it belongs to the shadow rather than
-   fighting it.
-
-   Nudge pastes this shadow string into four components; here it is one class.
-
-   Only master-detail panes get it — the inbox list, the conversation, the
-   contact record. Settings-style cards stay flat (see Card.tsx). Elevation
-   means "this pane is its own surface", and if everything is raised then
-   nothing is.
-
-   In @layer components on purpose, same reasoning as the base block below: a
+/* In @layer components on purpose, same reasoning as the base block below: a
    utility class in the markup must still win over this. */
 @layer components {
   /* The inbox's two panels. Same treatment as every other card now — no
@@ -394,6 +375,11 @@ thead {
 }
 .email-paper table {
   max-width: 100%;
+}
+/* The WYSIWYG editor's placeholder, which renders inside the paper and would
+   otherwise take the paper's near-black. */
+.email-paper p.is-editor-empty:first-child::before {
+  color: #9ca3af;
 }
 
 /* Base form controls on the shared tokens.
@@ -437,21 +423,6 @@ thead {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Email surfaces render as white "paper" regardless of app theme. Sent emails
-   carry inline colors (e.g. color: rgb(0,0,0)) that assume a mail client's
-   white background — on a dark surface those runs turn black-on-black.
-   Ported from Nudge with the WYSIWYG editor. */
-.email-paper {
-  background: #fff;
-  color: #111;
-}
-.email-paper a {
-  color: #2563eb;
-}
-.email-paper p.is-editor-empty:first-child::before {
-  color: #9ca3af;
 }
 
 /* WYSIWYG email body editor (EmailBodyEditor). The email's own inline styles
