@@ -281,6 +281,93 @@ more than either.
   its own Business tab; Business has no tabs at all. The reasoning that kept
   them apart, and what changed to answer it, is recorded there.
 
+## The IA after 2026-08-14 (inbox, reminders, message variables)
+
+Four moves, each made because a surface was named after its implementation
+rather than after what it does.
+
+- **Unread is per CONVERSATION, and the old boundary is a frozen floor.**
+  `inboxVisits` (seenAt/leftAt) was the whole model: a row counted as new when
+  its latest inbound landed after you last LEFT the Inbox. That answers "have
+  you visited lately", so switching tabs marked everything read — markers went
+  out with nobody having opened a conversation, and a filter over it would
+  empty itself on every navigation. Nudge shipped that same model, found it
+  wrong, and replaced it; this is the port of the replacement.
+  `inboxReads` holds one stamp per (org, user, customer) and a conversation is
+  new when its latest inbound is newer than MY stamp for it — per user, like
+  the pins beside it, because a colleague reading a message does not mean I
+  have. **`inboxVisits` is never written again**: it survives only as the
+  floor under the new model (`inboxReadFloor` = max(leftAt, seenAt,
+  user._creationTime)), which is what stopped every existing salon waking up
+  to its whole history lit green. A moving floor silently marks things read —
+  that is the bug being replaced. `markInboxSeen`/`markInboxLeft` are gone;
+  `markConversationRead` is the only writer, called on an explicit row click
+  and on a reply landing in the thread you are already looking at. **One rule,
+  two readers:** `messages.conversations` and `messages.inboxUnseenCount` run
+  the same test over the same rows, so the sidebar can never dot something the
+  tab cannot show. Read stamps are POINT LOOKUPS behind the floor test, never
+  collected — cost stays bounded by the conversation window rather than
+  growing with every conversation a salon has ever opened.
+- **The inbox has All / Unread / Pinned chips**, persisted per browser
+  (`randevu.inbox.view.v1`), in the `h-9` track that exists to line the two
+  cards up — one line only, or the chips spill out of it. Counts are computed
+  over the UNFILTERED list, because a chip advertises what switching to it
+  would show and cannot count through itself. **A live search overrides the
+  chip**, per `useTableState`'s rule that a query must never fail to find a
+  match that exists in the data. The open conversation falls back outside the
+  filtered list, or reading an unread one under the Unread chip would blank
+  the pane as its own row dropped out.
+- **"Message variables" is gone; its two fields went where they belong.** That
+  card named the `[booking_link]` and `[phone]` TOKENS rather than the things
+  themselves, and filed a salon's own phone number in Reminders where no owner
+  would look for it. No mature appointment product has a screen for setting
+  the value of a template token. The number customers call is a row in
+  Business → General beside the business name (agent-line chips included — a
+  number an agent answers around the clock is the one worth printing), and
+  online booking is its own card next to the request form. **The booking link
+  is a CHOICE, not an override**: Resepta page / my own link / off, with the
+  URL box only under the second and the derived link shown as a fact to copy.
+  Do not re-pair a toggle with a free-text URL as equals; that shape is what
+  made it read as an override, and neither said which a message would use.
+- **Reminders rules open as a PAGE, not an expanding row.** The id lives in
+  the URL (`?rule=`) like the app's tab does, so a refresh or a trip to
+  another tab and back returns to the rule. A row that navigates must not also
+  hold controls: timing and channel switches live inside the page, the row
+  states what the rule does and which lanes it is on, and there is no chevron
+  because the whole row is the affordance.
+
+## Message tokens: the preview, and the defaults (2026-08-14)
+
+- **`renderTokens` is shared by the send path and the preview** and must stay
+  that way, or the preview becomes a second opinion. An unknown token stays
+  LITERAL (so a typo stays visible); a known token with no value renders as
+  nothing, and the whitespace cleanup makes the sentence survive it.
+- **`waTemplates.variableDefaults` is the "when empty, print…" table**, one
+  row per token the body actually uses, authored under the body it repairs.
+  The wording is EDITORIAL — what reads correctly depends on the sentence and
+  the language — which is why it lives on the template and not on the field.
+  A default only fires for a token the renderer already knows THAT RESOLVED TO
+  EMPTY. Threaded through every send path (`wa.ts`, `campaigns.ts`,
+  `lib/awayReply.ts`); add it to any new one.
+- **Only tokens that can honestly be blank get a row.** Not `[business]` (an
+  org always has a name), not `[date]` (every lifecycle send has a time), not
+  `[booking_link]`/`[phone]` (configuration — a blank one means go and set it
+  in Business settings, not write a sentence about not having it), not
+  `[manage_link]` (structural), and not `[name]` (the renderer already tidies
+  "Hello [name]!" down to "Hello!"). What is left: the org's own contact
+  fields, and the booking facts an appointment can genuinely lack.
+- **The preview always draws.** It used to demand a contact and a booking,
+  refusing to invent names and prices — right about invention, wrong about
+  refusing. It now auto-picks one of the salon's REAL bookings (soonest ahead
+  that actually has line items, since a booking with no services previews
+  every price token as an empty slot), and where there is nothing to fill
+  from, a built-in previews as its own label in guillemets — ⟨Services with
+  prices⟩ — never as silence. Reading order is **real value → the owner's
+  default → the labelled slot**, so the preview shows what would actually
+  send. Contact fields deliberately keep resolving to nothing: the preview
+  speaks about a real customer, and a field that person never answered is
+  honestly blank for them.
+
 ## Business is one page (2026-08-12, later the same day)
 
 Supersedes the chip-strip parts of the section above. Sidebar: Customers ·
