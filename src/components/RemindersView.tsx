@@ -639,28 +639,49 @@ function RuleEditor({
     }
     const items = appointment?.items ?? [];
     const totalMinor = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
+    // A real send collapses a token with nothing behind it, along with the
+    // whitespace it leaves — renderTokens does that on purpose, so a message
+    // never goes out saying "Merhaba ," or carrying an empty bracket. In a
+    // PREVIEW that same kindness is a lie: the line simply vanishes, and the
+    // writer cannot tell a token that will fill on a real send from one they
+    // misspelled. So a built-in with no sample data behind it previews as its
+    // own label in guillemets instead of as nothing.
+    //
+    // Contact fields are deliberately NOT given this treatment. The preview
+    // speaks about a real customer, and a field that person never answered is
+    // honestly blank for them — that is information, not a gap.
+    const sample = (value: string | undefined, label: string) =>
+      value && value.trim() ? value : `⟨${label}⟩`;
     return {
       firstName: picked.firstName,
       lastName: picked.lastName,
       // The BUSINESS's number and link — what [phone] and [booking_link]
       // resolve to at send time (see convex/lib/renderTokens).
-      phone: orgPublicPhone,
+      phone: sample(orgPublicPhone, t("vars.phone")),
       email: picked.email,
-      bookingLink: orgBookingUrl,
+      bookingLink: sample(orgBookingUrl, t("vars.bookingLink")),
       businessName: orgName,
       appointmentAt: appointment
         ? formatAppointmentTime(appointment.startAt, orgTimezone, orgLanguage)
-        : undefined,
-      staffName: appointment?.staffName,
-      serviceName: items.map((item) => `• ${item.name}`).join("\n") || undefined,
-      servicePriceList:
+        : `⟨${t("vars.date")}⟩`,
+      staffName: sample(appointment?.staffName, t("vars.staff")),
+      serviceName: sample(
+        items.map((item) => `• ${item.name}`).join("\n"),
+        t("vars.service"),
+      ),
+      servicePriceList: sample(
         items
           .map(
             (item) =>
               `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
           )
-          .join("\n") || undefined,
-      price: totalMinor > 0 ? formatMoney(totalMinor) : undefined,
+          .join("\n"),
+        t("vars.priceList"),
+      ),
+      price: totalMinor > 0 ? formatMoney(totalMinor) : `⟨${t("vars.price")}⟩`,
+      // Never resolvable outside an appointment-lifecycle send, so it is a
+      // placeholder in every preview rather than sometimes-blank.
+      manageLink: `⟨${t("vars.manageLink")}⟩`,
       custom,
     };
   }, [
@@ -674,6 +695,7 @@ function RuleEditor({
     picked,
     appointment,
     rule.trigger,
+    t,
   ]);
 
   if (!template) {
@@ -725,6 +747,13 @@ function RuleEditor({
         }),
       )
     : "";
+  // Whether what the reader is looking at right now contains a placeholder.
+  // Checked against the RENDERED text of whichever lane is showing, subject
+  // included — the raw template always holds tokens, which would light this
+  // permanently and teach everyone to ignore it.
+  const showsPlaceholder =
+    /⟨[^⟩]+⟩/.test(lane === "email" ? renderedEmailHtml : rendered) ||
+    (previewValues ? /⟨[^⟩]+⟩/.test(renderTokens(subject, previewValues)) : false);
   const pickedLabel = picked
     ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
     : "";
@@ -942,6 +971,14 @@ function RuleEditor({
                 </span>
               )}
             </div>
+          )}
+          {/* Only when a placeholder is actually on screen. A standing note
+              about brackets under a preview that has none is the sort of
+              caption people learn to stop reading. */}
+          {showsPlaceholder && (
+            <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+              {t("editor.previewPlaceholder")}
+            </p>
           )}
         </div>
       </div>

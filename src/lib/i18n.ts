@@ -968,6 +968,25 @@ const dictionary = {
     en: "Manage-appointment link",
     de: "Termin-Verwaltungslink",
   },
+  // Group headings in the Insert-variable menu. Built-ins come from the
+  // appointment or the business and are nearly always there; a contact field
+  // comes from one customer's record and is blank for anyone who never
+  // answered it. One flat list hid that difference.
+  "editor.varsBuiltIn": {
+    tr: "Randevu ve işletme",
+    en: "Appointment & business",
+    de: "Termin & Betrieb",
+  },
+  "editor.varsCustom": {
+    tr: "Kişi alanları",
+    en: "Contact fields",
+    de: "Kontaktfelder",
+  },
+  "editor.previewPlaceholder": {
+    tr: "⟨Köşeli⟩ gösterilen değişkenlerin bu önizlemede dolduracak verisi yok; gerçek gönderimde yerlerini alır ya da satırdan sessizce çıkar.",
+    en: "Variables shown in ⟨brackets⟩ have no data to fill in this preview. On a real send they either fill or drop out of the line quietly.",
+    de: "Variablen in ⟨spitzen Klammern⟩ haben in dieser Vorschau keine Daten. Beim echten Versand werden sie entweder gefüllt oder verschwinden still aus der Zeile.",
+  },
   "editor.insertVariable": {
     tr: "Değişken ekle",
     en: "Insert variable",

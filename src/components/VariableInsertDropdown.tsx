@@ -44,9 +44,18 @@ export function VariableInsertDropdown({
     // appointment-lifecycle messages; empty elsewhere.
     { key: "manage_link", label: t("vars.manageLink") },
   ];
-  const all = [
-    ...fields.map((field) => ({ key: field.key, label: field.label })),
-    ...builtIns,
+  // Two groups, and the order matters. These behave differently: a built-in
+  // is filled from the appointment or the business and is therefore almost
+  // always there, while a contact field is filled from THIS customer's record
+  // and is empty for anyone who never answered it. One flat list put "Your
+  // favorite color" above "Appointment date" and read as one undifferentiated
+  // vocabulary, which is how a template ends up quietly missing a line.
+  const custom = fields.map((field) => ({ key: field.key, label: field.label }));
+  const groups = [
+    { title: t("editor.varsBuiltIn"), items: builtIns },
+    ...(custom.length > 0
+      ? [{ title: t("editor.varsCustom"), items: custom }]
+      : []),
   ];
 
   const [open, setOpen] = useState(false);
@@ -67,9 +76,13 @@ export function VariableInsertDropdown({
   }, [open]);
 
   const q = foldSearch(filter.trim());
-  const shown = q
-    ? all.filter((v) => foldSearch(v.label).includes(q) || foldSearch(v.key).includes(q))
-    : all;
+  const match = (v: { key: string; label: string }) =>
+    !q || foldSearch(v.label).includes(q) || foldSearch(v.key).includes(q);
+  const shownGroups = groups
+    .map((group) => ({ ...group, items: group.items.filter(match) }))
+    .filter((group) => group.items.length > 0);
+  // Enter takes the first hit across the groups, in the order they render.
+  const shown = shownGroups.flatMap((group) => group.items);
 
   const pick = (key: string) => {
     onInsert(`[${key}]`);
@@ -115,23 +128,37 @@ export function VariableInsertDropdown({
             />
           </div>
           <ul className="max-h-56 overflow-y-auto pb-1">
-            {shown.map((v) => (
-              <li key={v.key}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    // mousedown (not click) so the textarea's selection isn't
-                    // lost before the insert lands at the cursor.
-                    e.preventDefault();
-                    pick(v.key);
-                  }}
-                  className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
-                >
-                  <span className="truncate">{v.label}</span>
-                  <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">
-                    [{v.key}]
-                  </span>
-                </button>
+            {shownGroups.map((group) => (
+              <li key={group.title}>
+                {/* Only worth a heading when there is something to tell apart:
+                    an org with no contact fields of its own gets one list and
+                    no label over it. */}
+                {shownGroups.length > 1 && (
+                  <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+                    {group.title}
+                  </div>
+                )}
+                <ul>
+                  {group.items.map((v) => (
+                    <li key={v.key}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          // mousedown (not click) so the textarea's selection
+                          // isn't lost before the insert lands at the cursor.
+                          e.preventDefault();
+                          pick(v.key);
+                        }}
+                        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                      >
+                        <span className="truncate">{v.label}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">
+                          [{v.key}]
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
             {shown.length === 0 && (
