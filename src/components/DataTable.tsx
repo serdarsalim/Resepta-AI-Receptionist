@@ -272,7 +272,7 @@ export function Th({
       // semibold, not medium: with the header's fill gone, weight is now half
       // of what separates it from the body — the rule underneath is the other
       // half.
-      className={`group relative overflow-hidden whitespace-nowrap px-4 py-2 font-semibold ${
+      className={`group relative overflow-hidden whitespace-nowrap px-3 py-2 font-semibold ${
         dropTarget ? "bg-[var(--muted-bg)]" : ""
       } ${className}`}
     >

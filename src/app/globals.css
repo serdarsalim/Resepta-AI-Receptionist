@@ -46,6 +46,24 @@
   --table-header-fg: #1c2b33;
   --table-divider: #e4e6eb;
   --row-hover-bg: #f5f6f7;
+  /* A card is lifted, not outlined. The reference draws no border at all —
+     the edge is a soft shadow, which is why its corners read as softer than
+     ours at the same radius: a 1px line makes a curve explicit in a way a
+     shadow never does. */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+  /* The plane the view's cards float on. The reference washes its page from a
+     cool tint into a warm one, corner to corner, so the white cards read as
+     paper on something rather than white on white. Theirs runs lavender to
+     mint; ours runs --accent to --brand, which lands in nearly the same place
+     because their lavender is blue-tinted and their mint is green — the two
+     hues this app already owns. Percentages stay in single digits: past that
+     it stops being a plane and starts being a poster. */
+  --content-bg: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent) 7%, var(--pane)) 0%,
+    var(--pane) 48%,
+    color-mix(in srgb, var(--brand) 8%, var(--pane)) 100%
+  );
   /* Recessed surface the sidebar + floating content card sit on */
   --pane: #f1f1f3;
   /* Primary action accent — soft blue, white text in both modes */
@@ -86,6 +104,17 @@
   --table-header-fg: #ededed;
   --table-divider: #2e2e2e;
   --row-hover-bg: #202020;
+  /* A shadow is invisible on #0a0a0a, so the same job falls to a hairline
+     ring. Same property, so nothing at the call site has to know. */
+  --card-shadow: 0 0 0 1px var(--border);
+  /* Halved: the same mix that reads as a tint on white reads as a colour cast
+     on near-black. */
+  --content-bg: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent) 4%, var(--pane)) 0%,
+    var(--pane) 48%,
+    color-mix(in srgb, var(--brand) 4%, var(--pane)) 100%
+  );
   --pane: #0c0c0c;
   --accent: #3b82f6;
   --accent-fg: #ffffff;

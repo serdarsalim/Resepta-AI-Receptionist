@@ -19,7 +19,12 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+    // Lifted, not outlined, and rounded-lg rather than -xl. Both come from the
+    // reference table: dropping the 1px line is what softens the corners, so
+    // the radius has to come down with it or the card starts looking like a
+    // pill. Border lives in --card-shadow now, which is a real ring only in
+    // dark mode, where a shadow would be invisible.
+    <section className="rounded-lg bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
       {title && (
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold">{title}</h2>

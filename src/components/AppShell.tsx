@@ -1330,7 +1330,7 @@ export function AppShell({
           columns stop reading as paper. */}
       <div
         className={`flex min-h-0 flex-1 flex-col overflow-hidden md:rounded-xl md:border md:border-[var(--border)] ${
-          tab === "appointments" ? "bg-[var(--card)]" : "bg-[var(--pane)]"
+          tab === "appointments" ? "bg-[var(--card)]" : "bg-[image:var(--content-bg)]"
         }`}
       >
         {/* No ✕ on any tab. Business traded its close button for the search box

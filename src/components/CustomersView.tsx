@@ -578,10 +578,18 @@ export function CustomersView({
       )}
 
       {hasCustomers && (
-        <div className="hidden overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] sm:block">
+        <div className="hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)] sm:block">
           {/* The table scrolls sideways inside its own card. The page body
-              never does. */}
-          <div className="thin-scroll overflow-x-auto overscroll-x-contain">
+              never does.
+
+              px-4 here rather than on the card is what insets the rules. The
+              header's bottom border and every row divider are drawn by the
+              TABLE, so they can only ever run its full width — the way to
+              stop them touching the card's edge is to make the table narrower
+              than the card, which is what padding on the scroller does. Cell
+              padding drops to px-3 in exchange, so the first column's text
+              lands about where it did before. */}
+          <div className="thin-scroll overflow-x-auto overscroll-x-contain px-4 py-1">
             <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth }}>
               <colgroup>
                 {/* Name takes no width of its own: it absorbs whatever the
@@ -651,7 +659,7 @@ export function CustomersView({
                   <tr>
                     <td
                       colSpan={visibleColumns.length + 1}
-                      className="px-4 py-6 text-[var(--muted)]"
+                      className="px-3 py-6 text-[var(--muted)]"
                     >
                       {t("customers.noMatches")}
                     </td>
@@ -667,7 +675,7 @@ export function CustomersView({
                     }}
                     className="cursor-pointer outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)]"
                   >
-                    <td className="px-4 py-2.5 font-medium">
+                    <td className="px-3 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate">{fullName(customer)}</span>
                         {customer.needsAttention && (
@@ -687,7 +695,7 @@ export function CustomersView({
                     {visibleColumns.map((column) => (
                       <td
                         key={column.key}
-                        className={`truncate px-4 py-2.5 text-[var(--muted)] ${
+                        className={`truncate px-3 py-2.5 text-[var(--muted)] ${
                           column.numeric ? "tabular-nums" : ""
                         }`}
                       >
