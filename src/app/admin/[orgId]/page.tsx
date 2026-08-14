@@ -19,7 +19,7 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Activity, Row, Section, SecretRow, UserActivity } from "../parts";
+import { Activity, Row, Section, SecretRow, TabStrip, UserActivity } from "../parts";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -172,7 +172,7 @@ export default function TenantPage() {
           <Link href="/admin" className="text-xs text-[var(--muted)] hover:underline">
             ← Fleet
           </Link>
-          <h1 className="mt-1 text-lg font-semibold">
+          <h1 className="page-title mt-1 text-lg font-semibold">
             {detail.name}
             {detail.demoMode && (
               <span className="ml-2 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
@@ -233,32 +233,18 @@ export default function TenantPage() {
         </div>
       </header>
 
-      <div className="flex gap-1">
-        {(
-          [
-            { id: "setup" as const, label: "Setup" },
-            { id: "agents" as const, label: "Agents" },
-            { id: "assistant" as const, label: "Assistant" },
-            { id: "usage" as const, label: "Usage" },
-            { id: "members" as const, label: "Members" },
-            { id: "activity" as const, label: "Activity" },
-          ]
-        ).map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => setTab(entry.id)}
-            aria-current={tab === entry.id ? "page" : undefined}
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              tab === entry.id
-                ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
+      <TabStrip
+        tabs={[
+          { id: "setup" as const, label: "Setup" },
+          { id: "agents" as const, label: "Agents" },
+          { id: "assistant" as const, label: "Assistant" },
+          { id: "usage" as const, label: "Usage" },
+          { id: "members" as const, label: "Members" },
+          { id: "activity" as const, label: "Activity" },
+        ]}
+        active={tab}
+        onSelect={setTab}
+      />
 
       {/* Two feeds, deliberately separate and deliberately in this order. The
           first answers "who touched this account", the second "did our messages

@@ -23,7 +23,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { ago, Count, Row, Section, SecretRow, Setup } from "./parts";
+import { ago, Count, Row, Section, SecretRow, Setup, TabStrip } from "./parts";
 import { InfoTip } from "@/components/InfoTip";
 
 export default function AdminPage() {
@@ -62,7 +62,9 @@ export default function AdminPage() {
   return (
     <main className="mx-auto max-w-6xl p-6">
       <header className="mb-4 flex items-baseline justify-between">
-        <h1 className="text-lg font-semibold">Resepta admin</h1>
+        {/* page-title, like every header in the salon app: one variable owns
+            what a page heading looks like in both themes. */}
+        <h1 className="page-title text-lg font-semibold">Resepta admin</h1>
         {tab === "businesses" && (
           <p className="text-xs text-[var(--muted)]">
             {fleet.length} {fleet.length === 1 ? "org" : "orgs"} · noisiest first
@@ -70,27 +72,15 @@ export default function AdminPage() {
         )}
       </header>
 
-      <div className="mb-4 flex gap-1">
-        {(
-          [
+      <div className="mb-4">
+        <TabStrip
+          tabs={[
             { id: "businesses" as const, label: "Businesses" },
             { id: "platform" as const, label: "Platform" },
-          ]
-        ).map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => setTab(entry.id)}
-            aria-current={tab === entry.id ? "page" : undefined}
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              tab === entry.id
-                ? "bg-[var(--accent)] font-medium text-[var(--accent-fg)]"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {entry.label}
-          </button>
-        ))}
+          ]}
+          active={tab}
+          onSelect={setTab}
+        />
       </div>
 
       {/* One line for the whole deployment. Email is operator plumbing that
