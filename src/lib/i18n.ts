@@ -279,11 +279,6 @@ const dictionary = {
   "appointments.day": { tr: "Gün", en: "Day", de: "Tag" },
   "appointments.week": { tr: "Hafta", en: "Week", de: "Woche" },
   "appointments.today": { tr: "Bugün", en: "Today", de: "Heute" },
-  "appointments.editHours": {
-    tr: "Saatleri düzenle",
-    en: "Edit hours",
-    de: "Öffnungszeiten bearbeiten",
-  },
   "appointments.search": {
     tr: "Randevularda ara",
     en: "Search appointments",

@@ -68,19 +68,7 @@ export function AppHome() {
         <ContactView customerId={contactId} onClose={() => setContactId(null)} />
       ) : (
         <>
-          {tab === "appointments" && (
-            <AppointmentsView
-              onOpenContact={setContactId}
-              onEditHours={() => {
-                // The section param goes in FIRST — BusinessView reads it on
-                // mount, and the tab switch below is what mounts it.
-                const url = new URL(window.location.href);
-                url.searchParams.set("section", "hours");
-                window.history.replaceState(null, "", url);
-                setTab("business");
-              }}
-            />
-          )}
+          {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
           {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
           {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
           {tab === "campaigns" && <CampaignsView />}

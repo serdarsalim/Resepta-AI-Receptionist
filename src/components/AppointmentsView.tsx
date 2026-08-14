@@ -101,12 +101,8 @@ function periodHasToday(view: ViewMode, anchor: number): boolean {
 
 export function AppointmentsView({
   onOpenContact,
-  onEditHours,
 }: {
   onOpenContact: (id: Id<"customers">) => void;
-  // Deep link into Business → Hours — the closed shading's "where do I change
-  // this". Owned by the parent because the tab state lives there.
-  onEditHours: () => void;
 }) {
   const { t, language } = useLanguage();
   const [view, setView] = useState<ViewMode>("week");
@@ -337,19 +333,14 @@ export function AppointmentsView({
         {/* Right cluster. Today can be rendered conditionally now rather than
             merely hidden: it sits at the end of a right-aligned group, so its
             coming and going moves nothing — the arrows are at the other end of
-            the row, and New appointment is pinned to the edge. */}
+            the row, and New appointment is pinned to the edge.
+
+            "Edit hours" used to sit here, on the theory that it explained the
+            shading it stood next to. It didn't read that way: a link out to
+            another tab, parked beside the one button that acts on this one,
+            just looked misfiled. Hours live in Business → Hours, which is
+            where someone changing them goes looking. */}
         <div className="ml-auto flex items-center gap-2">
-          {/* Beside the grid that shows the shading it explains. Only on the
-              views that shade — and it doubles as "set hours" for an org that
-              hasn't, which is when it's needed most. */}
-          {(view === "day" || view === "week" || view === "month") && (
-            <button
-              className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              onClick={onEditHours}
-            >
-              {t("appointments.editHours")}
-            </button>
-          )}
           {view !== "list" && !periodHasToday(view, anchor) && (
             <button
               className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
