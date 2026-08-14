@@ -1072,6 +1072,20 @@ export default defineSchema({
     bodyHtml: v.optional(v.string()),
     // Email subject line, same token vocabulary. WhatsApp ignores it.
     subject: v.optional(v.string()),
+    // What each [token] prints for a customer whose value is blank, authored
+    // beside the sentence it repairs (Nudge's variableDefaults). A token that
+    // resolves to nothing leaves a hole — renderTokens tidies the punctuation
+    // around it, so the message still reads, but "your [staff] will see you"
+    // quietly loses its point. The fallback is EDITORIAL, which is why it
+    // lives on the template and not on the field: the right word depends on
+    // the sentence, and on this row's language.
+    //
+    // Only ever consulted for a token the renderer already knows and that
+    // resolved to empty. An unrecognised token stays literal so a typo stays
+    // visible instead of being quietly answered by a default.
+    variableDefaults: v.optional(
+      v.array(v.object({ key: v.string(), value: v.string() })),
+    ),
     // ---- Cloud API lane only, plumbing below this line -----------------------
     // The name approved in Meta Business Manager. Optional: an org on the shop
     // phone or email alone never registers anything with Meta, and a required

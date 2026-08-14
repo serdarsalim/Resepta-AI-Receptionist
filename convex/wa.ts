@@ -24,7 +24,7 @@ import {
 } from "./lib/waCloud";
 import { isOrgSetupFailure } from "./lib/alerts";
 import { outOfHoursMessage } from "./lib/awayReply";
-import { renderTokens } from "./lib/renderTokens";
+import { renderTokens, tokenDefaults } from "./lib/renderTokens";
 import { sendEvolutionText } from "./lib/evolution";
 import {
   evolutionReplyHint,
@@ -615,8 +615,12 @@ export const sendAppointmentMessage = internalAction({
       price,
       custom: customValues,
     };
+    // The template's own "when empty, print…" table, so a token this
+    // customer has no value for still says something (schema:
+    // waTemplates.variableDefaults).
+    const defaults = tokenDefaults(contentTemplate?.variableDefaults);
     const body = contentTemplate?.body
-      ? renderTokens(contentTemplate.body, tokenValues)
+      ? renderTokens(contentTemplate.body, tokenValues, defaults)
       : contentTemplate?.bodyPreview
         ? contentTemplate.bodyPreview
             .replace(/\{\{1\}\}/g, customer.firstName)
@@ -792,7 +796,7 @@ export const sendAppointmentMessage = internalAction({
       // because an empty subject line reads as spam.
       const subject =
         (contentTemplate?.subject
-          ? renderTokens(contentTemplate.subject, tokenValues)
+          ? renderTokens(contentTemplate.subject, tokenValues, defaults)
           : "") || `${org.name}, ${when}`;
       // The WYSIWYG-authored HTML when there is one — signature tables and
       // all — otherwise the plain body wrapped the way it always was. Tokens
@@ -800,11 +804,15 @@ export const sendAppointmentMessage = internalAction({
       // service list swaps its newlines for <br/> here, because inside HTML a
       // bare \n is just a space and the list would flatten to one line.
       const emailHtml = contentTemplate?.bodyHtml
-        ? renderTokens(contentTemplate.bodyHtml, {
-            ...tokenValues,
-            serviceName: tokenValues.serviceName?.replace(/\n/g, "<br/>"),
-            servicePriceList: tokenValues.servicePriceList?.replace(/\n/g, "<br/>"),
-          })
+        ? renderTokens(
+            contentTemplate.bodyHtml,
+            {
+              ...tokenValues,
+              serviceName: tokenValues.serviceName?.replace(/\n/g, "<br/>"),
+              servicePriceList: tokenValues.servicePriceList?.replace(/\n/g, "<br/>"),
+            },
+            defaults,
+          )
         : emailBodyHtml(body);
       // Replies come back to US, not to whatever mailbox the From address
       // belongs to — same wiring as email.sendToCustomer, and for the same

@@ -132,6 +132,9 @@ export const current = query({
         body: v.optional(v.string()),
         bodyHtml: v.optional(v.string()),
         subject: v.optional(v.string()),
+        variableDefaults: v.optional(
+          v.array(v.object({ key: v.string(), value: v.string() })),
+        ),
         metaName: v.optional(v.string()),
         language: v.string(),
         status: templateStatus,
@@ -225,6 +228,7 @@ export const current = query({
         body: t.body,
         bodyHtml: t.bodyHtml,
         subject: t.subject,
+        variableDefaults: t.variableDefaults,
         metaName: t.metaName,
         language: t.language,
         status: t.status,
@@ -607,6 +611,10 @@ export const updateTemplate = mutation({
     metaName: v.optional(v.string()),
     language: v.optional(v.string()),
     status: v.optional(templateStatus),
+    // "When empty, print…" — one row per token the body actually uses.
+    variableDefaults: v.optional(
+      v.array(v.object({ key: v.string(), value: v.string() })),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -614,6 +622,17 @@ export const updateTemplate = mutation({
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
+    if (args.variableDefaults !== undefined) {
+      // Blanks are dropped rather than stored: an empty box means "no
+      // fallback", and a row of empties would leave the field looking set.
+      const rows = args.variableDefaults
+        .map((pair) => ({
+          key: pair.key.trim().toLowerCase(),
+          value: pair.value.trim(),
+        }))
+        .filter((pair) => pair.key && pair.value);
+      patch.variableDefaults = rows.length ? rows : undefined;
+    }
     if (args.body !== undefined) patch.body = args.body.trim() || undefined;
     if (args.bodyHtml !== undefined) patch.bodyHtml = args.bodyHtml.trim() || undefined;
     if (args.subject !== undefined) patch.subject = args.subject.trim() || undefined;

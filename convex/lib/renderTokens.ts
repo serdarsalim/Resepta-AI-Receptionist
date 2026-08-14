@@ -124,6 +124,22 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   toplam: "price",
 };
 
+// Storage form (an array, so the editor can keep row order) → lookup form.
+// Blank values are dropped: an empty box means "no fallback", and keeping it
+// would make the token resolve to an empty string it was already resolving to.
+export function tokenDefaults(
+  pairs: ReadonlyArray<{ key: string; value: string }> | undefined,
+): Record<string, string> | undefined {
+  if (!pairs?.length) return undefined;
+  const out: Record<string, string> = {};
+  for (const pair of pairs) {
+    const key = pair.key.trim().toLowerCase();
+    const value = pair.value.trim();
+    if (key && value) out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 // Render a free-text body.
 //
 // An unresolved token — one the writer invented, or one whose value is empty
@@ -131,17 +147,27 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
 // receiving "Merhaba [ad]" is worse than receiving "Merhaba": the first tells
 // them they are talking to broken software, the second just reads as brief.
 // The whitespace cleanup below is what makes that come out as a sentence.
-export function renderTokens(body: string, values: TokenValues): string {
+// `defaults` is the template's own "when empty, print…" table, keyed by the
+// token as the owner typed it (waTemplates.variableDefaults). It is consulted
+// ONLY after the real chain has run and only for a token this renderer
+// recognises: an unknown token stays literal, so a typo stays visible rather
+// than being quietly answered by a fallback the owner meant for a real field.
+export function renderTokens(
+  body: string,
+  values: TokenValues,
+  defaults?: Record<string, string>,
+): string {
+  const fallback = (raw: string) => defaults?.[raw]?.trim() ?? "";
   const filled = body.replace(/\[([^\]\n]{1,32})\]/g, (whole, rawName: string) => {
     const raw = rawName.trim().toLowerCase();
     const key = ALIASES[raw];
-    if (key) return values[key]?.trim() ?? "";
+    if (key) return values[key]?.trim() || fallback(raw);
     // The org's own fields, by exact key. hasOwnProperty rather than a truthy
     // read: an empty value is a field that resolves to nothing, which is a
     // different fact from a token that is not a field at all.
     const custom = values.custom;
     if (custom && Object.prototype.hasOwnProperty.call(custom, raw)) {
-      return custom[raw].trim();
+      return custom[raw].trim() || fallback(raw);
     }
     return whole; // Not a token we know — leave the writer's text alone.
   });

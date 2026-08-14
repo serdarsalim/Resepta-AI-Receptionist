@@ -16,7 +16,7 @@
 
 import type { Doc, Id } from "../_generated/dataModel";
 import { DEFAULT_TEMPLATE_TEXTS } from "../messageRules";
-import { renderTokens } from "./renderTokens";
+import { renderTokens, tokenDefaults } from "./renderTokens";
 
 // The same exact-language match as wa.sendAppointmentMessage — the customer's
 // language, falling back to the org's, and stock text has to cover whatever
@@ -28,7 +28,13 @@ function resolveLanguage(raw: string | undefined): string {
 
 export type OutOfHoursTemplate = Pick<
   Doc<"waTemplates">,
-  "ruleId" | "kind" | "language" | "body" | "bodyHtml" | "subject"
+  | "ruleId"
+  | "kind"
+  | "language"
+  | "body"
+  | "bodyHtml"
+  | "subject"
+  | "variableDefaults"
 >;
 
 // Returns null when there is nothing useful to say: no authored wording, and
@@ -77,11 +83,15 @@ export function outOfHoursMessage(args: {
     bookingLink,
     custom: args.custom,
   };
-  const body = renderTokens(authored?.body ?? stock.body, values);
+  // Only the AUTHORED text carries defaults; the stock copy is ours and has
+  // no editor behind it to have set any.
+  const defaults = tokenDefaults(authored?.variableDefaults);
+  const body = renderTokens(authored?.body ?? stock.body, values, defaults);
   if (!body) return null;
-  const subject = renderTokens(authored?.subject ?? stock.subject, values) || args.org.name;
+  const subject =
+    renderTokens(authored?.subject ?? stock.subject, values, defaults) || args.org.name;
   const bodyHtml = authored?.bodyHtml
-    ? renderTokens(authored.bodyHtml, values)
+    ? renderTokens(authored.bodyHtml, values, defaults)
     : undefined;
   return { body, subject, bodyHtml: bodyHtml || undefined };
 }

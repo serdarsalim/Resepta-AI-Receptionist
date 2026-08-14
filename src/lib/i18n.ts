@@ -940,6 +940,11 @@ const dictionary = {
   },
   // The appointment facts the variable dropdown offers beside the org's own
   // contact fields — things that are true of the booking, not the person.
+  // [name] resolves but is deliberately absent from the insert menu (the stock
+  // templates already open with it). It earns a label here because it is the
+  // token most worth a fallback: a customer with no first name on file turns
+  // "Hello [name]!" into "Hello!", and "there" reads better than nothing.
+  "vars.firstName": { tr: "Ad", en: "First name", de: "Vorname" },
   "vars.business": { tr: "İşletme adı", en: "Business name", de: "Betriebsname" },
   "vars.date": { tr: "Randevu tarihi", en: "Appointment date", de: "Termindatum" },
   "vars.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
@@ -972,6 +977,21 @@ const dictionary = {
   // appointment or the business and are nearly always there; a contact field
   // comes from one customer's record and is blank for anyone who never
   // answered it. One flat list hid that difference.
+  "editor.varDefaults": {
+    tr: "Boş kalırsa ne yazsın",
+    en: "When empty, print…",
+    de: "Wenn leer, schreibe…",
+  },
+  "editor.varDefaultsHint": {
+    tr: "Bir değişkenin o müşteride karşılığı yoksa mesajdan sessizce düşer ve cümle eksik gider. Buraya yazdığınız kelime onun yerine geçer. Boş bırakırsanız bugünkü davranış sürer: değişken kaybolur. Yalnızca yukarıda kullandığınız değişkenler listelenir.",
+    en: "A variable with no value for that customer drops out of the message and the sentence goes short. What you type here stands in for it. Leave a box empty and today's behaviour continues: the variable simply disappears. Only the variables you used above are listed.",
+    de: "Eine Variable ohne Wert für diese Kundin oder diesen Kunden fällt aus der Nachricht heraus und der Satz bleibt unvollständig. Was Sie hier eintragen, tritt an ihre Stelle. Lassen Sie ein Feld leer, bleibt es beim heutigen Verhalten: die Variable verschwindet. Aufgeführt sind nur die oben verwendeten Variablen.",
+  },
+  "editor.varDefaultsPlaceholder": {
+    tr: "şöyle yazsın…",
+    en: "prints as…",
+    de: "erscheint als…",
+  },
   "editor.varsBuiltIn": {
     tr: "Randevu ve işletme",
     en: "Appointment & business",
@@ -1032,16 +1052,6 @@ const dictionary = {
   // Why the preview pane is empty. Sample names and invented prices used to
   // fill it, and an owner reading "€350,00" for a haircut they charge €35 for
   // cannot tell a template bug from a made-up number.
-  "settings.previewNeedsContact": {
-    tr: "Bu mesajın nasıl gideceğini görmek için bir müşteri seçin — önizleme sadece gerçek randevu bilgileriyle çalışır.",
-    en: "Pick a contact to see this message. The preview only runs on a real booking — no sample names, no invented prices.",
-    de: "Wählen Sie einen Kontakt, um diese Nachricht zu sehen. Die Vorschau läuft nur mit einem echten Termin — keine Beispielnamen, keine erfundenen Preise.",
-  },
-  "settings.previewNoBooking": {
-    tr: "Bu müşterinin randevusu yok, o yüzden gösterecek gerçek tarih ve fiyat da yok. Randevusu olan bir müşteri seçin.",
-    en: "This contact has no bookings, so there's no real date or price to show. Pick a contact who has an appointment.",
-    de: "Dieser Kontakt hat keine Termine, also gibt es kein echtes Datum und keinen echten Preis. Wählen Sie einen Kontakt mit Termin.",
-  },
   // Operator-facing: the org predates the rules table and the one-shot
   // migration has not run yet. A salon owner should never see this for more
   // than a deploy window.

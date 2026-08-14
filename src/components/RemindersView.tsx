@@ -6,7 +6,11 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 // Pure TS shared with the backend on purpose: the preview must be the SAME
 // renderer the send path uses, or the preview becomes a second opinion.
-import { renderTokens } from "../../convex/lib/renderTokens";
+import { renderTokens, tokenDefaults } from "../../convex/lib/renderTokens";
+import {
+  VariableDefaultsEditor,
+  type VariableDefault,
+} from "./VariableDefaultsEditor";
 // Same reason: the preview prints the date in the shape the send path prints
 // it, timezone and all, rather than a second date formatter's opinion.
 import { formatAppointmentTime } from "../../convex/lib/format";
@@ -71,6 +75,7 @@ type TemplateRow = {
   body?: string;
   bodyHtml?: string;
   subject?: string;
+  variableDefaults?: VariableDefault[];
   bodyPreview?: string;
   emailSentCount?: number;
   emailOpenCount?: number;
@@ -546,7 +551,12 @@ function RuleEditor({
   waConnected: boolean;
   onSaveTemplate: (
     templateId: Id<"waTemplates">,
-    patch: { body?: string; bodyHtml?: string; subject?: string },
+    patch: {
+      body?: string;
+      bodyHtml?: string;
+      subject?: string;
+      variableDefaults?: VariableDefault[];
+    },
   ) => void;
 }) {
   const { t } = useLanguage();
@@ -558,6 +568,12 @@ function RuleEditor({
   const [liveHtml, setLiveHtml] = useState(
     template?.bodyHtml ?? plainToHtml(template?.body ?? ""),
   );
+  // The "when empty, print…" table. Held here so the preview can render the
+  // UNSAVED value — you are typing a fallback to see how the sentence reads,
+  // and a preview that waited for the blur would be showing the old one.
+  const [defaults, setDefaults] = useState<VariableDefault[]>(
+    template?.variableDefaults ?? [],
+  );
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   // The row is created by ensureTemplate when the panel opens; until the
   // query catches up there is nothing to bind to.
@@ -565,6 +581,7 @@ function RuleEditor({
   useEffect(() => {
     setBody(template?.body ?? "");
     setSubject(template?.subject ?? "");
+    setDefaults(template?.variableDefaults ?? []);
     setLiveHtml(template?.bodyHtml ?? plainToHtml(template?.body ?? ""));
     // Re-seed exactly when the editor starts talking about a different row.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -620,6 +637,9 @@ function RuleEditor({
   // Every value below is built the way convex/wa.ts builds it at send time,
   // including prices being MINOR units (the old sample divided by nothing and
   // printed €350.00 for a 350-kuruş line).
+  // Live, not persisted: you are typing a fallback to watch the sentence
+  // settle, so the preview has to read what is in the box right now.
+  const liveDefaults = tokenDefaults(defaults);
   const previewValues = useMemo(() => {
     if (!picked) return null;
     // The away reply speaks to a person, not a booking — everyone else still
@@ -650,23 +670,24 @@ function RuleEditor({
     // Contact fields are deliberately NOT given this treatment. The preview
     // speaks about a real customer, and a field that person never answered is
     // honestly blank for them — that is information, not a gap.
-    const sample = (value: string | undefined, label: string) =>
-      value && value.trim() ? value : `⟨${label}⟩`;
+    const sample = (value: string | undefined, key: string, label: string) =>
+      value?.trim() || liveDefaults?.[key] || `⟨${label}⟩`;
     return {
       firstName: picked.firstName,
       lastName: picked.lastName,
       // The BUSINESS's number and link — what [phone] and [booking_link]
       // resolve to at send time (see convex/lib/renderTokens).
-      phone: sample(orgPublicPhone, t("vars.phone")),
+      phone: sample(orgPublicPhone, "phone", t("vars.phone")),
       email: picked.email,
-      bookingLink: sample(orgBookingUrl, t("vars.bookingLink")),
+      bookingLink: sample(orgBookingUrl, "booking_link", t("vars.bookingLink")),
       businessName: orgName,
       appointmentAt: appointment
         ? formatAppointmentTime(appointment.startAt, orgTimezone, orgLanguage)
-        : `⟨${t("vars.date")}⟩`,
-      staffName: sample(appointment?.staffName, t("vars.staff")),
+        : liveDefaults?.date ?? `⟨${t("vars.date")}⟩`,
+      staffName: sample(appointment?.staffName, "staff", t("vars.staff")),
       serviceName: sample(
         items.map((item) => `• ${item.name}`).join("\n"),
+        "service",
         t("vars.service"),
       ),
       servicePriceList: sample(
@@ -676,12 +697,16 @@ function RuleEditor({
               `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
           )
           .join("\n"),
+        "pricelist",
         t("vars.priceList"),
       ),
-      price: totalMinor > 0 ? formatMoney(totalMinor) : `⟨${t("vars.price")}⟩`,
+      price:
+        totalMinor > 0
+          ? formatMoney(totalMinor)
+          : (liveDefaults?.price ?? `⟨${t("vars.price")}⟩`),
       // Never resolvable outside an appointment-lifecycle send, so it is a
       // placeholder in every preview rather than sometimes-blank.
-      manageLink: `⟨${t("vars.manageLink")}⟩`,
+      manageLink: liveDefaults?.manage_link ?? `⟨${t("vars.manageLink")}⟩`,
       custom,
     };
   }, [
@@ -695,6 +720,7 @@ function RuleEditor({
     picked,
     appointment,
     rule.trigger,
+    liveDefaults,
     t,
   ]);
 
@@ -735,25 +761,66 @@ function RuleEditor({
   // What each lane would actually send: WhatsApp the derived plain text,
   // email the authored HTML — both through the same token renderer.
   const previewPlain = emailEnabled ? htmlToText(liveHtml) : body;
-  const rendered = previewValues ? renderTokens(previewPlain, previewValues) : "";
+  // Before a contact is picked the preview still renders — it just speaks
+  // about nobody. Org facts (name, phone, booking link) are true regardless of
+  // who is reading, so they resolve; anything that belongs to a person or a
+  // booking stays literal, and a token with a fallback shows the fallback.
+  // That is Nudge's rule, and it is the honest one: no invented names, no
+  // invented prices, but never a blank pane either.
+  const contactlessSlot = (key: string, label: string) =>
+    liveDefaults?.[key] ?? `⟨${label}⟩`;
+  const contactlessValues = {
+    // True no matter who is reading, so they resolve for real.
+    businessName: orgName,
+    phone: orgPublicPhone || contactlessSlot("phone", t("vars.phone")),
+    bookingLink:
+      orgBookingUrl || contactlessSlot("booking_link", t("vars.bookingLink")),
+    // Everything that belongs to a person or a booking. A labelled slot rather
+    // than the raw [token] Nudge leaves behind: it reads as the shape of the
+    // sentence instead of as syntax, which is what a preview is for.
+    firstName: contactlessSlot("name", t("vars.firstName")),
+    appointmentAt: contactlessSlot("date", t("vars.date")),
+    staffName: contactlessSlot("staff", t("vars.staff")),
+    serviceName: contactlessSlot("service", t("vars.service")),
+    servicePriceList: contactlessSlot("pricelist", t("vars.priceList")),
+    price: contactlessSlot("price", t("vars.price")),
+    manageLink: contactlessSlot("manage_link", t("vars.manageLink")),
+    // Org fields resolve to their own labelled slots too, so a body built out
+    // of contact fields is not a row of blanks before anyone is picked.
+    custom: Object.fromEntries(
+      contactFields.map((field) => [
+        field.key,
+        liveDefaults?.[field.key] ?? `⟨${field.label}⟩`,
+      ]),
+    ),
+  };
+  const renderFor = (text: string) =>
+    previewValues
+      ? renderTokens(text, previewValues, liveDefaults)
+      : renderTokens(text, contactlessValues, liveDefaults);
+  const rendered = renderFor(previewPlain);
   // Same swap the send path makes: inside HTML a bare \n is a space, so the
   // service list rides <br/>.
   const renderedEmailHtml = previewValues
     ? sanitizeEmailHtml(
-        renderTokens(liveHtml, {
-          ...previewValues,
-          serviceName: previewValues.serviceName?.replace(/\n/g, "<br/>"),
-          servicePriceList: previewValues.servicePriceList?.replace(/\n/g, "<br/>"),
-        }),
+        renderTokens(
+          liveHtml,
+          {
+            ...previewValues,
+            serviceName: previewValues.serviceName?.replace(/\n/g, "<br/>"),
+            servicePriceList: previewValues.servicePriceList?.replace(/\n/g, "<br/>"),
+          },
+          liveDefaults,
+        ),
       )
-    : "";
+    : sanitizeEmailHtml(renderTokens(liveHtml, contactlessValues, liveDefaults));
   // Whether what the reader is looking at right now contains a placeholder.
   // Checked against the RENDERED text of whichever lane is showing, subject
   // included — the raw template always holds tokens, which would light this
   // permanently and teach everyone to ignore it.
   const showsPlaceholder =
     /⟨[^⟩]+⟩/.test(lane === "email" ? renderedEmailHtml : rendered) ||
-    (previewValues ? /⟨[^⟩]+⟩/.test(renderTokens(subject, previewValues)) : false);
+    /⟨[^⟩]+⟩/.test(renderFor(subject));
   const pickedLabel = picked
     ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
     : "";
@@ -844,6 +911,20 @@ function RuleEditor({
               %
             </span>
           </p>
+        )}
+
+        {/* Directly under the body it repairs — the fallback is part of
+            writing the sentence, not a setting somewhere else. Renders
+            nothing until the body uses a token we can resolve. */}
+        {templateId && (
+          <VariableDefaultsEditor
+            bodies={[body, subject]}
+            defaults={defaults}
+            onChange={(next) => {
+              setDefaults(next);
+              onSaveTemplate(templateId, { variableDefaults: next });
+            }}
+          />
         )}
       </div>
 
@@ -942,22 +1023,14 @@ function RuleEditor({
           {/* No contact, or a contact with nothing booked: say which, and say
               nothing else. An empty pane with a reason beats a filled pane
               with invented facts. */}
-          {!previewValues ? (
-            <p className="flex flex-1 items-center rounded-lg border border-dashed border-[var(--border)] px-3 py-4 text-xs leading-relaxed text-[var(--muted)]">
-              {!contactId
-                ? t("settings.previewNeedsContact")
-                : picked && !appointment
-                  ? t("settings.previewNoBooking")
-                  : t("common.loading")}
-            </p>
-          ) : lane === "email" ? (
+          {lane === "email" ? (
             /* The email as the customer's mail client shows it: white paper no
                matter the app theme, subject on top, the authored HTML below.
                flex-1 so the paper runs the full height beside the editor. */
             <div className="email-paper flex flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]">
               <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
-                {renderTokens(subject, previewValues) ||
-                  [orgName || "—", previewValues.appointmentAt]
+                {renderFor(subject) ||
+                  [orgName || "—", previewValues?.appointmentAt]
                     .filter(Boolean)
                     .join(", ")}
               </p>
