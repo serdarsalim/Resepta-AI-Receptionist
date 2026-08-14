@@ -51,6 +51,12 @@ export const PLATFORM_KEYS = {
   // agent before the model runs. Table-only on purpose — flipping it is an
   // operator action from /admin, not a deploy.
   chatAgentDisabled: null,
+  // The default price per called minute, micro-USD as a string ("300000" =
+  // $0.30/min). Set once here instead of on every org: the meter resolves
+  // org.voiceRateMicroUsdPerMinute ?? this ?? 0 at stamp time, so an org row
+  // exists only for exceptions (a market that needs its own price). Table-only:
+  // pricing is an operator decision, not a deploy artifact.
+  voiceRateMicroUsdPerMinute: null,
 } as const;
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;

@@ -19,6 +19,7 @@ import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { monthKey } from "./lib/usage";
+import { platformValue } from "./lib/platformConfig";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenDuration, spokenPrice } from "./lib/speech";
@@ -2292,8 +2293,17 @@ async function meterCall(
   if (!stampBilled && !stampCost) return {};
   const org = await ctx.db.get(orgId);
   if (!org) return {};
-  // Unset rate = metered at rate zero: usage still counts, the bill is 0.
-  const rate = org.voiceRateMicroUsdPerMinute ?? 0;
+  // Org override first, then the platform-wide default (set once in /admin →
+  // Platform), then zero — usage still counts either way, the bill is just 0.
+  // An explicit org 0 beats the default: that is what an override means.
+  const rate =
+    org.voiceRateMicroUsdPerMinute ??
+    Math.max(
+      0,
+      Math.round(
+        Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || 0,
+      ),
+    );
   const billedMicroUsd = stampBilled
     ? Math.round(((durationSec ?? 0) * rate) / 60)
     : undefined;

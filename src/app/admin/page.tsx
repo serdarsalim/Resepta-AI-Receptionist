@@ -341,6 +341,26 @@ export default function AdminPage() {
               onSave={(value) => setConfig({ key: "openaiApiKey", value })}
             />
             <Row
+              label="Voice rate (USD per minute)"
+              hint="What every business pays per called minute, billed per second. Set once here; a business's own Usage tab can override it. Changes only price calls from now on — history keeps its stamped rate."
+              current={
+                mail.voiceRateMicroUsdPerMinute === null
+                  ? undefined
+                  : String(mail.voiceRateMicroUsdPerMinute / 1_000_000)
+              }
+              placeholder="0.30"
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                return setConfig({
+                  key: "voiceRateMicroUsdPerMinute",
+                  value:
+                    !value.trim() || Number.isNaN(parsed)
+                      ? ""
+                      : String(Math.max(0, Math.round(parsed * 1_000_000))),
+                });
+              }}
+            />
+            <Row
               label="Model override"
               hint="Optional exact model name for the selected provider (defaults: claude-sonnet-5 / gpt-5.2). Applies only while an org resolves to the platform provider. Unknown names fail visibly in the flight recorder and meter at $0 until priced in lib/llm.ts."
               current={mail.chatAgentModel ?? undefined}

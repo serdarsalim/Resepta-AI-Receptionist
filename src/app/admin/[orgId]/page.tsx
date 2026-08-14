@@ -611,13 +611,21 @@ export default function TenantPage() {
       >
         <Row
           label="Rate (USD per minute)"
-          hint="Empty = no rate: calls still meter (minutes and Retell cost stay visible) but bill at $0. History keeps the rate it was stamped with."
+          hint={
+            voice.defaultRateMicroUsdPerMinute === null
+              ? "Override for this business only. Empty = the platform default, which is not set yet — calls bill at $0 until one exists (Platform tab on the fleet page)."
+              : `Override for this business only. Empty = the platform default, currently $${(voice.defaultRateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min. History keeps the rate it was stamped with.`
+          }
           current={
             voice.rateMicroUsdPerMinute === null
               ? undefined
               : String(voice.rateMicroUsdPerMinute / 1_000_000)
           }
-          placeholder="0.30"
+          placeholder={
+            voice.defaultRateMicroUsdPerMinute === null
+              ? "0.30"
+              : String(voice.defaultRateMicroUsdPerMinute / 1_000_000)
+          }
           onSave={(value) => {
             const parsed = Number(value.replace(",", "."));
             return setVoiceRate({

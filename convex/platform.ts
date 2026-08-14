@@ -882,6 +882,7 @@ export const orgVoiceUsage = query({
     v.null(),
     v.object({
       rateMicroUsdPerMinute: v.union(v.number(), v.null()),
+      defaultRateMicroUsdPerMinute: v.union(v.number(), v.null()),
       months: v.array(
         v.object({
           month: v.string(),
@@ -906,6 +907,8 @@ export const orgVoiceUsage = query({
       .take(24);
     return {
       rateMicroUsdPerMinute: org.voiceRateMicroUsdPerMinute ?? null,
+      defaultRateMicroUsdPerMinute:
+        Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
       months: rows
         .filter(
           (r) =>

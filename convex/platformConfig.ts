@@ -56,6 +56,7 @@ export const status = query({
     chatAgentModel: v.union(v.string(), v.null()),
     chatAgentDisabled: v.boolean(),
     retellApiKey: v.union(v.string(), v.null()),
+    voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
     // deployment still configured the old way.
@@ -89,6 +90,8 @@ export const status = query({
       chatAgentModel: (await platformValue(ctx, "chatAgentModel"))?.trim() || null,
       chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
+      voiceRateMicroUsdPerMinute:
+        Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
@@ -114,6 +117,7 @@ const settableKey = v.union(
   v.literal("chatAgentModel"),
   v.literal("retellApiKey"),
   v.literal("chatAgentDisabled"),
+  v.literal("voiceRateMicroUsdPerMinute"),
 );
 
 // One key at a time, so a form that submits every field cannot blank the three
