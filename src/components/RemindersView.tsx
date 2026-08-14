@@ -851,7 +851,11 @@ function RuleEditor({
           height — the two panes read as one aligned unit, not a tall form
           beside a floating card. */}
       <div className="flex flex-col gap-2">
-        <div className="flex h-10 items-center justify-between gap-2">
+        {/* Right-aligned as one cluster. justify-between pushed the word
+            "Preview" to the far left of the column and left it stranded a
+            hand's width from the box it labels, reading as a heading for the
+            whole pane rather than as the label on that control. */}
+        <div className="flex h-10 items-center justify-end gap-2">
           {/* Two lanes, one message: a toggle, not two cards. Only rendered
               when the rule really can travel both ways — otherwise the label
               alone says which lane you are looking at. */}
@@ -882,7 +886,10 @@ function RuleEditor({
               booking; the × empties the pane again. */}
           <span className="relative min-w-0 flex-1 max-w-56">
             <input
-              className="w-full text-xs"
+              // h-10 like the subject box across the gutter: the two are the
+              // top row of their columns and any difference reads as a
+              // misalignment rather than as a smaller control.
+              className="h-10 w-full text-sm"
               value={contactId ? pickedLabel : contactQuery}
               placeholder={t("settings.previewPickContact")}
               onChange={(e) => {
@@ -1240,7 +1247,17 @@ function RulesCard({
           );
           return (
             <div key={rule._id}>
-              <div className="flex items-center gap-3 py-3">
+              {/* An open row is the header of the panel under it, so it takes
+                  a tint and loses its bottom rounding — otherwise the editor
+                  appears to belong to the whole list rather than to the one
+                  rule whose chevron you turned. */}
+              <div
+                className={`flex items-center gap-3 px-3 py-3 transition-colors ${
+                  expanded
+                    ? "-mx-3 rounded-t-lg bg-[var(--muted-bg)]"
+                    : "-mx-3"
+                }`}
+              >
                 <div className={RULE_COLUMNS}>
                   <span className="flex items-center gap-1.5 text-sm">
                     {ruleWhen(rule)}
@@ -1298,7 +1315,7 @@ function RulesCard({
                 </button>
               </div>
               {expanded && (
-                <>
+                <div className="-mx-3 rounded-b-lg bg-[var(--muted-bg)] px-3 pt-1">
                   <RuleEditor
                     rule={rule}
                     template={ownTemplate}
@@ -1326,7 +1343,7 @@ function RulesCard({
                       {t("settings.deleteRule")}
                     </button>
                   </div>
-                </>
+                </div>
               )}
             </div>
           );
