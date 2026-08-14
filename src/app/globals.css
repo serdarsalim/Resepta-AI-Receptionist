@@ -95,6 +95,17 @@
      literally did not exist there. var(--foreground) re-resolves under .dark,
      so one definition serves both modes. */
   --closed-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
+  /* WhatsApp's own bubble shadow, near enough: one hairline, no border. Ours
+     carried a full 1px border AND Tailwind's shadow-sm, so every incoming
+     bubble drew its edge twice and read heavier than anything around it. */
+  --bubble-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  /* The thread's own plane, and the reason a borderless bubble works at all:
+     a white bubble on a white card is invisible without a line around it, so
+     dropping the border means the ground under it has to step back. WhatsApp
+     solves this with a beige pattern; this is the flat, neutral version of the
+     same move. Only the scroll area wears it — the contact header above and
+     the composer below stay card-white, which is also how WhatsApp sits. */
+  --thread-bg: #f4f4f5;
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }
@@ -134,6 +145,8 @@
   --brand-soft: color-mix(in srgb, var(--brand) 18%, var(--card));
   --grid-line: color-mix(in srgb, var(--border) 85%, transparent);
   --grid-line-soft: color-mix(in srgb, var(--border) 45%, transparent);
+  --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
+  --thread-bg: #101010;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 }

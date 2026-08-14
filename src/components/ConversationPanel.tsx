@@ -494,7 +494,10 @@ export function ConversationPanel({
         // are separated by hairlines, and 8px of margin on top of a border is
         // what made the note cards read as a stack of boxes.
         className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
-          chatOrder ? "space-y-2" : ""
+          // Only the chat wears the tinted plane. The feed view renders notes
+          // and calls as bordered rows, which have their own edges and want
+          // the card's white under them.
+          chatOrder ? "space-y-2 bg-[var(--thread-bg)]" : ""
         }`}
       >
         {feed === undefined && (
@@ -727,10 +730,10 @@ export function ConversationPanel({
               // of on a line of its own underneath, which is what every
               // messenger does and what stopped these bubbles from being
               // twice as tall as they needed to be.
-              className={`flex w-fit max-w-[78%] items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-sm ${
+              className={`flex w-fit max-w-[78%] items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-[var(--bubble-shadow)] ${
                 outbound
                   ? "ml-auto rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
-                  : "rounded-bl-sm border border-[var(--border)] bg-[var(--card)]"
+                  : "rounded-bl-sm bg-[var(--card)]"
               } ${
                 // A send that never left keeps its side and its colour and
                 // wears a red ring instead. Recolouring the whole bubble made
