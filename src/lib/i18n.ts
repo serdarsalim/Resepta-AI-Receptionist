@@ -1247,6 +1247,25 @@ const dictionary = {
   // (clicking grey pins it, clicking green unpins).
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
   "inbox.unseen": { tr: "Yeni mesaj", en: "New reply", de: "Neue Nachricht" },
+  // The list-filter chips. Their own keys rather than reusing the two above:
+  // those name a row's STATE for a screen reader ("Sabitlendi" = this one is
+  // pinned), and a chip names an ACTION on the list ("show me the pinned
+  // ones"). Turkish separates the two where English happens not to.
+  "inbox.filterAll": { tr: "Tümü", en: "All", de: "Alle" },
+  "inbox.filterUnread": { tr: "Okunmamış", en: "Unread", de: "Ungelesen" },
+  "inbox.filterPinned": { tr: "Sabitlenenler", en: "Pinned", de: "Angeheftet" },
+  "inbox.noUnread": {
+    tr: "Okunmamış konuşma yok.",
+    en: "Nothing unread.",
+    de: "Nichts Ungelesenes.",
+  },
+  // Doubles as discovery for the affordance: the pin is a dot on the row and
+  // an empty list is the best place to say so.
+  "inbox.noPinned": {
+    tr: "Sabitlenmiş konuşma yok. Sonra dönmek istediğiniz konuşmanın yanındaki noktaya tıklayın.",
+    en: "Nothing pinned. Click the dot on a conversation to keep it here for later.",
+    de: "Nichts angeheftet. Klicken Sie auf den Punkt einer Unterhaltung, um sie für später hier zu behalten.",
+  },
   "inbox.notPinned": {
     tr: "Sabitlenmedi",
     en: "Not pinned",

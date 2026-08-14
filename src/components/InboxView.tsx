@@ -14,6 +14,11 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 
+// Which slice of the list the chips are showing. Persisted per browser under
+// this key; the .v1 suffix is the escape hatch if the shape ever changes.
+type InboxFilter = "all" | "unread" | "pinned";
+const VIEW_STORAGE_KEY = "randevu.inbox.view.v1";
+
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "now";
@@ -32,35 +37,51 @@ export function InboxView({
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
   const setInboxPin = useMutation(api.messages.setInboxPin);
-  const markInboxSeen = useMutation(api.messages.markInboxSeen);
-  const markInboxLeft = useMutation(api.messages.markInboxLeft);
+  const markConversationRead = useMutation(api.messages.markConversationRead);
   const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
+  // The conversation the USER opened, as opposed to the one auto-selected on
+  // arrival — only this one gets read stamps. Without the distinction, landing
+  // on the Inbox would silently read the newest conversation, which is the
+  // boundary model this replaced wearing a smaller hat.
+  const [opened, setOpened] = useState<Id<"customers"> | null>(null);
   const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.
   const [filter, setFilter] = useState<FeedFilter>("all");
+  // Which slice of the list. Persisted per browser: a filter is a working
+  // context ("I'm on my unread"), and re-picking it on every visit is the same
+  // friction the filter exists to remove. Safe to persist only because the
+  // active chip is always visible — a hidden sticky filter is the version of
+  // this that traps people. Read in an effect, never during render: the server
+  // has no localStorage and a render-time read is a hydration mismatch.
+  const [view, setView] = useState<InboxFilter>("all");
+  useEffect(() => {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (stored === "unread" || stored === "pinned") setView(stored);
+  }, []);
+  const chooseView = (next: InboxFilter) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // A browser with storage disabled or full still gets the filter, it just
+      // does not get to keep it.
+    }
+  };
 
-  // Clear the SIDEBAR dot. This view only mounts while the Inbox tab is open,
-  // so mounting IS "the user is looking at it". Re-runs when the newest inbound
-  // moves, so mail arriving while they sit here counts as seen rather than
-  // re-lighting the dot behind them.
-  const newestInboundAt = Math.max(
-    0,
-    ...(conversations ?? []).map((c) => c.lastInboundAt),
-  );
+  // A reply that lands while you are sitting in that conversation is read, not
+  // new — re-stamping on its lastInboundAt is what stops the dot re-lighting on
+  // a thread you are watching. Only for the conversation opened by hand, and
+  // the mutation is monotonic, so a re-render cannot cost a write.
+  const openedInboundAt =
+    opened && conversations
+      ? (conversations.find((c) => c.customerId === opened)?.lastInboundAt ?? null)
+      : null;
   useEffect(() => {
-    void markInboxSeen({}).catch(() => {});
-  }, [markInboxSeen, newestInboundAt]);
-  // Grey's boundary, stamped on the way OUT — this is what makes a reply show
-  // once and then go quiet. Separate clock from the sidebar's above: a boundary
-  // that advanced on arrival would clear every grey marker before the reader
-  // had a chance to read the row it was on. Empty deps: unmount only.
-  useEffect(() => {
-    return () => {
-      void markInboxLeft({}).catch(() => {});
-    };
-  }, [markInboxLeft]);
+    if (!opened || openedInboundAt === null) return;
+    void markConversationRead({ customerId: opened }).catch(() => {});
+  }, [markConversationRead, opened, openedInboundAt]);
 
   // Select once, when the list first arrives. Behind a ref so the mobile Back
   // action can return to the list without being immediately overridden.
@@ -71,13 +92,32 @@ export function InboxView({
     setFilter(conversations[0].lastChannel);
   }, [conversations]);
 
+  // Counts for the chip labels, over the UNFILTERED list: a chip advertises
+  // what switching to it would show, so it cannot count through itself.
+  const unseenCount = (conversations ?? []).filter((c) => c.unseen).length;
+  const pinnedCount = (conversations ?? []).filter((c) => c.pinned).length;
+
   // Search reads the whole row, preview text included: a salon owner looks
   // for "the one who asked about balayage", not for a name they remember.
-  const shown = (conversations ?? []).filter((c) =>
-    search.matches(c.name, c.phone, c.email, c.lastBody),
+  //
+  // A live query OVERRIDES the chip, per this app's search rule: a query must
+  // never fail to find a match that exists in the data. Searching from the
+  // Pinned chip and getting nothing, because the person you looked for was
+  // simply not pinned, is the failure that rule exists to prevent.
+  const shown = (conversations ?? []).filter(
+    (c) =>
+      (search.active ||
+        view === "all" ||
+        (view === "unread" ? c.unseen : c.pinned)) &&
+      search.matches(c.name, c.phone, c.email, c.lastBody),
   );
 
-  const active = conversations?.find((c) => c.customerId === selected);
+  // Falls back outside the filtered list on purpose: opening an unread
+  // conversation while the Unread chip is active would otherwise blank the
+  // right pane the instant its read stamp landed and the row dropped out.
+  const active =
+    shown.find((c) => c.customerId === selected) ??
+    conversations?.find((c) => c.customerId === selected);
 
   return (
     // h-full, not flex-1: `main` in the shell is a block, so there's no flex
@@ -110,12 +150,36 @@ export function InboxView({
         >
           {/* This fixed-height track mirrors the right column's name +
               channel-pills row so both card borders start on the same
-              horizontal line, which is the whole reason it exists. It held the
-              search box for a while; search now lives in the header with every
-              other tab's, so the track is back to spending its height on
-              alignment alone. Load-bearing despite being empty — delete it and
-              the two cards stop lining up. */}
-          <div className="h-9 shrink-0 pb-1" aria-hidden />
+              horizontal line, which is the whole reason it exists. It spent a
+              while empty holding that alignment alone; now it earns its height
+              with the list filters. ONE LINE ONLY — the track is h-9, so a
+              second row of chips spills out of it rather than pushing the card
+              down. */}
+          <div className="flex h-9 shrink-0 items-center gap-1.5 pb-1">
+            {(
+              [
+                ["all", t("inbox.filterAll"), 0],
+                ["unread", t("inbox.filterUnread"), unseenCount],
+                ["pinned", t("inbox.filterPinned"), pinnedCount],
+              ] as const
+            ).map(([key, label, count]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={view === key}
+                onClick={() => chooseView(key)}
+                className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-sm transition-colors ${
+                  view === key
+                    ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
+                    : "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+                }`}
+              >
+                {label}
+                {/* Zero renders nothing: a row of noughts is noise. */}
+                {count > 0 && <span className="tabular-nums">{count}</span>}
+              </button>
+            ))}
+          </div>
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto card-raised">
             {conversations === undefined ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
@@ -126,8 +190,17 @@ export function InboxView({
                 {t("inbox.empty")}
               </p>
             ) : shown.length === 0 ? (
+              // Per-filter, not one generic line: an empty Pinned list is the
+              // best place to say what a pin even is, and "no matches" under an
+              // active chip reads as a broken search.
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
-                {t("table.noMatches")}
+                {search.active
+                  ? t("table.noMatches")
+                  : view === "unread"
+                    ? t("inbox.noUnread")
+                    : view === "pinned"
+                      ? t("inbox.noPinned")
+                      : t("table.noMatches")}
               </p>
             ) : (
               // The last row's divider would land on the card's own bottom
@@ -137,7 +210,15 @@ export function InboxView({
                   const isActive = c.customerId === selected;
                   const open = (next?: FeedFilter) => {
                     setSelected(c.customerId);
+                    setOpened(c.customerId);
                     setFilter(next ?? c.lastChannel);
+                    // Stamped here as well as in the effect above: the effect
+                    // only covers a new inbound landing on an already-open
+                    // thread, so re-opening a conversation whose timestamp has
+                    // not moved would otherwise never re-stamp.
+                    void markConversationRead({ customerId: c.customerId }).catch(
+                      () => {},
+                    );
                   };
                   return (
                     <li key={c.customerId}>
