@@ -144,6 +144,12 @@ const VoicePhoneIcon = makeIcon(
   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
 );
 
+// Only ever rendered for platform admins (the operator's own shortcut to
+// /admin), so a shield never appears in any salon's sidebar.
+const AdminShieldIcon = makeIcon(
+  <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />,
+);
+
 const NAV_TABS: {
   id: TabId;
   key: TranslationKey;
@@ -855,7 +861,13 @@ function WorkspaceSwitcher({
     return collapsed ? (
       <BrandMark size={24} />
     ) : (
-      <span className="block truncate text-sm font-semibold tracking-tight">
+      // Two lines before the ellipsis, not one: "Bella Güzellik Salo…" is the
+      // owner's own name cut off in their own product. The title carries the
+      // full name for the (rare) name that overflows even two lines.
+      <span
+        title={label}
+        className="line-clamp-2 break-words text-sm font-semibold leading-snug tracking-tight"
+      >
         {label}
       </span>
     );
@@ -892,7 +904,13 @@ function WorkspaceSwitcher({
           <BrandMark size={24} />
         ) : (
           <>
-            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {/* Same two-line grace as the single-workspace name above. */}
+            <span
+              title={label}
+              className="line-clamp-2 min-w-0 flex-1 break-words leading-snug"
+            >
+              {label}
+            </span>
             <span className="text-[10px] text-[var(--muted)]">▾</span>
           </>
         )}
@@ -1047,6 +1065,9 @@ export function AppShell({
   // fed by failed sends only, which meant two colours of dot for one idea:
   // somebody still has to look at this.
   const attentionCount = useQuery(api.messages.inboxUnseenCount, {});
+  // False for every salon user, and false is what it returns rather than
+  // throwing — one cheap query, reveals nothing (same read UserMenu makes).
+  const isPlatformAdmin = useQuery(api.platform.amPlatformAdmin, {});
 
   // Read on mount, not during render: the server has no localStorage, so
   // seeding state from it directly would hydrate-mismatch. One frame expanded
@@ -1245,6 +1266,33 @@ export function AppShell({
                 onClick={() => goTo(entry.id)}
               />
             ))}
+            {/* The operator's door, below Business — an anchor, not a tab: it
+                opens the fleet console in its own browser tab so the workspace
+                being looked at stays where it was. Hardcoded "Admin" like the
+                console itself: the admin surface is deliberately English-only,
+                and this row renders for platform admins alone, never for any
+                salon user. */}
+            {isPlatformAdmin && (
+              <a
+                href="/admin"
+                target="_blank"
+                rel="noopener"
+                title={showCollapsed ? "Admin" : undefined}
+                className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
+                  showCollapsed
+                    ? "mx-auto h-9 w-9 justify-center px-0"
+                    : "w-full gap-3 px-3"
+                }`}
+              >
+                <AdminShieldIcon
+                  className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
+                  style={{ color: "var(--foreground)" }}
+                />
+                {!showCollapsed && (
+                  <span className="flex-1 truncate text-left">Admin</span>
+                )}
+              </a>
+            )}
           </div>
 
           {/* Who is signed in, at the bottom corner — where a decade of
