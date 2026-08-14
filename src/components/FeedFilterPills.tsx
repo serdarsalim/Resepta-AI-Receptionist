@@ -108,12 +108,16 @@ export function FeedFilterPills({
         // unchanged — the row lives in a fixed h-9 track that the empty track
         // over the list mirrors, and growing it breaks the two cards' shared
         // top edge.
+        // bg-[var(--card)] on the resting states: the row sits above the
+        // inbox's two cards, directly on the washed plane, and an unfilled
+        // pill there is a ring around a piece of the gradient. White makes it
+        // read as a control on the same paper as the cards under it.
         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors ${
           active
             ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
             : count > 0
-              ? "border-[var(--border)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
-              : "border-[var(--border)] text-[var(--muted)]/50"
+              ? "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+              : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)]/50"
         }`}
       >
         {/* Channels are icon-only — the glyphs are the ones customers know.

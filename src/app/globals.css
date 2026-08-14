@@ -46,11 +46,11 @@
   --table-header-fg: #1c2b33;
   --table-divider: #e4e6eb;
   --row-hover-bg: #f5f6f7;
-  /* A card is lifted, not outlined. The reference draws no border at all —
-     the edge is a soft shadow, which is why its corners read as softer than
-     ours at the same radius: a 1px line makes a curve explicit in a way a
-     shadow never does. */
-  /* Two layers doing different jobs. The tight one seats the card on the
+  /* A card is lifted, not outlined: the reference draws no border at all, and
+     dropping the 1px line is what softens the corners — a line makes a curve
+     explicit in a way a shadow never does.
+
+     Two layers doing different jobs. The tight one seats the card on the
      plane; the wide one is the halo that makes the edge read as lifted rather
      than cut. The first attempt had only tight layers, so the top and left
      corners — where a downward drop shadow puts nothing — met the gradient at
@@ -346,19 +346,15 @@ thead {
    In @layer components on purpose, same reasoning as the base block below: a
    utility class in the markup must still win over this. */
 @layer components {
+  /* The inbox's two panels. Same treatment as every other card now — no
+     border, --card-shadow, 0.5rem radius — so the inbox stops being the one
+     surface still wearing its own edge. Kept as a class rather than folded
+     into the Card component because these panels manage their own scrolling
+     and never take Card's padding. */
   .card-raised {
     background: var(--card);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 0.375rem;
-    box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.05),
-      0 3px 8px rgba(15, 23, 42, 0.04);
-  }
-  .dark .card-raised {
-    border-color: rgba(255, 255, 255, 0.1);
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.18),
-      0 3px 8px rgba(0, 0, 0, 0.14);
+    border-radius: 0.5rem;
+    box-shadow: var(--card-shadow);
   }
 }
 

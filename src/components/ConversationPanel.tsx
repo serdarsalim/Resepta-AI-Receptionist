@@ -717,7 +717,17 @@ export function ConversationPanel({
               // Ours right and green, theirs left and white — the arrangement
               // every WhatsApp user already reads without being taught. The
               // squared-off corner is the tail: it points at whoever spoke.
-              className={`max-w-[78%] rounded-2xl px-2.5 py-2 text-sm shadow-sm ${
+              //
+              // w-fit is what stops a two-word reply from becoming a slab: as
+              // a plain block the bubble filled its 78% whatever it held, so
+              // "Ok" and a paragraph were the same width and the column read
+              // as a wall rather than a conversation. max-w still caps it.
+              //
+              // flex + items-end puts the stamp BESIDE the last line instead
+              // of on a line of its own underneath, which is what every
+              // messenger does and what stopped these bubbles from being
+              // twice as tall as they needed to be.
+              className={`flex w-fit max-w-[78%] items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-sm ${
                 outbound
                   ? "ml-auto rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
                   : "rounded-bl-sm border border-[var(--border)] bg-[var(--card)]"
@@ -728,6 +738,9 @@ export function ConversationPanel({
                 failed ? "opacity-70 ring-1 ring-red-400/50" : ""
               }`}
             >
+              {/* min-w-0 so a long unbroken word wraps instead of shoving the
+                  stamp out of the bubble. */}
+              <div className="min-w-0">
               {/* Email carries a subject and WhatsApp doesn't, so it leads
                   the bubble when there is one. It also rescues the case where
                   the body never arrived: the provider hands us the metadata
@@ -774,10 +787,11 @@ export function ConversationPanel({
                   <p className="text-[var(--muted)]">{t("message.template")}</p>
                 )
               )}
+              </div>
               <p
-                className={`mt-0.5 flex flex-wrap items-center gap-1 text-[10.5px] ${
-                  outbound ? "justify-end" : ""
-                } ${failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"}`}
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-[10.5px] ${
+                  failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"
+                }`}
               >
                 {/* Time only — the day band above already said the date. Full
                     stamp on hover for anyone who needs to be sure. */}
