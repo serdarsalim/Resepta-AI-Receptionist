@@ -1262,6 +1262,28 @@ function RulesCard({
     org.quietHoursStart,
   )}:00–${pad(org.quietHoursEnd)}:00`;
 
+  // The row's version: the same sentence with the number as TEXT. A row that
+  // opens a page must not also hold controls — clicking the "24" to retype it
+  // and clicking two millimetres away to navigate are different intentions,
+  // and one of them was going to be a surprise. Everything editable now lives
+  // inside the page the row opens.
+  const ruleWhenStatic = (rule: RuleRowData) => {
+    switch (rule.trigger) {
+      case "booking":
+        return t("settings.ruleWhenBooked");
+      case "cancellation":
+        return t("settings.ruleWhenCancelled");
+      case "out_of_hours":
+        return t("settings.ruleWhenClosed");
+      case "before_start":
+        return `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`;
+      case "after_end":
+        return `${rule.offsetHours} ${t("settings.ruleHoursAfterEnd")}`;
+      case "no_show":
+        return `${Math.round(rule.offsetHours / 24)} ${t("settings.ruleDaysAfterNoShow")}`;
+    }
+  };
+
   const ruleWhen = (rule: RuleRowData) => {
     switch (rule.trigger) {
       case "booking":
@@ -1350,21 +1372,64 @@ function RulesCard({
     );
     return (
       <Card disabled={!isOwner}>
-        <div className="mb-3 flex items-center gap-3">
+        {/* Back arrow left, title centred, an equal-width spacer right so the
+            centring is of the ROW and not of what happens to be left over
+            after the button. The arrow carries the label as its tooltip and
+            its accessible name rather than printing it: a word next to a
+            glyph that already says "back" is the second half of the same
+            sentence, and it was competing with the title for rank. */}
+        <div className="mb-3 flex items-center gap-2">
           <button
             type="button"
             onClick={() => openRule(null)}
-            className="-ml-1 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            title={t("settings.rulesBack")}
+            aria-label={t("settings.rulesBack")}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
           >
-            ← {t("settings.rulesBack")}
+            ←
           </button>
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-medium">
-              {ruleName(opened.trigger)}
-            </span>
-            <span className="shrink-0 text-sm text-[var(--muted)]">
-              {ruleWhen(opened)}
-            </span>
+          <h2 className="min-w-0 flex-1 truncate text-center text-lg font-semibold">
+            {ruleName(opened.trigger)}
+          </h2>
+          <span className="h-9 w-9 shrink-0" aria-hidden />
+        </div>
+
+        {/* Everything editable about the rule ITSELF — when it fires and which
+            lanes it travels — in one strip above the words it sends. Both used
+            to live on the list row, back when the row expanded in place; a row
+            that opens a page cannot also be a control panel. */}
+        <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-[var(--border)] pb-3">
+          <span className="flex items-center gap-1.5 text-sm">
+            {ruleWhen(opened)}
+            {opened.trigger === "no_show" && <InfoTip text={winbackHint} />}
+            {opened.trigger === "after_end" && (
+              <InfoTip text={t("settings.ruleFollowupHint")} />
+            )}
+            {opened.trigger === "out_of_hours" && (
+              <InfoTip text={t("settings.ruleOutOfHoursHint")} />
+            )}
+          </span>
+          <span className="flex flex-wrap items-center gap-1.5 text-xs">
+            {wiredFor(opened).map((channel) => {
+              const on = activeChannels(opened).has(channel);
+              return (
+                <button
+                  key={channel}
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
+                  onClick={() => toggleChannel(opened, channel)}
+                  className={`rounded-full px-2.5 py-0.5 transition-colors ${
+                    on
+                      ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                      : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {channelLabel(channel)}
+                </button>
+              );
+            })}
           </span>
         </div>
         <RuleEditor
@@ -1434,7 +1499,7 @@ function RulesCard({
               >
                 <div className={RULE_COLUMNS}>
                   <span className="flex items-center gap-1.5 text-sm">
-                    {ruleWhen(rule)}
+                    {ruleWhenStatic(rule)}
                     {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
                     {rule.trigger === "after_end" && (
                       <InfoTip text={t("settings.ruleFollowupHint")} />
@@ -1446,34 +1511,21 @@ function RulesCard({
                   <span className="text-sm text-[var(--muted)]">
                     {ruleName(rule.trigger)}
                   </span>
+                  {/* Which lanes this rule is ON, stated. The switches moved
+                      inside with everything else editable. */}
                   <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                    {rowChannels.map((channel) => {
-                      const on = activeChannels(rule).has(channel);
-                      return (
-                        <button
+                    {rowChannels
+                      .filter((channel) => activeChannels(rule).has(channel))
+                      .map((channel) => (
+                        <span
                           key={channel}
-                          type="button"
-                          role="switch"
-                          aria-checked={on}
-                          aria-label={`${ruleName(rule.trigger)} — ${channelLabel(channel)}`}
-                          // The channel switches stay live on the row: they
-                          // are the one thing worth changing without going in.
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleChannel(rule, channel);
-                          }}
-                          className={`rounded-full px-2.5 py-0.5 transition-colors ${
-                            on
-                              ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                              : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                          }`}
+                          className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
                         >
                           {channelLabel(channel)}
-                        </button>
-                      );
-                    })}
-                    {rowChannels.length === 0 && (
-                      <span className="hidden sm:inline text-[var(--muted)]">—</span>
+                        </span>
+                      ))}
+                    {rowChannels.every((channel) => !activeChannels(rule).has(channel)) && (
+                      <span className="text-[var(--muted)]">{t("settings.ruleOff")}</span>
                     )}
                   </span>
                 </div>

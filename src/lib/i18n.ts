@@ -977,6 +977,7 @@ const dictionary = {
   // appointment or the business and are nearly always there; a contact field
   // comes from one customer's record and is blank for anyone who never
   // answered it. One flat list hid that difference.
+  "settings.ruleOff": { tr: "Kapalı", en: "Off", de: "Aus" },
   "settings.rulesBack": {
     tr: "Tüm kurallar",
     en: "All rules",
