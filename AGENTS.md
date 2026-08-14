@@ -589,6 +589,21 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
   `chatAgentTurns`, the flight recorder that is also the raw LLM ledger.
   `usageMonthly` is incremented in the same mutation as the turn — never
   write one without the other.
+- **The voice meter follows the same ledger rule.** `retell.meterCall`
+  stamps each call ONCE per side — billed (frozen at
+  `orgs.voiceRateMicroUsdPerMinute` when the duration first lands, per
+  second) and Retell's own cost (`call_cost.combined_cost`, call_analyzed) —
+  and bumps `usageMonthly`'s voice counters in the same mutation. Each stamp
+  keys on its own field being unset: that idempotency is what makes the
+  call_ended/call_analyzed double-fire and every retry safe, so never stamp
+  or bump anywhere else. Months key on the call's `startedAt` in the org's
+  zone (`lib/usage.ts monthKey`, shared with the chat lane). Rate changes
+  never reprice history; the activity feed carries the number for exactly
+  that reason. Backfill for pre-meter calls: `voiceBackfill:run` (billed
+  defaults to zero — run before setting the rate). Operator surface:
+  /admin Calls MTD column + the org page's Usage tab. There is deliberately
+  no hard cap on the voice lane: suspension is the human lever, and the
+  org's own Retell account balance is the real fuse.
 - **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
   the voice template's twin. Behaviour changes are version bumps; owners
   never edit prompts (vertical presets are the answer to customisation).
