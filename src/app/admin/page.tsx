@@ -135,7 +135,7 @@ export default function AdminPage() {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
+            <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 py-2 font-medium">Business</th>
                 <th className="px-3 py-2 font-medium">Setup</th>

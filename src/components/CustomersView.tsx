@@ -591,7 +591,7 @@ export function CustomersView({
                   <col key={column.key} style={{ width: widthOf(column) }} />
                 ))}
               </colgroup>
-              <thead className="text-left text-[var(--muted-strong)]">
+              <thead className="text-left">
                 <tr>
                   <Th
                     label={t("customers.name")}
@@ -646,7 +646,7 @@ export function CustomersView({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)]">
+              <tbody className="divide-y divide-[var(--table-divider)]">
                 {rows.length === 0 && (
                   <tr>
                     <td

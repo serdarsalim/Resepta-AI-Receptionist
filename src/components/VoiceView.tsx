@@ -84,7 +84,7 @@ function CallHistory() {
           border. */}
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
+            <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("calls.caller")}</th>
                 <th className="px-3 py-2 font-medium">{t("calls.when")}</th>
@@ -194,7 +194,7 @@ function BillingSection() {
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
+            <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("voiceBilling.month")}</th>
                 <th className="px-3 py-2 font-medium">{t("voiceBilling.calls")}</th>

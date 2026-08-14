@@ -32,8 +32,20 @@
      red there would read as danger on every hover. This is what tells Resepta
      apart from Nudge at a glance; --brand is what makes the app legible. */
   --logo: #e11d48;
-  --table-header-bg: color-mix(in srgb, var(--brand) 8%, var(--card));
-  --row-hover-bg: color-mix(in srgb, var(--brand) 4%, var(--card));
+  /* Table surface, taken from the WhatsApp Manager table Serdar picked as the
+     reference. Two things define that look. The header carries NO fill — it
+     is separated from the body by weight and one rule, nothing else — and the
+     row hover is a neutral grey rather than a brand tint.
+
+     What this replaces: an 8%-of-brand mint band. It was the only place the
+     green appeared as a large fill, and since every ACTION on the page wears
+     --accent blue, the first thing the eye landed on was the one colour that
+     never means "do something". Both tokens are literal hex rather than
+     mixes of --brand precisely so the table stops inheriting brand decisions;
+     tune them here and every table follows. */
+  --table-header-fg: #1c2b33;
+  --table-divider: #e4e6eb;
+  --row-hover-bg: #f5f6f7;
   /* Recessed surface the sidebar + floating content card sit on */
   --pane: #f1f1f3;
   /* Primary action accent — soft blue, white text in both modes */
@@ -68,8 +80,12 @@
   --brand: #10b981;
   /* Lifted a little for dark backgrounds; #e11d48 goes muddy on #0a0a0a. */
   --logo: #f43f5e;
-  --table-header-bg: color-mix(in srgb, var(--brand) 12%, var(--card));
-  --row-hover-bg: color-mix(in srgb, var(--brand) 7%, var(--card));
+  /* Same relationships inverted: header text brighter than the body, divider
+     a touch above --border so the header rule reads without a fill behind it,
+     hover one step off --card. The reference has no dark mode to copy. */
+  --table-header-fg: #ededed;
+  --table-divider: #2e2e2e;
+  --row-hover-bg: #202020;
   --pane: #0c0c0c;
   --accent: #3b82f6;
   --accent-fg: #ffffff;
@@ -97,9 +113,13 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-/* One branded header treatment for every data table (Nudge convention). */
+/* One header treatment for every data table. A rule and the weight of the
+   text do the separating; there is no band behind it. Set on thead rather than
+   on each th so a header that wraps to two lines still draws one continuous
+   line under the whole row. */
 thead {
-  background-color: var(--table-header-bg);
+  color: var(--table-header-fg);
+  border-bottom: 1px solid var(--table-divider);
 }
 
 .page-title {

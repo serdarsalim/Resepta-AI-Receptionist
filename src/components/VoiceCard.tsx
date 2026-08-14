@@ -367,7 +367,7 @@ export function VoiceCard({
               grab. min-w-full lets the table size to its content so the
               overflow-x-auto above actually has something to scroll. */}
           <table className="min-w-full text-sm">
-            <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
+            <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
@@ -827,7 +827,7 @@ export function VoiceCard({
               <>
                 <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
                   <table className="w-full min-w-[680px] text-sm">
-                    <thead className="bg-[var(--table-header-bg)] text-left text-xs text-[var(--muted-strong)]">
+                    <thead className="text-left text-xs">
                       <tr>
                         <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                         <th className="px-3 py-2 font-medium">{t("settings.voiceLanguage")}</th>

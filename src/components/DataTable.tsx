@@ -269,7 +269,10 @@ export function Th({
         setDropTarget(false);
         drag.onDrop();
       }}
-      className={`group relative overflow-hidden whitespace-nowrap px-4 py-2 font-medium ${
+      // semibold, not medium: with the header's fill gone, weight is now half
+      // of what separates it from the body — the rule underneath is the other
+      // half.
+      className={`group relative overflow-hidden whitespace-nowrap px-4 py-2 font-semibold ${
         dropTarget ? "bg-[var(--muted-bg)]" : ""
       } ${className}`}
     >
@@ -364,8 +367,11 @@ export function ColumnPicker({
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
-          open ? "bg-[var(--muted-bg)] text-[var(--foreground)]" : ""
+        // A bordered button, not a ghost label. It opens a menu and changes
+        // the table under it, so it should look like something you press —
+        // the borderless version read as a caption sitting above the table.
+        className={`inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)] ${
+          open ? "bg-[var(--muted-bg)]" : ""
         } ${className}`}
       >
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
