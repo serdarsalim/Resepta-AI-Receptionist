@@ -24,6 +24,7 @@ import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { ago, Count, Row, Section, SecretRow, Setup } from "./parts";
+import { InfoTip } from "@/components/InfoTip";
 
 export default function AdminPage() {
   // Asked FIRST, and fleet is skipped until it comes back true. platform.fleet
@@ -142,7 +143,7 @@ export default function AdminPage() {
                 <th className="px-3 py-2 font-medium">Upcoming</th>
                 <th
                   className="px-3 py-2 font-medium"
-                  title="This month's metered voice usage — what we bill them, and what Retell charges us"
+                  title="This month's metered voice usage: what we bill them, and what Retell charges us"
                 >
                   Calls MTD
                 </th>
@@ -342,7 +343,7 @@ export default function AdminPage() {
             />
             <Row
               label="Voice rate (USD per minute)"
-              hint="What every business pays per called minute, billed per second. Set once here; a business's own Usage tab can override it. Changes only price calls from now on — history keeps its stamped rate."
+              hint="What every business pays per called minute, billed per second. Set once here; a business's own Usage tab can override it. Changes only price calls from now on; history keeps its stamped rate."
               current={
                 mail.voiceRateMicroUsdPerMinute === null
                   ? undefined
@@ -370,7 +371,10 @@ export default function AdminPage() {
               onSave={(value) => setConfig({ key: "chatAgentModel", value })}
             />
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-              <div className="text-sm font-medium">Kill switch</div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium">Kill switch</div>
+                <InfoTip text="Immediate, platform-wide, reversible. Also visible on each business's Assistant tab." />
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -390,10 +394,6 @@ export default function AdminPage() {
                     ? "Every agent is stopped — click to re-enable"
                     : "Stop every org&apos;s chat agent"}
                 </button>
-                <span className="text-xs text-[var(--muted)]">
-                  Immediate, platform-wide, reversible. Also visible on each
-                  business&apos;s Assistant tab.
-                </span>
               </div>
             </div>
             <SecretRow

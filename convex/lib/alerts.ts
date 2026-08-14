@@ -249,9 +249,9 @@ const ALERT_COPY: Record<
       de: "Anrufkosten haben 80 % Ihres Budgets erreicht",
     },
     body: {
-      tr: "Telefon asistanının bu ayki harcaması {detail}. Aramalar kesintisiz devam ediyor — bu bir uyarıdır, sınır değil. Bütçeyi Telefon sayfasındaki Kullanım bölümünden değiştirebilirsiniz.",
-      en: "This month's phone agent spend is {detail}. Calls keep going — this is an alert, not a cutoff. You can change the budget in the Usage section of the Phone page.",
-      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail}. Anrufe laufen unverändert weiter — dies ist ein Hinweis, keine Sperre. Das Budget können Sie im Bereich Nutzung auf der Telefonseite ändern.",
+      tr: "Telefon asistanının bu ayki harcaması {detail}. Aramalar kesintisiz devam ediyor; bu bir uyarıdır, sınır değil. Bütçeyi Telefon sayfasındaki Kullanım bölümünden değiştirebilirsiniz.",
+      en: "This month's phone agent spend is {detail}. Calls keep going; this is an alert, not a cutoff. You can change the budget in the Usage section of the Phone page.",
+      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail}. Anrufe laufen unverändert weiter; dies ist ein Hinweis, keine Sperre. Das Budget können Sie im Bereich Nutzung auf der Telefonseite ändern.",
     },
   },
   voiceBudget100: {
@@ -262,9 +262,9 @@ const ALERT_COPY: Record<
       de: "Anrufbudget überschritten",
     },
     body: {
-      tr: "Telefon asistanının bu ayki harcaması {detail} — belirlediğiniz bütçenin üzerinde. Aramalar kesilmez, müşterileriniz aramaya devam edebilir. Bütçeyi Telefon sayfasındaki Kullanım bölümünden güncelleyebilirsiniz.",
-      en: "This month's phone agent spend is {detail} — above the budget you set. Calls are not cut off; your customers can keep calling. You can update the budget in the Usage section of the Phone page.",
-      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail} — über Ihrem festgelegten Budget. Anrufe werden nicht unterbrochen, Ihre Kunden können weiterhin anrufen. Das Budget können Sie im Bereich Nutzung auf der Telefonseite anpassen.",
+      tr: "Telefon asistanının bu ayki harcaması {detail}, belirlediğiniz bütçenin üzerinde. Aramalar kesilmez, müşterileriniz aramaya devam edebilir. Bütçeyi Telefon sayfasındaki Kullanım bölümünden güncelleyebilirsiniz.",
+      en: "This month's phone agent spend is {detail}, above the budget you set. Calls are not cut off; your customers can keep calling. You can update the budget in the Usage section of the Phone page.",
+      de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail}, über Ihrem festgelegten Budget. Anrufe werden nicht unterbrochen, Ihre Kunden können weiterhin anrufen. Das Budget können Sie im Bereich Nutzung auf der Telefonseite anpassen.",
     },
   },
   failedCalendarCancel: {

@@ -291,9 +291,13 @@ export function Row({
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-      <div>
+      {/* The hint rides an (i) beside the label, same affordance as Section's
+          description. Rendered inline, every row's paragraph stacked into a
+          wall of prose and the labels drowned in it — the reader who needs
+          the explanation hovers for it, the reader who knows scans labels. */}
+      <div className="flex items-center gap-2">
         <div className="text-sm font-medium">{label}</div>
-        {hint && <div className="text-xs text-[var(--muted)]">{hint}</div>}
+        {hint && <InfoTip text={hint} />}
       </div>
       <div className="min-w-0">
         <input
@@ -335,10 +339,15 @@ export function SecretRow({
   const [draft, setDraft] = useState("");
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+      {/* The masked tail stays visible — it is data ("which key is in
+          there"), not prose. Only the explanation folds behind the (i),
+          matching Row. */}
       <div>
-        <div className="text-sm font-medium">{label}</div>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">{label}</div>
+          {hint && <InfoTip text={hint} />}
+        </div>
         <div className="font-mono text-xs text-[var(--muted)]">{masked ?? "not set"}</div>
-        {hint && <div className="text-xs text-[var(--muted)]">{hint}</div>}
       </div>
       <div className="min-w-0">
         <input

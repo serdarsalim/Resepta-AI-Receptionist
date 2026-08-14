@@ -607,13 +607,13 @@ export default function TenantPage() {
       <>
       <Section
         title="Voice meter"
-        description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands — changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
+        description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands, so changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
       >
         <Row
           label="Rate (USD per minute)"
           hint={
             voice.defaultRateMicroUsdPerMinute === null
-              ? "Override for this business only. Empty = the platform default, which is not set yet — calls bill at $0 until one exists (Platform tab on the fleet page)."
+              ? "Override for this business only. Empty = the platform default, which is not set yet; calls bill at $0 until one exists (Platform tab on the fleet page)."
               : `Override for this business only. Empty = the platform default, currently $${(voice.defaultRateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min. History keeps the rate it was stamped with.`
           }
           current={
