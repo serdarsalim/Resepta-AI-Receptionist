@@ -5,7 +5,7 @@
 // Convex surface around it.
 
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
@@ -160,6 +160,35 @@ export const set = mutation({
         updatedAt: Date.now(),
         updatedBy: userId ?? undefined,
       });
+    }
+    return null;
+  },
+});
+
+// The terminal's door to the same write. `set` requires a signed-in platform
+// admin, which `npx convex run` is not — this is the nudge
+// setBillingRateFromCli pattern: internal, so only a deploy key reaches it,
+// and it funnels through the same one-key-at-a-time semantics as `set`
+// (empty value deletes the row, falling the key back to its env var).
+//
+//   npx convex run platformConfig:setFromCli '{"key":"voiceRateMicroUsdPerMinute","value":"300000"}'
+export const setFromCli = internalMutation({
+  args: { key: settableKey, value: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const value = args.value.trim();
+    const existing = await ctx.db
+      .query("platformConfig")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    if (!value) {
+      if (existing) await ctx.db.delete(existing._id);
+      return null;
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, { value, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("platformConfig", { key: args.key, value, updatedAt: Date.now() });
     }
     return null;
   },
