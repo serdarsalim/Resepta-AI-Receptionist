@@ -866,6 +866,55 @@ const dictionary = {
     en: "Add reminder",
     de: "Erinnerung hinzufügen",
   },
+  // The add sheet. It replaced a row of preset chips ("+ 2 days before",
+  // "+ 1 hour before"), which could only ever offer the handful of timings
+  // somebody guessed in advance — a salon that wants 36 hours had no way in.
+  // So: pick the message, then type the number and choose the unit.
+  "settings.ruleAddPick": {
+    tr: "Hangi mesaj",
+    en: "Which message",
+    de: "Welche Nachricht",
+  },
+  "settings.ruleAddTiming": {
+    tr: "Ne zaman gönderilsin",
+    en: "When it sends",
+    de: "Wann sie gesendet wird",
+  },
+  "settings.ruleUnitHours": { tr: "saat", en: "hours", de: "Stunden" },
+  "settings.ruleUnitDays": { tr: "gün", en: "days", de: "Tage" },
+  "settings.ruleBeforeAppointment": {
+    tr: "Randevudan önce",
+    en: "Before the appointment",
+    de: "Vor dem Termin",
+  },
+  "settings.ruleAfterAppointment": {
+    tr: "Randevu bittikten sonra",
+    en: "After the appointment",
+    de: "Nach dem Termin",
+  },
+  "settings.ruleAfterNoShow": {
+    tr: "Randevusuna gelmeyen müşteriye",
+    en: "After a no-show",
+    de: "Nach einem Nichterscheinen",
+  },
+  // Shown on a type that can only exist once and already does. Greyed rather
+  // than dropped: a list whose entries vanish never teaches anyone what the
+  // list contains.
+  "settings.ruleAlreadyAdded": {
+    tr: "Zaten eklendi",
+    en: "Already added",
+    de: "Bereits hinzugefügt",
+  },
+  "settings.ruleExists": {
+    tr: "Bu zamanlamada bir kural zaten var.",
+    en: "A rule already sends at that time.",
+    de: "Zu diesem Zeitpunkt sendet bereits eine Regel.",
+  },
+  "settings.ruleRange": {
+    tr: "{min} ile {max} {unit} arasında olmalı.",
+    en: "Must be between {min} and {max} {unit}.",
+    de: "Muss zwischen {min} und {max} {unit} liegen.",
+  },
   "settings.ruleFollowup": {
     tr: "Randevu sonrası",
     en: "Follow-up",

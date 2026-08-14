@@ -15,6 +15,7 @@ import {
 // it, timezone and all, rather than a second date formatter's opinion.
 import { formatAppointmentTime } from "../../convex/lib/format";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
 import { EmailBodyEditor } from "./EmailBodyEditor";
@@ -31,6 +32,7 @@ import { TimezoneSelect } from "./TimezoneSelect";
 import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
+import { Sheet } from "./Sheet";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -82,6 +84,67 @@ type TemplateRow = {
   emailReplyCount?: number;
   emailLastSentAt?: number;
 };
+
+// What "Add reminder" can add, and what timing each one accepts. The bounds
+// are messageRules.clampOffset's, restated here so the sheet can refuse a
+// number before the mutation silently rounds it into range — an owner who
+// types 300 hours should be told the ceiling is 168, not handed a 168 they
+// never asked for.
+//
+// `repeatable` marks the two that are genuinely a list: a 24h reminder and a
+// 2h one are two different messages, and so are a review ask two hours after
+// the visit and a rebooking nudge three weeks later. The rest are singletons —
+// there is one confirmation, one away reply.
+type AddOption = {
+  trigger: RuleTrigger;
+  nameKey: TranslationKey;
+  whenKey: TranslationKey;
+  repeatable?: boolean;
+  timing?: {
+    minHours: number;
+    maxHours: number;
+    defaultAmount: number;
+    defaultUnit: "hours" | "days";
+  };
+};
+
+const ADD_OPTIONS: AddOption[] = [
+  {
+    trigger: "booking",
+    nameKey: "settings.ruleConfirmation",
+    whenKey: "settings.ruleWhenBooked",
+  },
+  {
+    trigger: "before_start",
+    nameKey: "settings.ruleReminder",
+    whenKey: "settings.ruleBeforeAppointment",
+    repeatable: true,
+    timing: { minHours: 1, maxHours: 168, defaultAmount: 24, defaultUnit: "hours" },
+  },
+  {
+    trigger: "after_end",
+    nameKey: "settings.ruleFollowup",
+    whenKey: "settings.ruleAfterAppointment",
+    repeatable: true,
+    timing: { minHours: 1, maxHours: 720, defaultAmount: 24, defaultUnit: "hours" },
+  },
+  {
+    trigger: "cancellation",
+    nameKey: "settings.ruleCancellation",
+    whenKey: "settings.ruleWhenCancelled",
+  },
+  {
+    trigger: "no_show",
+    nameKey: "settings.ruleWinback",
+    whenKey: "settings.ruleAfterNoShow",
+    timing: { minHours: 24, maxHours: 90 * 24, defaultAmount: 14, defaultUnit: "days" },
+  },
+  {
+    trigger: "out_of_hours",
+    nameKey: "settings.ruleOutOfHours",
+    whenKey: "settings.ruleWhenClosed",
+  },
+];
 
 // Same map as messageRules.kindForTrigger — which template bucket words a
 // trigger, for the fallback lookup and the row labels.
@@ -1076,6 +1139,198 @@ function RuleEditor({
   );
 }
 
+// Adding a rule, as a sheet you open from the button above the card. It used
+// to be a row of chips parked under the table — "+ 2 days before", "+ 1 hour
+// before" — which had two problems. It charged the card a permanent strip of
+// buttons for a job done a handful of times, and it could only ever offer the
+// timings somebody guessed in advance: a salon that wanted 36 hours had no way
+// in, and the chips vanished one by one as they were used, so the strip also
+// changed shape under you. Here the message types are always all six, and the
+// timing is a number you type with the unit beside it.
+function AddRuleSheet({
+  rules,
+  onAdd,
+  onClose,
+}: {
+  rules: RuleRowData[];
+  onAdd: (trigger: RuleTrigger, offsetHours?: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useLanguage();
+  const [trigger, setTrigger] = useState<RuleTrigger | null>(null);
+  const [amount, setAmount] = useState("");
+  const [unit, setUnit] = useState<"hours" | "days">("hours");
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
+  const taken = (option: AddOption) =>
+    !option.repeatable && rules.some((rule) => rule.trigger === option.trigger);
+
+  const pick = (option: AddOption) => {
+    setTrigger(option.trigger);
+    setError(null);
+    if (option.timing) {
+      setAmount(String(option.timing.defaultAmount));
+      setUnit(option.timing.defaultUnit);
+    }
+  };
+
+  // The bounds live in hours; the message has to speak the unit the box is
+  // currently in, or "between 1 and 168" reads as nonsense next to a Days
+  // dropdown. Ceil the floor and floor the ceiling so every number the
+  // sentence names is actually accepted.
+  const boundsIn = (timing: NonNullable<AddOption["timing"]>) =>
+    unit === "days"
+      ? {
+          min: Math.max(1, Math.ceil(timing.minHours / 24)),
+          max: Math.floor(timing.maxHours / 24),
+        }
+      : { min: timing.minHours, max: timing.maxHours };
+
+  const submit = () => {
+    if (!selected) return;
+    let offsetHours: number | undefined;
+    if (selected.timing) {
+      const bounds = boundsIn(selected.timing);
+      const typed = Number(amount);
+      if (!Number.isFinite(typed) || typed < bounds.min || typed > bounds.max) {
+        setError(
+          t("settings.ruleRange")
+            .replace("{min}", String(bounds.min))
+            .replace("{max}", String(bounds.max))
+            .replace(
+              "{unit}",
+              unit === "days" ? t("settings.ruleUnitDays") : t("settings.ruleUnitHours"),
+            ),
+        );
+        return;
+      }
+      offsetHours = Math.round(unit === "days" ? typed * 24 : typed);
+      // Two rules at the same moment would send the same message twice.
+      if (
+        rules.some(
+          (rule) => rule.trigger === selected.trigger && rule.offsetHours === offsetHours,
+        )
+      ) {
+        setError(t("settings.ruleExists"));
+        return;
+      }
+    }
+    onAdd(selected.trigger, offsetHours);
+    onClose();
+  };
+
+  return (
+    <Sheet title={t("settings.ruleAdd")} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <fieldset>
+          <legend className="mb-1.5 text-xs text-[var(--muted)]">
+            {t("settings.ruleAddPick")}
+          </legend>
+          <div className="space-y-1">
+            {ADD_OPTIONS.map((option) => {
+              const disabled = taken(option);
+              const on = trigger === option.trigger;
+              return (
+                <label
+                  key={option.trigger}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
+                    disabled
+                      ? "cursor-not-allowed border-[var(--border)] opacity-50"
+                      : on
+                        ? "cursor-pointer border-[var(--accent)] bg-[var(--muted-bg)]"
+                        : "cursor-pointer border-[var(--border)] hover:bg-[var(--muted-bg)]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="rule-trigger"
+                    className="w-auto"
+                    checked={on}
+                    disabled={disabled}
+                    onChange={() => pick(option)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{t(option.nameKey)}</span>
+                    <span className="block text-xs text-[var(--muted)]">
+                      {disabled ? t("settings.ruleAlreadyAdded") : t(option.whenKey)}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        {/* Only the three triggers that hang off a clock get a timing row. The
+            event ones fire on the mutation, so a number there would be a
+            promise nothing keeps (messageRules.clampOffset pins them to 0). */}
+        {selected?.timing && (
+          <div>
+            <span className="mb-1.5 block text-xs text-[var(--muted)]">
+              {t("settings.ruleAddTiming")}
+            </span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={boundsIn(selected.timing).min}
+                max={boundsIn(selected.timing).max}
+                value={amount}
+                aria-label={t("settings.ruleAddTiming")}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setError(null);
+                }}
+                className="w-24"
+              />
+              <select
+                value={unit}
+                aria-label={t("settings.ruleAddTiming")}
+                onChange={(event) => {
+                  setUnit(event.target.value as "hours" | "days");
+                  setError(null);
+                }}
+                className="w-32"
+              >
+                <option value="hours">{t("settings.ruleUnitHours")}</option>
+                <option value="days">{t("settings.ruleUnitDays")}</option>
+              </select>
+              <span className="text-sm text-[var(--muted)]">{t(selected.whenKey)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Reserved whether or not it holds anything, so a rejected number does
+            not shove the buttons out from under the pointer. */}
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="submit"
+            disabled={!selected}
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
+          >
+            {t("common.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
 function RulesCard({
   isOwner,
   org,
@@ -1103,7 +1358,7 @@ function RulesCard({
   evolutionEnabled: boolean;
   emailEnabled: boolean;
 }) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const addRule = useMutation(api.messageRules.add);
   const updateRule = useMutation(api.messageRules.update);
   const removeRule = useMutation(api.messageRules.remove);
@@ -1138,6 +1393,7 @@ function RulesCard({
     window.history.replaceState(null, "", url);
   };
   const [confirm, confirmDialog] = useConfirm();
+  const [adding, setAdding] = useState(false);
 
   const deleteRule = async (rule: RuleRowData) => {
     const ok = await confirm({
@@ -1340,28 +1596,8 @@ function RulesCard({
     }
   };
 
-  // The add chips: reminder presets not yet on the table, the singletons when
-  // absent, and the follow-up ALWAYS — a 2h review ask and a three-week
-  // rebooking nudge are two rows, and the chip is how the second one gets in.
-  const reminderOffsets = rules
-    .filter((r) => r.trigger === "before_start")
-    .map((r) => r.offsetHours);
-  const unusedPresets = OFFSET_PRESETS.filter((h) => !reminderOffsets.includes(h));
-  const missingSingles = (
-    [
-      ["booking", "settings.ruleConfirmation"],
-      ["cancellation", "settings.ruleCancellation"],
-      ["no_show", "settings.ruleWinback"],
-      ["out_of_hours", "settings.ruleOutOfHours"],
-    ] as const
-  ).filter(([trigger]) => !rules.some((r) => r.trigger === trigger));
-
-  const addDefaults: Partial<Record<RuleTrigger, number>> = {
-    after_end: 24,
-    no_show: 14 * 24,
-  };
   const doAdd = (trigger: RuleTrigger, offsetHours?: number) =>
-    void addRule({ trigger, offsetHours: offsetHours ?? addDefaults[trigger] ?? 0 });
+    void addRule({ trigger, offsetHours: offsetHours ?? 0 });
 
   // One rule, full width, with the way back in the header — the drill-in
   // VoiceView uses for an agent. The list is gone while you are in here on
@@ -1458,145 +1694,135 @@ function RulesCard({
             {t("settings.deleteRule")}
           </button>
         </div>
+        {/* The confirm has to be mounted in THIS branch too. useConfirm's
+            promise only resolves when its dialog is on screen, so without
+            this the delete button above simply did nothing — it awaited an
+            answer from a dialog that only the list branch rendered. */}
+        {confirmDialog}
       </Card>
     );
   }
 
   return (
-    <Card disabled={!isOwner}>
-      <div className="hidden items-center gap-3 pb-2 sm:flex">
-        <div className={RULE_COLUMNS}>
-          <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-            {t("settings.rulesWhen")}
-            <InfoTip text={t("settings.rulesHint")} />
-          </span>
-          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
-          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
+    <div className="space-y-2">
+      {/* Above the card and hard right, the same place and the same solid
+          button Customers puts "Add customer" — this is the page's primary
+          action, not a footnote under the table it adds to. */}
+      {isOwner && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("settings.ruleAdd")}
+          </button>
         </div>
-      </div>
+      )}
+      <Card disabled={!isOwner}>
+        <div className="hidden items-center gap-3 pb-2 sm:flex">
+          <div className={RULE_COLUMNS}>
+            <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+              {t("settings.rulesWhen")}
+              <InfoTip text={t("settings.rulesHint")} />
+            </span>
+            <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
+            <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
+          </div>
+        </div>
 
-      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-        {rules.map((rule) => {
-          const rowChannels = wiredFor(rule);
-          return (
-            <div key={rule._id}>
-              {/* The whole row opens the rule. It used to unfold in place,
-                  which read fine while a rule was three fields and stopped
-                  reading at all once the panel grew a two-column editor with
-                  its own preview: the list above it stayed on screen, so
-                  nothing told you which rule you were inside. */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => open(rule)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    open(rule);
-                  }
-                }}
-                className="-mx-3 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
-              >
-                <div className={RULE_COLUMNS}>
-                  <span className="flex items-center gap-1.5 text-sm">
-                    {ruleWhenStatic(rule)}
-                    {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
-                    {rule.trigger === "after_end" && (
-                      <InfoTip text={t("settings.ruleFollowupHint")} />
-                    )}
-                    {rule.trigger === "out_of_hours" && (
-                      <InfoTip text={t("settings.ruleOutOfHoursHint")} />
-                    )}
-                  </span>
-                  <span className="text-sm text-[var(--muted)]">
-                    {ruleName(rule.trigger)}
-                  </span>
-                  {/* Which lanes this rule is ON, stated. The switches moved
-                      inside with everything else editable. */}
-                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                    {rowChannels
-                      .filter((channel) => activeChannels(rule).has(channel))
-                      .map((channel) => (
-                        <span
-                          key={channel}
-                          className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                        >
-                          {channelLabel(channel)}
-                        </span>
-                      ))}
-                    {rowChannels.every((channel) => !activeChannels(rule).has(channel)) && (
-                      <span className="text-[var(--muted)]">{t("settings.ruleOff")}</span>
-                    )}
-                  </span>
+        <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+          {rules.map((rule) => {
+            const rowChannels = wiredFor(rule);
+            return (
+              <div key={rule._id}>
+                {/* The whole row opens the rule. It used to unfold in place,
+                    which read fine while a rule was three fields and stopped
+                    reading at all once the panel grew a two-column editor with
+                    its own preview: the list above it stayed on screen, so
+                    nothing told you which rule you were inside. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => open(rule)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      open(rule);
+                    }
+                  }}
+                  className="-mx-3 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  <div className={RULE_COLUMNS}>
+                    <span className="flex items-center gap-1.5 text-sm">
+                      {ruleWhenStatic(rule)}
+                      {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
+                      {rule.trigger === "after_end" && (
+                        <InfoTip text={t("settings.ruleFollowupHint")} />
+                      )}
+                      {rule.trigger === "out_of_hours" && (
+                        <InfoTip text={t("settings.ruleOutOfHoursHint")} />
+                      )}
+                    </span>
+                    <span className="text-sm text-[var(--muted)]">
+                      {ruleName(rule.trigger)}
+                    </span>
+                    {/* Which lanes this rule is ON, stated. The switches moved
+                        inside with everything else editable. */}
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {rowChannels
+                        .filter((channel) => activeChannels(rule).has(channel))
+                        .map((channel) => (
+                          <span
+                            key={channel}
+                            className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          >
+                            {channelLabel(channel)}
+                          </span>
+                        ))}
+                      {rowChannels.every((channel) => !activeChannels(rule).has(channel)) && (
+                        <span className="text-[var(--muted)]">{t("settings.ruleOff")}</span>
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 pt-3">
-        <span className="text-xs text-[var(--muted)]">{t("settings.ruleAdd")}</span>
-        {missingSingles.map(([trigger, key]) => (
-          <button
-            key={trigger}
-            type="button"
-            onClick={() => doAdd(trigger)}
-            className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-          >
-            <span aria-hidden className="text-[var(--muted)]">+</span>
-            {t(key)}
-          </button>
-        ))}
-        {unusedPresets.map((hours) => (
-          <button
-            key={hours}
-            type="button"
-            onClick={() => doAdd("before_start", hours)}
-            className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-          >
-            <span aria-hidden className="text-[var(--muted)]">+</span>
-            {formatReminderOffset(hours, language)}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => doAdd("after_end")}
-          className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-        >
-          <span aria-hidden className="text-[var(--muted)]">+</span>
-          {t("settings.ruleFollowup")}
-        </button>
-      </div>
+        {!orgHasChannel && (
+          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
+            {t("settings.rulesNoChannel")}
+          </p>
+        )}
 
-      {!orgHasChannel && (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          {t("settings.rulesNoChannel")}
-        </p>
+        {/* The escape hatch, deliberately quiet and in the corner: back to the
+            stock rules and stock wording. */}
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = await confirm({
+                title: t("settings.resetRules"),
+                body: t("settings.resetRulesConfirm"),
+                confirmLabel: t("settings.resetRules"),
+              });
+              if (!ok) return;
+              openRule(null);
+              void resetRules({});
+            }}
+            className="text-xs text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
+          >
+            {t("settings.resetRules")}
+          </button>
+        </div>
+        {confirmDialog}
+      </Card>
+      {adding && (
+        <AddRuleSheet rules={rules} onAdd={doAdd} onClose={() => setAdding(false)} />
       )}
-
-      {/* The escape hatch, deliberately quiet and in the corner: back to the
-          stock rules and stock wording. */}
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={async () => {
-            const ok = await confirm({
-              title: t("settings.resetRules"),
-              body: t("settings.resetRulesConfirm"),
-              confirmLabel: t("settings.resetRules"),
-            });
-            if (!ok) return;
-            openRule(null);
-            void resetRules({});
-          }}
-          className="text-xs text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
-        >
-          {t("settings.resetRules")}
-        </button>
-      </div>
-      {confirmDialog}
-    </Card>
+    </div>
   );
 }
 
