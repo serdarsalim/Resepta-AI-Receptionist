@@ -19,7 +19,17 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Activity, Row, Section, SecretRow, TabStrip, UserActivity } from "../parts";
+import {
+  Activity,
+  AdminSearchProvider,
+  Row,
+  Section,
+  SecretRow,
+  TabStrip,
+  UserActivity,
+} from "../parts";
+import { SearchInput } from "@/components/DataTable";
+import { useSearch } from "@/lib/useTableState";
 
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
@@ -131,6 +141,10 @@ export default function TenantPage() {
   // provider, and a state that arms and disarms itself is the same protection
   // with less machinery.
   const [armedSuspend, setArmedSuspend] = useState(false);
+  // Same box as the fleet page and the salon app: this page is six tabs of
+  // labelled rows, and "where do I set the transfer number" should not be a
+  // hunt through all six.
+  const search = useSearch();
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
@@ -166,6 +180,7 @@ export default function TenantPage() {
     });
 
   return (
+    <AdminSearchProvider search={search}>
     <main className="mx-auto max-w-4xl space-y-4 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -185,54 +200,38 @@ export default function TenantPage() {
             {detail.agents.length === 1 ? "agent" : "agents"}
           </p>
         </div>
-        {/* Everything below this line is config the operator installs. This
-            button is for the rest: the things that only exist inside the
-            product, where the fix is three taps in their own Appointments
-            screen and no amount of admin fields would have reached it. */}
-        <div className="flex items-center gap-1">
-          {/* Suspension (docs/chat-agent.md §8): outbound stops, inbound keeps
-              recording. Two-click arm/confirm instead of a dialog. */}
-          {assistant && assistant.status === "suspended" ? (
-            <button
-              type="button"
-              onClick={() => void setOrgStatus({ orgId, status: "active" })}
-              className="rounded-lg px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-            >
-              Suspended · Reactivate
-            </button>
-          ) : assistant ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (!armedSuspend) {
-                  setArmedSuspend(true);
-                  setTimeout(() => setArmedSuspend(false), 4000);
-                  return;
-                }
-                setArmedSuspend(false);
-                void setOrgStatus({ orgId, status: "suspended" });
-              }}
-              className={`rounded-lg px-2 py-1 text-xs ${
-                armedSuspend
-                  ? "bg-red-50 font-medium text-red-700 dark:bg-red-950/30 dark:text-red-400"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              }`}
-            >
-              {armedSuspend ? "Click again to suspend — all sends stop" : "Suspend"}
-            </button>
-          ) : null}
+        {/* Two controls, both real buttons now: they were plain text sitting
+            in the corner, which read as a caption rather than something you
+            could press. Suspend left the header entirely — it is the most
+            destructive thing on this page and it was one stray click from the
+            impersonation button. It lives at the foot of the page instead.
+
+            The label lost the salon's name: it sat directly under an <h1> that
+            already says it, so the name was the longest word in a button that
+            repeated its own page title back at you. */}
+        <div className="flex items-center gap-2">
+          <SearchInput
+            value={search.query}
+            onChange={search.setQuery}
+            placeholder="Search settings"
+          />
           <button
             type="button"
+            title="Opens the salon's own app with you signed in as them. Everything below is config an operator installs; this is for the rest, where the fix is three taps in their own screens."
             onClick={() => {
               void actAs({ orgId }).then(() => router.push("/"));
             }}
-            className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+            className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)]"
           >
-            Work in this account as {detail.name} →
+            Open their app →
           </button>
         </div>
       </header>
 
+      {/* A live query looks across every tab at once — a setting must be
+          findable from wherever you happen to be standing — so the strip goes
+          away rather than sitting there implying it still divides anything. */}
+      {!search.active && (
       <TabStrip
         tabs={[
           { id: "setup" as const, label: "Setup" },
@@ -245,6 +244,7 @@ export default function TenantPage() {
         active={tab}
         onSelect={setTab}
       />
+      )}
 
       {/* Two feeds, deliberately separate and deliberately in this order. The
           first answers "who touched this account", the second "did our messages
@@ -273,7 +273,7 @@ export default function TenantPage() {
         </>
       )}
 
-      {tab === "setup" && (
+      {(tab === "setup" || search.active) && (
       <>
       <Section
         title="Voice"
@@ -299,7 +299,7 @@ export default function TenantPage() {
           once; this is running state that changes every call, and reading one
           while looking for the other is why the Voice card had grown to hold
           both. */}
-      {tab === "agents" && (
+      {(tab === "agents" || search.active) && (
       <>
       <Section
         title="Agent setup"
@@ -440,7 +440,7 @@ export default function TenantPage() {
       </>
       )}
 
-      {tab === "assistant" && assistant && (
+      {(tab === "assistant" || search.active) && assistant && (
       <>
       <Section
         title="Chat agent"
@@ -589,7 +589,7 @@ export default function TenantPage() {
       </>
       )}
 
-      {tab === "usage" && voice && (
+      {(tab === "usage" || search.active) && voice && (
       <>
       <Section
         title="Voice meter"
@@ -666,7 +666,7 @@ export default function TenantPage() {
       </>
       )}
 
-      {tab === "members" && (
+      {(tab === "members" || search.active) && (
       <Section
         title="Members"
         description="Who can sign in to this business. Sign-in is Google-only, so the address here is the only one that works — and there is no way to look it up from the other side."
@@ -703,7 +703,7 @@ export default function TenantPage() {
       </Section>
       )}
 
-      {tab === "setup" && (
+      {(tab === "setup" || search.active) && (
       <>
       <Section
         title="WhatsApp"
@@ -817,6 +817,64 @@ export default function TenantPage() {
 
       </>
       )}
+
+      {/* The foot of the page, below every tab, because suspension is not part
+          of any one of them and because the most destructive control here
+          should take a deliberate scroll rather than sit a stray click from
+          "open their app". Still two clicks: the admin shell has no confirm
+          dialog, and a button that arms and disarms itself is the same
+          protection with less machinery. */}
+      {assistant && (
+        <Section
+          title="Account status"
+          description="Suspending stops every outbound message — reminders, campaigns, the chat agent. Inbound keeps recording, so un-suspending restores a complete world: losing a customer's messages during a billing dispute is how a late payer becomes an ex-customer."
+        >
+          <div className="flex flex-wrap items-center gap-3 py-1.5">
+            {assistant.status === "suspended" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void setOrgStatus({ orgId, status: "active" })}
+                  className="rounded-lg border border-amber-500/40 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                >
+                  Reactivate
+                </button>
+                <span className="text-xs text-amber-700 dark:text-amber-400">
+                  Suspended — nothing is sending.
+                </span>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!armedSuspend) {
+                      setArmedSuspend(true);
+                      setTimeout(() => setArmedSuspend(false), 4000);
+                      return;
+                    }
+                    setArmedSuspend(false);
+                    void setOrgStatus({ orgId, status: "suspended" });
+                  }}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    armedSuspend
+                      ? "border-red-500/40 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                      : "border-[var(--border)] text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {armedSuspend ? "Click again to confirm" : "Suspend account"}
+                </button>
+                {armedSuspend && (
+                  <span className="text-xs text-red-700 dark:text-red-400">
+                    All sends stop immediately.
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        </Section>
+      )}
     </main>
+    </AdminSearchProvider>
   );
 }
