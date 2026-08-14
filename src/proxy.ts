@@ -60,7 +60,10 @@ const isPublicPage = createRouteMatcher([
   "/",
 ]);
 
-export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+// Keep this as Next 16's named proxy export. Its Node-runtime loader has a
+// separate default-export interop path, and a bad module shape there surfaces
+// only as the opaque `adapterFn is not a function` request-time crash.
+export const proxy = convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   // Keep help content in the product repository so it cannot drift from the
   // shipped interface, while giving it a clean public docs origin.
   const host = hostFromHeader(request.headers.get("host"));

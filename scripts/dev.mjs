@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // One command for the whole dev loop: Convex backend + Next frontend.
+// The frontend script deliberately uses webpack: Turbopack's proxy loader can
+// enter a failed recompilation loop that exhausts the development machine.
 // Output is prefixed per process; Ctrl-C (or either process dying) takes both
 // down, so you never leave a stray `next dev` holding port 3006.
 
