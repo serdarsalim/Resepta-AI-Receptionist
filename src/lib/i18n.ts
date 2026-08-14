@@ -2376,30 +2376,41 @@ const dictionary = {
     en: "to",
     de: "bis",
   },
-  "settings.msgVariables": {
-    tr: "Mesaj değişkenleri",
-    en: "Message variables",
-    de: "Nachrichtenvariablen",
+  // The booking page and the public phone were a card called "Message
+  // variables" until 2026-08-14. The name described the [booking_link] and
+  // [phone] tokens rather than the things themselves, which put a salon's own
+  // phone number under a heading no owner would ever open. Both live in
+  // Business settings now and the tokens simply read them.
+  "settings.publicPhone": {
+    tr: "Müşterilerin arayacağı numara",
+    en: "Number for customers to call",
+    de: "Rufnummer für Ihre Kundschaft",
   },
-  "settings.msgVariablesHint": {
-    tr: "Her şablonda kullanılabilir: [booking_link] randevu linkinizi, [phone] müşteriye verdiğiniz numarayı yazar. Değerler burada tek yerden yönetilir.",
-    en: "Usable in every template: [booking_link] inserts your booking link, [phone] the number you give customers. The values are managed here, once.",
-    de: "In jeder Vorlage nutzbar: [booking_link] fügt Ihren Buchungslink ein, [phone] die Nummer für Ihre Kundschaft. Die Werte werden hier zentral gepflegt.",
+  "settings.bookingMode": {
+    tr: "Randevu alma",
+    en: "Taking bookings",
+    de: "Terminbuchung",
   },
+  "settings.bookingModeNative": {
+    tr: "Resepta sayfası",
+    en: "Resepta page",
+    de: "Resepta-Seite",
+  },
+  "settings.bookingModeOwn": {
+    tr: "Kendi linkim",
+    en: "My own link",
+    de: "Eigener Link",
+  },
+  "settings.bookingModeOff": { tr: "Kapalı", en: "Off", de: "Aus" },
   "settings.bookingPage": {
     tr: "Online randevu sayfası",
     en: "Online booking page",
     de: "Online-Buchungsseite",
   },
   "settings.bookingPageHint": {
-    tr: "Resepta'nın kendi randevu sayfası: müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer. Açınca [booking_link] otomatik olarak bu sayfayı gösterir. Çalışma saatlerinin tanımlı olması gerekir.",
-    en: "Resepta's own booking page: the customer picks a service and a time, and the appointment lands straight on your calendar. Switching it on points [booking_link] at it automatically. Opening hours must be set.",
-    de: "Die eigene Buchungsseite von Resepta: Ihre Kundschaft wählt Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender. Beim Einschalten zeigt [booking_link] automatisch auf diese Seite. Die Öffnungszeiten müssen hinterlegt sein.",
-  },
-  "settings.bookingUrlHint": {
-    tr: "Müşterilerin randevu aldığı sayfa. Mesajlardaki her [booking_link] bu adresi yazar.",
-    en: "The page customers book on. Every [booking_link] in your messages inserts this address.",
-    de: "Die Seite, auf der Ihre Kundschaft bucht. Jedes [booking_link] in Ihren Nachrichten fügt diese Adresse ein.",
+    tr: "Müşterileriniz online randevuyu nereden alsın. Resepta sayfasında müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer; çalışma saatlerinin tanımlı olması gerekir. Kendi linkiniz varsa onu yazın. Mesajlarınızdaki randevu linki her zaman burada seçtiğinizi gösterir.",
+    en: "Where customers book online. On the Resepta page they pick a service and a time and the appointment lands straight on your calendar; your opening hours have to be set. Use your own link if you already have one. The booking link in your messages always points at whichever you pick here.",
+    de: "Wo Ihre Kundschaft online bucht. Auf der Resepta-Seite wählt sie Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender; dafür müssen Ihre Öffnungszeiten hinterlegt sein. Haben Sie bereits einen eigenen Link, nutzen Sie diesen. Der Buchungslink in Ihren Nachrichten zeigt immer auf das, was Sie hier wählen.",
   },
   "settings.publicPhoneHint": {
     tr: "Bilerek tek numara: otomatik bir mesajda tek ve net bir arama noktası olmalı. Önerimiz sesli asistanın hattı — 7/24 açık olan o.",

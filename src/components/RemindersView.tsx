@@ -1372,9 +1372,12 @@ function RulesCard({
 // component keeps living in this file because the away-reply half of it is
 // still wired to everything else here.
 // Pure schedule — days and open/close, nothing else. The away-reply that used
-// to live here is the out_of_hours rule in Reminders now, and the booking
-// link + public phone are template variables edited beside the rules
-// (MessageVariablesCard). What remained is exactly what the tab's name says.
+// to live here is the out_of_hours rule in Reminders now, and the booking link
+// + public phone are facts about the business, edited in Business settings
+// (BusinessView's BookingCard and DetailsCard). They spent a while here as a
+// "Message variables" card, which named the [booking_link] / [phone] tokens
+// rather than the things themselves and put a salon's own phone number
+// somewhere nobody would look for it.
 export function BusinessHoursCard({
   isOwner,
   org,
@@ -1486,128 +1489,6 @@ export function BusinessHoursCard({
             className="min-w-0 flex-1"
             defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
             onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
-          />
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// What [booking_link] and [phone] insert — the values live on the org
-// (orgs.bookingUrl / orgs.publicPhone), and they are edited HERE, beside the
-// templates that use them, because "things you set" belong next to where they
-// act. The phone offers the voice agents' inbound lines first: a number an
-// agent answers 24/7 is the one worth printing in an automated message.
-// SINGLE number by design — one clear call-to-action, not a switchboard.
-function MessageVariablesCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
-  const settings = useQuery(api.orgs.current, {});
-  const voiceNumbers = useQuery(api.orgs.voiceNumbers, {}) ?? [];
-  const update = useMutation(api.orgs.update);
-  const enableBooking = useMutation(api.booking.enable);
-  if (!settings) return null;
-  const { bookingUrl, publicPhone, bookingEnabled, publicSlug } = settings.org;
-  const phone = publicPhone ?? "";
-  const isAgentNumber = voiceNumbers.some((line) => line.number === phone);
-  const nativeBookingUrl = publicSlug
-    ? `${window.location.origin}/book/${publicSlug}`
-    : null;
-
-  return (
-    <Card title={t("settings.msgVariables")} tip={t("settings.msgVariablesHint")} disabled={!isOwner}>
-      <div className={ROW_GRID}>
-        {/* The native booking page. Switching it on mints the page AND points
-            [booking_link] at it — the auto-fill the whole variable exists
-            for. Switching it off clears the link only if it was ours: a
-            pasted external URL is not ours to delete. */}
-        <RowLabel
-          label={t("settings.bookingPage")}
-          hint={t("settings.bookingPageHint")}
-        />
-        <div className="space-y-1">
-          <Toggle
-            checked={bookingEnabled ?? false}
-            onChange={(next) =>
-              void (async () => {
-                const slug = await enableBooking({ enabled: next });
-                if (next && slug) {
-                  await update({
-                    bookingUrl: `${window.location.origin}/book/${slug}`,
-                  });
-                } else if (!next && nativeBookingUrl && bookingUrl === nativeBookingUrl) {
-                  await update({ bookingUrl: "" });
-                }
-              })()
-            }
-          />
-          {(bookingEnabled ?? false) && nativeBookingUrl && (
-            <p className="break-all text-xs text-[var(--muted)]">
-              <a
-                href={nativeBookingUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-2 hover:text-[var(--foreground)]"
-              >
-                {nativeBookingUrl}
-              </a>
-            </p>
-          )}
-        </div>
-
-        <RowLabel
-          label={t("vars.bookingLink")}
-          hint={t("settings.bookingUrlHint")}
-        />
-        <input
-          // Keyed so the auto-fill above refreshes the uncontrolled input.
-          key={bookingUrl ?? ""}
-          defaultValue={bookingUrl ?? ""}
-          placeholder="https://…"
-          onBlur={(e) => void update({ bookingUrl: e.target.value })}
-        />
-
-        <RowLabel label={t("vars.phone")} hint={t("settings.publicPhoneHint")} />
-        <div className="space-y-1.5">
-          {voiceNumbers.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              {voiceNumbers.map((line) => {
-                const active = phone === line.number;
-                return (
-                  <button
-                    key={line.number}
-                    type="button"
-                    onClick={() =>
-                      void update({ publicPhone: active ? "" : line.number })
-                    }
-                    className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-                      active
-                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                        : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {line.number}
-                    <span className="ml-1 opacity-70">
-                      · {line.agentName ?? t("settings.voiceAgentNumber")}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <input
-            // Keyed so picking a chip refreshes the uncontrolled input.
-            key={phone}
-            defaultValue={isAgentNumber ? "" : phone}
-            placeholder={
-              isAgentNumber ? t("settings.publicPhoneCustom") : "+90…"
-            }
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              // An empty custom field while a chip is picked is not a clear —
-              // the chip is the value; clearing means unpicking the chip.
-              if (!next && isAgentNumber) return;
-              void update({ publicPhone: next });
-            }}
           />
         </div>
       </div>
@@ -1783,7 +1664,6 @@ export function RemindersView() {
             evolutionEnabled={settings.evolutionEnabled}
             emailEnabled={settings.emailEnabled}
           />
-          <MessageVariablesCard isOwner={isOwner} />
         </>
       ) : (
         <>

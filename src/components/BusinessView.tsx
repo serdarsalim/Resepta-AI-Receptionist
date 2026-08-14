@@ -84,6 +84,9 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.inboundAddress" },
   { card: "general", key: "settings.emailFrom" },
   { card: "general", key: "settings.language" },
+  { card: "general", key: "settings.publicPhone" },
+  { card: "booking", key: "settings.bookingPage" },
+  { card: "booking", key: "settings.bookingMode" },
   { card: "general", key: "settings.currency" },
   { card: "hours", key: "settings.hours" },
   { card: "hours", key: "settings.timezone" },
@@ -92,10 +95,11 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "team", key: "roster.bookable" },
 ];
 
-type BusinessCard = "general" | "hours" | "team";
+type BusinessCard = "general" | "booking" | "hours" | "team";
 
 const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
   general: "settings.general",
+  booking: "settings.bookingPage",
   hours: "settings.hours",
   team: "staff.title",
 };
@@ -122,6 +126,7 @@ export function BusinessView() {
   const search = useHeaderSearch(t("common.search"));
   const cardRefs = useRef<Record<BusinessCard, HTMLDivElement | null>>({
     general: null,
+    booking: null,
     hours: null,
     team: null,
   });
@@ -202,6 +207,11 @@ export function BusinessView() {
       <div ref={(node) => void (cardRefs.current.general = node)}>
         <DetailsCard isOwner={isOwner} />
       </div>
+      {/* Beside the request form conceptually — both are public doors into the
+          business — and above Hours, which is what a booking page reads. */}
+      <div ref={(node) => void (cardRefs.current.booking = node)}>
+        <BookingCard isOwner={isOwner} />
+      </div>
       {/* Hours and Team are adjacent because they are the two inputs to one
           calculation: getAvailableSlots reads the business hours AND
           orgCapacity, the count of active staff. A chip boundary between them
@@ -259,11 +269,200 @@ function EmbedSnippet({ src }: { src: string }) {
 // Name, language, sender address. This used to be Settings' first
 // chip, which put the business's own identity behind a page about
 // connections. It is not a connection, so it leads here instead.
+// The agents' lines as chips, plus a box for a number we do not host. Lifted
+// verbatim out of Reminders' old MessageVariablesCard: the behaviour was
+// right, only its address was wrong.
+function PublicPhoneField({
+  phone,
+  voiceNumbers,
+  onSave,
+}: {
+  phone: string;
+  voiceNumbers: { number: string; agentName?: string | null }[];
+  onSave: (next: string) => void;
+}) {
+  const { t } = useLanguage();
+  const isAgentNumber = voiceNumbers.some((line) => line.number === phone);
+  return (
+    <div className="space-y-1.5">
+      {voiceNumbers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {voiceNumbers.map((line) => {
+            const active = phone === line.number;
+            return (
+              <button
+                key={line.number}
+                type="button"
+                onClick={() => onSave(active ? "" : line.number)}
+                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
+                  active
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {line.number}
+                <span className="ml-1 opacity-70">
+                  · {line.agentName ?? t("settings.voiceAgentNumber")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <input
+        // Keyed so picking a chip refreshes the uncontrolled input.
+        key={phone}
+        defaultValue={isAgentNumber ? "" : phone}
+        placeholder={isAgentNumber ? t("settings.publicPhoneCustom") : "+90…"}
+        onBlur={(e) => {
+          const next = e.target.value.trim();
+          // An empty custom field while a chip is picked is not a clear — the
+          // chip is the value; clearing means unpicking the chip.
+          if (!next && isAgentNumber) return;
+          onSave(next);
+        }}
+      />
+    </div>
+  );
+}
+
+// Online booking, as its own card rather than a row inside "Message
+// variables". It is a CHANNEL — a public page customers land on — which is
+// what every appointment product treats it as, and it belongs beside the
+// request form for the same reason.
+//
+// ── ONE CHOICE, NOT A TOGGLE PLUS AN OVERRIDE ──────────────────────────────
+//
+// The old shape put the switch and a free-text URL side by side as equals, so
+// the box read as an override of the page you had just switched on, and there
+// was no way to tell which one a message would actually use. It is one
+// question with two answers now: our page, or a link of your own. The URL box
+// exists only under the second, and [booking_link] resolves to whichever is
+// selected — which is the whole point of the field and was previously
+// something you had to infer.
+function BookingCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const update = useMutation(api.orgs.update);
+  const enableBooking = useMutation(api.booking.enable);
+  const [copied, setCopied] = useState(false);
+  if (!settings) return null;
+  const { bookingUrl, bookingEnabled, publicSlug } = settings.org;
+  const nativeBookingUrl =
+    publicSlug && typeof window !== "undefined"
+      ? `${window.location.origin}/book/${publicSlug}`
+      : null;
+  const usingOwnLink = !bookingEnabled && !!bookingUrl;
+  // "Off" is a real third state and has to stay reachable: a salon that takes
+  // no online bookings at all should not be forced to host a page or paste a
+  // link, and [booking_link] then resolves to nothing, cleanly.
+  const mode: "off" | "native" | "own" = bookingEnabled
+    ? "native"
+    : usingOwnLink
+      ? "own"
+      : "off";
+
+  const choose = (next: "off" | "native" | "own") =>
+    void (async () => {
+      if (next === "native") {
+        const slug = await enableBooking({ enabled: true });
+        if (slug) {
+          await update({ bookingUrl: `${window.location.origin}/book/${slug}` });
+        }
+        return;
+      }
+      // Leaving our page behind clears the link only if the link WAS ours: a
+      // URL the salon pasted is not ours to delete.
+      if (bookingEnabled) {
+        await enableBooking({ enabled: false });
+        if (nativeBookingUrl && bookingUrl === nativeBookingUrl) {
+          await update({ bookingUrl: "" });
+        }
+      }
+      if (next === "off" && !bookingEnabled) await update({ bookingUrl: "" });
+    })();
+
+  return (
+    <Card
+      title={t("settings.bookingPage")}
+      tip={t("settings.bookingPageHint")}
+      disabled={!isOwner}
+    >
+      <div className={ROW_GRID}>
+        <RowLabel label={t("settings.bookingMode")} />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                ["native", t("settings.bookingModeNative")],
+                ["own", t("settings.bookingModeOwn")],
+                ["off", t("settings.bookingModeOff")],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={mode === key}
+                onClick={() => choose(key)}
+                className={`rounded-full px-2.5 py-1 text-sm transition-colors ${
+                  mode === key
+                    ? "bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Ours: the link is derived, so it is shown as a fact to copy
+              rather than a box to edit. Editing it was never meaningful — the
+              page lives at that address whatever the field says. */}
+          {mode === "native" && nativeBookingUrl && (
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href={nativeBookingUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-xs text-[var(--muted)] underline underline-offset-2 hover:text-[var(--foreground)]"
+              >
+                {nativeBookingUrl}
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(nativeBookingUrl).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1200);
+                  });
+                }}
+                className="rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                {copied ? t("common.copied") : t("common.copy")}
+              </button>
+            </div>
+          )}
+
+          {mode === "own" && (
+            <input
+              key={bookingUrl ?? ""}
+              defaultValue={bookingUrl ?? ""}
+              placeholder="https://…"
+              onBlur={(e) => void update({ bookingUrl: e.target.value.trim() })}
+            />
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
   const enableForm = useMutation(api.forms.enable);
+  const voiceNumbers = useQuery(api.orgs.voiceNumbers, {}) ?? [];
   // Read at render rather than baked in: the same deployment serves localhost
   // and the real domain, and a hardcoded host would hand the salon a link that
   // works for nobody but whoever built it.
@@ -289,6 +488,28 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           <input
             defaultValue={settings.org.name}
             onBlur={(e) => void update({ name: e.target.value })}
+          />
+          {/* The number customers are told to ring, beside the business name
+              because that is what it is: a fact about the business, not a
+              setting for one feature. It spent its first life in a card called
+              "Message variables" over in Reminders, which is where a salon
+              owner would never look for their own phone number — and which
+              named an implementation detail (the [phone] token) rather than
+              the thing itself. The token still reads this value; it just is
+              not what the field is FOR.
+
+              The agents' own lines are offered first and cost one tap: a
+              number an agent answers around the clock is the one worth
+              printing in an automated message. SINGLE number by design — one
+              clear call to action, not a switchboard. */}
+          <RowLabel
+            label={t("settings.publicPhone")}
+            hint={t("settings.publicPhoneHint")}
+          />
+          <PublicPhoneField
+            phone={settings.org.publicPhone ?? ""}
+            voiceNumbers={voiceNumbers}
+            onSave={(next) => void update({ publicPhone: next })}
           />
           {/* Timezone moved to Hours (2026-08-12). It is the clock the open and
               close times are read in, so it belongs on that screen; here it was
