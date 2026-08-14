@@ -10,7 +10,7 @@
 export const PRODUCT_NAME = "Resepta";
 
 // The public tab title: what a visitor who has never signed in should read.
-export const DEFAULT_TITLE = `${PRODUCT_NAME} — calls, bookings and customer follow-up`;
+export const DEFAULT_TITLE = `${PRODUCT_NAME} | AI front desk for appointment businesses`;
 
 // The signed-in tab title. Business first, because that is the half a tab
 // strip still shows once it truncates, and an operator with three salons open

@@ -3,9 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
 import { useState } from "react";
-import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { DEMO_ORIGIN, DOCS_ORIGIN } from "@/lib/hosts";
 import { LANGUAGES, isLanguage } from "@/lib/i18n";
@@ -26,15 +24,14 @@ export function Landing() {
   const [activeUseCase, setActiveUseCase] =
     useState<LandingUseCase["id"]>("beauty");
   const copy = LANDING[language];
-  const walkIn = useQuery(api.demo.walkInEnabled, {});
   const useCase =
     copy.useCases.find((item) => item.id === activeUseCase) ?? copy.useCases[0];
 
-  const start = async (provider: "google" | "anonymous") => {
+  const start = async () => {
     setBusy(true);
     setError(false);
     try {
-      await signIn(provider);
+      await signIn("google");
     } catch {
       setError(true);
       setBusy(false);
@@ -43,7 +40,7 @@ export function Landing() {
 
   return (
     <div id="top" className="min-h-dvh overflow-hidden bg-[var(--background)]">
-      <nav className="sticky top-3 z-50 mx-auto w-[min(100%-1.5rem,76rem)] rounded-2xl border border-[color-mix(in_srgb,var(--border)_80%,transparent)] bg-[color-mix(in_srgb,var(--card)_78%,transparent)] shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+      <nav className="sticky top-3 z-50 mx-auto w-[min(100%-1.5rem,76rem)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_82%,transparent)] shadow-[0_8px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
         <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-5">
           <a href="#top" className="flex shrink-0 items-center gap-2.5">
             <Mark />
@@ -60,8 +57,8 @@ export function Landing() {
             <a className="transition-colors hover:text-[var(--foreground)]" href="#use-cases">
               {copy.nav.useCases}
             </a>
-            <a className="transition-colors hover:text-[var(--foreground)]" href="#features">
-              {copy.nav.features}
+            <a className="transition-colors hover:text-[var(--foreground)]" href="#setup">
+              {copy.nav.setup}
             </a>
             {/* The only nav entry that leaves the page, so it opens in its own
                 tab: the help centre lives on the docs origin and a visitor
@@ -104,8 +101,8 @@ export function Landing() {
             </select>
             <button
               disabled={busy}
-              onClick={() => start("google")}
-              className="hidden rounded-lg bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-fg)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60 sm:block"
+              onClick={start}
+              className="hidden rounded-lg bg-[#2563eb] px-5 py-2.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#1d4ed8] disabled:opacity-60 sm:block"
             >
               {copy.navCta}
             </button>
@@ -114,59 +111,61 @@ export function Landing() {
       </nav>
 
       <main>
-        <section className="relative mx-auto max-w-[76rem] px-6 pb-16 pt-12 sm:pb-20 sm:pt-16">
+        <section className="relative mx-auto max-w-[76rem] px-6 pb-16 pt-14 sm:pb-24 sm:pt-20">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -left-48 -top-40 h-[32rem] w-[32rem] rounded-full bg-[color-mix(in_srgb,var(--brand)_8%,transparent)] blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-52 top-10 h-[30rem] w-[30rem] rounded-full bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] blur-3xl"
+          />
           <div className="relative grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:gap-12">
             <div className="landing-rise">
-              <h1 className="text-[clamp(2.7rem,5vw,4.25rem)] font-bold leading-[0.98] tracking-[-0.055em]">
+              <h1 className="max-w-[13ch] text-[clamp(2.8rem,5.2vw,4.65rem)] font-bold leading-[0.96] tracking-[-0.06em]">
                 {copy.headlineLead}
-                <span className="bg-[linear-gradient(110deg,var(--brand),var(--accent))] bg-clip-text text-transparent">
+                <span className="bg-[linear-gradient(105deg,var(--brand),var(--accent))] bg-clip-text text-transparent">
                   {copy.headlineAccent}
                 </span>
               </h1>
-              <p className="mt-6 max-w-[55ch] text-lg leading-relaxed text-[var(--muted)] sm:text-xl">
+              <p className="mt-7 max-w-[56ch] text-lg leading-relaxed text-[var(--muted-strong)] sm:text-xl">
                 {copy.subhead}
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
                 <button
                   disabled={busy}
-                  onClick={() => start("google")}
-                  className="rounded-lg bg-[var(--accent)] px-6 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
+                  onClick={start}
+                  className="inline-flex items-center gap-2.5 rounded-lg bg-[#2563eb] px-6 py-3.5 text-base font-semibold text-white shadow-[0_10px_24px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-colors duration-150 hover:bg-[#1d4ed8] disabled:opacity-60"
                 >
+                  <GoogleIcon />
                   {copy.ctaPrimary}
                 </button>
-                {walkIn ? (
-                  // The demo opens on its own origin, in its own tab.
-                  //
-                  // This used to call signIn("anonymous") right here, which
-                  // created the demo session on resepta.xyz — precisely what
-                  // demo.resepta.xyz exists to prevent. An owner who clicked
-                  // it while signed in had their real session replaced by a
-                  // preview (see the comment in src/proxy.ts). Sending them to
-                  // the demo origin keeps the two sessions apart, and a new
-                  // tab leaves the landing page where they left it.
-                  <a
-                    href={DEMO_ORIGIN}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-lg px-5 py-3.5 text-base font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-                  >
-                    {copy.ctaDemo} <ArrowIcon />
-                  </a>
-                ) : (
-                  <a
-                    href="#product"
-                    className="rounded-lg px-5 py-3.5 text-base font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-                  >
-                    {copy.ctaDemo} <ArrowIcon />
-                  </a>
-                )}
+                {/* The demo stays on its own origin so an owner's real session
+                    is never replaced by the anonymous showroom session. */}
+                <a
+                  href={DEMO_ORIGIN}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg px-5 py-3.5 text-base font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  {copy.ctaDemo} <ArrowIcon />
+                </a>
               </div>
+              <p className="mt-3 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
               {error && (
                 <p className="mt-3 text-sm text-red-600 dark:text-red-400">
                   {t("auth.failed")}
                 </p>
               )}
+              <div className="mt-8 flex max-w-[38rem] flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--muted-strong)]">
+                {copy.proof.map((item) => (
+                  <span key={item} className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
 
             <HeroProduct copy={copy} />
@@ -176,24 +175,25 @@ export function Landing() {
 
         <section id="workflow" className="scroll-mt-24 bg-[var(--pane)]">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
-            <SectionIntro title={copy.workflowTitle} />
+            <SectionIntro title={copy.workflowTitle} body={copy.workflowBody} wide />
             <div className="mt-12 grid gap-5 md:grid-cols-3">
               {copy.workflow.map((step, index) => (
                 <div
                   key={step.number}
-                  className="relative overflow-hidden rounded-2xl bg-[var(--card)] p-6 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-shadow duration-150 hover:shadow-[0_14px_30px_rgba(15,23,42,0.08)]"
+                  className="relative overflow-hidden rounded-2xl bg-[var(--card)] p-6 shadow-[var(--card-shadow)]"
                 >
-                  <span className="text-sm font-semibold text-[var(--brand)]">{step.number}</span>
-                  <h3 className="mt-8 text-xl font-semibold tracking-tight">{step.title}</h3>
+                  <div className="flex items-center justify-between">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand)]">
+                      {step.number}
+                    </span>
+                    {index < copy.workflow.length - 1 && (
+                      <span className="hidden text-[var(--muted)] md:block">
+                        <ArrowIcon />
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="mt-10 text-xl font-semibold tracking-tight">{step.title}</h3>
                   <p className="mt-3 leading-relaxed text-[var(--muted)]">{step.body}</p>
-                  <span
-                    aria-hidden
-                    className={`absolute right-0 top-0 h-24 w-24 rounded-bl-full opacity-60 ${
-                      index === 1
-                        ? "bg-[color-mix(in_srgb,var(--accent)_13%,transparent)]"
-                        : "bg-[color-mix(in_srgb,var(--brand)_13%,transparent)]"
-                    }`}
-                  />
                 </div>
               ))}
             </div>
@@ -201,7 +201,7 @@ export function Landing() {
         </section>
 
         <section id="product" className="scroll-mt-24">
-          <div className="mx-auto grid max-w-[76rem] items-center gap-14 px-6 py-20 sm:py-28 lg:grid-cols-[0.78fr_1.22fr] lg:gap-20">
+          <div className="mx-auto grid max-w-[76rem] items-center gap-14 px-6 py-20 sm:py-28 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
             <div>
               <SectionIntro
                 title={copy.productTitle}
@@ -231,7 +231,7 @@ export function Landing() {
             <div
               role="tablist"
               aria-label={copy.useCasesTitle}
-              className="mt-10 flex max-w-full gap-1 overflow-x-auto rounded-xl bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] p-1 no-scrollbar sm:w-fit"
+              className="mt-10 flex max-w-full gap-6 overflow-x-auto border-b border-[var(--border)] no-scrollbar sm:w-fit"
             >
               {copy.useCases.map((item) => {
                 const active = item.id === useCase.id;
@@ -242,9 +242,9 @@ export function Landing() {
                     role="tab"
                     aria-selected={active}
                     onClick={() => setActiveUseCase(item.id)}
-                    className={`shrink-0 rounded-lg px-4 py-2.5 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 ${
+                    className={`relative shrink-0 px-0.5 pb-3 text-sm font-medium transition-colors duration-200 ${
                       active
-                        ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
+                        ? "text-[var(--foreground)] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-[var(--foreground)]"
                         : "text-[var(--muted)] hover:text-[var(--foreground)]"
                     }`}
                   >
@@ -257,22 +257,20 @@ export function Landing() {
             <div
               key={useCase.id}
               role="tabpanel"
-              className="landing-tab-enter mt-6 grid min-h-[30rem] overflow-hidden rounded-[2rem] bg-[var(--card)] shadow-[0_18px_48px_rgba(15,23,42,0.08)] lg:grid-cols-[1.05fr_0.95fr]"
+              className="landing-tab-enter mt-8 grid min-h-[30rem] overflow-hidden rounded-[2rem] bg-[var(--card)] shadow-[0_18px_48px_rgba(15,23,42,0.08)] lg:grid-cols-[1.05fr_0.95fr]"
             >
               <div className="relative min-h-[20rem] overflow-hidden lg:min-h-[30rem]">
                 <Image
                   src={useCase.image}
                   alt={useCase.imageAlt}
                   fill
-                  loading="eager"
                   sizes="(max-width: 1024px) 100vw, 52vw"
                   className="object-cover"
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_60%,rgba(0,0,0,0.18))]" />
               </div>
               <div className="flex min-h-[20rem] flex-col justify-center p-7 sm:p-10 lg:p-12">
-                <p className="text-sm font-semibold text-[var(--brand)]">{useCase.tab}</p>
-                <h3 className="mt-3 text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
+                <h3 className="text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
                   {useCase.title}
                 </h3>
                 <p className="mt-5 max-w-[46ch] text-lg leading-relaxed text-[var(--muted)]">
@@ -289,11 +287,35 @@ export function Landing() {
 
         <section id="features" className="scroll-mt-24">
           <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
-            <SectionIntro title={copy.featuresTitle} />
-            <div className="mt-12 grid gap-x-14 gap-y-12 sm:grid-cols-2">
+            <SectionIntro title={copy.featuresTitle} body={copy.featuresBody} wide />
+            <div className="mt-12 grid gap-5 sm:grid-cols-2">
               {copy.features.map((feature) => (
                 <Feature key={feature.title} feature={feature} />
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="setup" className="scroll-mt-24 bg-[var(--pane)]">
+          <div className="mx-auto max-w-[76rem] px-6 py-20 sm:py-28">
+            <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
+              <SectionIntro title={copy.setupTitle} body={copy.setupBody} />
+              <div className="grid gap-4">
+                {copy.setup.map((step) => (
+                  <div
+                    key={step.number}
+                    className="grid grid-cols-[2.75rem_1fr] gap-4 rounded-2xl bg-[var(--card)] p-5 shadow-[var(--card-shadow)] sm:p-6"
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand)]">
+                      {step.number}
+                    </span>
+                    <div>
+                      <h3 className="text-lg font-semibold">{step.title}</h3>
+                      <p className="mt-1.5 leading-relaxed text-[var(--muted)]">{step.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -311,11 +333,13 @@ export function Landing() {
               </p>
               <button
                 disabled={busy}
-                onClick={() => start("google")}
-                className="mt-8 rounded-lg bg-[var(--accent)] px-7 py-3.5 text-base font-semibold text-[var(--accent-fg)] shadow-[0_10px_26px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-opacity duration-150 hover:opacity-90 disabled:opacity-60"
+                onClick={start}
+                className="mt-8 inline-flex items-center gap-2.5 rounded-lg bg-[#2563eb] px-7 py-3.5 text-base font-semibold text-white shadow-[0_10px_26px_color-mix(in_srgb,var(--accent)_24%,transparent)] transition-colors duration-150 hover:bg-[#1d4ed8] disabled:opacity-60"
               >
+                <GoogleIcon />
                 {copy.ctaPrimary}
               </button>
+              <p className="mt-3 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
             </div>
           </div>
         </section>
@@ -336,7 +360,7 @@ export function Landing() {
               <a href="#product">{copy.nav.product}</a>
               <a href="#workflow">{copy.nav.workflow}</a>
               <a href="#use-cases">{copy.nav.useCases}</a>
-              <a href="#features">{copy.nav.features}</a>
+              <a href="#setup">{copy.nav.setup}</a>
             </FooterNav>
 
             <FooterNav title={copy.footerResources}>
@@ -403,68 +427,96 @@ function SectionIntro({
 function HeroProduct({ copy }: { copy: LandingCopy }) {
   const hero = copy.hero;
   return (
-    <div className="landing-rise landing-rise-delay relative min-h-[25rem] w-full max-w-[32rem] justify-self-end overflow-hidden rounded-3xl bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand)_10%,var(--card)),color-mix(in_srgb,var(--accent)_7%,var(--card))_58%,var(--card))] p-3 shadow-[0_20px_50px_rgba(15,23,42,0.09)] sm:min-h-[28rem] sm:p-4 lg:min-h-[30rem]">
-      <div className="relative overflow-hidden rounded-2xl bg-[color-mix(in_srgb,var(--card)_94%,transparent)] shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
-        <div className="flex items-center justify-between px-4 py-3 sm:px-5">
-          <div className="flex items-center gap-2">
+    <div className="landing-rise landing-rise-delay w-full max-w-[34rem] justify-self-end overflow-hidden rounded-[1.75rem] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--brand)_12%,var(--pane)),color-mix(in_srgb,var(--accent)_8%,var(--pane)))] p-2.5 shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:p-3">
+      <div className="overflow-hidden rounded-2xl bg-[var(--card)] shadow-[var(--card-shadow)]">
+        <div className="flex items-center justify-between px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-2.5">
             <Mark small />
-            <span className="text-sm font-semibold">Resepta</span>
+            <span className="text-sm font-semibold">{hero.workspace}</span>
           </div>
-          <span className="text-xs text-[var(--muted)]">{hero.today}</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--brand)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+            {hero.live}
+          </span>
         </div>
-        <div className="bg-[var(--pane)] p-3 sm:p-4">
-          <div className="rounded-xl bg-[var(--card)] p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">{hero.calendar}</span>
-              <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-xs font-medium text-[var(--brand)]">
-                {hero.appointment}
-              </span>
+
+        <div className="grid gap-3 bg-[var(--pane)] p-3 sm:grid-cols-[0.92fr_1.08fr] sm:p-4">
+          <div className="space-y-3">
+            <div className="rounded-xl bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-xs font-medium text-[var(--muted-strong)]">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_12%,var(--card))] text-[var(--accent)]">
+                    <PhoneIcon />
+                  </span>
+                  {hero.incoming}
+                </span>
+                <span className="text-[11px] font-medium text-[var(--brand)]">{hero.answered}</span>
+              </div>
+              <p className="mt-5 text-base font-semibold">{hero.caller}</p>
+              <p className="mt-1 text-sm leading-snug text-[var(--muted-strong)]">{hero.request}</p>
+              <p className="mt-4 rounded-lg bg-[var(--muted-bg)] p-3 text-xs leading-relaxed text-[var(--muted)]">
+                {hero.callNote}
+              </p>
             </div>
-            <div className="mt-4 grid grid-cols-[3rem_1fr] gap-x-3 gap-y-3 text-xs sm:grid-cols-[4rem_1fr]">
-              {hero.calendarEntries.map((entry, index) => (
-                <div key={`${entry.time}-${entry.name}`} className="contents">
-                  <span className="py-2 text-[var(--muted)]">{entry.time}</span>
-                  <span
-                    className={`rounded-lg px-3 py-2 font-medium ${
-                      index === 1
-                        ? "bg-[color-mix(in_srgb,var(--accent)_9%,var(--card))]"
-                        : index === 2
-                          ? "bg-[color-mix(in_srgb,var(--brand)_16%,var(--card))]"
-                          : "bg-[color-mix(in_srgb,var(--brand)_10%,var(--card))]"
+
+            <div className="rounded-xl bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+                <PersonIcon />
+              </span>
+              <p className="mt-3 text-sm font-semibold">{hero.customer}</p>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{hero.customerDetail}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-xl bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{hero.calendar}</span>
+                <CalendarIcon />
+              </div>
+              <div className="mt-4 space-y-2.5">
+                {hero.calendarEntries.map((entry, index) => (
+                  <div
+                    key={`${entry.time}-${entry.name}`}
+                    className={`grid grid-cols-[2.75rem_1fr] items-center gap-2 rounded-lg px-2.5 py-2 text-xs ${
+                      index === hero.calendarEntries.length - 1
+                        ? "bg-[var(--brand-soft)] text-[var(--foreground)]"
+                        : "bg-[var(--muted-bg)] text-[var(--muted-strong)]"
                     }`}
                   >
-                    {entry.name} · {entry.time}
-                  </span>
+                    <span className="text-[var(--muted)]">{entry.time}</span>
+                    <span className="font-medium">{entry.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 rounded-lg bg-[color-mix(in_srgb,var(--accent)_8%,var(--card))] p-3">
+                <div className="flex items-center gap-2 text-xs font-medium text-[var(--accent)]">
+                  <CheckIcon />
+                  {hero.booked}
                 </div>
-              ))}
+                <p className="mt-2 text-sm font-semibold">{hero.appointment}</p>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">{hero.service}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--brand)]">
+                <MessageIcon />
+                {hero.confirmation}
+              </div>
+              <p className="mt-2 text-sm font-semibold">{hero.confirmed}</p>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="absolute bottom-4 left-3 w-[min(17rem,76%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_96%,transparent)] p-4 shadow-[0_16px_36px_rgba(15,23,42,0.13)] backdrop-blur-xl sm:bottom-6 sm:left-4">
-        <div className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-xs font-medium text-[var(--muted)]">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_13%,var(--card))] text-[var(--accent)]">
-              <PhoneIcon />
-            </span>
-            {hero.incoming}
-          </span>
-          <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--brand)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-            {hero.answered}
-          </span>
+        <div className="flex items-center gap-2 px-4 py-3 text-[11px] text-[var(--muted)] sm:px-5">
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+          {hero.incoming}
+          <span aria-hidden>→</span>
+          {hero.booked}
+          <span aria-hidden>→</span>
+          {hero.confirmed}
         </div>
-        <p className="mt-3 font-semibold">{hero.caller}</p>
-        <p className="mt-1 text-sm leading-snug text-[var(--muted)]">{hero.request}</p>
-      </div>
-
-      <div className="absolute bottom-16 right-3 w-[min(14rem,62%)] rounded-2xl bg-[color-mix(in_srgb,var(--card)_97%,transparent)] p-4 shadow-[0_16px_36px_rgba(15,23,42,0.13)] backdrop-blur-xl sm:bottom-20 sm:right-4">
-        <div className="flex items-center gap-2 text-xs font-medium text-[var(--brand)]">
-          <MessageIcon />
-          {hero.confirmation}
-        </div>
-        <p className="mt-2 text-sm font-semibold">{hero.confirmed}</p>
       </div>
     </div>
   );
@@ -512,6 +564,7 @@ function ProductPreview({ copy }: { copy: LandingCopy }) {
           <div className="space-y-3 p-4 sm:p-5">
             <ActivityCard icon={<PhoneIcon />} title={preview.callTitle} body={preview.callSummary} accent="accent" />
             <ActivityCard icon={<PersonIcon />} title={preview.customerTitle} body={preview.customerDetail} accent="brand" />
+            <ActivityCard icon={<MessageIcon />} title={preview.reminderTitle} body={preview.reminderDetail} accent="accent" />
           </div>
         </div>
       </div>
@@ -549,14 +602,12 @@ function ActivityCard({
 
 function Feature({ feature }: { feature: LandingFeature }) {
   return (
-    <div className="flex gap-4">
+    <div className="rounded-2xl bg-[var(--card)] p-6 shadow-[var(--card-shadow)] sm:p-7">
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--muted-bg)] text-[var(--foreground)]">
         <FeatureIcon channel={feature.channel} />
       </span>
-      <div>
-        <h3 className="text-xl font-semibold tracking-tight">{feature.title}</h3>
-        <p className="mt-2 max-w-[54ch] leading-relaxed text-[var(--muted)]">{feature.body}</p>
-      </div>
+      <h3 className="mt-8 text-xl font-semibold tracking-tight">{feature.title}</h3>
+      <p className="mt-3 max-w-[54ch] leading-relaxed text-[var(--muted)]">{feature.body}</p>
     </div>
   );
 }
@@ -594,6 +645,31 @@ function ArrowIcon() {
     <svg className="ml-1 inline h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5">
+        <path
+          fill="#4285F4"
+          d="M21.6 12.23c0-.71-.06-1.23-.2-1.78H12v3.41h5.52a4.74 4.74 0 0 1-2.05 3.02v2.2h3.32c1.94-1.79 2.81-4.42 2.81-6.85Z"
+        />
+        <path
+          fill="#34A853"
+          d="M12 22c2.7 0 4.98-.89 6.64-2.42l-3.32-2.57c-.89.6-2.04.95-3.32.95-2.61 0-4.82-1.77-5.61-4.14H2.97v2.64A10.02 10.02 0 0 0 12 22Z"
+        />
+        <path
+          fill="#FBBC05"
+          d="M6.39 13.82A6.02 6.02 0 0 1 6.08 12c0-.63.11-1.25.3-1.82V7.54H2.98A10 10 0 0 0 2 12c0 1.61.38 3.13.97 4.46l3.42-2.64Z"
+        />
+        <path
+          fill="#EA4335"
+          d="M12 6.04c1.48 0 2.8.51 3.85 1.5l2.87-2.88A9.65 9.65 0 0 0 12 2a10.02 10.02 0 0 0-9.03 5.54l3.42 2.64C7.18 7.81 9.39 6.04 12 6.04Z"
+        />
+      </svg>
+    </span>
   );
 }
 

@@ -20,7 +20,9 @@ export const metadata: Metadata = {
   // lib/brand.ts. This is what everyone else reads.
   title: DEFAULT_TITLE,
   description:
-    "Resepta answers calls, books appointments and keeps customers informed in one connected workflow.",
+    "Resepta connects calls, customer records, appointments, confirmations and reminders in one front desk for appointment businesses.",
+  applicationName: "Resepta",
+  category: "business",
   metadataBase: new URL(APEX_ORIGIN),
   // Relative, so metadataBase stays the single place the origin is written.
   //
@@ -29,6 +31,20 @@ export const metadata: Metadata = {
   // The three "use client" public pages cannot override anything, so they get
   // a server layout carrying UNLISTED from src/lib/seo.ts instead.
   alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Resepta",
+    title: DEFAULT_TITLE,
+    description:
+      "The call becomes a booking. The follow-up stays connected in one front desk for appointment businesses.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_TITLE,
+    description:
+      "Calls, bookings, customer context and follow-up in one connected front desk.",
+  },
 };
 
 export default function RootLayout({

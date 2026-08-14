@@ -1,10 +1,8 @@
 // Public landing-page copy. This lives outside i18n.ts because it is long-form
 // marketing language, not interface vocabulary.
 //
-// Each language is written for its reader rather than translated line by line:
-// Turkish is warm and direct for owner-operated businesses; German is concrete,
-// formal and reliability-led; English leads with time saved and one joined-up
-// workflow. The product remains vertical-agnostic in all three.
+// Each language is written for its reader rather than translated line by line.
+// The product remains vertical-agnostic in all three.
 import type { Language } from "./i18n";
 
 export type LandingFeature = {
@@ -23,31 +21,45 @@ export type LandingUseCase = {
   imageAlt: string;
 };
 
+type LandingStep = {
+  number: string;
+  title: string;
+  body: string;
+};
+
 export type LandingCopy = {
-  nav: { product: string; workflow: string; useCases: string; features: string };
+  nav: { product: string; workflow: string; useCases: string; setup: string };
   navCta: string;
   headlineLead: string;
   headlineAccent: string;
   subhead: string;
   ctaPrimary: string;
   ctaDemo: string;
+  ctaNote: string;
+  proof: string[];
   themeToLight: string;
   themeToDark: string;
   hero: {
+    workspace: string;
+    live: string;
     incoming: string;
     answered: string;
     caller: string;
     request: string;
+    callNote: string;
     booked: string;
     appointment: string;
+    service: string;
     confirmation: string;
     confirmed: string;
-    today: string;
+    customer: string;
+    customerDetail: string;
     calendar: string;
     calendarEntries: Array<{ time: string; name: string }>;
   };
   workflowTitle: string;
-  workflow: Array<{ number: string; title: string; body: string }>;
+  workflowBody: string;
+  workflow: LandingStep[];
   productTitle: string;
   productBody: string;
   productPoints: string[];
@@ -61,12 +73,18 @@ export type LandingCopy = {
     callSummary: string;
     customerTitle: string;
     customerDetail: string;
+    reminderTitle: string;
+    reminderDetail: string;
   };
   useCasesTitle: string;
   useCasesBody: string;
   useCases: LandingUseCase[];
   featuresTitle: string;
+  featuresBody: string;
   features: LandingFeature[];
+  setupTitle: string;
+  setupBody: string;
+  setup: LandingStep[];
   closingTitle: string;
   closingBody: string;
   footerLine: string;
@@ -84,60 +102,69 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: {
       product: "Ürün",
       workflow: "Nasıl çalışır",
-      useCases: "Kullanım alanları",
-      features: "Özellikler",
+      useCases: "Kimler için",
+      setup: "Başlangıç",
     },
-    navCta: "Başlayın",
-    headlineLead: "Siz işinize bakın. ",
-    headlineAccent: "Resepta gerisini halleder.",
+    navCta: "Google ile başlayın",
+    headlineLead: "Arama randevuya dönüşür. ",
+    headlineAccent: "Takip daha siz işinize dönmeden başlar.",
     subhead:
-      "Aramaları yanıtlar, randevuları oluşturur ve takibi yapar—siz işinize devam ederken.",
+      "Resepta, randevulu işletmeler için aramaları, müşterileri, takvimi, onayları ve hatırlatmaları tek bir bağlantılı ön büroda toplar.",
     ctaPrimary: "Google ile başlayın",
-    ctaDemo: "Ürünü inceleyin",
+    ctaDemo: "Canlı demoyu deneyin",
+    ctaNote: "Şifre yok. Başlamak için tek soru: işletmenizin adı.",
+    proof: ["Arama kaydı", "Randevu ve müşteri kartı", "Onay ve hatırlatmalar"],
     themeToLight: "Açık temaya geç",
     themeToDark: "Koyu temaya geç",
     hero: {
+      workspace: "Resepta ön büro",
+      live: "Canlı akış",
       incoming: "Gelen arama",
-      answered: "Yanıtlandı",
+      answered: "Resepta yanıtlıyor",
       caller: "Derya Akın",
-      request: "Perşembe öğleden sonra için randevu istiyor",
+      request: "Perşembe öğleden sonra ilk randevu",
+      callNote: "Hizmet, saat tercihi ve iletişim bilgisi alındı.",
       booked: "Randevu oluşturuldu",
       appointment: "Perşembe · 14:30",
+      service: "İlk görüşme · 45 dk",
       confirmation: "Onay gönderildi",
-      confirmed: "Müşteri onayladı",
-      today: "Bugün",
-      calendar: "Takvim",
+      confirmed: "Derya onayladı",
+      customer: "Müşteri kartı güncellendi",
+      customerDetail: "Tercih edilen zaman · Öğleden sonra",
+      calendar: "Bugünün takvimi",
       calendarEntries: [
         { time: "09:30", name: "Elif" },
         { time: "11:00", name: "Mert" },
         { time: "14:30", name: "Derya" },
       ],
     },
-    workflowTitle: "Telefon çalar. Takvim dolar. Müşteri haberdar olur.",
+    workflowTitle: "Tek görüşme. Başından sonuna tek kayıt.",
+    workflowBody:
+      "Resepta yalnızca telefonu açmaz. Görüşmede alınan bilgiyi ekibinizin çalıştığı randevuya, müşteri kartına ve takip akışına taşır.",
     workflow: [
       {
         number: "01",
-        title: "Aramayı karşılar",
-        body: "Müşterinin ne istediğini anlar, gerekli bilgileri alır ve işletmeniz gibi konuşur.",
+        title: "Arama karşılanır",
+        body: "Sesli asistan işletmenizin dilinde konuşur, talebi anlar ve ihtiyacınız olan müşteri bilgilerini toplar.",
       },
       {
         number: "02",
-        title: "Uygun saati bulur",
-        body: "Hizmeti ve müsaitliği kontrol eder, seçilen saati doğrudan takvime işler.",
+        title: "Randevu kayda geçer",
+        body: "Hizmet, tercih edilen zaman ve görüşme notu aynı randevuya eklenir. Ekibiniz ne olduğunu hemen görür.",
       },
       {
         number: "03",
-        title: "Takibi kendi yapar",
-        body: "Onay ve hatırlatma gider; cevaplar randevuya ve müşteri kartına geri yazılır.",
+        title: "Takip bağlı kalır",
+        body: "Onay, hatırlatma, iptal ve müşteri cevabı aynı kayda döner. Sonraki adım ortada kalmaz.",
       },
     ],
-    productTitle: "Günün tamamı tek ekranda",
+    productTitle: "Ön büronuzun tamamı aynı bağlamı görür",
     productBody:
-      "Aramalar, müşteriler, randevular ve mesajlar aynı kaydı paylaşır. Kim aradı, ne istedi ve sırada ne var diye aramanız gerekmez.",
+      "Takvim ayrı, telefon notları ayrı, mesajlar başka yerde olduğunda işi birleştirmek yine size kalır. Resepta her kanalı aynı müşteri ve randevu etrafında toplar.",
     productPoints: [
-      "Telefon görüşmesinden doğrudan randevu",
-      "Müşteri bilgileri otomatik güncel kalır",
-      "Onay, iptal ve hatırlatmalar aynı akışta",
+      "Görüşmeden randevuya uzanan görünür bir akış",
+      "Ekip için güncel müşteri bilgileri ve arama geçmişi",
+      "Randevuya bağlı onay, iptal ve hatırlatmalar",
     ],
     productPreview: {
       title: "Bugünün akışı",
@@ -149,75 +176,86 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "11:00", name: "Mert Kaya", service: "Kontrol", status: "Hatırlatma gitti" },
         { time: "14:30", name: "Derya Akın", service: "Randevu", status: "Yeni" },
       ],
-      callTitle: "Yeni arama kaydı",
-      callSummary: "Derya, perşembe öğleden sonra için randevu aldı.",
-      customerTitle: "Müşteri kartı güncellendi",
-      customerDetail: "Tercih edilen saat · Öğleden sonra",
+      callTitle: "Arama kaydı hazır",
+      callSummary: "Derya perşembe öğleden sonra için randevu istedi.",
+      customerTitle: "Müşteri kartı güncel",
+      customerDetail: "Saat tercihi ve iletişim bilgisi kaydedildi.",
+      reminderTitle: "Takip sırada",
+      reminderDetail: "Onay gönderildi. Hatırlatma zamanı planlandı.",
     },
-    useCasesTitle: "Aynı ürün, işletmenize göre çalışan bir akış",
+    useCasesTitle: "Telefon için işini bırakamayan ekipler için",
     useCasesBody:
-      "Resepta bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplamak istediğiniz bilgileri siz belirlersiniz.",
+      "Resepta tek bir sektöre göre şekillenmez. Hizmetlerinizi, çalışma düzeninizi ve müşteriden toplanacak bilgileri işletmenize göre belirlersiniz.",
     useCases: [
       {
         id: "beauty",
         tab: "Bakım ve güzellik",
-        title: "Eller doluyken telefon boş kalmaz",
-        body: "Kuaför, berber ve güzellik merkezlerinde ekip müşterinin başındayken gelen arama karşılanır, doğru hizmet ve süreyle takvime düşer.",
-        outcome: "Daha az kaçan çağrı, daha dolu bir gün.",
+        title: "Eller müşterideyken telefon boş kalmaz",
+        body: "Kuaför, berber ve güzellik ekipleri müşterinin başındayken arama karşılanır, talep kaydedilir ve doğru hizmetle randevuya dönüşür.",
+        outcome: "Daha az kaçan çağrı, daha düzenli bir gün.",
         image: "/images/randevu-salon.webp",
         imageAlt: "Müşterisinin saçını keserken çalışan bağımsız kuaför",
       },
       {
         id: "health",
         tab: "Klinikler",
-        title: "Hasta aradığında süreç başlar",
-        body: "Muayenehane ve klinikler randevu talebini, temel bilgileri ve tercih edilen saati tek görüşmede alır; ekip tedaviye odaklanır.",
-        outcome: "Daha düzenli kabul, daha az telefon trafiği.",
+        title: "Hasta aradığında kabul süreci başlar",
+        body: "Muayenehane ve klinikler randevu talebini, temel bilgileri ve zaman tercihini tek görüşmede alırken ekip tedaviye odaklanır.",
+        outcome: "Daha sakin bir ön büro, daha net bir takvim.",
         image: "/images/randevu-clinic.webp",
         imageAlt: "Hastasıyla ilgilenen bağımsız diş hekimi",
       },
       {
         id: "service",
         tab: "Yerel hizmetler",
-        title: "İş başındayken yeni iş alın",
-        body: "Servisler ve randevuyla çalışan yerel işletmeler, müşterinin talebini ve uygun zamanı siz aletlerin başındayken kaydeder.",
+        title: "Bu işi yaparken sıradaki işi alın",
+        body: "Servisler ve randevuyla çalışan yerel işletmeler, ekip iş başındayken müşterinin talebini ve tercih ettiği zamanı kaydeder.",
         outcome: "Kesintisiz çalışma, kaybolmayan talepler.",
         image: "/images/randevu-workshop.webp",
         imageAlt: "Atölyesinde bir aracın motorunda çalışan usta",
       },
     ],
-    featuresTitle: "Randevu almanın ötesinde",
+    featuresTitle: "Otomasyon çalışır, kontrol sizde kalır",
+    featuresBody:
+      "Resepta işletmenizin nasıl konuşacağını ve neyi kaydedeceğini sizin belirlediğiniz bir çalışma alanıdır.",
     features: [
       {
         channel: "call",
-        title: "Size göre konuşan sesli asistan",
-        body: "Hizmetlerinizi, çalışma biçiminizi ve sorulacak bilgileri Resepta'da belirlersiniz.",
+        title: "İşletmenize göre konuşan sesli asistan",
+        body: "Açılış cümlesini, talimatları, sesi ve görüşmede toplanacak bilgileri siz belirlersiniz.",
       },
       {
         channel: "calendar",
-        title: "Tek ve güncel takvim",
-        body: "Telefonla alınan, elle eklenen ve değiştirilen randevular aynı yerde kalır.",
+        title: "Ekibin gerçekten çalıştığı takvim",
+        body: "Telefonla alınan, elle eklenen ve daha sonra değişen randevular tek yerde görünür.",
       },
       {
         channel: "message",
-        title: "Otomatik müşteri takibi",
-        body: "Onay, hatırlatma, iptal ve gelmeyen müşteriye dönüş ayrı ayrı takip edilmez.",
+        title: "Randevuya bağlı müşteri takibi",
+        body: "Onay, hatırlatma, iptal ve gelmeyen müşteriye dönüş ayrı listelerde kaybolmaz.",
       },
       {
         channel: "customer",
-        title: "Her görüşmede zenginleşen müşteri kartı",
-        body: "Müşterinin verdiği bilgiler sonraki görüşmede hazır olur; aynı sorular tekrar sorulmaz.",
+        title: "Her temasla güçlenen müşteri kaydı",
+        body: "Görüşmede alınan bilgiler sonraki aramada ve ekibin ekranında hazır olur.",
       },
     ],
-    closingTitle: "Bir sonraki arama takvimde yerini bulsun.",
+    setupTitle: "Google hesabından gerçek bir çalışma alanına",
+    setupBody:
+      "Hesap açma kısmı kısa tutulur. İşletmenin akışını ise kendi hızınızda kurarsınız.",
+    setup: [
+      { number: "01", title: "Google ile girin", body: "Şifre oluşturmayın, sıfırlama akışıyla uğraşmayın." },
+      { number: "02", title: "İşletmenizi adlandırın", body: "İlk girişte sorduğumuz tek soru işletmenizin adıdır." },
+      { number: "03", title: "Akışı kurun", body: "Hizmetleri, ekibi, sesli asistanı ve ihtiyacınız olan kanalları ekleyin." },
+    ],
+    closingTitle: "Bir sonraki aramaya net bir sonraki adım verin.",
     closingBody:
-      "Resepta'ya Google hesabınızla girin. İşletmenizi oluşturun, akışı birlikte çalıştıralım.",
-    footerLine: "Randevulu çalışan işletmeler için telefon ve müşteri otomasyonu.",
+      "Çalışma alanınızı şimdi oluşturun. Hizmetleri, ekibi ve bağlı kanalları hazır olduğunuzda kurun.",
+    footerLine: "Randevulu işletmeler için bağlantılı arama, müşteri ve takip otomasyonu.",
     footerProduct: "Ürün",
     footerResources: "Kaynaklar",
     footerCompany: "Şirket",
-    footerAutotaktLine:
-      "Yapay zekâ asistanları, bağlı iş akışları ve pratik işletme yazılımları.",
+    footerAutotaktLine: "Yapay zekâ asistanları, bağlı iş akışları ve pratik işletme yazılımları.",
     help: "Yardım merkezi",
     privacy: "Gizlilik politikası",
     terms: "Kullanım koşulları",
@@ -227,60 +265,69 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: {
       product: "Product",
       workflow: "How it works",
-      useCases: "Use cases",
-      features: "Features",
+      useCases: "Who it is for",
+      setup: "Getting started",
     },
-    navCta: "Get started",
-    headlineLead: "Stay with the work. ",
-    headlineAccent: "Resepta handles the appointment.",
+    navCta: "Start with Google",
+    headlineLead: "The call becomes a booking. ",
+    headlineAccent: "The follow-up is already moving.",
     subhead:
-      "Answers calls, books appointments, and follows up—while you stay with the work.",
+      "Resepta gives appointment businesses one connected front desk for calls, customers, calendar, confirmations, and reminders.",
     ctaPrimary: "Start with Google",
-    ctaDemo: "Explore the product",
+    ctaDemo: "Try the live demo",
+    ctaNote: "No password. One business-name question to get started.",
+    proof: ["Call history", "Booking and customer record", "Confirmations and reminders"],
     themeToLight: "Switch to light mode",
     themeToDark: "Switch to dark mode",
     hero: {
+      workspace: "Resepta front desk",
+      live: "Live workflow",
       incoming: "Incoming call",
-      answered: "Answered",
+      answered: "Resepta is answering",
       caller: "Olivia Reed",
-      request: "Looking for an appointment on Thursday afternoon",
-      booked: "Appointment booked",
+      request: "First visit on Thursday afternoon",
+      callNote: "Service, preferred time, and contact details collected.",
+      booked: "Appointment created",
       appointment: "Thursday · 14:30",
-      confirmation: "Confirmation sent",
-      confirmed: "Customer confirmed",
-      today: "Today",
-      calendar: "Calendar",
+      service: "First visit · 45 min",
+      confirmation: "Confirmation delivered",
+      confirmed: "Olivia confirmed",
+      customer: "Customer record updated",
+      customerDetail: "Preferred time · Afternoon",
+      calendar: "Today's calendar",
       calendarEntries: [
         { time: "09:30", name: "Emily" },
         { time: "11:00", name: "James" },
         { time: "14:30", name: "Olivia" },
       ],
     },
-    workflowTitle: "The phone rings. The calendar fills. The customer stays informed.",
+    workflowTitle: "One conversation. One connected record.",
+    workflowBody:
+      "Resepta does more than answer the phone. It carries what was learned into the appointment, customer record, and follow-up your team actually works from.",
     workflow: [
       {
         number: "01",
-        title: "Answer the call",
-        body: "Understand what the customer needs, collect the right details, and speak in the way your business works.",
+        title: "The call is answered",
+        body: "A voice agent speaks in the way your business works, understands the request, and collects the details you need.",
       },
       {
         number: "02",
-        title: "Find the right time",
-        body: "Check the service and availability, then place the chosen time directly on the calendar.",
+        title: "The appointment is recorded",
+        body: "The service, preferred time, and call context land on the same appointment. Your team can see what happened.",
       },
       {
         number: "03",
-        title: "Run the follow-up",
-        body: "Send confirmations and reminders, then write responses back to the booking and customer record.",
+        title: "The follow-up stays attached",
+        body: "Confirmations, reminders, cancellations, and replies return to the same record. The next step does not go missing.",
       },
     ],
-    productTitle: "The whole day, in one view",
+    productTitle: "Your whole front desk sees the same context",
     productBody:
-      "Calls, customers, appointments, and messages share the same record. Nobody has to work out who called, what they wanted, or what should happen next.",
+      "When the calendar, call notes, and messages live in separate tools, your team still has to join the dots. Resepta keeps every channel around the same customer and appointment.",
     productPoints: [
-      "Turn a phone conversation into a booking",
-      "Keep customer details current automatically",
-      "Handle confirmations, cancellations, and reminders together",
+      "A visible path from conversation to appointment",
+      "Current customer details and call history for the team",
+      "Confirmations, cancellations, and reminders tied to the booking",
     ],
     productPreview: {
       title: "Today's flow",
@@ -292,21 +339,23 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "11:00", name: "James Wilson", service: "Follow-up", status: "Reminder sent" },
         { time: "14:30", name: "Olivia Reed", service: "Appointment", status: "New" },
       ],
-      callTitle: "New call record",
-      callSummary: "Olivia booked an appointment for Thursday afternoon.",
-      customerTitle: "Customer record updated",
-      customerDetail: "Preferred time · Afternoon",
+      callTitle: "Call record ready",
+      callSummary: "Olivia asked for an appointment on Thursday afternoon.",
+      customerTitle: "Customer record current",
+      customerDetail: "Preferred time and contact details were saved.",
+      reminderTitle: "Follow-up queued",
+      reminderDetail: "Confirmation delivered. Reminder time is scheduled.",
     },
-    useCasesTitle: "One product, shaped around the way you work",
+    useCasesTitle: "For teams that cannot pause the work to answer the phone",
     useCasesBody:
-      "Resepta is not built around one industry. You define the services, working pattern, and customer information that matter to your business.",
+      "Resepta is not shaped around one industry. You define the services, working pattern, and customer details that matter to your business.",
     useCases: [
       {
         id: "beauty",
-        tab: "Beauty & care",
+        tab: "Beauty and care",
         title: "Keep both hands on the client",
-        body: "Salons, barbers, and beauty teams can take the call, match the right service and duration, and book the visit while the team stays with the customer.",
-        outcome: "Fewer missed calls. A fuller working day.",
+        body: "Salons, barbers, and beauty teams can have the call answered, the request recorded, and the right service turned into a booking while the team stays with the client.",
+        outcome: "Fewer missed calls. A more orderly working day.",
         image: "/images/randevu-salon.webp",
         imageAlt: "Independent stylist cutting a client's hair",
       },
@@ -323,44 +372,53 @@ export const LANDING: Record<Language, LandingCopy> = {
         id: "service",
         tab: "Local services",
         title: "Take the next job while doing this one",
-        body: "Workshops and appointment-led local services capture the request and a suitable time while the team stays on the tools.",
-        outcome: "Uninterrupted work. No lost enquiries.",
+        body: "Workshops and appointment-led local services capture the request and preferred time while the team stays on the tools.",
+        outcome: "Uninterrupted work. No lost requests.",
         image: "/images/randevu-workshop.webp",
         imageAlt: "Mechanic working on a car in an independent workshop",
       },
     ],
-    featuresTitle: "More than taking a booking",
+    featuresTitle: "Automation runs. You keep control.",
+    featuresBody:
+      "Resepta is a workspace where you decide how the business speaks and what each conversation should capture.",
     features: [
       {
         channel: "call",
         title: "A voice agent shaped around your business",
-        body: "Define your services, instructions, and the customer information that should be collected inside Resepta.",
+        body: "Set the opening line, instructions, voice, and customer details that should be collected during a call.",
       },
       {
         channel: "calendar",
-        title: "One calendar that stays current",
-        body: "Bookings made by phone, added manually, or changed later all live in the same place.",
+        title: "The calendar your team actually works from",
+        body: "Bookings made by phone, added manually, or changed later remain visible in one place.",
       },
       {
         channel: "message",
-        title: "Customer follow-up on autopilot",
-        body: "Confirmations, reminders, cancellations, and no-show follow-up move as one workflow.",
+        title: "Customer follow-up tied to the booking",
+        body: "Confirmations, reminders, cancellations, and no-show follow-up do not disappear into separate lists.",
       },
       {
         channel: "customer",
-        title: "A customer record that gets smarter",
-        body: "Information shared in a call is ready next time, so the customer does not have to repeat themselves.",
+        title: "A customer record that improves with every contact",
+        body: "Details collected during a call are ready for the next conversation and for the team.",
       },
     ],
-    closingTitle: "Let the next call find its place on the calendar.",
+    setupTitle: "From Google sign-in to a real workspace",
+    setupBody:
+      "Account creation stays short. You can shape the business workflow at your own pace.",
+    setup: [
+      { number: "01", title: "Continue with Google", body: "There is no password to create, remember, or reset." },
+      { number: "02", title: "Name your business", body: "The only question on first sign-in is the name of your business." },
+      { number: "03", title: "Build the workflow", body: "Add services, team members, the voice agent, and the channels your setup needs." },
+    ],
+    closingTitle: "Give the next caller a clear next step.",
     closingBody:
-      "Sign in with Google, create your business, and put the first connected appointment workflow to work.",
-    footerLine: "Calls and customer automation for appointment-led businesses.",
+      "Create the workspace now. Set up services, your team, and connected channels when you are ready.",
+    footerLine: "Connected calls, customers, and follow-up for appointment businesses.",
     footerProduct: "Product",
     footerResources: "Resources",
     footerCompany: "Company",
-    footerAutotaktLine:
-      "AI assistants, connected workflows, and practical business software.",
+    footerAutotaktLine: "AI assistants, connected workflows, and practical business software.",
     help: "Help center",
     privacy: "Privacy policy",
     terms: "Terms of service",
@@ -370,60 +428,69 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: {
       product: "Produkt",
       workflow: "So funktioniert es",
-      useCases: "Einsatzbereiche",
-      features: "Funktionen",
+      useCases: "Für wen",
+      setup: "Einstieg",
     },
-    navCta: "Loslegen",
-    headlineLead: "Bleiben Sie bei Ihrer Arbeit. ",
-    headlineAccent: "Resepta kümmert sich um den Termin.",
+    navCta: "Mit Google starten",
+    headlineLead: "Aus dem Anruf wird ein Termin. ",
+    headlineAccent: "Die Nachbereitung läuft schon.",
     subhead:
-      "Nimmt Anrufe an, bucht Termine und übernimmt die Nachbereitung – während Sie weiterarbeiten.",
+      "Resepta verbindet Anrufe, Kunden, Kalender, Bestätigungen und Erinnerungen zu einem durchgängigen Empfang für Terminbetriebe.",
     ctaPrimary: "Mit Google starten",
-    ctaDemo: "Produkt ansehen",
+    ctaDemo: "Live-Demo ausprobieren",
+    ctaNote: "Kein Passwort. Zum Start nur eine Frage: Wie heißt Ihr Betrieb?",
+    proof: ["Anrufverlauf", "Termin und Kundenprofil", "Bestätigungen und Erinnerungen"],
     themeToLight: "Zum hellen Modus wechseln",
     themeToDark: "Zum dunklen Modus wechseln",
     hero: {
+      workspace: "Resepta Empfang",
+      live: "Laufender Vorgang",
       incoming: "Eingehender Anruf",
-      answered: "Angenommen",
+      answered: "Resepta nimmt an",
       caller: "Sophie Hartmann",
-      request: "Möchte am Donnerstagnachmittag einen Termin",
-      booked: "Termin eingetragen",
+      request: "Ersttermin am Donnerstagnachmittag",
+      callNote: "Leistung, Wunschzeit und Kontaktdaten wurden erfasst.",
+      booked: "Termin angelegt",
       appointment: "Donnerstag · 14:30",
-      confirmation: "Bestätigung gesendet",
-      confirmed: "Kundin hat bestätigt",
-      today: "Heute",
-      calendar: "Kalender",
+      service: "Ersttermin · 45 Min.",
+      confirmation: "Bestätigung zugestellt",
+      confirmed: "Sophie hat bestätigt",
+      customer: "Kundenprofil aktualisiert",
+      customerDetail: "Bevorzugte Zeit · Nachmittag",
+      calendar: "Heutiger Kalender",
       calendarEntries: [
         { time: "09:30", name: "Anna" },
         { time: "11:00", name: "Lukas" },
         { time: "14:30", name: "Sophie" },
       ],
     },
-    workflowTitle: "Das Telefon klingelt. Der Kalender füllt sich. Der Kunde bleibt informiert.",
+    workflowTitle: "Ein Gespräch. Ein durchgängiger Vorgang.",
+    workflowBody:
+      "Resepta nimmt nicht nur den Anruf an. Die erfassten Angaben landen im Termin, im Kundenprofil und in der Nachbereitung, mit der Ihr Team tatsächlich arbeitet.",
     workflow: [
       {
         number: "01",
-        title: "Anruf annehmen",
-        body: "Das Anliegen verstehen, die richtigen Angaben erfassen und so sprechen, wie es zu Ihrem Betrieb passt.",
+        title: "Der Anruf wird angenommen",
+        body: "Ein Sprachassistent spricht passend zu Ihrem Betrieb, versteht das Anliegen und erfasst die benötigten Angaben.",
       },
       {
         number: "02",
-        title: "Passenden Zeitpunkt finden",
-        body: "Leistung und Verfügbarkeit prüfen und den gewählten Termin direkt in den Kalender eintragen.",
+        title: "Der Termin wird erfasst",
+        body: "Leistung, Wunschzeit und Gesprächskontext stehen am selben Termin. Ihr Team sieht sofort, was passiert ist.",
       },
       {
         number: "03",
-        title: "Kundenkontakt fortsetzen",
-        body: "Bestätigung und Erinnerung senden und Antworten beim Termin sowie im Kundenprofil festhalten.",
+        title: "Die Nachbereitung bleibt verbunden",
+        body: "Bestätigungen, Erinnerungen, Absagen und Antworten kehren zum selben Vorgang zurück. Kein nächster Schritt geht verloren.",
       },
     ],
-    productTitle: "Der ganze Arbeitstag auf einen Blick",
+    productTitle: "Ihr gesamter Empfang sieht denselben Zusammenhang",
     productBody:
-      "Anrufe, Kunden, Termine und Nachrichten gehören zu demselben Vorgang. Ihr Team sieht sofort, wer angerufen hat, worum es ging und was als Nächstes ansteht.",
+      "Wenn Kalender, Anrufnotizen und Nachrichten in getrennten Werkzeugen liegen, muss Ihr Team sie weiter selbst verbinden. Resepta bündelt jeden Kanal rund um denselben Kunden und Termin.",
     productPoints: [
-      "Aus einem Telefongespräch wird ein Termin",
-      "Kundendaten bleiben automatisch aktuell",
-      "Bestätigungen, Absagen und Erinnerungen greifen ineinander",
+      "Ein sichtbarer Weg vom Gespräch zum Termin",
+      "Aktuelle Kundendaten und Anrufverlauf für das Team",
+      "Bestätigungen, Absagen und Erinnerungen direkt am Termin",
     ],
     productPreview: {
       title: "Heutiger Ablauf",
@@ -435,21 +502,23 @@ export const LANDING: Record<Language, LandingCopy> = {
         { time: "11:00", name: "Lukas Weber", service: "Kontrolle", status: "Erinnert" },
         { time: "14:30", name: "Sophie Hartmann", service: "Termin", status: "Neu" },
       ],
-      callTitle: "Neuer Anruf erfasst",
-      callSummary: "Sophie hat einen Termin am Donnerstagnachmittag vereinbart.",
-      customerTitle: "Kundenprofil aktualisiert",
-      customerDetail: "Bevorzugte Zeit · Nachmittag",
+      callTitle: "Anrufnotiz ist bereit",
+      callSummary: "Sophie fragte nach einem Termin am Donnerstagnachmittag.",
+      customerTitle: "Kundenprofil ist aktuell",
+      customerDetail: "Wunschzeit und Kontaktdaten wurden gespeichert.",
+      reminderTitle: "Nachbereitung eingeplant",
+      reminderDetail: "Bestätigung zugestellt. Erinnerungszeit steht fest.",
     },
-    useCasesTitle: "Ein Produkt, das sich nach Ihrem Betrieb richtet",
+    useCasesTitle: "Für Teams, die ihre Arbeit nicht fürs Telefon unterbrechen können",
     useCasesBody:
-      "Resepta ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsablauf und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
+      "Resepta ist nicht auf eine Branche festgelegt. Sie bestimmen Leistungen, Arbeitsweise und die Kundenangaben, die für Ihren Betrieb wichtig sind.",
     useCases: [
       {
         id: "beauty",
-        tab: "Pflege & Schönheit",
+        tab: "Pflege und Schönheit",
         title: "Bleiben Sie mit beiden Händen beim Kunden",
-        body: "Salons, Barbershops und Kosmetikstudios nehmen Anrufe an, ordnen Leistung und Dauer richtig zu und buchen den Besuch, ohne die Arbeit zu unterbrechen.",
-        outcome: "Weniger verpasste Anrufe, ein besser gefüllter Tag.",
+        body: "In Salons, Barbershops und Kosmetikstudios wird der Anruf angenommen, das Anliegen erfasst und die passende Leistung zum Termin, während das Team beim Kunden bleibt.",
+        outcome: "Weniger verpasste Anrufe. Ein ruhigerer Arbeitstag.",
         image: "/images/randevu-salon.webp",
         imageAlt: "Selbstständige Friseurin schneidet einer Kundin die Haare",
       },
@@ -457,8 +526,8 @@ export const LANDING: Record<Language, LandingCopy> = {
         id: "health",
         tab: "Praxen",
         title: "Die Aufnahme beginnt bereits beim Anruf",
-        body: "Praxen und Kliniken erfassen Anliegen, notwendige Angaben und Wunschzeit in einem Gespräch, während sich das Team auf die Behandlung konzentriert.",
-        outcome: "Weniger Telefonlast, ein klarerer Terminplan.",
+        body: "Praxen und Kliniken erfassen Anliegen, notwendige Angaben und Wunschzeit in einem Gespräch, während das Team bei der Behandlung bleibt.",
+        outcome: "Ein ruhigerer Empfang und ein klarerer Terminplan.",
         image: "/images/randevu-clinic.webp",
         imageAlt: "Selbstständiger Zahnarzt behandelt eine Patientin",
       },
@@ -466,44 +535,53 @@ export const LANDING: Record<Language, LandingCopy> = {
         id: "service",
         tab: "Lokale Betriebe",
         title: "Den nächsten Auftrag während der Arbeit annehmen",
-        body: "Werkstätten und andere Betriebe mit Terminvergabe erfassen Anliegen und passenden Zeitpunkt, während das Team bei der eigentlichen Arbeit bleibt.",
-        outcome: "Weniger Unterbrechungen, keine verlorenen Anfragen.",
+        body: "Werkstätten und andere Terminbetriebe erfassen Anliegen und Wunschzeit, während das Team bei der eigentlichen Arbeit bleibt.",
+        outcome: "Weniger Unterbrechungen. Keine verlorenen Anfragen.",
         image: "/images/randevu-workshop.webp",
         imageAlt: "Mechaniker arbeitet in einer freien Werkstatt an einem Auto",
       },
     ],
-    featuresTitle: "Mehr als nur ein Termin",
+    featuresTitle: "Die Automatisierung läuft. Sie behalten die Kontrolle.",
+    featuresBody:
+      "In Resepta legen Sie fest, wie Ihr Betrieb spricht und welche Angaben jedes Gespräch erfassen soll.",
     features: [
       {
         channel: "call",
         title: "Ein Sprachassistent nach Ihren Vorgaben",
-        body: "Leistungen, Anweisungen und die benötigten Kundenangaben legen Sie direkt in Resepta fest.",
+        body: "Begrüßung, Anweisungen, Stimme und die zu erfassenden Kundenangaben bestimmen Sie selbst.",
       },
       {
         channel: "calendar",
-        title: "Ein Kalender, der aktuell bleibt",
-        body: "Telefonisch vereinbarte, manuell eingetragene und später geänderte Termine stehen an einem Ort.",
+        title: "Der Kalender, mit dem Ihr Team wirklich arbeitet",
+        body: "Telefonisch vereinbarte, manuell angelegte und später geänderte Termine bleiben an einem Ort sichtbar.",
       },
       {
         channel: "message",
-        title: "Verlässliche Nachbetreuung",
-        body: "Bestätigungen, Erinnerungen, Absagen und Rückgewinnung laufen als ein abgestimmter Prozess.",
+        title: "Nachbereitung direkt am Termin",
+        body: "Bestätigungen, Erinnerungen, Absagen und Rückgewinnung verschwinden nicht in getrennten Listen.",
       },
       {
         channel: "customer",
-        title: "Ein Kundenprofil, das dazulernt",
-        body: "Angaben aus dem Gespräch sind beim nächsten Kontakt vorhanden und müssen nicht erneut abgefragt werden.",
+        title: "Ein Kundenprofil, das mit jedem Kontakt besser wird",
+        body: "Angaben aus dem Gespräch stehen beim nächsten Kontakt und für das Team bereit.",
       },
     ],
-    closingTitle: "Der nächste Anruf soll seinen Platz im Kalender finden.",
+    setupTitle: "Von der Google-Anmeldung zum echten Arbeitsbereich",
+    setupBody:
+      "Die Kontoerstellung bleibt kurz. Den Ablauf Ihres Betriebs richten Sie in Ihrem eigenen Tempo ein.",
+    setup: [
+      { number: "01", title: "Mit Google anmelden", body: "Sie müssen kein Passwort erstellen, merken oder zurücksetzen." },
+      { number: "02", title: "Betrieb benennen", body: "Die einzige Frage beim ersten Einstieg ist der Name Ihres Betriebs." },
+      { number: "03", title: "Ablauf einrichten", body: "Fügen Sie Leistungen, Team, Sprachassistent und die benötigten Kanäle hinzu." },
+    ],
+    closingTitle: "Geben Sie dem nächsten Anrufer einen klaren nächsten Schritt.",
     closingBody:
-      "Melden Sie sich mit Google an, legen Sie Ihren Betrieb an und starten Sie den ersten durchgängigen Terminablauf.",
-    footerLine: "Telefon- und Kundenautomatisierung für Betriebe mit Terminvergabe.",
+      "Erstellen Sie jetzt den Arbeitsbereich. Leistungen, Team und verbundene Kanäle richten Sie ein, wenn Sie bereit sind.",
+    footerLine: "Verbundene Anrufe, Kunden und Nachbereitung für Terminbetriebe.",
     footerProduct: "Produkt",
     footerResources: "Ressourcen",
     footerCompany: "Unternehmen",
-    footerAutotaktLine:
-      "KI-Assistenten, vernetzte Arbeitsabläufe und praktische Unternehmenssoftware.",
+    footerAutotaktLine: "KI-Assistenten, vernetzte Arbeitsabläufe und praktische Unternehmenssoftware.",
     help: "Hilfe-Center",
     privacy: "Datenschutzerklärung",
     terms: "Nutzungsbedingungen",
