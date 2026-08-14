@@ -7,7 +7,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
@@ -596,29 +596,35 @@ export function summariseEntries(entries: ConversationEntry[]): ConversationSumm
 // mean "this arrived while you were away" and must survive the visit that
 // shows them. One stamp for both jobs makes opening the Inbox erase the very
 // thing it was opened to show.
+// ONE RULE, TWO READERS: this counts exactly what `conversations` marks
+// unseen, over the same set of rows, so the sidebar can never dot something
+// the tab cannot show.
 export const inboxUnseenCount = query({
   args: {},
   returns: v.number(),
   handler: async (ctx) => {
     const { user, orgId } = await requireOrg(ctx);
     const visit = await inboxVisit(ctx, orgId, user._id);
-    // Never opened it: no boundary to measure against, so no dot rather than a
-    // badge counting the salon's entire history back to its first customer.
-    if (!visit?.seenAt) return 0;
-    const seenAt = visit.seenAt;
+    const floor = inboxReadFloor(visit, user);
     const byCustomer = await conversationEntries(ctx, orgId);
     let count = 0;
     for (const [customerId, entries] of byCustomer) {
       const { lastInboundAt } = summariseEntries(entries);
-      // Nothing inbound can never be new, whatever the customer row says, so
-      // it never earns a read of that row.
-      if (lastInboundAt <= seenAt) continue;
+      // The floor settles most rows for free; only the ones that clear it are
+      // worth a point lookup. Nothing inbound can ever be new.
+      if (lastInboundAt <= floor) continue;
       const customer = await ctx.db.get(customerId as Id<"customers">);
       if (!customer) continue;
       // A muted customer is not in the inbox at all, so counting them here
       // would leave a badge pointing at rows that aren't there.
       if (customer.mutedAt) continue;
-      count += 1;
+      const readAt = await inboxReadAt(
+        ctx,
+        orgId,
+        user._id,
+        customerId as Id<"customers">,
+      );
+      if (lastInboundAt > readAt) count += 1;
     }
     return count;
   },
@@ -661,7 +667,7 @@ export const setAttention = mutation({
 // This person's visit boundaries for THIS workspace, or null before their
 // first visit. Keyed by org + user rather than hung off `memberships`, because
 // a platform operator has no membership row — see the inboxVisits comment in
-// schema.ts.
+// schema.ts. Read-only now: the stamps are the frozen floor described there.
 async function inboxVisit(
   ctx: QueryCtx | MutationCtx,
   orgId: Id<"orgs">,
@@ -673,22 +679,81 @@ async function inboxVisit(
     .unique();
 }
 
-// Both stamps are monotonic and share this path: upsert, never move backwards.
-async function stampInboxVisit(
-  ctx: MutationCtx,
-  field: "seenAt" | "leftAt",
-): Promise<null> {
-  const { user, orgId } = await requireOrg(ctx);
-  const visit = await inboxVisit(ctx, orgId, user._id);
-  const now = Date.now();
-  if (!visit) {
-    await ctx.db.insert("inboxVisits", { orgId, userId: user._id, [field]: now });
-    return null;
-  }
-  if ((visit[field] ?? 0) >= now) return null;
-  await ctx.db.patch(visit._id, { [field]: now });
-  return null;
+// ---- Unread: ONE definition, read by the rows and the sidebar dot alike ----
+//
+// A conversation is NEW when its latest inbound is newer than the moment I
+// last OPENED it. Per (org, user, conversation): visiting the tab, leaving the
+// tab, and a colleague's reading all leave it alone.
+//
+// The floor is what keeps the day-one backlog dark. Whatever the retired
+// visit boundary last reached, or the user's own creation time for anyone who
+// never had one — an inbound older than that counts as read, so nobody was
+// handed their whole history in green the day this shipped.
+function inboxReadFloor(
+  visit: { seenAt?: number; leftAt?: number } | null,
+  user: Doc<"users">,
+): number {
+  return Math.max(visit?.leftAt ?? 0, visit?.seenAt ?? 0, user._creationTime);
 }
+
+// Point lookup, deliberately, rather than reading this user's read-set whole:
+// the cost is then bounded by the conversation window forever, instead of
+// growing with every conversation they have ever opened.
+async function inboxReadAt(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"orgs">,
+  userId: Id<"users">,
+  customerId: Id<"customers">,
+): Promise<number> {
+  const row = await ctx.db
+    .query("inboxReads")
+    .withIndex("by_org_user_customer", (q) =>
+      q.eq("orgId", orgId).eq("userId", userId).eq("customerId", customerId),
+    )
+    .unique();
+  return row?.readAt ?? 0;
+}
+
+// Stamp "I opened this conversation". Called when the user CLICKS a row, and
+// again if a reply lands while they are sitting in that conversation — a
+// message read in front of somebody must not re-light behind their back.
+// Monotonic, so a re-render storm costs no writes.
+//
+// Deliberately NOT called when the Inbox restores a selection on arrival:
+// that is the view filling its right-hand pane, not a person choosing to read
+// something, and letting it stamp would put back "opening the tab clears it"
+// in a smaller disguise.
+export const markConversationRead = mutation({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("inboxReads")
+      .withIndex("by_org_user_customer", (q) =>
+        q
+          .eq("orgId", orgId)
+          .eq("userId", user._id)
+          .eq("customerId", args.customerId),
+      )
+      .unique();
+    if (existing) {
+      if (existing.readAt >= now) return null;
+      await ctx.db.patch(existing._id, { readAt: now });
+    } else {
+      await ctx.db.insert("inboxReads", {
+        orgId,
+        userId: user._id,
+        customerId: args.customerId,
+        readAt: now,
+      });
+    }
+    return null;
+  },
+});
 
 // Pin or unpin, for me. Unpinning deletes; re-pinning an existing pin refreshes
 // the stamp, which is what un-spends a pin that an outbound message has since
@@ -725,24 +790,10 @@ export const setInboxPin = mutation({
   },
 });
 
-// "I have the Inbox open." Drives the SIDEBAR dot only. Called on mount and
-// again whenever mail lands while the tab is open, so the dot cannot reappear
-// behind the reader's back while they are staring at the list. Monotonic.
-export const markInboxSeen = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => await stampInboxVisit(ctx, "seenAt"),
-});
-
-// "I have left the Inbox" — the boundary the grey ROW markers compare against.
-// Stamped on unmount alone. Closing the browser skips it, which only means the
-// next visit marks everything since the last clean exit; it self-corrects on
-// the first tab switch.
-export const markInboxLeft = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => await stampInboxVisit(ctx, "leftAt"),
-});
+// markInboxSeen / markInboxLeft used to live here and are deliberately gone:
+// they wrote the visit boundary, and that boundary is a frozen floor now (see
+// schema.ts inboxVisits). Reading a conversation is markConversationRead, and
+// nothing else marks anything read.
 
 // Inbox left pane: one row per customer, newest activity first, carrying the
 // last preview plus which channels are waiting on a reply from the business.
@@ -768,8 +819,8 @@ export const conversations = query({
       // re-stamps inboxSeenAt instead of re-lighting the sidebar dot behind
       // the reader's back.
       lastInboundAt: v.number(),
-      // They wrote since I last LEFT the Inbox. A visit boundary and nothing
-      // more — it makes no claim about whether anyone answered.
+      // They wrote since I last OPENED this conversation. It makes no claim
+      // about whether anyone answered, only that I have not looked.
       unseen: v.boolean(),
       // I pinned this conversation. Manual, sticky, and mine alone.
       pinned: v.boolean(),
@@ -779,10 +830,7 @@ export const conversations = query({
     const { user, orgId } = await requireOrg(ctx);
     const byCustomer = await conversationEntries(ctx, orgId);
     const visit = await inboxVisit(ctx, orgId, user._id);
-    // Unset (never left the Inbox) reads as "nothing to mark" rather than
-    // marking every row on a first visit, which would teach the reader to
-    // ignore the colour immediately.
-    const leftBoundary = visit?.leftAt ?? Number.MAX_SAFE_INTEGER;
+    const readFloor = inboxReadFloor(visit, user);
     // Read whole: unpinning deletes, so this holds only live pins.
     const pins = await ctx.db
       .query("inboxPins")
@@ -805,6 +853,14 @@ export const conversations = query({
       // point: a quiet row in a list of forty is still forty rows to read.
       if (customer.mutedAt) continue;
       const summary = summariseEntries(entries);
+      // NEW = they wrote since I last opened THIS conversation. Floored, so a
+      // conversation nobody ever opened is only new if it moved after the
+      // baseline. The floor test is free and short-circuits the point lookup,
+      // so only rows that clear it cost a read.
+      const unseen =
+        summary.lastInboundAt > readFloor &&
+        summary.lastInboundAt >
+          (await inboxReadAt(ctx, orgId, user._id, customer._id));
       out.push({
         customerId: customer._id,
         name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
@@ -817,7 +873,7 @@ export const conversations = query({
         hasFailed: summary.hasFailed,
         awaitingReply: summary.awaitingChannels.length > 0,
         lastInboundAt: summary.lastInboundAt,
-        unseen: summary.lastInboundAt > leftBoundary,
+        unseen,
         // A pin older than the newest outbound is SPENT: you pinned the debt
         // and then paid it. That is how replying clears a pin without the send
         // path ever hearing about pins.

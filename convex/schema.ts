@@ -105,15 +105,18 @@ export default defineSchema({
     .index("by_org_user", ["orgId", "userId"])
     .index("by_org_user_customer", ["orgId", "userId", "customerId"]),
 
-  // When this person last looked at this workspace's Inbox — the objective
-  // half of the row marker, and the grey one.
+  // FROZEN BASELINE. These were the whole unread model: seenAt was "I have the
+  // tab open" and leftAt was "I walked away", and a row counted as new when its
+  // latest inbound landed after leftAt. That boundary could only answer "have
+  // you been to the Inbox lately", so switching tabs marked everything read —
+  // markers went out with nobody having opened a single conversation, and an
+  // Unread filter over it would empty itself every time you navigated away.
   //
-  // Two stamps, not one, because they answer different questions. seenAt is
-  // "I have the tab open" and drives the SIDEBAR dot, so it is written on
-  // mount and again whenever mail lands while you are looking. leftAt is "I
-  // walked away" and is the boundary the grey ROW markers compare against, so
-  // it is written on unmount alone — a boundary that advanced on arrival would
-  // clear every marker before the reader had read the row it sat on.
+  // Unread is per-CONVERSATION now (inboxReads below). Nothing writes this any
+  // more; it survives as the FLOOR under that model, so the day the switch
+  // shipped nobody woke up to their whole history lit green. Never write it
+  // again — a moving floor silently marks things read, which is the bug this
+  // replaced.
   //
   // Its own table rather than two columns on `memberships`, which is where
   // this started: a platform operator working inside a tenant resolves an org
@@ -129,6 +132,26 @@ export default defineSchema({
     seenAt: v.optional(v.number()),
     leftAt: v.optional(v.number()),
   }).index("by_org_user", ["orgId", "userId"]),
+
+  // "I opened this conversation, at this moment." PER-USER, one row per
+  // conversation anyone has ever opened, and the whole of the unread model: a
+  // conversation is NEW when its latest inbound is newer than my stamp for it,
+  // floored by inboxVisits above for the rows I never opened.
+  //
+  // Per user and not per org-wide-customer on purpose, the same reasoning as
+  // inboxPins: a colleague reading a message does not mean I have. That is a
+  // real difference from attentionClearedAt, which is shared and stays shared.
+  //
+  // Rows are never pruned. Readers look a stamp up by (org, user, customer)
+  // rather than reading the set, so the table's SIZE costs a query nothing. If
+  // that ever changes, compact — advance the floor to the newest fully-read
+  // conversation and delete underneath it — rather than reading it whole.
+  inboxReads: defineTable({
+    orgId: v.id("orgs"),
+    userId: v.id("users"),
+    customerId: v.id("customers"),
+    readAt: v.number(),
+  }).index("by_org_user_customer", ["orgId", "userId", "customerId"]),
 
   // Team invites. No token is mailed and none is checked (Nudge's model):
   // Google has already proven the signer-in controls the address, so matching
