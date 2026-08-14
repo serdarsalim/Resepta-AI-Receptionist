@@ -237,6 +237,13 @@ export const process = internalAction({
       // caller told us, and this record only claims the latter.
       const collected = { ...afterValues, ...duringValues };
 
+      // Retell prices the call in USD cents on call_cost.combined_cost, and
+      // only the call_analyzed event carries it. Converted to micro-USD here
+      // so the meter (retell.meterCall) speaks the ledger's one unit.
+      const combinedCostCents = Number(
+        ((call.call_cost ?? {}) as Record<string, unknown>).combined_cost,
+      );
+
       await ctx.runMutation(internal.retell.recordCall, {
         retellAgentId: row.retellAgentId,
         retellCallId: row.retellCallId,
@@ -255,6 +262,9 @@ export const process = internalAction({
         // Only call_ended carries it; call_analyzed arrives without one and
         // recordCall's fill-don't-overwrite patch keeps the first value.
         disconnectionReason: String(call.disconnection_reason ?? "") || undefined,
+        retellCostMicroUsd: Number.isFinite(combinedCostCents)
+          ? Math.round(combinedCostCents * 10_000)
+          : undefined,
       });
 
       const phone = String(call.from_number ?? "");

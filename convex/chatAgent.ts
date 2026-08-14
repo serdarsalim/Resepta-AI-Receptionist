@@ -9,6 +9,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { monthKey } from "./lib/usage";
 
 import { platformValue } from "./lib/platformConfig";
 import {
@@ -258,20 +259,6 @@ export const loadTurnContext = internalQuery({
     };
   },
 });
-
-// "2026-08" in the org's zone. UTC when the zone is broken — a wrong bucket
-// at a month boundary beats a thrown turn.
-function monthKey(at: number, timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-    }).format(new Date(at));
-  } catch {
-    return new Date(at).toISOString().slice(0, 7);
-  }
-}
 
 // ── The flight recorder + ledger write (spec §5, §6) ────────────────────────
 // One mutation writes the turn AND bumps the month's counters, so the two can

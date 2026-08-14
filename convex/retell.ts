@@ -9,7 +9,7 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { normalisePhone } from "./lib/phone";
@@ -18,6 +18,7 @@ import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { monthKey } from "./lib/usage";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenDuration, spokenPrice } from "./lib/speech";
@@ -2261,6 +2262,80 @@ export const updateContactFromVoice = internalMutation({
   },
 });
 
+// The call meter (schema: calls.billedMicroUsd / usageMonthly.voice*). One
+// helper serves both recordCall branches. Two independent, idempotent stamps:
+//
+//   billed  — the first time a duration is known. Frozen at the org's rate at
+//             that instant; bumps voiceCalls/voiceSeconds/voiceBilledMicroUsd.
+//   cost    — the first time Retell's own price is known (call_analyzed).
+//             Bumps voiceCostMicroUsd.
+//
+// Each keys on its own field being unset, so the call_ended/call_analyzed
+// double-fire and any webhook retry can never double-bill or double-bump the
+// month. The ledger row is bumped in the SAME mutation as the stamp — the
+// usageMonthly rule the chat lane already lives by. The month is the month of
+// the call's startedAt in the org's zone: a call analysed after midnight
+// bills into the month it was made.
+async function meterCall(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  existing: Doc<"calls"> | null,
+  args: { durationSec?: number; retellCostMicroUsd?: number },
+  startedAt: number,
+): Promise<{ billedMicroUsd?: number; retellCostMicroUsd?: number }> {
+  const durationSec = existing?.durationSec ?? args.durationSec;
+  const stampBilled =
+    durationSec !== undefined && existing?.billedMicroUsd === undefined;
+  const stampCost =
+    args.retellCostMicroUsd !== undefined &&
+    existing?.retellCostMicroUsd === undefined;
+  if (!stampBilled && !stampCost) return {};
+  const org = await ctx.db.get(orgId);
+  if (!org) return {};
+  // Unset rate = metered at rate zero: usage still counts, the bill is 0.
+  const rate = org.voiceRateMicroUsdPerMinute ?? 0;
+  const billedMicroUsd = stampBilled
+    ? Math.round(((durationSec ?? 0) * rate) / 60)
+    : undefined;
+  const month = monthKey(startedAt, org.timezone);
+  const usage = await ctx.db
+    .query("usageMonthly")
+    .withIndex("by_org_month", (q) => q.eq("orgId", orgId).eq("month", month))
+    .unique();
+  const bump = {
+    voiceCalls: stampBilled ? 1 : 0,
+    voiceSeconds: stampBilled ? (durationSec ?? 0) : 0,
+    voiceBilledMicroUsd: billedMicroUsd ?? 0,
+    voiceCostMicroUsd: stampCost ? (args.retellCostMicroUsd ?? 0) : 0,
+  };
+  if (usage) {
+    await ctx.db.patch(usage._id, {
+      voiceCalls: (usage.voiceCalls ?? 0) + bump.voiceCalls,
+      voiceSeconds: (usage.voiceSeconds ?? 0) + bump.voiceSeconds,
+      voiceBilledMicroUsd:
+        (usage.voiceBilledMicroUsd ?? 0) + bump.voiceBilledMicroUsd,
+      voiceCostMicroUsd:
+        (usage.voiceCostMicroUsd ?? 0) + bump.voiceCostMicroUsd,
+      updatedAt: Date.now(),
+    });
+  } else {
+    await ctx.db.insert("usageMonthly", {
+      orgId,
+      month,
+      llmTurns: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+      llmCostMicroUsd: 0,
+      ...bump,
+      updatedAt: Date.now(),
+    });
+  }
+  return {
+    ...(billedMicroUsd !== undefined ? { billedMicroUsd } : {}),
+    ...(stampCost ? { retellCostMicroUsd: args.retellCostMicroUsd } : {}),
+  };
+}
+
 // Post-call webhook: one row per Retell call, idempotent by retellCallId.
 export const recordCall = internalMutation({
   args: {
@@ -2275,6 +2350,7 @@ export const recordCall = internalMutation({
     recordingUrl: v.optional(v.string()),
     collected: v.optional(v.record(v.string(), v.any())),
     disconnectionReason: v.optional(v.string()),
+    retellCostMicroUsd: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -2304,6 +2380,7 @@ export const recordCall = internalMutation({
           existing.collected || args.collected
             ? { ...(args.collected ?? {}), ...(existing.collected ?? {}) }
             : undefined,
+        ...(await meterCall(ctx, agent.orgId, existing, args, existing.startedAt)),
       });
       return null;
     }
@@ -2355,6 +2432,7 @@ export const recordCall = internalMutation({
       retellCallId: args.retellCallId,
       collected: args.collected,
       disconnectionReason: args.disconnectionReason,
+      ...(await meterCall(ctx, agent.orgId, null, args, args.startedAt)),
     });
     return null;
   },

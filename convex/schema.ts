@@ -373,6 +373,13 @@ export default defineSchema({
     // pauses politely. Protects the platform key from a runaway loop and one
     // org from becoming everyone's bill.
     chatAgentMonthlyBudgetMicroUsd: v.optional(v.number()),
+    // What THIS org pays per called minute, micro-USD, billed per second.
+    // Operator-set from /admin only. Unset or 0 = metered at rate zero: the
+    // meter still counts seconds and Retell cost so an unpriced org's burn
+    // stays visible, the bill is just 0. The rate is read once per call at
+    // stamp time (retell.recordCall) and frozen onto the row — changing it
+    // never rewrites a past call.
+    voiceRateMicroUsdPerMinute: v.optional(v.number()),
     // The showroom. An org with this set never reaches a provider: sends are
     // simulated, replies are invented, and a nightly cron wipes it back to a
     // fixed dataset (convex/demo.ts).
@@ -621,6 +628,16 @@ export default defineSchema({
     // and this app speaks three languages. It is the only thing that explains a
     // call with no summary — an unanswered call has nothing else to show.
     disconnectionReason: v.optional(v.string()),
+    // Call metering — stamped ONCE each, in recordCall, idempotent on the
+    // field being unset so the call_ended/call_analyzed double-fire (and any
+    // webhook retry) can never double-bill. billedMicroUsd is FROZEN at the
+    // org's voiceRateMicroUsdPerMinute the moment the duration first lands:
+    // the month's bill is a sum of immutable line items, and a later price
+    // change never rewrites history. retellCostMicroUsd is what Retell
+    // charged US (call_cost.combined_cost, arrives on call_analyzed) —
+    // operator margin data, never shown to the org.
+    billedMicroUsd: v.optional(v.number()),
+    retellCostMicroUsd: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_started", ["orgId", "startedAt"])
@@ -1491,6 +1508,17 @@ export default defineSchema({
     llmInputTokens: v.number(),
     llmOutputTokens: v.number(),
     llmCostMicroUsd: v.number(),
+    // The voice lane's counters on the same ledger row (the shape doing what
+    // its comment promised). Bumped in retell.recordCall, in the same
+    // mutation that stamps the call row, keyed to the month of the call's
+    // startedAt: a call analysed after midnight bills into the month it was
+    // made. Optional because rows written before the meter existed carry
+    // none. calls/seconds/billed move together when a duration first lands;
+    // cost lands separately when call_analyzed brings Retell's price.
+    voiceCalls: v.optional(v.number()),
+    voiceSeconds: v.optional(v.number()),
+    voiceBilledMicroUsd: v.optional(v.number()),
+    voiceCostMicroUsd: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_org_month", ["orgId", "month"]),
 
