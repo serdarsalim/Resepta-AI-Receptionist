@@ -1297,13 +1297,21 @@ function Calendar({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
+    // The grid is a card, the plane around it is the page gradient. Everything
+    // INSIDE stays exactly as it was — white paper with the closed hours
+    // shaded on it and every hour line drawn on top. The alternative (letting
+    // the gradient show through closed hours and painting only open time
+    // white) was tried and reverted: the white band is an overlay, so it
+    // buried the hour lines it was laid over, and the grid lost its ruler.
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
 
       {/* Column headers stay put while the hours scroll under them. With staff
           columns the names take this row over: the date is already in the
           heading above, and a date row on top of a name row is two headers
           stacked for one thing. */}
-      <div className="flex pr-[10px]">
+      {/* pt-3: the row sits inside a card now, and a weekday name flush
+          against the card's top edge reads as clipped. */}
+      <div className="flex pr-[10px] pt-3">
         <div className="w-12 shrink-0" />
         {staffColumns
           ? columns.map((column) => (

@@ -837,7 +837,11 @@ export function ConversationPanel({
            Sending any manual message also takes over (stamped server-side in
            wa.sendSession); the chip is how the thread is handed BACK, which
            no message can express. */
-        <div className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)]">
+        <div
+          className={`flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)] ${
+            chatOrder ? "bg-[var(--thread-bg)]" : ""
+          }`}
+        >
           <span>
             {agentChipState === "paused" ? t("agent.paused") : t("agent.answering")}
           </span>
@@ -858,7 +862,12 @@ export function ConversationPanel({
       {canCompose && (
         <>
           <form
-            className="p-3"
+            // Same tint as the thread above it, on the same condition. White
+            // here put a hard seam across the panel exactly where the
+            // conversation ended — the composer is part of the chat surface,
+            // not a footer under it. The feed view keeps card-white, because
+            // its thread does too.
+            className={`p-3 ${chatOrder ? "bg-[var(--thread-bg)]" : ""}`}
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
@@ -893,9 +902,9 @@ export function ConversationPanel({
                 sharing a row. A chat composer should read as somewhere you
                 talk, not as a form with a submit button. */}
             <div
-              className={`flex items-end gap-1 rounded-3xl bg-[var(--muted-bg)] p-1.5 ${
-                windowOpen ? "" : "opacity-60"
-              }`}
+              className={`flex items-end gap-1 rounded-3xl p-1.5 ${
+                chatOrder ? "bg-[var(--card)]" : "bg-[var(--muted-bg)]"
+              } ${windowOpen ? "" : "opacity-60"}`}
             >
             <textarea
               ref={composerRef}

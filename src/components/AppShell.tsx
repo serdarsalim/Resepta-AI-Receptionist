@@ -1329,9 +1329,7 @@ export function AppShell({
           the plane to separate — grey just tints the whole grid and the day
           columns stop reading as paper. */}
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden md:rounded-xl md:shadow-[var(--card-shadow)] ${
-          tab === "appointments" ? "bg-[var(--card)]" : "bg-[image:var(--content-bg)]"
-        }`}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)] md:rounded-xl md:shadow-[var(--card-shadow)]"
       >
         {/* No ✕ on any tab. Business traded its close button for the search box
             first, and Account followed (2026-08-12) once it had grown enough

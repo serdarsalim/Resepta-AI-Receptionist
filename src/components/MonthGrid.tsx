@@ -108,7 +108,8 @@ export function MonthGrid({
   const today = startOfDay(Date.now());
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // Same card as the week grid: white paper on the page gradient.
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
       <div className="grid grid-cols-7">
         {headers.map((name) => (
           <div
