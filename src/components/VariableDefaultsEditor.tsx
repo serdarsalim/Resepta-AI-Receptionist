@@ -52,23 +52,34 @@ export function VariableDefaultsEditor({
   const { t } = useLanguage();
   const fields = useQuery(api.contactFields.list, {}) ?? [];
 
-  // The same vocabulary the insert menu offers, so a row appears for exactly
-  // the tokens this app can resolve. Aliases resolve to their canonical label
-  // where we know one; anything else the renderer knows still gets a row under
-  // its own name.
+  // ── ONLY TOKENS THAT CAN HONESTLY BE BLANK ─────────────────────────────
+  //
+  // A fallback is worth authoring where the value varies per customer or per
+  // booking AND can legitimately be missing. Everything else is either always
+  // there or is configuration, and offering a row for those teaches the wrong
+  // lesson — that the way to fix a missing booking link is to write a
+  // sentence about not having one, rather than to go and set the link.
+  //
+  // Excluded and why:
+  //   [business]                  the org always has a name; it cannot be blank
+  //   [date]                      every appointment-lifecycle send has a time
+  //   [booking_link] / [phone]    org CONFIG. Blank means "go set it" — those
+  //                               two now live in Business settings
+  //   [manage_link]               structural: present on lifecycle sends,
+  //                               absent everywhere else, never per-customer
+  //   [name]                      renderTokens tidies the greeting when it is
+  //                               blank ("Hello [name]!" → "Hello!"), so the
+  //                               sentence already survives without help
+  //
+  // What is left is the honest list: the org's own contact fields, which are
+  // blank for anyone who never answered them, and the three booking facts a
+  // real appointment can genuinely lack.
   const labels = new Map<string, string>([
-    ["name", t("vars.firstName")],
-    ["firstname", t("vars.firstName")],
-    ["business", t("vars.business")],
-    ["date", t("vars.date")],
     ["service", t("vars.service")],
     ["pricelist", t("vars.priceList")],
     ["fiyatlistesi", t("vars.priceList")],
     ["price", t("vars.price")],
     ["staff", t("vars.staff")],
-    ["booking_link", t("vars.bookingLink")],
-    ["phone", t("vars.phone")],
-    ["manage_link", t("vars.manageLink")],
     ...fields.map((field) => [field.key, field.label] as [string, string]),
   ]);
 

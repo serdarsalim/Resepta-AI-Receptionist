@@ -977,6 +977,11 @@ const dictionary = {
   // appointment or the business and are nearly always there; a contact field
   // comes from one customer's record and is blank for anyone who never
   // answered it. One flat list hid that difference.
+  "settings.rulesBack": {
+    tr: "Tüm kurallar",
+    en: "All rules",
+    de: "Alle Regeln",
+  },
   "editor.varDefaults": {
     tr: "Boş kalırsa ne yazsın",
     en: "When empty, print…",

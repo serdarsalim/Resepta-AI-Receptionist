@@ -187,6 +187,50 @@ export const listRange = query({
 });
 
 // The contact page's history pane: this customer's appointments, newest first.
+// A real booking to preview a template against, chosen for the writer rather
+// than for the reader: the soonest one still ahead that actually has line
+// items, because a booking with no services previews every price token as an
+// empty slot and teaches nothing. Falls back to the soonest ahead, then to the
+// most recent past one, then to null for a salon with nothing booked yet.
+//
+// Deliberately a REAL booking. The preview used to refuse to draw without one
+// on the grounds that invented names and prices make the product look like it
+// has a pricing bug — which was right about invention and wrong about
+// refusing. This is the third answer: no invention, no blank pane.
+export const sampleForPreview = query({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({ customerId: v.id("customers"), name: v.string() }),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const now = Date.now();
+    const upcoming = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) => q.eq("orgId", orgId).gte("startAt", now))
+      .take(40);
+    const past = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) => q.eq("orgId", orgId).lt("startAt", now))
+      .order("desc")
+      .take(40);
+    const withItems = [...upcoming, ...past].find(
+      (row) => (row.items?.length ?? 0) > 0 && row.customerId,
+    );
+    const chosen = withItems ?? upcoming[0] ?? past[0];
+    if (!chosen?.customerId) return null;
+    const customer = await ctx.db.get(chosen.customerId);
+    if (!customer) return null;
+    return {
+      customerId: customer._id,
+      name:
+        `${customer.firstName} ${customer.lastName ?? ""}`.trim() ||
+        customer.phone,
+    };
+  },
+});
+
 export const listForCustomer = query({
   args: { customerId: v.id("customers") },
   returns: v.array(

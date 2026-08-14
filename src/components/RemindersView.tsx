@@ -599,13 +599,19 @@ function RuleEditor({
   const contacts = useQuery(api.customers.options, {}) ?? [];
   const [contactQuery, setContactQuery] = useState("");
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
+  // A real booking of this salon's own, so the preview is filled the moment
+  // the page opens and nobody has to configure a fallback to see the sentence
+  // work. Auto-picked, never sticky: choosing someone yourself replaces it,
+  // and clearing the box drops back to this.
+  const sample = useQuery(api.appointments.sampleForPreview, {});
+  const effectiveContactId = contactId ?? sample?.customerId ?? null;
   // Which lane the preview is showing. One message goes out two ways, so this
   // is a view of the same thing rather than two things — stacking both cards
   // made the pane look like the rule sends twice.
   const [lanePref, setLanePref] = useState<"email" | "whatsapp">("email");
   const picked = useQuery(
     api.customers.get,
-    contactId ? { customerId: contactId } : "skip",
+    effectiveContactId ? { customerId: effectiveContactId } : "skip",
   );
   const matches =
     contactQuery.trim() && !contactId
@@ -622,7 +628,7 @@ function RuleEditor({
   // failing that the most recent past one. Rows arrive newest-first.
   const appointments = useQuery(
     api.appointments.listForCustomer,
-    contactId ? { customerId: contactId } : "skip",
+    effectiveContactId ? { customerId: effectiveContactId } : "skip",
   );
   const appointment = useMemo(() => {
     if (!appointments?.length) return null;
@@ -971,7 +977,11 @@ function RuleEditor({
               // top row of their columns and any difference reads as a
               // misalignment rather than as a smaller control.
               className="h-10 w-full text-sm"
-              value={contactId ? pickedLabel : contactQuery}
+              value={
+                contactId
+                  ? pickedLabel
+                  : contactQuery || (sample && !contactQuery ? sample.name : "")
+              }
               placeholder={t("settings.previewPickContact")}
               onChange={(e) => {
                 setContactId(null);
@@ -1103,7 +1113,30 @@ function RulesCard({
   // For the preview's custom-token map — the same registry the variable
   // dropdown reads, so preview and menu can never disagree.
   const contactFieldRows = useQuery(api.contactFields.list, {}) ?? [];
-  const [expandedId, setExpandedId] = useState<Id<"messageRules"> | null>(null);
+  // The open rule lives in the URL, the same way the app's tab does and the
+  // same way VoiceView carries its open agent. Expand-in-place was fine while
+  // a rule was three fields; it now opens a two-column editor with its own
+  // preview, and a panel that tall unfolding inside a list left no way to tell
+  // what you were looking at. So a rule is a PAGE you go into and come back
+  // from — and because the id is in the URL, a refresh or a trip to another
+  // tab and back returns you to it rather than to the top of the list.
+  const [openId, setOpenId] = useState<Id<"messageRules"> | null>(null);
+  // Read after mount: initialising state from window during render is a
+  // hydration mismatch (AppHome's tab does the same dance).
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("rule");
+    if (wanted) setOpenId(wanted as Id<"messageRules">);
+  }, []);
+  const openRule = (next: Id<"messageRules"> | null) => {
+    setOpenId(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("rule", next);
+    else url.searchParams.delete("rule");
+    // replaceState, not push: a drill-in is not history. The back button in
+    // the header is the way out, and filling the browser stack with every
+    // rule glanced at makes Back stop meaning "the page before this one".
+    window.history.replaceState(null, "", url);
+  };
   const [confirm, confirmDialog] = useConfirm();
 
   const deleteRule = async (rule: RuleRowData) => {
@@ -1112,7 +1145,7 @@ function RulesCard({
       body: t("settings.deleteRuleConfirm"),
     });
     if (!ok) return;
-    setExpandedId(null);
+    openRule(null);
     void removeRule({ ruleId: rule._id });
   };
 
@@ -1202,16 +1235,27 @@ function RulesCard({
         ? t("settings.ruleEmail")
         : t("settings.channelBoth");
 
-  const toggleExpand = (rule: RuleRowData) => {
-    if (expandedId === rule._id) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(rule._id);
+  const open = (rule: RuleRowData) => {
+    openRule(rule._id);
     // Creates the rule's own wording row (copied from the kind fallback) the
-    // first time the panel opens; a no-op after that.
+    // first time it is opened; a no-op after that.
     if (isOwner) void ensureTemplate({ ruleId: rule._id, language: org.language });
   };
+  // A rule deleted in another tab, or an id someone pasted: fall back to the
+  // list rather than holding a page that cannot render.
+  const opened = rules.find((rule) => rule._id === openId) ?? null;
+  useEffect(() => {
+    if (openId && rules.length > 0 && !opened) openRule(null);
+  }, [openId, opened, rules.length]);
+  // Re-runs ensureTemplate for a rule restored from the URL, which never went
+  // through open() — a refresh inside a rule that had no wording row yet
+  // would otherwise land on an editor with nothing to bind to.
+  useEffect(() => {
+    if (opened && isOwner) {
+      void ensureTemplate({ ruleId: opened._id, language: org.language });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [opened?._id, isOwner, org.language]);
 
   const pad = (h: number) => String(h).padStart(2, "0");
   const winbackHint = `${t("settings.ruleWinbackHint")}\n${t("settings.ruleSendWindow")}: ${pad(
@@ -1297,6 +1341,62 @@ function RulesCard({
   const doAdd = (trigger: RuleTrigger, offsetHours?: number) =>
     void addRule({ trigger, offsetHours: offsetHours ?? addDefaults[trigger] ?? 0 });
 
+  // One rule, full width, with the way back in the header — the drill-in
+  // VoiceView uses for an agent. The list is gone while you are in here on
+  // purpose: half a list above an editor was the confusion.
+  if (opened) {
+    const ownTemplate = templates.find(
+      (tpl) => tpl.ruleId === opened._id && tpl.language === org.language,
+    );
+    return (
+      <Card disabled={!isOwner}>
+        <div className="mb-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => openRule(null)}
+            className="-ml-1 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            ← {t("settings.rulesBack")}
+          </button>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium">
+              {ruleName(opened.trigger)}
+            </span>
+            <span className="shrink-0 text-sm text-[var(--muted)]">
+              {ruleWhen(opened)}
+            </span>
+          </span>
+        </div>
+        <RuleEditor
+          rule={opened}
+          template={ownTemplate}
+          contactFields={contactFieldRows}
+          orgName={org.name}
+          orgLanguage={org.language}
+          orgCurrency={org.currency}
+          orgTimezone={org.timezone}
+          orgBookingUrl={org.bookingUrl}
+          orgPublicPhone={org.publicPhone}
+          emailEnabled={emailEnabled}
+          waConnected={waConnected}
+          onSaveTemplate={(templateId, patch) =>
+            void updateTemplate({ templateId, ...patch })
+          }
+        />
+        {/* Deleting lives with the thing being deleted. */}
+        <div className="flex justify-end pt-2">
+          <button
+            type="button"
+            onClick={() => void deleteRule(opened)}
+            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            {t("settings.deleteRule")}
+          </button>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card disabled={!isOwner}>
       <div className="hidden items-center gap-3 pb-2 sm:flex">
@@ -1308,28 +1408,29 @@ function RulesCard({
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
           <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
         </div>
-        <span className="w-9 shrink-0" aria-hidden />
       </div>
 
       <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
         {rules.map((rule) => {
-          const expanded = expandedId === rule._id;
           const rowChannels = wiredFor(rule);
-          const ownTemplate = templates.find(
-            (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
-          );
           return (
             <div key={rule._id}>
-              {/* An open row is the header of the panel under it, so it takes
-                  a tint and loses its bottom rounding — otherwise the editor
-                  appears to belong to the whole list rather than to the one
-                  rule whose chevron you turned. */}
+              {/* The whole row opens the rule. It used to unfold in place,
+                  which read fine while a rule was three fields and stopped
+                  reading at all once the panel grew a two-column editor with
+                  its own preview: the list above it stayed on screen, so
+                  nothing told you which rule you were inside. */}
               <div
-                className={`flex items-center gap-3 px-3 py-3 transition-colors ${
-                  expanded
-                    ? "-mx-3 rounded-t-lg bg-[var(--muted-bg)]"
-                    : "-mx-3"
-                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => open(rule)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    open(rule);
+                  }
+                }}
+                className="-mx-3 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
               >
                 <div className={RULE_COLUMNS}>
                   <span className="flex items-center gap-1.5 text-sm">
@@ -1355,7 +1456,12 @@ function RulesCard({
                           role="switch"
                           aria-checked={on}
                           aria-label={`${ruleName(rule.trigger)} — ${channelLabel(channel)}`}
-                          onClick={() => toggleChannel(rule, channel)}
+                          // The channel switches stay live on the row: they
+                          // are the one thing worth changing without going in.
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleChannel(rule, channel);
+                          }}
                           className={`rounded-full px-2.5 py-0.5 transition-colors ${
                             on
                               ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
@@ -1371,53 +1477,7 @@ function RulesCard({
                     )}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(rule)}
-                  aria-expanded={expanded}
-                  aria-label={`${ruleName(rule.trigger)} — ${t("settings.ruleEditMessage")}`}
-                  title={t("settings.ruleEditMessage")}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                >
-                  <span
-                    aria-hidden
-                    className={`inline-block transition-transform ${expanded ? "rotate-180" : ""}`}
-                  >
-                    ⌄
-                  </span>
-                </button>
               </div>
-              {expanded && (
-                <div className="-mx-3 rounded-b-lg bg-[var(--muted-bg)] px-3 pt-1">
-                  <RuleEditor
-                    rule={rule}
-                    template={ownTemplate}
-                    contactFields={contactFieldRows}
-                    orgName={org.name}
-                    orgLanguage={org.language}
-                    orgCurrency={org.currency}
-                    orgTimezone={org.timezone}
-                    orgBookingUrl={org.bookingUrl}
-                    orgPublicPhone={org.publicPhone}
-                    emailEnabled={emailEnabled}
-                    waConnected={waConnected}
-                    onSaveTemplate={(templateId, patch) =>
-                      void updateTemplate({ templateId, ...patch })
-                    }
-                  />
-                  {/* Deleting lives with the thing being deleted — the open
-                      panel — not as a glyph on every collapsed row. */}
-                  <div className="flex justify-end pb-4">
-                    <button
-                      type="button"
-                      onClick={() => void deleteRule(rule)}
-                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
-                    >
-                      {t("settings.deleteRule")}
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
@@ -1475,7 +1535,7 @@ function RulesCard({
               confirmLabel: t("settings.resetRules"),
             });
             if (!ok) return;
-            setExpandedId(null);
+            openRule(null);
             void resetRules({});
           }}
           className="text-xs text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
