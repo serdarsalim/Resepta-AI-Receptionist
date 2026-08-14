@@ -597,13 +597,24 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
   keys on its own field being unset: that idempotency is what makes the
   call_ended/call_analyzed double-fire and every retry safe, so never stamp
   or bump anywhere else. Months key on the call's `startedAt` in the org's
-  zone (`lib/usage.ts monthKey`, shared with the chat lane). Rate changes
-  never reprice history; the activity feed carries the number for exactly
-  that reason. Backfill for pre-meter calls: `voiceBackfill:run` (billed
-  defaults to zero — run before setting the rate). Operator surface:
-  /admin Calls MTD column + the org page's Usage tab. There is deliberately
-  no hard cap on the voice lane: suspension is the human lever, and the
-  org's own Retell account balance is the real fuse.
+  zone (`lib/usage.ts monthKey`, shared with the chat lane). The rate
+  resolves org override ?? platform default (`platformConfig
+  voiceRateMicroUsdPerMinute`) ?? 0 — set the price ONCE on the Platform
+  tab; an org row exists only for exceptions, and an explicit org 0 beats
+  the default. Rate changes never reprice history; the activity feed
+  carries the number for exactly that reason. Backfill for pre-meter calls:
+  `voiceBackfill:run` (billed defaults to zero — run before setting the
+  rate). Two surfaces, one boundary: /admin (fleet Calls MTD + org Usage
+  tab) sees both sides including Retell's cost; the OWNER's Usage section
+  on the voice page (`convex/billing.ts`, owner-only, staff get null) sees
+  billed only — `retellCostMicroUsd` never reaches an org-facing read. The
+  owner's soft budget (`orgs.voiceMonthlyBudgetMicroUsd`) emails owners at
+  80/100% via the alerts fan-out (kind "billing", the first owner-scoped
+  kind; the budget being set is the opt-in, no per-user toggle). There is
+  deliberately no hard cap on the voice lane: an alerted runaway month
+  beats hanging up on the salon's own customer, suspension is the human
+  lever, and the meter's frozen line items + month rollups are the exact
+  substrate a Stripe paid tier reads later.
 - **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
   the voice template's twin. Behaviour changes are version bumps; owners
   never edit prompts (vertical presets are the answer to customisation).
