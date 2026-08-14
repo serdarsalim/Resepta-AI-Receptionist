@@ -341,7 +341,13 @@ function ShellHeader({
   }, [placeholder]);
 
   return (
-    <header className="flex items-center justify-between gap-3 px-4 pb-1 pt-3">
+    // min-h-14 is the whole reason every tab's first row lands in the same
+    // place. Without it the header is as tall as whatever it happens to hold:
+    // ~55px on a tab with a search box, ~42px on one without — so switching
+    // from Customers to Reminders jumped the card and its Add button 13px up
+    // the screen. The floor is the search box's own height plus this padding,
+    // so tabs that have one are unchanged and the rest stop shifting.
+    <header className="flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3">
       <div
         className={`flex min-w-0 items-center gap-1 ${
           expanded ? "hidden sm:flex" : "flex"

@@ -707,6 +707,110 @@ function ServiceKeyCell({
   );
 }
 
+// Adding a service, as a sheet. It used to be an inline row that unfolded at
+// the foot of the list — fine when the card was the only thing on a settings
+// page, wrong now that Services is its own tab whose primary action should sit
+// where every other tab's does. The stacked layout also gives the price its
+// currency and the duration its unit room to be labelled properly, which the
+// three-inputs-on-one-line version could not afford.
+function NewServiceSheet({ onClose }: { onClose: () => void }) {
+  const { t, language } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
+  const create = useMutation(api.services.create);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  return (
+    <Sheet title={t("services.add")} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const name = String(form.get("name") ?? "").trim();
+          if (!name) return;
+          const price = parseMoney(String(form.get("price") ?? ""), currency, language);
+          setPending(true);
+          setError(null);
+          try {
+            await create({
+              name,
+              durationMinutes: Number(form.get("durationMinutes")) || 30,
+              ...(price !== undefined ? { price } : {}),
+            });
+            onClose();
+          } catch (err) {
+            // The inline form swallowed this: a duplicate key rejected the
+            // mutation and the row just sat there having apparently done
+            // nothing.
+            setError(serviceErrorText(err, t));
+            setPending(false);
+          }
+        }}
+      >
+        <label className="block text-sm">
+          {t("services.name")}
+          <input name="name" required data-sheet-autofocus className="mt-1 block w-full" />
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="block text-sm">
+            {t("services.duration")}
+            <span className="mt-1 flex items-center gap-2">
+              <input
+                name="durationMinutes"
+                type="number"
+                min={5}
+                step={5}
+                defaultValue={30}
+                className="w-24"
+              />
+              <span className="text-xs text-[var(--muted)]">{t("services.minutes")}</span>
+            </span>
+          </label>
+          <label className="block text-sm">
+            {t("services.price")}
+            <span className="mt-1 flex items-center gap-2">
+              <input
+                name="price"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder={t("common.optional")}
+                className="w-28"
+              />
+              <span className="text-xs text-[var(--muted)]">
+                {currencySymbol(currency, language)}
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {/* Reserved whether or not it holds anything, so a rejected save does
+            not shove the buttons out from under the pointer. */}
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
+          >
+            {t("common.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
 // Services are what the salon sells, and the duration is what sizes the block
 // on the calendar, so an empty list is not a cosmetic gap: bookings have
 // nothing to pick and every appointment falls back to 30 minutes.
@@ -715,7 +819,6 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const settings = useQuery(api.orgs.current, {});
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const services = useQuery(api.services.list, {});
-  const create = useMutation(api.services.create);
   const update = useMutation(api.services.update);
   const remove = useMutation(api.services.remove);
   const [adding, setAdding] = useState(false);
@@ -729,204 +832,147 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   if (!isOwner && services !== undefined && rows.length === 0) return null;
 
   return (
-    <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
-      {services === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : (
-        <div className="space-y-2">
-          {rows.length > 0 && (
-            // Column headers label their columns, so a row of toggles is never
-            // an unlabelled switch. They only exist where the columns actually
-            // sit side by side; below sm the row stacks and each value carries
-            // its own label instead.
-            <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
-              <span>{t("services.name")}</span>
-              <span>{t("services.key")}</span>
-              <span>{t("services.duration")}</span>
-              <span>{t("services.price")}</span>
-              <span>{t("services.active")}</span>
-              <span />
-            </div>
-          )}
-          <ul className="divide-y divide-[var(--border)]">
-            {rows.map((service) => (
-              <li
-                key={service._id}
-                className={`group flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
-              >
-                {/* Full width on a phone, so the name is not fighting 264px of
-                    fixed columns for the 60px that is left. */}
-                <span className="w-full min-w-0 sm:w-auto">
-                  <InlineEditValue
-                    value={service.name}
-                    onSave={(next) =>
-                      next && update({ serviceId: service._id, name: next })
-                    }
-                  />
-                </span>
-                {/* Editable, unlike a contact field's key, and the difference
-                    is real rather than an oversight: nothing stores a pointer
-                    to a service key. The agent is handed the current list on
-                    every call, so a key it "knew" last month was never
-                    remembered. What the key still buys is that RENAMING the
-                    service does not move the address by itself. */}
-                <ServiceKeyCell
-                  value={service.key}
-                  onSave={(key) =>
-                    void update({ serviceId: service._id, key }).catch((err) =>
-                      setError(serviceErrorText(err, t)),
-                    )
-                  }
-                />
-                <span className="flex items-center gap-0.5">
-                  <InlineEditValue
-                    value={String(service.durationMinutes)}
-                    type="number"
-                    compact
-                    onSave={(next) =>
-                      Number(next) > 0 &&
-                      update({ serviceId: service._id, durationMinutes: Number(next) })
-                    }
-                  />
-                  <span className="shrink-0 text-xs text-[var(--muted)]">
-                    {t("services.minutes")}
-                  </span>
-                </span>
-                {/* Same shape as duration — a number with its unit trailing.
-                    Blank means unpriced, and clearing the box says so rather
-                    than writing a zero, because zero is a real price a salon
-                    might charge and "I haven't decided" is not it. */}
-                <span className="flex items-center gap-0.5">
-                  <InlineEditValue
-                    value={moneyInputValue(service.price, currency, language)}
-                    type="number"
-                    compact
-                    onSave={(next) =>
-                      update({
-                        serviceId: service._id,
-                        price: parseMoney(next, currency, language) ?? null,
-                      })
-                    }
-                  />
-                  <span className="shrink-0 text-xs text-[var(--muted)]">
-                    {currencySymbol(currency, language)}
-                  </span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-xs text-[var(--muted)] sm:hidden">
-                    {t("services.active")}
-                  </span>
-                  <Toggle
-                    checked={service.active}
-                    label={t("services.active")}
-                    onChange={(next) =>
-                      void update({ serviceId: service._id, active: next })
-                    }
-                  />
-                </span>
-                {/* Hover reveal is a desktop idea. A phone has no hover, so the
-                    button stays visible there rather than being unreachable. */}
-                <button
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await confirm({
-                        title: t("services.deleteConfirm").replace("{name}", service.name),
-                      });
-                      if (!ok) return;
-                      setError(null);
-                      await remove({ serviceId: service._id }).catch((err) =>
-                        setError(serviceErrorText(err, t)),
-                      );
-                    })();
-                  }}
-                  className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
-                >
-                  {t("common.delete")}
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {error && !adding && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
-          {confirmDialog}
-
-          {/* Inline row, not a modal: click add, type, Enter saves. */}
-          {adding ? (
-            <form
-              className="flex flex-wrap items-end gap-2 pt-1"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                const name = String(form.get("name") ?? "").trim();
-                if (!name) return setAdding(false);
-                const price = parseMoney(
-                  String(form.get("price") ?? ""),
-                  currency,
-                  language,
-                );
-                await create({
-                  name,
-                  durationMinutes: Number(form.get("durationMinutes")) || 30,
-                  ...(price !== undefined ? { price } : {}),
-                });
-                setAdding(false);
-              }}
-            >
-              <label className="block text-sm">
-                {t("services.name")}
-                <input name="name" required autoFocus className="mt-1 block w-56" />
-              </label>
-              <label className="block text-sm">
-                {t("services.duration")}
-                <input
-                  name="durationMinutes"
-                  type="number"
-                  min={5}
-                  step={5}
-                  defaultValue={30}
-                  className="mt-1 block w-24"
-                />
-              </label>
-              <label className="block text-sm">
-                {`${t("services.price")} (${currencySymbol(currency, language)})`}
-                <input
-                  name="price"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder={t("common.optional")}
-                  className="mt-1 block w-28"
-                />
-              </label>
-              <button
-                type="submit"
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("common.add")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAdding(false)}
-                className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                {t("common.cancel")}
-              </button>
-            </form>
-          ) : (
-            isOwner && (
-              <button
-                onClick={() => setAdding(true)}
-                className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                + {t("services.add")}
-              </button>
-            )
-          )}
+    <div className="space-y-2">
+      {/* Above the card and hard right, the same solid button Customers and
+          Reminders use. It was a quiet "+ Add service" at the foot of the
+          list, which put the page's primary action below however many rows
+          the salon happens to sell. */}
+      {isOwner && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("services.add")}
+          </button>
         </div>
       )}
-    </Card>
+      <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
+        {services === undefined ? (
+          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+        ) : (
+          <div className="space-y-2">
+            {rows.length > 0 && (
+              // Column headers label their columns, so a row of toggles is never
+              // an unlabelled switch. They only exist where the columns actually
+              // sit side by side; below sm the row stacks and each value carries
+              // its own label instead.
+              <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
+                <span>{t("services.name")}</span>
+                <span>{t("services.key")}</span>
+                <span>{t("services.duration")}</span>
+                <span>{t("services.price")}</span>
+                <span>{t("services.active")}</span>
+                <span />
+              </div>
+            )}
+            <ul className="divide-y divide-[var(--border)]">
+              {rows.map((service) => (
+                <li
+                  key={service._id}
+                  className={`group flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
+                >
+                  {/* Full width on a phone, so the name is not fighting 264px of
+                      fixed columns for the 60px that is left. */}
+                  <span className="w-full min-w-0 sm:w-auto">
+                    <InlineEditValue
+                      value={service.name}
+                      onSave={(next) =>
+                        next && update({ serviceId: service._id, name: next })
+                      }
+                    />
+                  </span>
+                  {/* Editable, unlike a contact field's key, and the difference
+                      is real rather than an oversight: nothing stores a pointer
+                      to a service key. The agent is handed the current list on
+                      every call, so a key it "knew" last month was never
+                      remembered. What the key still buys is that RENAMING the
+                      service does not move the address by itself. */}
+                  <ServiceKeyCell
+                    value={service.key}
+                    onSave={(key) =>
+                      void update({ serviceId: service._id, key }).catch((err) =>
+                        setError(serviceErrorText(err, t)),
+                      )
+                    }
+                  />
+                  <span className="flex items-center gap-0.5">
+                    <InlineEditValue
+                      value={String(service.durationMinutes)}
+                      type="number"
+                      compact
+                      onSave={(next) =>
+                        Number(next) > 0 &&
+                        update({ serviceId: service._id, durationMinutes: Number(next) })
+                      }
+                    />
+                    <span className="shrink-0 text-xs text-[var(--muted)]">
+                      {t("services.minutes")}
+                    </span>
+                  </span>
+                  {/* Same shape as duration — a number with its unit trailing.
+                      Blank means unpriced, and clearing the box says so rather
+                      than writing a zero, because zero is a real price a salon
+                      might charge and "I haven't decided" is not it. */}
+                  <span className="flex items-center gap-0.5">
+                    <InlineEditValue
+                      value={moneyInputValue(service.price, currency, language)}
+                      type="number"
+                      compact
+                      onSave={(next) =>
+                        update({
+                          serviceId: service._id,
+                          price: parseMoney(next, currency, language) ?? null,
+                        })
+                      }
+                    />
+                    <span className="shrink-0 text-xs text-[var(--muted)]">
+                      {currencySymbol(currency, language)}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-xs text-[var(--muted)] sm:hidden">
+                      {t("services.active")}
+                    </span>
+                    <Toggle
+                      checked={service.active}
+                      label={t("services.active")}
+                      onChange={(next) =>
+                        void update({ serviceId: service._id, active: next })
+                      }
+                    />
+                  </span>
+                  {/* Hover reveal is a desktop idea. A phone has no hover, so the
+                      button stays visible there rather than being unreachable. */}
+                  <button
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await confirm({
+                          title: t("services.deleteConfirm").replace("{name}", service.name),
+                        });
+                        if (!ok) return;
+                        setError(null);
+                        await remove({ serviceId: service._id }).catch((err) =>
+                          setError(serviceErrorText(err, t)),
+                        );
+                      })();
+                    }}
+                    className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            {confirmDialog}
+          </div>
+        )}
+      </Card>
+      {adding && <NewServiceSheet onClose={() => setAdding(false)} />}
+    </div>
   );
 }
 
