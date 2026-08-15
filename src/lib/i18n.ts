@@ -2549,10 +2549,20 @@ const dictionary = {
     de: "Nachricht schreiben…",
   },
   "contact.send": { tr: "Gönder", en: "Send", de: "Senden" },
+  // The explanation. It reads as a line above the composer, not inside it —
+  // see contact.sessionClosedShort.
   "contact.sessionClosed": {
     tr: "24 saatlik pencere kapalı. Müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
     en: "The 24h window is closed. Only template messages until the customer writes.",
     de: "Das 24-Stunden-Fenster ist geschlossen. Bis der Kunde schreibt, sind nur Vorlagennachrichten möglich.",
+  },
+  // What the disabled box itself says. A placeholder has one line and no way to
+  // scroll it, so the sentence above cannot live here: on a phone it clipped
+  // mid-word and grew a scrollbar nobody could use.
+  "contact.sessionClosedShort": {
+    tr: "Pencere kapalı",
+    en: "Window closed",
+    de: "Fenster geschlossen",
   },
 
   "services.title": { tr: "Hizmetler", en: "Services", de: "Leistungen" },

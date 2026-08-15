@@ -115,8 +115,19 @@ export function ContactView({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      {/* One header row, never two: back, who, and the pane swap on phones. */}
-      <div className="mb-3 flex items-center gap-3">
+      {/* One row on a desktop: back, who, the filter pills. Two on a phone with
+          the conversation open, because that is the one combination that does
+          not fit — back, name, dot, pills and the pane swap together ask for
+          ~560px of a 454px row. Everything but the name is shrink-0, so the
+          name paid the whole difference and rendered at zero width: the header
+          of a customer record with no customer in it.
+
+          flex-wrap alone would not have moved anything. The name is min-w-0, so
+          the browser shrinks it to nothing before it considers a second line —
+          the overflow reads as "fits" right up until it doesn't. The pills take
+          w-full below lg to claim a line outright, and order-last so the break
+          lands before them rather than before the pane swap. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         {/* The drawn arrow, same one the inbox uses. A "←" glyph is whatever
             the reader's font decides it is, and next to a row of crisp SVG
             channel icons it read as a stray character. */}
@@ -184,13 +195,15 @@ export function ContactView({
           customerId={customerId}
           value={filter}
           onChange={setFilter}
-          className={`ml-auto ${mobilePane === "conversation" ? "flex" : "hidden"} lg:flex`}
+          className={`order-last w-full ${
+            mobilePane === "conversation" ? "flex" : "hidden"
+          } lg:order-none lg:ml-auto lg:w-auto lg:flex`}
         />
-        <div
-          className={`flex shrink-0 items-center gap-1 lg:hidden ${
-            mobilePane === "conversation" ? "" : "ml-auto"
-          }`}
-        >
+        {/* Always ml-auto now. It used to give the margin up whenever the pills
+            were showing, because the two were sharing one line and fighting for
+            it; the pills have their own line below lg, so there is nothing left
+            to yield to. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1 lg:hidden">
           {(
             [
               ["record", "fields.title"],

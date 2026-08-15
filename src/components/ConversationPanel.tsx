@@ -897,6 +897,18 @@ export function ConversationPanel({
               } else setSendError(result.reason ?? "error");
             }}
           >
+            {/* Why the pill below is dead, said above it where there is room to
+                say it. It spent its life as the placeholder, which is the one
+                place in a form that cannot hold a sentence: a placeholder gets
+                one line and no way to reach the rest, so at phone width it cut
+                off at "until the" and put a scrollbar on a disabled box — a
+                scrollbar for text the reader is not allowed to scroll. Out
+                here it just wraps. */}
+            {!windowOpen && (
+              <p className="px-3 pb-1.5 text-xs text-[var(--muted)]">
+                {t("contact.sessionClosed")}
+              </p>
+            )}
             {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and
                 Send inside a single rounded surface rather than three controls
                 sharing a row. A chat composer should read as somewhere you
@@ -920,7 +932,9 @@ export function ConversationPanel({
               }}
               rows={1}
               placeholder={
-                windowOpen ? t("contact.typeMessage") : t("contact.sessionClosed")
+                windowOpen
+                  ? t("contact.typeMessage")
+                  : t("contact.sessionClosedShort")
               }
               disabled={!windowOpen || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
