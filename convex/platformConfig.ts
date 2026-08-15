@@ -57,6 +57,9 @@ export const status = query({
     chatAgentDisabled: v.boolean(),
     retellApiKey: v.union(v.string(), v.null()),
     voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
+    // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
+    stripeSecretKey: v.union(v.string(), v.null()),
+    stripeWebhookSecret: v.union(v.string(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
     // deployment still configured the old way.
@@ -67,6 +70,8 @@ export const status = query({
       anthropicApiKey: v.boolean(),
       openaiApiKey: v.boolean(),
       retellApiKey: v.boolean(),
+      stripeSecretKey: v.boolean(),
+      stripeWebhookSecret: v.boolean(),
     }),
   }),
   handler: async (ctx) => {
@@ -79,6 +84,8 @@ export const status = query({
     const openaiKey = await platformValue(ctx, "openaiApiKey");
     const provider = (await platformValue(ctx, "chatAgentProvider"))?.toLowerCase();
     const retellKey = await platformValue(ctx, "retellApiKey");
+    const stripeKey = await platformValue(ctx, "stripeSecretKey");
+    const stripeWebhook = await platformValue(ctx, "stripeWebhookSecret");
     return {
       apiKey: config.apiKey ? maskSecret(config.apiKey) : null,
       domain: config.domain,
@@ -92,6 +99,8 @@ export const status = query({
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       voiceRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
+      stripeSecretKey: stripeKey ? maskSecret(stripeKey) : null,
+      stripeWebhookSecret: stripeWebhook ? maskSecret(stripeWebhook) : null,
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
@@ -99,6 +108,9 @@ export const status = query({
         anthropicApiKey: Boolean(anthropicKey) && !row("anthropicApiKey"),
         openaiApiKey: Boolean(openaiKey) && !row("openaiApiKey"),
         retellApiKey: Boolean(retellKey) && !row("retellApiKey"),
+        stripeSecretKey: Boolean(stripeKey) && !row("stripeSecretKey"),
+        stripeWebhookSecret:
+          Boolean(stripeWebhook) && !row("stripeWebhookSecret"),
       },
     };
   },
@@ -118,6 +130,9 @@ const settableKey = v.union(
   v.literal("retellApiKey"),
   v.literal("chatAgentDisabled"),
   v.literal("voiceRateMicroUsdPerMinute"),
+  // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
+  v.literal("stripeSecretKey"),
+  v.literal("stripeWebhookSecret"),
 );
 
 // One key at a time, so a form that submits every field cannot blank the three

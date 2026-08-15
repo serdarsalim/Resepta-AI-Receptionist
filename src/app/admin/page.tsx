@@ -425,6 +425,40 @@ export default function AdminPage() {
               onSave={(value) => setConfig({ key: "retellApiKey", value })}
             />
           </Section>
+
+          {/* The Resend doctrine once more: one Stripe account for the whole
+              deployment, because the platform sells the credit and Stripe
+              pays the platform whichever org the money lands on. */}
+          <Section
+            title="Billing (Stripe)"
+            description={`The platform's Stripe account for prepaid wallet top-ups. In Stripe, add a webhook endpoint pointing at ${
+              (process.env.NEXT_PUBLIC_CONVEX_URL ?? "<convex-url>").replace(
+                ".convex.cloud",
+                ".convex.site",
+              )
+            }/stripe/webhook with the checkout.session.completed event, and paste its signing secret below. Businesses on invoice mode never touch any of this.`}
+          >
+            <SecretRow
+              label="Secret key"
+              hint={
+                mail.fromEnv.stripeSecretKey
+                  ? "Currently coming from the STRIPE_SECRET_KEY env var. Saving here overrides it."
+                  : "The sk_live or sk_test key. Creates Checkout sessions when an owner tops up; the card itself never touches this product."
+              }
+              masked={mail.stripeSecretKey}
+              onSave={(value) => setConfig({ key: "stripeSecretKey", value })}
+            />
+            <SecretRow
+              label="Webhook signing secret"
+              hint={
+                mail.fromEnv.stripeWebhookSecret
+                  ? "Currently coming from the STRIPE_WEBHOOK_SECRET env var. Saving here overrides it."
+                  : "The whsec value from the webhook endpoint above. Without it, payments succeed on Stripe but no balance is ever credited."
+              }
+              masked={mail.stripeWebhookSecret}
+              onSave={(value) => setConfig({ key: "stripeWebhookSecret", value })}
+            />
+          </Section>
         </div>
         </AdminSearchProvider>
       )}

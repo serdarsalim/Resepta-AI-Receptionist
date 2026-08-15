@@ -843,8 +843,11 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
   success_url rides back on `?tab=billing`. The wallet is deliberately
   lane-agnostic: a future metered lane debits the same balance. Config is
   `stripeSecretKey`/`stripeWebhookSecret` in platformConfig (env fallback,
-  Resend doctrine) — WhatsApp is NOT metered because each org's Cloud API
-  number bills to its own Meta account, and email stays free.
+  Resend doctrine), settable on the fleet Platform tab's Billing (Stripe)
+  section, which also prints the webhook URL to register at Stripe
+  (`<convex-site>/stripe/webhook`, event checkout.session.completed) —
+  WhatsApp is NOT metered because each org's Cloud API number bills to its
+  own Meta account, and email stays free.
 - **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
   the voice template's twin. Behaviour changes are version bumps; owners
   never edit prompts (vertical presets are the answer to customisation).
