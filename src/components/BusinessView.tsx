@@ -871,11 +871,12 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               {rows.map((service) => (
                 <li
                   key={service._id}
-                  className={`group flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
+                  className={`group relative flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
                 >
                   {/* Full width on a phone, so the name is not fighting 264px of
-                      fixed columns for the 60px that is left. */}
-                  <span className="w-full min-w-0 sm:w-auto">
+                      fixed columns for the 60px that is left. Reserves the right
+                      end for the delete button, which is parked there below sm. */}
+                  <span className="w-full min-w-0 max-sm:pr-16 sm:w-auto">
                     <InlineEditValue
                       value={service.name}
                       onSave={(next) =>
@@ -931,7 +932,13 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       {currencySymbol(currency, language)}
                     </span>
                   </span>
-                  <span className="flex items-center gap-1.5">
+                  {/* Carries the phone row's auto margin, so the switches line
+                      up on one right edge instead of starting wherever that
+                      row's price happened to end. It has to be THIS cell and
+                      not the delete button after it: two auto margins split the
+                      slack between them and neither lands anywhere. At sm the
+                      grid owns the columns and the margin has to go. */}
+                  <span className="ml-auto flex items-center gap-1.5 sm:ml-0">
                     <span className="text-xs text-[var(--muted)] sm:hidden">
                       {t("services.active")}
                     </span>
@@ -944,7 +951,15 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     />
                   </span>
                   {/* Hover reveal is a desktop idea. A phone has no hover, so the
-                      button stays visible there rather than being unreachable. */}
+                      button stays visible there rather than being unreachable.
+
+                      Out of flow below sm, up on the name's line. In flow it was
+                      the reason the toggles still did not line up: on a row with
+                      a long key or a four-figure price it wrapped to a third
+                      line and the toggle took the right edge, on a short row it
+                      fitted and pushed the toggle ~68px in. Whether a row's
+                      switch aligns is not allowed to depend on how much that
+                      service costs. */}
                   <button
                     onClick={() => {
                       void (async () => {
@@ -958,7 +973,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         );
                       })();
                     }}
-                    className="ml-auto rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 sm:ml-0 sm:justify-self-end [@media(hover:none)]:opacity-100"
+                    className="rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 max-sm:absolute max-sm:right-0 max-sm:top-1 sm:justify-self-end [@media(hover:none)]:opacity-100"
                   >
                     {t("common.delete")}
                   </button>
