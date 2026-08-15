@@ -149,6 +149,25 @@ The reference has real problems of its own — truncated status text, five
 columns showing `--`, four filter dropdowns where one would do. It is a
 reference, not a target.
 
+## The operator console is not an exception
+
+`/admin` runs the same system as the salon app, ported 2026-08-15. It has no
+`AppShell`, so the plane goes on the page root instead (`parts.tsx`'s `Plane`):
+`bg-[image:var(--content-bg)]` plus **`bg-fixed`**, which is load-bearing here
+and not in the salon app. A gradient restarts inside whatever box draws it, and
+this route scrolls the document rather than a pane, so without `bg-fixed` the
+wash slides out from under the cards as you scroll.
+
+Two calls worth keeping:
+
+**The fleet table keeps full-bleed rules.** Nine columns you track across to the
+last cell make each rule a reading rail. The inset gutter is for the four-column
+case (Customers). Same language, opposite call, decided by column count.
+
+**Every state wears the plane, loading included.** A bare `Loading…` painted flat
+white until the query landed and then washed over, which reads as arriving in a
+different app for as long as the round trip takes.
+
 ## Porting this to another app
 
 Both apps share the token structure, so the order is:
