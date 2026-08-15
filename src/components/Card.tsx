@@ -24,7 +24,12 @@ export function Card({
     // the radius has to come down with it or the card starts looking like a
     // pill. Border lives in --card-shadow now, which is a real ring only in
     // dark mode, where a shadow would be invisible.
-    <section className="rounded-lg bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
+    // 12px inside on a phone, 16 from sm. Deliberately tighter than Nudge,
+    // whose content cards run p-4 sm:p-6 — its cards hold forms, ours hold
+    // rows that already carry their own columns (a service key chip, a price,
+    // a switch), and those rows are what runs out of width first. The shell
+    // outside is down to 8px for the same reason.
+    <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
       {title && (
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-sm font-semibold">{title}</h2>
