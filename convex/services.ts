@@ -12,7 +12,9 @@ const serviceDoc = v.object({
   // Never optional on the way OUT, even though the column is: a caller has to
   // be able to render and paste it without knowing which rows predate keys.
   key: v.string(),
-  durationMinutes: v.number(),
+  // Unset = this is a good (no duration, no calendar footprint). See schema.
+  durationMinutes: v.optional(v.number()),
+  leadMinutes: v.optional(v.number()),
   active: v.boolean(),
   // List price in minor units (40000 = 400,00 in the org's currency). Optional
   // because "not priced" and "free" are different facts, and a salon that
@@ -64,7 +66,9 @@ export const list = query({
 export const create = mutation({
   args: {
     name: v.string(),
-    durationMinutes: v.number(),
+    // Omit to create a good — a service that is a thing, not time.
+    durationMinutes: v.optional(v.number()),
+    leadMinutes: v.optional(v.number()),
     price: v.optional(v.number()),
   },
   returns: v.id("services"),
@@ -80,7 +84,12 @@ export const create = mutation({
       orgId,
       name,
       key: uniqueKey(base, taken),
-      durationMinutes: Math.max(5, Math.round(args.durationMinutes)),
+      ...(args.durationMinutes !== undefined
+        ? { durationMinutes: Math.max(5, Math.round(args.durationMinutes)) }
+        : {}),
+      ...(args.leadMinutes !== undefined
+        ? { leadMinutes: Math.max(0, Math.round(args.leadMinutes)) }
+        : {}),
       active: true,
       ...(args.price !== undefined ? { price: normalizePrice(args.price) } : {}),
     });
@@ -99,7 +108,11 @@ export const update = mutation({
     // RENAME does not silently move the address — which is why it is derived
     // once and then only ever moves when somebody says so.
     key: v.optional(v.string()),
-    durationMinutes: v.optional(v.number()),
+    // Null clears the duration, turning the service into a good; a number
+    // sets it. Same shape as price below, for the same reason: without the
+    // null case there is no way back once someone types a figure.
+    durationMinutes: v.optional(v.union(v.number(), v.null())),
+    leadMinutes: v.optional(v.union(v.number(), v.null())),
     active: v.optional(v.boolean()),
     // Null clears the price; a number sets it. Without the null case there is
     // no way back to "not priced" once someone types a figure by mistake.
@@ -133,7 +146,16 @@ export const update = mutation({
       );
     }
     if (args.durationMinutes !== undefined) {
-      patch.durationMinutes = Math.max(5, Math.round(args.durationMinutes));
+      patch.durationMinutes =
+        args.durationMinutes === null
+          ? undefined
+          : Math.max(5, Math.round(args.durationMinutes));
+    }
+    if (args.leadMinutes !== undefined) {
+      patch.leadMinutes =
+        args.leadMinutes === null
+          ? undefined
+          : Math.max(0, Math.round(args.leadMinutes));
     }
     if (args.active !== undefined) patch.active = args.active;
     if (args.price !== undefined) {

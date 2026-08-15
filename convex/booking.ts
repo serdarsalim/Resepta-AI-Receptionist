@@ -108,10 +108,16 @@ function overlapCount(
   durationMinutes: number,
   ignoreId?: Id<"appointments">,
 ): number {
+  // Goods (duration 0) occupy nobody, in either direction: a candidate order
+  // needs no chair, and an existing order holds none. The !== 0 check is
+  // deliberate — unset duration means a legacy row (assume 30), only an
+  // explicit 0 means goods.
+  if (durationMinutes === 0) return 0;
   const endMs = startMs + durationMinutes * 60_000;
   return rows.filter(
     (row) =>
       row._id !== ignoreId &&
+      row.durationMinutes !== 0 &&
       row.startAt < endMs &&
       startMs < row.startAt + (row.durationMinutes ?? 30) * 60_000,
   ).length;
@@ -149,7 +155,10 @@ export const page = query({
         v.object({
           _id: v.id("services"),
           name: v.string(),
-          durationMinutes: v.number(),
+          // Unset = a good: ordered for a moment, blocks nothing. The page
+          // offers every in-hours time instead of a scarcity-carved grid.
+          durationMinutes: v.optional(v.number()),
+          leadMinutes: v.optional(v.number()),
         }),
       ),
       // False when the org never set opening hours — the page says "call us"
@@ -176,7 +185,12 @@ export const page = query({
         .map((service) => ({
           _id: service._id,
           name: service.name,
-          durationMinutes: service.durationMinutes,
+          ...(service.durationMinutes !== undefined
+            ? { durationMinutes: service.durationMinutes }
+            : {}),
+          ...(service.leadMinutes !== undefined
+            ? { leadMinutes: service.leadMinutes }
+            : {}),
         })),
       hasHours: hasBusinessHours(org.businessHours ?? {}),
     };
@@ -196,7 +210,13 @@ async function freeStarts(
   org: Doc<"orgs">,
   date: string,
   duration: number,
-  opts?: { ignoreId?: Id<"appointments">; customerId?: Id<"customers"> },
+  opts?: {
+    ignoreId?: Id<"appointments">;
+    customerId?: Id<"customers">;
+    // Goods lead time, ms. Folded into the notice floor so a cake that needs
+    // a day's warning never shows tomorrow-morning times.
+    leadMs?: number;
+  },
 ): Promise<number[]> {
   {
     const hours = org.businessHours;
@@ -255,7 +275,10 @@ async function freeStarts(
       } catch {
         continue;
       }
-      if (startMs < now + MIN_NOTICE_MS) continue;
+      if (startMs < now + Math.max(MIN_NOTICE_MS, opts?.leadMs ?? 0)) continue;
+      // Both guards are no-ops for goods (duration 0): overlapCount returns 0
+      // and customerConflict returns null. A good is never crowded out and
+      // never crowds — every in-hours grid line stays offerable.
       if (overlapCount(rows, startMs, duration, opts?.ignoreId) >= capacity) continue;
       if (
         opts?.customerId &&
@@ -280,7 +303,9 @@ export const slots = query({
     if (!org) return [];
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.orgId !== org._id || !service.active) return [];
-    return await freeStarts(ctx, org, args.date, service.durationMinutes);
+    return await freeStarts(ctx, org, args.date, service.durationMinutes ?? 0, {
+      leadMs: (service.leadMinutes ?? 0) * 60_000,
+    });
   },
 });
 
@@ -321,9 +346,31 @@ export const slotsForToken = query({
     return await freeStarts(ctx, org, args.date, duration, {
       ignoreId: appointment._id,
       customerId: appointment.customerId,
+      leadMs: await goodsLeadMs(ctx, appointment),
     });
   },
 });
+
+// The lead time a goods order carries into a move. Zero for anything
+// time-bound: lead time is a promise about making the thing, and a haircut
+// is made in the chair. Read from the live service rather than snapshotted,
+// because "how much warning does the baker need" is a fact about the baker
+// today, not about the order's history.
+async function goodsLeadMs(
+  ctx: ReadCtx,
+  appointment: Doc<"appointments">,
+): Promise<number> {
+  if (appointment.durationMinutes !== 0) return 0;
+  let leadMs = 0;
+  for (const item of appointment.items ?? []) {
+    if (!item.serviceId) continue;
+    const service = await ctx.db.get(item.serviceId);
+    if (service?.leadMinutes) {
+      leadMs = Math.max(leadMs, service.leadMinutes * 60_000);
+    }
+  }
+  return leadMs;
+}
 
 export const book = mutation({
   args: {
@@ -333,6 +380,9 @@ export const book = mutation({
     name: v.string(),
     phone: v.string(),
     email: v.optional(v.string()),
+    // Goods only ("3 chocolate cakes"). Ignored for time-bound services —
+    // two haircuts is two visits, and this page books one at a time.
+    quantity: v.optional(v.number()),
   },
   returns: v.object({
     ok: v.boolean(),
@@ -356,27 +406,41 @@ export const book = mutation({
       return { ok: false, reason: "bad-phone" };
     }
 
+    // A good books as duration 0: it holds no chair and no colleague's hour,
+    // so the capacity guards below fall through by construction.
+    const isGood = service.durationMinutes === undefined;
+    const duration = service.durationMinutes ?? 0;
+    const quantity =
+      isGood && args.quantity !== undefined
+        ? Math.min(99, Math.max(1, Math.round(args.quantity)))
+        : 1;
+
     const now = Date.now();
-    if (args.startMs < now + MIN_NOTICE_MS - 60_000) {
+    const noticeMs = Math.max(MIN_NOTICE_MS, (service.leadMinutes ?? 0) * 60_000);
+    if (args.startMs < now + noticeMs - 60_000) {
       // The minute of slack forgives a slot picked just before the boundary
       // crossed it — refusing a booking the page offered seconds ago reads
-      // as the product breaking.
-      return { ok: false, reason: "slot-taken" };
+      // as the product breaking. lead-time is its own reason so the page can
+      // say "order a day ahead" instead of pretending the slot filled up.
+      return {
+        ok: false,
+        reason: args.startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
+      };
     }
     if (args.startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
     // The write holds the invariant itself, exactly like the voice lane:
     // being offered by the slots query is not being bound by it.
-    if (!fitsOpenHours(org, args.startMs, service.durationMinutes)) {
+    if (!fitsOpenHours(org, args.startMs, duration)) {
       return { ok: false, reason: "slot-taken" };
     }
     const rows = await activeRowsAround(
       ctx,
       org._id,
       args.startMs,
-      args.startMs + service.durationMinutes * 60_000,
+      args.startMs + duration * 60_000,
     );
     const capacity = await orgCapacity(ctx, org._id);
-    if (overlapCount(rows, args.startMs, service.durationMinutes) >= capacity) {
+    if (overlapCount(rows, args.startMs, duration) >= capacity) {
       return { ok: false, reason: "slot-taken" };
     }
 
@@ -429,7 +493,7 @@ export const book = mutation({
     // `rows`, not allUpcoming: this window's rows include an appointment that
     // started before now and is still running, which is precisely the one a
     // caller can collide with.
-    if (customerConflict(rows, customerId, args.startMs, service.durationMinutes)) {
+    if (customerConflict(rows, customerId, args.startMs, duration)) {
       return { ok: false, reason: "customer-busy" };
     }
 
@@ -438,14 +502,15 @@ export const book = mutation({
       orgId: org._id,
       customerId,
       startAt: args.startMs,
-      durationMinutes: service.durationMinutes,
+      durationMinutes: duration,
       // Snapshot, never a pointer — appointments.items' own doctrine.
       items: [
         {
           serviceId: service._id,
           name: service.name,
           price: service.price,
-          durationMinutes: service.durationMinutes,
+          durationMinutes: duration,
+          ...(quantity > 1 ? { quantity } : {}),
         },
       ],
       status: "scheduled",
@@ -544,8 +609,12 @@ export const reschedule = mutation({
       appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
       30;
     const now = Date.now();
-    if (args.startMs < now + MIN_NOTICE_MS - 60_000) {
-      return { ok: false, reason: "slot-taken" };
+    const noticeMs = Math.max(MIN_NOTICE_MS, await goodsLeadMs(ctx, appointment));
+    if (args.startMs < now + noticeMs - 60_000) {
+      return {
+        ok: false,
+        reason: args.startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
+      };
     }
     if (args.startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
     if (!fitsOpenHours(org, args.startMs, duration)) {

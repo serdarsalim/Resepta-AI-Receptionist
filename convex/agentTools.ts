@@ -352,8 +352,9 @@ export const listServices = internalQuery({
         id: row._id,
         name: row.name,
         key: serviceKey(row),
-        durationMinutes: row.durationMinutes,
-        durationSpoken: spokenDuration(row.durationMinutes, language),
+        durationMinutes: row.durationMinutes ?? null,
+        durationSpoken: spokenDuration(row.durationMinutes ?? 0, language),
+        leadMinutes: row.leadMinutes ?? null,
         active: row.active,
         price: row.price ?? null,
         priceSpoken: spokenPrice(row.price ?? null, currency, language),
@@ -408,11 +409,12 @@ export const createService = internalMutation({
   args: {
     ...scope,
     name: v.string(),
-    durationMinutes: v.number(),
+    durationMinutes: v.optional(v.number()),
+    leadMinutes: v.optional(v.number()),
     price: v.optional(v.number()),
   },
   returns: v.any(),
-  handler: async (ctx, { orgId, userId, connectionId, name, durationMinutes, price }) => {
+  handler: async (ctx, { orgId, userId, connectionId, name, durationMinutes, leadMinutes, price }) => {
     const label = name.trim();
     if (!label) throw new Error("A service needs a name.");
     const rows = await ctx.db
@@ -427,13 +429,16 @@ export const createService = internalMutation({
     const taken = new Set(rows.map(serviceKey));
     const base = keyFromLabel(label) || `service_${taken.size + 1}`;
     const key = uniqueKey(base, taken);
-    const duration = Math.max(5, Math.round(durationMinutes));
+    const duration =
+      durationMinutes === undefined ? undefined : Math.max(5, Math.round(durationMinutes));
+    const lead = leadMinutes === undefined ? undefined : Math.max(0, Math.round(leadMinutes));
     const amount = price === undefined ? undefined : Math.max(0, Math.round(price));
     const serviceId = await ctx.db.insert("services", {
       orgId,
       name: label,
       key,
-      durationMinutes: duration,
+      ...(duration !== undefined ? { durationMinutes: duration } : {}),
+      ...(lead !== undefined ? { leadMinutes: lead } : {}),
       active: true,
       ...(amount !== undefined ? { price: amount } : {}),
     });
@@ -442,7 +447,7 @@ export const createService = internalMutation({
       connectionId,
       userId,
       tool: "create_service",
-      args: { name: label, durationMinutes: duration, price: amount ?? null },
+      args: { name: label, durationMinutes: duration ?? null, leadMinutes: lead ?? null, price: amount ?? null },
       targetTable: "services",
       targetId: serviceId,
       before: null,
@@ -452,7 +457,10 @@ export const createService = internalMutation({
     await recordActivity(ctx, {
       orgId,
       kind: "settings_changed",
-      detail: `Added the service "${label}" (${duration} min)`,
+      detail:
+        duration !== undefined
+          ? `Added the service "${label}" (${duration} min)`
+          : `Added the good "${label}"`,
       agent: { actorId: userId, connectionId, agentActionId: actionId },
     });
     return { serviceId, key, name: label, actionId };

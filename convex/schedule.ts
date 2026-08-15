@@ -18,6 +18,9 @@ import { recordCustomerCreated } from "./lib/newCustomer";
 const lineInput = v.object({
   serviceId: v.id("services"),
   price: v.optional(v.number()),
+  // Goods only ("3 chocolate cakes" is one line). Ignored on time-bound
+  // services — two haircuts is two visits.
+  quantity: v.optional(v.number()),
 });
 
 const storedItem = v.object({
@@ -25,6 +28,7 @@ const storedItem = v.object({
   name: v.string(),
   price: v.optional(v.number()),
   durationMinutes: v.number(),
+  quantity: v.optional(v.number()),
 });
 
 // Same contract as appointments.resolveLines, and same reason: the client
@@ -33,18 +37,26 @@ const storedItem = v.object({
 async function resolveLines(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
-  lines: { serviceId: Id<"services">; price?: number }[],
+  lines: { serviceId: Id<"services">; price?: number; quantity?: number }[],
 ) {
   const items = [];
   for (const line of lines) {
     const service = await ctx.db.get(line.serviceId);
     if (!service || service.orgId !== orgId) throw new Error("not-found");
     const price = line.price ?? service.price;
+    // A good's line stores duration 0 (it adds no time to the visit) and may
+    // carry a quantity; a time-bound line never does.
+    const isGood = service.durationMinutes === undefined;
+    const quantity =
+      isGood && line.quantity !== undefined
+        ? Math.min(99, Math.max(1, Math.round(line.quantity)))
+        : 1;
     items.push({
       serviceId: service._id,
       name: service.name,
       ...(price !== undefined ? { price: Math.max(0, Math.round(price)) } : {}),
-      durationMinutes: service.durationMinutes,
+      durationMinutes: service.durationMinutes ?? 0,
+      ...(quantity > 1 ? { quantity } : {}),
     });
   }
   return items;
@@ -263,7 +275,10 @@ export const create = action({
     });
 
     let externalUid: string | undefined;
-    if (org.calcomApiKey && org.calcomEventTypeId) {
+    // A goods-only booking (duration 0) never goes to cal.com: there is no
+    // zero-length representation there, and it consumes no inventory cal.com
+    // could be the source of truth about. It stays Resepta's alone.
+    if (org.calcomApiKey && org.calcomEventTypeId && prepared.durationMinutes !== 0) {
       const booking = await createBooking({
         apiKey: org.calcomApiKey,
         eventTypeId: org.calcomEventTypeId,

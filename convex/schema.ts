@@ -817,7 +817,18 @@ export default defineSchema({
     // anybody edits them — so nothing needs migrating and nothing stays
     // unstable once it has been touched.
     key: v.optional(v.string()),
-    durationMinutes: v.number(),
+    // Unset means this service is a GOOD, not time: a chocolate cake, a
+    // delivery, a one-time purchase. A good is handed over at a moment but
+    // occupies nobody — it never blocks the calendar, never collides with
+    // anything, and any number of them can be due at the same minute. On the
+    // appointment itself the sentinel is durationMinutes: 0, not unset,
+    // because legacy appointment rows already use unset to mean "assume 30".
+    durationMinutes: v.optional(v.number()),
+    // Goods only: minimum notice in minutes ("order a day ahead" = 1440).
+    // A wedding cake cannot be promised in twenty minutes. Enforced on the
+    // customer-facing paths (booking page, voice, chat) and deliberately NOT
+    // on the owner's own calendar — the baker may accept a rush job herself.
+    leadMinutes: v.optional(v.number()),
     active: v.boolean(),
     // LIST price, in integer minor units of orgs.currency (40000 = ₺400,00).
     // What this costs today — editable forever, and editing it must never
@@ -879,7 +890,14 @@ export default defineSchema({
           serviceId: v.optional(v.id("services")),
           name: v.string(),
           price: v.optional(v.number()),
+          // 0 on a line whose service is a good — goods add no time.
           durationMinutes: v.number(),
+          // How many of this line. Unset means 1, and time-bound services
+          // always leave it unset — "two haircuts" is two visits, but "two
+          // chocolate cakes" is one handover. price stays PER UNIT; the
+          // line's worth is price × quantity, so a discount still works the
+          // same way (edit the unit price).
+          quantity: v.optional(v.number()),
         }),
       ),
     ),

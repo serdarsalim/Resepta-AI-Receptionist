@@ -23,7 +23,7 @@ import { platformValue } from "./lib/platformConfig";
 import { queueOrgAlert } from "./lib/alerts";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
-import { spokenClock, spokenDateTime, spokenDuration, spokenPrice } from "./lib/speech";
+import { spokenClock, spokenDateTime, spokenDuration, spokenLead, spokenPrice } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
@@ -827,14 +827,18 @@ export const beforeCallContext = internalQuery({
       services: services
         .filter((service) => service.active)
         .map((service) => {
-          const duration = spokenDuration(service.durationMinutes, lang);
+          // null for a good — spokenDuration refuses 0, correctly: a cake
+          // has a price and no length, and "(null)" down a phone line was
+          // the bug this branch exists to avoid.
+          const duration = spokenDuration(service.durationMinutes ?? 0, lang);
           const price =
             service.price !== undefined
               ? spokenPrice(service.price, currency, lang)
               : null;
-          return price
-            ? `${service.name} (${duration}, ${price})`
-            : `${service.name} (${duration})`;
+          const parts = [duration, price].filter(Boolean);
+          return parts.length
+            ? `${service.name} (${parts.join(", ")})`
+            : service.name;
         })
         .join("; "),
     };
@@ -1518,16 +1522,23 @@ export const runtimeCallContext = internalQuery({
 // missing its service name is a great deal better than a caller told "sorry"
 // because the agent improvised a synonym. The salon sees an unnamed block and
 // fixes it in one click; the customer keeps their slot.
-async function matchService(
-  ctx: MutationCtx,
-  orgId: Id<"orgs">,
-  spoken: string,
-): Promise<{
+// A matched line as voiceBook stores it. durationMinutes 0 means the service
+// is a GOOD (a cake, a delivery) — services can never store a real 0, the
+// writers floor at 5 — and only goods ever carry quantity or leadMinutes.
+type MatchedLine = {
   serviceId: Id<"services">;
   name: string;
   price?: number;
   durationMinutes: number;
-} | undefined> {
+  leadMinutes?: number;
+  quantity?: number;
+};
+
+async function matchService(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  spoken: string,
+): Promise<MatchedLine | undefined> {
   const wanted = foldForMatch(spoken);
   if (!wanted) return undefined;
   const services = (
@@ -1559,40 +1570,41 @@ async function matchService(
     serviceId: hit.service._id,
     name: hit.service.name,
     price: hit.service.price,
-    durationMinutes: hit.service.durationMinutes,
+    durationMinutes: hit.service.durationMinutes ?? 0,
+    ...(hit.service.leadMinutes !== undefined
+      ? { leadMinutes: hit.service.leadMinutes }
+      : {}),
   };
 }
 
 // Several spoken services against the salon's list, in the order the caller
-// said them. Deduplicated by id: one visit does not contain the same service
-// twice, so a repeat is the matcher having caught the same thing twice (a
-// caller saying "saç kesimi, normal saç kesimi") rather than a real second
-// booking. Unmatched words are dropped rather than guessed at, exactly as the
-// singular path drops them — the appointment still stands and the agent reads
-// back what DID match, which is its cue to ask again.
+// said them. TIME-BOUND repeats are deduplicated by id: one visit does not
+// contain the same haircut twice, so a repeat is the matcher having caught
+// the same thing twice (a caller saying "saç kesimi, normal saç kesimi")
+// rather than a real second booking. A repeated GOOD is the opposite — "two
+// chocolate cakes" is a real order of two, and the agent asks for multiples
+// exactly by repeating the name — so a good's repeats accumulate as quantity
+// on its one line. Unmatched words are dropped rather than guessed at, exactly
+// as the singular path drops them — the appointment still stands and the agent
+// reads back what DID match, which is its cue to ask again.
 async function matchServices(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
   spoken: string[],
-): Promise<
-  Array<{
-    serviceId: Id<"services">;
-    name: string;
-    price?: number;
-    durationMinutes: number;
-  }>
-> {
-  const lines: Array<{
-    serviceId: Id<"services">;
-    name: string;
-    price?: number;
-    durationMinutes: number;
-  }> = [];
-  const seen = new Set<string>();
+): Promise<MatchedLine[]> {
+  const lines: MatchedLine[] = [];
+  const byId = new Map<string, MatchedLine>();
   for (const one of spoken) {
     const hit = await matchService(ctx, orgId, one);
-    if (!hit || seen.has(String(hit.serviceId))) continue;
-    seen.add(String(hit.serviceId));
+    if (!hit) continue;
+    const existing = byId.get(String(hit.serviceId));
+    if (existing) {
+      if (existing.durationMinutes === 0) {
+        existing.quantity = Math.min(99, (existing.quantity ?? 1) + 1);
+      }
+      continue;
+    }
+    byId.set(String(hit.serviceId), hit);
     lines.push(hit);
   }
   return lines;
@@ -1709,6 +1721,28 @@ export const voiceBook = internalMutation({
       ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
       : undefined;
     if (!args.externalUid) {
+      // Goods-only orders sum to 0 and fall through every occupancy guard
+      // below by construction — a cake holds no chair. What a good DOES
+      // enforce is its lead time: the baker's warning is a real constraint
+      // where the chair count is not.
+      const leadMs = lines.reduce(
+        (max, item) => Math.max(max, (item.leadMinutes ?? 0) * 60_000),
+        0,
+      );
+      if (leadMs > 0 && args.startAt < Date.now() + leadMs) {
+        const needed = lines.find(
+          (item) => (item.leadMinutes ?? 0) * 60_000 === leadMs,
+        );
+        // Read only on the failure path — the happy path must not pay for it.
+        const bookingOrg = await ctx.db.get(args.orgId);
+        const notice =
+          spokenLead(leadMs / 60_000, bookingOrg?.language) ?? `${leadMs / 60_000} minutes`;
+        // A sentence, not a slug, for the same reason as customer-busy below:
+        // the agent reads this back, and it must name the remedy.
+        throw new Error(
+          `lead-time: "${needed?.name ?? "this item"}" must be ordered ${notice} in advance. Apologise, say how much notice it needs, and offer the earliest day that satisfies it.`,
+        );
+      }
       const duration = totalMinutes ?? args.durationMinutes ?? 30;
       const endAt = args.startAt + duration * 60_000;
       // One day either side is enough: nothing a salon books runs longer.
@@ -1742,9 +1776,12 @@ export const voiceBook = internalMutation({
           `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`,
         );
       }
+      // Goods rows (an explicit 0 — unset means a legacy row, assume 30)
+      // hold no chair, so they never count toward a full shop.
       const overlapping = nearby.filter(
         (row) =>
           (row.status === "scheduled" || row.status === "confirmed") &&
+          row.durationMinutes !== 0 &&
           row.startAt < endAt &&
           args.startAt < row.startAt + (row.durationMinutes ?? 30) * 60_000,
       ).length;
@@ -1770,7 +1807,7 @@ export const voiceBook = internalMutation({
             .collect()
         ).filter((row) => row.active).length,
       );
-      if (overlapping >= capacity) {
+      if (duration > 0 && overlapping >= capacity) {
         // The message is the tool result the agent reads back, so it names
         // the conflict in a way the agent can act on: offer another time.
         throw new Error("slot-taken");
@@ -1783,7 +1820,11 @@ export const voiceBook = internalMutation({
       // The services' own durations win over anything the call reported: they
       // are what the salon says the work takes, and the block staff read.
       durationMinutes: totalMinutes ?? args.durationMinutes,
-      items: lines.length ? lines : undefined,
+      // leadMinutes is matcher plumbing, not a line fact — the stored
+      // snapshot carries what was sold, not the baker's scheduling rule.
+      items: lines.length
+        ? lines.map(({ leadMinutes: _lead, ...item }) => item)
+        : undefined,
       status: "scheduled",
       source: args.source ?? "voice",
       externalUid: args.externalUid,
@@ -1819,7 +1860,13 @@ export const bookedBetween = internalQuery({
           q.eq("orgId", args.orgId).gte("startAt", args.startMs).lt("startAt", args.endMs),
         )
         .collect()
-    ).filter((row) => row.status === "scheduled" || row.status === "confirmed");
+    ).filter(
+      (row) =>
+        (row.status === "scheduled" || row.status === "confirmed") &&
+        // Goods orders (explicit 0) hold no chair — a Saturday of cake
+        // pickups must not read as a full shop.
+        row.durationMinutes !== 0,
+    );
     // Every booked time used to come back as unavailable, which is only true
     // of a one-chair shop. What the agent needs is the times that are FULL —
     // where as many appointments already overlap as there are people to work

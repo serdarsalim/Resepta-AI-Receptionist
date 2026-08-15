@@ -27,6 +27,10 @@ export function customerConflict(
   durationMinutes: number,
   ignoreId?: Id<"appointments">,
 ): Doc<"appointments"> | null {
+  // A goods order (duration 0) is a handover, not a sitting: the customer is
+  // not IN it, so it collides with nothing — not with their haircut, and not
+  // with their four other cakes due the same minute.
+  if (durationMinutes === 0) return null;
   const endMs = startMs + durationMinutes * 60_000;
   return (
     rows.find(
@@ -37,6 +41,10 @@ export function customerConflict(
         // hands over its raw index range, and a cancelled appointment must
         // never block the slot it freed.
         (row.status === "scheduled" || row.status === "confirmed") &&
+        // The same exemption from the other side — an existing goods order
+        // never blocks the person. NOT ?? here: unset means a legacy row
+        // (assume 30), only an explicit 0 means goods.
+        row.durationMinutes !== 0 &&
         row.startAt < endMs &&
         startMs < row.startAt + (row.durationMinutes ?? 30) * 60_000,
     ) ?? null

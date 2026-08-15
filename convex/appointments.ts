@@ -16,6 +16,9 @@ import { formatAppointmentTime } from "./lib/format";
 const lineInput = v.object({
   serviceId: v.id("services"),
   price: v.optional(v.number()),
+  // Goods only ("3 chocolate cakes" is one line, quantity 3). Ignored on
+  // time-bound services — two haircuts is two visits.
+  quantity: v.optional(v.number()),
 });
 
 const storedItem = v.object({
@@ -23,6 +26,7 @@ const storedItem = v.object({
   name: v.string(),
   price: v.optional(v.number()),
   durationMinutes: v.number(),
+  quantity: v.optional(v.number()),
 });
 
 type StoredItem = {
@@ -30,6 +34,7 @@ type StoredItem = {
   name: string;
   price?: number;
   durationMinutes: number;
+  quantity?: number;
 };
 
 // Client lines -> stored snapshot lines. The price falls back to the service's
@@ -38,30 +43,47 @@ type StoredItem = {
 async function resolveLines(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
-  lines: { serviceId: Id<"services">; price?: number }[],
+  lines: { serviceId: Id<"services">; price?: number; quantity?: number }[],
 ): Promise<StoredItem[]> {
   const items: StoredItem[] = [];
   for (const line of lines) {
     const service = await ctx.db.get(line.serviceId);
     if (!service || service.orgId !== orgId) throw new Error("not-found");
     const price = line.price ?? service.price;
+    // A good's line stores duration 0 — it adds no time to the visit — and
+    // may carry a quantity. Time-bound lines never do.
+    const isGood = service.durationMinutes === undefined;
+    const quantity =
+      isGood && line.quantity !== undefined
+        ? Math.min(99, Math.max(1, Math.round(line.quantity)))
+        : 1;
     items.push({
       serviceId: service._id,
       name: service.name,
       // Whole minor units only, and never negative — a sum is trustworthy
       // only if nothing feeding it can be a fraction.
       ...(price !== undefined ? { price: Math.max(0, Math.round(price)) } : {}),
-      durationMinutes: service.durationMinutes,
+      durationMinutes: service.durationMinutes ?? 0,
+      ...(quantity > 1 ? { quantity } : {}),
     });
   }
   return items;
+}
+
+// What a line is worth: unit price × how many. The helper exists so no summer
+// ever multiplies in one place and forgets in another.
+export function lineWorth(item: StoredItem): number | undefined {
+  if (item.price === undefined) return undefined;
+  return item.price * (item.quantity ?? 1);
 }
 
 // What the block prints. Two services read "Sac kesimi, Sakal tirasi"; the
 // callers that have to fit it in a 30-minute block truncate their own copy.
 export function itemsLabel(items: StoredItem[] | undefined): string | undefined {
   if (!items?.length) return undefined;
-  return items.map((i) => i.name).join(", ");
+  return items
+    .map((i) => ((i.quantity ?? 1) > 1 ? `${i.quantity}× ${i.name}` : i.name))
+    .join(", ");
 }
 
 // The visit's total. Undefined when NO line carries a price — "nothing was
@@ -71,7 +93,7 @@ export function itemsLabel(items: StoredItem[] | undefined): string | undefined 
 export function itemsTotal(items: StoredItem[] | undefined): number | undefined {
   if (!items?.length) return undefined;
   if (items.every((i) => i.price === undefined)) return undefined;
-  return items.reduce((sum, i) => sum + (i.price ?? 0), 0);
+  return items.reduce((sum, i) => sum + (lineWorth(i) ?? 0), 0);
 }
 
 const enrichedAppointment = v.object({

@@ -260,7 +260,7 @@ const TOOLS: ToolDef[] = [
     name: "list_services",
     title: "What this business sells",
     description:
-      "The bookable services, with the key the phone agent books by, duration, price and whether they are active. Prices are minor units of the returned currency — 40000 is 400,00. Read this before adding one, so you do not create a near-duplicate.",
+      "Everything this business sells, with the key the phone agent books by, duration, price and whether it is active. A row with durationMinutes null is a GOOD (a cake, a delivery): sold at a moment, no calendar footprint, orderable in quantity. Prices are minor units of the returned currency — 40000 is 400,00. Read this before adding one, so you do not create a near-duplicate.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, idempotentHint: true },
     handler: async (ctx, _args, who) =>
@@ -277,27 +277,35 @@ const TOOLS: ToolDef[] = [
       type: "object",
       properties: {
         name: { type: "string", description: "What a customer would call it." },
-        durationMinutes: { type: "number", description: "Minimum 5." },
+        durationMinutes: {
+          type: "number",
+          description:
+            "Minimum 5. OMIT ENTIRELY for a good — a thing sold at a moment (a cake, a delivery) rather than time. Goods never block the calendar and can be ordered in quantity.",
+        },
+        leadMinutes: {
+          type: "number",
+          description:
+            "Goods only: minimum notice in minutes (1440 = order a day ahead). Omit for no lead time.",
+        },
         price: {
           type: "number",
           description: "Minor units (40000 = 400,00). Omit if the business does not track it.",
         },
       },
-      required: ["name", "durationMinutes"],
+      required: ["name"],
       additionalProperties: false,
     },
     annotations: {},
     handler: async (ctx, args, who) => {
       const name = str(args, "name");
-      const durationMinutes = num(args, "durationMinutes");
       if (!name) throw new Error("name is required");
-      if (durationMinutes === undefined) throw new Error("durationMinutes is required");
       const res = await ctx.runMutation(internal.agentTools.createService, {
         orgId: who.orgId as never,
         userId: who.userId as never,
         connectionId: who.connectionId as never,
         name,
-        durationMinutes,
+        durationMinutes: num(args, "durationMinutes"),
+        leadMinutes: num(args, "leadMinutes"),
         price: num(args, "price"),
       });
       return {

@@ -57,6 +57,31 @@ export function spokenDuration(
   }).format(hours ? total / 60 : total);
 }
 
+// How much warning an order needs, shaped to be said: "2 days", not "2880
+// minutes". Same Intl machinery as spokenDuration, one unit up — lead times
+// are set in days far more often than appointment lengths are.
+export function spokenLead(
+  minutes: number | null | undefined,
+  locale: string | null | undefined,
+): string | null {
+  if (minutes === null || minutes === undefined) return null;
+  const total = Math.round(minutes);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const unit =
+    total >= 1440 && total % 1440 === 0
+      ? "day"
+      : total >= 60 && total % 60 === 0
+        ? "hour"
+        : "minute";
+  const value = unit === "day" ? total / 1440 : unit === "hour" ? total / 60 : total;
+  return new Intl.NumberFormat(locale || "en", {
+    style: "unit",
+    unit,
+    unitDisplay: "long",
+    useGrouping: false,
+  }).format(value);
+}
+
 // The word a customer would use, by currency and then language, keyed by the
 // Intl plural category so English can say one dollar and 3000 dollars. Turkish
 // does not inflect a noun after a numeral, so its two forms are the same word
