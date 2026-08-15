@@ -42,12 +42,21 @@ import { Sheet } from "./Sheet";
 // never types "24, 2".
 const OFFSET_PRESETS = [48, 24, 3, 2, 1];
 
-// The three columns left of the toggle. Stacked on mobile (the row reads as a
-// sentence), a grid from sm up (it reads as a table). The header uses the same
-// inner grid so the columns line up without a real <table>, which would need
-// its own mobile story.
+// The three columns left of the toggle. A three-column table from sm up; on a
+// phone the same three cells fold into two columns — when over what on the
+// left, channel pinned right — rather than stacking flush left down one edge
+// and leaving half the row empty. The header uses the same inner grid so the
+// columns line up without a real <table>, which would need its own mobile
+// story; it is sm-only, so the phone placement below never reaches it.
 const RULE_COLUMNS =
-  "min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-3";
+  "grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3";
+
+// Phone placement for the two cells that are not already in the top-left slot.
+// Applied at each row call site because only a row has these three children in
+// this order — the sm-only headers share the grid but not the folding.
+const RULE_WHAT_CELL = "max-sm:col-start-1 max-sm:row-start-2";
+const RULE_CHANNEL_CELL =
+  "max-sm:col-start-2 max-sm:row-start-1 max-sm:row-span-2 max-sm:justify-self-end";
 
 type RuleKind = "confirmation" | "reminder" | "winback";
 
@@ -224,9 +233,9 @@ function RuleRow({
           {when}
           {hint && <InfoTip text={hint} />}
         </span>
-        <span className="text-sm text-[var(--muted)]">{what}</span>
+        <span className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}>{what}</span>
         <span
-          className={`flex items-center gap-1.5 text-xs ${
+          className={`flex items-center gap-1.5 text-xs ${RULE_CHANNEL_CELL} ${
             silent ? "text-amber-700 dark:text-amber-400" : "text-[var(--muted)]"
           }`}
         >
@@ -1764,12 +1773,14 @@ function RulesCard({
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
                     </span>
-                    <span className="text-sm text-[var(--muted)]">
+                    <span className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}>
                       {ruleName(rule.trigger)}
                     </span>
                     {/* Which lanes this rule is ON, stated. The switches moved
                         inside with everything else editable. */}
-                    <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span
+                      className={`flex flex-wrap items-center gap-1.5 text-xs ${RULE_CHANNEL_CELL}`}
+                    >
                       {rowChannels
                         .filter((channel) => activeChannels(rule).has(channel))
                         .map((channel) => (
