@@ -238,7 +238,9 @@ export const loadTurnContext = internalQuery({
         .map((s) => ({
           name: s.name,
           key: serviceKey(s),
-          durationMinutes: s.durationMinutes,
+          // null = a good: no length, no calendar footprint, quantity allowed.
+          durationMinutes: s.durationMinutes ?? null,
+          leadMinutes: s.leadMinutes ?? null,
           price: s.price ?? null,
         })),
       teamNames: staff.filter((s) => s.active).map((s) => s.name),
@@ -495,11 +497,13 @@ export const respond = internalAction({
       closedDays: openness.closed_days,
       services: (context.services as {
         name: string;
-        durationMinutes: number;
+        durationMinutes: number | null;
+        leadMinutes: number | null;
         price: number | null;
       }[]).map((s) => ({
         name: s.name,
-        durationMinutes: s.durationMinutes,
+        durationMinutes: s.durationMinutes ?? undefined,
+        leadMinutes: s.leadMinutes ?? undefined,
         price:
           s.price === null
             ? undefined
@@ -751,19 +755,40 @@ async function executeTool(
           note: "The business is CLOSED then, so this was not booked. Offer the nearest time inside open_hours.",
         };
       }
+      // Plural now, with the same tolerance the voice handler has: a
+      // model that packs "saç kesimi, sakal" into one entry gets it split
+      // rather than matched against nothing. `service` stays accepted
+      // because nothing stops an older conversation mid-flight from
+      // having already been handed the previous tool shape.
+      const spokenServices = Array.isArray(input.services)
+        ? input.services
+            .flatMap((one) => String(one ?? "").split(","))
+            .map((one) => one.trim())
+            .filter(Boolean)
+        : undefined;
+      const spokenService = String(input.service ?? "").trim() || undefined;
       let externalUid: string | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
-        const booking = await createBooking({
-          apiKey: org.calcomApiKey,
-          eventTypeId: org.calcomEventTypeId,
-          startIso: new Date(startAt).toISOString(),
-          name: customerName,
-          phone: customer.phone,
-          timeZone: org.timezone,
-          language: org.language,
+        // Same rule as the voice webhook: a goods-only order stays local.
+        // cal.com has nothing zero-length, and an externalUid would skip
+        // voiceBook's guards — lead time included.
+        const { goodsOnly } = await ctx.runQuery(internal.retell.classifyServices, {
+          orgId: context.orgId,
+          spoken: spokenServices ?? (spokenService ? [spokenService] : []),
         });
-        if (!booking.ok) return { error: booking.reason };
-        externalUid = booking.uid;
+        if (!goodsOnly) {
+          const booking = await createBooking({
+            apiKey: org.calcomApiKey,
+            eventTypeId: org.calcomEventTypeId,
+            startIso: new Date(startAt).toISOString(),
+            name: customerName,
+            phone: customer.phone,
+            timeZone: org.timezone,
+            language: org.language,
+          });
+          if (!booking.ok) return { error: booking.reason };
+          externalUid = booking.uid;
+        }
       }
       try {
         const booking = await ctx.runMutation(internal.retell.voiceBook, {
@@ -772,18 +797,8 @@ async function executeTool(
           phone: customer.phone,
           startAt,
           externalUid,
-          // Plural now, with the same tolerance the voice handler has: a
-          // model that packs "saç kesimi, sakal" into one entry gets it split
-          // rather than matched against nothing. `service` stays accepted
-          // because nothing stops an older conversation mid-flight from
-          // having already been handed the previous tool shape.
-          services: Array.isArray(input.services)
-            ? input.services
-                .flatMap((one) => String(one ?? "").split(","))
-                .map((one) => one.trim())
-                .filter(Boolean)
-            : undefined,
-          service: String(input.service ?? "").trim() || undefined,
+          services: spokenServices,
+          service: spokenService,
           source: "chat",
         });
         return {

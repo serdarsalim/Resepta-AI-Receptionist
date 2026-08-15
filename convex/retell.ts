@@ -7,6 +7,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -1535,7 +1536,7 @@ type MatchedLine = {
 };
 
 async function matchService(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   orgId: Id<"orgs">,
   spoken: string,
 ): Promise<MatchedLine | undefined> {
@@ -1588,7 +1589,7 @@ async function matchService(
 // as the singular path drops them — the appointment still stands and the agent
 // reads back what DID match, which is its cue to ask again.
 async function matchServices(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   orgId: Id<"orgs">,
   spoken: string[],
 ): Promise<MatchedLine[]> {
@@ -1609,6 +1610,26 @@ async function matchServices(
   }
   return lines;
 }
+
+// Whether the spoken order is goods through and through. http.ts asks BEFORE
+// deciding to involve cal.com: a goods-only order has no zero-length
+// representation there and consumes no inventory, so it must stay local —
+// not least because an externalUid would skip voiceBook's own guards, lead
+// time included. Anything unmatched or mixed keeps the current cal.com path;
+// unknown words defaulting to "not goods" is the conservative reading.
+export const classifyServices = internalQuery({
+  args: { orgId: v.id("orgs"), spoken: v.array(v.string()) },
+  returns: v.object({ goodsOnly: v.boolean() }),
+  handler: async (ctx, args) => {
+    const lines = await matchServices(ctx, args.orgId, args.spoken);
+    return {
+      goodsOnly:
+        lines.length > 0 &&
+        lines.length === args.spoken.length &&
+        lines.every((line) => line.durationMinutes === 0),
+    };
+  },
+});
 
 // Voice booking: find/create the customer by phone, insert the appointment.
 // externalUid (cal.com's uid when the booking went through cal.com) is what

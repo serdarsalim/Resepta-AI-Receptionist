@@ -562,19 +562,43 @@ http.route({
             " in closed_days.",
         });
       }
+      // Whatever the caller called them. Matching against the org's own
+      // list happens in voiceBook, not here and not in the agent's prompt.
+      //
+      // Both shapes accepted: template v4 sends `services`, and an agent
+      // whose owner has not clicked the update banner still sends the
+      // singular `service`. A model improvising a comma-separated string
+      // into the array field is caught here too, because one entry of
+      // "saç kesimi, sakal" would otherwise match nothing at all.
+      const spokenServices = Array.isArray(args.services)
+        ? args.services
+            .flatMap((one) => String(one ?? "").split(","))
+            .map((one) => one.trim())
+            .filter(Boolean)
+        : undefined;
+      const spokenService = String(args.service ?? "").trim() || undefined;
       let externalUid: string | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
-        const booking = await createBooking({
-          apiKey: org.calcomApiKey,
-          eventTypeId: org.calcomEventTypeId,
-          startIso: new Date(startAt).toISOString(),
-          name: customerName,
-          phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
-          timeZone: org.timezone,
-          language: org.language,
-        });
-        if (!booking.ok) return respond({ error: booking.reason });
-        externalUid = booking.uid;
+        // Goods-only orders never touch cal.com: nothing zero-length exists
+        // there, and an externalUid would make voiceBook skip its own guards
+        // — the lead-time check included. Local book, local truth.
+        const { goodsOnly } = (await ctx.runQuery(internal.retell.classifyServices, {
+          orgId: org._id,
+          spoken: spokenServices ?? (spokenService ? [spokenService] : []),
+        })) as { goodsOnly: boolean };
+        if (!goodsOnly) {
+          const booking = await createBooking({
+            apiKey: org.calcomApiKey,
+            eventTypeId: org.calcomEventTypeId,
+            startIso: new Date(startAt).toISOString(),
+            name: customerName,
+            phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
+            timeZone: org.timezone,
+            language: org.language,
+          });
+          if (!booking.ok) return respond({ error: booking.reason });
+          externalUid = booking.uid;
+        }
       }
       let booking: { serviceName?: string; serviceNames?: string[] };
       try {
@@ -584,21 +608,8 @@ http.route({
           phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
           startAt,
           externalUid,
-          // Whatever the caller called them. Matching against the org's own
-          // list happens in voiceBook, not here and not in the agent's prompt.
-          //
-          // Both shapes accepted: template v4 sends `services`, and an agent
-          // whose owner has not clicked the update banner still sends the
-          // singular `service`. A model improvising a comma-separated string
-          // into the array field is caught here too, because one entry of
-          // "saç kesimi, sakal" would otherwise match nothing at all.
-          services: Array.isArray(args.services)
-            ? args.services
-                .flatMap((one) => String(one ?? "").split(","))
-                .map((one) => one.trim())
-                .filter(Boolean)
-            : undefined,
-          service: String(args.service ?? "").trim() || undefined,
+          services: spokenServices,
+          service: spokenService,
         });
       } catch (err) {
         return respond({ error: err instanceof Error ? err.message : "book-failed" });

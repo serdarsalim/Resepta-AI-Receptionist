@@ -39,7 +39,9 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // to an empty string for every salon delivering over WhatsApp, so it did
 // nothing except sit in the owner's editor looking like a mistake. The plain
 // rule is back, asked once after the booking is saved.
-export const VOICE_AGENT_TEMPLATE_VERSION = 8;
+// v9: goods — services without a duration take no slot, repeat-per-piece for
+// quantity, and the lead-time refusal gets its own remedy line.
+export const VOICE_AGENT_TEMPLATE_VERSION = 9;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -88,6 +90,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "RANDEVU",
     "Hiçbir şeyi uydurma. Müsaitlik, kayıt ve değişiklik her zaman araçlarla yapılır.",
     "Birden fazla hizmet tek bir book_appointment çağrısıdır: tek randevu, süreler toplanır, hizmetler arka arkaya yapılır.",
+    "Süresi olmayan kalemler ÜRÜNDÜR (örneğin pasta, teslimat): takvimde yer tutmaz, müsaitlik kontrolü gerekmez, sadece teslim zamanı sorulur. Aynı üründen birden fazla isteniyorsa adını listede adet kadar tekrarla: üç pasta üç kayıttır.",
+    "book_appointment lead-time derse ürün daha fazla ön süre ister: özür dile, ne kadar önceden sipariş gerektiğini söyle ve uygun en erken günü öner.",
     "Kaydetmeden hemen önce hizmeti, tarihi ve saati bir kez tekrarla ve onay iste. book_appointment aracını yalnızca onaydan sonra çağır.",
     "Kayıttan sonra tek kısa cümleyle tamamlandığını söyle. Detayları baştan tekrar okuma.",
     "İptal veya ertelemede önce randevuyu bul ve adıyla söyle, değiştirmeden önce açık onay al.",
@@ -128,6 +132,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "BOOKING",
     "Invent nothing. Availability, saving and changes always go through the tools.",
     "Several services are ONE book_appointment call: one appointment, durations summed, services back to back.",
+    "Items listed without a duration are GOODS (a cake, a delivery): they take no calendar slot and need no availability check — only ask when they want to pick it up or have it delivered. For several of the same good, repeat its name in the services list once per piece: three cakes is three entries.",
+    "If book_appointment answers lead-time, the item needs more notice: apologise, say how much warning it needs, and offer the earliest day that satisfies it.",
     "Immediately before saving, repeat the service, date and time once and ask for confirmation. Call book_appointment only after they confirm.",
     "Once saved, say so in one short sentence. Do not read the appointment back again.",
     "To cancel or move, find and name the appointment first, then take explicit confirmation.",
@@ -168,6 +174,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "TERMIN",
     "Erfinde nichts. Verfügbarkeit, Speichern und Änderungen laufen immer über die Werkzeuge.",
     "Mehrere Leistungen sind EIN book_appointment-Aufruf: ein Termin, Dauern summiert, Leistungen nacheinander.",
+    "Einträge ohne Dauer sind WAREN (eine Torte, eine Lieferung): sie belegen keinen Termin und brauchen keine Verfügbarkeitsprüfung — frage nur nach dem Abhol- oder Lieferzeitpunkt. Für mehrere Stück derselben Ware wiederhole ihren Namen in der Liste einmal pro Stück: drei Torten sind drei Einträge.",
+    "Antwortet book_appointment mit lead-time, braucht die Ware mehr Vorlauf: entschuldige dich, nenne die nötige Vorlaufzeit und biete den frühesten passenden Tag an.",
     "Wiederhole direkt vor dem Speichern Leistung, Datum und Uhrzeit einmal und bitte um Bestätigung. Rufe book_appointment erst danach auf.",
     "Ist gespeichert, sage es in einem kurzen Satz. Lies den Termin nicht erneut vor.",
     "Zum Absagen oder Verschieben finde und benenne den Termin zuerst, dann hole ausdrückliche Bestätigung.",
