@@ -1276,8 +1276,15 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
           are pinned and undeletable, org rows drag to reorder, a List type
           expands into its options editor, and Filled by is the column that
           replaced the old three-group split. */}
+      {/* The min-width is what makes the overflow-x above it mean anything. The
+          colgroup below spends 448px on five fixed columns and leaves the label
+          the remainder; with w-full alone the table shrank to the container, so
+          on a phone the remainder went NEGATIVE — the label column collapsed to
+          nothing, its header printed on top of the key header, and values wrapped
+          one character per line. Floor the table at the width its own columns
+          ask for and the wrapper scrolls, which is what it was always for. */}
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-sm">
+        <table className="w-full min-w-[38rem] table-fixed text-sm">
           <colgroup>
             <col className="w-6" />
             <col />
