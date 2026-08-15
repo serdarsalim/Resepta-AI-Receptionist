@@ -572,8 +572,8 @@ export const sendAppointmentMessage = internalAction({
     // the message language. Items store integer minor units; no items or a
     // zero total renders as nothing rather than as a free appointment.
     const totalMinor = (
-      (appointment.items ?? []) as { price?: number }[]
-    ).reduce((sum, item) => sum + (item.price ?? 0), 0);
+      (appointment.items ?? []) as { price?: number; quantity?: number }[]
+    ).reduce((sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1), 0);
     const formatMoney = (minor: number) =>
       new Intl.NumberFormat(language, {
         style: "currency",
@@ -583,10 +583,13 @@ export const sendAppointmentMessage = internalAction({
     // [pricelist] — the receipt look. An unpriced item keeps its bullet
     // without a dangling dash.
     const servicePriceList = appointment.items
-      ?.map(
-        (item: { name: string; price?: number }) =>
-          `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
-      )
+      ?.map((item: { name: string; price?: number; quantity?: number }) => {
+        const quantity = item.quantity ?? 1;
+        const label = quantity > 1 ? `${quantity}× ${item.name}` : item.name;
+        // The line's worth, not the unit price — a receipt line for three
+        // cakes says what three cakes cost.
+        return `• ${label}${item.price ? ` — ${formatMoney(item.price * quantity)}` : ""}`;
+      })
       .join("\n");
     const tokenValues = {
       firstName: customer.firstName,
@@ -609,7 +612,9 @@ export const sendAppointmentMessage = internalAction({
       // One bullet line per booked service — [service] renders as a LIST, so
       // the stock texts put it on its own paragraph rather than mid-sentence.
       serviceName: appointment.items
-        ?.map((item: { name: string }) => `• ${item.name}`)
+        ?.map((item: { name: string; quantity?: number }) =>
+          (item.quantity ?? 1) > 1 ? `• ${item.quantity}× ${item.name}` : `• ${item.name}`,
+        )
         .join("\n"),
       servicePriceList,
       price,

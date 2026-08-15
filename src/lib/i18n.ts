@@ -193,6 +193,23 @@ const dictionary = {
 
   "appointments.edit": { tr: "Randevuyu düzenle", en: "Edit appointment", de: "Termin bearbeiten" },
   "appointments.duration": { tr: "Süre (dk)", en: "Duration (min)", de: "Dauer (Min.)" },
+  "appointments.quantity": { tr: "Adet", en: "Quantity", de: "Anzahl" },
+  "services.durationGoodHint": {
+    tr: "Boş bırakılırsa ürün olur: takvimde yer tutmaz (ör. pasta, teslimat)",
+    en: "Leave empty for a good: takes no calendar slot (e.g. a cake, a delivery)",
+    de: "Leer lassen für eine Ware: belegt keinen Termin (z. B. Torte, Lieferung)",
+  },
+  "services.leadTime": {
+    tr: "Ön sipariş süresi",
+    en: "Lead time",
+    de: "Vorlaufzeit",
+  },
+  "services.leadDays": { tr: "gün önce", en: "days ahead", de: "Tage vorher" },
+  "booking.leadTime": {
+    tr: "Bu ürün için daha erken bir tarih seçilemez, lütfen daha ileri bir gün seçin",
+    en: "This item needs more notice, please pick a later day",
+    de: "Dieser Artikel braucht mehr Vorlauf, bitte einen späteren Tag wählen",
+  },
   "appointments.bookAnyway": {
     tr: "Yine de kaydet",
     en: "Book anyway",

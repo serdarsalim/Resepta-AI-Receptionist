@@ -96,9 +96,14 @@ export function dragResult(
   dayMs: number,
   defaultDuration: number,
 ): { startAt: number; durationMinutes: number } {
+  const raw = drag.endMinute - drag.startMinute;
   const durationMinutes =
     drag.kind === "create" && !drag.moved
       ? defaultDuration
-      : Math.max(SNAP_MINUTES, drag.endMinute - drag.startMinute);
+      : drag.kind === "move" && raw === 0
+        ? // A goods order (duration 0) moves without gaining a length — the
+          // snap floor is for edges being drawn, and a move draws none.
+          0
+        : Math.max(SNAP_MINUTES, raw);
   return { startAt: dayMs + drag.startMinute * 60_000, durationMinutes };
 }

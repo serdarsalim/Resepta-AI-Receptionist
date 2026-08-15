@@ -387,7 +387,13 @@ export function ContactView({
                               // the service costs now.
                               lines: (appointment.items ?? []).flatMap((item) =>
                                 item.serviceId
-                                  ? [{ serviceId: item.serviceId, price: item.price }]
+                                  ? [
+                                      {
+                                        serviceId: item.serviceId,
+                                        price: item.price,
+                                        quantity: item.quantity,
+                                      },
+                                    ]
                                   : [],
                               ),
                               staffId: appointment.staffId ?? null,

@@ -403,7 +403,9 @@ export function AppointmentsView({
                   ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
                   : undefined,
                 lines: (row.items ?? []).flatMap((item) =>
-                  item.serviceId ? [{ serviceId: item.serviceId, price: item.price }] : [],
+                  item.serviceId
+                    ? [{ serviceId: item.serviceId, price: item.price, quantity: item.quantity }]
+                    : [],
                 ),
                 staffId: row.staffId ?? null,
                 notes: row.notes,
@@ -451,7 +453,7 @@ export function AppointmentsView({
               // show what this visit recorded, not what the service costs now.
               lines: (row.items ?? []).flatMap((item) =>
                 item.serviceId
-                  ? [{ serviceId: item.serviceId, price: item.price }]
+                  ? [{ serviceId: item.serviceId, price: item.price, quantity: item.quantity }]
                   : [],
               ),
               staffId: row.staffId ?? null,
@@ -697,6 +699,7 @@ type CalendarAppointment = {
     name: string;
     price?: number;
     durationMinutes: number;
+    quantity?: number;
   }[];
   total?: number;
 };
@@ -852,6 +855,17 @@ type Placed = {
   cluster: Cluster;
 };
 
+// What a row occupies for LANE PACKING, which is not what it occupies in
+// time: a goods order (duration 0) borrows a small footprint here so five
+// cakes due at 15:00 sit side by side instead of stacking into one
+// unclickable pixel column. Only the packer sees this; the drawn height and
+// every piece of booking math still treat the order as zero-length.
+const PIN_LANE_MINUTES = 15;
+function laneMinutes(row: CalendarAppointment): number {
+  const minutes = row.durationMinutes ?? DEFAULT_DURATION;
+  return minutes === 0 ? PIN_LANE_MINUTES : minutes;
+}
+
 // Side-by-side placement for bookings that overlap in time. Rows are grouped
 // into clusters of mutually overlapping appointments, and each cluster is
 // split into as many lanes as it needs. Every placement carries its cluster
@@ -878,13 +892,12 @@ function laneOut(rows: CalendarAppointment[]): Placed[] {
   };
 
   for (const row of sorted) {
-    const end = row.startAt + (row.durationMinutes ?? DEFAULT_DURATION) * 60_000;
+    const end = row.startAt + laneMinutes(row) * 60_000;
     if (row.startAt >= clusterEnd) flush();
     // First lane whose last booking has already finished.
     const laneEnds: number[] = [];
     for (const item of cluster) {
-      const itemEnd =
-        item.row.startAt + (item.row.durationMinutes ?? DEFAULT_DURATION) * 60_000;
+      const itemEnd = item.row.startAt + laneMinutes(item.row) * 60_000;
       laneEnds[item.lane] = Math.max(laneEnds[item.lane] ?? 0, itemEnd);
     }
     let lane = 0;
@@ -1541,6 +1554,10 @@ function Calendar({
                   }
 
                   const { row, lane, lanes } = item;
+                  // An explicit 0 is a goods order: drawn as a pin, moved but
+                  // never resized, dashed so a handover reads differently
+                  // from twenty minutes of somebody's chair.
+                  const isGood = row.durationMinutes === 0;
                   const top =
                     ((minutesInto(row.startAt) - dayStart * 60) / 60) * HOUR_PX;
                   const height = Math.max(
@@ -1584,7 +1601,10 @@ function Calendar({
                             RESIZE_HANDLE_PX;
                         startDrag(
                           {
-                            kind: nearBottom ? "resize" : "move",
+                            // A pin has no bottom edge to drag — a good's
+                            // length is not a thing, so grabbing anywhere
+                            // moves it.
+                            kind: nearBottom && !isGood ? "resize" : "move",
                             day: column.day,
                             row,
                             anchorMinute: startMinute,
@@ -1608,19 +1628,22 @@ function Calendar({
                       }}
                       className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${
                         BLOCK_STYLE[row.status] ?? BLOCK_STYLE.scheduled
-                      } ${
+                      } ${isGood ? "border border-dashed border-current/40" : ""} ${
                         drag?.row?._id === row._id
                           ? "opacity-30"
                           : ""
                       }`}
                     >
                       {/* Resize grip. Its own element so the cursor changes
-                          before you press, rather than after. */}
-                      <span
-                        aria-hidden
-                        className="absolute inset-x-0 bottom-0 cursor-ns-resize"
-                        style={{ height: RESIZE_HANDLE_PX }}
-                      />
+                          before you press, rather than after. A pin has no
+                          edge, so it gets none. */}
+                      {!isGood && (
+                        <span
+                          aria-hidden
+                          className="absolute inset-x-0 bottom-0 cursor-ns-resize"
+                          style={{ height: RESIZE_HANDLE_PX }}
+                        />
+                      )}
                       {/* A half-hour block is one line tall, so the time and
                           the name share it rather than clipping.
 

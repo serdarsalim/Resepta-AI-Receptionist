@@ -18,14 +18,17 @@ import { PhoneInput } from "@/components/PhoneField";
 // Today's civil date in a timezone, as YYYY-MM-DD — the org's, not the
 // viewer's: a Vienna customer at 23:30 books an Istanbul salon whose day has
 // already turned.
-function todayIn(timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
+function dayIn(timezone: string, atMs: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
-  return parts;
+  }).format(new Date(atMs));
+}
+
+function todayIn(timezone: string): string {
+  return dayIn(timezone, Date.now());
 }
 
 export default function BookingPage({
@@ -43,6 +46,7 @@ export default function BookingPage({
   const [startMs, setStartMs] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
@@ -125,6 +129,13 @@ export default function BookingPage({
   }
 
   const service = page.services.find((s) => s._id === serviceId) ?? null;
+  // A good with a lead time cannot be had tomorrow morning; the date input
+  // says so up front instead of letting every too-soon day answer "no times".
+  const isGood = service !== null && service.durationMinutes === undefined;
+  const minDate =
+    service?.leadMinutes !== undefined
+      ? dayIn(page.timezone, Date.now() + service.leadMinutes * 60_000)
+      : todayIn(page.timezone);
 
   return (
     <Shell title={page.orgName}>
@@ -150,7 +161,11 @@ export default function BookingPage({
                   }`}
                 >
                   {row.name}
-                  <span className="ml-1.5 text-xs opacity-70">{row.durationMinutes}′</span>
+                  {/* A good has no minutes to advertise — the name is the
+                      whole fact. */}
+                  {row.durationMinutes !== undefined && (
+                    <span className="ml-1.5 text-xs opacity-70">{row.durationMinutes}′</span>
+                  )}
                 </button>
               );
             })}
@@ -163,7 +178,7 @@ export default function BookingPage({
             <input
               type="date"
               value={dateValue}
-              min={todayIn(page.timezone)}
+              min={minDate}
               onChange={(event) => {
                 setDate(event.target.value);
                 setStartMs(null);
@@ -219,6 +234,7 @@ export default function BookingPage({
                 name,
                 phone,
                 ...(email.trim() ? { email } : {}),
+                ...(isGood && quantity > 1 ? { quantity } : {}),
               });
               setSending(false);
               if (result.ok) setDone({ token: result.token, startMs });
@@ -231,8 +247,27 @@ export default function BookingPage({
             }}
           >
             <p className="text-sm text-[var(--muted)]">
-              {service.name} · {dateTimeLabel(startMs)}
+              {isGood && quantity > 1 ? `${quantity} × ${service.name}` : service.name} ·{" "}
+              {dateTimeLabel(startMs)}
             </p>
+            {/* How many, goods only: ordering three cakes is one order for a
+                moment, not three bookings. */}
+            {isGood && (
+              <label className="block text-sm">
+                {t("appointments.quantity")}
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  step={1}
+                  value={quantity}
+                  onChange={(e) =>
+                    setQuantity(Math.min(99, Math.max(1, Math.round(Number(e.target.value) || 1))))
+                  }
+                  className="mt-1 w-24"
+                />
+              </label>
+            )}
             <label className="block text-sm">
               {t("forms.name")}
               <input
@@ -265,7 +300,9 @@ export default function BookingPage({
                       ? t("booking.customerBusy")
                       : error === "too-many"
                         ? t("booking.tooMany")
-                        : t("forms.failed")}
+                        : error === "lead-time"
+                          ? t("booking.leadTime")
+                          : t("forms.failed")}
               </p>
             )}
             <button

@@ -93,7 +93,11 @@ export const revenue = query({
         unpriced++;
         continue;
       }
-      const total = priced.reduce((sum, item) => sum + (item.price ?? 0), 0);
+      // price is PER UNIT on a goods line; the line is worth price × quantity.
+      const total = priced.reduce(
+        (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
+        0,
+      );
       monthTotal += total;
       if (row.startAt >= weekStart) {
         weekTotal += total;
@@ -105,7 +109,11 @@ export const revenue = query({
             ? `${customer.firstName} ${customer.lastName ?? ""}`.trim() ||
               customer.phone
             : "",
-          services: items.map((item) => item.name).join(", "),
+          services: items
+            .map((item) =>
+              (item.quantity ?? 1) > 1 ? `${item.quantity}× ${item.name}` : item.name,
+            )
+            .join(", "),
           total,
         });
       }

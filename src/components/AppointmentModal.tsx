@@ -38,8 +38,9 @@ export type ModalDraft = {
   customerName?: string;
   phone?: string;
   // The visit's line items. One entry per service delivered; prices are minor
-  // units, absent when the line was never priced.
-  lines?: { serviceId: Id<"services">; price?: number }[];
+  // units, absent when the line was never priced. quantity only ever rides on
+  // a good ("3 chocolate cakes" is one line).
+  lines?: { serviceId: Id<"services">; price?: number; quantity?: number }[];
   staffId?: Id<"staff"> | null;
   notes?: string;
   status?: string;
@@ -50,7 +51,7 @@ export type ModalSubmit = {
   durationMinutes: number;
   customerId?: Id<"customers">;
   newCustomer?: { firstName: string; lastName?: string; phone: string; consent: boolean };
-  lines: { serviceId: Id<"services">; price?: number }[];
+  lines: { serviceId: Id<"services">; price?: number; quantity?: number }[];
   staffId?: Id<"staff"> | null;
   notes?: string;
 };
@@ -75,7 +76,8 @@ export function AppointmentModal({
   services: {
     _id: Id<"services">;
     name: string;
-    durationMinutes: number;
+    // Absent = a good: no length, no calendar footprint, quantity allowed.
+    durationMinutes?: number;
     price?: number;
   }[];
   currency: string;
@@ -110,10 +112,13 @@ export function AppointmentModal({
   // Line rows, held as strings because that is what the inputs speak. An empty
   // list is a real state — a blocked-out hour with no service on it — so the
   // modal opens with no rows rather than one blank one begging to be filled.
-  const [lines, setLines] = useState<{ serviceId: string; price: string }[]>(() =>
+  const [lines, setLines] = useState<
+    { serviceId: string; price: string; quantity: string }[]
+  >(() =>
     (draft.lines ?? []).map((line) => ({
       serviceId: line.serviceId as string,
       price: moneyInputValue(line.price, currency, language),
+      quantity: String(line.quantity ?? 1),
     })),
   );
   const [staffId, setStaffId] = useState<string>(draft.staffId ?? "");
@@ -257,6 +262,7 @@ export function AppointmentModal({
         ? {
             serviceId,
             price: moneyInputValue(picked?.price, currency, language),
+            quantity: "1",
           }
         : line,
     );
@@ -268,8 +274,25 @@ export function AppointmentModal({
     if (minutes > 0) setDurationMinutes(minutes);
   };
 
+  const isGoodLine = (line: { serviceId: string }) => {
+    const service = services.find((s) => s._id === line.serviceId);
+    return service !== undefined && service.durationMinutes === undefined;
+  };
+  // Goods through and through: every chosen line is a thing, not time. The
+  // block then books as duration 0 — a handover moment that holds no chair —
+  // so the duration field disappears rather than showing a number that means
+  // nothing.
+  const chosen = lines.filter((line) => line.serviceId);
+  const goodsOnly = chosen.length > 0 && chosen.every(isGoodLine);
+
+  const lineQuantity = (line: { quantity: string }) =>
+    Math.min(99, Math.max(1, Math.round(Number(line.quantity) || 1)));
   const priced = lines
-    .map((line) => parseMoney(line.price, currency, language))
+    .map((line) => {
+      const price = parseMoney(line.price, currency, language);
+      if (price === undefined) return undefined;
+      return price * (isGoodLine(line) ? lineQuantity(line) : 1);
+    })
     .filter((p): p is number => p !== undefined);
   const total = priced.length ? priced.reduce((sum, p) => sum + p, 0) : undefined;
 
@@ -313,16 +336,18 @@ export function AppointmentModal({
   const submit = () => {
     const values: ModalSubmit = {
       startAt,
-      durationMinutes,
+      durationMinutes: goodsOnly ? 0 : durationMinutes,
       // Rows still on "—" are dropped rather than sent: an unfinished row is
       // someone mid-thought, not a line they meant to record.
       lines: lines
         .filter((line) => line.serviceId)
         .map((line) => {
           const price = parseMoney(line.price, currency, language);
+          const quantity = isGoodLine(line) ? lineQuantity(line) : 1;
           return {
             serviceId: line.serviceId as Id<"services">,
             ...(price !== undefined ? { price } : {}),
+            ...(quantity > 1 ? { quantity } : {}),
           };
         }),
       staffId: staffId ? (staffId as Id<"staff">) : null,
@@ -646,7 +671,7 @@ export function AppointmentModal({
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs font-medium">
+            <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
               {t("appointments.when")}
               <input
                 type="datetime-local"
@@ -658,17 +683,21 @@ export function AppointmentModal({
                 }}
               />
             </label>
-            <label className="block text-xs font-medium">
-              {t("appointments.duration")}
-              <input
-                type="number"
-                min={5}
-                step={5}
-                className="mt-1"
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
-              />
-            </label>
+            {/* An order of goods has a moment, not a length — showing a
+                minutes field for it would be a number that means nothing. */}
+            {!goodsOnly && (
+              <label className="block text-xs font-medium">
+                {t("appointments.duration")}
+                <input
+                  type="number"
+                  min={5}
+                  step={5}
+                  className="mt-1"
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
+                />
+              </label>
+            )}
           </div>
 
           {/* One row per service delivered. A cut plus a beard trim is one
@@ -691,9 +720,30 @@ export function AppointmentModal({
                     </option>
                   ))}
                 </select>
+                {/* Quantity, goods only: "3× cake" is one line. Time-bound
+                    lines never show it — two haircuts is two visits. */}
+                {isGoodLine(line) && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    step={1}
+                    aria-label={t("appointments.quantity")}
+                    className="w-14 shrink-0"
+                    value={line.quantity}
+                    onChange={(e) =>
+                      setLines((prev) =>
+                        prev.map((l, i) =>
+                          i === index ? { ...l, quantity: e.target.value } : l,
+                        ),
+                      )
+                    }
+                  />
+                )}
                 {/* Prefilled from the service, editable on the spot. Typing a
                     different number IS the discount — there is no override
-                    toggle, because the field already permits the edit. */}
+                    toggle, because the field already permits the edit. Unit
+                    price on a goods line; the total below does the ×. */}
                 <input
                   type="number"
                   min={0}
@@ -724,7 +774,9 @@ export function AppointmentModal({
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setLines((prev) => [...prev, { serviceId: "", price: "" }])}
+                onClick={() =>
+                  setLines((prev) => [...prev, { serviceId: "", price: "", quantity: "1" }])
+                }
                 className="rounded-md py-1 text-xs text-[var(--accent)] hover:underline"
               >
                 {t("appointments.addService")}

@@ -749,6 +749,11 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
   const create = useMutation(api.services.create);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Controlled, because emptying it changes what the form IS: no duration
+  // means a good (a cake, a delivery), and a good gets a lead-time field
+  // where a service gets none.
+  const [duration, setDuration] = useState("30");
+  const isGood = duration.trim() === "";
 
   return (
     <Sheet title={t("services.add")} onClose={onClose}>
@@ -760,12 +765,18 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
           const name = String(form.get("name") ?? "").trim();
           if (!name) return;
           const price = parseMoney(String(form.get("price") ?? ""), currency, language);
+          const leadDays = Number(form.get("leadDays"));
           setPending(true);
           setError(null);
           try {
             await create({
               name,
-              durationMinutes: Number(form.get("durationMinutes")) || 30,
+              // Empty means a good, and the absence IS the fact — the server
+              // stores no duration rather than a placeholder.
+              ...(isGood ? {} : { durationMinutes: Number(duration) || 30 }),
+              ...(isGood && leadDays > 0
+                ? { leadMinutes: Math.round(leadDays * 1440) }
+                : {}),
               ...(price !== undefined ? { price } : {}),
             });
             onClose();
@@ -791,12 +802,36 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
                 type="number"
                 min={5}
                 step={5}
-                defaultValue={30}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder={t("common.optional")}
                 className="w-24"
               />
               <span className="text-xs text-[var(--muted)]">{t("services.minutes")}</span>
             </span>
+            <span className="mt-1 block text-xs text-[var(--muted)]">
+              {t("services.durationGoodHint")}
+            </span>
           </label>
+          {/* Only a good needs warning time — a haircut's notice is the slot
+              itself. Appears when the duration is emptied, beside the fact it
+              belongs to. */}
+          {isGood && (
+            <label className="block text-sm">
+              {t("services.leadTime")}
+              <span className="mt-1 flex items-center gap-2">
+                <input
+                  name="leadDays"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder={t("common.optional")}
+                  className="w-24"
+                />
+                <span className="text-xs text-[var(--muted)]">{t("services.leadDays")}</span>
+              </span>
+            </label>
+          )}
           <label className="block text-sm">
             {t("services.price")}
             <span className="mt-1 flex items-center gap-2">
@@ -919,19 +954,63 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       }
                     />
                   </span>
+                  {/* For a GOOD (no duration) this track holds the lead time
+                      instead, in days: the column's question is "what does
+                      time mean for this row", and for a cake the answer is
+                      how much warning the baker needs, not minutes in a
+                      chair. Clearing a duration turns the row into a good;
+                      there is deliberately no inline way back, because a
+                      good's row no longer edits minutes — recreate it. */}
                   <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-1 max-sm:row-start-2">
-                    <InlineEditValue
-                      value={String(service.durationMinutes)}
-                      type="number"
-                      compact
-                      onSave={(next) =>
-                        Number(next) > 0 &&
-                        update({ serviceId: service._id, durationMinutes: Number(next) })
-                      }
-                    />
-                    <span className="shrink-0 text-xs text-[var(--muted)]">
-                      {t("services.minutes")}
-                    </span>
+                    {service.durationMinutes !== undefined ? (
+                      <>
+                        <InlineEditValue
+                          value={String(service.durationMinutes)}
+                          type="number"
+                          compact
+                          onSave={(next) => {
+                            if (next.trim() === "") {
+                              return update({ serviceId: service._id, durationMinutes: null });
+                            }
+                            if (Number(next) > 0) {
+                              return update({
+                                serviceId: service._id,
+                                durationMinutes: Number(next),
+                              });
+                            }
+                          }}
+                        />
+                        <span className="shrink-0 text-xs text-[var(--muted)]">
+                          {t("services.minutes")}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <InlineEditValue
+                          value={
+                            service.leadMinutes !== undefined
+                              ? String(service.leadMinutes / 1440)
+                              : ""
+                          }
+                          type="number"
+                          compact
+                          placeholder="—"
+                          onSave={(next) => {
+                            const days = Number(next);
+                            return update({
+                              serviceId: service._id,
+                              leadMinutes:
+                                next.trim() === "" || !(days > 0)
+                                  ? null
+                                  : Math.round(days * 1440),
+                            });
+                          }}
+                        />
+                        <span className="shrink-0 text-xs text-[var(--muted)]">
+                          {t("services.leadDays")}
+                        </span>
+                      </>
+                    )}
                   </span>
                   {/* Same shape as duration — a number with its unit trailing.
                       Blank means unpriced, and clearing the box says so rather
