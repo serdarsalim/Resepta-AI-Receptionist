@@ -53,6 +53,11 @@ export const current = query({
       formEnabled: v.optional(v.boolean()),
       bookingEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
+      // Shows the Balance tab (prepaid only) — the wallet itself is
+      // wallet.overview's answer, this is just "does the destination exist".
+      billingMode: v.optional(
+        v.union(v.literal("invoice"), v.literal("prepaid")),
+      ),
       // Drives the banner that tells a visitor this salon is not real.
       demoMode: v.optional(v.boolean()),
       // The chat agent's lifecycle state (docs/chat-agent.md §5). Read by the
@@ -184,6 +189,7 @@ export const current = query({
         formEnabled: org.formEnabled,
         bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
+        billingMode: org.billingMode,
         demoMode: org.demoMode,
         chatAgentMode: org.chatAgentMode,
         inboundDomain: mailConfig.domain ?? undefined,

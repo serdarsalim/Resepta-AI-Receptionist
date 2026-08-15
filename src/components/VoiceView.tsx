@@ -174,25 +174,31 @@ function BillingSection() {
         {t("voiceBilling.rateLine").replace("{rate}", usd(data.rateMicroUsdPerMinute))}
       </p>
 
-      <div className={`mt-4 ${ROW_GRID}`}>
-        <RowLabel label={t("voiceBilling.budget")} hint={t("voiceBilling.budgetHint")} />
-        <input
-          inputMode="decimal"
-          defaultValue={
-            data.budgetMicroUsd === null ? "" : String(data.budgetMicroUsd / 1_000_000)
-          }
-          placeholder="50"
-          onBlur={(e) => {
-            const parsed = Number(e.target.value.replace(",", "."));
-            void setBudget({
-              budgetMicroUsd:
-                !e.target.value.trim() || Number.isNaN(parsed)
-                  ? null
-                  : Math.round(parsed * 1_000_000),
-            });
-          }}
-        />
-      </div>
+      {/* The soft budget is the invoice lane's alert lever; a prepaid org's
+          alerts come from its wallet, and this row's hint ("calls are never
+          cut off") would be a lie there. The wallet lives on the Balance
+          tab. */}
+      {data.mode !== "prepaid" && (
+        <div className={`mt-4 ${ROW_GRID}`}>
+          <RowLabel label={t("voiceBilling.budget")} hint={t("voiceBilling.budgetHint")} />
+          <input
+            inputMode="decimal"
+            defaultValue={
+              data.budgetMicroUsd === null ? "" : String(data.budgetMicroUsd / 1_000_000)
+            }
+            placeholder="50"
+            onBlur={(e) => {
+              const parsed = Number(e.target.value.replace(",", "."));
+              void setBudget({
+                budgetMicroUsd:
+                  !e.target.value.trim() || Number.isNaN(parsed)
+                    ? null
+                    : Math.round(parsed * 1_000_000),
+              });
+            }}
+          />
+        </div>
+      )}
 
       {data.months.length === 0 ? (
         <p className="mt-4 border-t border-[var(--table-divider)] pt-4 text-sm text-[var(--muted)]">

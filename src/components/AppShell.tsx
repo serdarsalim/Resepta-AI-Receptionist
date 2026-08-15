@@ -34,6 +34,7 @@ export type TabId =
   | "messages"
   | "revenue"
   | "services"
+  | "billing"
   | "business"
   | "account";
 
@@ -144,6 +145,15 @@ const VoicePhoneIcon = makeIcon(
   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
 );
 
+// The card that pays for the agent — the Balance tab's mark, prepaid orgs
+// only.
+const WalletCardIcon = makeIcon(
+  <>
+    <rect x="2.5" y="5" width="19" height="14" rx="2" />
+    <path d="M2.5 9.5h19" />
+  </>,
+);
+
 // Only ever rendered for platform admins (the operator's own shortcut to
 // /admin), so a shield never appears in any salon's sidebar.
 const AdminShieldIcon = makeIcon(
@@ -248,6 +258,17 @@ const NAV_TABS: {
 // admin's org page instead: an audit log is a debugging surface whose readers
 // are operators, and a salon owner has no use for a page of "settings changed".
 const FOOT_TABS: typeof NAV_TABS = [
+  // The wallet, above Business where every SaaS keeps money (Vercel, Stripe,
+  // OpenAI all park Billing at the account edge of the sidebar). Prepaid
+  // orgs only, owners only — filtered in AppShell, like Revenue above. It is
+  // NOT a section on the voice page: the wallet belongs to the business, and
+  // any future metered lane draws the same balance.
+  {
+    id: "billing",
+    key: "nav.balance",
+    Icon: WalletCardIcon,
+    color: "var(--foreground)",
+  },
   {
     id: "business",
     key: "nav.business",
@@ -1182,6 +1203,16 @@ export function AppShell({
     if (entry.id === "campaigns") return Boolean(settings?.whatsapp.connected);
     return true;
   });
+  // Balance is money, so it exists only where there is a wallet to show:
+  // prepaid orgs, owners. Staff and invoice-mode orgs never see the entry.
+  const footTabs = FOOT_TABS.filter((entry) => {
+    if (entry.id === "billing")
+      return (
+        settings?.org.billingMode === "prepaid" &&
+        settings.me.role === "owner"
+      );
+    return true;
+  });
   // ?tab=revenue on an org that has it switched off would render a tab with
   // no way back to it — the sidebar entry it came from does not exist. Waits
   // for settings to load so the redirect fires on a known answer, not on the
@@ -1191,6 +1222,11 @@ export function AppShell({
     if (tab === "revenue" && !settings.org.revenueEnabled)
       onTab("appointments");
     if (tab === "campaigns" && !settings.whatsapp.connected)
+      onTab("appointments");
+    if (
+      tab === "billing" &&
+      (settings.org.billingMode !== "prepaid" || settings.me.role !== "owner")
+    )
       onTab("appointments");
   }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
@@ -1393,7 +1429,7 @@ export function AppShell({
               className={`my-2 h-px w-1/2 bg-[var(--border)] ${showCollapsed ? "mx-auto" : "ml-2"}`}
             />
             <div className="space-y-0.5">
-              {FOOT_TABS.map((entry) => (
+              {footTabs.map((entry) => (
                 <SidebarButton
                   key={entry.id}
                   entry={entry}

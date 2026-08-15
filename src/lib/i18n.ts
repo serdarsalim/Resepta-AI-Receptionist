@@ -1463,6 +1463,57 @@ const dictionary = {
     en: "No metered calls yet.",
     de: "Noch keine abgerechneten Anrufe.",
   },
+  // The prepaid wallet (BillingView, prepaid orgs only). "Bakiye" over any
+  // coined word: it is what every prepaid product in Türkiye calls this.
+  "nav.balance": { tr: "Bakiye", en: "Balance", de: "Guthaben" },
+  "wallet.balance": {
+    tr: "Mevcut bakiye",
+    en: "Current balance",
+    de: "Aktuelles Guthaben",
+  },
+  "wallet.topUpLine": {
+    tr: "Ödeme Stripe'ın güvenli sayfasında kartla yapılır; bakiyeniz ödemeden hemen sonra güncellenir.",
+    en: "Payment is by card on Stripe's secure page; your balance updates right after.",
+    de: "Die Zahlung erfolgt per Karte auf der sicheren Stripe-Seite; Ihr Guthaben wird direkt danach aktualisiert.",
+  },
+  "wallet.topUpWith": {
+    tr: "{amount} yükle",
+    en: "Add {amount}",
+    de: "{amount} aufladen",
+  },
+  "wallet.starting": {
+    tr: "Stripe'a yönlendiriliyorsunuz…",
+    en: "Taking you to Stripe…",
+    de: "Sie werden zu Stripe weitergeleitet…",
+  },
+  "wallet.error": {
+    tr: "Ödeme başlatılamadı. Lütfen tekrar deneyin.",
+    en: "Could not start the payment. Please try again.",
+    de: "Die Zahlung konnte nicht gestartet werden. Bitte versuchen Sie es erneut.",
+  },
+  "wallet.paid": {
+    tr: "Ödeme alındı, bakiyeniz güncellendi.",
+    en: "Payment received, your balance is updated.",
+    de: "Zahlung eingegangen, Ihr Guthaben wurde aktualisiert.",
+  },
+  "wallet.low": {
+    tr: "Bakiyeniz azalıyor. Aramaların kesilmemesi için yükleme yapın.",
+    en: "Your balance is running low. Top up to keep calls coming in.",
+    de: "Ihr Guthaben wird knapp. Laden Sie auf, damit Anrufe weiter ankommen.",
+  },
+  "wallet.paused": {
+    tr: "Bakiyeniz bitti. Telefon asistanı yeni aramaları yanıtlamıyor; yükleme yaptığınız anda kaldığı yerden devam eder.",
+    en: "Your balance ran out. The phone agent is not answering new calls; it resumes the moment you top up.",
+    de: "Ihr Guthaben ist aufgebraucht. Der Telefonassistent nimmt keine neuen Anrufe an; nach dem Aufladen geht es sofort weiter.",
+  },
+  "wallet.topups": { tr: "Yüklemeler", en: "Top-ups", de: "Aufladungen" },
+  "wallet.noTopups": {
+    tr: "Henüz yükleme yok.",
+    en: "No top-ups yet.",
+    de: "Noch keine Aufladungen.",
+  },
+  "wallet.sourceStripe": { tr: "Kart", en: "Card", de: "Karte" },
+  "wallet.sourceManual": { tr: "Manuel", en: "Manual", de: "Manuell" },
   // Per-call, so "what was collected", not the agent card's "what it collects".
   "calls.collected": {
     tr: "Toplanan bilgiler",

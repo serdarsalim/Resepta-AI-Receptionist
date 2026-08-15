@@ -17,6 +17,11 @@ export const voiceOverview = query({
       // The rate this org actually meters at right now (override or platform
       // default) — shown so the bill is explainable, not negotiable in-app.
       rateMicroUsdPerMinute: v.number(),
+      // Lets the Usage section drop the soft-budget row for prepaid orgs:
+      // its hint promises "calls are never cut off", which is the invoice
+      // lane's truth — a prepaid org's calls DO stop at zero balance, and
+      // its alerts come from the wallet (BillingView), not from a budget.
+      mode: v.union(v.literal("invoice"), v.literal("prepaid")),
       budgetMicroUsd: v.union(v.number(), v.null()),
       months: v.array(
         v.object({
@@ -50,6 +55,7 @@ export const voiceOverview = query({
       .take(24);
     return {
       rateMicroUsdPerMinute: rate,
+      mode: org.billingMode ?? "invoice",
       budgetMicroUsd: org.voiceMonthlyBudgetMicroUsd ?? null,
       months: rows
         .filter((r) => (r.voiceCalls ?? 0) > 0 || (r.voiceSeconds ?? 0) > 0)

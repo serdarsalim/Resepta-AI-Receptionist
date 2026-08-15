@@ -13,6 +13,7 @@ import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
 import { ServicesView } from "@/components/ServicesView";
 import { AccountView } from "@/components/AccountView";
+import { BillingView } from "@/components/BillingView";
 import { ContactView } from "@/components/ContactView";
 
 // The signed-in application, lifted out of app/page.tsx so it can be pulled in
@@ -81,6 +82,9 @@ export function AppHome() {
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
               all call this Business, and a salon owner does not think of the
               salon as a workspace. */}
+          {/* The prepaid wallet — Stripe's success_url points here, so this
+              tab id is part of the checkout round trip (wallet.ts). */}
+          {tab === "billing" && <BillingView />}
           {tab === "business" && <BusinessView />}
           {/* Personal, not org config. Only the avatar menu routes here. */}
           {tab === "account" && <AccountView />}
@@ -104,6 +108,7 @@ const TAB_IDS: TabId[] = [
   "messages",
   "revenue",
   "services",
+  "billing",
   "business",
   "account",
 ];
