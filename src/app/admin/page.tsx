@@ -27,6 +27,7 @@ import {
   ago,
   AdminSearchProvider,
   Count,
+  Plane,
   Row,
   Section,
   SecretRow,
@@ -58,10 +59,10 @@ export default function AdminPage() {
   const search = useSearch();
   const router = useRouter();
 
+  // Loading wears the plane too. Bare, the page painted flat white for as long
+  // as the query took and then washed over — a flash of a different app.
   if (allowed === undefined) {
-    return (
-      <main className="mx-auto max-w-6xl p-6 text-sm text-[var(--muted)]">Loading…</main>
-    );
+    return <Plane><p className="text-sm text-[var(--muted)]">Loading…</p></Plane>;
   }
   // 404, not "you may not". Explaining the refusal told a salon owner that an
   // operator console exists and invited them to ask for a login to it; the
@@ -69,9 +70,7 @@ export default function AdminPage() {
   // not a page. Same reason a private repo 404s rather than 403s.
   if (!allowed) notFound();
   if (fleet === undefined) {
-    return (
-      <main className="mx-auto max-w-6xl p-6 text-sm text-[var(--muted)]">Loading…</main>
-    );
+    return <Plane><p className="text-sm text-[var(--muted)]">Loading…</p></Plane>;
   }
 
   // Name and timezone: the two things an operator actually has in their head
@@ -79,7 +78,7 @@ export default function AdminPage() {
   const shownFleet = fleet.filter((org) => search.matches(org.name, org.timezone));
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
+    <Plane>
       <header className="mb-4 flex items-center justify-between gap-3">
         {/* page-title, like every header in the salon app: one variable owns
             what a page heading looks like in both themes. */}
@@ -109,10 +108,14 @@ export default function AdminPage() {
       {/* One line for the whole deployment. Email is operator plumbing that
           arrives for every org at once, so a missing key is one fact stated
           once — not a column that would say the same thing on every row. */}
+      {/* Same amber treatment as OperatorBanner: a tint plus an inset ring,
+          never a fill with a border on top of it. One edge per surface, and on
+          a washed plane a filled amber slab is the loudest thing on screen for
+          a fact that is one sentence long. */}
       {deployment && !deployment.emailLane && (
-        <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+        <p className="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
           No email lane on this deployment, so nothing sends by email for any
-          org — reminders, invites and your own failure alerts included.{" "}
+          org: reminders, invites and your own failure alerts included.{" "}
           {tab !== "platform" && (
             <button
               type="button"
@@ -133,38 +136,53 @@ export default function AdminPage() {
             : "No business matches that."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        // A card like every other card: no border, --card-shadow, rounded-lg.
+        // overflow-hidden is not tidying — a table's square corners paint
+        // straight over a rounded card's, and the sideways scroll has to live
+        // on an inner box so the clip survives it.
+        //
+        // Rules stay FULL-BLEED here. The inset gutter the salon app's
+        // Customers table uses is for four short columns; this is nine you
+        // track across to the last cell, which makes each rule a reading rail.
+        // Same language, opposite call, decided by column count.
+        <div className="overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
+          <div className="thin-scroll overflow-x-auto overscroll-x-contain">
           <table className="w-full text-sm">
+            {/* No fill behind the header. Weight and one rule separate it, and
+                the rule is drawn on thead globally so a wrapped header still
+                gets one continuous line. font-semibold is the compensation for
+                the fill being gone, not taste. pt-3.5 pb-2 because a column
+                name flush against the card's top edge reads as clipped. */}
             <thead className="text-left text-xs">
               <tr>
-                <th className="px-3 py-2 font-medium">Business</th>
-                <th className="px-3 py-2 font-medium">Setup</th>
-                <th className="px-3 py-2 font-medium" title="Failed sends, last 24h">
+                <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
+                <th className="px-3 pb-2 pt-3.5 font-semibold">Setup</th>
+                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Failed sends, last 24h">
                   Failed
                 </th>
                 <th
-                  className="px-3 py-2 font-medium"
-                  title="Retries exhausted — nothing will pick these up"
+                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  title="Retries exhausted, so nothing will pick these up"
                 >
                   Gave up
                 </th>
-                <th className="px-3 py-2 font-medium" title="Waiting on a retry">
+                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Waiting on a retry">
                   Retrying
                 </th>
                 <th
-                  className="px-3 py-2 font-medium"
+                  className="px-3 pb-2 pt-3.5 font-semibold"
                   title="Claimed for sending and never reported back"
                 >
                   Stuck
                 </th>
-                <th className="px-3 py-2 font-medium">Upcoming</th>
+                <th className="px-3 pb-2 pt-3.5 font-semibold">Upcoming</th>
                 <th
-                  className="px-3 py-2 font-medium"
+                  className="px-3 pb-2 pt-3.5 font-semibold"
                   title="This month's metered voice usage: what we bill them, and what Retell charges us"
                 >
                   Calls MTD
                 </th>
-                <th className="px-3 py-2 font-medium">Last activity</th>
+                <th className="px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
               </tr>
             </thead>
             <tbody>
@@ -177,7 +195,7 @@ export default function AdminPage() {
                 <tr
                   key={org.orgId}
                   onClick={() => router.push(`/admin/${org.orgId}`)}
-                  className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--row-hover-bg)]"
+                  className="cursor-pointer border-t border-[var(--table-divider)] hover:bg-[var(--row-hover-bg)]"
                 >
                   <td className="px-3 py-2">
                     <Link
@@ -230,6 +248,7 @@ export default function AdminPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       ))}
 
@@ -246,8 +265,8 @@ export default function AdminPage() {
               makes it safe. See convex/lib/platformAuth.ts. */}
           Platform admins: {deployment.platformAdmins.join(" · ")}
           <span className="ml-2 opacity-70">
-            — set with{" "}
-            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>
+            (set with{" "}
+            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>)
           </span>
         </p>
       )}
@@ -283,7 +302,7 @@ export default function AdminPage() {
             />
             <Row
               label="Product name"
-              hint="How invites and alerts sign themselves. Not what customers see — salon mail carries the salon's name."
+              hint="How invites and alerts sign themselves. Not what customers see; salon mail carries the salon's name."
               current={mail.productName}
               placeholder="Resepta"
               onSave={(value) => setConfig({ key: "productName", value })}
@@ -328,10 +347,10 @@ export default function AdminPage() {
                   {mail.chatAgentProvider === "openai"
                     ? mail.openaiApiKey
                       ? "using the OpenAI key below"
-                      : "⚠ no OpenAI key set — every turn will skip"
+                      : "⚠ no OpenAI key set, so every turn will skip"
                     : mail.anthropicApiKey
                       ? "using the Anthropic key below"
-                      : "⚠ no Anthropic key set — every turn will skip"}
+                      : "⚠ no Anthropic key set, so every turn will skip"}
                 </span>
               </div>
             </div>
@@ -409,8 +428,8 @@ export default function AdminPage() {
                   }`}
                 >
                   {mail.chatAgentDisabled
-                    ? "Every agent is stopped — click to re-enable"
-                    : "Stop every org&apos;s chat agent"}
+                    ? "Every agent is stopped. Click to re-enable"
+                    : "Stop every org's chat agent"}
                 </button>
               </div>
             </div>
@@ -462,6 +481,6 @@ export default function AdminPage() {
         </div>
         </AdminSearchProvider>
       )}
-    </main>
+    </Plane>
   );
 }

@@ -20,6 +20,43 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { InfoTip } from "@/components/InfoTip";
 import type { Search } from "@/lib/useTableState";
 
+// The console's plane, and the reason /admin now looks like the product it
+// administers. The salon app gets its wash from AppShell's content pane
+// (bg-[image:var(--content-bg)]); this route has no shell at all, so the same
+// token goes on the page root instead. Cards are paper on it, exactly as they
+// are one click away in the salon's own screens.
+//
+// bg-fixed is load-bearing, not decoration. A gradient restarts inside
+// whatever box draws it, so on a document that scrolls the wash would slide
+// under the cards; anchored to the viewport it stays one plane however far
+// down the page you are.
+//
+// page-stack is the house rule for the bottom edge: 6rem below the last card,
+// so the page reads as having ENDED rather than having been cut off.
+export function Plane({
+  narrow,
+  className = "",
+  children,
+}: {
+  // The fleet table wants every column it can get; a tenant's settings are
+  // rows of label + control and read badly at full width.
+  narrow?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-dvh bg-[image:var(--content-bg)] bg-fixed">
+      <main
+        className={`page-stack mx-auto px-4 pt-6 sm:px-6 ${
+          narrow ? "max-w-4xl" : "max-w-6xl"
+        } ${className}`}
+      >
+        {children}
+      </main>
+    </div>
+  );
+}
+
 export function ago(at: number | undefined): string {
   if (!at) return "never";
   const mins = Math.round((Date.now() - at) / 60000);
@@ -252,7 +289,10 @@ function ActivityTable({ rows }: { rows: ActivityRow[] }) {
       <table className="w-full text-xs">
         <tbody>
           {rows.map((row) => (
-            <tr key={row._id} className="border-t border-[var(--border)]">
+            // --table-divider, not --border: the card edge token is tuned to
+            // be found, and a row rule drawn at that weight turns a feed into
+            // a spreadsheet.
+            <tr key={row._id} className="border-t border-[var(--table-divider)]">
               <td className="whitespace-nowrap px-3 py-1.5 text-[var(--muted-strong)] tabular-nums">
                 {ago(row.at)} ago
               </td>
@@ -502,7 +542,11 @@ export function Section({
   }
   return (
     <SectionContext.Provider value={value}>
-    <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+    {/* Lifted, not outlined — the same card the salon app's Settings uses, and
+        for the same reason: the page under it is a plane with a wash, so paper
+        on it separates by shadow. The radius comes down with the border. A
+        rounded-xl card behind a shadow and no line reads as a pill. */}
+    <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
       {/* The description is a sentence explaining what the section governs,
           and a sentence per card is what made this page a wall of prose. It
           moves behind the (i) the rest of the app already uses — same

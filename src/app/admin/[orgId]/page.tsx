@@ -22,6 +22,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   Activity,
   AdminSearchProvider,
+  Plane,
   Row,
   Section,
   SecretRow,
@@ -155,17 +156,20 @@ export default function TenantPage() {
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
 
+  // Every state wears the plane, loading included: bare, the page painted flat
+  // white until the query landed and then washed over, which reads as arriving
+  // in a different app.
   if (allowed === undefined) {
-    return <main className="mx-auto max-w-4xl p-6 text-sm text-[var(--muted)]">Loading…</main>;
+    return <Plane narrow><p className="text-sm text-[var(--muted)]">Loading…</p></Plane>;
   }
   // 404, not "you may not" — see the note on the fleet page. A refusal that
   // explains itself is an advert for the thing it is refusing.
   if (!allowed) notFound();
   if (detail === undefined) {
-    return <main className="mx-auto max-w-4xl p-6 text-sm text-[var(--muted)]">Loading…</main>;
+    return <Plane narrow><p className="text-sm text-[var(--muted)]">Loading…</p></Plane>;
   }
   if (detail === null) {
-    return <main className="mx-auto max-w-4xl p-6 text-sm">No such business.</main>;
+    return <Plane narrow><p className="text-sm">No such business.</p></Plane>;
   }
 
   const org = (patch: Omit<Parameters<typeof setOrgConfig>[0], "orgId">) =>
@@ -183,7 +187,7 @@ export default function TenantPage() {
 
   return (
     <AdminSearchProvider search={search}>
-    <main className="mx-auto max-w-4xl space-y-4 p-6">
+    <Plane narrow className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link href="/admin" className="text-xs text-[var(--muted)] hover:underline">
@@ -192,7 +196,7 @@ export default function TenantPage() {
           <h1 className="page-title mt-1 text-lg font-semibold">
             {detail.name}
             {detail.demoMode && (
-              <span className="ml-2 rounded-lg bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
+              <span className="ml-2 rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
                 demo
               </span>
             )}
@@ -223,7 +227,12 @@ export default function TenantPage() {
             onClick={() => {
               void actAs({ orgId }).then(() => router.push("/"));
             }}
-            className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)]"
+            // Filled with --card, not left transparent. A bordered control
+            // sitting straight on the plane is a ring around a piece of the
+            // gradient; filled, it reads as a control on the same paper as
+            // the cards below it. Height matches the search box beside it —
+            // any difference on the top row reads as misalignment.
+            className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)]"
           >
             Open their app →
           </button>
@@ -446,7 +455,7 @@ export default function TenantPage() {
       <>
       <Section
         title="Chat agent"
-        description="The WhatsApp assistant's lifecycle (docs/chat-agent.md). Shadow runs the full agent on real inbound and records every would-be reply without sending — read a week of it before going live."
+        description="The WhatsApp assistant's lifecycle (docs/chat-agent.md). Shadow runs the full agent on real inbound and records every would-be reply without sending. Read a week of it before going live."
       >
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Mode</div>
@@ -475,15 +484,15 @@ export default function TenantPage() {
               </Pill>
             ) : (
               <Pill tone="warn">
-                No {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} key — agent skips every turn
+                No {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} key, so the agent skips every turn
               </Pill>
             )}
           </Fact>
           <Fact label="Platform kill switch">
             {assistant.killSwitch ? (
-              <Pill tone="warn">ON — every org stopped</Pill>
+              <Pill tone="warn">On, every org stopped</Pill>
             ) : (
-              <span className="text-[var(--muted)]">off</span>
+              <span className="text-[var(--muted)]">Off</span>
             )}
           </Fact>
           <Fact label={`Cost (${assistant.month})`}>
@@ -533,7 +542,7 @@ export default function TenantPage() {
               }`}
             >
               {assistant.killSwitch
-                ? "Every agent is stopped — click to re-enable"
+                ? "Every agent is stopped. Click to re-enable"
                 : "Stop every org's agent"}
             </button>
           </div>
@@ -542,7 +551,7 @@ export default function TenantPage() {
 
       <Section
         title="Flight recorder"
-        description="The last 25 turns, newest first — sent, shadowed, skipped and failed alike. Expand one to read the reply and every tool call with its arguments and result."
+        description="The last 25 turns, newest first: sent, shadowed, skipped and failed alike. Expand one to read the reply and every tool call with its arguments and result."
       >
         {assistant.turns.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">No turns yet.</p>
@@ -572,7 +581,11 @@ export default function TenantPage() {
                     {shortDate(turn.at)}
                   </span>
                 </summary>
-                <div className="ml-1 space-y-1.5 border-l-2 border-[var(--border)] py-1 pl-3">
+                {/* Indent alone, no left bar. A 2px rule down the side of an
+                    expander is the accent-bar habit the house rules ban, and
+                    the summary directly above already says what this belongs
+                    to. Spacing carries the nesting. */}
+                <div className="space-y-1.5 py-1 pl-4">
                   {turn.reply && <p className="whitespace-pre-wrap">{turn.reply}</p>}
                   {turn.toolCalls && (
                     <pre className="overflow-x-auto rounded-lg bg-[var(--muted-bg)] p-2 font-mono text-[11px]">
@@ -660,7 +673,7 @@ export default function TenantPage() {
                 }`}
               >
                 {usd(voice.walletBalanceMicroUsd)}
-                {voice.walletBalanceMicroUsd <= 0 && " — declining new calls"}
+                {voice.walletBalanceMicroUsd <= 0 && ", declining new calls"}
               </div>
             </div>
             <Row
@@ -681,18 +694,22 @@ export default function TenantPage() {
             {voice.topups.length > 0 && (
               <div className="overflow-x-auto py-2">
                 <table className="w-full text-sm">
-                  <thead className="text-left text-xs text-[var(--muted-strong)]">
+                  {/* No colour override on thead. The global rule paints it
+                      --table-header-fg and draws the one rule under it; a
+                      per-table --muted-strong here fought that and made this
+                      the only header in the app reading as a caption. */}
+                  <thead className="text-left text-xs">
                     <tr>
-                      <th className="py-1.5 pr-3 font-medium">Top-up</th>
-                      <th className="py-1.5 pr-3 font-medium">Amount</th>
-                      <th className="py-1.5 font-medium">Source</th>
+                      <th className="pb-2 pr-3 pt-1 font-semibold">Top-up</th>
+                      <th className="pb-2 pr-3 pt-1 font-semibold">Amount</th>
+                      <th className="pb-2 pt-1 font-semibold">Source</th>
                     </tr>
                   </thead>
                   <tbody>
                     {voice.topups.map((t) => (
                       <tr
                         key={`${t.at}-${t.amountMicroUsd}`}
-                        className="border-t border-[var(--border)] tabular-nums"
+                        className="border-t border-[var(--table-divider)] tabular-nums"
                       >
                         <td className="py-1.5 pr-3">
                           {new Date(t.at).toLocaleString("en-GB")}
@@ -712,21 +729,21 @@ export default function TenantPage() {
         ) : (
           <div className="overflow-x-auto py-2">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs text-[var(--muted-strong)]">
+              <thead className="text-left text-xs">
                 <tr>
-                  <th className="py-1.5 pr-3 font-medium">Month</th>
-                  <th className="py-1.5 pr-3 font-medium">Calls</th>
-                  <th className="py-1.5 pr-3 font-medium">Talk time</th>
-                  <th className="py-1.5 pr-3 font-medium">Billed</th>
-                  <th className="py-1.5 pr-3 font-medium">Retell cost</th>
-                  <th className="py-1.5 font-medium">Margin</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Month</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Calls</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Talk time</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Billed</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Retell cost</th>
+                  <th className="pb-2 pt-1 font-semibold">Margin</th>
                 </tr>
               </thead>
               <tbody>
                 {voice.months.map((m) => {
                   const margin = m.billedMicroUsd - m.costMicroUsd;
                   return (
-                    <tr key={m.month} className="border-t border-[var(--border)] tabular-nums">
+                    <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
                       <td className="py-1.5 pr-3">{m.month}</td>
                       <td className="py-1.5 pr-3">{m.calls}</td>
                       <td className="py-1.5 pr-3">{minSec(m.seconds)}</td>
@@ -753,7 +770,7 @@ export default function TenantPage() {
       {(tab === "members" || search.active) && (
       <Section
         title="Members"
-        description="Who can sign in to this business. Sign-in is Google-only, so the address here is the only one that works — and there is no way to look it up from the other side."
+        description="Who can sign in to this business. Sign-in is Google-only, so the address here is the only one that works, and there is no way to look it up from the other side."
       >
         {detail.members.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
@@ -821,7 +838,7 @@ export default function TenantPage() {
 
       <Section
         title="Voice agents"
-        description="One Retell workspace can serve several businesses. This decides which of its agents this business may connect — not which it already has, which nothing here changes."
+        description="One Retell workspace can serve several businesses. This decides which of its agents this business may connect, not which it already has, which nothing here changes."
       >
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Connectable agents</div>
@@ -911,7 +928,7 @@ export default function TenantPage() {
       {assistant && (
         <Section
           title="Account status"
-          description="Suspending stops every outbound message — reminders, campaigns, the chat agent. Inbound keeps recording, so un-suspending restores a complete world: losing a customer's messages during a billing dispute is how a late payer becomes an ex-customer."
+          description="Suspending stops every outbound message: reminders, campaigns, the chat agent. Inbound keeps recording, so un-suspending restores a complete world: losing a customer's messages during a billing dispute is how a late payer becomes an ex-customer."
         >
           <div className="flex flex-wrap items-center gap-3 py-1.5">
             {assistant.status === "suspended" ? (
@@ -924,7 +941,7 @@ export default function TenantPage() {
                   Reactivate
                 </button>
                 <span className="text-xs text-amber-700 dark:text-amber-400">
-                  Suspended — nothing is sending.
+                  Suspended. Nothing is sending.
                 </span>
               </>
             ) : (
@@ -958,7 +975,7 @@ export default function TenantPage() {
           </div>
         </Section>
       )}
-    </main>
+    </Plane>
     </AdminSearchProvider>
   );
 }
