@@ -368,6 +368,71 @@ rather than after what it does.
   speaks about a real customer, and a field that person never answered is
   honestly blank for them.
 
+## The mobile pass (2026-08-15) — phone rules that now hold everywhere
+
+A full pass over the app below `sm`, measured against Nudge at identical
+viewports rather than eyeballed. The rules it left behind:
+
+- **iOS input zoom is solved in ONE place and must stay solved.** iOS Safari
+  zooms the page when a focused field's text is under 16px, and never zooms
+  back out. `globals.css` renders every input/textarea/select at 16px below
+  sm; number spinners go with it there (~16px of a thumb-useless control);
+  `RecordField`'s `compact` takes its container below sm instead of its fixed
+  width. Never reintroduce a sub-16px field on a phone, and never reach for
+  `maximum-scale=1` instead — that fix takes pinch-zoom away from readers who
+  need it.
+- **The safe area needs both halves.** `viewport-fit=cover` lives in
+  `app/layout.tsx`'s viewport export; the phone tab bar pads by
+  `env(safe-area-inset-bottom)`. Either alone does nothing — without the
+  viewport opt-in the env() reads 0 everywhere.
+- **A view that scrolls inside itself takes the phone's bottom edge.** Nudge's
+  rule, ported with its reasoning: such a view has no content end to breathe
+  after, so padding under it only shortens the scroll viewport. The view
+  declares itself with `data-fills-pane` (Inbox, calendar grids, the customer
+  drill-in) and AppShell's `main` drops its bottom padding via `has-[]`. The
+  test is the view's own attribute, not a tab-id list — the customer drill-in
+  fills the pane while the customers LIST does not, same tab. Reading views
+  keep their padding because their content genuinely stops.
+- **The scrollbar gutter is sm-and-up.** A touch scrollbar is an overlay and
+  takes no width; reserving a 12px track on a phone spends real screen to
+  prevent a shift that cannot happen.
+- **Phone insets are Nudge's, measured:** `main` runs `px-2` below sm, `Card`
+  runs `p-3` (tighter than Nudge's p-4 on purpose — our cards hold multi-column
+  rows, not forms). Card content is 446px of a 500px viewport; don't spend it.
+- **Phone rows are grids with FIXED tracks, never wrapping flex lines.** Each
+  row is its own grid container, so columns align across rows only by asking
+  for the same widths (services: `SERVICE_ROW_GRID`, reminders:
+  `RULE_COLUMNS`). Every track must hold its value AND its unit at the 16px
+  edit size — a too-narrow track must overflow visibly (whitespace-nowrap),
+  never stack a number vertically.
+- **The phone tab bar is not the sidebar.** It renders `navTabs` minus
+  `drawerOnly` entries (Reminders carries it — set-once surfaces give up
+  their slot first), and an entry may carry `phoneKey` for a shorter label
+  (Voice agent → Agent). The drawer always shows everything under its full
+  names. Open: past six visible tabs the bar still degrades; capping at
+  5 + More was proposed and deferred.
+- **Switches never wear their column label as a word on a phone** — a switch's
+  whole job is showing its own state; the label rides `aria-label`. Values
+  that cannot speak for themselves (a bare 60) keep their unit.
+- **Row deletes are an ×** in a quiet h-7 square (services now matches the
+  reminders table) — the word lives on `aria-label`/`title`.
+
+**Service keys moved (Serdar, 2026-08-15).** The Services list is an owner's
+price list — name · duration · price · active — and shows NO key at any
+width. Keys live in `ServiceKeysCard` under Contact fields on the Voice
+agent's strip, because that tab is the agent's vocabulary: everything it
+knows by key. This does not re-glue the old "Services & fields" split (that
+parted the price list from the field schema, and holds); names in the keys
+card are read-only so the price list stays the single editing surface for
+what a service is called. Don't put the key column back.
+
+**Decided, not yet built: duration-less services.** Serdar wants services
+that are goods, not time — a delivery, a cake. `durationMinutes` is
+load-bearing in ~18 convex files (booking slots, overlap, reminder timing,
+the agent quoting lengths, ICS end times), so this is a semantics project —
+what does a booking of a timeless service mean in each reader — not a
+`v.optional()` sprinkle. Spec first.
+
 ## Business is one page (2026-08-12, later the same day)
 
 Supersedes the chip-strip parts of the section above. Sidebar: Customers ·
