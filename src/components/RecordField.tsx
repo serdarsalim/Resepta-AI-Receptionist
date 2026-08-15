@@ -187,7 +187,12 @@ export function InlineEditValue({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setEditing(false);
       }}
-      className={`px-2 py-1 text-sm ${compact ? "w-20" : ""}`}
+      // compact is 80px, which was measured against text-sm. Below sm a focused
+      // field renders at 16px (globals.css, the iOS zoom rule) and 80px stops
+      // holding a five-figure price, so on a phone it takes its container
+      // instead — in the service row that is a fixed grid track, which is the
+      // width that was reasoned about.
+      className={`px-2 py-1 text-sm ${compact ? "max-sm:w-full sm:w-20" : ""}`}
     />
   );
 }

@@ -461,3 +461,36 @@ thead {
   height: 0;
   pointer-events: none;
 }
+
+/* iOS Safari zooms the page whenever you focus a field whose text is under
+   16px, and it does not zoom back out afterwards — you are left scrolled
+   sideways in a layout that no longer fits, once per tap. Every field in this
+   app was under the line: eight at text-xs, six at text-sm.
+
+   16px below sm, which is the size iOS is looking for. The other fix people
+   reach for is maximum-scale=1 in the viewport meta, and it works by taking
+   pinch-zoom away from everyone on every page — that is not a trade this app
+   makes to save a few pixels of label.
+
+   Scoped to the elements that trigger it and left alone from sm up, where the
+   text-xs/text-sm sizes are what the desktop layout is drawn around. */
+@media (max-width: 39.99rem) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* And the spinner goes with it. It is ~16px of a number field's width, it is
+     a pointer control nobody nudges with a thumb, and at 16px text that width
+     is the difference between a price fitting its cell and scrolling inside
+     it. The field still types, and the keyboard is numeric either way. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    appearance: textfield;
+  }
+}

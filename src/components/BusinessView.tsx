@@ -669,8 +669,14 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 // it came down the screen a digit at a time, so the tracks are 5rem/6rem and
 // the cells carry whitespace-nowrap: a track that is ever too narrow should
 // overflow where you can see it, not quietly stack.
+//
+// The price track is the wide one because it is sized for EDITING, not for
+// reading: below sm a focused field renders at 16px (globals.css, the iOS
+// zoom rule) and a number input spends another ~16px on its spinner, so a
+// five-figure price needs ~6.5rem where the resting text needs 4. Phone gap
+// drops to 8px to pay for it, which leaves the key ~79px at 375.
 const SERVICE_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_5rem_6rem_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:gap-2";
+  "grid grid-cols-[minmax(0,1fr)_5rem_6.5rem_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:gap-2";
 
 function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): string {
   const message = err instanceof Error ? err.message : String(err);
