@@ -197,10 +197,12 @@ const dictionary = {
   "services.kind": { tr: "Tür", en: "Type", de: "Art" },
   "services.kindService": { tr: "Hizmet", en: "Service", de: "Leistung" },
   "services.kindGood": { tr: "Ürün", en: "Product", de: "Produkt" },
+  // One line at the sheet's column width, deliberately — a wrapping hint
+  // makes the modal resize when the kind flips.
   "services.goodHint": {
-    tr: "Takvimde yer tutmaz, sadece teslim anı seçilir (ör. pasta, teslimat)",
-    en: "Takes no calendar slot, only a pickup time (e.g. a cake, a delivery)",
-    de: "Belegt keinen Termin, nur eine Abholzeit (z. B. Torte, Lieferung)",
+    tr: "Takvimde yer tutmaz (ör. pasta)",
+    en: "Blocks no calendar time (e.g. a cake)",
+    de: "Belegt keinen Termin (z. B. Torte)",
   },
   "services.leadTime": {
     tr: "Ön sipariş süresi",

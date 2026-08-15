@@ -791,25 +791,19 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        {/* Label left, control right, one fact per row. The controls share
-            the sheet's right edge: the name gets more room because names
-            need it, the numbers stay number-sized, and nothing spans the
-            whole modal just because a modal is wide. */}
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>{t("services.name")}</span>
-          <input name="name" required data-sheet-autofocus className="w-56" />
-        </label>
-        {/* An explicit kind, the pressed-chip pattern the booking page uses
-            for its service picker. Duration is not a default the owner has
-            to notice and delete — it only exists once they have said this
-            is time. */}
-        <div
-          className="flex items-center justify-between gap-3 text-sm"
-          role="group"
-          aria-label={t("services.kind")}
-        >
-          <span>{t("services.kind")}</span>
-          <span className="flex gap-1.5">
+        {/* A form grid: labels in the first column, every control starting
+            at the same left edge in the second. Type comes FIRST because it
+            decides what the rest of the form even asks — a service has a
+            length, a product has a warning, and the name is just a name
+            either way. The name box is wider (names need it), the numbers
+            are number-sized (w-28), all flush left. */}
+        <div className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-3 text-sm">
+          <span id="service-kind-label">{t("services.kind")}</span>
+          <div
+            role="group"
+            aria-labelledby="service-kind-label"
+            className="flex w-56 gap-1.5"
+          >
             {(["service", "good"] as const).map((option) => {
               const picked = kind === option;
               return (
@@ -818,7 +812,7 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
                   type="button"
                   aria-pressed={picked}
                   onClick={() => setKind(option)}
-                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  className={`flex-1 rounded-lg border px-3 py-1.5 transition-colors ${
                     picked
                       ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
                       : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -828,49 +822,68 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
                 </button>
               );
             })}
-          </span>
-        </div>
-        {isGood && (
-          <p className="text-right text-xs text-[var(--muted)]">{t("services.goodHint")}</p>
-        )}
-        {/* A service has a length; a product has a warning. Never both — the
-            kind above decides which question this row asks. */}
-        {!isGood ? (
-          <label className="flex items-center justify-between gap-3 text-sm">
-            <span>{t("services.duration")}</span>
-            <span className="flex items-center gap-2">
-              <input
-                name="durationMinutes"
-                type="number"
-                min={5}
-                step={5}
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="w-28"
-              />
-              <span className="text-xs text-[var(--muted)]">{t("services.minutes")}</span>
-            </span>
-          </label>
-        ) : (
-          <label className="flex items-center justify-between gap-3 text-sm">
-            <span>{t("services.leadTime")}</span>
-            <span className="flex items-center gap-2">
-              <input
-                name="leadDays"
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder={t("common.optional")}
-                className="w-28"
-              />
-              <span className="text-xs text-[var(--muted)]">{t("services.leadDays")}</span>
-            </span>
-          </label>
-        )}
-        <label className="flex items-center justify-between gap-3 text-sm">
-          <span>{t("services.price")}</span>
+          </div>
+          {/* Reserved whether or not it holds anything — the same rule the
+              error line below follows — so flipping the kind never resizes
+              the sheet. Both branches also render exactly ONE time row
+              (minutes or warning), for the same reason. */}
+          <span aria-hidden />
+          <p className="-mt-1.5 min-h-[1rem] text-xs text-[var(--muted)]">
+            {isGood ? t("services.goodHint") : ""}
+          </p>
+
+          <label htmlFor="service-name">{t("services.name")}</label>
+          <input
+            id="service-name"
+            name="name"
+            required
+            data-sheet-autofocus
+            className="w-56"
+          />
+
+          {!isGood ? (
+            <>
+              <label htmlFor="service-duration">{t("services.duration")}</label>
+              <span className="flex items-center gap-2">
+                {/* key, or React reuses this node for the lead input when the
+                    kind flips and the old "30" rides along as its value. */}
+                <input
+                  key="duration"
+                  id="service-duration"
+                  name="durationMinutes"
+                  type="number"
+                  min={5}
+                  step={5}
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  className="w-28"
+                />
+                <span className="text-xs text-[var(--muted)]">{t("services.minutes")}</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <label htmlFor="service-lead">{t("services.leadTime")}</label>
+              <span className="flex items-center gap-2">
+                <input
+                  key="lead"
+                  id="service-lead"
+                  name="leadDays"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  placeholder={t("common.optional")}
+                  className="w-28"
+                />
+                <span className="text-xs text-[var(--muted)]">{t("services.leadDays")}</span>
+              </span>
+            </>
+          )}
+
+          <label htmlFor="service-price">{t("services.price")}</label>
           <span className="flex items-center gap-2">
             <input
+              id="service-price"
               name="price"
               type="number"
               min={0}
@@ -882,7 +895,7 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
               {currencySymbol(currency, language)}
             </span>
           </span>
-        </label>
+        </div>
 
         {/* Reserved whether or not it holds anything, so a rejected save does
             not shove the buttons out from under the pointer. */}
