@@ -28,6 +28,7 @@ import {
   requirePlatformAdmin,
 } from "./lib/platformAuth";
 import { enrichActivity } from "./activity";
+import { applyWalletCredit } from "./wallet";
 import { monthKey } from "./lib/usage";
 import { maskSecret } from "./lib/connections";
 import { resolveChatLlm } from "./lib/chatLlm";
@@ -883,6 +884,18 @@ export const orgVoiceUsage = query({
     v.object({
       rateMicroUsdPerMinute: v.union(v.number(), v.null()),
       defaultRateMicroUsdPerMinute: v.union(v.number(), v.null()),
+      // The prepaid wallet, resolved rather than raw: unset mode reads as
+      // "invoice" so the panel never renders a third state that only means
+      // "older org".
+      billingMode: v.union(v.literal("invoice"), v.literal("prepaid")),
+      walletBalanceMicroUsd: v.number(),
+      topups: v.array(
+        v.object({
+          at: v.number(),
+          amountMicroUsd: v.number(),
+          source: v.union(v.literal("stripe"), v.literal("manual")),
+        }),
+      ),
       months: v.array(
         v.object({
           month: v.string(),
@@ -898,6 +911,11 @@ export const orgVoiceUsage = query({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
+    const topups = await ctx.db
+      .query("walletTopups")
+      .withIndex("by_org_at", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(12);
     // Newest month first. Rows with no voice activity are dropped rather than
     // rendered as a table of zeros — most ledger rows are LLM-only.
     const rows = await ctx.db
@@ -909,6 +927,13 @@ export const orgVoiceUsage = query({
       rateMicroUsdPerMinute: org.voiceRateMicroUsdPerMinute ?? null,
       defaultRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
+      billingMode: org.billingMode ?? "invoice",
+      walletBalanceMicroUsd: org.walletBalanceMicroUsd ?? 0,
+      topups: topups.map((t) => ({
+        at: t.at,
+        amountMicroUsd: t.amountMicroUsd,
+        source: t.source,
+      })),
       months: rows
         .filter(
           (r) =>
@@ -954,6 +979,57 @@ export const setVoiceRate = mutation({
         args.rateMicroUsdPerMinute === null
           ? "voice rate cleared"
           : `voice rate → $${(args.rateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min`,
+    });
+    return null;
+  },
+});
+
+// Which settlement model this org lives under (schema: orgs.billingMode).
+// Switching to prepaid starts enforcing the wallet on the NEXT ring — an org
+// switched with a zero balance stops taking calls until money lands, which
+// is the operator's own answer to "when does enforcement start".
+export const setBillingMode = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    mode: v.union(v.literal("invoice"), v.literal("prepaid")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, { billingMode: args.mode });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: `billing mode → ${args.mode}`,
+    });
+    return null;
+  },
+});
+
+// Operator money: goodwill credit, a correction, or (negative) clawing back
+// a mistaken one. Same code path as the Stripe webhook, so the balance and
+// the trail move together here too.
+export const addWalletCredit = mutation({
+  args: { orgId: v.id("orgs"), amountMicroUsd: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const amount = Math.round(args.amountMicroUsd);
+    if (amount === 0) return null;
+    await applyWalletCredit(ctx, {
+      orgId: args.orgId,
+      amountMicroUsd: amount,
+      source: "manual",
+      by: admin._id,
+    });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: `wallet credit ${amount > 0 ? "+" : "−"}$${Math.abs(amount / 1_000_000).toFixed(2)} (manual)`,
     });
     return null;
   },

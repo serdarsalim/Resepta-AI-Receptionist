@@ -14,6 +14,8 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_PRODUCT_NAME, platformValue } from "./lib/platformConfig";
 
@@ -106,6 +108,47 @@ export const overview = query({
 // the usageMonthly rule again — and the alert stamps re-arm only past the
 // thresholds the new balance actually clears: a top-up that leaves the
 // wallet under the low mark must not earn a second "running low" mail.
+// Shared by the Stripe webhook's mutation below and the operator's manual
+// credit in platform.ts — one code path for "money arrived", however it
+// arrived.
+export async function applyWalletCredit(
+  ctx: MutationCtx,
+  args: {
+    orgId: Id<"orgs">;
+    amountMicroUsd: number;
+    source: "stripe" | "manual";
+    stripeSessionId?: string;
+    by?: Id<"users">;
+  },
+): Promise<void> {
+  if (args.stripeSessionId) {
+    const seen = await ctx.db
+      .query("walletTopups")
+      .withIndex("by_stripe_session", (q) =>
+        q.eq("stripeSessionId", args.stripeSessionId),
+      )
+      .unique();
+    if (seen) return;
+  }
+  const org = await ctx.db.get(args.orgId);
+  if (!org) return;
+  const amount = Math.round(args.amountMicroUsd);
+  await ctx.db.insert("walletTopups", {
+    orgId: args.orgId,
+    amountMicroUsd: amount,
+    source: args.source,
+    stripeSessionId: args.stripeSessionId,
+    at: Date.now(),
+    by: args.by,
+  });
+  const after = (org.walletBalanceMicroUsd ?? 0) + amount;
+  await ctx.db.patch(args.orgId, {
+    walletBalanceMicroUsd: after,
+    ...(after > 0 ? { walletAlertEmptyAt: undefined } : {}),
+    ...(after > WALLET_LOW_MICRO_USD ? { walletAlertLowAt: undefined } : {}),
+  });
+}
+
 export const creditTopup = internalMutation({
   args: {
     orgId: v.id("orgs"),
@@ -116,32 +159,7 @@ export const creditTopup = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.stripeSessionId) {
-      const seen = await ctx.db
-        .query("walletTopups")
-        .withIndex("by_stripe_session", (q) =>
-          q.eq("stripeSessionId", args.stripeSessionId),
-        )
-        .unique();
-      if (seen) return null;
-    }
-    const org = await ctx.db.get(args.orgId);
-    if (!org) return null;
-    const amount = Math.round(args.amountMicroUsd);
-    await ctx.db.insert("walletTopups", {
-      orgId: args.orgId,
-      amountMicroUsd: amount,
-      source: args.source,
-      stripeSessionId: args.stripeSessionId,
-      at: Date.now(),
-      by: args.by,
-    });
-    const after = (org.walletBalanceMicroUsd ?? 0) + amount;
-    await ctx.db.patch(args.orgId, {
-      walletBalanceMicroUsd: after,
-      ...(after > 0 ? { walletAlertEmptyAt: undefined } : {}),
-      ...(after > WALLET_LOW_MICRO_USD ? { walletAlertLowAt: undefined } : {}),
-    });
+    await applyWalletCredit(ctx, args);
     return null;
   },
 });

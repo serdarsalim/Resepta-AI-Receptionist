@@ -133,6 +133,8 @@ export default function TenantPage() {
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
+  const setBillingMode = useMutation(api.platform.setBillingMode);
+  const addWalletCredit = useMutation(api.platform.addWalletCredit);
   const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
   const setChatAgentBudget = useMutation(api.platform.setChatAgentBudget);
   const setOrgStatus = useMutation(api.platform.setOrgStatus);
@@ -623,6 +625,88 @@ export default function TenantPage() {
             });
           }}
         />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Billing mode</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["invoice", "prepaid"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => void setBillingMode({ orgId, mode: option })}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  voice.billingMode === option
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+            <span className="text-xs text-[var(--muted)]">
+              Invoice: meter only, settle outside the product. Prepaid: Stripe
+              wallet, an empty balance declines new calls at ring time.
+            </span>
+          </div>
+        </div>
+        {voice.billingMode === "prepaid" && (
+          <>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="text-sm font-medium">Wallet balance</div>
+              <div
+                className={`text-sm tabular-nums ${
+                  voice.walletBalanceMicroUsd <= 0
+                    ? "text-red-600 dark:text-red-400"
+                    : ""
+                }`}
+              >
+                {usd(voice.walletBalanceMicroUsd)}
+                {voice.walletBalanceMicroUsd <= 0 && " — declining new calls"}
+              </div>
+            </div>
+            <Row
+              label="Add credit (USD)"
+              hint="Manual credit on top of Stripe top-ups: goodwill, a correction, or negative to claw one back. Applies immediately."
+              placeholder="20"
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                if (!value.trim() || Number.isNaN(parsed) || parsed === 0) {
+                  return Promise.resolve();
+                }
+                return addWalletCredit({
+                  orgId,
+                  amountMicroUsd: Math.round(parsed * 1_000_000),
+                });
+              }}
+            />
+            {voice.topups.length > 0 && (
+              <div className="overflow-x-auto py-2">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs text-[var(--muted-strong)]">
+                    <tr>
+                      <th className="py-1.5 pr-3 font-medium">Top-up</th>
+                      <th className="py-1.5 pr-3 font-medium">Amount</th>
+                      <th className="py-1.5 font-medium">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voice.topups.map((t) => (
+                      <tr
+                        key={`${t.at}-${t.amountMicroUsd}`}
+                        className="border-t border-[var(--border)] tabular-nums"
+                      >
+                        <td className="py-1.5 pr-3">
+                          {new Date(t.at).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-1.5 pr-3">{usd(t.amountMicroUsd)}</td>
+                        <td className="py-1.5">{t.source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
         {voice.months.length === 0 ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">No metered calls yet.</p>
         ) : (
