@@ -194,10 +194,13 @@ const dictionary = {
   "appointments.edit": { tr: "Randevuyu düzenle", en: "Edit appointment", de: "Termin bearbeiten" },
   "appointments.duration": { tr: "Süre (dk)", en: "Duration (min)", de: "Dauer (Min.)" },
   "appointments.quantity": { tr: "Adet", en: "Quantity", de: "Anzahl" },
-  "services.durationGoodHint": {
-    tr: "Boş bırakılırsa ürün olur: takvimde yer tutmaz (ör. pasta, teslimat)",
-    en: "Leave empty for a good: takes no calendar slot (e.g. a cake, a delivery)",
-    de: "Leer lassen für eine Ware: belegt keinen Termin (z. B. Torte, Lieferung)",
+  "services.kind": { tr: "Tür", en: "Type", de: "Art" },
+  "services.kindService": { tr: "Hizmet", en: "Service", de: "Leistung" },
+  "services.kindGood": { tr: "Ürün", en: "Product", de: "Produkt" },
+  "services.goodHint": {
+    tr: "Takvimde yer tutmaz, sadece teslim anı seçilir (ör. pasta, teslimat)",
+    en: "Takes no calendar slot, only a pickup time (e.g. a cake, a delivery)",
+    de: "Belegt keinen Termin, nur eine Abholzeit (z. B. Torte, Lieferung)",
   },
   "services.leadTime": {
     tr: "Ön sipariş süresi",

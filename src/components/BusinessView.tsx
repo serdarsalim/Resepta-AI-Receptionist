@@ -749,11 +749,13 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
   const create = useMutation(api.services.create);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  // Controlled, because emptying it changes what the form IS: no duration
-  // means a good (a cake, a delivery), and a good gets a lead-time field
-  // where a service gets none.
+  // An explicit choice, not empty-field semantics: "leave duration blank to
+  // make a product" was a rule you had to be told, and a default of 30 meant
+  // the form had already answered the question before the owner did. The
+  // kind decides which time field the form even has.
+  const [kind, setKind] = useState<"service" | "good">("service");
+  const isGood = kind === "good";
   const [duration, setDuration] = useState("30");
-  const isGood = duration.trim() === "";
 
   return (
     <Sheet title={t("services.add")} onClose={onClose}>
@@ -771,8 +773,8 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
           try {
             await create({
               name,
-              // Empty means a good, and the absence IS the fact — the server
-              // stores no duration rather than a placeholder.
+              // A product sends no duration at all — the absence IS the
+              // fact, the server stores nothing rather than a placeholder.
               ...(isGood ? {} : { durationMinutes: Number(duration) || 30 }),
               ...(isGood && leadDays > 0
                 ? { leadMinutes: Math.round(leadDays * 1440) }
@@ -789,14 +791,54 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
           }
         }}
       >
-        <label className="block text-sm">
-          {t("services.name")}
-          <input name="name" required data-sheet-autofocus className="mt-1 block w-full" />
+        {/* Label left, control right, one fact per row. The controls share
+            the sheet's right edge: the name gets more room because names
+            need it, the numbers stay number-sized, and nothing spans the
+            whole modal just because a modal is wide. */}
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span>{t("services.name")}</span>
+          <input name="name" required data-sheet-autofocus className="w-56" />
         </label>
-        <div className="flex flex-wrap gap-3">
-          <label className="block text-sm">
-            {t("services.duration")}
-            <span className="mt-1 flex items-center gap-2">
+        {/* An explicit kind, the pressed-chip pattern the booking page uses
+            for its service picker. Duration is not a default the owner has
+            to notice and delete — it only exists once they have said this
+            is time. */}
+        <div
+          className="flex items-center justify-between gap-3 text-sm"
+          role="group"
+          aria-label={t("services.kind")}
+        >
+          <span>{t("services.kind")}</span>
+          <span className="flex gap-1.5">
+            {(["service", "good"] as const).map((option) => {
+              const picked = kind === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={picked}
+                  onClick={() => setKind(option)}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    picked
+                      ? "border-[var(--accent)] bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
+                      : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {t(option === "service" ? "services.kindService" : "services.kindGood")}
+                </button>
+              );
+            })}
+          </span>
+        </div>
+        {isGood && (
+          <p className="text-right text-xs text-[var(--muted)]">{t("services.goodHint")}</p>
+        )}
+        {/* A service has a length; a product has a warning. Never both — the
+            kind above decides which question this row asks. */}
+        {!isGood ? (
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>{t("services.duration")}</span>
+            <span className="flex items-center gap-2">
               <input
                 name="durationMinutes"
                 type="number"
@@ -804,51 +846,43 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
                 step={5}
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
-                placeholder={t("common.optional")}
-                className="w-24"
+                className="w-28"
               />
               <span className="text-xs text-[var(--muted)]">{t("services.minutes")}</span>
             </span>
-            <span className="mt-1 block text-xs text-[var(--muted)]">
-              {t("services.durationGoodHint")}
-            </span>
           </label>
-          {/* Only a good needs warning time — a haircut's notice is the slot
-              itself. Appears when the duration is emptied, beside the fact it
-              belongs to. */}
-          {isGood && (
-            <label className="block text-sm">
-              {t("services.leadTime")}
-              <span className="mt-1 flex items-center gap-2">
-                <input
-                  name="leadDays"
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  placeholder={t("common.optional")}
-                  className="w-24"
-                />
-                <span className="text-xs text-[var(--muted)]">{t("services.leadDays")}</span>
-              </span>
-            </label>
-          )}
-          <label className="block text-sm">
-            {t("services.price")}
-            <span className="mt-1 flex items-center gap-2">
+        ) : (
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>{t("services.leadTime")}</span>
+            <span className="flex items-center gap-2">
               <input
-                name="price"
+                name="leadDays"
                 type="number"
                 min={0}
-                step="0.01"
+                step={0.5}
                 placeholder={t("common.optional")}
                 className="w-28"
               />
-              <span className="text-xs text-[var(--muted)]">
-                {currencySymbol(currency, language)}
-              </span>
+              <span className="text-xs text-[var(--muted)]">{t("services.leadDays")}</span>
             </span>
           </label>
-        </div>
+        )}
+        <label className="flex items-center justify-between gap-3 text-sm">
+          <span>{t("services.price")}</span>
+          <span className="flex items-center gap-2">
+            <input
+              name="price"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder={t("common.optional")}
+              className="w-28"
+            />
+            <span className="text-xs text-[var(--muted)]">
+              {currencySymbol(currency, language)}
+            </span>
+          </span>
+        </label>
 
         {/* Reserved whether or not it holds anything, so a rejected save does
             not shove the buttons out from under the pointer. */}
