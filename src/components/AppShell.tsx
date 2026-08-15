@@ -1114,7 +1114,7 @@ export function AppShell({
 
   // Phone drawer. Below md the sidebar is off-canvas, and it is now the only
   // way to reach Business and Settings: the avatar menu no longer shortcuts
-  // there, and the bottom bar carries the three work tabs only.
+  // there. The bottom bar carries the same navTabs the sidebar does.
   const [mobileOpen, setMobileOpen] = useState(false);
   // The drawer is a phone surface, so it always shows the full-width sidebar.
   // Folding the desktop collapse in here beats measuring the viewport: the
@@ -1380,8 +1380,12 @@ export function AppShell({
           )}
           {children}
         </main>
-        {/* Phone nav */}
-        <nav className="flex border-t border-[var(--border)] md:hidden">
+        {/* Phone nav. The bar is the last row of a 100dvh column, so on a
+            notched iPhone it lands under the home indicator — the labels are
+            the part that goes. Padding it by the inset moves the row clear
+            while the border and background still run to the bottom edge.
+            Needs viewport-fit=cover, set in app/layout.tsx, or the env() is 0. */}
+        <nav className="flex border-t border-[var(--border)] pb-[env(safe-area-inset-bottom)] md:hidden">
           {navTabs.map(({ id, key, Icon, color }) => {
             const active = tab === id;
             return (

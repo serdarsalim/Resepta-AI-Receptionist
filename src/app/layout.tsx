@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
@@ -14,6 +14,16 @@ import "./globals.css";
 import "flag-icons/css/flag-icons.min.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+
+// Next's default viewport is width=device-width,initial-scale=1 and nothing
+// else, which is fine until you ask for a safe-area inset: env(safe-area-inset-*)
+// reads 0 on iOS unless the page opts into drawing under the notch and the home
+// indicator. The app's bottom tab bar is pinned to the foot of a 100dvh column,
+// so without viewport-fit=cover its labels sit under the indicator on every
+// iPhone since the X.
+export const viewport: Viewport = {
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   // The signed-in app replaces this with the workspace's own name; see
