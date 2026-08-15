@@ -651,12 +651,26 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
-// Header and rows share one template, and it only becomes a grid at sm. The
-// four fixed columns add up to ~264px, which on a 390px phone left about 60px
-// for the service name: the exact anti-pattern the design language names.
-// Below sm the row is a wrapping flex line instead, name on its own row.
+// Header and rows share one template. Six columns at sm; on a phone the same
+// cells fold to two lines — name across the top, then key / duration / price /
+// switch — because the four fixed sm columns add up to ~264px, which on a
+// 390px phone left about 60px for the service name.
+//
+// The phone line is a GRID with fixed tracks, not the wrapping flex line it
+// used to be, and the fixed part is the whole point. Each row is its own grid
+// container, so nothing lines up across rows by agreement — only by both rows
+// asking for the same widths. Intrinsic sizing gave every row its own idea of
+// where the duration started, tracking whatever that service's key happened to
+// be.
+//
+// Each track holds a number AND its unit — "90" plus "min", "5600.00" plus the
+// currency symbol — because the unit sits inside the cell rather than in a
+// column of its own. Sized at 4rem the duration left its number about 36px and
+// it came down the screen a digit at a time, so the tracks are 5rem/6rem and
+// the cells carry whitespace-nowrap: a track that is ever too narrow should
+// overflow where you can see it, not quietly stack.
 const SERVICE_ROW_GRID =
-  "sm:grid sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:items-center sm:gap-2";
+  "grid grid-cols-[minmax(0,1fr)_5rem_6rem_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:gap-2";
 
 function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -670,14 +684,16 @@ function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): str
 function ServiceKeyCell({
   value,
   onSave,
+  className,
 }: {
   value: string;
   onSave: (key: string) => void;
+  className?: string;
 }) {
   const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
   return (
-    <span className="flex min-w-0 items-center">
+    <span className={`flex min-w-0 items-center ${className ?? ""}`}>
       {editing ? (
         <input
           autoFocus
@@ -854,11 +870,16 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
         ) : (
           <div className="space-y-2">
             {rows.length > 0 && (
-              // Column headers label their columns, so a row of toggles is never
-              // an unlabelled switch. They only exist where the columns actually
-              // sit side by side; below sm the row stacks and each value carries
-              // its own label instead.
-              <div className={`hidden px-1 text-xs text-[var(--muted)] ${SERVICE_ROW_GRID}`}>
+              // Column headers label their columns. They only exist at sm,
+              // where the six columns sit in one line and a header can sit over
+              // each; the phone layout is two lines of four and its values
+              // speak for themselves.
+              //
+              // max-sm:hidden, not hidden: SERVICE_ROW_GRID sets `grid` at every
+              // width now, and two unprefixed display utilities on one element
+              // are decided by Tailwind's own order rather than by this file.
+              // Scoping the hide to the phone leaves nothing to arbitrate.
+              <div className={`px-1 text-xs text-[var(--muted)] max-sm:hidden ${SERVICE_ROW_GRID}`}>
                 <span>{t("services.name")}</span>
                 <span>{t("services.key")}</span>
                 <span>{t("services.duration")}</span>
@@ -871,12 +892,12 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               {rows.map((service) => (
                 <li
                   key={service._id}
-                  className={`group relative flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${SERVICE_ROW_GRID}`}
+                  className={`group relative py-1.5 text-sm ${SERVICE_ROW_GRID}`}
                 >
-                  {/* Full width on a phone, so the name is not fighting 264px of
-                      fixed columns for the 60px that is left. Reserves the right
-                      end for the delete button, which is parked there below sm. */}
-                  <span className="w-full min-w-0 max-sm:pr-16 sm:w-auto">
+                  {/* The whole top line on a phone, so the name is not fighting
+                      264px of fixed columns for the 60px that is left. Reserves
+                      the right end for the delete button, parked there below sm. */}
+                  <span className="min-w-0 max-sm:col-span-4 max-sm:row-start-1 max-sm:pr-16">
                     <InlineEditValue
                       value={service.name}
                       onSave={(next) =>
@@ -891,6 +912,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       remembered. What the key still buys is that RENAMING the
                       service does not move the address by itself. */}
                   <ServiceKeyCell
+                    className="max-sm:col-start-1 max-sm:row-start-2"
                     value={service.key}
                     onSave={(key) =>
                       void update({ serviceId: service._id, key }).catch((err) =>
@@ -898,7 +920,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       )
                     }
                   />
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-2 max-sm:row-start-2">
                     <InlineEditValue
                       value={String(service.durationMinutes)}
                       type="number"
@@ -916,7 +938,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       Blank means unpriced, and clearing the box says so rather
                       than writing a zero, because zero is a real price a salon
                       might charge and "I haven't decided" is not it. */}
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-3 max-sm:row-start-2">
                     <InlineEditValue
                       value={moneyInputValue(service.price, currency, language)}
                       type="number"
@@ -932,16 +954,17 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       {currencySymbol(currency, language)}
                     </span>
                   </span>
-                  {/* Carries the phone row's auto margin, so the switches line
-                      up on one right edge instead of starting wherever that
-                      row's price happened to end. It has to be THIS cell and
-                      not the delete button after it: two auto margins split the
-                      slack between them and neither lands anywhere. At sm the
-                      grid owns the columns and the margin has to go. */}
-                  <span className="ml-auto flex items-center gap-1.5 sm:ml-0">
-                    <span className="text-xs text-[var(--muted)] sm:hidden">
-                      {t("services.active")}
-                    </span>
+                  {/* Last track of the phone line, pinned to its right edge.
+                      This used to be an auto margin fighting the flex line for
+                      the same result; a named grid column just says it. */}
+                  <span className="flex items-center gap-1.5 max-sm:col-start-4 max-sm:row-start-2 max-sm:justify-self-end">
+                    {/* No visible "Active" beside it. The phone row used to
+                        repeat each column's header as a word, which is right
+                        for a value that cannot speak for itself — a bare "60"
+                        needs "min" — and wrong for a switch, which is the one
+                        control whose whole job is showing its own state. The
+                        Toggle carries the word as aria-label, so the name is
+                        still there for anyone not reading the colour. */}
                     <Toggle
                       checked={service.active}
                       label={t("services.active")}
