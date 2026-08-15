@@ -1530,6 +1530,10 @@ const dictionary = {
     en: "Voice agent",
     de: "Sprachassistent",
   },
+  // The phone tab bar's version. Six labels share the width of a phone, so the
+  // qualifier goes and the noun stays: nothing else in the bar is an agent, so
+  // "Voice" was never the load-bearing half.
+  "nav.voiceShort": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
   "nav.reminders": {
     tr: "Hatırlatmalar",

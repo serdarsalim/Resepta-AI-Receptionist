@@ -155,6 +155,12 @@ const NAV_TABS: {
   key: TranslationKey;
   Icon: (props: IconProps) => React.ReactElement;
   color: string;
+  // A shorter label for the phone tab bar, where a sidebar's worth of room is
+  // not on offer. Falls back to `key`.
+  phoneKey?: TranslationKey;
+  // Sidebar and drawer only. The phone bar fits about five labels; anything you
+  // set once rather than work in gives up its slot first.
+  drawerOnly?: boolean;
 }[] = [
   {
     id: "customers",
@@ -177,6 +183,7 @@ const NAV_TABS: {
   {
     id: "voice",
     key: "nav.voice",
+    phoneKey: "nav.voiceShort",
     Icon: VoicePhoneIcon,
     color: "#10b981",
   },
@@ -209,11 +216,18 @@ const NAV_TABS: {
   // argument that rules are config — true on paper, wrong in use. Reminders is
   // the thing this product does to keep chairs full, so it stays one click
   // away and adjacent to the bookings it chases.
+  //
+  // Off the phone tab bar, in the drawer with Business. That argument is about
+  // where it sits in the sidebar and it still holds there; the bar is a
+  // different question. Five rules you set once and leave alone is not what a
+  // phone's bottom row is for, and the slot is worth more to a tab you tap all
+  // day.
   {
     id: "messages",
     key: "nav.reminders",
     Icon: BellIcon,
     color: "#6366f1",
+    drawerOnly: true,
   },
 ];
 
@@ -416,7 +430,11 @@ function ShellHeader({
           </button>
         )}
         {placeholder && (
-          <div className={expanded ? "min-w-0 flex-1 sm:flex-none" : "hidden sm:block"}>
+          <div
+            className={
+              expanded ? "min-w-0 flex-1 sm:flex-none" : "hidden sm:block"
+            }
+          >
             <SearchInput
               ref={searchRef}
               value={query}
@@ -474,12 +492,16 @@ function OnboardingGate() {
             {t("nav.signOut")}
           </button>
         </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">{t("onboarding.prompt")}</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {t("onboarding.prompt")}
+        </p>
         <form
           className="mt-4 space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
+            const name = String(
+              new FormData(event.currentTarget).get("name") ?? "",
+            ).trim();
             if (name) void update({ name });
           }}
         >
@@ -501,7 +523,15 @@ function OnboardingGate() {
 
 function SunIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4" />
     </svg>
@@ -509,14 +539,31 @@ function SunIcon() {
 }
 function MoonIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   );
 }
 function AutoIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none" />
     </svg>
@@ -524,7 +571,16 @@ function AutoIcon() {
 }
 function CheckIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );
@@ -532,7 +588,17 @@ function CheckIcon() {
 // A single person, not a gear: this menu is about you, not the business.
 function PersonIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20v-.5a7 7 0 0 1 14 0v.5" />
     </svg>
@@ -540,7 +606,16 @@ function PersonIcon() {
 }
 function SignOutIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <path d="M16 17l5-5-5-5M21 12H9" />
     </svg>
@@ -548,7 +623,17 @@ function SignOutIcon() {
 }
 function HelpIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M9.8 9a2.4 2.4 0 1 1 3.9 1.9c-1 .7-1.7 1.2-1.7 2.6" />
       <path d="M12 17h.01" />
@@ -601,9 +686,11 @@ function UserMenu({
   // lets the menu open upward from a sidebar footer without anybody having to
   // guess its height first — a guessed height is a menu that drifts the moment
   // somebody adds a row to it.
-  const [pos, setPos] = useState<
-    { top?: number; bottom?: number; left: number } | null
-  >(null);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+  } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = pos !== null;
@@ -634,7 +721,10 @@ function UserMenu({
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (
+        btnRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
         return;
       }
       setPos(null);
@@ -678,7 +768,11 @@ function UserMenu({
     });
   };
 
-  const THEME_OPTIONS: { value: Theme; key: TranslationKey; Icon: () => React.ReactNode }[] = [
+  const THEME_OPTIONS: {
+    value: Theme;
+    key: TranslationKey;
+    Icon: () => React.ReactNode;
+  }[] = [
     { value: "light", key: "theme.light", Icon: SunIcon },
     { value: "dark", key: "theme.dark", Icon: MoonIcon },
     { value: "auto", key: "theme.auto", Icon: AutoIcon },
@@ -736,7 +830,9 @@ function UserMenu({
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
           >
             <div className="border-b border-[var(--border)] px-3 py-2.5">
-              <div className="truncate text-sm font-medium">{name || email}</div>
+              <div className="truncate text-sm font-medium">
+                {name || email}
+              </div>
               {name && email && (
                 <div className="truncate text-xs text-[var(--muted)]">
                   {email}
@@ -862,7 +958,10 @@ function WorkspaceSwitcher({
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (btnRef.current?.contains(target) || menuRef.current?.contains(target)) {
+      if (
+        btnRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
         return;
       }
       setPos(null);
@@ -1027,7 +1126,9 @@ function SidebarButton({
             // bold label finishes the job. Collapsed has no label, so the pill
             // earns a tint of the tab's own hue as the stronger selected cue.
             `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
-              collapsed ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]" : ""
+              collapsed
+                ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]"
+                : ""
             }`
           : "font-medium text-[var(--muted-strong)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
       }`}
@@ -1087,8 +1188,10 @@ export function AppShell({
   // undefined one render earlier.
   useEffect(() => {
     if (!settings) return;
-    if (tab === "revenue" && !settings.org.revenueEnabled) onTab("appointments");
-    if (tab === "campaigns" && !settings.whatsapp.connected) onTab("appointments");
+    if (tab === "revenue" && !settings.org.revenueEnabled)
+      onTab("appointments");
+    if (tab === "campaigns" && !settings.whatsapp.connected)
+      onTab("appointments");
   }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
   // fed by failed sends only, which meant two colours of dot for one idea:
@@ -1190,32 +1293,32 @@ export function AppShell({
     // Above both the header and the views: the box is rendered up here, the
     // filtering happens down there, so the query has to sit over the pair.
     <HeaderSearchProvider>
-    <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
-      {/* Fixed overlay, so it costs the layout nothing and renders on every
+      <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
+        {/* Fixed overlay, so it costs the layout nothing and renders on every
           screen rather than only the one the operator arrived on. */}
-      <OperatorBanner />
-      {/* Same treatment, same reason. Only one of the two can be showing at
+        <OperatorBanner />
+        {/* Same treatment, same reason. Only one of the two can be showing at
           once in practice: an operator impersonating an org is not someone who
           was just invited to it. */}
-      <WorkspaceInviteBanner />
-      {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
+        <WorkspaceInviteBanner />
+        {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
           keeps pointer-events off while closed so it never eats a tap. */}
-      <button
-        type="button"
-        tabIndex={mobileOpen ? 0 : -1}
-        aria-hidden={!mobileOpen}
-        aria-label={t("nav.closeMenu")}
-        onClick={() => setMobileOpen(false)}
-        className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-[120ms] motion-reduce:transition-none md:hidden ${
-          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      />
-      {/* Sidebar: a recessed pane on desktop, an off-canvas drawer on phones.
+        <button
+          type="button"
+          tabIndex={mobileOpen ? 0 : -1}
+          aria-hidden={!mobileOpen}
+          aria-label={t("nav.closeMenu")}
+          onClick={() => setMobileOpen(false)}
+          className={`fixed inset-0 z-30 bg-black/40 transition-opacity duration-[120ms] motion-reduce:transition-none md:hidden ${
+            mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        />
+        {/* Sidebar: a recessed pane on desktop, an off-canvas drawer on phones.
           Same markup either way, so the phone gets the real navigation instead
           of a cut-down second copy of it. Below md the drawer is the ONLY way
           to reach Business and Settings, now that the avatar menu no longer
           shortcuts there. */}
-      {/* Off-canvas is not hidden: translated away, the drawer keeps its place
+        {/* Off-canvas is not hidden: translated away, the drawer keeps its place
           in the accessibility tree and every destination inside it stays
           tabbable, so tabbing off the phone menu button walks into an
           invisible sidebar. `visibility: hidden` fixes that without a
@@ -1223,56 +1326,60 @@ export function AppShell({
           transitionable: hidden → visible flips at the start, visible →
           hidden waits for the slide to finish, so the animation survives.
           `md:visible` puts the desktop pane back. */}
-      <aside
-        aria-label={t("nav.primary")}
-        className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
-          mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
-        } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
-      >
-        {/* Brand row. The mark stays put across the collapse so the eye has a
-            fixed anchor; the name and the switcher are what fold away. */}
-        <div
-          className={`flex items-center gap-2 pt-3 ${
-            showCollapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
-          }`}
+        <aside
+          aria-label={t("nav.primary")}
+          className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
+            mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
+          } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
-          {showCollapsed ? (
-            <WorkspaceSwitcher fallbackName={settings?.org.name} collapsed />
-          ) : (
-            <>
-              <BrandMark size={26} />
-              <div className="min-w-0 flex-1">
-                <WorkspaceSwitcher fallbackName={settings?.org.name} />
-              </div>
-            </>
-          )}
-          {/* One control, one glyph: on desktop it folds the sidebar down to
+          {/* Brand row. The mark stays put across the collapse so the eye has a
+            fixed anchor; the name and the switcher are what fold away. */}
+          <div
+            className={`flex items-center gap-2 pt-3 ${
+              showCollapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
+            }`}
+          >
+            {showCollapsed ? (
+              <WorkspaceSwitcher fallbackName={settings?.org.name} collapsed />
+            ) : (
+              <>
+                <BrandMark size={26} />
+                <div className="min-w-0 flex-1">
+                  <WorkspaceSwitcher fallbackName={settings?.org.name} />
+                </div>
+              </>
+            )}
+            {/* One control, one glyph: on desktop it folds the sidebar down to
               symbols, on the phone it slides the drawer away. Both mean "put
               the sidebar back", which is why the icon does not change. */}
-          <button
-            type="button"
-            onClick={() => (mobileOpen ? setMobileOpen(false) : toggleCollapsed())}
-            aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
-            className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
-          >
-            <PanelLeftIcon />
-          </button>
-        </div>
-
-        <nav className={`flex flex-1 flex-col pb-1 pt-4 ${showCollapsed ? "px-1" : "px-2"}`}>
-          <div className="space-y-0.5">
-            {navTabs.map((entry) => (
-              <SidebarButton
-                key={entry.id}
-                entry={entry}
-                active={tab === entry.id}
-                collapsed={showCollapsed}
-                dot={entry.id === "inbox" && (attentionCount ?? 0) > 0}
-                onClick={() => goTo(entry.id)}
-              />
-            ))}
+            <button
+              type="button"
+              onClick={() =>
+                mobileOpen ? setMobileOpen(false) : toggleCollapsed()
+              }
+              aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+              className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+            >
+              <PanelLeftIcon />
+            </button>
           </div>
-          {/* Config sits with the work rather than pinned to the floor, under a
+
+          <nav
+            className={`flex flex-1 flex-col pb-1 pt-4 ${showCollapsed ? "px-1" : "px-2"}`}
+          >
+            <div className="space-y-0.5">
+              {navTabs.map((entry) => (
+                <SidebarButton
+                  key={entry.id}
+                  entry={entry}
+                  active={tab === entry.id}
+                  collapsed={showCollapsed}
+                  dot={entry.id === "inbox" && (attentionCount ?? 0) > 0}
+                  onClick={() => goTo(entry.id)}
+                />
+              ))}
+            </div>
+            {/* Config sits with the work rather than pinned to the floor, under a
               short rule that separates the two groups without drawing a line
               across the whole pane. It moved up because the floor is spoken
               for: the signed-in person lives down there now, and two things
@@ -1281,68 +1388,70 @@ export function AppShell({
               A partial rule, not a full-width border: it is dividing two
               stacks of left-aligned items, so it only has to be as wide as the
               items are — a full bleed reads as the end of the sidebar. */}
-          <div
-            aria-hidden
-            className={`my-2 h-px w-1/2 bg-[var(--border)] ${showCollapsed ? "mx-auto" : "ml-2"}`}
-          />
-          <div className="space-y-0.5">
-            {FOOT_TABS.map((entry) => (
-              <SidebarButton
-                key={entry.id}
-                entry={entry}
-                active={tab === entry.id}
-                collapsed={showCollapsed}
-                onClick={() => goTo(entry.id)}
-              />
-            ))}
-            {/* The operator's door, below Business — an anchor, not a tab: it
+            <div
+              aria-hidden
+              className={`my-2 h-px w-1/2 bg-[var(--border)] ${showCollapsed ? "mx-auto" : "ml-2"}`}
+            />
+            <div className="space-y-0.5">
+              {FOOT_TABS.map((entry) => (
+                <SidebarButton
+                  key={entry.id}
+                  entry={entry}
+                  active={tab === entry.id}
+                  collapsed={showCollapsed}
+                  onClick={() => goTo(entry.id)}
+                />
+              ))}
+              {/* The operator's door, below Business — an anchor, not a tab: it
                 opens the fleet console in its own browser tab so the workspace
                 being looked at stays where it was. Hardcoded "Admin" like the
                 console itself: the admin surface is deliberately English-only,
                 and this row renders for platform admins alone, never for any
                 salon user. */}
-            {isPlatformAdmin && (
-              <a
-                href="/admin"
-                target="_blank"
-                rel="noopener"
-                title={showCollapsed ? "Admin" : undefined}
-                className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
-                  showCollapsed
-                    ? "mx-auto h-9 w-9 justify-center px-0"
-                    : "w-full gap-3 px-3"
-                }`}
-              >
-                <AdminShieldIcon
-                  className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
-                  style={{ color: "var(--foreground)" }}
-                />
-                {!showCollapsed && (
-                  <span className="flex-1 truncate text-left">Admin</span>
-                )}
-              </a>
-            )}
-          </div>
+              {isPlatformAdmin && (
+                <a
+                  href="/admin"
+                  target="_blank"
+                  rel="noopener"
+                  title={showCollapsed ? "Admin" : undefined}
+                  className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
+                    showCollapsed
+                      ? "mx-auto h-9 w-9 justify-center px-0"
+                      : "w-full gap-3 px-3"
+                  }`}
+                >
+                  <AdminShieldIcon
+                    className="shrink-0 opacity-80 transition-opacity group-hover:opacity-100"
+                    style={{ color: "var(--foreground)" }}
+                  />
+                  {!showCollapsed && (
+                    <span className="flex-1 truncate text-left">Admin</span>
+                  )}
+                </a>
+              )}
+            </div>
 
-          {/* Who is signed in, at the bottom corner — where a decade of
+            {/* Who is signed in, at the bottom corner — where a decade of
               dashboards has trained people to look for it, and where it stops
               competing with the workspace name at the top for "whose is this".
               pb-7 lifts it off the edge: flush against it the row reads as cut
               off, and on a Mac the dev-tools bubble lands on top of it. */}
-          <div className={`mt-auto pb-7 pt-2 ${showCollapsed ? "flex justify-center" : ""}`}>
-            <UserMenu
-              variant="row"
-              collapsed={showCollapsed}
-              name={settings?.me.name}
-              email={settings?.me.email}
-              remoteTheme={settings?.me.themePreference}
-              onOpenAccount={() => goTo("account")}
-            />
-          </div>
-        </nav>
-      </aside>
+            <div
+              className={`mt-auto pb-7 pt-2 ${showCollapsed ? "flex justify-center" : ""}`}
+            >
+              <UserMenu
+                variant="row"
+                collapsed={showCollapsed}
+                name={settings?.me.name}
+                email={settings?.me.email}
+                remoteTheme={settings?.me.themePreference}
+                onOpenAccount={() => goTo("account")}
+              />
+            </div>
+          </nav>
+        </aside>
 
-      {/* Floating content card; scrolls internally (min-h-0 is load-bearing).
+        {/* Floating content card; scrolls internally (min-h-0 is load-bearing).
           --pane, not --background: this is the plane the view's own cards sit
           on, not a sheet of its own. White here meant card-raised was white on
           white and had to buy its separation entirely with shadow.
@@ -1351,65 +1460,67 @@ export function AppShell({
           grid of hairlines rather than floating cards, so there is nothing for
           the plane to separate — grey just tints the whole grid and the day
           columns stop reading as paper. */}
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)] md:rounded-xl md:shadow-[var(--card-shadow)]"
-      >
-        {/* No ✕ on any tab. Business traded its close button for the search box
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)] md:rounded-xl md:shadow-[var(--card-shadow)]">
+          {/* No ✕ on any tab. Business traded its close button for the search box
             first, and Account followed (2026-08-12) once it had grown enough
             rows to be worth searching. The header holds ONE control on the
             right, search is the more useful one, and every sidebar row is
             already a way out, which is all the ✕ ever did. */}
-        <ShellHeader
-          titleKey={titleKey}
-          onOpenMenu={() => setMobileOpen(true)}
-          name={settings?.me.name}
-          email={settings?.me.email}
-          remoteTheme={settings?.me.themePreference}
-          onOpenAccount={() => onTab("account")}
-        />
-        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-          {/* Above the content rather than in a corner: someone clicking
+          <ShellHeader
+            titleKey={titleKey}
+            onOpenMenu={() => setMobileOpen(true)}
+            name={settings?.me.name}
+            email={settings?.me.email}
+            remoteTheme={settings?.me.themePreference}
+            onOpenAccount={() => onTab("account")}
+          />
+          <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+            {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it
               scrolls away once they've read it, rather than charging a strip
               of vertical rent on every screen. */}
-          {settings?.org.demoMode && (
-            <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
-              {t("demo.banner")}
-            </p>
-          )}
-          {children}
-        </main>
-        {/* Phone nav. The bar is the last row of a 100dvh column, so on a
+            {settings?.org.demoMode && (
+              <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
+                {t("demo.banner")}
+              </p>
+            )}
+            {children}
+          </main>
+          {/* Phone nav. Not every sidebar row earns a slot here — see drawerOnly
+            on NAV_TABS — and the ones that do may answer to a shorter name.
+            The bar is the last row of a 100dvh column, so on a
             notched iPhone it lands under the home indicator — the labels are
             the part that goes. Padding it by the inset moves the row clear
             while the border and background still run to the bottom edge.
             Needs viewport-fit=cover, set in app/layout.tsx, or the env() is 0. */}
-        <nav className="flex border-t border-[var(--border)] pb-[env(safe-area-inset-bottom)] md:hidden">
-          {navTabs.map(({ id, key, Icon, color }) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => onTab(id)}
-                aria-current={active ? "page" : undefined}
-                className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
-                  active
-                    ? "font-semibold text-[var(--foreground)]"
-                    : "text-[var(--muted)]"
-                }`}
-              >
-                <Icon
-                  className="shrink-0"
-                  style={{ color, opacity: active ? 1 : 0.8 }}
-                />
-                {t(key)}
-              </button>
-            );
-          })}
-        </nav>
+          <nav className="flex border-t border-[var(--border)] pb-[env(safe-area-inset-bottom)] md:hidden">
+            {navTabs
+              .filter((entry) => !entry.drawerOnly)
+              .map(({ id, key, phoneKey, Icon, color }) => {
+                const active = tab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => onTab(id)}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
+                      active
+                        ? "font-semibold text-[var(--foreground)]"
+                        : "text-[var(--muted)]"
+                    }`}
+                  >
+                    <Icon
+                      className="shrink-0"
+                      style={{ color, opacity: active ? 1 : 0.8 }}
+                    />
+                    {t(phoneKey ?? key)}
+                  </button>
+                );
+              })}
+          </nav>
+        </div>
       </div>
-    </div>
     </HeaderSearchProvider>
   );
 }
