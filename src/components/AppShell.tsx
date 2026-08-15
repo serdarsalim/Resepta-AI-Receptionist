@@ -1488,8 +1488,14 @@ export function AppShell({
 
             Padding stays on `main` rather than moving to a wrapper div — the
             filling views size against main's content box, and an auto-height
-            wrapper between them would collapse that. */}
-        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:has-[[data-fills-pane]]:pb-0">
+            wrapper between them would collapse that.
+
+            Sideways it is 8px on a phone, measured off Nudge rather than
+            picked: its views run px-2 there against our 16, which was handing
+            back 16px of a 500px screen on every card. The card's own shadow
+            and radius already separate it from the pane; a second inset out
+            here was doing the same job twice. Unchanged from sm up. */}
+        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it
