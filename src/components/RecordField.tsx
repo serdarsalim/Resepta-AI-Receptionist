@@ -187,12 +187,13 @@ export function InlineEditValue({
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setEditing(false);
       }}
-      // compact is 80px, which was measured against text-sm. Below sm a focused
-      // field renders at 16px (globals.css, the iOS zoom rule) and 80px stops
-      // holding a five-figure price, so on a phone it takes its container
-      // instead — in the service row that is a fixed grid track, which is the
-      // width that was reasoned about.
-      className={`px-2 py-1 text-sm ${compact ? "max-sm:w-full sm:w-20" : ""}`}
+      // compact takes its container below sm — a focused field renders at 16px
+      // there (globals.css, the iOS zoom rule), and in the service row the
+      // container is a fixed grid track, which is the width that was reasoned
+      // about. From sm it is 96px: it spent years at 80, which held every
+      // duration and then clipped "5600.00" the moment a price ran to five
+      // figures, because a number input also spends ~16px on its spinner.
+      className={`px-2 py-1 text-sm ${compact ? "max-sm:w-full sm:w-24" : ""}`}
     />
   );
 }

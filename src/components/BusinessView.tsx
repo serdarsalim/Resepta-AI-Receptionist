@@ -677,8 +677,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 // zoom rule), so a five-figure price needs ~6.5rem where the resting text
 // needs 4. The third track is the phone line's spacer — it takes whatever the
 // fixed tracks leave, so the switch keeps to the right edge.
+// At sm the duration and price tracks are 8/9rem, not the 7 they inherited
+// from the six-column days: the key column's departure handed its 8rem to the
+// name, which was already the widest thing on the line, while a five-figure
+// price still edited inside a clipped box. The extra rem each is spent where
+// the numbers actually live.
 const SERVICE_ROW_GRID =
-  "grid grid-cols-[5rem_6.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[1fr_7rem_7rem_4rem_4rem] sm:gap-2";
+  "grid grid-cols-[5rem_6.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[1fr_8rem_9rem_4rem_4rem] sm:gap-2";
 
 function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): string {
   const message = err instanceof Error ? err.message : String(err);
