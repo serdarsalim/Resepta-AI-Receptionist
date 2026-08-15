@@ -1474,7 +1474,22 @@ export function AppShell({
             remoteTheme={settings?.me.themePreference}
             onOpenAccount={() => onTab("account")}
           />
-          <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+          {/* Nudge's rule for the bottom edge, ported: a view whose cards scroll
+            INSIDE themselves has no content end to breathe after, so padding
+            under it is pure loss — it just shortens the scroll viewport. On a
+            phone, where height is the scarce thing, those views run to the
+            screen edge instead. Views that page-scroll keep the padding,
+            because their content genuinely stops.
+
+            The test is the view's own `data-fills-pane`, not a list of tab ids
+            here: the customer drill-in fills the pane while the customers LIST
+            does not, and both are the same tab. A view that declares itself is
+            also one AppShell cannot forget to update.
+
+            Padding stays on `main` rather than moving to a wrapper div — the
+            filling views size against main's content box, and an auto-height
+            wrapper between them would collapse that. */}
+        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:has-[[data-fills-pane]]:pb-0">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it

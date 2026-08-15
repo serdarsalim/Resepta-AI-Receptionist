@@ -256,10 +256,15 @@ thead {
 }
 
 /* Thin themed scrollbar for internal overflow containers. */
-/* Reserve the scrollbar track always — content must never shift when a list
-   grows past the fold (Nudge behavior). Pairs with .thin-scroll. */
-.stable-gutter {
-  scrollbar-gutter: stable;
+/* Reserve the scrollbar track so content never shifts when a list grows past
+   the fold (Nudge behavior). Pairs with .thin-scroll.
+   From sm up only: a touch device draws its scrollbar as an overlay and takes
+   no width, so reserving a 12px track there buys nothing and spends 12px of a
+   phone's 500. Nudge gates it the same way, for the same reason. */
+@media (min-width: 40rem) {
+  .stable-gutter {
+    scrollbar-gutter: stable;
+  }
 }
 
 /* Widths are Vercel's, measured off its dashboard sidebar rather than guessed:

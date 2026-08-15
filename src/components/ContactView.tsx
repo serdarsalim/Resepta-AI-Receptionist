@@ -114,7 +114,11 @@ export function ContactView({
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    // Fills the pane and scrolls inside itself, so it takes the phone's bottom
+    // edge — see AppShell's main. Declared here rather than by tab id because
+    // the customers LIST behind it does not fill the pane, and both are the
+    // same tab.
+    <div data-fills-pane className="flex h-full min-h-0 min-w-0 flex-col">
       {/* One row on a desktop: back, who, the filter pills. Two on a phone with
           the conversation open, because that is the one combination that does
           not fit — back, name, dot, pills and the pane swap together ask for

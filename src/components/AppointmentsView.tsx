@@ -299,7 +299,11 @@ export function AppointmentsView({
   }, [appointments, search]);
 
   return (
+    // data-fills-pane only in the grid views. The list PAGE-scrolls and its
+    // content ends, so it keeps the shell's bottom padding; the grids scroll
+    // inside themselves and take the phone's bottom edge. See AppShell's main.
     <div
+      data-fills-pane={view === "list" ? undefined : ""}
       className={
         view === "list" ? "space-y-4" : "flex h-full min-h-0 flex-col gap-4"
       }

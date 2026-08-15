@@ -135,7 +135,10 @@ export function InboxView({
     // at 462. Capping without the padding left this 20px wide. Gated to lg
     // because the shell's own p-4 already pads the one-column phone layout, and
     // stacking both would eat the row.
-    <div className="mx-auto flex h-full w-full min-h-0 min-w-0 max-w-6xl flex-col lg:px-6">
+    <div
+      data-fills-pane
+      className="mx-auto flex h-full w-full min-h-0 min-w-0 max-w-6xl flex-col lg:px-6"
+    >
       <div
         className={`grid min-h-0 min-w-0 flex-1 gap-4 ${
           active
