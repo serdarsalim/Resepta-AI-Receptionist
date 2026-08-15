@@ -820,6 +820,31 @@ operator verification checklist live in [`docs/phone-agent.md`](docs/phone-agent
   beats hanging up on the salon's own customer, suspension is the human
   lever, and the meter's frozen line items + month rollups are the exact
   substrate a Stripe paid tier reads later.
+- **The prepaid wallet IS that paid tier** (`orgs.billingMode`, 2026-08-15).
+  Two settlement models, operator-picked per org on the /admin Usage tab:
+  "invoice" (unset) is everything above, unchanged; "prepaid" adds a wallet
+  (`orgs.walletBalanceMicroUsd`) the org tops up itself through Stripe
+  Checkout and every billed stamp draws down — the debit happens inside
+  `meterCall`, same mutation as the stamp, so the wallet can never disagree
+  with the line items it paid for. Money in is `wallet.applyWalletCredit`,
+  the ONE credit path shared by the Stripe webhook (`/stripe/webhook`,
+  signature-verified, idempotent on the Checkout session id — Stripe
+  retries are welcome) and the operator's manual credit (platform.ts).
+  Enforcement is ring-time only: `beforeCallContext` resolves null at
+  balance ≤ 0, the inbound webhook answers without an agent override, and
+  Retell declines the ring — an in-flight call always finishes, which
+  bounds the overdraft at one call, and topping up needs no re-enable
+  because the next ring reads the balance again. Low/empty mails
+  (`walletLow`/`walletEmpty`, kind "billing") stamp on the org and re-arm
+  on top-up, not monthly; the owner's soft-budget row hides for prepaid
+  orgs because its "calls are never cut off" hint is the invoice lane's
+  truth. Owner surface is the Balance sidebar tab (`BillingView`, prepaid
+  owners only, filtered in AppShell exactly like Revenue); Stripe's
+  success_url rides back on `?tab=billing`. The wallet is deliberately
+  lane-agnostic: a future metered lane debits the same balance. Config is
+  `stripeSecretKey`/`stripeWebhookSecret` in platformConfig (env fallback,
+  Resend doctrine) — WhatsApp is NOT metered because each org's Cloud API
+  number bills to its own Meta account, and email stays free.
 - **The template is versioned platform code** (`lib/chatAgentTemplate.ts`),
   the voice template's twin. Behaviour changes are version bumps; owners
   never edit prompts (vertical presets are the answer to customisation).
