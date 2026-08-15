@@ -902,8 +902,10 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                 >
                   {/* The whole top line on a phone, so the name is not fighting
                       264px of fixed columns for the 60px that is left. Reserves
-                      the right end for the delete button, parked there below sm. */}
-                  <span className="min-w-0 max-sm:col-span-4 max-sm:row-start-1 max-sm:pr-16">
+                      the right end for the delete ×, parked there below sm —
+                      pr-8 clears its w-7, where the old "Delete" word needed
+                      twice that. */}
+                  <span className="min-w-0 max-sm:col-span-4 max-sm:row-start-1 max-sm:pr-8">
                     <InlineEditValue
                       value={service.name}
                       onSave={(next) =>
@@ -1002,9 +1004,11 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         );
                       })();
                     }}
-                    className="rounded-md px-2 py-1 text-xs text-red-600 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 dark:text-red-400 max-sm:absolute max-sm:right-0 max-sm:top-1 sm:justify-self-end [@media(hover:none)]:opacity-100"
+                    aria-label={`${service.name} — ${t("common.delete")}`}
+                    title={t("common.delete")}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-[var(--muted)] opacity-0 transition-colors transition-opacity hover:bg-[var(--muted-bg)] hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-red-400 max-sm:absolute max-sm:right-0 max-sm:top-0.5 sm:justify-self-end [@media(hover:none)]:opacity-100"
                   >
-                    {t("common.delete")}
+                    ×
                   </button>
                 </li>
               ))}
