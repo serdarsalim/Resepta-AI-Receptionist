@@ -301,6 +301,30 @@ function PanelLeftIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+// The phone drawer's glyph. Not PanelLeftIcon: the panel-left mark describes a
+// sidebar that stays put and gets narrower, which is what the desktop toggle
+// does. On a phone the same tap opens a drawer over the page, and a hamburger
+// is the one icon every phone user already reads as "menu".
+function MenuIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
+  );
+}
+
 // The header, extracted so it can read the search context — a provider
 // rendered in AppShell's own output is not an ancestor of AppShell's body, so
 // the consumer has to be a child component rather than an inline block.
@@ -353,15 +377,14 @@ function ShellHeader({
           expanded ? "hidden sm:flex" : "flex"
         }`}
       >
-        {/* Phone door to the sidebar. Same panel-left glyph as the collapse
-            toggle, since it opens the same thing. */}
+        {/* Phone door to the sidebar. */}
         <button
           type="button"
           onClick={onOpenMenu}
           aria-label={t("nav.menu")}
           className="-ml-1 rounded-md p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] md:hidden"
         >
-          <PanelLeftIcon size={18} />
+          <MenuIcon size={18} />
         </button>
         <h1 className="page-title truncate text-sm font-semibold md:text-base">
           {t(titleKey)}
