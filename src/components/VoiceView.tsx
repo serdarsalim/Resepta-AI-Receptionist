@@ -11,7 +11,7 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { KnowledgeCard } from "./KnowledgeCard";
-import { FieldsCard } from "./BusinessView";
+import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Card } from "./Card";
 
@@ -312,7 +312,16 @@ export function VoiceView() {
       {section === "calls" && <CallHistory />}
       {section === "billing" && isOwner && <BillingSection />}
       {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
-      {section === "fields" && <FieldsCard isOwner={isOwner} />}
+      {/* Service keys ride under the contact fields: this tab is the agent's
+          vocabulary — everything it knows by key — and a service's key is the
+          same species of plumbing as a field's. The Services tab itself shows
+          none of this; its reader is deciding prices, not addresses. */}
+      {section === "fields" && (
+        <div className="space-y-4">
+          <FieldsCard isOwner={isOwner} />
+          <ServiceKeysCard isOwner={isOwner} />
+        </div>
+      )}
     </div>
   );
 }

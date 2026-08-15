@@ -651,32 +651,34 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   );
 }
 
-// Header and rows share one template. Six columns at sm; on a phone the same
-// cells fold to two lines — name across the top, then key / duration / price /
-// switch — because the four fixed sm columns add up to ~264px, which on a
-// 390px phone left about 60px for the service name.
+// Header and rows share one template. Five columns at sm; on a phone the same
+// cells fold to two lines — name across the top, then duration / price /
+// switch — because the fixed sm columns add up to more than a 390px phone can
+// give them next to a name.
 //
-// The phone line is a GRID with fixed tracks, not the wrapping flex line it
-// used to be, and the fixed part is the whole point. Each row is its own grid
-// container, so nothing lines up across rows by agreement — only by both rows
-// asking for the same widths. Intrinsic sizing gave every row its own idea of
-// where the duration started, tracking whatever that service's key happened to
-// be.
+// NO KEY COLUMN. The list's reader is a salon owner deciding what they sell
+// and for how much; the key is the agent's address for a service, and it now
+// lives with the rest of the agent's vocabulary on the Contact fields tab
+// (ServiceKeysCard). It spent a while here as a monospace chip and read as
+// exactly what it was: a developer's column in an owner's price list.
+//
+// The phone line is a GRID with fixed tracks, not a wrapping flex line. Each
+// row is its own grid container, so nothing lines up across rows by agreement
+// — only by both rows asking for the same widths. Intrinsic sizing gave every
+// row its own idea of where the duration started.
 //
 // Each track holds a number AND its unit — "90" plus "min", "5600.00" plus the
 // currency symbol — because the unit sits inside the cell rather than in a
-// column of its own. Sized at 4rem the duration left its number about 36px and
-// it came down the screen a digit at a time, so the tracks are 5rem/6rem and
-// the cells carry whitespace-nowrap: a track that is ever too narrow should
-// overflow where you can see it, not quietly stack.
+// column of its own. The cells carry whitespace-nowrap: a track that is ever
+// too narrow should overflow where you can see it, not quietly stack.
 //
 // The price track is the wide one because it is sized for EDITING, not for
 // reading: below sm a focused field renders at 16px (globals.css, the iOS
-// zoom rule) and a number input spends another ~16px on its spinner, so a
-// five-figure price needs ~6.5rem where the resting text needs 4. Phone gap
-// drops to 8px to pay for it, which leaves the key ~79px at 375.
+// zoom rule), so a five-figure price needs ~6.5rem where the resting text
+// needs 4. The third track is the phone line's spacer — it takes whatever the
+// fixed tracks leave, so the switch keeps to the right edge.
 const SERVICE_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_5rem_6.5rem_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[1fr_8rem_7rem_7rem_4rem_4rem] sm:gap-2";
+  "grid grid-cols-[5rem_6.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 sm:grid-cols-[1fr_7rem_7rem_4rem_4rem] sm:gap-2";
 
 function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): string {
   const message = err instanceof Error ? err.message : String(err);
@@ -887,7 +889,6 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               // Scoping the hide to the phone leaves nothing to arbitrate.
               <div className={`px-1 text-xs text-[var(--muted)] max-sm:hidden ${SERVICE_ROW_GRID}`}>
                 <span>{t("services.name")}</span>
-                <span>{t("services.key")}</span>
                 <span>{t("services.duration")}</span>
                 <span>{t("services.price")}</span>
                 <span>{t("services.active")}</span>
@@ -913,22 +914,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       }
                     />
                   </span>
-                  {/* Editable, unlike a contact field's key, and the difference
-                      is real rather than an oversight: nothing stores a pointer
-                      to a service key. The agent is handed the current list on
-                      every call, so a key it "knew" last month was never
-                      remembered. What the key still buys is that RENAMING the
-                      service does not move the address by itself. */}
-                  <ServiceKeyCell
-                    className="max-sm:col-start-1 max-sm:row-start-2"
-                    value={service.key}
-                    onSave={(key) =>
-                      void update({ serviceId: service._id, key }).catch((err) =>
-                        setError(serviceErrorText(err, t)),
-                      )
-                    }
-                  />
-                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-2 max-sm:row-start-2">
+                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-1 max-sm:row-start-2">
                     <InlineEditValue
                       value={String(service.durationMinutes)}
                       type="number"
@@ -946,7 +932,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       Blank means unpriced, and clearing the box says so rather
                       than writing a zero, because zero is a real price a salon
                       might charge and "I haven't decided" is not it. */}
-                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-3 max-sm:row-start-2">
+                  <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-2 max-sm:row-start-2">
                     <InlineEditValue
                       value={moneyInputValue(service.price, currency, language)}
                       type="number"
@@ -1021,6 +1007,67 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
       </Card>
       {adding && <NewServiceSheet onClose={() => setAdding(false)} />}
     </div>
+  );
+}
+
+// The agent's addresses for what the business sells, shown beside the contact
+// fields because that page is already the agent's vocabulary — the things it
+// knows BY KEY. The Services list dropped its key column (see
+// SERVICE_ROW_GRID): its reader is an owner deciding what they sell and for
+// how much, and a monospace chip in that list was a developer's column in an
+// owner's price list. The key still has to live somewhere, because renaming a
+// service must not move the address automations point at — and the reader who
+// cares about that is on this tab already.
+//
+// Names are read-only here on purpose. The price list is where a service is
+// edited; this card answers one question — "what does the agent call it" —
+// and a second editing surface for the name would just be drift waiting.
+export function ServiceKeysCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  const services = useQuery(api.services.list, {});
+  const update = useMutation(api.services.update);
+  const [error, setError] = useState<string | null>(null);
+
+  const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+
+  // No services yet: nothing to address, so no card. The Services tab is
+  // where the first one gets made.
+  if (services !== undefined && rows.length === 0) return null;
+
+  return (
+    <Card
+      title={t("fields.serviceKeys")}
+      tip={t("fields.serviceKeysHint")}
+      disabled={!isOwner}
+    >
+      {services === undefined ? (
+        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+      ) : (
+        <div className="space-y-2">
+          <ul className="divide-y divide-[var(--border)]">
+            {rows.map((service) => (
+              <li
+                key={service._id}
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 py-1.5 text-sm"
+              >
+                <span className="min-w-0 truncate">{service.name}</span>
+                <ServiceKeyCell
+                  value={service.key}
+                  onSave={(key) =>
+                    void update({ serviceId: service._id, key }).catch((err) =>
+                      setError(serviceErrorText(err, t)),
+                    )
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
