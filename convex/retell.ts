@@ -22,6 +22,7 @@ import { recordCustomerCreated } from "./lib/newCustomer";
 import { monthKey } from "./lib/usage";
 import { platformValue } from "./lib/platformConfig";
 import { queueOrgAlert } from "./lib/alerts";
+import { WALLET_LOW_MICRO_USD } from "./wallet";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenDuration, spokenLead, spokenPrice } from "./lib/speech";
@@ -641,6 +642,15 @@ export const beforeCallContext = internalQuery({
     if (!agent || !agent.enabled) return null;
     const org = await ctx.db.get(agent.orgId);
     if (!org) return null;
+    // Prepaid enforcement (schema: orgs.billingMode): resolving null means
+    // the inbound webhook answers without an agent override and Retell
+    // declines the ring, so an empty wallet sounds like a busy line, never
+    // an agent that answers and cannot help. Ring time only — a call
+    // already in progress is never touched, which bounds the overdraft at
+    // one call. Topping up needs no re-enable step: the next ring reads the
+    // balance again.
+    if (org.billingMode === "prepaid" && (org.walletBalanceMicroUsd ?? 0) <= 0)
+      return null;
     const normalised = normalisePhone(phone);
     const customer = normalised
       ? await ctx.db
@@ -2446,6 +2456,32 @@ async function meterCall(
       who: org.name || "—",
       detail: `${fmt(spentAfter)} / ${fmt(budget)}`,
     });
+  }
+  // The prepaid drawdown (schema: orgs.billingMode). Same mutation as the
+  // stamp, so the wallet can never disagree with the line items it paid
+  // for. The low/empty mails fire on the way down, once per descent — their
+  // stamps clear on top-up (wallet.creditTopup), not on a new month. Empty
+  // also stamps low, for the same reason a call jumping past 100% stamps
+  // both budget thresholds: "running low" after "ran out" reads as the
+  // balance going backwards.
+  if (stampBilled && org.billingMode === "prepaid") {
+    const after = (org.walletBalanceMicroUsd ?? 0) - (billedMicroUsd ?? 0);
+    const crossedEmpty = after <= 0 && !org.walletAlertEmptyAt;
+    const crossedLow =
+      after <= WALLET_LOW_MICRO_USD && !org.walletAlertLowAt;
+    await ctx.db.patch(orgId, {
+      walletBalanceMicroUsd: after,
+      ...(crossedLow || crossedEmpty ? { walletAlertLowAt: Date.now() } : {}),
+      ...(crossedEmpty ? { walletAlertEmptyAt: Date.now() } : {}),
+    });
+    if (crossedEmpty || crossedLow) {
+      await queueOrgAlert(ctx, {
+        orgId,
+        template: crossedEmpty ? "walletEmpty" : "walletLow",
+        who: org.name || "—",
+        detail: `$${(Math.max(after, 0) / 1_000_000).toFixed(2)}`,
+      });
+    }
   }
   return {
     ...(billedMicroUsd !== undefined ? { billedMicroUsd } : {}),

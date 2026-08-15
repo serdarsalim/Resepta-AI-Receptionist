@@ -100,7 +100,9 @@ export type AlertTemplate =
   | "failedCalendarCancel"
   | "newContact"
   | "voiceBudget80"
-  | "voiceBudget100";
+  | "voiceBudget100"
+  | "walletLow"
+  | "walletEmpty";
 
 export const alertTemplateValidator = v.union(
   v.literal("inboundText"),
@@ -114,6 +116,8 @@ export const alertTemplateValidator = v.union(
   v.literal("newContact"),
   v.literal("voiceBudget80"),
   v.literal("voiceBudget100"),
+  v.literal("walletLow"),
+  v.literal("walletEmpty"),
 );
 
 // One row per alert a salon can receive. `kind` is on the row, not on the call
@@ -265,6 +269,37 @@ const ALERT_COPY: Record<
       tr: "Telefon asistanının bu ayki harcaması {detail}, belirlediğiniz bütçenin üzerinde. Aramalar kesilmez, müşterileriniz aramaya devam edebilir. Bütçeyi Telefon sayfasındaki Kullanım bölümünden güncelleyebilirsiniz.",
       en: "This month's phone agent spend is {detail}, above the budget you set. Calls are not cut off; your customers can keep calling. You can update the budget in the Usage section of the Phone page.",
       de: "Die Kosten des Telefonassistenten liegen diesen Monat bei {detail}, über Ihrem festgelegten Budget. Anrufe werden nicht unterbrochen, Ihre Kunden können weiterhin anrufen. Das Budget können Sie im Bereich Nutzung auf der Telefonseite anpassen.",
+    },
+  },
+  // The prepaid wallet's two mails (schema: orgs.walletAlertLowAt/EmptyAt).
+  // {detail} is the remaining balance. Unlike the budget pair above, these
+  // DO gate calls, so the body says exactly what stops, what finishes, and
+  // that topping up resumes service immediately — an owner must never learn
+  // their line went quiet from a customer.
+  walletLow: {
+    kind: "billing",
+    subject: {
+      tr: "Bakiyeniz azalıyor",
+      en: "Your balance is running low",
+      de: "Ihr Guthaben wird knapp",
+    },
+    body: {
+      tr: "Kalan bakiyeniz {detail}. Bakiye bittiğinde telefon asistanı yeni aramaları yanıtlamayı durdurur. Bakiye sayfasından yükleme yapabilirsiniz.",
+      en: "Your remaining balance is {detail}. When it runs out, the phone agent stops answering new calls. You can top up on the Balance page.",
+      de: "Ihr verbleibendes Guthaben beträgt {detail}. Ist es aufgebraucht, nimmt der Telefonassistent keine neuen Anrufe mehr an. Aufladen können Sie auf der Seite Guthaben.",
+    },
+  },
+  walletEmpty: {
+    kind: "billing",
+    subject: {
+      tr: "Bakiyeniz bitti, telefon asistanı duraklatıldı",
+      en: "Your balance ran out, the phone agent is paused",
+      de: "Ihr Guthaben ist aufgebraucht, der Telefonassistent ist pausiert",
+    },
+    body: {
+      tr: "Bakiyeniz {detail}. Telefon asistanı yeni aramaları yanıtlamıyor; devam eden bir arama varsa normal şekilde tamamlanır. Bakiye sayfasından yükleme yaptığınız anda aramalar kaldığı yerden devam eder.",
+      en: "Your balance is {detail}. The phone agent is not answering new calls; a call already in progress finishes normally. Calls resume the moment you top up on the Balance page.",
+      de: "Ihr Guthaben beträgt {detail}. Der Telefonassistent nimmt keine neuen Anrufe an; ein laufendes Gespräch wird normal beendet. Sobald Sie auf der Seite Guthaben aufladen, werden Anrufe sofort wieder angenommen.",
     },
   },
   failedCalendarCancel: {

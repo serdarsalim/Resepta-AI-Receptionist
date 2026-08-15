@@ -2,7 +2,11 @@ import { httpRouter } from "convex/server";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { auth } from "./auth";
-import { verifyMetaSignature, verifyRetellSignature } from "./lib/metaSig";
+import {
+  verifyMetaSignature,
+  verifyRetellSignature,
+  verifyStripeSignature,
+} from "./lib/metaSig";
 import { handler as mcpHandler } from "./mcp";
 import { handler as voiceMcpHandler } from "./voiceMcp";
 import {
@@ -814,6 +818,59 @@ http.route({
         "cache-control": "no-store, no-cache, must-revalidate, private",
       },
     });
+  }),
+});
+
+// Stripe's side of a wallet top-up (wallet.ts owns the session; this lands
+// the money). Signature-verified against the endpoint secret before the body
+// is trusted, like every other webhook here. Only checkout.session.completed
+// matters; every other event type is acknowledged and dropped, so the Stripe
+// dashboard can send whatever event set it likes. The credit is idempotent
+// on the session id inside creditTopup, so Stripe's retries are welcome —
+// which is also why an unpaid or malformed session returns 200 rather than
+// an error: a response Stripe retries forever should be reserved for "we
+// could not process a real credit", not "this event was not for us".
+http.route({
+  path: "/stripe/webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const rawBody = await request.text();
+    const secret = await ctx.runQuery(internal.wallet.stripeWebhookSecret, {});
+    if (!secret) return new Response("not configured", { status: 503 });
+    const valid = await verifyStripeSignature(
+      secret,
+      rawBody,
+      request.headers.get("stripe-signature"),
+    );
+    if (!valid) return new Response("bad signature", { status: 401 });
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      return new Response("bad json", { status: 400 });
+    }
+    if (String(event.type ?? "") === "checkout.session.completed") {
+      const data = (event.data ?? {}) as Record<string, unknown>;
+      const session = (data.object ?? {}) as Record<string, unknown>;
+      const orgId = String(session.client_reference_id ?? "");
+      const sessionId = String(session.id ?? "");
+      const amountCents = Number(session.amount_total);
+      if (
+        orgId &&
+        sessionId &&
+        String(session.payment_status ?? "") === "paid" &&
+        Number.isFinite(amountCents) &&
+        amountCents > 0
+      ) {
+        await ctx.runMutation(internal.wallet.creditTopup, {
+          orgId: orgId as never,
+          amountMicroUsd: Math.round(amountCents * 10_000),
+          source: "stripe",
+          stripeSessionId: sessionId,
+        });
+      }
+    }
+    return Response.json({ received: true });
   }),
 });
 

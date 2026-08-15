@@ -90,6 +90,7 @@ import type * as voiceEvents from "../voiceEvents.js";
 import type * as voiceMcp from "../voiceMcp.js";
 import type * as voiceProvisioning from "../voiceProvisioning.js";
 import type * as wa from "../wa.js";
+import type * as wallet from "../wallet.js";
 import type * as webhook from "../webhook.js";
 
 import type {
@@ -181,6 +182,7 @@ declare const fullApi: ApiFromModules<{
   voiceMcp: typeof voiceMcp;
   voiceProvisioning: typeof voiceProvisioning;
   wa: typeof wa;
+  wallet: typeof wallet;
   webhook: typeof webhook;
 }>;
 
