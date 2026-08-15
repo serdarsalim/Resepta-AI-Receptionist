@@ -57,6 +57,13 @@ export const PLATFORM_KEYS = {
   // exists only for exceptions (a market that needs its own price). Table-only:
   // pricing is an operator decision, not a deploy artifact.
   voiceRateMicroUsdPerMinute: null,
+  // The platform's Stripe account for prepaid wallet top-ups — the Resend
+  // case again: one deployment-wide account BY INTENT, because the platform
+  // sells the credit and Stripe pays the platform, whichever org the money
+  // lands on. Secret key creates Checkout sessions (wallet.createTopupSession);
+  // the webhook secret verifies checkout.session.completed (/stripe/webhook).
+  stripeSecretKey: "STRIPE_SECRET_KEY",
+  stripeWebhookSecret: "STRIPE_WEBHOOK_SECRET",
 } as const;
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;

@@ -411,6 +411,31 @@ export default defineSchema({
     // hanging up on them mid-month is worse than any bill. Suspension stays
     // the operator's lever for the org that will not pay.
     voiceMonthlyBudgetMicroUsd: v.optional(v.number()),
+    // How this org settles the meter. Unset = "invoice": the meter counts,
+    // the bill is settled outside the product and nothing enforces — every
+    // org predating the wallet. "prepaid" is the self-serve model: a wallet
+    // balance topped up in-app through Stripe, drawn down by every metered
+    // charge, and a balance at or below zero declines NEW inbound calls at
+    // ring time (retell.beforeCallContext). An in-flight call always
+    // finishes; the overdraft that allows is bounded by one call and is the
+    // price of never hanging up on the salon's own customer. Operator-set
+    // from /admin.
+    billingMode: v.optional(v.union(v.literal("invoice"), v.literal("prepaid"))),
+    // The prepaid wallet, micro-USD like every meter field, and deliberately
+    // lane-agnostic: voice draws it down today, and any future metered lane
+    // draws the same number rather than growing a wallet of its own.
+    // Credited only by wallet.creditTopup (Stripe webhook, operator
+    // adjustment); debited only inside retell.meterCall, in the same
+    // mutation that stamps the call — the usageMonthly rule applied to
+    // money out. May sit slightly negative: a call's length is known only
+    // after it ends.
+    walletBalanceMicroUsd: v.optional(v.number()),
+    // Low/empty alert stamps, re-armed by a top-up rather than by the
+    // calendar: running low is a fact about the balance, not the month.
+    // (usageMonthly's voiceBudgetAlert* stamps re-arm monthly because a
+    // budget is monthly; these clear when money arrives.)
+    walletAlertLowAt: v.optional(v.number()),
+    walletAlertEmptyAt: v.optional(v.number()),
     // The showroom. An org with this set never reaches a provider: sends are
     // simulated, replies are invented, and a nightly cron wipes it back to a
     // fixed dataset (convex/demo.ts).
@@ -1554,6 +1579,26 @@ export default defineSchema({
   })
     .index("by_org_at", ["orgId", "at"])
     .index("by_customer_at", ["customerId", "at"]),
+
+  // Money INTO a prepaid org's wallet (orgs.walletBalanceMicroUsd — money
+  // out is the meter's own stamp on each call, so it needs no rows here).
+  // One row per credit: "stripe" rows are written by the checkout webhook,
+  // idempotent on stripeSessionId, because Stripe retries webhooks and a
+  // paid session must credit exactly once; "manual" rows are operator
+  // corrections and goodwill from /admin and may be negative. The balance
+  // on orgs is bumped in the same mutation that inserts the row, so the
+  // wallet and its trail cannot disagree.
+  walletTopups: defineTable({
+    orgId: v.id("orgs"),
+    amountMicroUsd: v.number(),
+    source: v.union(v.literal("stripe"), v.literal("manual")),
+    stripeSessionId: v.optional(v.string()),
+    at: v.number(),
+    // The operator who keyed a manual row; stripe rows carry none.
+    by: v.optional(v.id("users")),
+  })
+    .index("by_org_at", ["orgId", "at"])
+    .index("by_stripe_session", ["stripeSessionId"]),
 
   // Per-org, per-month cost rollup — the admin panel's "what does this org
   // cost" read, one document instead of a scan over turns. Incremented in the
