@@ -368,6 +368,59 @@ rather than after what it does.
   speaks about a real customer, and a field that person never answered is
   honestly blank for them.
 
+## Goods (2026-08-15) — services without a duration
+
+Resepta sells two kinds of thing now: SERVICES (time — a haircut, blocks the
+calendar) and GOODS (things — a chocolate cake, a delivery). A good is a
+`services` row with **no `durationMinutes`**; the writers floor a real
+duration at 5, so the catalog is unambiguous. The model follows Square (one
+catalog, two kinds), Shopify (due-time as an attribute on the order, not a
+calendar entity) and bakery order-ahead systems (lead time as the only
+capacity control worth having).
+
+The invariants, and where they live:
+
+- **On the appointment the sentinel is an explicit `durationMinutes: 0`,
+  never unset.** Legacy rows use unset to mean "assume 30", and 0 flows
+  through every `?? 30` fallback untouched (`0 ?? 30 === 0`). If you write a
+  goods booking, write the zero.
+- **A goods order occupies nobody, in both directions.** `overlapCount`
+  (booking.ts), `customerConflict` (lib/overlap.ts), voiceBook's guards and
+  `bookedBetween` (retell.ts) all skip explicit-0 rows AND zero-length
+  candidates. Ten cakes at Saturday 15:00 is fine; a cake never blocks a
+  haircut, a haircut never blocks a cake. Guard checks use `!== 0`, not
+  falsy — unset must keep meaning "legacy, assume 30".
+- **Quantity rides the line, price stays per unit.** `items[].quantity`
+  (unset = 1), goods only — "two haircuts" is two visits. `itemsTotal`/
+  `lineWorth` (appointments.ts), the revenue report and the WhatsApp
+  receipt tokens all multiply; if you sum prices anywhere new, multiply.
+- **The voice/chat agents order multiples by REPEATING the name** in the
+  `services` array — matchServices accumulates repeats of a good into
+  quantity and still dedupes repeated time-bound services. That is why the
+  tool schema never changed and deployed agents kept working (template
+  bumps: voice v9, chat v3).
+- **Goods never touch cal.com.** No zero-length representation exists there,
+  and an externalUid makes voiceBook skip its own guards. http.ts and
+  chatAgent.ts ask `retell.classifyServices` first; schedule.create skips
+  cal.com when the prepared duration is 0.
+- **Lead time (`services.leadMinutes`) is the goods capacity control**,
+  enforced on customer-facing paths only (booking page, voice, chat,
+  self-serve reschedule) — the owner's own calendar may always take a rush
+  job. The voiceBook refusal is a sentence naming the remedy; the booking
+  page gets reason `"lead-time"`, not a lying `"slot-taken"`.
+- **On the grid a goods order is a dashed 20px pin**: moves, never resizes
+  (`dragResult` preserves a moved zero-length row). The lane packer lends
+  pins 15 visual minutes (`laneMinutes`) so simultaneous orders sit side by
+  side — display only, the booking math never sees it.
+- **UI conversion is one-way inline**: clearing a duration in the price list
+  makes a good (its duration cell becomes the lead column, entered in days);
+  there is deliberately no inline path back to time-bound — recreate the row.
+
+Rejected for v1, on purpose: inventory/stock tracking, per-slot order caps,
+cutoff times (Square Online has them because web checkout is unattended; the
+agent can just be told hours). If demand appears, the bakery-shaped next
+step is `max_per_day` per good, not slot windows.
+
 ## The mobile pass (2026-08-15) — phone rules that now hold everywhere
 
 A full pass over the app below `sm`, measured against Nudge at identical
