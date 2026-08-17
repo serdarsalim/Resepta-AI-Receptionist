@@ -104,7 +104,13 @@ function ToolbarButton({
         e.preventDefault();
         onClick();
       }}
-      className={`group relative min-w-6 rounded px-1.5 py-0.5 text-xs leading-5 ${
+      // NAMED group, not a bare one. A bare `group-hover:` matches ANY ancestor
+      // carrying the class, so the moment this toolbar was dropped inside
+      // something that had one — the note bubble, whose row is a group so its
+      // delete button can appear on hover — every tooltip in the row lit up at
+      // once and stacked on top of each other. A named group only answers to
+      // its own name, which makes this component safe wherever it is mounted.
+      className={`group/tip relative min-w-6 rounded px-1.5 py-0.5 text-xs leading-5 ${
         active
           ? "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] text-[var(--accent)]"
           : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -112,7 +118,7 @@ function ToolbarButton({
     >
       {children}
       {/* Instant tooltip — native title waits ~1s, too slow to learn icons by. */}
-      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-[var(--foreground)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--background)] group-hover:block">
+      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-[var(--foreground)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--background)] group-hover/tip:block">
         {title}
       </span>
     </button>

@@ -2707,6 +2707,20 @@ const dictionary = {
   "contact.send": { tr: "Gönder", en: "Send", de: "Senden" },
   // The explanation. It reads as a line above the composer, not inside it —
   // see contact.sessionClosedShort.
+  // The WhatsApp tab shows on every org now, so the composer has to answer for
+  // one with no number connected. Names the fix and where it lives — "not
+  // configured" tells somebody a fact about the software; this tells them what
+  // to go and do.
+  "contact.waNotConnected": {
+    tr: "WhatsApp numarası bağlı değil. Bağlamak için İşletme sekmesine gidin.",
+    en: "No WhatsApp number connected. Connect one in the Business tab.",
+    de: "Keine WhatsApp-Nummer verbunden. Im Tab \u201eBetrieb\u201c verbinden.",
+  },
+  "contact.waNotConnectedShort": {
+    tr: "WhatsApp bağlı değil",
+    en: "WhatsApp not connected",
+    de: "WhatsApp nicht verbunden",
+  },
   "contact.sessionClosed": {
     tr: "24 saatlik pencere kapalı. Müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
     en: "The 24h window is closed. Only template messages until the customer writes.",

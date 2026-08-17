@@ -319,6 +319,22 @@ export function ConversationPanel({
 
   const windowOpen =
     !!lastInboundAt && Date.now() - lastInboundAt < SESSION_WINDOW_MS;
+  // A number to send FROM. The WhatsApp tab shows for every org now
+  // (FeedFilterPills), so this pane has to answer for an org that has not
+  // connected one — it used to be unreachable except through All, where it
+  // quietly offered a Send that came back "wa-not-configured".
+  //
+  // Optimistic while the query is in flight. The alternative is claiming the
+  // number is missing before we know, and a false sentence that corrects itself
+  // is worse than a control that is briefly live.
+  const waReady =
+    settings === undefined ||
+    settings.whatsapp.connected ||
+    settings.evolutionEnabled;
+  // Two different reasons the composer can be dead, and the line above it says
+  // which. Not connected outranks the window: there is no point telling
+  // somebody to wait for a reply on a channel they cannot send on at all.
+  const composerLive = waReady && windowOpen;
   // This composer is WhatsApp's, and only WhatsApp's: it sends into Meta's
   // 24h session window, which no other channel has. Email receives now but
   // still has no composer of its own (next), and a call isn't something you
@@ -609,14 +625,20 @@ export function ConversationPanel({
         // because each carries a byline above it and the two would otherwise
         // sit closer to the note above than to their own.
         className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
-          // Only the chat wears the tinted plane. The feed view renders calls
+          // Only the chat wears a plane of its own. The feed view renders calls
           // and email rows with their own edges, which want the card's white
           // under them.
-          chatOrder
-            ? "space-y-2 bg-[var(--thread-bg)]"
-            : filter === "note"
-              ? "space-y-3"
-              : ""
+          //
+          // WhatsApp gets the WALLPAPER and an open email thread gets the flat
+          // tint. Mail is not a chat: no client wallpapers it, and giving it
+          // one would say the two channels are the same thing.
+          filter === "whatsapp"
+            ? "chat-wallpaper space-y-2"
+            : chatOrder
+              ? "space-y-2 bg-[var(--thread-bg)]"
+              : filter === "note"
+                ? "space-y-3"
+                : ""
         }`}
       >
         {feed === undefined && (
@@ -990,7 +1012,11 @@ export function ConversationPanel({
            no message can express. */
         <div
           className={`flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)] ${
-            chatOrder ? "bg-[var(--thread-bg)]" : ""
+            filter === "whatsapp"
+              ? "chat-wallpaper"
+              : chatOrder
+                ? "bg-[var(--thread-bg)]"
+                : ""
           }`}
         >
           <span>
@@ -1018,7 +1044,13 @@ export function ConversationPanel({
             // conversation ended — the composer is part of the chat surface,
             // not a footer under it. The feed view keeps card-white, because
             // its thread does too.
-            className={`p-3 ${chatOrder ? "bg-[var(--thread-bg)]" : ""}`}
+            className={`p-3 ${
+              filter === "whatsapp"
+                ? "chat-wallpaper"
+                : chatOrder
+                  ? "bg-[var(--thread-bg)]"
+                  : ""
+            }`}
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
@@ -1055,9 +1087,9 @@ export function ConversationPanel({
                 off at "until the" and put a scrollbar on a disabled box — a
                 scrollbar for text the reader is not allowed to scroll. Out
                 here it just wraps. */}
-            {!windowOpen && (
+            {!composerLive && (
               <p className="px-3 pb-1.5 text-xs text-[var(--muted)]">
-                {t("contact.sessionClosed")}
+                {waReady ? t("contact.sessionClosed") : t("contact.waNotConnected")}
               </p>
             )}
             {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and
@@ -1066,8 +1098,15 @@ export function ConversationPanel({
                 talk, not as a form with a submit button. */}
             <div
               className={`flex items-end gap-1 rounded-3xl p-1.5 ${
-                chatOrder ? "bg-[var(--card)]" : "bg-[var(--muted-bg)]"
-              } ${windowOpen ? "" : "opacity-60"}`}
+                // On the wallpaper the field is --chat-field, which is white on
+                // light paper and a LIFTED grey on dark. --card would be the
+                // dark paper itself, and the pill would vanish into it.
+                filter === "whatsapp"
+                  ? "bg-[var(--chat-field)]"
+                  : chatOrder
+                    ? "bg-[var(--card)]"
+                    : "bg-[var(--muted-bg)]"
+              } ${composerLive ? "" : "opacity-60"}`}
             >
             <textarea
               ref={composerRef}
@@ -1083,11 +1122,13 @@ export function ConversationPanel({
               }}
               rows={1}
               placeholder={
-                windowOpen
+                composerLive
                   ? t("contact.typeMessage")
-                  : t("contact.sessionClosedShort")
+                  : waReady
+                    ? t("contact.sessionClosedShort")
+                    : t("contact.waNotConnectedShort")
               }
-              disabled={!windowOpen || sending}
+              disabled={!composerLive || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
             />
             {/* Inside the same pill as the clock: both are secondary actions
@@ -1098,7 +1139,7 @@ export function ConversationPanel({
               onClick={() => setAttaching((prev) => !prev)}
               aria-label={t("media.attach")}
               aria-pressed={attaching}
-              disabled={!windowOpen || sending}
+              disabled={!composerLive || sending}
               className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
                 attaching || attached
                   ? "text-[var(--accent)]"
@@ -1116,7 +1157,7 @@ export function ConversationPanel({
               onClick={() => setScheduling((prev) => !prev)}
               aria-label={t("message.scheduleAt")}
               aria-pressed={scheduling}
-              disabled={!windowOpen || sending}
+              disabled={!composerLive || sending}
               className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
                 scheduling || scheduleAt
                   ? "text-[var(--accent)]"
@@ -1130,7 +1171,7 @@ export function ConversationPanel({
             </button>
             <button
               type="submit"
-              disabled={!windowOpen || sending || (!draft.trim() && !attached)}
+              disabled={!composerLive || sending || (!draft.trim() && !attached)}
               className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {t("contact.send")}
@@ -1458,7 +1499,9 @@ function NoteEntry({
   };
 
   return (
-    <li className="group list-none">
+    // Named, for the same reason the toolbar's tooltip group is: this row wraps
+    // a rich editor while editing, and a bare `group` here reaches into it.
+    <li className="group/note list-none">
       {confirmDialog}
       <div className="flex min-w-0 max-w-[85%] flex-col items-start gap-1">
         {/* Who put it there and when, above the bubble rather than inside it:
@@ -1479,7 +1522,7 @@ function NoteEntry({
             type="button"
             onClick={askRemove}
             aria-label={t("common.delete")}
-            className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-red-400"
+            className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus-visible:opacity-100 group-hover/note:opacity-100 dark:hover:text-red-400"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M3 6h18" />

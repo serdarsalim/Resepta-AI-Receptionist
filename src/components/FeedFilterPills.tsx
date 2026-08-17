@@ -43,19 +43,19 @@ export function FeedFilterPills({
   // The same query the panel runs, so Convex serves both from one subscription
   // rather than a counts callback threaded back up through the parent.
   const feed = useQuery(api.messages.feedForCustomer, { customerId });
-  const settings = useQuery(api.orgs.current, {});
-  // A business that never connected WhatsApp has no WhatsApp history and no
-  // way to make any, so the pill is a permanently empty tab advertising a
-  // channel it does not have. The rule editor already tells these businesses
-  // their channel is Email; this keeps the feed saying the same thing.
+  // WhatsApp shows whether or not a number is connected (Serdar, 2026-08-17).
   //
-  // Hidden rather than dimmed while the query is in flight: most businesses
-  // here have no WhatsApp, so hiding is the answer that usually turns out
-  // right, and a pill that appears and then vanishes reads as a glitch.
-  // Anything already on the record still shows under All.
-  const waConnected = Boolean(
-    settings && (settings.whatsapp.connected || settings.evolutionEnabled),
-  );
+  // It used to hide until connected, on the grounds that an org with no number
+  // has no WhatsApp history and no way to make any — a permanently empty tab
+  // advertising a channel it does not have. That reasoning contradicted the one
+  // two paragraphs down, which is the right one: an empty Call or Email tab
+  // means "we haven't yet", and the tab is a STANDING OFFER. WhatsApp is a
+  // standing offer too — connecting a number is a thing the owner can go and
+  // do, and a channel hidden until it works is a channel nobody discovers.
+  //
+  // The tab is not a dead end either. Its composer says the number is missing
+  // instead of offering a Send that fails (ConversationPanel), which is what
+  // hiding the pill was really protecting against.
   const countOf = (tab: FeedFilter) =>
     tab === "all"
       ? (feed?.length ?? 0)
@@ -75,10 +75,7 @@ export function FeedFilterPills({
   // Kept while it is the open tab, or the pills would renumber under someone
   // who is looking at them.
   const hasForm = countOf("form") > 0 || value === "form";
-  const tabs = TABS.filter(
-    (tab) =>
-      (tab !== "whatsapp" || waConnected) && (tab !== "form" || hasForm),
-  );
+  const tabs = TABS.filter((tab) => tab !== "form" || hasForm);
 
   const pill = (tab: FeedFilter) => {
     const count = countOf(tab);

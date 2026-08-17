@@ -6,11 +6,17 @@
 
 export type Channel = "whatsapp" | "email" | "call";
 
-// Ordered by how a salon actually reaches people: the phone rings first, mail
-// is the one every business has, and WhatsApp is the one many never connect.
+// Ordered by how a salon actually reaches people: the phone rings first, then
+// WhatsApp, then mail. WhatsApp sat last on the grounds that many orgs never
+// connect it — but that was the same reasoning that used to hide its pill
+// entirely, and it is backwards. This is Turkey: WhatsApp is how a salon and a
+// customer talk, and email is the formal channel you fall back to. Ordering it
+// by how often it is CONFIGURED rather than how much it MATTERS put the main
+// conversation last (Serdar, 2026-08-17).
+//
 // This array is the single source of channel order — the filter pills and the
-// inbox row's "reachable on" strip both read it.
-export const CHANNELS: readonly Channel[] = ["call", "email", "whatsapp"];
+// inbox row's "reachable on" strip both read it, so they can never disagree.
+export const CHANNELS: readonly Channel[] = ["call", "whatsapp", "email"];
 
 // A note is a row in the feed but not a way to reach anybody, so it gets a
 // glyph without joining CHANNELS — which drives the inbox row's "reachable on"

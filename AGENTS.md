@@ -665,6 +665,51 @@ deals; we sell services, and an appointment is the thing a customer bought.
   neighbours, so picking one moved them sideways. All keeps its word: it has no
   mark to be. Names live on `title` + `aria-label`.
 
+### The WhatsApp tab, its order, and its wallpaper (2026-08-17)
+
+- **The WhatsApp pill shows whether or not a number is connected.** It used to
+  hide until connected — an org with no number has no history and no way to make
+  any — but that contradicted the rule right beside it: an empty Call or Email
+  tab means "we haven't yet", and the tab is a STANDING OFFER. Connecting a
+  number is a thing the owner can go and do, and a channel hidden until it works
+  is a channel nobody discovers.
+- **So the composer has to answer for an unconnected org.** `waReady` (a
+  connected Cloud number OR the Evolution lane) kills the composer and puts
+  `contact.waNotConnected` above it — which NAMES the fix and where it lives
+  rather than saying "not configured". Optimistic while the settings query is in
+  flight: a false sentence that corrects itself is worse than a control that is
+  briefly live. Not connected outranks the 24h window in that line — there is no
+  point telling somebody to wait for a reply on a channel they cannot send on.
+  - This was a real hole before the pill changed: the tab was unreachable except
+    through All, where it quietly offered a Send that came back
+    `wa-not-configured`.
+- **Channel order is `call · whatsapp · email`** (`FeedIcon.CHANNELS`, the single
+  source both the pills and the inbox's "reachable on" strip read). WhatsApp sat
+  last on the grounds that many orgs never connect it — the same backwards
+  reasoning that hid the pill. This is Turkey: WhatsApp is how a salon and a
+  customer talk, and email is the formal fallback.
+- **The WhatsApp thread wears a wallpaper** (`.chat-wallpaper`, ported from
+  Nudge). Light: `--chat-paper` #f2eee7 under a veil of its OWN colour (a layer,
+  never `opacity` — that would fade the messages sitting on it) and the tile at
+  380px, small enough to be texture rather than drawings. Dark drops the pattern
+  entirely and goes near-black paper with LIFTED bubbles; a dark tile was tried
+  in Nudge and read as busy at every gain that was visible at all.
+  - The composer's field is `--chat-field`, not `--card`: on dark, `--card` IS
+    the bubbles and the paper, so a `--card` pill vanished into it.
+  - **An open email thread keeps the flat `--thread-bg`.** Mail is not a chat,
+    no client wallpapers it, and giving it one would say the two channels are
+    the same thing.
+
+### A shared component must never rely on a BARE Tailwind `group`
+
+`group-hover:` matches ANY ancestor carrying the class, not the nearest one. The
+editor toolbar's tooltips used a bare `group`, and the moment that toolbar was
+mounted inside the note bubble — whose row is a `group` so its delete button can
+appear on hover — hovering anywhere in the note lit every tooltip at once and
+stacked them on top of each other. Named groups (`group/tip`, `group/note`) only
+answer to their own name. Use one in any component that can be mounted inside
+something else, which is all of them.
+
 ## Business is one page (2026-08-12, later the same day)
 
 Supersedes the chip-strip parts of the section above. Sidebar: Customers ·

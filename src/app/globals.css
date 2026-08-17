@@ -366,6 +366,58 @@ thead {
    carries inline colours that assume a mail client's white background — a
    newsletter written as black-on-white turns black-on-black the moment the
    salon switches to dark mode, and the message reads as blank. */
+/* WhatsApp's wallpaper, ported from Nudge (2026-08-17, where it landed the same
+   day). Only the WhatsApp thread wears it. An open email thread keeps the flat
+   --thread-bg: mail is not a chat, it does not come with a wallpaper in any
+   client, and giving it one would say the two channels are the same thing.
+
+   --chat-paper is the tile's OWN ground colour. It paints the strip below a
+   short thread before the image loads, and covers the sub-pixel row a
+   fractional tile can leave at the bottom. */
+:root {
+  --chat-paper: #f2eee7;
+  /* The composer's field, which has to sit ON the paper and read as a field in
+     both themes. It cannot be --card (that IS the dark paper) and it cannot be
+     --muted-bg (identical to --card in dark). */
+  --chat-field: #ffffff;
+}
+.chat-wallpaper {
+  background-color: var(--chat-paper);
+  /* The veil is how the pattern is dialled back, and it is a LAYER, not
+     opacity: `opacity` on this element would fade the messages sitting on it.
+     Tinted with the paper's own colour rather than white, so it fades the
+     DOODLES toward the ground without shifting the ground itself — a white
+     veil would wash the paper out, and the paper is the part that should stay. */
+  background-image: linear-gradient(
+      rgba(242, 238, 231, 0.4),
+      rgba(242, 238, 231, 0.4)
+    ),
+    url("/chat-bg.webp");
+  background-repeat: repeat;
+  /* Tile width, not natural size: at its natural 887px the doodles read as
+     drawings and compete with the bubbles. Small enough to be texture. */
+  background-size: 380px auto;
+}
+/* Dark drops the pattern entirely — Serdar's call in Nudge, after seeing it
+   both ways. Not a porting problem: a dark tile derived from the same source
+   read as busy at every gain that was visible at all. The texture's job is to
+   make the thread feel like a different SURFACE from the tables, and on dark
+   the card already does that on its own.
+
+   Keep this rule rather than scoping the light one: it is what documents the
+   decision, and --chat-paper is what the composer's field reads to sit on the
+   right ground in both themes. */
+.dark .chat-wallpaper {
+  /* Near-black paper with LIFTED bubbles on it — WhatsApp's own dark
+     treatment. Not --card: the bubbles and the composer field are --card too,
+     so a --card paper made both invisible, which is precisely what dropping
+     the pattern exposed. A chat needs two levels whether or not it has a
+     wallpaper; light gets them from paper-vs-white, dark gets them from here. */
+  --chat-paper: #0f0f0f;
+  --chat-field: #242424;
+  background-image: none;
+}
+
 .email-paper {
   background: #fff;
   color: #111;
