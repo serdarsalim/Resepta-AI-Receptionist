@@ -9,9 +9,12 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import type { TranslationKey } from "@/lib/i18n";
 import {
+  addLocalDays,
   formatDayHeading,
   formatTime,
   localeFor,
+  startOfLocalDay,
+  startOfLocalWeek,
 } from "@/lib/datetime";
 import {
   DEFAULT_DURATION,
@@ -726,11 +729,9 @@ const BLOCK_STYLE: Record<string, string> = {
   no_show: "bg-red-500/10 text-red-700 dark:text-red-400",
 };
 
-function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
+// Body in lib/datetime, alongside addLocalDays — the two have to agree about
+// what a day is, and they were in different files.
+const startOfDay = startOfLocalDay;
 
 // The view picker. A dropdown rather than five segments, because five segments
 // is a row of buttons four of which are wrong, and the set will keep growing.
@@ -837,10 +838,8 @@ function ViewMenu({
   );
 }
 
-function startOfWeek(ms: number): number {
-  const d = new Date(startOfDay(ms));
-  return d.getTime() - ((d.getDay() + 6) % 7) * DAY_MS; // Monday-start
-}
+// Body in lib/datetime — this was the third copy.
+const startOfWeek = startOfLocalWeek;
 
 function minutesInto(ms: number): number {
   const d = new Date(ms);
@@ -1030,13 +1029,18 @@ function Calendar({
     () =>
       view === "day"
         ? [startOfDay(anchor)]
-        : [...Array(7)].map((_, i) => startOfWeek(anchor) + i * DAY_MS),
+        : [...Array(7)].map((_, i) => addLocalDays(startOfWeek(anchor), i)),
     [view, anchor],
   );
 
   const visible = useMemo(() => {
     const from = days[0];
-    const to = days[days.length - 1] + DAY_MS;
+    // The next local midnight, not +86,400,000ms. On the fall-back week that
+    // fixed step landed at 23:00 Sunday, so a booking at 23:30 was excluded
+    // here AND fell before the next week's `from` — invisible in week view on
+    // both pages, and in day view on both days. On the spring-forward week it
+    // over-reached to 01:00 Monday and drew a Monday booking in Sunday's column.
+    const to = addLocalDays(days[days.length - 1], 1);
     return appointments.filter(
       (a) => a.startAt >= from && a.startAt < to && a.status !== "cancelled",
     );
@@ -1054,11 +1058,15 @@ function Calendar({
       return days.map((day) => ({
         key: String(day),
         day,
-        rows: visible.filter((a) => a.startAt >= day && a.startAt < day + DAY_MS),
+        rows: visible.filter(
+          (a) => a.startAt >= day && a.startAt < addLocalDays(day, 1),
+        ),
       }));
     }
     const day = days[0];
-    const rows = visible.filter((a) => a.startAt >= day && a.startAt < day + DAY_MS);
+    const rows = visible.filter(
+          (a) => a.startAt >= day && a.startAt < addLocalDays(day, 1),
+        );
     // Grouped by staff id, not by the printed name: two people can share a
     // first name, and the old string grouping made one column out of both — and
     // two columns out of one person whose name had a trailing space.

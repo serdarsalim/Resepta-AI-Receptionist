@@ -2,7 +2,13 @@
 
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { formatTime, weekdayNames } from "@/lib/datetime";
+import {
+  addLocalDays,
+  formatTime,
+  startOfLocalDay,
+  startOfLocalWeek,
+  weekdayNames,
+} from "@/lib/datetime";
 import type { Rect } from "@/lib/anchoredSheet";
 
 // The month, as a month reads: whether days are full, not what happens at
@@ -26,21 +32,16 @@ export type MonthRow = {
 // through the year makes every row jump under the cursor, and the one thing
 // you do in month view is page through the year.
 const WEEKS = 6;
-const DAY_MS = 86_400_000;
 
 // Past this a cell is a list nobody reads, and the day view is right there.
 const MAX_PER_DAY = 3;
 
-function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function startOfWeek(ms: number): number {
-  const d = new Date(startOfDay(ms));
-  return d.getTime() - ((d.getDay() + 6) % 7) * DAY_MS; // Monday-start
-}
+// Re-exported under the local names the rest of this file already uses, rather
+// than renaming forty call sites. The bodies moved to lib/datetime because they
+// were retyped in three components and one of the copies had to be right about
+// DST for the others to be — see addLocalDays there.
+const startOfDay = startOfLocalDay;
+const startOfWeek = startOfLocalWeek;
 
 export function startOfMonth(ms: number): number {
   const d = new Date(ms);
@@ -83,7 +84,13 @@ export function MonthGrid({
 
   const days = useMemo(() => {
     const first = startOfWeek(startOfMonth(anchor));
-    return Array.from({ length: WEEKS * 7 }, (_, i) => first + i * DAY_MS);
+    // addLocalDays, not first + i * DAY_MS. A local day is 23 or 25 hours long
+    // twice a year, so the fixed step drifted an hour partway through the grid
+    // — and since byDay is keyed on exact local midnights, every cell past the
+    // transition missed its bookings entirely. The last two weeks of October
+    // rendered as empty, the date labels repeated a number, and isToday could
+    // never match.
+    return Array.from({ length: WEEKS * 7 }, (_, i) => addLocalDays(first, i));
   }, [anchor]);
 
   // Bookings bucketed by day, each bucket in time order. Built once per render

@@ -2,7 +2,13 @@
 
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { localeFor, weekdayNames } from "@/lib/datetime";
+import {
+  addLocalDays,
+  localeFor,
+  startOfLocalDay,
+  startOfLocalWeek,
+  weekdayNames,
+} from "@/lib/datetime";
 
 // Twelve months at once. Not a view you read appointments in — a view you
 // NAVIGATE with, and secondarily one you read shape from: which months are
@@ -12,18 +18,10 @@ import { localeFor, weekdayNames } from "@/lib/datetime";
 // a name, and four characters of a name is worse than nothing because it looks
 // like information.
 
-const DAY_MS = 86_400_000;
-
-function startOfDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function startOfWeek(ms: number): number {
-  const d = new Date(startOfDay(ms));
-  return d.getTime() - ((d.getDay() + 6) % 7) * DAY_MS; // Monday-start
-}
+// Bodies live in lib/datetime now — they were retyped here, in MonthGrid and in
+// AppointmentsView, and DST arithmetic is not a thing to get right three times.
+const startOfDay = startOfLocalDay;
+const startOfWeek = startOfLocalWeek;
 
 export function startOfYear(ms: number): number {
   const d = new Date(ms);
@@ -82,7 +80,11 @@ export function YearGrid({
         return {
           month,
           first,
-          days: Array.from({ length: 42 }, (_, i) => from + i * DAY_MS),
+          // addLocalDays, not from + i * DAY_MS: bookedDays is a Set of exact
+          // local midnights, so the fixed step made has() false for every cell
+          // after a DST transition — 30–31 March and 26–31 October showed no
+          // booked dot no matter how many appointments those days held.
+          days: Array.from({ length: 42 }, (_, i) => addLocalDays(from, i)),
         };
       }),
     [year],

@@ -143,6 +143,53 @@ export function weekdayNames(language: Language): string[] {
 }
 
 // Minutes-from-midnight <-> the "HH:MM" that <input type="time"> speaks.
+// ── Calendar-day arithmetic ─────────────────────────────────────────────────
+//
+// Stepping a day is NOT adding 86,400,000ms, and the calendar grids all learned
+// that the hard way. Twice a year a local day is 23 or 25 hours long, so a grid
+// built by adding a fixed day drifts an hour after the transition — and because
+// bookings are bucketed by exact local-midnight keys, every cell past that point
+// missed. The last two weeks of October rendered as having no appointments at
+// all, with the date labels repeating a number and the today pill vanishing.
+//
+// Date's setters work in wall-clock time and the platform owns the DST table, so
+// setDate does the right thing on its own. Nothing here needs a timezone
+// argument: these are the BROWSER's local days, which is what a calendar the
+// user is looking at is drawn in.
+export function startOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function addLocalDays(ms: number, days: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  return d.getTime();
+}
+
+// Monday-start, because the week grid is. Kept next to its siblings so the
+// convention lives in one place rather than in three component files.
+export function startOfLocalWeek(ms: number): number {
+  const d = new Date(startOfLocalDay(ms));
+  return addLocalDays(d.getTime(), -((d.getDay() + 6) % 7));
+}
+
+// The instant at `minutes` past local midnight on the day `dayMs` falls in.
+//
+// setMinutes normalises into hours in wall-clock terms, which is exactly the
+// question a calendar asks: "what instant is 10:00 on this day". Adding
+// minutes * 60_000 to midnight asks a different one — "what instant is 600
+// real minutes after midnight" — and on a spring-forward day those differ by
+// an hour, so a block dropped on the 10:00 row was written at 11:00.
+export function atLocalMinutes(dayMs: number, minutes: number): number {
+  const d = new Date(dayMs);
+  d.setHours(0, 0, 0, 0);
+  d.setMinutes(minutes);
+  return d.getTime();
+}
+
 export function minutesToTimeValue(minutes: number): string {
   const clamped = Math.min(24 * 60 - 1, Math.max(0, Math.round(minutes)));
   const pad = (n: number) => String(n).padStart(2, "0");

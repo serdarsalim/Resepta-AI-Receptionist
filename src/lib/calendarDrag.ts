@@ -5,6 +5,8 @@
 
 // A salon books in quarter hours, and finer snapping only demands a steadier
 // hand than a counter phone allows.
+import { atLocalMinutes } from "./datetime";
+
 export const SNAP_MINUTES = 15;
 
 // How long a booking is when nobody has said: what a new one opens at, and what
@@ -105,5 +107,13 @@ export function dragResult(
           // snap floor is for edges being drawn, and a move draws none.
           0
         : Math.max(SNAP_MINUTES, raw);
-  return { startAt: dayMs + drag.startMinute * 60_000, durationMinutes };
+  // atLocalMinutes, not dayMs + minutes * 60_000. The two differ by an hour on
+  // a DST transition day, and this value is WRITTEN: a block dropped on the
+  // 10:00 row of 29 March was stored at 11:00, and the optimistic entry carried
+  // the wrong time too, so it rendered an hour off before the server even
+  // answered. Fall-back Sunday stored 09:00 for the same drop.
+  return {
+    startAt: atLocalMinutes(dayMs, drag.startMinute),
+    durationMinutes,
+  };
 }
