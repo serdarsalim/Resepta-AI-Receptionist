@@ -1525,31 +1525,33 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
                 <td className="py-2 pr-3 text-xs">{t(field.typeKey)}</td>
                 <td className="py-2 pr-3 text-xs">
                   {field.voice ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void setIdentityLock({
-                          key: field.key,
-                          locked: !(identityLocks ?? []).includes(field.key),
-                        })
-                      }
-                      title={t(
-                        (identityLocks ?? []).includes(field.key)
-                          ? "fields.unlockHint"
-                          : "fields.lockHint",
-                      )}
-                      className={
-                        (identityLocks ?? []).includes(field.key)
-                          ? "rounded px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                          : "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-100"
-                      }
-                    >
-                      {t(
-                        (identityLocks ?? []).includes(field.key)
-                          ? "fields.source.manual"
-                          : "fields.source.voice",
-                      )}
-                    </button>
+                    // Read once. It was recomputed four times inline, and the
+                    // title branch was keyed the wrong way round against the
+                    // other three: a locked field read "Locked", in muted
+                    // styling, with the tooltip "The voice agent can write this
+                    // field. Click to lock it." — contradicting its own label,
+                    // its own colour, and what the click actually did. The
+                    // org-field chip 150 lines above keys all three on `voice`,
+                    // the inverse, and agrees with itself; this copy did not.
+                    (() => {
+                      const locked = (identityLocks ?? []).includes(field.key);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void setIdentityLock({ key: field.key, locked: !locked })
+                          }
+                          title={t(locked ? "fields.lockHint" : "fields.unlockHint")}
+                          className={
+                            locked
+                              ? "rounded px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                              : "rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-100"
+                          }
+                        >
+                          {t(locked ? "fields.source.manual" : "fields.source.voice")}
+                        </button>
+                      );
+                    })()
                   ) : (
                     <span title={t("fields.phoneLockedHint")}>
                       {t("fields.source.manual")}

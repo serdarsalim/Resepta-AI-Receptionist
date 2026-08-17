@@ -736,7 +736,16 @@ function RuleEditor({
       custom[field.key] = picked.custom?.[field.key] ?? "";
     }
     const items = appointment?.items ?? [];
-    const totalMinor = items.reduce((sum, item) => sum + (item.price ?? 0), 0);
+    // × quantity. AGENTS.md, under Goods: "Quantity rides the line, price stays
+    // per unit … if you sum prices anywhere new, multiply." This preview was a
+    // new sum that did not, so three cakes at ₺120 previewed as ₺120 and were
+    // sent as ₺360 — the owner tuning wording against a third of what the
+    // customer receives, in the pane whose own comment promises it is "built the
+    // way convex/wa.ts builds it at send time".
+    const totalMinor = items.reduce(
+      (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
+      0,
+    );
     // A real send collapses a token with nothing behind it, along with the
     // whitespace it leaves — renderTokens does that on purpose, so a message
     // never goes out saying "Merhaba ," or carrying an empty bracket. In a
@@ -764,16 +773,31 @@ function RuleEditor({
         : liveDefaults?.date ?? `⟨${t("vars.date")}⟩`,
       staffName: sample(appointment?.staffName, "staff", t("vars.staff")),
       serviceName: sample(
-        items.map((item) => `• ${item.name}`).join("\n"),
+        // The send path prefixes the quantity here too (convex/wa.ts).
+        items
+          .map((item) =>
+            (item.quantity ?? 1) > 1
+              ? `• ${item.quantity}× ${item.name}`
+              : `• ${item.name}`,
+          )
+          .join("\n"),
         "service",
         t("vars.service"),
       ),
       servicePriceList: sample(
         items
-          .map(
-            (item) =>
-              `• ${item.name}${item.price ? ` — ${formatMoney(item.price)}` : ""}`,
-          )
+          .map((item) => {
+            // Quantity prefix and line worth, both of which the send path emits
+            // and this dropped — and price !== undefined, so a service priced 0
+            // previews as free rather than as unpriced. Mirrors convex/wa.ts.
+            const quantity = item.quantity ?? 1;
+            const label = quantity > 1 ? `${quantity}× ${item.name}` : item.name;
+            return `• ${label}${
+              item.price !== undefined
+                ? ` — ${formatMoney(item.price * quantity)}`
+                : ""
+            }`;
+          })
           .join("\n"),
         "pricelist",
         t("vars.priceList"),
@@ -1455,28 +1479,40 @@ function RulesCard({
       ...(emailEnabled ? (["email"] as const) : []),
     ];
   };
-  const activeChannels = (rule: RuleRowData): Set<"whatsapp" | "email"> => {
-    if (rule.paused) return new Set();
+  // What the ROW stores, ignoring paused. Kept separate because `paused` and
+  // `channel` are two axes and collapsing them is what lost data below.
+  const storedChannels = (rule: RuleRowData): Set<"whatsapp" | "email"> => {
     const active = new Set<"whatsapp" | "email">();
     if (rule.channel !== "email") active.add("whatsapp");
     if (rule.channel !== "whatsapp") active.add("email");
     return active;
   };
+  // What the chips SHOW: a paused rule shows none.
+  const activeChannels = (rule: RuleRowData): Set<"whatsapp" | "email"> =>
+    rule.paused ? new Set() : storedChannels(rule);
   const toggleChannel = (rule: RuleRowData, channel: "whatsapp" | "email") => {
-    const active = activeChannels(rule);
-    if (active.has(channel)) active.delete(channel);
-    else active.add(channel);
-    const on = wiredFor(rule).filter((w) => active.has(w));
+    // Built from what is stored, so a paused rule turning a chip back on
+    // resumes with the pair it had rather than with only that chip.
+    const next = storedChannels(rule);
+    if (activeChannels(rule).has(channel)) next.delete(channel);
+    else next.add(channel);
+    const on = wiredFor(rule).filter((w) => next.has(w));
     if (on.length === 0) {
       // Last chip off: the rule keeps its channel and pauses, so switching a
       // chip back on restores exactly what was there.
       void updateRule({ ruleId: rule._id, paused: true });
       return;
     }
+    // `channel` comes from the full stored set, NOT from `on`. Deriving it from
+    // the wired subset meant an unwired lane could never survive a toggle: in an
+    // email-only org, a rule at "both" that had its one chip switched off and
+    // back on came back as "email" — and stayed email-only, silently, on the day
+    // WhatsApp was finally connected. wiredFor decides whether the rule can run
+    // at all; it does not get to rewrite what the owner asked for.
     void updateRule({
       ruleId: rule._id,
       paused: false,
-      channel: on.length === 2 ? "both" : on[0],
+      channel: next.size === 2 ? "both" : [...next][0],
     });
   };
 
