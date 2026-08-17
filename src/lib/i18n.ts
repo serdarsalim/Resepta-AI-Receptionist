@@ -174,6 +174,54 @@ const dictionary = {
     de: "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
   },
 
+  "join.title": {
+    tr: "Ekibe katılın",
+    en: "Join the team",
+    de: "Zum Team hinzufügen",
+  },
+  "join.prompt": {
+    tr: "Davetinizi kabul etmek için Google ile giriş yapın. Davet edildiğiniz e-posta adresini kullanın.",
+    en: "Sign in with Google to accept your invitation. Use the address it was sent to.",
+    de: "Melden Sie sich mit Google an, um die Einladung anzunehmen. Nutzen Sie die Adresse, an die sie ging.",
+  },
+  "join.working": {
+    tr: "Davet kontrol ediliyor…",
+    en: "Checking your invitation…",
+    de: "Einladung wird geprüft…",
+  },
+  "join.welcome": {
+    tr: "Katıldınız:",
+    en: "You've joined",
+    de: "Sie sind dabei:",
+  },
+  "join.open": {
+    tr: "Açın",
+    en: "Open it",
+    de: "Öffnen",
+  },
+  // One line per way this can fail, because "invalid invite" makes the reader
+  // guess which of four different things to do about it.
+  "join.notFound": {
+    tr: "Bu davet bağlantısı geçerli değil. Sizi davet eden kişiden yenisini isteyin.",
+    en: "This invitation link isn't valid. Ask whoever invited you for a new one.",
+    de: "Dieser Einladungslink ist ungültig. Bitten Sie um einen neuen.",
+  },
+  "join.alreadyAccepted": {
+    tr: "Bu davet zaten kullanılmış. Zaten üyesiniz — giriş yapın.",
+    en: "This invitation was already used. You're already a member — just sign in.",
+    de: "Diese Einladung wurde bereits genutzt. Sie sind schon Mitglied — melden Sie sich an.",
+  },
+  "join.expired": {
+    tr: "Bu davetin süresi doldu. Sizi davet eden kişiden yenisini isteyin.",
+    en: "This invitation has expired. Ask whoever invited you for a new one.",
+    de: "Diese Einladung ist abgelaufen. Bitten Sie um eine neue.",
+  },
+  "join.wrongAccount": {
+    tr: "Bu davet başka bir e-posta adresine gönderildi. Davetin gittiği adresle giriş yapın.",
+    en: "This invitation was sent to a different address. Sign in with the one it went to.",
+    de: "Diese Einladung ging an eine andere Adresse. Melden Sie sich mit dieser an.",
+  },
+
   "onboarding.title": {
     tr: "Hoş geldiniz!",
     en: "Welcome!",

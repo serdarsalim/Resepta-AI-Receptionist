@@ -4,7 +4,23 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
+import { requireUser } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
+
+// inv_<48 hex>, 192 bits from the Web Crypto CSPRNG — same shape and same
+// reasoning as mcpKeys.mintKey. This string is the ONLY thing that admits
+// somebody to a workspace they were invited to, so it has to be unguessable:
+// the address it is mailed to used to be sufficient on its own.
+function mintInviteToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return `inv_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+// An invite left open forever is a trap that ages into a breach: the row sits
+// there until somebody with that address happens to sign up, which may be
+// months and a job change later.
+const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 const role = v.union(v.literal("owner"), v.literal("staff"));
 
@@ -326,12 +342,16 @@ export const invite = mutation({
     // Scheduled at the end of whichever branch takes, never before: the mail
     // says "you have been added", and an invite that then failed validation
     // would make that a lie. Fire and forget by design, see email.sendInvite.
-    const notify = () =>
+    const notify = (token?: string) =>
       ctx.scheduler.runAfter(0, internal.email.sendInvite, {
         to: email,
         orgName: org?.name || "Resepta",
         invitedByName: user.name?.trim() || user.email || "Resepta",
         language: org?.language ?? "tr",
+        // Only the no-account branch carries one. An account that already
+        // exists was joined outright above, so there is nothing to accept and
+        // the mail is a notification, not a key.
+        ...(token !== undefined ? { token } : {}),
       });
     // Workspace model: an EXISTING account joins immediately as a membership
     // (Retell/Slack behavior) — invite rows are only for addresses with no
@@ -360,23 +380,121 @@ export const invite = mutation({
       await notify();
       return null;
     }
+    // Scoped to THIS org. It used to look across the whole table, so one salon
+    // inviting an address blocked every other salon from inviting the same
+    // person and told them "already-invited" about a workspace they cannot see.
+    // Coherent now that acceptance is by token: two orgs may each have an open
+    // invite for one address, and the token decides which one is being accepted.
     const open = (
       await ctx.db
         .query("invites")
         .withIndex("by_email", (q) => q.eq("email", email))
         .collect()
-    ).find((row) => row.acceptedAt === undefined);
+    ).find((row) => row.acceptedAt === undefined && row.orgId === orgId);
     if (open) throw new Error("already-invited");
+    const token = mintInviteToken();
     await ctx.db.insert("invites", {
       orgId,
       email,
       role: args.role,
       invitedBy: user._id,
       staffId: args.staffId,
+      token,
+      expiresAt: Date.now() + INVITE_TTL_MS,
     });
     await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
-    await notify();
+    await notify(token);
     return null;
+  },
+});
+
+// The accept step, and the whole point of the token.
+//
+// Membership used to be granted in auth.ts on an EMAIL match at first sign-in:
+// no token, no expiry, nothing to accept. So anyone could sign up, invite an
+// address they did not control, and wait — when that person first signed in
+// with Google they landed inside the inviter's workspace, reading and writing a
+// stranger's salon, and with no salon of their own, because the founding path
+// only ran when no invite matched. Possession of an address now grants nothing;
+// possession of the mailed secret grants exactly one membership.
+//
+// Requires no org of its own, so it works for the account that has just
+// founded one and is joining a second workspace.
+export const acceptInvite = mutation({
+  args: { token: v.string() },
+  returns: v.object({
+    ok: v.boolean(),
+    reason: v.optional(v.string()),
+    orgId: v.optional(v.id("orgs")),
+    orgName: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const token = args.token.trim();
+    if (!token) return { ok: false, reason: "not-found" };
+    const invite = await ctx.db
+      .query("invites")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    // Rows predating the token are matched by nothing and are therefore inert
+    // rather than dangerous — the by_token lookup simply cannot find them.
+    if (!invite) return { ok: false, reason: "not-found" };
+    if (invite.acceptedAt !== undefined) return { ok: false, reason: "already-accepted" };
+    if (invite.expiresAt !== undefined && invite.expiresAt < Date.now()) {
+      return { ok: false, reason: "expired" };
+    }
+    // The invite names an address, and admitting a different account than the
+    // one named is the confusion the token exists to prevent — a forwarded link
+    // must not hand the workspace to whoever opened the mail second.
+    if (!user.email || user.email.toLowerCase() !== invite.email) {
+      return { ok: false, reason: "wrong-account" };
+    }
+    const org = await ctx.db.get(invite.orgId);
+    if (!org) return { ok: false, reason: "not-found" };
+
+    // Idempotent: the link may be clicked twice, or the owner may have added
+    // this person by hand in the meantime.
+    const already = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) =>
+        q.eq("userId", user._id).eq("orgId", invite.orgId),
+      )
+      .unique();
+    if (!already) {
+      // Stamped seenAt: they are standing in the door having just clicked
+      // accept, so the "somebody added you" banner would be telling them
+      // something they already know.
+      await ctx.db.insert("memberships", {
+        userId: user._id,
+        orgId: invite.orgId,
+        role: invite.role,
+        seenAt: Date.now(),
+      });
+    }
+    // Invited from an existing member's row: join the two halves now. Guarded
+    // on the staff row still existing and still unclaimed, because an invite
+    // can sit for two weeks and in that time the member may have been removed
+    // or given a different login. Moved here from auth.ts with the rest.
+    if (invite.staffId) {
+      const staff = await ctx.db.get(invite.staffId);
+      if (staff && staff.orgId === invite.orgId && !staff.userId) {
+        await ctx.db.patch(invite.staffId, { userId: user._id });
+      }
+    }
+    await ctx.db.patch(invite._id, {
+      acceptedAt: Date.now(),
+      acceptedUserId: user._id,
+    });
+    // Land them in the workspace they just accepted rather than whichever was
+    // active, which for a first-time account is the empty org they founded on
+    // the way in.
+    await ctx.db.patch(user._id, { orgId: invite.orgId, role: invite.role });
+    await recordActivity(ctx, {
+      orgId: invite.orgId,
+      kind: "member_invited",
+      detail: `${invite.email} accepted`,
+    });
+    return { ok: true, orgId: invite.orgId, orgName: org.name };
   },
 });
 

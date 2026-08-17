@@ -478,6 +478,11 @@ export const sendInvite = internalAction({
     orgName: v.string(),
     invitedByName: v.string(),
     language: v.string(),
+    // Present when the invited address has no account yet, in which case this
+    // mail carries the only thing that can admit them to the workspace. Absent
+    // when the account already existed and was joined outright, so the mail is
+    // a notification and the plain site URL is the right destination.
+    token: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -498,7 +503,15 @@ export const sendInvite = internalAction({
       from,
       to: args.to,
       subject: copy.subject(args.orgName),
-      html: `<p>${copy.line(org, by)}</p><p>${copy.action}<br/><a href="${siteUrl}">${siteUrl}</a></p>`,
+      // The join link carries the token as a query param, which is where an
+      // invite secret belongs: it is the credential the recipient is meant to
+      // present, and it grants one membership to one named address.
+      html: (() => {
+        const link = args.token
+          ? `${siteUrl}/join?t=${encodeURIComponent(args.token)}`
+          : siteUrl;
+        return `<p>${copy.line(org, by)}</p><p>${copy.action}<br/><a href="${link}">${link}</a></p>`;
+      })(),
     });
     if (!result.ok) {
       console.warn(`invite email not sent to ${args.to}: ${result.reason}`);

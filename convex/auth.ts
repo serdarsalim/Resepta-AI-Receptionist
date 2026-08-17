@@ -102,54 +102,25 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         return userId;
       }
 
-      // ---- Invite check FIRST (multi-user orgs). An open invite for this
-      // address means this person JOINS that org instead of founding a new
-      // one. Indexed by email; the open-invite pick happens in JS.
-      const invite = email
-        ? (
-            await db
-              .query("invites")
-              .withIndex("by_email", (q) => q.eq("email", email))
-              .collect()
-          ).find((row) => row.acceptedAt === undefined) ?? null
-        : null;
-      if (invite) {
-        const userId = await db.insert("users", {
-          email,
-          name,
-          image: args.profile.image as string | undefined,
-          orgId: invite.orgId,
-          role: invite.role,
-        });
-        // Deliberately NOT stamped. They were invited before they had an
-        // account, so this is the first they are hearing of the workspace and
-        // the shell should say so once they land.
-        await db.insert("memberships", {
-          userId,
-          orgId: invite.orgId,
-          role: invite.role,
-        });
-        // Invited from an existing member's row: join the two halves now,
-        // while we know they belong together. Guarded on the staff row still
-        // existing and still being unclaimed — an invite can sit unaccepted
-        // for weeks, and in that time the member may have been removed or
-        // given a different login.
-        if (invite.staffId) {
-          const staff = await db.get(invite.staffId);
-          if (staff && staff.orgId === invite.orgId && !staff.userId) {
-            await db.patch(invite.staffId, { userId });
-          }
-        }
-        // Audit trail of who admitted whom; stamping also drops the row off
-        // the pending list.
-        await db.patch(invite._id, {
-          acceptedAt: Date.now(),
-          acceptedUserId: userId,
-        });
-        return userId;
-      }
+      // ---- No invite branch here, deliberately. ----
+      //
+      // This used to look for an open invite matching the signing-in address
+      // and, on a hit, put the new account straight into that org. Possession
+      // of an email address was the whole credential: no token, no expiry,
+      // nothing accepted. Anyone could found an org, invite an address they did
+      // not control, and wait — and the victim's first Google sign-in landed
+      // them inside a stranger's salon with read and write access, holding no
+      // salon of their own, because the founding path below only ran when no
+      // invite matched.
+      //
+      // Every first sign-in now founds its own org, and joining a workspace is
+      // an explicit act: team.acceptInvite, against the token mailed to the
+      // invited address. See convex/team.ts. The cost is that an invited person
+      // also owns an empty org they will probably never open; acceptInvite
+      // switches them into the invited workspace so they at least land in the
+      // right one.
 
-      // ---- No invite: founding sign-in. ----
+      // ---- Founding sign-in. ----
       // Unnamed until onboarding — "" renders as the name prompt in the app.
       const orgId = await db.insert("orgs", {
         name: "",
