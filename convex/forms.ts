@@ -46,8 +46,13 @@ export const publicForm = query({
   handler: async (ctx, args) => {
     const slug = args.slug.trim().toLowerCase();
     if (!slug) return null;
-    const orgs = await ctx.db.query("orgs").collect();
-    const org = orgs.find((candidate) => candidate.publicSlug === slug);
+    // Indexed, not a full-table collect — see schema orgs.by_public_slug. In
+    // `submit` this mattered doubly: a mutation that reads every org row
+    // conflicts with any concurrent write to any of them.
+    const org = await ctx.db
+      .query("orgs")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
+      .unique();
     // A disabled form is indistinguishable from a wrong slug, which is the
     // right answer: an org that switched its form off has not agreed to keep
     // confirming it exists.
@@ -80,8 +85,13 @@ export const submit = mutation({
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
     const slug = args.slug.trim().toLowerCase();
-    const orgs = await ctx.db.query("orgs").collect();
-    const org = orgs.find((candidate) => candidate.publicSlug === slug);
+    // Indexed, not a full-table collect — see schema orgs.by_public_slug. In
+    // `submit` this mattered doubly: a mutation that reads every org row
+    // conflicts with any concurrent write to any of them.
+    const org = await ctx.db
+      .query("orgs")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
+      .unique();
     if (!org || !org.formEnabled) return { ok: false, reason: "not-found" };
 
     const name = args.name.trim();

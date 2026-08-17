@@ -34,7 +34,7 @@ import { maskSecret } from "./lib/connections";
 import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
-import { emailConfig, platformValue } from "./lib/platformConfig";
+import { emailConfig, platformValue, type EmailConfig } from "./lib/platformConfig";
 import { recordActivity } from "./lib/activity";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
 
@@ -128,10 +128,25 @@ export const fleet = query({
     }
 
     const orgs = await ctx.db.query("orgs").take(200);
-    const out = [];
-    for (const org of orgs) {
-      out.push(await healthFor(ctx, org, now, since, stuckByOrg.get(org._id) ?? 0));
-    }
+    // Read ONCE and passed down. emailConfig is deployment-global and was the
+    // first statement of healthFor, so it ran a full platformConfig collect per
+    // org — 200 redundant scans per invocation of this query.
+    const mailConfig = await emailConfig(ctx);
+    // Concurrent, not sequential. Each healthFor is ~700 documents (three
+    // 200-row message/appointment takes plus memberships and templates), so at
+    // the 200-org ceiling this query reads ~140k documents against Convex's
+    // 32,000-per-transaction limit — the fleet page starts throwing somewhere
+    // around 25-45 active orgs and never recovers, because it is a subscribed
+    // query that re-runs on any write to messages, appointments, memberships or
+    // usageMonthly for ANY org. Promise.all does not lower the read count, so
+    // the ceiling is still there; it does stop the latency being the sum of 200
+    // serial round trips. Bounding the per-org counters with a rollup is the
+    // real fix and wants its own change.
+    const out = await Promise.all(
+      orgs.map((org) =>
+        healthFor(ctx, org, now, since, stuckByOrg.get(org._id) ?? 0, mailConfig),
+      ),
+    );
     // Loudest first: the operator opens this to find what is broken, not to
     // read an alphabetical list. Dead letters outrank plain failures because
     // they mean the retry queue gave up, which nothing else recovers from.
@@ -152,8 +167,10 @@ async function healthFor(
   now: number,
   since: number,
   stuck: number,
+  // Passed in rather than read here: it is deployment-global, and reading it per
+  // org meant a full platformConfig scan for every row on the page.
+  mailConfig: EmailConfig,
 ) {
-  const mailConfig = await emailConfig(ctx);
   const [memberships, waAccount, templates] = await Promise.all([
     ctx.db
       .query("memberships")

@@ -57,10 +57,13 @@ type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
 async function orgBySlug(ctx: ReadCtx, rawSlug: string): Promise<Doc<"orgs"> | null> {
   const slug = rawSlug.trim().toLowerCase();
   if (!slug) return null;
-  // Scanned, not indexed — same reasoning as email.orgByInboundAddress: one
-  // row per paying business, read once per page.
-  const orgs = await ctx.db.query("orgs").collect();
-  const org = orgs.find((candidate) => candidate.publicSlug === slug);
+  // Indexed. This used to collect the whole orgs table and Array.find — which
+  // also put every org row in this page's subscription read set, so one salon
+  // saving a setting re-ran every open booking page on the deployment.
+  const org = await ctx.db
+    .query("orgs")
+    .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
+    .unique();
   // Disabled and nonexistent look identical, deliberately (forms.publicForm).
   if (!org || !org.bookingEnabled) return null;
   return org;

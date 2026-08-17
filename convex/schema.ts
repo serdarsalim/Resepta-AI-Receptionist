@@ -495,7 +495,17 @@ export default defineSchema({
     // is how an inbound event finds its org — the same job phone_number_id
     // does on the Cloud lane.
     .index("by_evolution_instance", ["evolutionInstance"])
-    .index("by_evolution_token", ["evolutionWebhookToken"]),
+    .index("by_evolution_token", ["evolutionWebhookToken"])
+    // Both were resolved by collecting the WHOLE table and running Array.find,
+    // on the grounds that orgs is "one row per paying business, read once per
+    // page". The read count was the smaller half of the problem: a full
+    // .collect() puts every org document into the subscription's read set, so
+    // any org editing any setting invalidated and re-ran every open public
+    // booking page on the deployment — a fan-out that grows as orgs ×
+    // concurrent visitors, for orgs that have nothing to do with each other.
+    // Both fields are already documented as globally unique handles.
+    .index("by_public_slug", ["publicSlug"])
+    .index("by_inbound_address", ["inboundAddress"]),
 
   // Per-org integration credentials. One row per (org, provider, field), which
   // is Nudge's shape (convex/lib/connections.ts there) with the one change that

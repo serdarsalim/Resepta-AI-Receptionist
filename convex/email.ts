@@ -33,11 +33,13 @@ export const orgByInboundAddress = internalQuery({
   handler: async (ctx, args) => {
     const wanted = args.localPart.trim().toLowerCase();
     if (!wanted) return null;
-    // Scanned rather than indexed on purpose: orgs is a small table (one row
-    // per paying business) and an index here would be a second thing to keep
-    // in sync for a lookup that runs once per inbound email.
-    const orgs = await ctx.db.query("orgs").collect();
-    const match = orgs.find((org) => org.inboundAddress?.toLowerCase() === wanted);
+    // Indexed. Stored addresses are already lower-cased by
+    // resolveInboundAddress, which is what makes an equality lookup safe here —
+    // the old scan lower-cased each candidate as it went and could afford to.
+    const match = await ctx.db
+      .query("orgs")
+      .withIndex("by_inbound_address", (q) => q.eq("inboundAddress", wanted))
+      .unique();
     return match?._id ?? null;
   },
 });

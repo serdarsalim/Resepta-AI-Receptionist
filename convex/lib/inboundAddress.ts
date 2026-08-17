@@ -46,10 +46,15 @@ export async function resolveInboundAddress(
 ): Promise<string> {
   const slug = slugifyInboundAddress(raw);
   if (!slug) throw new Error("address-required");
-  const clash = (await ctx.db.query("orgs").collect()).find(
-    (other) => other._id !== orgId && other.inboundAddress === slug,
-  );
-  if (clash) throw new Error("address-taken");
+  // Indexed (schema orgs.by_inbound_address). The scan this replaces read every
+  // org row inside a mutation, which put the whole table into that mutation's
+  // OCC conflict set — so saving one salon's address raced every other salon's
+  // settings save.
+  const clash = await ctx.db
+    .query("orgs")
+    .withIndex("by_inbound_address", (q) => q.eq("inboundAddress", slug))
+    .unique();
+  if (clash && clash._id !== orgId) throw new Error("address-taken");
   return slug;
 }
 
