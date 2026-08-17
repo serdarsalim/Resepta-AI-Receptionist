@@ -66,10 +66,21 @@ export const revenue = query({
     const weekStart = dayStartMs(shiftDays(today, -6), tz);
     const monthStart = dayStartMs(shiftDays(today, -29), tz);
 
+    // Bounded at the END of today, not left open. Without the upper bound the
+    // range collected the org's entire forward book, and a future appointment
+    // marked "completed" — a mis-tap in the row menu, or an owner pre-settling
+    // a prepaid visit — was counted into today's, this week's AND this month's
+    // takings at once. This file's own header says why that is wrong: one still
+    // in the future "has not earned anything YET; counting either would make
+    // the number a forecast wearing the clothes of a receipt."
+    //
+    // It also stops the .collect() growing without limit. A salon with a year
+    // of forward bookings was reading all of them to total the last thirty days.
+    const horizon = dayStartMs(shiftDays(today, 1), tz);
     const rows = await ctx.db
       .query("appointments")
       .withIndex("by_org_start", (q) =>
-        q.eq("orgId", orgId).gte("startAt", monthStart),
+        q.eq("orgId", orgId).gte("startAt", monthStart).lt("startAt", horizon),
       )
       .collect();
 

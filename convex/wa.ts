@@ -35,6 +35,7 @@ import {
 } from "./lib/waLane";
 import { isDemo } from "./demo";
 import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
+import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -587,11 +588,15 @@ export const sendAppointmentMessage = internalAction({
     const totalMinor = (
       (appointment.items ?? []) as { price?: number; quantity?: number }[]
     ).reduce((sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1), 0);
+    // narrowSymbol, and the exponent from Intl rather than a hardcoded /100 —
+    // i.e. lib/money.formatMoney, whose own comment names this exact case:
+    // English renders TRY as the literal code ("TRY 400.00"), "which is what
+    // you want in a table listing many currencies and wrong here". An org has
+    // one currency, and this is the surface that reaches the customer, so the
+    // dashboard was showing ₺400.00 while the reminder about that same
+    // appointment said TRY 400.00.
     const formatMoney = (minor: number) =>
-      new Intl.NumberFormat(language, {
-        style: "currency",
-        currency: org.currency ?? "TRY",
-      }).format(minor / 100);
+      formatMinorUnits(minor, org.currency ?? "TRY", language);
     const price = totalMinor > 0 ? formatMoney(totalMinor) : undefined;
     // [pricelist] — the receipt look. An unpriced item keeps its bullet
     // without a dangling dash.
@@ -601,7 +606,14 @@ export const sendAppointmentMessage = internalAction({
         const label = quantity > 1 ? `${quantity}× ${item.name}` : item.name;
         // The line's worth, not the unit price — a receipt line for three
         // cakes says what three cakes cost.
-        return `• ${label}${item.price ? ` — ${formatMoney(item.price * quantity)}` : ""}`;
+        // price === undefined, not falsy. A service priced 0 is "free", which
+        // services.ts keeps deliberately distinct from "not priced" — and this
+        // rendered both as a bare bullet, so a customer was never told the
+        // consultation costs nothing. itemsTotal and lineWorth in
+        // appointments.ts both test identity; this line was the holdout.
+        return `• ${label}${
+          item.price !== undefined ? ` — ${formatMoney(item.price * quantity)}` : ""
+        }`;
       })
       .join("\n");
     const tokenValues = {

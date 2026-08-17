@@ -103,15 +103,26 @@ export const create = mutation({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
     if (existing.some((field) => field.key === key)) throw new Error("field-exists");
+    // A select with no choices is unfillable by hand, unwritable by the agent,
+    // and — worst — unpublishable: retellAgent resolves a voice variable's
+    // choices from field.options and throws "needs at least one option", so one
+    // blank field means the phone agent can never be published again. Deduped
+    // too, matching `update`. Both siblings already refused this
+    // (agentTools.createContactField and `remove`'s neighbour), and the
+    // seedForOrg header claims `create` does; now it does.
+    const options =
+      args.type === "select"
+        ? [...new Set((args.options ?? []).map((o) => o.trim()).filter(Boolean))]
+        : undefined;
+    if (args.type === "select" && (!options || options.length === 0)) {
+      throw new Error("select-needs-options");
+    }
     return await ctx.db.insert("contactFields", {
       orgId,
       key,
       label,
       type: args.type,
-      options:
-        args.type === "select"
-          ? (args.options ?? []).map((o) => o.trim()).filter(Boolean)
-          : undefined,
+      options,
       order: existing.length,
       // Left unset for the default so the stored row stays as small as the
       // meaning: a field nobody marked is a field staff fill in.

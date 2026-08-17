@@ -257,9 +257,17 @@ async function freeStarts(
     // First grid line at or after opening — 09:15 opening offers 09:30, not
     // a 09:15 the rest of the day's grid would sit crooked on.
     const firstStep = Math.ceil(openFrom / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
+    // `minute < openTo` as well as the duration fit. For a time-bound service
+    // the duration term already implies it, but a GOOD has duration 0, so
+    // `minute + 0 <= openTo` admitted a slot at exactly the closing minute —
+    // and nothing downstream filtered it, because overlapCount and
+    // customerConflict both return early on duration 0. The page offered 18:00
+    // at a salon closing at 18:00, and `book` then refused it through
+    // isWithinActiveWindow's `minutesOfDay >= endMinute` with reason
+    // "slot-taken": a slot nothing had taken.
     for (
       let minute = firstStep;
-      minute + duration <= openTo;
+      minute < openTo && minute + duration <= openTo;
       minute += SLOT_STEP_MINUTES
     ) {
       let startMs: number;

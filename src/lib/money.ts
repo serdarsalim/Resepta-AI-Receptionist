@@ -11,40 +11,17 @@
 
 // The allowlist itself lives next to the mutation that validates against it,
 // so Settings can never save a code this file can't render.
+// formatMoney moved next to the allowlist for the same reason the allowlist is
+// there: wa.ts renders [price] for a customer in that customer's language and
+// could not reach a src/ module, so it grew its own copy without narrowSymbol.
+// One implementation, both sides.
 export {
   CURRENCIES,
   DEFAULT_CURRENCY,
+  formatMoney,
   type Currency,
 } from "../../convex/lib/money";
-
-function fractionDigits(currency: string, locale: string): number {
-  // Typed optional because the option is optional on the way IN; for a
-  // currency-style formatter Intl always resolves it. 2 is only a floor.
-  return (
-    new Intl.NumberFormat(locale, { style: "currency", currency }).resolvedOptions()
-      .minimumFractionDigits ?? 2
-  );
-}
-
-// "₺400,00" in Turkish, "€400.00" in English — symbol, placement, separators
-// and digit grouping all come from Intl. No symbol table, no per-locale
-// branching, and it is right in languages nobody on the team reads.
-export function formatMoney(
-  minor: number,
-  currency: string,
-  locale: string,
-): string {
-  const digits = fractionDigits(currency, locale);
-  // narrowSymbol, not the default: English renders TRY as the literal code
-  // ("TRY 400.00"), which is what you want in a table listing many currencies
-  // and wrong here. An org has exactly one currency, so the symbol is never
-  // ambiguous and "₺400.00" is what its staff actually recognise.
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    currencyDisplay: "narrowSymbol",
-  }).format(minor / 10 ** digits);
-}
+import { fractionDigits } from "../../convex/lib/money";
 
 // What a person typed → minor units. Accepts "400", "400,50", "400.50" and
 // "1.234,56": the last separator followed by 1-2 digits is the decimal one,
