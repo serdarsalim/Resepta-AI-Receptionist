@@ -579,6 +579,26 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - `chatOrder` is therefore WhatsApp **plus** an open email thread, and the
     bubble keeps its `emailHtml` branch (sanitised, and only inside a thread —
     in a list a formatted mail is a wall).
+- **Notes are rich text too**, same editor, same `compact` mode. A note is where
+  the salon writes down what matters about a person — an allergy, a price
+  agreed, three things to check next time — and a list is the natural shape for
+  that, which plain text could not make.
+  - **There is no is-it-html flag, deliberately.** Nudge shipped one and it
+    became a lie the first time somebody edited an old plain note in the rich
+    editor: the row stored markup while the column still said plain, and the
+    note rendered its own tags as text. `bodyIsHtml` judges the BODY, and
+    requires a real tag NAME so a note reading "bütçe < 5000 TL" stays plain.
+  - Nothing stored is migrated. `plainToHtml` converts a legacy note on the way
+    INTO the editor, so its paragraph breaks survive and a note nobody edits is
+    never rewritten.
+  - `noteText` flattens for the All index and any future search — a row reading
+    "<p>Amonyağa" is worse than useless. The All index's in-place expander
+    renders the markup, and only for notes: a WhatsApp message is always the
+    text somebody sent.
+  - `hasNoteText` lives in `convex/lib/noteBody` so the mutation and the button
+    share one answer about what "empty" means — an empty tiptap document is
+    "<p></p>", so `!body` is the wrong test on both sides. Same arrangement
+    `lib/emailInbound` already has with `normalizeSubject`.
 - **The email composer is the rich editor**, `EmailBodyEditor` in `compact`
   mode: no frame of its own (the composer is already a box), no Visual/HTML
   switch (nobody hand-writes HTML in a reply — that earns its place in the
@@ -603,6 +623,10 @@ deals; we sell services, and an appointment is the thing a customer bought.
     mail — is sanitised at render, which is where the untrusted HTML actually
     is. Convex's runtime has no DOM, so `isomorphic-dompurify` cannot run there
     anyway; don't try to "add server-side sanitising" without reading this.
+  - `compact` also drops the rule under the toolbar. It earns its place in the
+    framed editor, where the toolbar is a band inside a box and something has to
+    say where the band ends; in a composer there is no box and no band, so the
+    line is decoration. Borders belong to containers.
   - **Reply strips existing prefixes before prepending** (`stripReplyPrefixes`,
     the un-lowercased half of `normalizeSubject`). The thread's title is the
     subject of whichever mail opened it and usually already carries a "Re:", so

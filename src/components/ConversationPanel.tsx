@@ -24,6 +24,12 @@ import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject, stripReplyPrefixes } from "../../convex/lib/emailInbound";
 import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
+import {
+  bodyIsHtml,
+  hasNoteText,
+  noteText,
+  plainToHtml,
+} from "../../convex/lib/noteBody";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -163,9 +169,6 @@ export function ConversationPanel({
   const [noteSaving, setNoteSaving] = useState(false);
   // Collapsed at rest — see the composer itself.
   const [noteOpen, setNoteOpen] = useState(false);
-  // Grows with what is typed, bottom-anchored and capped, so a three-line note
-  // is visible while writing without the field owning half the pane.
-  const noteDraftRef = useRef<HTMLTextAreaElement>(null);
   // The email composer is a disclosure, not a permanent bar: unlike WhatsApp,
   // where you reply constantly, most visits to the email tab are to READ. It
   // opens on Compose and closes on send.
@@ -294,16 +297,6 @@ export function ConversationPanel({
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
   }, [draft, filter]);
 
-  // noteOpen is a dep because the field does not exist until the composer is
-  // expanded: without it the first measurement happens on a ref that is still
-  // null and the box opens at its rows= height whatever is in the draft.
-  useEffect(() => {
-    const el = noteDraftRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [noteDraft, filter, noteOpen]);
-
   // Restore the index's position once a routed detail has navigated back.
   // rAF because the rows have to be laid out before a scrollTop means anything.
   useEffect(() => {
@@ -325,7 +318,7 @@ export function ConversationPanel({
 
   const saveNote = async () => {
     const body = noteDraft.trim();
-    if (!body || noteSaving) return;
+    if (!hasNoteText(body) || noteSaving) return;
     setNoteSaving(true);
     try {
       await addNote({ customerId, body });
@@ -387,7 +380,11 @@ export function ConversationPanel({
           }`}
         >
           {composing ? (
-            <div className="space-y-2 rounded-xl border border-[var(--border)] p-2">
+            // Explicitly white, not transparent. The header around it takes the
+            // thread's tinted plane, and a composer that inherits it reads as a
+            // hole in the conversation rather than a sheet of paper laid on top
+            // — which is what a message you are writing is.
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
               <input
                 value={emailSubject}
                 onChange={(event) => setEmailSubject(event.target.value)}
@@ -550,15 +547,22 @@ export function ConversationPanel({
                typing area and the buttons, so the two read as one control
                rather than an input with something parked beside it. */
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2">
-              <textarea
-                autoFocus
-                ref={noteDraftRef}
+              {/* The same editor the email composer uses. A note is where the
+                  salon writes down what matters about a person — an allergy, a
+                  price agreed, three things to check next time — and a list is
+                  the natural shape for that. Plain text could not make one.
+
+                  onLiveChange as well as onSave: the editor reports on BLUR, so
+                  Add note would otherwise sit disabled while you typed and only
+                  wake when you clicked away. */}
+              <EmailBodyEditor
+                compact
+                showVariables={false}
                 value={noteDraft}
-                onChange={(event) => setNoteDraft(event.target.value)}
+                onSave={setNoteDraft}
+                onLiveChange={setNoteDraft}
                 disabled={noteSaving}
-                rows={2}
                 placeholder={t("notes.placeholder")}
-                className="max-h-40 min-h-[3.5rem] w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm focus:outline-none"
               />
               <div className="mt-1 flex justify-end gap-2">
                 {/* Cancel left of the confirm, the order this app already uses
@@ -577,7 +581,7 @@ export function ConversationPanel({
                 <button
                   type="button"
                   onClick={() => void saveNote()}
-                  disabled={noteSaving || !noteDraft.trim()}
+                  disabled={noteSaving || !hasNoteText(noteDraft)}
                   className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   {noteSaving ? t("common.saving") : t("notes.add")}
@@ -722,7 +726,11 @@ export function ConversationPanel({
                 ? ("summary" in item ? item.summary : undefined) ?? ""
                 : item.channel === "email"
                   ? ("emailSubject" in item ? item.emailSubject : undefined) ?? ""
-                  : ("body" in item ? item.body : undefined) ?? "";
+                  : item.channel === "note"
+                    // A note can be markup now. The index is one line of TEXT —
+                    // a row reading "<p>Amonyağa" is worse than useless.
+                    ? noteText(("body" in item ? item.body : undefined) ?? "")
+                    : ("body" in item ? item.body : undefined) ?? "";
             return (
               <Fragment key={item.id}>
                 {monthBand}
@@ -779,7 +787,18 @@ export function ConversationPanel({
                   </button>
                   {open && "body" in item && item.body && (
                     <div className="border-b border-[var(--border)] px-4 py-2 text-sm">
-                      <p className="whitespace-pre-wrap break-words">{item.body}</p>
+                      {/* A note opened here is the same markup the notes tab
+                          renders — without this it printed its own tags. Only
+                          notes can be markup; a WhatsApp message is always the
+                          text somebody sent. */}
+                      {item.channel === "note" && bodyIsHtml(item.body) ? (
+                        <div
+                          className="break-words [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4"
+                          dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(item.body) }}
+                        />
+                      ) : (
+                        <p className="whitespace-pre-wrap break-words">{item.body}</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -862,8 +881,13 @@ export function ConversationPanel({
                   where the body never arrived — the provider hands us the
                   metadata first and the body on a second call, and a fetch that
                   fails must still leave a readable bubble. */}
+              {/* Semibold, which is this app's heading weight (h2 and h3 both
+                  take it) — and the subject IS the bubble's heading. Medium was
+                  a step too light to do that job here: the body can carry its
+                  own <strong> at 600, so the line naming the mail was reading
+                  lighter than a bold word inside it. */}
               {item.emailSubject && (
-                <p className="mb-0.5 font-medium">{item.emailSubject}</p>
+                <p className="mb-1 font-semibold">{item.emailSubject}</p>
               )}
               {/* The picture IS the message when a customer sends one — "this
                   is the colour I want" — so it leads, capped rather than
@@ -1336,7 +1360,7 @@ function NoteEntry({
 
   const save = async () => {
     const next = draft.trim();
-    if (!next || busy) return;
+    if (!hasNoteText(next) || busy) return;
     setBusy(true);
     try {
       await updateNote({ noteId: item.id as Id<"notes">, body: next });
@@ -1379,22 +1403,22 @@ function NoteEntry({
         </div>
         {editing ? (
           // The editor wears the bubble, so a note reads and edits in the same
-          // box instead of jumping into a form somewhere else on the pane.
+          // box instead of jumping into a form somewhere else on the pane — and
+          // in the same FORMAT, rather than becoming plain text the moment you
+          // touch it.
           <div className="w-full min-w-[16rem] rounded-2xl bg-[var(--muted-bg)] px-3 py-2">
-            <textarea
-              autoFocus
+            <EmailBodyEditor
+              compact
+              showVariables={false}
               value={draft}
+              onSave={setDraft}
+              onLiveChange={setDraft}
               disabled={busy}
-              onChange={(event) => setDraft(event.target.value)}
-              className="min-h-[4rem] w-full resize-y border-0 bg-transparent p-0 text-sm focus:outline-none"
             />
             <div className="mt-2 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setDraft(body);
-                  setEditing(false);
-                }}
+                onClick={() => setEditing(false)}
                 disabled={busy}
                 className="rounded-md px-2.5 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
               >
@@ -1403,7 +1427,7 @@ function NoteEntry({
               <button
                 type="button"
                 onClick={() => void save()}
-                disabled={busy || !draft.trim()}
+                disabled={busy || !hasNoteText(draft)}
                 className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
               >
                 {busy ? t("common.saving") : t("common.save")}
@@ -1416,13 +1440,30 @@ function NoteEntry({
           <button
             type="button"
             onClick={() => {
-              setDraft(body);
+              // Plain notes predate the editor. Converted on the way IN rather
+              // than migrated in storage: the paragraph breaks somebody typed
+              // survive, and a note nobody ever edits is never rewritten.
+              setDraft(bodyIsHtml(body) ? body : plainToHtml(body));
               setEditing(true);
             }}
             title={t("notes.edit")}
             className="min-w-0 rounded-2xl bg-[var(--muted-bg)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
           >
-            <span className="block whitespace-pre-wrap break-words">{body}</span>
+            {/* Judged on the BODY, never on a stored flag — see lib/noteBody.
+                Sanitised even though this markup is ours: a note can be edited
+                by anyone in the org, and "we wrote it" is not a security
+                boundary. */}
+            {bodyIsHtml(body) ? (
+              <div
+                className="break-words [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4"
+                dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(body) }}
+              />
+            ) : (
+              // whitespace-pre-wrap, not <br> injection: a legacy plain note
+              // keeps its line breaks without being rewritten into markup it
+              // was never stored as.
+              <span className="block whitespace-pre-wrap break-words">{body}</span>
+            )}
           </button>
         )}
       </div>

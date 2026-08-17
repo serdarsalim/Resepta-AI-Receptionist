@@ -50,6 +50,7 @@ import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_newCustomer from "../lib/newCustomer.js";
+import type * as lib_noteBody from "../lib/noteBody.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
 import type * as lib_overlap from "../lib/overlap.js";
 import type * as lib_phone from "../lib/phone.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   "lib/metaSig": typeof lib_metaSig;
   "lib/money": typeof lib_money;
   "lib/newCustomer": typeof lib_newCustomer;
+  "lib/noteBody": typeof lib_noteBody;
   "lib/orgAuth": typeof lib_orgAuth;
   "lib/overlap": typeof lib_overlap;
   "lib/phone": typeof lib_phone;

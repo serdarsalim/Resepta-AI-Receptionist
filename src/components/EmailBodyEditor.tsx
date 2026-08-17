@@ -137,6 +137,7 @@ function Ic({ children }: { children: React.ReactNode }) {
 function Toolbar({
   editor,
   showVariables = true,
+  divider = true,
 }: {
   editor: Editor;
   // Tokens are for a TEMPLATE, which is written once and rendered per
@@ -144,6 +145,12 @@ function Toolbar({
   // renders it on the way out, so a {{name}} inserted here would reach the
   // customer as those eight characters.
   showVariables?: boolean;
+  // The rule under the buttons. It earns its place in the framed editor, where
+  // the toolbar is a band inside a box and something has to say where the band
+  // ends. In the composer there is no box and no band — the buttons sit on the
+  // same sheet as the text they format, and a line across it is decoration.
+  // Borders belong to containers (AGENTS.md).
+  divider?: boolean;
 }) {
   const { t } = useLanguage();
   const {
@@ -165,7 +172,11 @@ function Toolbar({
     editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
   };
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-[var(--border)] px-2 py-1">
+    <div
+      className={`flex flex-wrap items-center gap-0.5 px-2 py-1 ${
+        divider ? "border-b border-[var(--border)]" : ""
+      }`}
+    >
       <ToolbarButton title={t("editor.bold")} active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
         <strong>B</strong>
       </ToolbarButton>
@@ -381,7 +392,7 @@ export function EmailBodyEditor({
       <div className={disabled ? "pointer-events-none opacity-50" : ""}>
         {editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} />
+            <Toolbar editor={editor} showVariables={showVariables} divider={false} />
             <EditorContent editor={editor} />
           </>
         ) : (

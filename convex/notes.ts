@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
+import { hasNoteText } from "./lib/noteBody";
 
 // Notes on a customer. There is no `list` here on purpose: a note is a row in
 // the conversation feed, not a separate list living beside it, so reading them
@@ -21,7 +22,10 @@ export const add = mutation({
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) throw new Error("not-found");
     const body = args.body.trim();
-    if (!body) throw new Error("body-required");
+    // Not `!body`. A note written in the rich editor arrives as markup, and an
+    // empty document serialises to "<p></p>" — a non-empty string carrying no
+    // note at all. The question is whether anything was WRITTEN.
+    if (!hasNoteText(body)) throw new Error("body-required");
     return await ctx.db.insert("notes", {
       orgId,
       customerId: args.customerId,
@@ -43,8 +47,9 @@ export const update = mutation({
     if (!note || note.orgId !== orgId) throw new Error("not-found");
     const body = args.body.trim();
     // An empty edit is a delete the user didn't mean to ask for. Reject it and
-    // let them use the delete button, which says what it does.
-    if (!body) throw new Error("body-required");
+    // let them use the delete button, which says what it does. Judged on the
+    // text, not the string — see add.
+    if (!hasNoteText(body)) throw new Error("body-required");
     if (body === note.body) return null;
     await ctx.db.patch(args.noteId, { body, editedAt: Date.now() });
     return null;
