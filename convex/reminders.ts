@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { DEFAULT_QUIET_HOURS } from "./orgs";
-import { getLocalPartsSafe } from "./lib/businessHours";
+import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import {
   computeNextMessage,
   loadOrgRules,
@@ -20,11 +20,40 @@ const BATCH = 200;
 // a barber closed on Monday still wants Monday's reminders going out for
 // Tuesday's appointments. Business hours (orgs.businessHours) are a separate
 // window and drive the WhatsApp away-reply instead.
+//
+// Wraps, and has to. These fields are named for the quiet part but read as the
+// SEND window, so "quiet from 21:00 to 09:00" is the natural thing to type and
+// it lands as start=21, end=9. A straight `hour >= start && hour < end` is then
+// false for all twenty-four hours: every reminder, winback and follow-up stops
+// forever, and nothing on screen admits it.
 function insideSendWindow(org: Doc<"orgs">, now: number): boolean {
   const start = org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0];
   const end = org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1];
   const hour = getLocalPartsSafe(now, org.timezone).hour;
-  return hour >= start && hour < end;
+  return start <= end
+    ? hour >= start && hour < end
+    : hour >= start || hour < end;
+}
+
+// When this org's send window next opens, as a UTC instant.
+//
+// A held row is parked here rather than left holding a due time that has
+// already passed. by_next_message is a single ascending index shared by every
+// org, so a row stuck in the past sits at the FRONT of it for the whole quiet
+// period: re-read by every tick, and — the part that actually hurts —
+// occupying one of the BATCH slots that an org currently inside its own window
+// needs. Parking keeps the index honest about when a row wants attention.
+// Nothing is lost, because computeNextMessage re-derives what is owed when the
+// row comes due again.
+function nextSendWindowOpen(org: Doc<"orgs">, now: number): number {
+  const start = org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0];
+  const tz = org.timezone || "UTC";
+  const p = getLocalPartsSafe(now, tz);
+  const todayOpen = localWallTimeToUtcMs(p.y, p.m0, p.d, start, 0, tz);
+  // Date.UTC normalises a day past the end of the month, so d + 1 is safe.
+  return todayOpen > now
+    ? todayOpen
+    : localWallTimeToUtcMs(p.y, p.m0, p.d + 1, start, 0, tz);
 }
 
 // ── The due sweep ───────────────────────────────────────────────────────────
@@ -72,16 +101,29 @@ export const tick = internalMutation({
       )
       .take(BATCH);
 
+    // Rows this invocation actually moved out of the due range. Not the same as
+    // due.length — see the hand-off at the bottom.
+    let handled = 0;
+
     for (const appointment of due) {
       const { org, rules } = await orgOf(appointment.orgId);
       if (!org) {
         // Orphaned row: clear the marker so it stops being read every tick.
         await ctx.db.patch(appointment._id, { nextMessageAt: undefined });
+        handled += 1;
         continue;
       }
-      // Held, not dropped. The row keeps its due time and the first tick
-      // inside the window sends it.
-      if (!insideSendWindow(org, now)) continue;
+      // Held, not dropped — but parked at the window opening rather than left
+      // sitting in the past, so it stops crowding the front of the index and
+      // stops being re-read by every tick until morning.
+      if (!insideSendWindow(org, now)) {
+        await ctx.db.patch(appointment._id, {
+          nextMessageAt: nextSendWindowOpen(org, now),
+        });
+        continue;
+      }
+      // Past the hold, every path below writes, so the row leaves the range.
+      handled += 1;
 
       // Re-derived from the row rather than trusted from the index: the org
       // may have changed its rules since the field was written, and what is
@@ -126,7 +168,14 @@ export const tick = internalMutation({
     // A full batch means there is probably more behind it. Hand off to a fresh
     // invocation rather than reading further in this one — the next tick is
     // five minutes away and a backlog should not wait for it.
-    if (due.length === BATCH) {
+    //
+    // Guarded on PROGRESS, not volume. This used to test due.length alone, and
+    // a batch entirely held by quiet hours wrote nothing: the same 200 rows
+    // came back, were skipped again, and re-enqueued again, spinning the
+    // scheduler continuously until the window opened. Parking held rows above
+    // already breaks that loop; `handled > 0` is the second belt, so a future
+    // no-op branch cannot re-open it.
+    if (due.length === BATCH && handled > 0) {
       await ctx.scheduler.runAfter(0, internal.reminders.tick, {});
     }
     return null;
@@ -146,11 +195,20 @@ export const tick = internalMutation({
 // come due or be about to. Anything it repairs is a bug in a write path; the
 // point is that the customer still gets their reminder while we find it.
 export const reconcile = internalMutation({
-  args: {},
+  args: { fromMs: v.optional(v.number()) },
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const now = Date.now();
+    // Continuation cursor. Without one, a deployment with more than 500 live
+    // bookings in the next 48 hours silently reconciled only the earliest 500
+    // and returned — so the later part of the window was reached only once it
+    // drifted inside the prefix, which for a busy deployment is after the
+    // 24-hour reminder was already due. The window does slide as `now` moves,
+    // so this was never permanent; it was a hole sitting exactly where the
+    // product's default offset lives.
+    const from = Math.max(args.fromMs ?? now, now);
     const horizon = now + 48 * 3600_000;
+    let resumeAt: number | undefined;
     const orgCache = new Map<
       Id<"orgs">,
       { org: Doc<"orgs"> | null; rules: Doc<"messageRules">[] }
@@ -160,9 +218,14 @@ export const reconcile = internalMutation({
       const rows = await ctx.db
         .query("appointments")
         .withIndex("by_status_start", (q) =>
-          q.eq("status", status).gt("startAt", now).lte("startAt", horizon),
+          q.eq("status", status).gt("startAt", from).lte("startAt", horizon),
         )
         .take(500);
+      if (rows.length === 500) {
+        // The smaller of the two statuses' cursors, so neither is skipped.
+        const last = rows[rows.length - 1].startAt;
+        resumeAt = resumeAt === undefined ? last : Math.min(resumeAt, last);
+      }
       for (const appointment of rows) {
         let entry = orgCache.get(appointment.orgId);
         if (entry === undefined) {
@@ -179,6 +242,14 @@ export const reconcile = internalMutation({
           await ctx.db.patch(appointment._id, { nextMessageAt: expected });
         }
       }
+    }
+    // `resumeAt > from` is the stall guard: this sweep mostly writes nothing,
+    // so unlike tick it cannot rely on its own writes to make the next read
+    // different, and a cursor that failed to advance would loop forever.
+    if (resumeAt !== undefined && resumeAt > from) {
+      await ctx.scheduler.runAfter(0, internal.reminders.reconcile, {
+        fromMs: resumeAt,
+      });
     }
     return null;
   },
@@ -236,11 +307,27 @@ export const backfillOrg = internalMutation({
         await ctx.db.patch(appointment._id, { nextMessageAt: expected });
       }
     }
-    // More to do: continue from just past the last row we handled.
+    // More to do: continue from the last row's own startAt, NOT past it.
+    //
+    // This used to advance by +1ms, which silently skipped every appointment
+    // sharing the 500th row's start time — and ties on the minute are routine,
+    // because capacity is a count, not exclusivity: a three-chair salon books
+    // three at 10:00, and localWallTimeToUtcMs writes them at zero seconds and
+    // zero millis, so the collision is guaranteed rather than unlikely. A
+    // skipped row keeps a stale nextMessageAt, so the rule the owner just
+    // saved never fires for that customer and nothing looks broken. This is
+    // not only the migration: every messageRules add/update/remove and
+    // orgs.update schedules it.
+    //
+    // gte() then re-reads the tied rows, which costs a page and loses nothing
+    // — recomputing nextMessageAt is idempotent. The one case that must still
+    // advance is a whole page at a single timestamp, which would never
+    // terminate otherwise.
     if (rows.length === 500) {
+      const last = rows[rows.length - 1].startAt;
       await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, {
         orgId: args.orgId,
-        fromMs: rows[rows.length - 1].startAt + 1,
+        fromMs: last === rows[0].startAt ? last + 1 : last,
       });
     }
     return null;

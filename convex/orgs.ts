@@ -367,11 +367,25 @@ export const update = mutation({
     if (args.sendBookingConfirmation !== undefined) {
       patch.sendBookingConfirmation = args.sendBookingConfirmation;
     }
-    if (args.quietHoursStart !== undefined) {
-      patch.quietHoursStart = Math.min(23, Math.max(0, Math.round(args.quietHoursStart)));
-    }
-    if (args.quietHoursEnd !== undefined) {
-      patch.quietHoursEnd = Math.min(24, Math.max(1, Math.round(args.quietHoursEnd)));
+    // Resolved as a PAIR, because the two are only meaningful together and
+    // these were clamped independently with no relationship checked. A start
+    // after the end is fine — insideSendWindow wraps, so 21→9 is an overnight
+    // send window — but start === end is the empty set, and storing it stops
+    // every reminder, winback and follow-up this org owes with nothing on
+    // screen admitting it. Falling back to the default beats keeping a config
+    // that reads "never", which is the same call the businessHours block below
+    // makes for the same reason.
+    if (args.quietHoursStart !== undefined || args.quietHoursEnd !== undefined) {
+      const start =
+        args.quietHoursStart === undefined
+          ? org0?.quietHoursStart ?? DEFAULT_QUIET_HOURS[0]
+          : Math.min(23, Math.max(0, Math.round(args.quietHoursStart)));
+      const end =
+        args.quietHoursEnd === undefined
+          ? org0?.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1]
+          : Math.min(24, Math.max(1, Math.round(args.quietHoursEnd)));
+      patch.quietHoursStart = start === end ? DEFAULT_QUIET_HOURS[0] : start;
+      patch.quietHoursEnd = start === end ? DEFAULT_QUIET_HOURS[1] : end;
     }
     if (args.winbackEnabled !== undefined) patch.winbackEnabled = args.winbackEnabled;
     if (args.winbackDaysAfter !== undefined) {
