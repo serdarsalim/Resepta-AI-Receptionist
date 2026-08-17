@@ -399,7 +399,18 @@ export const recoverAnalysis = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
-    const context = await ctx.runQuery(internal.voiceEvents.recoveryContext, args);
+    // Named fields, not `args`. Forwarding the whole bag sent `attempt` to a
+    // validator that declares three fields, and Convex rejects an undeclared
+    // property — so this action threw on its first statement, every time, and
+    // the entire analysis-recovery path was dead: no re-enqueue, no
+    // markRecoveryFailed, lastEventError left clear so health reported green,
+    // and no retellCostMicroUsd reaching the meter. TypeScript could not see
+    // it because `args` is a variable, so excess-property checking never ran.
+    const context = await ctx.runQuery(internal.voiceEvents.recoveryContext, {
+      orgId: args.orgId,
+      retellAgentId: args.retellAgentId,
+      retellCallId: args.retellCallId,
+    });
     if (!context || context.analyzed) return null;
     let reason = "Call analysis did not arrive.";
     if (context.apiKey) {

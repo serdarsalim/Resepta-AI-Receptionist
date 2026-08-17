@@ -642,6 +642,20 @@ export const beforeCallContext = internalQuery({
     if (!agent || !agent.enabled) return null;
     const org = await ctx.db.get(agent.orgId);
     if (!org) return null;
+    // Suspension (schema: orgs.status) "stops SPEND and OUTBOUND at the send
+    // chokepoints", and a ring the platform pays Retell for is spend. Ten
+    // message and provisioning lanes each carry a copy of this check; the voice
+    // lane, the largest bill in the product, carried none — so a suspended org
+    // kept answering, kept booking through voiceBook, and kept drawing its
+    // wallet down in meterCall, while the confirmation WhatsApp for that
+    // booking was refused by wa.ts. Booked and never told is the worst of the
+    // available outcomes.
+    //
+    // Ring time only, like the wallet check below, and deliberately NOT in
+    // loadVoiceContext: suspending mid-call would fail the agent's tool calls
+    // halfway through a conversation with a real customer on the line. One
+    // call finishing is the same bounded overdraft the wallet already accepts.
+    if ((org.status ?? "active") === "suspended") return null;
     // Prepaid enforcement (schema: orgs.billingMode): resolving null means
     // the inbound webhook answers without an agent override and Retell
     // declines the ring, so an empty wallet sounds like a busy line, never
