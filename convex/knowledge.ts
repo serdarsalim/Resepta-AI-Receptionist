@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
-import { requireOrg } from "./lib/orgAuth";
+import { requireOrg, requireOwner } from "./lib/orgAuth";
 
 // The business's own prose — what the chat agent knows beyond the structured
 // tables (docs/chat-agent.md §1). Deliberately BLOCKS with titles rather than
@@ -44,7 +44,7 @@ export const create = mutation({
   args: { title: v.string(), body: v.string() },
   returns: v.id("knowledge"),
   handler: async (ctx, args) => {
-    const { orgId, user } = await requireOrg(ctx);
+    const { orgId, user } = await requireOwner(ctx);
     const title = args.title.trim().slice(0, MAX_TITLE_CHARS);
     const body = args.body.trim().slice(0, MAX_BODY_CHARS);
     if (!title) throw new Error("empty-title");
@@ -72,7 +72,7 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId, user } = await requireOrg(ctx);
+    const { orgId, user } = await requireOwner(ctx);
     const row = await ctx.db.get(args.id);
     if (!row || row.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {
@@ -96,7 +96,7 @@ export const remove = mutation({
   args: { id: v.id("knowledge") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const row = await ctx.db.get(args.id);
     if (!row || row.orgId !== orgId) throw new Error("not-found");
     await ctx.db.delete(args.id);

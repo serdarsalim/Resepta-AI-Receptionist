@@ -251,8 +251,16 @@ export const loadForSend = internalQuery({
   args: { campaignId: v.id("campaigns") },
   returns: v.any(),
   handler: async (ctx, args) => {
+    // The gate for send() lives HERE rather than in the action. An action has
+    // no ctx.db, so it cannot check membership itself, and a guard bolted on
+    // beside the data load is a guard the next caller cannot forget. Owner-only
+    // for the reason create and remove already are: a run reaches every
+    // customer the salon has and cannot be recalled, so it is not a decision
+    // for whoever is on shift. The org comparison is the other half — without
+    // it, a caller holding another salon's campaignId spends their quota.
+    const { orgId } = await requireOwner(ctx);
     const campaign = await ctx.db.get(args.campaignId);
-    if (!campaign) return null;
+    if (!campaign || campaign.orgId !== orgId) return null;
     const [org, templates, waAccount] = await Promise.all([
       ctx.db.get(campaign.orgId),
       ctx.db
@@ -397,16 +405,24 @@ export const fanOut = internalMutation({
   },
 });
 
+// Claims the campaign, and is the only thing standing between a
+// double-invocation and a doubled run. The draft check in send() reads a
+// snapshot taken by an earlier transaction, so two callers can both pass it and
+// both fan out; re-reading status inside the write transaction is what lets
+// Convex's OCC see the conflict and refuse the second one. Returns whether the
+// claim was won.
 export const markStarted = internalMutation({
   args: { campaignId: v.id("campaigns"), recipientCount: v.number() },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
+    const campaign = await ctx.db.get(args.campaignId);
+    if (!campaign || campaign.status !== "draft") return false;
     await ctx.db.patch(args.campaignId, {
       status: "sending",
       startedAt: Date.now(),
       recipientCount: args.recipientCount,
     });
-    return null;
+    return true;
   },
 });
 
@@ -469,10 +485,14 @@ export const send = action({
       return { ok: false, reason: template ? "wa-not-configured" : "no-campaign-template" };
     }
 
-    await ctx.runMutation(internal.campaigns.markStarted, {
+    const claimed = await ctx.runMutation(internal.campaigns.markStarted, {
       campaignId: args.campaignId,
       recipientCount: recipientIds.length,
     });
+    // Lost the race to a concurrent invocation. Same reason as the snapshot
+    // check above, deliberately: from the caller's side both mean "this call
+    // sent nothing", and the distinction is ours, not theirs.
+    if (!claimed) return { ok: false, reason: "already-sent" };
 
     let queued = 0;
     for (let i = 0; i < recipientIds.length; i += FANOUT_BATCH) {

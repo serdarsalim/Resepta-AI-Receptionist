@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireOrg } from "./lib/orgAuth";
+import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 
 const serviceDoc = v.object({
@@ -73,7 +73,7 @@ export const create = mutation({
   },
   returns: v.id("services"),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const name = args.name.trim();
     if (!name) throw new Error("name-required");
     // A name of pure punctuation folds to nothing; fall back to a positional
@@ -120,7 +120,7 @@ export const update = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.orgId !== orgId) throw new Error("not-found");
     const patch: Record<string, unknown> = {};
@@ -173,7 +173,7 @@ export const remove = mutation({
   args: { serviceId: v.id("services") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const service = await ctx.db.get(args.serviceId);
     if (!service || service.orgId !== orgId) throw new Error("not-found");
     await ctx.db.delete(args.serviceId);
