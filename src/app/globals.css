@@ -418,6 +418,30 @@ thead {
   background-image: none;
 }
 
+/* The recording player, on the paper. Chrome paints its grey control panel
+   INSIDE the element's shadow tree, which no utility class can reach, so the
+   background has to be set on the PARTS as well as on the host — otherwise the
+   UA's own grey sits in a rounded box of ours and the corners show through.
+
+   Scoped to .chat-wallpaper deliberately: players elsewhere in the app sit on
+   plain --card, where the UA's grey is exactly what separates them from it. */
+.chat-wallpaper audio {
+  border-radius: 0.5rem; /* rounded-lg, matching the summary card below it */
+  background-color: var(--chat-field);
+}
+.chat-wallpaper audio::-webkit-media-controls-enclosure,
+.chat-wallpaper audio::-webkit-media-controls-panel {
+  background-color: var(--chat-field);
+  border-radius: 0.5rem;
+}
+/* The control GLYPHS are drawn by the UA, which picks their colour from
+   color-scheme — and this app never sets it, so they default to dark-on-light.
+   Right against the light paper, invisible against the dark one, so dark has to
+   say so explicitly or the play button disappears into #242424. */
+.dark .chat-wallpaper audio {
+  color-scheme: dark;
+}
+
 .email-paper {
   background: #fff;
   color: #111;
