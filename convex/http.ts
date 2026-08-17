@@ -443,6 +443,63 @@ http.route({
     const { org } = context;
     const callerPhone = String(args.phone ?? call.from_number ?? "");
 
+    // The three things an agent-supplied start has to survive before it becomes
+    // a row. One copy, shared by both write branches, because it WAS written
+    // twice and the second copy — reschedule_appointment — had none of the
+    // three and read the timezone wrong on top of that. An agent can name any
+    // instant; the prompt is the cooperative layer, and a write to the
+    // appointments table has to hold the invariant itself.
+    //
+    // `did` is the verb the agent repeats to the caller, so it has to match
+    // what was actually refused: a booking that never happened, or a move that
+    // did not take.
+    const startRefusal = (
+      startAt: number,
+      did: "booked" | "moved",
+    ): Record<string, unknown> | null => {
+      // A date the model made up parses just as cleanly as one the caller
+      // said. This booked 8 June 2024 off a live call — two years past, a
+      // confirmation sent for it, and a slot in the salon's list nobody can
+      // explain. Handing the miss back is the only safe answer: the agent can
+      // ask again, and inventing a plausible date on the caller's behalf is
+      // exactly what it must not do.
+      const now = Date.now();
+      if (startAt < now - 5 * 60_000) return { error: "start-is-in-the-past" };
+      if (startAt > now + 400 * 24 * 60 * 60_000) {
+        return { error: "start-is-too-far-ahead" };
+      }
+      // check_availability TELLS the agent the hours, but being told is not
+      // being bound: on the call that exposed this, that tool failed its
+      // signature check and answered nothing, so the model proposed 08:00 at a
+      // salon opening at 09:00 and nothing here disagreed.
+      //
+      // Checked before cal.com too, and deliberately: businessHours is the
+      // salon's own statement of when it is open, so a slot outside it is
+      // wrong whichever calendar is holding the inventory — and refusing here
+      // avoids creating a provider booking we would then have to undo.
+      const openHours = org.businessHours;
+      if (
+        openHours &&
+        hasBusinessHours(openHours) &&
+        !isWithinActiveWindow(startAt, org.timezone, openHours)
+      ) {
+        // Speakable, not a bare code. An error the agent cannot act on becomes
+        // "something went wrong" down the phone and ends a call that was one
+        // sentence from booking; handed the hours, it counters with a time
+        // that works.
+        return {
+          error: "outside-open-hours",
+          attempted: spokenDateTime(startAt, org.timezone, org.language),
+          ...openHoursForAgent(openHours),
+          note:
+            `The salon is CLOSED then, so this was not ${did}. Tell the caller` +
+            " and offer the nearest time inside open_hours on a day that is not" +
+            " in closed_days.",
+        };
+      }
+      return null;
+    };
+
     if (name === "check_availability") {
       const today = todayInZone(org.timezone);
       const dayIso = String(args.date ?? today);
@@ -522,50 +579,8 @@ http.route({
       if (Number.isNaN(startAt) || !customerName || !callerPhone) {
         return respond({ error: "missing-name-phone-or-start" });
       }
-      // A date the model made up parses just as cleanly as one the caller
-      // said. This booked 8 June 2024 off a live call — two years past, a
-      // confirmation sent for it, and a slot in the salon's list nobody can
-      // explain. Handing the miss back is the only safe answer: the agent can
-      // ask again, and inventing a plausible date on the caller's behalf is
-      // exactly what it must not do.
-      const now = Date.now();
-      if (startAt < now - 5 * 60_000) {
-        return respond({ error: "start-is-in-the-past" });
-      }
-      if (startAt > now + 400 * 24 * 60 * 60_000) {
-        return respond({ error: "start-is-too-far-ahead" });
-      }
-      // check_availability TELLS the agent the hours, but being told is not
-      // being bound: on the call that exposed this, that tool failed its
-      // signature check and answered nothing, so the model proposed 08:00 at a
-      // salon opening at 09:00 and nothing here disagreed. The prompt is the
-      // cooperative layer; a write to the appointments table has to hold the
-      // invariant itself.
-      //
-      // Checked before cal.com too, and deliberately: businessHours is the
-      // salon's own statement of when it is open, so a slot outside it is
-      // wrong whichever calendar is holding the inventory — and refusing here
-      // avoids creating a provider booking we would then have to undo.
-      const openHours = org.businessHours;
-      if (
-        openHours &&
-        hasBusinessHours(openHours) &&
-        !isWithinActiveWindow(startAt, org.timezone, openHours)
-      ) {
-        // Speakable, not a bare code. An error the agent cannot act on becomes
-        // "something went wrong" down the phone and ends a call that was one
-        // sentence from booking; handed the hours, it counters with a time
-        // that works.
-        return respond({
-          error: "outside-open-hours",
-          attempted: spokenDateTime(startAt, org.timezone, org.language),
-          ...openHoursForAgent(openHours),
-          note:
-            "The salon is CLOSED then, so this was not booked. Tell the caller" +
-            " and offer the nearest time inside open_hours on a day that is not" +
-            " in closed_days.",
-        });
-      }
+      const refusal = startRefusal(startAt, "booked");
+      if (refusal) return respond(refusal);
       // Whatever the caller called them. Matching against the org's own
       // list happens in voiceBook, not here and not in the agent's prompt.
       //
@@ -723,8 +738,18 @@ http.route({
         return respond({ cancelled: true });
       }
 
-      const startAt = Date.parse(String(args.start ?? ""));
+      // Wall time at the BUSINESS, not UTC — the same parse book_appointment
+      // uses, and for the same reason. Date.parse read the agent's zone-less
+      // stamp as UTC on a runtime whose zone IS UTC, so an Istanbul caller
+      // asking to move to five o'clock had it written at eight: cal.com moved
+      // with it, every reminder recomputed off the wrong instant, and the tool
+      // then read "eight o'clock" back down the phone to someone who said five.
+      const startAt = parseLocalStart(String(args.start ?? ""), org.timezone);
       if (Number.isNaN(startAt)) return respond({ error: "missing-or-bad-start" });
+      // This branch used to check nothing but NaN, so it would move a booking
+      // into the past or onto a closed Sunday that book_appointment refuses.
+      const refusal = startRefusal(startAt, "moved");
+      if (refusal) return respond(refusal);
       let newUid: string | undefined;
       if (found.externalUid && org.calcomApiKey) {
         const result = await rescheduleBooking({
