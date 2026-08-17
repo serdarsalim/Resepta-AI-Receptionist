@@ -334,32 +334,22 @@ export async function scheduleLifecycleMessages(
       await ctx.db.patch(appointmentId, { manageToken: crypto.randomUUID() });
     }
   }
-  if (org.rulesMigratedAt !== undefined) {
-    // Every matching live rule fires — two booking messages is a choice the
-    // owner made by having two rows, not a bug to dedupe away.
-    const rules = await loadOrgRules(ctx, orgId);
-    for (const rule of rules) {
-      if (rule.trigger !== trigger || rule.paused) continue;
-      await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
-        appointmentId,
-        kind: trigger === "booking" ? "confirmation" : "cancellation",
-        ruleId: rule._id,
-      });
-    }
-    return;
+  // Every matching live rule fires — two booking messages is a choice the
+  // owner made by having two rows, not a bug to dedupe away.
+  //
+  // The legacy branch that used to follow this (sendBookingConfirmation +
+  // removedRules, for orgs without rulesMigratedAt) is gone: migrateAll has run
+  // in prod, seedDefaultRules stamps every new org migrated at creation, and two
+  // maintained answers to "what should fire on booking" was one too many.
+  const rules = await loadOrgRules(ctx, orgId);
+  for (const rule of rules) {
+    if (rule.trigger !== trigger || rule.paused) continue;
+    await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
+      appointmentId,
+      kind: trigger === "booking" ? "confirmation" : "cancellation",
+      ruleId: rule._id,
+    });
   }
-  // Legacy orgs: the confirmation trio, verbatim. Cancellation notices did
-  // not exist on the old model, and inventing them for orgs that never chose
-  // one is not a migration, it is a surprise.
-  if (trigger !== "booking") return;
-  if (org.sendBookingConfirmation === false) return;
-  // Taken off the table entirely, which is a different act from switching it
-  // off — but the same outcome for this send.
-  if ((org.removedRules ?? []).includes("confirmation")) return;
-  await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
-    appointmentId,
-    kind: "confirmation",
-  });
 }
 
 // The old name, kept callable while every intake path moves over.

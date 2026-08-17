@@ -86,8 +86,7 @@ export const tick = internalMutation({
       let entry = orgCache.get(orgId);
       if (entry === undefined) {
         const org = await ctx.db.get(orgId);
-        const rules =
-          org?.rulesMigratedAt !== undefined ? await loadOrgRules(ctx, orgId) : [];
+        const rules = org ? await loadOrgRules(ctx, orgId) : [];
         entry = { org, rules };
         orgCache.set(orgId, entry);
       }
@@ -230,10 +229,7 @@ export const reconcile = internalMutation({
         let entry = orgCache.get(appointment.orgId);
         if (entry === undefined) {
           const org = await ctx.db.get(appointment.orgId);
-          const rules =
-            org?.rulesMigratedAt !== undefined
-              ? await loadOrgRules(ctx, appointment.orgId)
-              : [];
+          const rules = org ? await loadOrgRules(ctx, appointment.orgId) : [];
           entry = { org, rules };
           orgCache.set(appointment.orgId, entry);
         }
@@ -295,8 +291,7 @@ export const backfillOrg = internalMutation({
     const from = args.fromMs ?? Date.now() - 90 * 24 * 3600_000;
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const rules =
-      org.rulesMigratedAt !== undefined ? await loadOrgRules(ctx, args.orgId) : [];
+    const rules = await loadOrgRules(ctx, args.orgId);
     const rows = await ctx.db
       .query("appointments")
       .withIndex("by_org_start", (q) => q.eq("orgId", args.orgId).gte("startAt", from))

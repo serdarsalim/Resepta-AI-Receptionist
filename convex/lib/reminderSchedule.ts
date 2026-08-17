@@ -42,10 +42,8 @@
 
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { DEFAULT_REMINDER_OFFSETS, DEFAULT_WINBACK_DAYS } from "../orgs";
 
 const HOUR_MS = 3600_000;
-const DAY_MS = 24 * HOUR_MS;
 
 type DueKind = "reminder" | "winback" | "followup";
 
@@ -141,36 +139,19 @@ function nextFromRules(
   return earliest;
 }
 
-// ── The legacy path, verbatim ───────────────────────────────────────────────
-
-function nextReminder(
-  appointment: Doc<"appointments">,
-  org: Doc<"orgs">,
-): { at: number; offsetHours: number } | undefined {
-  if (appointment.startAt <= Date.now()) return undefined;
-  const offsets = org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS;
-  const paused = org.pausedReminderHours ?? [];
-  const sent = appointment.reminderSentOffsets ?? [];
-  let earliest: { at: number; offsetHours: number } | undefined;
-  for (const offsetHours of offsets) {
-    if (paused.includes(offsetHours)) continue;
-    if (sent.includes(offsetHours)) continue;
-    const at = appointment.startAt - offsetHours * HOUR_MS;
-    if (earliest === undefined || at < earliest.at) earliest = { at, offsetHours };
-  }
-  return earliest;
-}
-
-function winbackDueAt(
-  appointment: Doc<"appointments">,
-  org: Doc<"orgs">,
-): number | undefined {
-  if (appointment.status !== "no_show") return undefined;
-  if ((org.removedRules ?? []).includes("winback")) return undefined;
-  if (!(org.winbackEnabled ?? false)) return undefined;
-  if (appointment.winbackSentAt !== undefined) return undefined;
-  return appointment.startAt + (org.winbackDaysAfter ?? DEFAULT_WINBACK_DAYS) * DAY_MS;
-}
+// ── The legacy path used to live here ───────────────────────────────────────
+//
+// nextReminder and winbackDueAt are gone. They read org.reminderOffsetsHours,
+// pausedReminderHours, removedRules, winbackEnabled and winbackDaysAfter, and
+// appointment.reminderSentOffsets — the pre-messageRules model. Every org is on
+// rules now (messageRules:migrateAll, run in prod 2026-08-17) and
+// seedDefaultRules stamps new ones at creation, so nothing reached them.
+//
+// The FIELDS stay in the schema on purpose. Dropping a column is the one part of
+// this that cannot be undone by reverting a commit, and they are cheap to leave:
+// unread, optional, and the honest record of what those orgs were configured
+// with before the migration. Delete them in their own change, once this one has
+// lived in prod for a while.
 
 // What this appointment owes and when, or undefined for "nothing".
 //
@@ -184,22 +165,19 @@ export function computeNextMessage(
   rules: Doc<"messageRules">[],
 ): NextMessage | undefined {
   if (!org) return undefined;
-  if (org.rulesMigratedAt !== undefined) {
-    const next = nextFromRules(appointment, rules);
-    if (!next) return undefined;
-    return { ...next, at: next.at === 0 ? 1 : next.at };
-  }
-  if (wantsReminders(appointment.status)) {
-    const next = nextReminder(appointment, org);
-    if (!next) return undefined;
-    return {
-      at: next.at === 0 ? 1 : next.at,
-      kind: "reminder",
-      offsetHours: next.offsetHours,
-    };
-  }
-  const at = winbackDueAt(appointment, org);
-  return at === undefined ? undefined : { at: at === 0 ? 1 : at, kind: "winback" };
+  // One engine. This used to fork on org.rulesMigratedAt, with the legacy
+  // reminderOffsetsHours / pausedReminderHours / removedRules / winbackEnabled
+  // fields driving a second, fully-maintained implementation of the same
+  // question — forked again in syncAppointmentSchedule, three times in
+  // reminders.ts, once in appointments.ts, and once more as a duplicate card in
+  // RemindersView. Any change to when a message fires had to be made twice or
+  // the two halves disagreed for whichever orgs sat on the other side, and new
+  // orgs could not exercise the legacy path at all because seedDefaultRules
+  // stamps them migrated at creation. messageRules:migrateAll has run in prod
+  // (Serdar, 2026-08-17), so every org is on rules and the other half is gone.
+  const next = nextFromRules(appointment, rules);
+  if (!next) return undefined;
+  return { ...next, at: next.at === 0 ? 1 : next.at };
 }
 
 // The org's rules, for feeding computeNextMessage. Callers that walk many
@@ -223,10 +201,7 @@ export async function syncAppointmentSchedule(
   const appointment = await ctx.db.get(appointmentId);
   if (!appointment) return undefined;
   const org = await ctx.db.get(appointment.orgId);
-  const rules =
-    org?.rulesMigratedAt !== undefined
-      ? await loadOrgRules(ctx, appointment.orgId)
-      : [];
+  const rules = org ? await loadOrgRules(ctx, appointment.orgId) : [];
   const next = computeNextMessage(appointment, org, rules)?.at;
   if (appointment.nextMessageAt !== next) {
     await ctx.db.patch(appointmentId, { nextMessageAt: next });
