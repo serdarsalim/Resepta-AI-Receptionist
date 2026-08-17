@@ -4,6 +4,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 // Only the pure allowlist check, never requirePlatformAdmin. See that file's
 // header for why this single import is the rule rather than an exception to it.
 import { emailIsPlatformAdmin } from "./platformAuth";
+import { normalisePhone } from "./phone";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -84,10 +85,27 @@ export async function requireOwner(
   return { user, orgId };
 }
 
-// E.164 or it doesn't exist (Nudge convention). Normalizes separators, rejects
-// anything without a dial code.
+// E.164 or it doesn't exist (Nudge convention). The strict door: separators are
+// normalised, a country is never guessed.
+//
+// The separator handling is shared with lib/phone.normalisePhone now, because it
+// used to be a second copy that had already drifted — that one strips "/" and
+// this one did not, so "+43 664/1234567", the standard Austrian written form,
+// was accepted by the cal.com and voice lanes and refused by schedule.ts and
+// customers.update. One string, two verdicts, depending on which door it came
+// through.
+//
+// The leading "+" is still required HERE and checked before delegating, which is
+// the whole difference between the two functions. normalisePhone reads a bare
+// "5321234567" as an international number that lost its plus — a documented and
+// reasonable reading for text arriving from the world, and badly wrong for this
+// door: that Turkish local number would become +53, which is Cuba, and the
+// salon would never learn why their messages stopped arriving. Refusing is the
+// only safe answer when the caller has not said which country.
 export function assertE164(raw: string): string {
-  const phone = raw.replace(/[\s().-]/g, "");
-  if (!/^\+[1-9]\d{6,14}$/.test(phone)) throw new Error("phone-must-be-e164");
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed.startsWith("+")) throw new Error("phone-must-be-e164");
+  const phone = normalisePhone(trimmed);
+  if (!phone) throw new Error("phone-must-be-e164");
   return phone;
 }

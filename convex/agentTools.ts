@@ -19,6 +19,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
 import { connectionField } from "./lib/connections";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
+import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
 
@@ -263,14 +264,58 @@ export const updateCustomer = internalMutation({
           `"${rawKey}" is not editable here. Editable: ${EDITABLE.join(", ")}.`,
         );
       }
-      const value = rawVal.trim();
-      const prior = (customer[key] ?? "") as string;
-      if (prior === value) continue;
+      const raw = rawVal.trim();
       // A customer with no phone cannot be messaged, and messaging is the whole
       // product. Refusing beats writing a row the reminder job will skip
       // forever without telling anyone.
-      if (key === "phone" && !value) throw new Error("A customer must keep a phone number.");
-      if (key === "firstName" && !value) throw new Error("A customer must keep a first name.");
+      if (key === "phone" && !raw) throw new Error("A customer must keep a phone number.");
+      if (key === "firstName" && !raw) throw new Error("A customer must keep a first name.");
+
+      // The in-app form (customers.update) normalises the number and refuses one
+      // another contact in this org already holds. This path did neither, and
+      // by_org_phone is read with .unique() — so two rows sharing one number
+      // made inbound WhatsApp, the voice agent's caller lookup, runtimeCallContext,
+      // the public booking page and the request form throw for that number
+      // permanently, with no screen anywhere to repair it. Writing a non-E.164
+      // string was the quieter half of the same bug: nothing matches it again,
+      // so that customer silently stops receiving anything.
+      let value = raw;
+      if (key === "phone") {
+        // The forgiving parse, not assertE164, and WITH the org's dial code —
+        // the same call cal.com's intake makes, for the same reason it gives:
+        // "nobody types +90 in a booking form", and nobody types it when
+        // telling their assistant a customer's number either. Without a dial
+        // code a bare "5321234567" parses as an international number that lost
+        // its plus, which for a Turkish local number is +53 — Cuba — and the
+        // salon would never learn why messages to that contact stopped
+        // arriving. (The voice lane deliberately passes none: a caller ID is
+        // already international and a number spelled out mid-call is
+        // transcribed speech. This is neither.)
+        const org = await ctx.db.get(orgId);
+        const normalised = normalisePhone(
+          raw,
+          org ? dialCodeForTimezone(org.timezone) : undefined,
+        );
+        if (!normalised) {
+          throw new Error(
+            `"${raw}" is not a phone number we can reach. Give it in full international form, e.g. +905321234567.`,
+          );
+        }
+        value = normalised;
+      }
+      const prior = (customer[key] ?? "") as string;
+      if (prior === value) continue;
+      if (key === "phone") {
+        const dupe = await ctx.db
+          .query("customers")
+          .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", value))
+          .unique();
+        if (dupe) {
+          throw new Error(
+            `Another contact in this business already has ${value}. Two contacts cannot share a number — every lookup by phone would stop working for both.`,
+          );
+        }
+      }
       before[key] = prior || null;
       after[key] = value;
     }
@@ -869,6 +914,19 @@ export const undo = internalMutation({
   handler: async (ctx, { orgId, userId, connectionId, actionId }) => {
     const action = await ctx.db.get(actionId as Id<"agentActions">).catch(() => null);
     if (!action || action.orgId !== orgId) throw new Error("No such action.");
+    // Your own change, which is what the tool's own description promises and
+    // what the drift check below is written around ("Undo takes back your own
+    // change; it does not win races"). userId and connectionId were taken in
+    // only to STAMP the reversal, never compared — so with recent_actions
+    // widening to the whole org on {everyone: true}, one staff member's
+    // connector could read another's action ids and revert their edits. The
+    // create_contact_field branch is the sharpest case: creating one is
+    // owner-gated, so reverting one without this check let a non-owner delete a
+    // field the owner made, taking every customer's value under that key with
+    // it.
+    if (action.userId !== userId) {
+      throw new Error("That action was somebody else's. You can only undo your own.");
+    }
     if (action.undoneAt) throw new Error("That action was already undone.");
     if (!action.reversible) {
       throw new Error(
