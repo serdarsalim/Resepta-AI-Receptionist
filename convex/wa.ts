@@ -34,6 +34,7 @@ import {
   loadEvolutionCreds,
 } from "./lib/waLane";
 import { isDemo } from "./demo";
+import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
 import { requireOrg } from "./lib/orgAuth";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -189,6 +190,18 @@ export const sendSession = action({
       // itself and Convex storage URLs are signed and short-lived, so a
       // picture would arrive as a broken fetch rather than a photo. Text is
       // what this lane is for.
+      //
+      // Said out loud rather than dropped: sending the caption alone and
+      // returning ok put the photo in the staff thread and nothing in the
+      // customer's.
+      if (args.mediaStorageId) {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId,
+          ok: false,
+          error: EVOLUTION_NO_MEDIA,
+        });
+        return { ok: false, reason: EVOLUTION_NO_MEDIA };
+      }
       const sent = await sendEvolutionText({
         baseUrl: evolution.baseUrl,
         apiKey: evolution.apiKey,
@@ -1122,6 +1135,19 @@ export const sendDueScheduled = internalAction({
           messageId: item.messageId,
           ok: false,
           error: "session-window-closed",
+        });
+        continue;
+      }
+      // Refused, not silently downgraded. Evolution is text-only here for the
+      // reason the immediate path states, and that is fine — what was not fine
+      // is that this branch dropped the attachment, sent the caption alone, and
+      // reported ok:true, so the row went to "sent" and the staff thread
+      // rendered a photo the customer never received.
+      if (lane === "evolution" && item.mediaStorageId) {
+        await ctx.runMutation(internal.messages.applySendResult, {
+          messageId: item.messageId,
+          ok: false,
+          error: EVOLUTION_NO_MEDIA,
         });
         continue;
       }

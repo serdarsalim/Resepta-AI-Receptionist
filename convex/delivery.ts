@@ -52,6 +52,7 @@ import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/wa
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { isDemo } from "./demo";
+import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
 // and the cron runs every minute — 50 is far more than a healthy deployment
@@ -304,6 +305,11 @@ async function attempt(
     // Text only. Templates are a Meta concept and a stored mediaLink is a
     // short-lived signed URL that Evolution fetches server-side, so a retried
     // image would arrive as a failed fetch rather than a photo.
+    //
+    // Which is why a row carrying one is refused instead of sent without it.
+    // Sending the caption alone reported success, so the row reached "sent"
+    // and the staff thread rendered a photo the customer never received.
+    if (job.mediaLink) return { ok: false, reason: EVOLUTION_NO_MEDIA };
     const sent = await sendEvolutionText({
       baseUrl: job.evolution.baseUrl,
       apiKey: job.evolution.apiKey,

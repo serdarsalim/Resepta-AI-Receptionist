@@ -588,6 +588,21 @@ export default defineSchema({
     // Runtime credentials are one-way hashes. The clear token is written to
     // the provider once and never stored in Resepta.
     runtimeTokenHash: v.optional(v.string()),
+    // The hash this agent answered to BEFORE the current rotation, still
+    // accepted.
+    //
+    // runtimeMcpConfig mints a fresh token and commits its hash as an argument
+    // to the publish chain — so the write lands first, and any non-2xx in
+    // create-agent-version / update-retell-llm / update-agent /
+    // publish-agent-version (a 429 is enough) leaves Retell's published agent
+    // holding the OLD bearer token while we hold only the new hash. Every
+    // save_customer_details on every subsequent call then 401s, permanently,
+    // until somebody happens to republish successfully — and nothing alerts.
+    //
+    // Keeping one generation back closes that without restructuring four call
+    // sites. It is not a new exposure: the previous token is one Retell was
+    // already given. It ages out on the next successful rotation.
+    runtimeTokenHashPrevious: v.optional(v.string()),
     runtimeConnectedAt: v.optional(v.number()),
     // Customer-facing health is derived from these stamps. Provider detail
     // remains in the event inbox for the platform operator.

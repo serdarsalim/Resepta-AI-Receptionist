@@ -22,6 +22,12 @@
 
 export type FailureClass = "transient" | "permanent";
 
+// One string, three send paths. The Evolution lane cannot carry an attachment
+// (it fetches the URL itself; Convex storage URLs are signed and short-lived),
+// and all three paths used to drop the image and report success — so the row
+// reached "sent" and the staff thread rendered a photo the customer never got.
+export const EVOLUTION_NO_MEDIA = "evolution-no-media";
+
 // Our own refusals, raised before the provider was ever called.
 const LOCAL_REFUSALS = new Set([
   "no-consent",
@@ -38,6 +44,14 @@ const LOCAL_REFUSALS = new Set([
   // definition — a demo row retried six times is six times the pointless work
   // and then a dead-letter alert about a send that was never going to happen.
   "demo-org",
+  // The Evolution twin of wa-not-configured above, which was in this set while
+  // this one was missing — so an org with no Evolution credentials had its rows
+  // retried for hours instead of failing once, visibly.
+  "evolution-not-configured",
+  // Evolution fetches a media URL itself and Convex storage URLs are signed and
+  // short-lived, so this lane is text-only by design. Retrying cannot change
+  // that, and the send used to report success while dropping the attachment.
+  EVOLUTION_NO_MEDIA,
 ]);
 
 // Meta error codes that mean "too fast", not "no". Worth naming individually
@@ -81,6 +95,24 @@ export function classifyFailure(reason: string | undefined): FailureClass {
     const status = Number(email[1]);
     return status >= 500 || status === 429 ? "transient" : "permanent";
   }
+
+  // The Evolution lane (lib/evolution.ts), which had no branch at all — so
+  // every one of its refusals fell through to the transient catch-all below and
+  // was re-sent the full budget, roughly six attempts over four and a half
+  // hours, before dead-lettering with the alert reserved for "we tried properly
+  // and the provider never took it". A wrong instance token answers 401 on
+  // every one of those attempts. That is the exact inversion of this file's own
+  // rule: when in doubt, permanent.
+  const evolution = reason.match(/^evolution-http-(\d{3})/);
+  if (evolution) {
+    const status = Number(evolution[1]);
+    return status >= 500 || status === 429 || status === 408
+      ? "transient"
+      : "permanent";
+  }
+  // Baileys is a socket, not a REST API: unreachable usually means the
+  // self-hosted box is restarting, which is the most retryable thing here.
+  if (reason === "evolution-unreachable") return "transient";
 
   // No recognisable status: this is the catch block in postWaCloud, i.e. fetch
   // itself threw — DNS, connection reset, timeout. That is the most retryable

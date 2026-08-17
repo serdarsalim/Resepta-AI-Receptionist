@@ -1326,6 +1326,15 @@ export const setRuntimeToken = internalMutation({
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, {
       runtimeTokenHash: tokenHash,
+      // One generation back stays valid. This hash is committed before the
+      // publish chain that DELIVERS the new token to Retell, so a 429 halfway
+      // through would otherwise leave the provider holding a token we no longer
+      // recognise — 401 on every save_customer_details, on every call, silently.
+      // Not carried when the hash has not actually changed, so a no-op
+      // republish cannot resurrect a generation we already retired.
+      ...(agent.runtimeTokenHash && agent.runtimeTokenHash !== tokenHash
+        ? { runtimeTokenHashPrevious: agent.runtimeTokenHash }
+        : {}),
       // The provider must be able to authenticate while it discovers the
       // tools, but this is not "connected" until its draft publishes.
       runtimeConnectedAt: undefined,
@@ -1419,7 +1428,15 @@ export const verifyRuntimeToken = internalQuery({
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
       .unique();
-    if (!agent || !agent.enabled || agent.runtimeTokenHash !== tokenHash) return null;
+    if (!agent || !agent.enabled) return null;
+    // Either generation. See schema.retellAgents.runtimeTokenHashPrevious: the
+    // new hash is stored before the publish that hands Retell the matching
+    // token, so accepting only the current one turned any mid-publish provider
+    // error into a permanently 401ing agent.
+    const known =
+      agent.runtimeTokenHash === tokenHash ||
+      agent.runtimeTokenHashPrevious === tokenHash;
+    if (!known) return null;
     return { orgId: agent.orgId, retellAgentId };
   },
 });
