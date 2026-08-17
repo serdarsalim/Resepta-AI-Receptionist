@@ -150,7 +150,7 @@ export function CallTranscript({
 
   if (turns.length === 0) {
     return (
-      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--paper)] p-3 font-sans text-xs leading-relaxed ${
+      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--chat-field)] p-3 font-sans text-xs leading-relaxed ${
         fill ? "min-h-32 flex-1" : "max-h-96"
       }`}>
         {transcript}
@@ -168,9 +168,17 @@ export function CallTranscript({
   // grey against.
   return (
     <div
-      className={`thin-scroll space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--paper)] p-3 ${
-        // min-h so a long summary above can never squeeze the transcript to
-        // nothing — it keeps its own scrollbar and a floor.
+      // The bubbles sit DIRECTLY on the chat paper — no inner box (Nudge's
+      // shape, ported back 2026-08-17). A card here would be a third surface
+      // level (paper → card → bubble) and would leave the agent's bubble with
+      // nothing to be white against.
+      //
+      // pr-3 for the scrollbar: the caller's bubbles are right-aligned, so
+      // without it they butt straight against the thumb. The left needs no
+      // counterpart — the scroller's own left edge already sits inside the
+      // pane's padding. min-h so a long summary above can never squeeze this to
+      // nothing; it keeps its own scrollbar and a floor.
+      className={`thin-scroll space-y-2 overflow-y-auto pr-3 ${
         fill ? "min-h-32 flex-1" : "max-h-96"
       }`}
     >
@@ -187,7 +195,11 @@ export function CallTranscript({
             <div
               className={`whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 text-xs ${
                 turn.agent
-                  ? "bg-[var(--pane)] text-[var(--foreground)]"
+                  // --chat-field, not --pane: this sits ON the chat paper, and
+                  // --chat-field is the raised surface defined against it in
+                  // BOTH themes (white on beige, #242424 on #0f0f0f). Same
+                  // token the WhatsApp thread's inbound bubbles read.
+                  ? "bg-[var(--chat-field)] text-[var(--foreground)]"
                   : "bg-[var(--accent)] text-[var(--accent-fg)]"
               }`}
             >
@@ -271,7 +283,7 @@ function CollectedList({ values }: { values: Record<string, unknown> }) {
   if (rows.length === 0) return null;
 
   return (
-    <dl className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-2.5 py-2">
+    <dl className="space-y-0.5">
       {rows.map(([key, text]) => (
         <div key={key} className="flex gap-2 text-xs">
           <dt className="shrink-0 text-[var(--muted)]">{humanizeKey(key)}:</dt>
@@ -320,6 +332,15 @@ export function CallDetail({
     return <p className="text-xs text-[var(--muted)]">{t("calls.nothingCaptured")}</p>;
   }
 
+  const billed =
+    typeof call.billedMicroUsd === "number" && call.billedMicroUsd > 0
+      ? t("calls.billedLine").replace(
+          "{amount}",
+          `$${(call.billedMicroUsd / 1_000_000).toFixed(2)}`,
+        )
+      : null;
+  const hasArtefact = !!call.summary || !!ended || !!billed || hasCollected;
+
   return (
     <div
       className={
@@ -329,33 +350,39 @@ export function CallDetail({
       }
     >
       {call.recordingUrl && (
-        <audio controls src={call.recordingUrl} className="h-9 w-full" />
+        <audio controls src={call.recordingUrl} className="h-9 w-full shrink-0" />
       )}
-      {call.summary && <p className="whitespace-pre-wrap text-sm">{call.summary}</p>}
-      {/* Under the summary, quiet: on an answered call it is a footnote. On an
-          unanswered one it is the only line there is, which is why it renders
-          even when nothing else does. */}
-      {ended && <p className="text-xs text-[var(--muted)]">{ended}</p>}
-      {typeof call.billedMicroUsd === "number" && call.billedMicroUsd > 0 && (
-        <p className="text-xs text-[var(--muted)]">
-          {t("calls.billedLine").replace(
-            "{amount}",
-            `$${(call.billedMicroUsd / 1_000_000).toFixed(2)}`,
+      {hasArtefact && (
+        /* Everything the call PRODUCED, as ONE artefact on the paper: what was
+           said in summary, how it ended, what it cost, what it collected. The
+           transcript below is the other half — what was actually said. Three
+           separate blocks made a reader assemble that themselves.
+
+           --chat-field, not --card: this sits ON the paper, and in dark --card
+           IS the card colour (#171717) against a #0f0f0f paper, which is near
+           invisible. --chat-field is the raised surface defined against the
+           paper in both themes. */
+        <div className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--chat-field)] px-2.5 py-2">
+          {call.summary && (
+            <p className="mb-2 whitespace-pre-wrap text-xs">{call.summary}</p>
           )}
-        </p>
-      )}
-      {hasCollected && <CollectedList values={call.collected!} />}
-      {call.transcript && (
-        <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
-          <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">
-            {t("calls.transcript")}
-          </div>
-          <CallTranscript
-            fill={fill}
-            transcript={call.transcript}
-            contactName={contactName}
-          />
+          {/* Under the summary, quiet: on an answered call it is a footnote. On
+              an unanswered one it is the only line there is, which is why the
+              card renders for it alone. */}
+          {ended && <p className="mb-2 text-xs text-[var(--muted)]">{ended}</p>}
+          {billed && <p className="mb-2 text-xs text-[var(--muted)]">{billed}</p>}
+          {hasCollected && <CollectedList values={call.collected!} />}
         </div>
+      )}
+      {/* No "Transcript" heading: a column of chat bubbles is self-evidently
+          the conversation, and the label was one more line of chrome between
+          the summary and the thing you opened the call to read. */}
+      {call.transcript && (
+        <CallTranscript
+          fill={fill}
+          transcript={call.transcript}
+          contactName={contactName}
+        />
       )}
     </div>
   );

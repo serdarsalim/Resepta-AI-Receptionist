@@ -699,6 +699,31 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - **An open email thread keeps the flat `--thread-bg`.** Mail is not a chat,
     no client wallpapers it, and giving it one would say the two channels are
     the same thing.
+  - **An OPEN CALL gets the paper too.** The rule is per SURFACE, not per tab
+    (Nudge's wording): a transcript is a conversation. The calls LIST does not —
+    rows on a patterned ground read as a table somebody spilled something on,
+    which is the same reason the email index and notes stay on the card.
+  - **The surface is painted ONCE, on the panel's root.** A repeating background
+    origins at its own element, so a header, a scroller and a composer each
+    tiling the doodles put three different phases of the pattern side by side
+    and seamed at every boundary. One parent, one continuous sheet.
+- **The opened call is Nudge's layout, ported back.** Everything the call
+  PRODUCED — summary, how it ended, what it cost, what it collected — is ONE
+  raised card on the paper; three separate blocks made the reader assemble that
+  themselves. The transcript's bubbles then sit DIRECTLY on the paper with no
+  box: a card there would be a third surface level (paper → card → bubble) and
+  would leave the agent's bubble with nothing to be white against.
+  - Both the card and the agent bubble read `--chat-field`, never `--card`: in
+    dark, `--card` (#171717) against a #0f0f0f paper is near invisible, and
+    `--chat-field` is the raised surface defined against the paper in both
+    themes. This retired a short-lived `--paper` token that was solving the
+    white-on-white symptom rather than the surface problem.
+  - No "Transcript" heading. A column of chat bubbles is self-evidently the
+    conversation, and the label was one more line of chrome between the summary
+    and the thing you opened the call to read.
+  - `pr-3` on the transcript scroller: the caller's bubbles are right-aligned
+    and butt against the scrollbar thumb without it. The left needs no
+    counterpart — the scroller's own edge sits inside the pane's padding.
 
 ### The inbox arrives with nothing selected (2026-08-17)
 

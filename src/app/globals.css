@@ -103,17 +103,6 @@
      same move. Only the scroll area wears it — the contact header above and
      the composer below stay card-white, which is also how WhatsApp sits. */
   --thread-bg: #f4f4f5;
-  /* A read-only block that sits ON a card and has to read as a different
-     SURFACE from it — the call transcript and the values an agent collected.
-     Both were --card, which is white on white: only their hairline said they
-     were there at all.
-
-     Beige rather than grey, and the same warmth the chat wallpaper uses,
-     because these are the same KIND of thing: a record you read, not a form
-     you fill in. It cannot be --muted-bg — in dark that is #171717, the exact
-     colour of --card, so the block would vanish into the card it sits on.
-     Dark gets a LIFTED grey for the same reason --chat-field does. */
-  --paper: #f7f3ec;
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }
@@ -155,11 +144,6 @@
   --grid-line-soft: color-mix(in srgb, var(--border) 45%, transparent);
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
   --thread-bg: #101010;
-  /* Lifted off --card (#171717), not tinted: a beige this dark is mud, and the
-     job here is separation rather than warmth. The transcript's agent bubbles
-     are --pane (#0c0c0c) and stay darker than this, so all three levels
-     survive. */
-  --paper: #1e1e1e;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 }

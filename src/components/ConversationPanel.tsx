@@ -386,8 +386,26 @@ export function ConversationPanel({
     setComposing(false);
   };
 
+  // The plane the whole pane stands on, painted ONCE here rather than by the
+  // header, the scroller and the composer separately. A repeating background
+  // origins at its own element, so three elements each tiling the doodles put
+  // three different phases of the pattern next to each other and seamed at
+  // every boundary. One parent, one continuous sheet.
+  //
+  // The rule is per SURFACE, not per tab (Nudge's wording): a transcript is a
+  // conversation and gets the paper, but the calls LIST is rows and does not —
+  // rows on a patterned ground read as a table somebody spilled something on,
+  // which is the same reason the email index and notes stay on the card. So
+  // the call tab paints paper only once a call is open.
+  const surface =
+    filter === "whatsapp" || (filter === "call" && !!openCall)
+      ? "chat-wallpaper"
+      : chatOrder
+        ? "bg-[var(--thread-bg)]"
+        : "";
+
   return (
-    <div className={`flex min-h-0 flex-col ${className ?? ""}`}>
+    <div className={`flex min-h-0 flex-col ${surface} ${className ?? ""}`}>
       {/* Email tab header. Compose sits top-right, Gmail's convention and
           Nudge's — the old full-width footer bar spent a whole row on one
           action. This is the slot the notes composer occupies below; each
@@ -400,11 +418,7 @@ export function ConversationPanel({
         // abruptly under it, which read as two panes stacked rather than one
         // conversation with a heading. Same rule the takeover chip and the
         // composer already follow.
-        <div
-          className={`shrink-0 px-3 pt-3 ${
-            chatOrder ? "bg-[var(--thread-bg)] pb-2" : ""
-          }`}
-        >
+        <div className={`shrink-0 px-3 pt-3 ${chatOrder ? "pb-2" : ""}`}>
           {composing ? (
             // Explicitly white, not transparent. The header around it takes the
             // thread's tinted plane, and a composer that inherits it reads as a
@@ -641,13 +655,7 @@ export function ConversationPanel({
           // WhatsApp gets the WALLPAPER and an open email thread gets the flat
           // tint. Mail is not a chat: no client wallpapers it, and giving it
           // one would say the two channels are the same thing.
-          filter === "whatsapp"
-            ? "chat-wallpaper space-y-2"
-            : chatOrder
-              ? "space-y-2 bg-[var(--thread-bg)]"
-              : filter === "note"
-                ? "space-y-3"
-                : ""
+          chatOrder ? "space-y-2" : filter === "note" ? "space-y-3" : ""
         }`}
       >
         {feed === undefined && (
@@ -1020,13 +1028,7 @@ export function ConversationPanel({
            wa.sendSession); the chip is how the thread is handed BACK, which
            no message can express. */
         <div
-          className={`flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)] ${
-            filter === "whatsapp"
-              ? "chat-wallpaper"
-              : chatOrder
-                ? "bg-[var(--thread-bg)]"
-                : ""
-          }`}
+          className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)]"
         >
           <span>
             {agentChipState === "paused" ? t("agent.paused") : t("agent.answering")}
@@ -1053,13 +1055,7 @@ export function ConversationPanel({
             // conversation ended — the composer is part of the chat surface,
             // not a footer under it. The feed view keeps card-white, because
             // its thread does too.
-            className={`p-3 ${
-              filter === "whatsapp"
-                ? "chat-wallpaper"
-                : chatOrder
-                  ? "bg-[var(--thread-bg)]"
-                  : ""
-            }`}
+            className="p-3"
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
