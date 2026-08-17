@@ -1470,6 +1470,13 @@ const dictionary = {
     en: "Click to pin this for later",
     de: "Zum Merken anheften",
   },
+  // The right pane before anything is picked. Says what to DO, not "no
+  // conversation selected" — the reader can see that nothing is selected.
+  "inbox.selectConversation": {
+    tr: "Okumak ve yanıtlamak için bir konuşma seçin.",
+    en: "Select a conversation to read and reply.",
+    de: "Wählen Sie eine Unterhaltung zum Lesen und Antworten.",
+  },
   "inbox.openContact": {
     tr: "Müşteriyi aç",
     en: "Open contact",

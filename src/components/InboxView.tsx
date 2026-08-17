@@ -5,7 +5,7 @@
 // One row per CUSTOMER across all three channels; calls are a channel here,
 // not a separate tab (ported from Nudge's InboxView).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -40,12 +40,11 @@ export function InboxView({
   const markConversationRead = useMutation(api.messages.markConversationRead);
   const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
-  // The conversation the USER opened, as opposed to the one auto-selected on
-  // arrival — only this one gets read stamps. Without the distinction, landing
-  // on the Inbox would silently read the newest conversation, which is the
-  // boundary model this replaced wearing a smaller hat.
+  // The conversation whose read stamps we own. Kept as its own state rather
+  // than folded into `selected` because the two answer different questions:
+  // `selected` is what the right pane shows, `opened` is what a reply landing
+  // right now counts as read against.
   const [opened, setOpened] = useState<Id<"customers"> | null>(null);
-  const didAutoSelect = useRef(false);
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.
   const [filter, setFilter] = useState<FeedFilter>("all");
@@ -83,14 +82,17 @@ export function InboxView({
     void markConversationRead({ customerId: opened }).catch(() => {});
   }, [markConversationRead, opened, openedInboundAt]);
 
-  // Select once, when the list first arrives. Behind a ref so the mobile Back
-  // action can return to the list without being immediately overridden.
-  useEffect(() => {
-    if (didAutoSelect.current || !conversations?.length) return;
-    didAutoSelect.current = true;
-    setSelected(conversations[0].customerId);
-    setFilter(conversations[0].lastChannel);
-  }, [conversations]);
+  // NOTHING is selected on arrival (Serdar, 2026-08-17, matching Nudge). The
+  // inbox used to open the newest conversation for you, which is the app
+  // deciding what you came here to read — and on a list where the top row moves
+  // whenever anyone writes, the thing it opens is different every visit. An
+  // inbox is a list you choose from.
+  //
+  // This also retires the `opened` / `selected` split. That existed because
+  // auto-select had to be distinguishable from a real open: the auto-selected
+  // conversation must not get a read stamp, or landing on the Inbox would
+  // silently mark the newest thread read. With no auto-select there is only one
+  // kind of selection left, and `opened` is now simply "the one you clicked".
 
   // Counts for the chip labels, over the UNFILTERED list: a chip advertises
   // what switching to it would show, so it cannot count through itself.
@@ -139,13 +141,14 @@ export function InboxView({
       data-fills-pane
       className="mx-auto flex h-full w-full min-h-0 min-w-0 max-w-6xl flex-col lg:px-6"
     >
-      <div
-        className={`grid min-h-0 min-w-0 flex-1 gap-4 ${
-          active
-            ? "grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
-            : "grid-cols-1"
-        }`}
-      >
+      {/* Always two columns from lg, whether or not anything is open. It used
+          to collapse to one when nothing was selected, which was invisible back
+          when the only way to have nothing selected was to back out on a phone
+          — where the layout is one column anyway. Now that the inbox ARRIVES
+          with nothing selected, that rule put the empty state underneath the
+          list instead of beside it. Below lg it is still one column and the two
+          panes swap. */}
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Conversation list. On small screens it swaps with the open
             conversation instead of sharing the row. */}
         <section
@@ -338,6 +341,31 @@ export function InboxView({
             )}
           </div>
         </section>
+
+        {/* Nothing chosen yet. Below lg the list owns the screen and this never
+            shows — there is no second column there to be empty. */}
+        {!active && (
+          <section className="hidden min-h-0 min-w-0 flex-col lg:flex">
+            {/* Mirrors the h-9 header track so the two card tops align. */}
+            <div className="h-9 shrink-0" />
+            <div className="card-raised flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)]">
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <p className="text-sm">{t("inbox.selectConversation")}</p>
+            </div>
+          </section>
+        )}
 
         {/* Open conversation — the same panel the contact page embeds, keyed by
             customer so composer drafts never leak across contacts. */}

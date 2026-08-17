@@ -700,6 +700,25 @@ deals; we sell services, and an appointment is the thing a customer bought.
     no client wallpapers it, and giving it one would say the two channels are
     the same thing.
 
+### The inbox arrives with nothing selected (2026-08-17)
+
+Matching Nudge. It used to open the newest conversation for you, which is the
+app deciding what you came here to read — and on a list whose top row moves
+whenever anyone writes, the thing it opens is different every visit. An inbox is
+a list you choose from; the right pane says so until you do.
+
+- This retired the `opened` / `selected` split's original reason. `opened`
+  existed to be distinguishable from an auto-selection, because the
+  auto-selected conversation must NOT get a read stamp — landing on the Inbox
+  would otherwise silently mark the newest thread read. With no auto-select
+  there is one kind of selection left; `opened` now just means "the one you
+  clicked", and it still owns the read stamps.
+- **The grid is two columns from lg whether or not anything is open.** It used
+  to collapse to one when nothing was selected, which was invisible while the
+  only way to have nothing selected was backing out on a phone — where the
+  layout is one column anyway. The moment arrival became the empty state, that
+  rule put the empty pane underneath the list instead of beside it.
+
 ### A shared component must never rely on a BARE Tailwind `group`
 
 `group-hover:` matches ANY ancestor carrying the class, not the nearest one. The
