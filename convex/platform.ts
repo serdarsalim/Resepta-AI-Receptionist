@@ -888,6 +888,10 @@ export const orgVoiceUsage = query({
       // "invoice" so the panel never renders a third state that only means
       // "older org".
       billingMode: v.union(v.literal("invoice"), v.literal("prepaid")),
+      // The lines this tenant may use, inbound and outbound. Empty means not
+      // restricted yet — see setAllowedPhoneNumbers for why that is the default
+      // rather than a lockout.
+      allowedPhoneNumbers: v.array(v.string()),
       walletBalanceMicroUsd: v.number(),
       topups: v.array(
         v.object({
@@ -928,6 +932,7 @@ export const orgVoiceUsage = query({
       defaultRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
       billingMode: org.billingMode ?? "invoice",
+      allowedPhoneNumbers: org.allowedPhoneNumbers ?? [],
       walletBalanceMicroUsd: org.walletBalanceMicroUsd ?? 0,
       topups: topups.map((t) => ({
         at: t.at,
@@ -1030,6 +1035,51 @@ export const addWalletCredit = mutation({
       orgId: args.orgId,
       kind: "settings_changed",
       detail: `wallet credit ${amount > 0 ? "+" : "−"}$${Math.abs(amount / 1_000_000).toFixed(2)} (manual)`,
+    });
+    return null;
+  },
+});
+
+// Which phone lines this tenant may use, for inbound routing and as an
+// outbound caller id. Operator-only, because the numbers live in a Retell
+// account the tenants share and deciding who gets which is not a decision a
+// tenant can be trusted to make about themselves.
+//
+// An empty list means "not restricted", not "no numbers": that is the state
+// every org is in the day this ships, and turning it into a lockout would take
+// the phones down fleet-wide. The cross-org claim check in retell.lineUsable
+// runs regardless, so an org with no list still cannot take a line somebody
+// else is holding.
+export const setAllowedPhoneNumbers = mutation({
+  args: { orgId: v.id("orgs"), numbers: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    // E.164 or it does not exist, same rule as every other number in the
+    // product — and here it is load-bearing twice over, because a list entry
+    // that does not match the provider's own formatting silently allows
+    // nothing.
+    const numbers = [
+      ...new Set(
+        args.numbers
+          .map((raw) => raw.replace(/[\s().\-/]/g, ""))
+          .filter((raw) => raw.length > 0),
+      ),
+    ];
+    const bad = numbers.find((n) => !/^\+[1-9]\d{6,14}$/.test(n));
+    if (bad) throw new Error(`not-e164: ${bad}`);
+    await ctx.db.patch(args.orgId, {
+      allowedPhoneNumbers: numbers.length > 0 ? numbers : undefined,
+    });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail:
+        numbers.length > 0
+          ? `phone lines set to ${numbers.join(", ")}`
+          : "phone line restriction removed",
     });
     return null;
   },

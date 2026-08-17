@@ -134,6 +134,7 @@ export default function TenantPage() {
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
+  const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
   const setBillingMode = useMutation(api.platform.setBillingMode);
   const addWalletCredit = useMutation(api.platform.addWalletCredit);
   const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
@@ -637,6 +638,21 @@ export default function TenantPage() {
                   : Math.round(parsed * 1_000_000),
             });
           }}
+        />
+        <Row
+          label="Phone lines"
+          hint="Comma-separated, full international form. The only numbers this business may route inbound calls to, or place outbound calls from. Every business shares one Retell account, so without a list here the only thing stopping one from taking another's line is that we refuse a number somebody already holds — that check runs either way. Empty = not restricted yet."
+          current={voice.allowedPhoneNumbers.join(", ") || undefined}
+          placeholder="+905321234567, +4319876543"
+          onSave={(value) =>
+            setAllowedPhoneNumbers({
+              orgId,
+              numbers: value
+                .split(",")
+                .map((one) => one.trim())
+                .filter(Boolean),
+            })
+          }
         />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Billing mode</div>

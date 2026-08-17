@@ -566,6 +566,45 @@ export const agentEditorContext = internalQuery({
   },
 });
 
+// Whether this org may use this line — for inbound routing or as an outbound
+// caller id. Two independent reasons it may not, and they are deliberately
+// separate:
+//
+//   1. The operator's per-tenant allowlist (orgs.allowedPhoneNumbers). Unset
+//      reads as "not restricted yet", which is what keeps every existing org
+//      working the day this deploys. Set it in /admin to make it authoritative.
+//
+//   2. Another org's agent already holds it. This runs whether or not a list
+//      exists, because it is the actual theft rather than a policy: every
+//      tenant shares one Retell account and therefore one phone-number
+//      namespace (voiceProvisioning.stampDefaultRetellKey copies the platform
+//      key onto each org), so a connector could otherwise name ANY number in
+//      that namespace and rebind a stranger's line to its own agent — their
+//      callers reaching the wrong agent, and those callers' names and emails
+//      landing in the wrong customer table.
+export const lineUsable = internalQuery({
+  args: { orgId: v.id("orgs"), number: v.string() },
+  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
+  handler: async (ctx, args) => {
+    const number = args.number.trim();
+    // Unassigning is always allowed — it takes a line away, it cannot take one.
+    if (!number) return { ok: true };
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return { ok: false, reason: "no-org" };
+    const allowed = org.allowedPhoneNumbers;
+    if (allowed !== undefined && allowed.length > 0 && !allowed.includes(number)) {
+      return { ok: false, reason: "number-not-assigned-to-this-workspace" };
+    }
+    // Scanned, not indexed: retellAgents holds one row per connected agent, so
+    // a handful per org. Worth an index on inboundNumber if the fleet grows.
+    const holder = (await ctx.db.query("retellAgents").collect()).find(
+      (row) => row.inboundNumber === number && row.orgId !== args.orgId,
+    );
+    if (holder) return { ok: false, reason: "number-held-by-another-workspace" };
+    return { ok: true };
+  },
+});
+
 // Provider publication happens before this mutation. If Retell rejects the
 // draft, the Resepta registry stays untouched and the editor can retry without
 // presenting a configuration that never went live.

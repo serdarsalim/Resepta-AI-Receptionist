@@ -169,9 +169,24 @@ export default defineSchema({
     staffId: v.optional(v.id("staff")),
     acceptedAt: v.optional(v.number()),
     acceptedUserId: v.optional(v.id("users")),
+    // The secret that actually grants the membership, and the only thing that
+    // does. This used to be matched on `email` alone at first sign-in, with no
+    // token, no expiry and no acceptance step — so anyone could found an org,
+    // invite an address they did not control, and wait: when that person signed
+    // in with Google for the first time they landed inside the inviter's
+    // workspace, reading and writing a stranger's salon, and with no org of
+    // their own because the founding path only ran when no invite matched.
+    //
+    // Optional because rows predating this exist; team.acceptInvite refuses a
+    // tokenless row, so those are inert rather than dangerous.
+    token: v.optional(v.string()),
+    // An invite that sits open forever is a trap that ages into a breach. 14
+    // days from issue; acceptInvite checks it.
+    expiresAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
-    .index("by_org", ["orgId"]),
+    .index("by_org", ["orgId"])
+    .index("by_token", ["token"]),
 
   orgs: defineTable({
     name: v.string(),
@@ -403,6 +418,19 @@ export default defineSchema({
     // stamp time (retell.recordCall) and frozen onto the row — changing it
     // never rewrites a past call.
     voiceRateMicroUsdPerMinute: v.optional(v.number()),
+    // Which phone lines this tenant may use, E.164, operator-set from /admin
+    // only. Every tenant shares one Retell account and therefore one phone
+    // number namespace (voiceProvisioning.stampDefaultRetellKey copies the
+    // platform key onto each org), so without this a connector could name ANY
+    // number in that namespace and bind another salon's line to its own agent —
+    // their callers reaching the wrong agent, their customers' names landing in
+    // the wrong table.
+    //
+    // Unset means "not restricted yet", which keeps existing orgs working on
+    // deploy; the cross-org claim check in retellAgent.assertLineUsable runs
+    // either way, so the theft is closed even for an org with no list. Set it
+    // per tenant to make the allowlist authoritative for inbound AND outbound.
+    allowedPhoneNumbers: v.optional(v.array(v.string())),
     // The one OWNER-set number on the voice meter: a soft monthly budget for
     // the billed side, in micro-USD. Crossing 80% and 100% emails the org's
     // owner once per threshold per month. An alert, deliberately not a cap:

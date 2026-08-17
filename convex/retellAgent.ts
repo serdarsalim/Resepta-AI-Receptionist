@@ -91,6 +91,10 @@ function siteUrl(): string | null {
 }
 
 type EditorContext = {
+  // Returned by agentEditorContext all along, just never declared. The line
+  // guards need it: whether a number may be used is a question about the org,
+  // not the agent.
+  orgId: Id<"orgs">;
   orgName: string;
   demoMode: boolean;
   apiKey: string | null;
@@ -1430,6 +1434,14 @@ async function assignLineTo(
   const target = number?.trim() || null;
   const previous = context.inboundNumber;
   if (target) {
+    // Before the provider is touched, because a rebind is instant and there is
+    // no undo: whichever agent held this line stops answering the moment the
+    // PATCH lands.
+    const usable = await ctx.runQuery(internal.retell.lineUsable, {
+      orgId: context.orgId,
+      number: target,
+    });
+    if (!usable.ok) throw new Error(usable.reason);
     // Replacing inbound_agents outright is also how a line MOVES: whichever
     // agent held it stops answering the moment this lands, at the provider and
     // then in applyLineAssignment.
@@ -1512,7 +1524,8 @@ export const testCall = action({
     to: v.string(),
   }),
   handler: async (ctx, { agentId, toNumber, fromNumber }) => {
-    const key = (await editorContext(ctx, agentId)).apiKey!;
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
     const to = toNumber.trim();
     if (!/^\+[1-9]\d{6,14}$/.test(to)) {
       throw new Error("Enter the number in full international form, e.g. +905321234567.");
@@ -1527,14 +1540,25 @@ export const testCall = action({
         await call(key, "GET", "v2/list-phone-numbers")
       ).json()) as { phone_number?: string; outbound_agent_id?: string }[];
       const rows = Array.isArray(list) ? list : [];
+      // The agent's own bound line is the fallback, NOT rows[0]. Every tenant
+      // shares one Retell account, so "the first number on the account" is
+      // whichever salon happens to be first — this used to place a test call
+      // from another business's line, with their number in the callee's phone.
       from =
         rows.find((n) => n.outbound_agent_id === agentId)?.phone_number ??
-        rows[0]?.phone_number ??
+        context.inboundNumber ??
         "";
     }
     if (!from) {
       throw new Error("This Retell account has no phone number to call from.");
     }
+    // Outbound is checked too, not just inbound routing: the caller id a salon
+    // shows is as much theirs-or-not-theirs as the line that rings them.
+    const usable = await ctx.runQuery(internal.retell.lineUsable, {
+      orgId: context.orgId,
+      number: from,
+    });
+    if (!usable.ok) throw new Error(usable.reason);
 
     const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
