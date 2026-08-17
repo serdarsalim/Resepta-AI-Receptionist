@@ -67,6 +67,7 @@ function CustomFieldRow({
   return (
     <FieldRow label={field.label}>
       <InlineEditValue
+        dense
         value={value}
         options={field.type === "select" ? (field.options ?? []) : null}
         type={FIELD_INPUT[field.type]}
@@ -296,24 +297,28 @@ export function ContactView({
               />
               <FieldRow label={t("customers.firstName")}>
                 <InlineEditValue
+                  dense
                   value={customer.firstName}
                   onSave={(next) => updateCustomer({ customerId, firstName: next })}
                 />
               </FieldRow>
               <FieldRow label={t("customers.lastName")}>
                 <InlineEditValue
+                  dense
                   value={customer.lastName ?? ""}
                   onSave={(next) => updateCustomer({ customerId, lastName: next })}
                 />
               </FieldRow>
               <FieldRow label={t("customers.phone")}>
                 <PhoneField
+                  dense
                   value={customer.phone}
                   onSave={(next) => updateCustomer({ customerId, phone: next })}
                 />
               </FieldRow>
               <FieldRow label={t("customers.email")}>
                 <InlineEditValue
+                  dense
                   value={customer.email ?? ""}
                   type="email"
                   onSave={(next) => updateCustomer({ customerId, email: next })}

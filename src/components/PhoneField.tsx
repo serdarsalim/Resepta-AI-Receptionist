@@ -93,12 +93,17 @@ function TrashIcon() {
 
 export function PhoneField({
   value,
+  dense,
   onSave,
 }: {
   value: string;
+  // The record card's tier, matching InlineEditValue's own `dense`. This field
+  // sits in the same column as those values and has to read at the same size.
+  dense?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const { language } = useLanguage();
+  const size = dense ? "text-xs" : "text-sm";
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [code, setCode] = useState("");
@@ -150,7 +155,7 @@ export function PhoneField({
   if (saving) {
     // Same box as the value it replaces, so the row never resizes mid-save.
     return (
-      <span className="block animate-pulse px-2 py-1 text-sm text-[var(--muted)]">{value}</span>
+      <span className={`block animate-pulse px-2 py-1 ${size} text-[var(--muted)]`}>{value}</span>
     );
   }
 
@@ -161,7 +166,7 @@ export function PhoneField({
         onClick={open}
         // -mx-2 + px-2: the value stays flush with the label grid while the
         // hover wash bleeds outward instead of indenting the text.
-        className="group/iv -mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+        className={`group/iv -mx-2 flex w-[calc(100%+1rem)] min-w-0 items-center justify-between gap-2 rounded-md px-2 py-1 text-left ${size} transition-colors hover:bg-[var(--muted-bg)]`}
       >
         <span className="flex min-w-0 items-center gap-1.5">
           {country && <FlagByIso iso={country.iso} label={country.label} />}

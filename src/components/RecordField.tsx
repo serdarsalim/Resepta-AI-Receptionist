@@ -12,6 +12,12 @@ import { useLanguage } from "@/lib/LanguageProvider";
 // Ported with one correction: Nudge's group heading is uppercase, which is out
 // of the design language. Sentence case here.
 
+// Two tiers, not one. The label and the value used to render at the same size
+// in the same weight, which is a form's grammar, not a record's: on a form you
+// read the question, on a record you read the ANSWER and glance left to see
+// what it answers. Nudge's numbers, measured off its live DOM rather than
+// eyeballed — 11px muted-strong label against a text-xs foreground value. The
+// label track narrows with the type it holds.
 export function FieldRow({
   label,
   hint,
@@ -22,8 +28,8 @@ export function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(6rem,7.5rem)_minmax(0,1fr)] items-start gap-x-2">
-      <div className="flex items-center gap-1.5 pt-1 text-sm leading-snug text-[var(--muted)]">
+    <div className="grid grid-cols-[minmax(5rem,6.5rem)_minmax(0,1fr)] items-start gap-x-2">
+      <div className="flex items-center gap-1.5 pt-1 text-[11px] leading-snug text-[var(--muted-strong)]">
         <span className="min-w-0 break-words">{label}</span>
         {hint && <InfoTip text={hint} />}
       </div>
@@ -50,7 +56,10 @@ export function FieldGroup({
 }) {
   return (
     <div className="flex items-center gap-2 pt-2">
-      <span className="text-sm font-medium">{label}</span>
+      {/* One tier above its rows in weight, the same tier in size. A heading
+          that also grows reads as a new card starting, and these are groups
+          inside one record. */}
+      <span className="text-[11px] font-medium text-[var(--muted-strong)]">{label}</span>
       {hint && <InfoTip text={hint} />}
       {/* No rule across the row: the heading and the group's own spacing
           carry the separation. Serdar's design language — lines and borders
@@ -85,6 +94,7 @@ export function InlineEditValue({
   placeholder,
   compact,
   clearable = true,
+  dense,
   onSave,
 }: {
   value: string;
@@ -104,12 +114,18 @@ export function InlineEditValue({
   // the record always has. An appointment is always in some status, and the
   // blank option there is a way to hand the server a status it will reject.
   clearable?: boolean;
+  // The record card's tier. A value on a contact record sits one step below the
+  // same control on a settings screen, because a record is a list you SCAN and a
+  // settings row is a question you answer. Opt-in rather than the default, so
+  // Business, Reminders and Account keep the size they were built at.
+  dense?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const selectRef = useRef<HTMLSelectElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const size = dense ? "text-xs" : "text-sm";
 
   useEffect(() => {
     if (!editing) return;
@@ -131,7 +147,7 @@ export function InlineEditValue({
   if (saving) {
     // Same box as the value it replaces, so the row never resizes mid-save.
     return (
-      <span className="block animate-pulse px-2 py-1 text-sm text-[var(--muted)]">
+      <span className={`block animate-pulse px-2 py-1 ${size} text-[var(--muted)]`}>
         {value}
       </span>
     );
@@ -144,7 +160,7 @@ export function InlineEditValue({
         onClick={() => setEditing(true)}
         // -mx-2 + px-2: the value stays flush with the label grid while the
         // hover wash bleeds outward instead of indenting the text.
-        className={`group/iv flex min-w-0 items-center gap-1 rounded-md py-1 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
+        className={`group/iv flex min-w-0 items-center gap-1 rounded-md py-1 text-left ${size} transition-colors hover:bg-[var(--muted-bg)] ${
           compact
             ? "px-1"
             : "-mx-2 w-[calc(100%+1rem)] justify-between gap-2 px-2"
@@ -171,7 +187,7 @@ export function InlineEditValue({
         onKeyDown={(e) => {
           if (e.key === "Escape") setEditing(false);
         }}
-        className="px-2 py-1 text-sm"
+        className={`px-2 py-1 ${size}`}
       >
         {clearable && <option value="" />}
         {merged.map((option) => (
@@ -199,7 +215,7 @@ export function InlineEditValue({
       // about. From sm it is 96px: it spent years at 80, which held every
       // duration and then clipped "5600.00" the moment a price ran to five
       // figures, because a number input also spends ~16px on its spinner.
-      className={`px-2 py-1 text-sm ${compact ? "max-sm:w-full sm:w-24" : ""}`}
+      className={`px-2 py-1 ${size} ${compact ? "max-sm:w-full sm:w-24" : ""}`}
     />
   );
 }
