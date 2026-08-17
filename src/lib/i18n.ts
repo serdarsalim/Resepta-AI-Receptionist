@@ -771,6 +771,10 @@ const dictionary = {
     de: "Notiz schreiben…",
   },
   "notes.add": { tr: "Not ekle", en: "Add note", de: "Notiz hinzufügen" },
+  // Every note names who wrote it. When the author's record carries no name
+  // and no email there is still something true to say, and it beats a blank
+  // byline on a record three people share.
+  "notes.systemAuthor": { tr: "Sistem", en: "System", de: "System" },
   "notes.edit": { tr: "Düzenle", en: "Edit", de: "Bearbeiten" },
   "notes.edited": { tr: "düzenlendi", en: "edited", de: "bearbeitet" },
   "notes.deleteConfirm": {
