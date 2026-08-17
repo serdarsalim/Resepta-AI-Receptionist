@@ -22,14 +22,12 @@ import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
-  formatReminderOffset,
   minutesToTimeValue,
   timeValueToMinutes,
   weekdayNames,
 } from "@/lib/datetime";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { TimezoneSelect } from "./TimezoneSelect";
-import { Toggle } from "./Toggle";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
@@ -37,10 +35,6 @@ import { Sheet } from "./Sheet";
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
 // explanations behind InfoTips.
-
-// Reminder timing is picked from presets — a salon owner taps "1 gün önce",
-// never types "24, 2".
-const OFFSET_PRESETS = [48, 24, 3, 2, 1];
 
 // The three columns left of the toggle. A three-column table from sm up; on a
 // phone the same three cells fold into two columns — when over what on the
@@ -57,8 +51,6 @@ const RULE_COLUMNS =
 const RULE_WHAT_CELL = "max-sm:col-start-1 max-sm:row-start-2";
 const RULE_CHANNEL_CELL =
   "max-sm:col-start-2 max-sm:row-start-1 max-sm:row-span-2 max-sm:justify-self-end";
-
-type RuleKind = "confirmation" | "reminder" | "winback";
 
 type RuleTrigger =
   | "booking"
@@ -173,353 +165,6 @@ const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
 // Meta's approval — the shop phone carries rules only when it is the only
 // WhatsApp the org has, and then all it needs is the words.
 //
-// Resolved against the ORG's language. A customer whose own language differs
-// is resolved per send, so no settings table can promise what they'll get —
-// this column answers "is this rule wired up at all", which is the question an
-// owner staring at a silent reminder actually has.
-function ruleChannels(
-  kind: RuleKind,
-  templates: TemplateRow[],
-  language: string,
-  waConnected: boolean,
-  evolutionEnabled: boolean,
-  emailEnabled: boolean,
-  emailLabel: string,
-  channelPref: "whatsapp" | "email" | "both",
-): string[] {
-  const template = templates.find((t) => t.kind === kind && t.language === language);
-  const hasText = Boolean(template?.body || template?.bodyPreview);
-  const channels: string[] = [];
-  const waOk = waConnected
-    ? template?.status === "approved" && Boolean(template?.metaName)
-    : evolutionEnabled && hasText;
-  if (channelPref !== "email" && waOk) channels.push("WhatsApp");
-  if (channelPref !== "whatsapp" && emailEnabled && hasText) channels.push(emailLabel);
-  return channels;
-}
-
-function RuleRow({
-  when,
-  what,
-  channels,
-  orgHasChannel,
-  enabled,
-  onToggle,
-  onRemove,
-  hint,
-}: {
-  when: React.ReactNode;
-  what: string;
-  channels: string[];
-  // False when the org has connected nothing at all. Then every row would be
-  // silent for the same reason, and four identical amber tags carry no more
-  // information than one line under the table — so the cell goes quiet and
-  // the card says it once. The tag only earns its colour when it tells this
-  // row apart from the ones above it.
-  orgHasChannel: boolean;
-  enabled: boolean;
-  onToggle: (next: boolean) => void;
-  onRemove: () => void;
-  hint?: string;
-}) {
-  const { t } = useLanguage();
-  // Amber, not red: a rule with nowhere to send is a setup step the owner
-  // hasn't finished, not a failure. Same treatment as autoReplyInactive.
-  const silent = orgHasChannel && channels.length === 0;
-  return (
-    <div className="flex items-center gap-3 py-3">
-      <div className={RULE_COLUMNS}>
-        <span className="flex items-center gap-1.5 text-sm">
-          {when}
-          {hint && <InfoTip text={hint} />}
-        </span>
-        <span className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}>{what}</span>
-        <span
-          className={`flex items-center gap-1.5 text-xs ${RULE_CHANNEL_CELL} ${
-            silent ? "text-amber-700 dark:text-amber-400" : "text-[var(--muted)]"
-          }`}
-        >
-          {silent && (
-            <>
-              {t("settings.ruleNoChannel")}
-              <InfoTip text={t("settings.ruleNoChannelHint")} />
-            </>
-          )}
-          {!silent &&
-            (channels.length > 0 ? (
-              channels.join(" · ")
-            ) : (
-              // Desktop only. Under the Channel header a dash reads as "nothing
-              // here"; stacked on mobile there is no header above it and a lone
-              // dash is just a stray mark. The amber line below the table
-              // already explains the silence, and it explains it once.
-              <span className="hidden sm:inline">—</span>
-            ))}
-        </span>
-      </div>
-      {/* Two controls, two meanings, and now every row has both: the switch
-          pauses without losing anything, the × takes the row off the table.
-          They used to be the same control, which is why switching a reminder
-          off silently deleted the schedule behind it. */}
-      <span className="flex w-11 shrink-0 justify-center">
-        <Toggle checked={enabled} onChange={onToggle} label={what} />
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`${what} — ${t("common.delete")}`}
-        title={t("common.delete")}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-// The reminders section as a rules table: one row per automatic message, read
-// top to bottom in the order a customer meets them — confirmation at booking,
-// reminders counting down, win-back after a no-show. Because offsets are
-// stored furthest-first, that ordering falls out of the array as it is.
-//
-// Storage is still the flat org fields (reminderOffsetsHours + two booleans),
-// NOT a notificationRules table. The consequence to know before extending
-// this: a number[] cannot express "rule exists but is off", so a reminder
-// row's toggle IS add/remove — switching it off drops the offset and the row
-// leaves with it. Confirmation and win-back sit on real booleans and toggle
-// the way you'd expect. The day per-rule channels or a disabled-but-present
-// reminder is wanted, that's when rows become documents — and the real cost of
-// that migration isn't the table, it's re-keying appointments.
-// reminderSentOffsets from offset-hours to ruleId without breaking the
-// double-send guard in reminders.tick.
-function NotificationRulesCard({
-  isOwner,
-  org,
-  templates,
-  waConnected,
-  evolutionEnabled,
-  emailEnabled,
-  update,
-}: {
-  isOwner: boolean;
-  org: {
-    language: string;
-    reminderOffsetsHours: number[];
-    pausedReminderHours: number[];
-    removedRules: string[];
-    sendBookingConfirmation: boolean;
-    winbackEnabled: boolean;
-    winbackDaysAfter: number;
-    quietHoursStart: number;
-    quietHoursEnd: number;
-    messageChannel: "whatsapp" | "email" | "both";
-  };
-  templates: TemplateRow[];
-  waConnected: boolean;
-  evolutionEnabled: boolean;
-  emailEnabled: boolean;
-  update: (args: Record<string, unknown>) => void;
-}) {
-  const { t, language } = useLanguage();
-  const offsets = org.reminderOffsetsHours;
-  const unused = OFFSET_PRESETS.filter((h) => !offsets.includes(h));
-  const orgHasChannel = waConnected || evolutionEnabled || emailEnabled;
-
-  const channelsFor = (kind: RuleKind) =>
-    ruleChannels(
-      kind,
-      templates,
-      org.language,
-      waConnected,
-      evolutionEnabled,
-      emailEnabled,
-      t("settings.ruleEmail"),
-      org.messageChannel,
-    );
-
-  const setOffsets = (next: number[]) =>
-    update({ reminderOffsetsHours: next.sort((a, b) => b - a) });
-
-  // Quiet hours have no UI of their own yet, and a win-back that looks stuck
-  // is usually just waiting for the window to open. Say so where it's asked.
-  const pad = (h: number) => String(h).padStart(2, "0");
-  const winbackHint = `${t("settings.ruleWinbackHint")}\n${t("settings.ruleSendWindow")}: ${pad(
-    org.quietHoursStart,
-  )}:00–${pad(org.quietHoursEnd)}:00`;
-
-  return (
-    <Card disabled={!isOwner}>
-      {/* The channel decision, org-wide rather than per rule: per-rule
-          channels would need the rules to become documents (see the storage
-          note above), and one salon sending its confirmation by WhatsApp but
-          its reminder by email is a configuration nobody has asked for.
-
-          Only WIRED channels are offered — the operator does the wiring, so a
-          pill for an unconfigured channel is a menu of things the salon
-          cannot order. One channel wired shows one pill (it says how messages
-          travel); "Both" exists only when there is actually a pair; nothing
-          wired hides the row, and the amber line below the table says whose
-          move it is. */}
-      {orgHasChannel && (
-        <div className="flex flex-wrap items-center gap-1.5 pb-3">
-          <span className="mr-1.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
-            {t("settings.sendChannel")}
-            <InfoTip text={t("settings.sendChannelHint")} />
-          </span>
-          {([
-            ...(waConnected || evolutionEnabled ? (["whatsapp"] as const) : []),
-            ...(emailEnabled ? (["email"] as const) : []),
-            ...((waConnected || evolutionEnabled) && emailEnabled
-              ? (["both"] as const)
-              : []),
-          ]).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => update({ messageChannel: option })}
-              className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                org.messageChannel === option
-                  ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {option === "whatsapp"
-                ? t("channel.whatsapp")
-                : option === "email"
-                  ? t("settings.ruleEmail")
-                  : t("settings.channelBoth")}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="hidden items-center gap-3 pb-2 sm:flex">
-        <div className={RULE_COLUMNS}>
-          <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-            {t("settings.rulesWhen")}
-            <InfoTip text={t("settings.rulesHint")} />
-          </span>
-          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
-          <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
-        </div>
-        <span className="flex w-11 shrink-0 justify-center text-xs text-[var(--muted)]">
-          {t("settings.ruleActive")}
-        </span>
-        {/* Spacer over the × column; a header on it would just repeat what the
-            glyph already says. */}
-        <span className="w-9 shrink-0" aria-hidden />
-      </div>
-
-      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-        {!org.removedRules.includes("confirmation") && (
-        <RuleRow
-          when={t("settings.ruleWhenBooked")}
-          what={t("settings.ruleConfirmation")}
-          channels={channelsFor("confirmation")}
-          orgHasChannel={orgHasChannel}
-          enabled={org.sendBookingConfirmation}
-          onToggle={(next) => update({ sendBookingConfirmation: next })}
-          onRemove={() =>
-            update({ removedRules: [...org.removedRules, "confirmation"] })
-          }
-        />
-        )}
-
-        {offsets.map((hours) => (
-          <RuleRow
-            key={hours}
-            when={formatReminderOffset(hours, language)}
-            what={t("settings.ruleReminder")}
-            channels={channelsFor("reminder")}
-            orgHasChannel={orgHasChannel}
-            enabled={!org.pausedReminderHours.includes(hours)}
-            onToggle={(next) =>
-              update({
-                pausedReminderHours: next
-                  ? org.pausedReminderHours.filter((h) => h !== hours)
-                  : [...org.pausedReminderHours, hours],
-              })
-            }
-            onRemove={() => setOffsets(offsets.filter((h) => h !== hours))}
-          />
-        ))}
-
-        {!org.removedRules.includes("winback") && (
-        <RuleRow
-          when={
-            <span className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={1}
-                max={90}
-                className="w-16"
-                defaultValue={org.winbackDaysAfter}
-                onBlur={(e) => {
-                  const days = Number(e.target.value);
-                  if (Number.isFinite(days) && days > 0) update({ winbackDaysAfter: days });
-                }}
-              />
-              {t("settings.ruleDaysAfterNoShow")}
-            </span>
-          }
-          what={t("settings.ruleWinback")}
-          channels={channelsFor("winback")}
-          orgHasChannel={orgHasChannel}
-          enabled={org.winbackEnabled}
-          onToggle={(next) => update({ winbackEnabled: next })}
-          onRemove={() => update({ removedRules: [...org.removedRules, "winback"] })}
-          hint={winbackHint}
-        />
-        )}
-      </div>
-
-      {(unused.length > 0 || org.removedRules.length > 0) && (
-        <div className="flex flex-wrap items-center gap-1.5 pt-3">
-          <span className="text-xs text-[var(--muted)]">{t("settings.ruleAdd")}</span>
-          {/* A removed singleton comes back the same way a reminder does, from
-              the same row of chips — so "add a rule" is one place, not two. */}
-          {org.removedRules.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() =>
-                update({ removedRules: org.removedRules.filter((r) => r !== key) })
-              }
-              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-            >
-              <span aria-hidden className="text-[var(--muted)]">+</span>
-              {key === "confirmation"
-                ? t("settings.ruleConfirmation")
-                : t("settings.ruleWinback")}
-            </button>
-          ))}
-          {unused.map((hours) => (
-            // Bordered, with a +, because these used to be bare text that
-            // only looked clickable once the pointer was already on them —
-            // and the one control on this card that ADDS a row read exactly
-            // like the labels beside it.
-            <button
-              key={hours}
-              type="button"
-              onClick={() => setOffsets([...offsets, hours])}
-              className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:border-[var(--foreground)] hover:text-[var(--foreground)]"
-            >
-              <span aria-hidden className="text-[var(--muted)]">+</span>
-              {formatReminderOffset(hours, language)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {!orgHasChannel && (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-          {t("settings.rulesNoChannel")}
-        </p>
-      )}
-    </Card>
-  );
-}
-
 // ── The rules-model card ────────────────────────────────────────────────────
 //
 // One row per messageRules document, in customer-journey order, each owning
@@ -2125,7 +1770,6 @@ export function RemindersView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const rulesData = useQuery(api.messageRules.list, {});
-  const update = useMutation(api.orgs.update);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
 
   if (!settings || !rulesData)
@@ -2133,26 +1777,22 @@ export function RemindersView() {
 
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
-  // Which model this org runs on. Legacy renders the old card untouched; it
-  // exists only for the window between the deploy and messageRules:migrateAll.
-  const migrated = rulesData.migrated;
-
   // What the lower templates card still owns. Rule-bound wording moved into
-  // each rule's own panel, so on the rules model this card is the Meta
-  // registration desk (plus the campaign row, which was always its own thing):
-  // rows only exist to be edited when a Cloud number makes approval a real
-  // concept. Legacy orgs keep the full editor they had.
+  // each rule's own panel, so this card is the Meta registration desk (plus the
+  // campaign row, which was always its own thing): rows only exist to be edited
+  // when a Cloud number makes approval a real concept.
+  //
+  // The `migrated` fork is gone from this file. Every org runs on messageRules
+  // (migrateAll has run in prod, and seedDefaultRules stamps new orgs at
+  // creation), so the legacy NotificationRulesCard and the three conditions that
+  // chose between the two models were unreachable — a second full editor for the
+  // same settings, maintained in parallel, that no signup could ever see.
   const metaTemplates = settings.templates.filter((template) => {
     if (template.ruleId !== undefined) return false;
-    if (template.kind === "campaign")
-      // The campaign's email subject moved into the campaign composer, where
-      // campaigns are actually written. What is left of this row is its Meta
-      // registration, which only exists as a concept on a Cloud number —
-      // legacy orgs keep the old behaviour.
-      return migrated
-        ? settings.whatsapp.connected
-        : settings.whatsapp.connected || settings.emailEnabled;
-    return migrated ? settings.whatsapp.connected : true;
+    // The campaign's email subject moved into the campaign composer, where
+    // campaigns are actually written. What is left of this row is its Meta
+    // registration, which only exists as a concept on a Cloud number.
+    return settings.whatsapp.connected;
   });
 
   return (
@@ -2165,34 +1805,15 @@ export function RemindersView() {
         </p>
       )}
 
-      {migrated ? (
-        <>
-          <RulesCard
-            isOwner={isOwner}
-            org={settings.org}
-            templates={settings.templates}
-            rules={rulesData.rules}
-            waConnected={settings.whatsapp.connected}
-            evolutionEnabled={settings.evolutionEnabled}
-            emailEnabled={settings.emailEnabled}
-          />
-        </>
-      ) : (
-        <>
-          <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            {t("settings.rulesMigrationPending")}
-          </p>
-          <NotificationRulesCard
-            isOwner={isOwner}
-            org={settings.org}
-            templates={settings.templates}
-            waConnected={settings.whatsapp.connected}
-            evolutionEnabled={settings.evolutionEnabled}
-            emailEnabled={settings.emailEnabled}
-            update={(args) => void update(args)}
-          />
-        </>
-      )}
+      <RulesCard
+        isOwner={isOwner}
+        org={settings.org}
+        templates={settings.templates}
+        rules={rulesData.rules}
+        waConnected={settings.whatsapp.connected}
+        evolutionEnabled={settings.evolutionEnabled}
+        emailEnabled={settings.emailEnabled}
+      />
 
       <>
           {/* No connect form here. The Meta credentials — phone number id,
@@ -2257,46 +1878,12 @@ export function RemindersView() {
                         </span>
                       )}
                     </div>
-                    {!migrated && template.kind !== "campaign" && (
-                      <>
-                        <textarea
-                          rows={3}
-                          className="w-full"
-                          defaultValue={template.body ?? ""}
-                          placeholder={t("settings.templateBodyPlaceholder")}
-                          aria-label={t("settings.templateBody")}
-                          onBlur={(e) =>
-                            void updateTemplate({
-                              templateId: template._id,
-                              body: e.target.value,
-                            })
-                          }
-                        />
-                        <p className="text-xs text-[var(--muted)]">
-                          {t("settings.templateTokens")}:{" "}
-                          {t("settings.templateTokensList")}
-                        </p>
-                        {/* Win-back mail is the one kind that tracks opens —
-                            a rate over the template, never a per-customer
-                            fact, because mail relays prefetch pixels and a
-                            personal "opened" badge would launder that guess
-                            into a record. */}
-                        {template.kind === "winback" &&
-                          (template.emailSentCount ?? 0) > 0 && (
-                            <p className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-                              {t("settings.templateEmailOpens")}:{" "}
-                              {template.emailOpenCount ?? 0} / {template.emailSentCount}
-                              <InfoTip text={t("settings.templateEmailOpensHint")} />
-                            </p>
-                          )}
-                      </>
-                    )}
                     {/* Outside the campaign guard: a campaign has no body
                         here, but its emails need a subject like everyone
                         else's (campaigns.fanOut renders it per customer). On
                         the rules model every other subject lives in its
                         rule's panel. */}
-                    {(!migrated || template.kind === "campaign") && settings.emailEnabled && (
+                    {template.kind === "campaign" && settings.emailEnabled && (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
                           {t("settings.templateSubject")}
