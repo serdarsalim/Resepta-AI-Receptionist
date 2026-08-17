@@ -1646,10 +1646,17 @@ function CallEntry({
   // inline would bury every message after it.
   if (detail) {
     return (
+      // No card of its own (Serdar, 2026-08-17). It wore a rounded, bordered,
+      // tinted box INSIDE the conversation panel's card — a frame drawn around
+      // the only thing the frame already contained. Borders belong to
+      // containers, and the pane is the container; the two blocks that are
+      // really containers (the collected values and the transcript, which
+      // scrolls) keep their own edges and now read as the only boxes here.
+      //
       // Fills the pane and lets the transcript take what is left of it. The
       // card used to end wherever the transcript's 24rem cap put it, leaving a
       // band of empty card under the one thing on the screen worth reading.
-      <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
+      <div className="flex min-h-0 flex-1 flex-col text-sm">
         {/* No duration line here at all (Serdar, 2026-08-17). The player reads
             "0:00 / 1:34" and the list row you arrived from carries the length
             too, so on the opened card it was a third copy of the same number

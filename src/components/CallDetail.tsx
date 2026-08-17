@@ -206,29 +206,76 @@ export function CallTranscript({
 // long value wrapped into a shape that no longer looked attached to its label.
 // A definition list keeps label and answer on one line and lets the values
 // left-align down the column, which is how you scan eight of them.
+// "preferred_staff" → "Preferred staff". Done in JS rather than with CSS
+// `capitalize` because nested keys are rendered INSIDE a value string, where a
+// class on the <dt> cannot reach them — and because `capitalize` would title
+// case every word, turning "party size" into "Party Size".
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/_/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+const isEmpty = (value: unknown) =>
+  value === null || value === undefined || value === "";
+
+// What the agent heard, as a sentence rather than as storage. `collected` is
+// typed `v.any()` because it is whatever Retell's post-call analysis returned,
+// so this has to survive shapes nobody designed for.
+//
+// It used to JSON.stringify anything object-shaped, which put
+// `{"after":"18:00","number":"+905338518505"}` — braces, quotes and all — in
+// front of a salon owner. Nested values are rare in practice, but "rare" is not
+// "never", and the fallback for a shape you did not expect should still be
+// READABLE.
+//
+// Depth is capped rather than recursed freely: past two levels an inline
+// rendering stops being clearer than the JSON, so that is where it gives up and
+// admits it.
+function formatCollected(
+  value: unknown,
+  t: (key: TranslationKey) => string,
+  depth = 0,
+): string {
+  if (typeof value === "boolean") return value ? t("common.yes") : t("common.no");
+  if (Array.isArray(value)) {
+    // A list is a list: "Saç kesimi, Boya". Retell returns these for anything
+    // the caller could say more than one of.
+    return value
+      .filter((item) => !isEmpty(item))
+      .map((item) => formatCollected(item, t, depth + 1))
+      .join(", ");
+  }
+  if (value !== null && typeof value === "object") {
+    if (depth >= 2) return JSON.stringify(value);
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([, nested]) => !isEmpty(nested))
+      .map(
+        ([nestedKey, nested]) =>
+          `${humanizeKey(nestedKey)}: ${formatCollected(nested, t, depth + 1)}`,
+      )
+      // A middle dot, not a comma: the pairs already contain commas of their
+      // own once a nested value is a list.
+      .join(" · ");
+  }
+  return String(value);
+}
+
 function CollectedList({ values }: { values: Record<string, unknown> }) {
   const { t } = useLanguage();
-  const rows = Object.entries(values).filter(
-    ([, value]) => value !== null && value !== undefined && value !== "",
-  );
+  const rows = Object.entries(values)
+    .filter(([, value]) => !isEmpty(value))
+    // An object or array that held nothing but empties formats to "", which is
+    // a label with no answer beside it.
+    .map(([key, value]) => [key, formatCollected(value, t)] as const)
+    .filter(([, text]) => text !== "");
   if (rows.length === 0) return null;
 
   return (
     <dl className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-2">
-      {rows.map(([key, value]) => (
+      {rows.map(([key, text]) => (
         <div key={key} className="flex gap-2 text-xs">
-          <dt className="shrink-0 capitalize text-[var(--muted)]">
-            {key.replace(/_/g, " ")}:
-          </dt>
-          <dd className="min-w-0 break-words">
-            {typeof value === "boolean"
-              ? value
-                ? t("common.yes")
-                : t("common.no")
-              : typeof value === "object"
-                ? JSON.stringify(value)
-                : String(value)}
-          </dd>
+          <dt className="shrink-0 text-[var(--muted)]">{humanizeKey(key)}:</dt>
+          <dd className="min-w-0 break-words">{text}</dd>
         </div>
       ))}
     </dl>
