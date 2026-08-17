@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -18,6 +19,7 @@ import { Extension } from "@tiptap/core";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // WYSIWYG email-body editor with an HTML toggle, ported from Nudge and
 // trimmed to what a rule's email needs: no media library, no saved-signature
@@ -81,14 +83,19 @@ function ToolbarButton({
   active,
   onClick,
   children,
+  // Only the colour button passes one: useAnchoredPanel measures the trigger's
+  // rect at open time, so the panel needs a handle on this element.
+  ref,
 }: {
   title: string;
   active?: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  ref?: React.Ref<HTMLButtonElement>;
 }) {
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={title}
       // preventDefault on mousedown keeps the editor selection/focus so the
@@ -129,7 +136,14 @@ function Ic({ children }: { children: React.ReactNode }) {
 
 function Toolbar({ editor }: { editor: Editor }) {
   const { t } = useLanguage();
-  const [showPalette, setShowPalette] = useState(false);
+  const {
+    triggerRef: paletteTrigger,
+    panelRef: palettePanel,
+    pos: palettePos,
+    open: paletteOpen,
+    toggle: togglePalette,
+    close: closePalette,
+  } = useAnchoredPanel(200, 40);
   const setLink = () => {
     const existing = editor.getAttributes("link").href as string | undefined;
     const url = window.prompt(t("editor.linkPrompt"), existing ?? "https://");
@@ -171,14 +185,25 @@ function Toolbar({ editor }: { editor: Editor }) {
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </Ic>
       </ToolbarButton>
-      <div className="relative">
-        <ToolbarButton title={t("editor.textColor")} onClick={() => setShowPalette((s) => !s)}>
+      {/* Portaled and fixed, not absolute. This toolbar sits inside
+          RemindersView's `email-paper … overflow-hidden` wrapper, which is
+          exactly the clipping ancestor AGENTS.md names — so the palette was
+          losing its right-hand swatches against the paper's edge. The hook also
+          brings the outside-click and Escape handling this had none of. */}
+      <>
+        <ToolbarButton ref={paletteTrigger} title={t("editor.textColor")} onClick={togglePalette}>
           <Ic>
             <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
           </Ic>
         </ToolbarButton>
-        {showPalette && (
-          <div className="absolute left-0 top-full z-10 mt-1 flex gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-md">
+        {paletteOpen &&
+          palettePos &&
+          createPortal(
+          <div
+            ref={palettePanel}
+            style={{ left: palettePos.left, top: palettePos.top, bottom: palettePos.bottom }}
+            className="fixed z-50 flex gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-md"
+          >
             {PALETTE.map((c) => (
               <button
                 key={c}
@@ -187,7 +212,7 @@ function Toolbar({ editor }: { editor: Editor }) {
                 onMouseDown={(e) => {
                   e.preventDefault();
                   editor.chain().focus().setColor(c).run();
-                  setShowPalette(false);
+                  closePalette();
                 }}
                 className="h-4 w-4 rounded-full border border-[var(--border)]"
                 style={{ backgroundColor: c }}
@@ -199,15 +224,16 @@ function Toolbar({ editor }: { editor: Editor }) {
               onMouseDown={(e) => {
                 e.preventDefault();
                 editor.chain().focus().unsetColor().run();
-                setShowPalette(false);
+                closePalette();
               }}
               className="h-4 w-4 rounded-full border border-[var(--border)] text-[9px] leading-none text-[var(--muted)]"
             >
               ×
             </button>
-          </div>
+          </div>,
+          document.body,
         )}
-      </div>
+      </>
       <ToolbarButton title={t("editor.clearFormatting")} onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
         <Ic>
           <path d="M4 7V4h16v3" /><path d="M5 20h6" /><path d="M13 4L8 20" />

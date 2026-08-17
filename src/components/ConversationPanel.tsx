@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
@@ -1213,6 +1214,16 @@ function NoteEntry({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.body ?? "");
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+  // One function, two handlers. The click and the keydown each carried their own
+  // copy of the confirm, so the browser box had to be replaced twice and could
+  // have been replaced once.
+  const askRemove = () => {
+    void (async () => {
+      const ok = await confirm({ title: t("notes.deleteConfirm") });
+      if (ok) await removeNote({ noteId: item.id as Id<"notes"> });
+    })();
+  };
 
   const body = item.body ?? "";
   // The measured node is STATE, not a ref, so the effect re-runs whenever the
@@ -1348,14 +1359,12 @@ function NoteEntry({
         aria-label={t("common.delete")}
         onClick={(event) => {
           event.stopPropagation();
-          if (!confirm(t("notes.deleteConfirm"))) return;
-          void removeNote({ noteId: item.id as Id<"notes"> });
+          askRemove();
         }}
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           event.stopPropagation();
-          if (!confirm(t("notes.deleteConfirm"))) return;
-          void removeNote({ noteId: item.id as Id<"notes"> });
+          askRemove();
         }}
         className="shrink-0 cursor-pointer text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus:opacity-100 group-hover:opacity-100 dark:hover:text-red-400"
       >
@@ -1376,6 +1385,7 @@ function NoteEntry({
 
   return (
     <li className="-mx-4 list-none border-b border-[var(--border)] first:border-t">
+      {confirmDialog}
       {expandable ? (
         <>
           <button

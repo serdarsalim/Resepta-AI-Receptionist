@@ -17,6 +17,7 @@ import { useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { Card } from "./Card";
 import { EmojiPicker } from "./EmojiPicker";
@@ -138,6 +139,7 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
   const send = useAction(api.campaigns.send);
   const ensureCampaignTemplate = useMutation(api.orgs.ensureCampaignTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
+  const [confirm, confirmDialog] = useConfirm();
 
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
@@ -186,7 +188,16 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
 
   const submit = async () => {
     if (!body.trim() || !preview?.count) return;
-    if (!window.confirm(t("campaign.sendConfirm"))) return;
+    // Not destructive — this is a SEND, so the button says the verb and stays
+    // the accent colour. window.confirm could say neither: it announces itself
+    // as "localhost:3006 says" and its two buttons read OK and Cancel, which is
+    // the wrong wording for the most irreversible action in the product.
+    const ok = await confirm({
+      title: t("campaign.sendConfirm"),
+      confirmLabel: t("campaign.send"),
+      destructive: false,
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -205,6 +216,7 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet title={t("campaign.new")} onClose={onClose}>
+      {confirmDialog}
       <div className="space-y-3">
         <div>
           <RowLabel label={t("campaign.name")} hint={t("campaign.nameHint")} />

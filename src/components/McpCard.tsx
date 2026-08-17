@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { ActionTip, InfoTip } from "./InfoTip";
@@ -21,6 +22,7 @@ export function McpCard({ site }: { site: SiteUrl }) {
   const keys = useQuery(api.mcpKeys.list, {});
   const create = useMutation(api.mcpKeys.create);
   const revoke = useMutation(api.mcpKeys.revoke);
+  const [confirm, confirmDialog] = useConfirm();
 
   // The raw key exists in the browser only inside this state, only until the
   // section unmounts. list() serves masked tails; there is no read-it-back.
@@ -61,6 +63,7 @@ export function McpCard({ site }: { site: SiteUrl }) {
   // verbose card intro the design language rules out.
   return (
     <Card title={t("settings.ai")} tip={t("mcp.intro")}>
+      {confirmDialog}
       {/* pb-2 on top of Card's own p-4. This card ends in a list of bordered
           key rows rather than a form control, and a bordered row landing 16px
           off the card's own border reads as two edges crowding each other.
@@ -156,9 +159,13 @@ export function McpCard({ site }: { site: SiteUrl }) {
                 <ActionTip
                   label={t("mcp.revoke")}
                   onClick={() => {
-                    if (window.confirm(t("mcp.revokeConfirm").replace("{name}", k.name))) {
-                      void revoke({ id: k._id });
-                    }
+                    void (async () => {
+                      const ok = await confirm({
+                        title: t("mcp.revokeConfirm").replace("{name}", k.name),
+                        confirmLabel: t("mcp.revoke"),
+                      });
+                      if (ok) await revoke({ id: k._id });
+                    })();
                   }}
                 >
                   ✕

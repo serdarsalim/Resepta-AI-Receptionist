@@ -23,9 +23,18 @@
 // database column deciding who can read every business on the deployment.
 //
 // It takes an email and touches no database, precisely so importing it cannot
-// widen anyone's read scope. requirePlatformAdmin and isPlatformAdmin stay
-// confined to convex/platform.ts. Do not add a third caller without the same
-// argument.
+// widen anyone's read scope.
+//
+// requirePlatformAdmin is confined to CROSS-ORG READS, which live in
+// convex/platform.ts, plus operator-only WRITE surfaces that read one org or
+// none: connections.ts (per-org provider credentials the salon must never see)
+// and platformConfig.ts (deployment-global operator settings). The rule was
+// written as "platform.ts only" before those two existed, and read as a
+// violation for a year. It is not: the thing worth confining is the ability to
+// read every business on the deployment, and neither of them can.
+//
+// Do not widen it further without the same argument: operator-only, and one org
+// or none.
 //
 // ── WHY AN ENV ALLOWLIST AND NOT A FLAG ON THE USER ROW ─────────────────────
 //

@@ -701,7 +701,10 @@ export function VoiceVariablesEditor({
                   setDraft((rows) => rows.filter((_, i) => i !== confirmRemove));
                   setConfirmRemove(null);
                 }}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
+                // Ghost + red text, no border. Same rule as the test button in
+                // VoiceAgentPage: the border belongs to the Sheet around this,
+                // not to the control inside it.
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
               >
                 {t("voiceVariables.remove").replace("{name}", removingLabel)}
               </button>

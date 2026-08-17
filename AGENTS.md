@@ -171,7 +171,16 @@ Every query is scoped by `requireOrg`. The single exception is
 ([`lib/platformAuth.ts`](convex/lib/platformAuth.ts)) — an env allowlist
 (`PLATFORM_ADMIN_EMAILS`), never an org role and never a DB flag, because a
 column is something an org-scoped mutation could reach. Unset denies everyone.
-Do not import `lib/platformAuth` anywhere else.
+`requirePlatformAdmin` may also gate an OPERATOR-ONLY WRITE surface outside that
+file — `convex/connections.ts` (per-org provider credentials the salon must
+never see) and `convex/platformConfig.ts` (deployment-global operator settings)
+both do. Neither reads across orgs, which is what this rule is actually
+protecting: the confinement that matters is cross-org READS, and those stay in
+`convex/platform.ts`. `lib/orgAuth.ts` and `lib/activity.ts` import only
+`emailIsPlatformAdmin`, which touches no database at all.
+
+Do not widen it further without the same argument: name the surface, show it is
+operator-only, and show it reads one org or none.
 
 ## Two kinds of template, never conflate them
 

@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { api } from "../../convex/_generated/api";
+import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
@@ -107,6 +108,7 @@ export function VoiceCard({
   );
   const connect = useMutation(api.retell.connect);
   const disconnect = useMutation(api.retell.disconnect);
+  const [confirm, confirmDialog] = useConfirm();
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
@@ -357,6 +359,7 @@ export function VoiceCard({
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
+      {confirmDialog}
       <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
 
       {connected.length > 0 && (
@@ -484,15 +487,22 @@ export function VoiceCard({
                         onClick={() => {
                           // An icon button has no label to slow the hand down,
                           // so the confirm carries the reassurance: the agent
-                          // itself survives, only the link goes.
+                          // itself survives, only the link goes. Which is
+                          // exactly the wording window.confirm cannot deliver —
+                          // its buttons stay OK and Cancel and it prefixes the
+                          // origin — so this was arguing for a dialog it was
+                          // not using.
                           const name = agent?.name ?? t("settings.voiceUnavailable");
-                          if (
-                            window.confirm(
-                              t("settings.voiceDisconnectConfirm").replace("{name}", name),
-                            )
-                          ) {
-                            void disconnect({ agentId: row._id });
-                          }
+                          void (async () => {
+                            const ok = await confirm({
+                              title: t("settings.voiceDisconnectConfirm").replace(
+                                "{name}",
+                                name,
+                              ),
+                              confirmLabel: t("settings.voiceDisconnect"),
+                            });
+                            if (ok) await disconnect({ agentId: row._id });
+                          })();
                         }}
                       >
                         ✕

@@ -465,7 +465,11 @@ export function VoiceAgentPage({
               setTestError(null);
               setTestOpen(true);
             }}
-            className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
+            // Ghost, so no border: AGENTS.md, "Borders belong to CONTAINERS
+            // (cards, inputs, dropdown panels) — never to buttons." This already
+            // carried the ghost recipe verbatim (text-muted + hover wash) and a
+            // container border on top of it.
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
           >
             {t("voiceDetail.test")}
           </button>

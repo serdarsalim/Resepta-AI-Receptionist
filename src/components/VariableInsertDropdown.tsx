@@ -9,9 +9,11 @@
 // registry.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { foldSearch } from "@/lib/useTableState";
 
 export function VariableInsertDropdown({
@@ -58,21 +60,23 @@ export function VariableInsertDropdown({
       : []),
   ];
 
-  const [open, setOpen] = useState(false);
+  // Portaled and fixed, through the shared hook. This panel was an `absolute`
+  // child of its own trigger, and it is rendered inside a card in all three of
+  // its homes (CampaignsView, EmailBodyEditor, RemindersView) — so it clipped on
+  // the nearest overflow-hidden ancestor, which every card and the shell's main
+  // pane are. AGENTS.md: "treat a clipped popup as a bug you introduced
+  // knowingly." The hook also brings outside-click, Escape, close-on-scroll and
+  // the flip-up when there is no room below, none of which this had.
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(
+    240,
+    260,
+  );
   const [filter, setFilter] = useState("");
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    if (open) inputRef.current?.focus();
+    else setFilter("");
   }, [open]);
 
   const q = foldSearch(filter.trim());
@@ -86,15 +90,16 @@ export function VariableInsertDropdown({
 
   const pick = (key: string) => {
     onInsert(`[${key}]`);
-    setOpen(false);
+    close();
     setFilter("");
   };
 
   return (
-    <div className="relative inline-block" ref={rootRef}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
       >
         {t("editor.insertVariable")}
@@ -112,63 +117,75 @@ export function VariableInsertDropdown({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
-          <div className="p-1.5">
-            <input
-              ref={inputRef}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setOpen(false);
-                if (e.key === "Enter" && shown.length > 0) pick(shown[0].key);
-              }}
-              placeholder={t("editor.searchVariables")}
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs focus:outline-none"
-            />
-          </div>
-          <ul className="max-h-56 overflow-y-auto pb-1">
-            {shownGroups.map((group) => (
-              <li key={group.title}>
-                {/* Only worth a heading when there is something to tell apart:
-                    an org with no contact fields of its own gets one list and
-                    no label over it. */}
-                {shownGroups.length > 1 && (
-                  <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
-                    {group.title}
-                  </div>
-                )}
-                <ul>
-                  {group.items.map((v) => (
-                    <li key={v.key}>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => {
-                          // mousedown (not click) so the textarea's selection
-                          // isn't lost before the insert lands at the cursor.
-                          e.preventDefault();
-                          pick(v.key);
-                        }}
-                        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
-                      >
-                        <span className="truncate">{v.label}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">
-                          [{v.key}]
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ))}
-            {shown.length === 0 && (
-              <li className="px-2.5 py-1.5 text-xs text-[var(--muted)]">
-                {t("editor.noVariableMatch")}
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{
+              left: pos.left,
+              top: pos.top,
+              bottom: pos.bottom,
+              width: pos.width,
+            }}
+            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+          >
+            <div className="p-1.5">
+              <input
+                ref={inputRef}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") close();
+                  if (e.key === "Enter" && shown.length > 0) pick(shown[0].key);
+                }}
+                placeholder={t("editor.searchVariables")}
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-xs focus:outline-none"
+              />
+            </div>
+            <ul className="max-h-56 overflow-y-auto pb-1">
+              {shownGroups.map((group) => (
+                <li key={group.title}>
+                  {/* Only worth a heading when there is something to tell apart:
+                      an org with no contact fields of its own gets one list and
+                      no label over it. */}
+                  {shownGroups.length > 1 && (
+                    <div className="px-2.5 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+                      {group.title}
+                    </div>
+                  )}
+                  <ul>
+                    {group.items.map((v) => (
+                      <li key={v.key}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            // mousedown (not click) so the textarea's selection
+                            // isn't lost before the insert lands at the cursor.
+                            e.preventDefault();
+                            pick(v.key);
+                          }}
+                          className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                        >
+                          <span className="truncate">{v.label}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">
+                            [{v.key}]
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+              {shown.length === 0 && (
+                <li className="px-2.5 py-1.5 text-xs text-[var(--muted)]">
+                  {t("editor.noVariableMatch")}
+                </li>
+              )}
+            </ul>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
