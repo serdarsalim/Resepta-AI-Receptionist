@@ -34,6 +34,10 @@ const LOCAL_REFUSALS = new Set([
   // The operator suspended the org (docs/chat-agent.md §8). Nothing heals
   // this but the operator, so retrying would only delay the honest answer.
   "org-suspended",
+  // The demo workspace never reaches a provider (convex/demo.ts). Permanent by
+  // definition — a demo row retried six times is six times the pointless work
+  // and then a dead-letter alert about a send that was never going to happen.
+  "demo-org",
 ]);
 
 // Meta error codes that mean "too fast", not "no". Worth naming individually

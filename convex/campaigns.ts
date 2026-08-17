@@ -40,6 +40,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { isDemo } from "./demo";
 import { customerSender } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
@@ -470,6 +471,11 @@ export const send = action({
     if ((org.status ?? "active") === "suspended") {
       return { ok: false, reason: "org-suspended" };
     }
+    // Same treatment for the demo workspace, and for the same reason a run is
+    // refused whole rather than fanned out: delivery.ts would now refuse every
+    // row at claim time, but queueing a thousand rows to be refused one by one
+    // is not an honest answer to "send this".
+    if (isDemo(org)) return { ok: false, reason: "demo-org" };
     if (recipientIds.length === 0) return { ok: false, reason: "no-recipients" };
 
     // Exact language match, no cross-language fallback — the same rule the

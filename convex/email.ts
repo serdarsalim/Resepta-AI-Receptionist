@@ -7,6 +7,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
+import { isDemo } from "./demo";
 import { customerSender, productSender, sendEmail } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import {
@@ -265,6 +266,8 @@ export const sendOutOfHoursReply = internalAction({
     });
     if (!context) return null;
     const { customer, org, rule, templates, contactFields } = context;
+    // The demo workspace answers nobody for real (convex/demo.ts).
+    if (isDemo(org)) return null;
     // Paused or deleted between the stamp and this action — err toward silence.
     if (!rule || rule.paused) return null;
     if (!context.sender) return null;
@@ -340,8 +343,13 @@ export const loadSendContext = internalQuery({
       inboundAddress: v.optional(v.string()),
       customerEmail: v.optional(v.string()),
       // Suspension rides the context read so the action can refuse without a
-      // second query (docs/chat-agent.md §8).
+      // second query (docs/chat-agent.md §8). demoMode rides it for the same
+      // reason, and had to be added: this was the ONLY send path in the product
+      // that never checked it, so an anonymous walk-in with a staff membership
+      // in the demo org could point a demo customer at any real address and
+      // send whatever they liked from the platform's verified domain.
       suspended: v.boolean(),
+      demo: v.boolean(),
     }),
     v.null(),
   ),
@@ -363,6 +371,7 @@ export const loadSendContext = internalQuery({
       inboundAddress: org.inboundAddress,
       customerEmail: customer.email,
       suspended: (org.status ?? "active") === "suspended",
+      demo: isDemo(org),
     };
   },
 });
@@ -386,6 +395,9 @@ export const sendToCustomer = action({
     if (context.suspended) {
       return { ok: false, reason: "org-suspended" };
     }
+    // The demo workspace never reaches a provider (convex/demo.ts). Same
+    // refusal wa.ts and chatAgent.ts have carried all along.
+    if (context.demo) return { ok: false, reason: "demo-org" };
     if (!context.customerEmail) return { ok: false, reason: "missing-email" };
     if (!context.sender) return { ok: false, reason: "email-not-configured" };
 

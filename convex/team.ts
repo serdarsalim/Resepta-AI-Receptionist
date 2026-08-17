@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { isDemo } from "./demo";
 import { recordActivity } from "./lib/activity";
 
 const role = v.union(v.literal("owner"), v.literal("staff"));
@@ -307,6 +308,13 @@ export const invite = mutation({
     const { user, orgId } = await requireOwner(ctx);
     const email = args.email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("bad-email");
+    // The demo workspace does not grow a team, and more to the point it does
+    // not send mail to a real address (convex/demo.ts). Anyone can walk into
+    // the demo, so an invite from it is a mail anybody can make the platform
+    // send from its own verified domain — and sendInvite has no org in hand to
+    // refuse it at the far end.
+    const inviteOrg = await ctx.db.get(orgId);
+    if (isDemo(inviteOrg)) throw new Error("demo-workspace");
     // Checked before either branch writes anything: an id from another org, or
     // one already claimed, must not quietly become an unlinked invite.
     if (args.staffId) {

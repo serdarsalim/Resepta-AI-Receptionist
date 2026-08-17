@@ -350,6 +350,12 @@ export const alertRecipients = internalQuery({
   handler: async (ctx, args) => {
     const org = await ctx.db.get(args.orgId);
     if (!org) return { emails: [], language: "en" };
+    // The demo workspace has no alert recipients, because anyone can walk into
+    // it (convex/demo.ts) and this is the one alert path that reaches sendEmail
+    // directly rather than through the delivery queue. Expressed as "nobody to
+    // tell" rather than a refusal at the send site, so the existing
+    // no-recipients branch logs it like any other empty list.
+    if (org.demoMode === true) return { emails: [], language: org.language ?? "en" };
     const memberships = await ctx.db
       .query("memberships")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))

@@ -51,6 +51,7 @@ import { emailConfig, type EmailConfig } from "./lib/platformConfig";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
+import { isDemo } from "./demo";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
 // and the cron runs every minute — 50 is far more than a healthy deployment
@@ -106,10 +107,19 @@ export const claimForRetry = internalMutation({
         : Promise.resolve(null),
     ]);
     if (!org || !customer) return null;
-    // Suspension (docs/chat-agent.md §8): a queued retry for a suspended org
-    // is refused here, at claim time, and the caller reports it through
-    // applySendResult like any other outcome.
-    if ((org.status ?? "active") === "suspended") return { suspended: true as const };
+    // Two reasons a queued row must not reach a provider, both refused here at
+    // claim time and reported through applySendResult like any other outcome:
+    // the operator suspended the org (docs/chat-agent.md §8), or this is the
+    // demo workspace (convex/demo.ts: "Every send path checks demoMode BEFORE
+    // it reaches a provider").
+    //
+    // demoMode was missing, and this is the chokepoint every queued send
+    // crosses on BOTH lanes — so a demo campaign's email rows were reaching
+    // Resend for real, from the platform's own verified domain.
+    if ((org.status ?? "active") === "suspended") {
+      return { refused: "org-suspended" as const };
+    }
+    if (isDemo(org)) return { refused: "demo-org" as const };
 
     const waAccount = await ctx.db
       .query("waAccounts")
@@ -202,11 +212,11 @@ export const retryDue = internalAction({
       const job = await ctx.runMutation(internal.delivery.claimForRetry, { messageId });
       if (!job) continue;
 
-      if ("suspended" in job && job.suspended) {
+      if ("refused" in job && job.refused) {
         await ctx.runMutation(internal.messages.applySendResult, {
           messageId,
           ok: false,
-          error: "org-suspended",
+          error: job.refused,
         });
         continue;
       }
