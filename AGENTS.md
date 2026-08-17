@@ -724,6 +724,12 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - `pr-3` on the transcript scroller: the caller's bubbles are right-aligned
     and butt against the scrollbar thumb without it. The left needs no
     counterpart — the scroller's own edge sits inside the pane's padding.
+  - **OUR side is on the RIGHT — the agent — and the caller is on the left**,
+    the same arrangement the WhatsApp thread uses in the same pane. It was the
+    other way round, which is what call-ANALYTICS tools do because there the
+    customer is the subject being studied. This is not that tool: it is the
+    salon's inbox, one pill away from a thread that already taught "right and
+    emerald is you", and nobody should re-learn the sides per tab.
   - **The agent's bubbles are emerald, the caller's are `--chat-field`.** The
     caller's used to be `--accent`, which is this app's ACTION colour — Reply,
     Compose, Send, Place call are all that blue — so blue meant "click me" and

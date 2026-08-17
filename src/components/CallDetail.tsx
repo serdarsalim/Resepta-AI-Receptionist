@@ -173,7 +173,7 @@ export function CallTranscript({
       // level (paper → card → bubble) and would leave the agent's bubble with
       // nothing to be white against.
       //
-      // pr-3 for the scrollbar: the caller's bubbles are right-aligned, so
+      // pr-3 for the scrollbar: the agent's bubbles are right-aligned, so
       // without it they butt straight against the thumb. The left needs no
       // counterpart — the scroller's own left edge already sits inside the
       // pane's padding. min-h so a long summary above can never squeeze this to
@@ -182,12 +182,21 @@ export function CallTranscript({
         fill ? "min-h-32 flex-1" : "max-h-96"
       }`}
     >
+      {/* OUR side is on the right, theirs on the left — the same arrangement the
+          WhatsApp thread uses, in the same pane. The agent speaks for the
+          salon, so it is us (Serdar, 2026-08-18).
+
+          It was the other way round, which is the convention call-ANALYTICS
+          tools use: there the customer is the subject being studied. This is
+          not that tool. It is the salon's inbox, sitting one pill away from a
+          thread that already taught "right and emerald is you", and a reader
+          should not have to re-learn the sides per tab. */}
       {turns.map((turn, i) => (
-        <div key={i} className={`flex ${turn.agent ? "justify-start" : "justify-end"}`}>
+        <div key={i} className={`flex ${turn.agent ? "justify-end" : "justify-start"}`}>
           <div className="min-w-0 max-w-[80%]">
             <div
               className={`mb-0.5 text-[10px] text-[var(--muted)] ${
-                turn.agent ? "text-left" : "text-right"
+                turn.agent ? "text-right" : "text-left"
               }`}
             >
               {turn.agent ? t("calls.agent") : contactName || t("calls.theCaller")}
