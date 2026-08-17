@@ -18,6 +18,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_PRODUCT_NAME, platformValue } from "./lib/platformConfig";
+import { queueOrgAlert } from "./lib/alerts";
 
 // Below this the owner gets the "running low" mail — once per descent, since
 // orgs.walletAlertLowAt re-arms on top-up rather than monthly.
@@ -142,11 +143,42 @@ export async function applyWalletCredit(
     by: args.by,
   });
   const after = (org.walletBalanceMicroUsd ?? 0) + amount;
+  // A credit is usually a top-up, so the interesting direction is upward and
+  // this only ever CLEARED the stamps. But platform.addWalletCredit takes a
+  // signed amount on purpose — its activity line reads "+" or "−" — so an
+  // operator clawback comes through here too, and a correction landing on
+  // exactly zero used to write no stamp and queue no mail. That silence was
+  // permanent, not merely late: at a balance of zero beforeCallContext declines
+  // every ring, so meterCall never runs again and the descent that WOULD have
+  // fired the empty alert can never happen. The owner's phone agent just stops
+  // answering.
+  //
+  // Mirrors the debit path in retell.meterCall, including empty stamping low as
+  // well: "running low" arriving after "ran out" reads as the balance going
+  // backwards.
+  const crossedEmpty = after <= 0 && !org.walletAlertEmptyAt;
+  const crossedLow = after <= WALLET_LOW_MICRO_USD && !org.walletAlertLowAt;
   await ctx.db.patch(args.orgId, {
     walletBalanceMicroUsd: after,
-    ...(after > 0 ? { walletAlertEmptyAt: undefined } : {}),
-    ...(after > WALLET_LOW_MICRO_USD ? { walletAlertLowAt: undefined } : {}),
+    ...(after > 0
+      ? { walletAlertEmptyAt: undefined }
+      : crossedEmpty
+        ? { walletAlertEmptyAt: Date.now() }
+        : {}),
+    ...(after > WALLET_LOW_MICRO_USD
+      ? { walletAlertLowAt: undefined }
+      : crossedLow || crossedEmpty
+        ? { walletAlertLowAt: Date.now() }
+        : {}),
   });
+  if (crossedEmpty || crossedLow) {
+    await queueOrgAlert(ctx, {
+      orgId: args.orgId,
+      template: crossedEmpty ? "walletEmpty" : "walletLow",
+      who: org.name || "—",
+      detail: `$${(Math.max(after, 0) / 1_000_000).toFixed(2)}`,
+    });
+  }
 }
 
 export const creditTopup = internalMutation({
@@ -161,6 +193,42 @@ export const creditTopup = internalMutation({
   handler: async (ctx, args) => {
     await applyWalletCredit(ctx, args);
     return null;
+  },
+});
+
+// The Stripe webhook's door, and the only one that takes an UNVALIDATED org
+// reference.
+//
+// client_reference_id arrives from Stripe and used to be cast straight into a
+// v.id("orgs") argument with `as never` and no try/catch. The Stripe credentials
+// are platform-wide — one account for the whole deployment — so any other
+// session on that account carrying a reference verifies fine and lands here: a
+// Payment Link, a second product, a second Convex deployment sharing the
+// endpoint secret. A reference that is not a document id in THIS deployment
+// failed argument validation, the httpAction threw, Convex answered 500, and
+// Stripe retried with backoff for days before disabling the endpoint — with
+// real top-ups queued behind it.
+//
+// Returns whether it was ours, so the route can answer 200 for "this event was
+// not for us" while a genuine failure still throws and earns the retry. That
+// distinction is the route's own stated contract.
+export const creditStripeSession = internalMutation({
+  args: {
+    clientReferenceId: v.string(),
+    amountMicroUsd: v.number(),
+    stripeSessionId: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const orgId = ctx.db.normalizeId("orgs", args.clientReferenceId.trim());
+    if (!orgId) return false;
+    await applyWalletCredit(ctx, {
+      orgId,
+      amountMicroUsd: args.amountMicroUsd,
+      source: "stripe",
+      stripeSessionId: args.stripeSessionId,
+    });
+    return true;
   },
 });
 
@@ -234,13 +302,26 @@ export const createTopupSession = action({
       },
       body: params.toString(),
     });
-    const json = (await res.json()) as {
+    // res.ok first, and the body read defensively — the order every other
+    // provider wrapper in this codebase uses (postWaCloud, sendEvolutionText,
+    // sendEmail, chatComplete), three of them with a comment about exactly this.
+    // Parsing first meant a 502 or 503 carrying an HTML maintenance page threw
+    // `SyntaxError: Unexpected token '<'` out of res.json() before !res.ok could
+    // be consulted, so the deliberate stripe-error below was unreachable for
+    // every non-JSON failure and an operator debugging a failed top-up got a
+    // parse stack instead of Stripe's status.
+    if (!res.ok) {
+      const detail = await res
+        .json()
+        .then((body: unknown) => (body as { error?: { message?: string } })?.error?.message)
+        .catch(() => undefined);
+      throw new Error(detail ?? `stripe-http-${res.status}`);
+    }
+    const json = (await res.json().catch(() => null)) as {
       url?: string;
       error?: { message?: string };
-    };
-    if (!res.ok || !json.url) {
-      throw new Error(json.error?.message ?? "stripe-error");
-    }
+    } | null;
+    if (!json?.url) throw new Error(json?.error?.message ?? "stripe-error");
     return json.url;
   },
 });

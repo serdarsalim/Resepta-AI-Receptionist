@@ -902,12 +902,26 @@ http.route({
         Number.isFinite(amountCents) &&
         amountCents > 0
       ) {
-        await ctx.runMutation(internal.wallet.creditTopup, {
-          orgId: orgId as never,
+        // Normalised inside the mutation rather than cast with `as never`
+        // here: this reference came off a Stripe account the whole deployment
+        // shares, so it is not necessarily one of ours, and an id that fails
+        // argument validation used to throw straight out of this httpAction —
+        // a 500 that Stripe retries for days before disabling the endpoint,
+        // with real top-ups stuck behind it.
+        const ours = await ctx.runMutation(internal.wallet.creditStripeSession, {
+          clientReferenceId: orgId,
           amountMicroUsd: Math.round(amountCents * 10_000),
-          source: "stripe",
           stripeSessionId: sessionId,
         });
+        // Deliberately not thrown. A reference that is not ours is exactly the
+        // "this event was not for us" case the header reserves a 200 for; a
+        // real credit that fails still throws from the mutation and earns the
+        // retry.
+        if (!ours) {
+          console.warn(
+            `stripe session ${sessionId} referenced "${orgId}", which is not an org on this deployment — ignored`,
+          );
+        }
       }
     }
     return Response.json({ received: true });
