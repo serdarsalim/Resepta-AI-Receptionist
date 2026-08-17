@@ -84,6 +84,7 @@ export function InlineEditValue({
   type = "text",
   placeholder,
   compact,
+  clearable = true,
   onSave,
 }: {
   value: string;
@@ -98,6 +99,11 @@ export function InlineEditValue({
   // token with what follows them ("45" + "min"), where a full-width control
   // would strand the unit on the far side of the row.
   compact?: boolean;
+  // Whether the picklist offers a blank row. It exists to CLEAR a value, so it
+  // belongs on an org field somebody filled in by mistake — and not on a value
+  // the record always has. An appointment is always in some status, and the
+  // blank option there is a way to hand the server a status it will reject.
+  clearable?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const [editing, setEditing] = useState(false);
@@ -167,7 +173,7 @@ export function InlineEditValue({
         }}
         className="px-2 py-1 text-sm"
       >
-        <option value="" />
+        {clearable && <option value="" />}
         {merged.map((option) => (
           <option key={option} value={option}>
             {labelFor ? labelFor(option) : option}

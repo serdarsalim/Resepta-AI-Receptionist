@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { Rect } from "@/lib/anchoredSheet";
+import type { ModalDraft } from "./AppointmentModal";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
@@ -24,6 +27,21 @@ const STATUS_KEY: Record<string, TranslationKey> = {
   completed: "status.completed",
   no_show: "status.no_show",
 };
+
+// The life of a booking, in the order it lives it — not the order the record
+// happens to declare them in. A picker is read top to bottom, so the two
+// endings sit at the bottom where somebody closing a visit out will look.
+const STATUS_ORDER = [
+  "scheduled",
+  "confirmed",
+  "completed",
+  "no_show",
+  "cancelled",
+] as const;
+
+type CustomerAppointment = FunctionReturnType<
+  typeof api.appointments.listForCustomer
+>[number];
 
 // The org field's declared type picks the editor; a select hands its options to
 // the same control instead of a second one.
@@ -112,6 +130,10 @@ export function ContactView({
   if (!customer) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
+
+  // Built once. Four places wanted it and each carried its own copy of the
+  // same `${first} ${last ?? ""}`.trim().
+  const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
 
   return (
     // Fills the pane and scrolls inside itself, so it takes the phone's bottom
@@ -250,6 +272,28 @@ export function ContactView({
               does, instead of a short card floating in an empty column. */}
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden card-raised">
             <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+              {/* What they bought leads the card; who they are follows. See the
+                  component. Booking from the record, with this customer already
+                  decided: the calendar was the only way in, which meant the one
+                  screen that knows who you are talking about could not act on
+                  it. */}
+              <CustomerAppointments
+                appointments={appointments}
+                currency={currency}
+                onAdd={() =>
+                  booking.open({
+                    // Next round hour, the same default the calendar's own
+                    // toolbar button uses when no slot was clicked.
+                    startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
+                    durationMinutes: DEFAULT_DURATION,
+                    customerId,
+                    customerName: customerName,
+                  })
+                }
+                onOpen={(draft, anchor) =>
+                  booking.open({ ...draft, customerId, customerName }, anchor)
+                }
+              />
               <FieldRow label={t("customers.firstName")}>
                 <InlineEditValue
                   value={customer.firstName}
@@ -305,135 +349,6 @@ export function ContactView({
                 />
               ))}
 
-              {/* Appointments close the record, under the same kind of ruled
-                  heading the field groups use — Nudge's Deals section on its
-                  contact card, which is the same idea: related records living
-                  INSIDE the record rather than in a card of their own.
-
-                  They were a second card below this one, and that was wrong in
-                  two ways. This card is flex-1, so a customer with four fields
-                  left a column of dead white above an appointments card that
-                  had been pushed half off the bottom of the screen. And the
-                  split implied the two were separate things to read, when
-                  "who they are" and "when they came" is one answer.
-
-                  Editable rows first, read-only history after: everything you
-                  can type into is above this rule, nothing below it is. */}
-              {/* Booking from the record, with this customer already decided.
-                  The calendar was the only way in, which meant the one screen
-                  that knows who you are talking about could not act on it: you
-                  read their history here, then went to the grid and named them
-                  again. Same sheet, same conflict handling, customer prefilled
-                  so the picker never appears. */}
-              <FieldGroup
-                label={t("appointments.title")}
-                action={
-                  <button
-                    type="button"
-                    onClick={() =>
-                      booking.open({
-                        // Next round hour, the same default the calendar's own
-                        // toolbar button uses when no slot was clicked.
-                        startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
-                        durationMinutes: DEFAULT_DURATION,
-                        customerId,
-                        customerName: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-                      })
-                    }
-                    className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--muted-bg)]"
-                  >
-                    {t("appointments.addForCustomer")}
-                  </button>
-                }
-              />
-              {appointments === undefined && (
-                <p className="py-1 text-sm text-[var(--muted)]">{t("common.loading")}</p>
-              )}
-              {appointments?.length === 0 && (
-                <p className="py-1 text-sm text-[var(--muted)]">{t("appointments.none")}</p>
-              )}
-              {!!appointments?.length && (
-                // Bled out to the card's edges (-mx-4) so the hover wash and
-                // the hairlines run the full width the way a list should,
-                // instead of floating inside the field inset. No nested scroll
-                // any more: this list is part of the record's one scroll now,
-                // and two scrollbars in one card is a trap.
-                <ul className="-mx-4 divide-y divide-[var(--border)] border-b border-[var(--border)]">
-                  {appointments.map((appointment) => (
-                    <li key={appointment._id}>
-                      {/* Flat row, hairline divider, wash on hover. No border
-                          per row, and nothing moves.
-                          
-                          A button, because the booking is editable from here.
-                          It used to be a div: you could read that Ebru has
-                          Giovanni at 15:15 on the one screen with Giovanni in
-                          front of you, and to move it by ten minutes you went
-                          to the calendar and found the block. Same sheet the
-                          grid opens, anchored to the row. */}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          const r = event.currentTarget.getBoundingClientRect();
-                          booking.open(
-                            {
-                              appointmentId: appointment._id,
-                              startAt: appointment.startAt,
-                              durationMinutes:
-                                appointment.durationMinutes ?? DEFAULT_DURATION,
-                              customerId,
-                              customerName: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-                              // Snapshotted lines, not ids resolved fresh: the
-                              // sheet shows what this visit recorded, not what
-                              // the service costs now.
-                              lines: (appointment.items ?? []).flatMap((item) =>
-                                item.serviceId
-                                  ? [
-                                      {
-                                        serviceId: item.serviceId,
-                                        price: item.price,
-                                        quantity: item.quantity,
-                                      },
-                                    ]
-                                  : [],
-                              ),
-                              staffId: appointment.staffId ?? null,
-                              notes: appointment.notes,
-                              status: appointment.status,
-                            },
-                            { top: r.top, left: r.left, width: r.width, height: r.height },
-                          );
-                        }}
-                        className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]">
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">
-                            {formatDateTime(appointment.startAt, language)}
-                          </span>
-                          <span className="block truncate text-xs text-[var(--muted)]">
-                            {[appointment.serviceName, appointment.staffName]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </span>
-                        </span>
-                        {/* The money reads as the row's fact and the status as
-                            its footnote, so the total takes the ink and the
-                            word sits under it. A visit nobody priced shows no
-                            amount rather than a dash — an empty slot is easier
-                            to skim past than a placeholder. */}
-                        <span className="shrink-0 text-right">
-                          {appointment.total !== undefined && (
-                            <span className="block text-sm tabular-nums">
-                              {formatMoney(appointment.total, currency, language)}
-                            </span>
-                          )}
-                          <span className="block text-xs text-[var(--muted)]">
-                            {t(STATUS_KEY[appointment.status])}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
             {/* Record meta, the way Nudge's contact footer works: when this
@@ -564,6 +479,179 @@ export function ContactView({
       </div>
 
       {booking.render()}
+    </div>
+  );
+}
+
+// What this customer bought, and it LEADS the record card — Nudge's deal block,
+// in a salon's terms (Serdar's call, 2026-08-17).
+//
+// It used to close the card, under the field rows, and that was the wrong way
+// round for the same reason Nudge moved its own: the visits are why anybody
+// opens a customer at all, and the identity fields are reference material you
+// consult once. Sitting last they were also the first thing pushed off the
+// bottom of a scroll region a phone had already halved.
+//
+// The cost is real and worth naming: First name no longer starts at a fixed
+// position. Where the record begins now depends on how many bookings this
+// customer has.
+//
+// Bottom rule only. The block sits against the card's own top edge, so a rule
+// above it would be a line drawn on a line; the single rule below is what stops
+// First name / Phone / Email reading as though they belonged to the last visit.
+function CustomerAppointments({
+  appointments,
+  currency,
+  onAdd,
+  onOpen,
+}: {
+  appointments: CustomerAppointment[] | undefined;
+  currency: string;
+  onAdd: () => void;
+  onOpen: (draft: ModalDraft, anchor: Rect) => void;
+}) {
+  const { t, language } = useLanguage();
+  const setStatus = useMutation(api.appointments.setStatus);
+  const [showPast, setShowPast] = useState(false);
+
+  // Upcoming is a visit still ahead that nobody has closed out — the same line
+  // Nudge draws between an open deal and a closed one. A cancelled booking next
+  // Tuesday is history: it is not going to happen, and leaving it up top means
+  // the count in the heading promises work that isn't there.
+  const now = Date.now();
+  const isUpcoming = (a: CustomerAppointment) =>
+    a.startAt >= now && (a.status === "scheduled" || a.status === "confirmed");
+  // The query hands these back newest-first, which is right for history and
+  // backwards for plans: what you need off the top of an upcoming list is the
+  // next thing happening, not the furthest away.
+  const upcoming = (appointments ?? []).filter(isUpcoming).sort((a, b) => a.startAt - b.startAt);
+  const past = (appointments ?? []).filter((a) => !isUpcoming(a));
+
+  // Same draft the calendar builds, so an edit opened from here and an edit
+  // opened from the grid are the same sheet with the same handles. Snapshotted
+  // lines, not ids resolved fresh: it shows what this visit recorded, not what
+  // the service costs now.
+  const draftFor = (a: CustomerAppointment): ModalDraft => ({
+    appointmentId: a._id,
+    startAt: a.startAt,
+    durationMinutes: a.durationMinutes ?? DEFAULT_DURATION,
+    lines: (a.items ?? []).flatMap((item) =>
+      item.serviceId
+        ? [{ serviceId: item.serviceId, price: item.price, quantity: item.quantity }]
+        : [],
+    ),
+    staffId: a.staffId ?? null,
+    notes: a.notes,
+    status: a.status,
+  });
+
+  const card = (a: CustomerAppointment) => (
+    <div key={a._id} className="rounded-md border border-[var(--border)] bg-[var(--card)] p-2">
+      <div className="flex items-center gap-2">
+        {/* The heading is what they BOUGHT — the section's whole subject, and
+            the one line that differs between two visits a week apart. Clicking
+            it opens the booking sheet: this is the screen with the customer in
+            front of you, so it is where a booking gets moved. */}
+        <button
+          type="button"
+          onClick={(event) =>
+            onOpen(draftFor(a), event.currentTarget.getBoundingClientRect())
+          }
+          className="min-w-0 flex-1 truncate rounded text-left text-sm font-medium transition-colors hover:text-[var(--accent)]"
+        >
+          {a.serviceName || t("appointments.title")}
+        </button>
+        <span className="shrink-0 text-xs text-[var(--muted)]">
+          {formatDateTime(a.startAt, language)}
+        </span>
+      </div>
+      {/* Labelled, because "Confirmed" on its own is a word with no question
+          attached — on the calendar the column supplies that and this card has
+          no column. Same tier the record rows below use, and no colon, because
+          they have none either. The service name needs no label (it is the
+          card's heading) and neither does the amount, which carries its
+          currency. Nudge's Stage row, exactly. */}
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-[11px] text-[var(--muted-strong)]">
+            {t("appointments.status")}
+          </span>
+          <InlineEditValue
+            compact
+            clearable={false}
+            value={a.status}
+            options={[...STATUS_ORDER]}
+            labelFor={(value) => t(STATUS_KEY[value] ?? "status.scheduled")}
+            onSave={(next) =>
+              setStatus({
+                appointmentId: a._id,
+                status: next as CustomerAppointment["status"],
+              })
+            }
+          />
+          {a.staffName && (
+            <span className="min-w-0 truncate text-xs text-[var(--muted)]">
+              · {a.staffName}
+            </span>
+          )}
+        </span>
+        {/* A visit nobody priced shows no amount rather than a dash — an empty
+            slot is easier to skim past than a placeholder. */}
+        {a.total !== undefined && (
+          <span className="shrink-0 text-sm tabular-nums">
+            {formatMoney(a.total, currency, language)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mb-1 border-b border-[var(--border)] pb-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-[var(--muted)]">
+          {t("appointments.title")}
+          {upcoming.length > 0 &&
+            ` · ${upcoming.length} ${t("appointments.upcomingCount")}`}
+        </span>
+        {/* Outlined, not filled and not a bare link. A fill would make this
+            history block compete with the page's real primary, and a blue link
+            is indistinguishable from the "show history" toggle directly below
+            it — which is a disclosure, not an action. Blue belongs to the
+            toggles here; a box belongs to the actions. Nudge's + Add deal. */}
+        <button
+          type="button"
+          onClick={onAdd}
+          className="shrink-0 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--row-hover-bg)]"
+        >
+          + {t("appointments.addForCustomer")}
+        </button>
+      </div>
+
+      <div className="mt-2 space-y-2">
+        {appointments === undefined && (
+          <p className="text-xs text-[var(--muted)]">{t("common.loading")}</p>
+        )}
+        {upcoming.map(card)}
+        {appointments !== undefined && upcoming.length === 0 && (
+          <p className="text-xs text-[var(--muted)]">{t("appointments.noUpcoming")}</p>
+        )}
+      </div>
+
+      {past.length > 0 && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowPast((prev) => !prev)}
+            className="text-xs text-[var(--accent)] hover:underline"
+          >
+            {showPast
+              ? t("appointments.hidePast")
+              : t("appointments.showPast").replace("{n}", String(past.length))}
+          </button>
+          {showPast && <div className="mt-1.5 space-y-2">{past.map(card)}</div>}
+        </div>
+      )}
     </div>
   );
 }

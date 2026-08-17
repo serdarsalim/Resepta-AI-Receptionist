@@ -316,6 +316,29 @@ const dictionary = {
     en: "Add appointment",
     de: "Termin hinzufügen",
   },
+  // The record card's appointments block (Nudge's deal block, in a salon's
+  // terms). The count rides the heading, and the visits that are over sit
+  // behind a disclosure rather than pushing the record off the screen.
+  "appointments.upcomingCount": {
+    tr: "yaklaşan",
+    en: "upcoming",
+    de: "bevorstehend",
+  },
+  "appointments.noUpcoming": {
+    tr: "Yaklaşan randevu yok",
+    en: "No upcoming appointments",
+    de: "Keine bevorstehenden Termine",
+  },
+  "appointments.showPast": {
+    tr: "{n} geçmiş randevuyu göster",
+    en: "Show {n} past",
+    de: "{n} vergangene anzeigen",
+  },
+  "appointments.hidePast": {
+    tr: "Geçmişi gizle",
+    en: "Hide history",
+    de: "Verlauf ausblenden",
+  },
   "appointments.when": { tr: "Tarih", en: "When", de: "Datum" },
   "appointments.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
   // What a bookable person is called, everywhere. Was overridable per org; the
