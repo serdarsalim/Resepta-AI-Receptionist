@@ -495,6 +495,74 @@ the agent quoting lengths, ICS end times), so this is a semantics project —
 what does a booking of a timeless service mean in each reader — not a
 `v.optional()` sprinkle. Spec first.
 
+## The contact record after 2026-08-17 (Nudge's card, ported wholesale)
+
+Serdar rebuilt Nudge's contact page and asked for the same treatment here.
+Everything below is a UI port — no domain model came with it. Nudge sells
+deals; we sell services, and an appointment is the thing a customer bought.
+
+- **Appointments LEAD the record card**, above the identity fields, in Nudge's
+  deal-block shape: a `text-xs font-medium` muted heading carrying the upcoming
+  count, an OUTLINED `+ Add appointment` beside it, one bordered card per visit,
+  and the finished ones behind a `Show N past` disclosure. Bottom rule only —
+  the block sits on the card's own top edge, so a rule above it is a line drawn
+  on a line, and the rule below is what stops First name / Phone / Email reading
+  as though they belonged to the last visit.
+  - The cost, and it is real: First name no longer starts at a fixed position.
+    Where the record begins depends on how many bookings the customer has.
+  - **Upcoming = ahead in time AND still scheduled or confirmed.** A cancelled
+    booking next Tuesday is history: it is not going to happen, and counting it
+    promises work that isn't there. Upcoming sorts soonest-first (the query hands
+    back newest-first, which is right for history and backwards for plans).
+  - Card: service name as the heading and the way into the booking sheet, date
+    right; then a LABELLED `Status` picker with the money opposite. Labelled
+    because "Confirmed" alone is a word with no question attached — on the
+    calendar the column supplies that and a card has no column.
+  - No Complete / No-show buttons beside the picker. Nudge has Won/Lost buttons
+    AND a stage picker because those are two axes; here status is one axis, and
+    a second control for it is two ways to do one thing.
+- **The record's two type tiers.** Label 11px `--muted-strong`, value `text-xs`
+  `--foreground`, group headings at the label's size in weight 500. Measured off
+  Nudge's live DOM, not eyeballed — both apps run a 17px root, so the numbers
+  transfer directly. Same size in the same weight for both halves is a FORM's
+  grammar: on a form you read the question, on a record you read the answer and
+  glance left to see what it answers.
+  - The value tier is opt-in (`dense` on `InlineEditValue` and `PhoneField`),
+    never those components' default. They are also the settings screens'
+    controls, and a settings row is a question you answer rather than a line you
+    scan. Business, Reminders and Account keep the size they were built at.
+  - This is the one place the tier doc below reads oddly: it lists "field
+    labels" under `--foreground`. That means a settings row's label. A record
+    card's label is a group label — navigation text — and sits at
+    `--muted-strong`.
+- **`InlineEditValue`'s blank option is `clearable`, default true.** It exists
+  to CLEAR a value, which is right for an org field somebody filled in by
+  mistake and wrong for a value the record always has. On the status picker it
+  was a way to hand the server a status it rejects.
+- **Notes are a chat**: bubbles, byline above (author + when), click the bubble
+  to edit, delete hover-revealed on the byline. No expand/collapse — a bubble
+  shows the whole note, which deleted the ResizeObserver that measured a
+  snippet's overflow to decide whether to draw a chevron. One column, one bubble
+  style: a mine-right/theirs-left split reads as a conversation between two
+  people, and a note log is not one — everybody is writing ON the customer.
+  - **The composer collapses to a `+ Add note` pill**, top of the tab, next to
+    where a fresh note lands. A permanently open composer is a band of chrome
+    between you and the notes you came to read. The one-line pseudo-input that
+    used to sit there read as "type here" while doing nothing of the kind.
+- **An open email thread is a mailbox, not a chat**: Gmail's who · what · when,
+  flush rows, newest first, click one to open it, newest arrives open. The
+  sender column is fixed-width so snippets line up, and the customer's own name
+  reads emerald. Bubbles are right for WhatsApp and wrong here — a thread is
+  eleven messages of which you want one, and the one that decides what you do
+  next is the last that arrived. **So `chatOrder` is WhatsApp alone.** Nothing
+  that reaches a bubble is a mail any more: that branch is WhatsApp and forms.
+- **Feed pills are their mark and their count, nothing else.** Notes and Form
+  used to carry their word (a bare pencil among channel glyphs reads as "edit
+  this contact"). Four words across the row was most of the header spent
+  labelling marks the reader knows, and the selected pill grew wider than its
+  neighbours, so picking one moved them sideways. All keeps its word: it has no
+  mark to be. Names live on `title` + `aria-label`.
+
 ## Business is one page (2026-08-12, later the same day)
 
 Supersedes the chip-strip parts of the section above. Sidebar: Customers ·
