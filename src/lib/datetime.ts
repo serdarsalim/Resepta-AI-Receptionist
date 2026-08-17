@@ -24,6 +24,28 @@ export function formatDateTime(ms: number, language: Language, timezone?: string
   }).format(new Date(ms));
 }
 
+// The same stamp with the weekday in front — "Mon 12 Aug, 19:32". For a heading
+// that names ONE moment, where a bare date makes the reader count back to work
+// out whether 26 Jul was a Saturday. For a salon reading a call record, which
+// day of the week it was is half of what the date means.
+//
+// Intl decides where the weekday goes, so Turkish and German each get their own
+// order rather than an English one translated.
+export function formatDateTimeWithWeekday(
+  ms: number,
+  language: Language,
+  timezone?: string,
+): string {
+  return new Intl.DateTimeFormat(LOCALE[language], {
+    timeZone: timezone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
 // A date with no time on it, for facts that are day-level however precisely
 // they were recorded. Deliberately day/short-month/year ("20 Jul 2026") rather
 // than a numeric date, because 07/08 is two different days depending on who is

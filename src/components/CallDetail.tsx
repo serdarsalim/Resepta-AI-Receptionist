@@ -132,18 +132,27 @@ export function parseTranscript(raw: string): Turn[] {
 export function CallTranscript({
   transcript,
   contactName,
+  fill = false,
 }: {
   transcript: string;
   // Labels the human side. Falls back to a generic "Caller" for a first-time
   // number that has no name on it yet.
   contactName?: string | null;
+  // Take the height left in the pane instead of capping at 24rem. For the call
+  // tab's detail view, where the transcript IS the page and a box ending
+  // two-thirds down leaves a band of empty card under the thing you are
+  // reading. The mixed feed keeps the cap: there the transcript is one card
+  // among many and a full-height one would bury everything after it.
+  fill?: boolean;
 }) {
   const { t } = useLanguage();
   const turns = useMemo(() => parseTranscript(transcript), [transcript]);
 
   if (turns.length === 0) {
     return (
-      <pre className="thin-scroll max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 font-sans text-xs leading-relaxed">
+      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 font-sans text-xs leading-relaxed ${
+        fill ? "min-h-32 flex-1" : "max-h-96"
+      }`}>
         {transcript}
       </pre>
     );
@@ -158,7 +167,13 @@ export function CallTranscript({
   // you can scroll — and it gives the agent's grey bubbles something to be
   // grey against.
   return (
-    <div className="thin-scroll max-h-96 space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-3">
+    <div
+      className={`thin-scroll space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 ${
+        // min-h so a long summary above can never squeeze the transcript to
+        // nothing — it keeps its own scrollbar and a floor.
+        fill ? "min-h-32 flex-1" : "max-h-96"
+      }`}
+    >
       {turns.map((turn, i) => (
         <div key={i} className={`flex ${turn.agent ? "justify-start" : "justify-end"}`}>
           <div className="min-w-0 max-w-[80%]">
@@ -239,10 +254,14 @@ export function CallDetail({
   call,
   contactName,
   className = "",
+  fill = false,
 }: {
   call: CallDetailItem;
   contactName?: string | null;
   className?: string;
+  // Fill the pane: the recording, summary and collected values keep their own
+  // height and the TRANSCRIPT takes whatever is left. See CallTranscript.
+  fill?: boolean;
 }) {
   const { t } = useLanguage();
   const ended = humanizeCallEnd(call.disconnectionReason, t);
@@ -255,7 +274,13 @@ export function CallDetail({
   }
 
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div
+      className={
+        fill
+          ? `flex min-h-0 flex-1 flex-col gap-3 ${className}`
+          : `space-y-3 ${className}`
+      }
+    >
       {call.recordingUrl && (
         <audio controls src={call.recordingUrl} className="h-9 w-full" />
       )}
@@ -274,11 +299,15 @@ export function CallDetail({
       )}
       {hasCollected && <CollectedList values={call.collected!} />}
       {call.transcript && (
-        <div>
+        <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
           <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">
             {t("calls.transcript")}
           </div>
-          <CallTranscript transcript={call.transcript} contactName={contactName} />
+          <CallTranscript
+            fill={fill}
+            transcript={call.transcript}
+            contactName={contactName}
+          />
         </div>
       )}
     </div>

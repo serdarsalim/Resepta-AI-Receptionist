@@ -9,6 +9,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
   formatDateTime,
+  formatDateTimeWithWeekday,
   formatDayHeading,
   formatTime,
   fromDatetimeLocalValue,
@@ -537,8 +538,11 @@ export function ConversationPanel({
           {/* The outcome pill was here too, printing the same raw
               `call_successful` boolean as the index did. Gone for the same
               reason: the summary is directly below it and says more. */}
+          {/* With the weekday: this heading names one moment and nothing else
+              on the screen says which day of the week it was, so a bare date
+              made the reader count back to find out. */}
           <h3 className="min-w-0 truncate text-sm font-semibold">
-            {formatDateTime(openCall.at, language)}
+            {formatDateTimeWithWeekday(openCall.at, language)}
           </h3>
         </div>
       )}
@@ -624,7 +628,12 @@ export function ConversationPanel({
         // now, so they take a gap of their own — a wider one than the chat's,
         // because each carries a byline above it and the two would otherwise
         // sit closer to the note above than to their own.
-        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
+        className={`thin-scroll stable-gutter min-h-0 flex-1 p-4 ${
+          // A call detail owns the pane: it is a flex column whose transcript
+          // takes the leftover height and scrolls on its own. Two scrollbars in
+          // one card is a trap, so this one stands down.
+          openCall ? "flex flex-col overflow-hidden" : "overflow-y-auto"
+        } ${
           // Only the chat wears a plane of its own. The feed view renders calls
           // and email rows with their own edges, which want the card's white
           // under them.
@@ -1637,9 +1646,18 @@ function CallEntry({
   // inline would bury every message after it.
   if (detail) {
     return (
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
-        {duration && <p className="mb-1 text-xs text-[var(--muted)]">{duration}</p>}
-        <CallDetail call={item} contactName={contactName} />
+      // Fills the pane and lets the transcript take what is left of it. The
+      // card used to end wherever the transcript's 24rem cap put it, leaving a
+      // band of empty card under the one thing on the screen worth reading.
+      <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
+        {/* Only when there is no player. The audio control already reads
+            "0:00 / 1:34", so above one this line was the same fact twice — but
+            on a call with no recording it is the only place the length is
+            said at all. */}
+        {duration && !item.recordingUrl && (
+          <p className="mb-1 shrink-0 text-xs text-[var(--muted)]">{duration}</p>
+        )}
+        <CallDetail fill call={item} contactName={contactName} />
       </div>
     );
   }
