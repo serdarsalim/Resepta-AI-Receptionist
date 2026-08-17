@@ -1367,6 +1367,13 @@ export default defineSchema({
     // Failure surfacing per org — the Messages tab badge and the platform
     // admin's per-org health both ask "what broke here lately".
     .index("by_org_status", ["orgId", "status"])
+    // Status ACROSS orgs, newest first — Convex appends _creationTime to every
+    // index, so this is really (status, _creationTime). Exists for the fleet
+    // page, which needs "what failed lately, everywhere". Reading that per org
+    // meant 200 rows × every org in a single query, which is how that page
+    // acquired a hard ceiling around 25-45 businesses. One bounded fleet-wide
+    // read costs what is BROKEN rather than what exists, and failures are rare.
+    .index("by_status_creation", ["status"])
     // Which messages show a given image. Exists so deleting a library asset
     // can ask exactly that, rather than scanning recent messages and hoping
     // the one that would break is among them.

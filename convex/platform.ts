@@ -40,11 +40,21 @@ import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
 
 const DAY_MS = 24 * 3600_000;
 
-// Per-org read caps. Health is a signal, not an audit: "more than 200 failures
-// in a day" and "exactly 4,812 failures in a day" lead to the same action, and
-// only one of them is worth reading five thousand rows for. Counts at the cap
-// are reported as capped so the UI can say "200+" rather than quietly lying.
+// Per-org read cap, still used by the per-org detail queries further down.
+// Health is a signal, not an audit: "more than 200 failures in a day" and
+// "exactly 4,812 failures in a day" lead to the same action, and only one of
+// them is worth reading five thousand rows for. Counts at the cap are reported
+// as capped so the UI can say "200+" rather than quietly lying.
 const SCAN_CAP = 200;
+
+// FLEET-wide cap for the one query that spans every org. Deliberately generous
+// and deliberately ONE budget rather than 200 of them: this is what turns the
+// fleet page's cost from "700 documents times however many customers we have"
+// into a flat ceiling it cannot cross. 2,000 covers a fleet-wide day of
+// failures, every org's queue, and a few thousand upcoming bookings with room
+// to spare, and sits an order of magnitude under Convex's 32,000-document
+// transaction limit.
+const FLEET_CAP = 2000;
 
 const orgHealth = v.object({
   orgId: v.id("orgs"),
@@ -132,6 +142,68 @@ export const fleet = query({
     // first statement of healthFor, so it ran a full platformConfig collect per
     // org — 200 redundant scans per invocation of this query.
     const mailConfig = await emailConfig(ctx);
+
+    // ── Everything below is read ONCE for the whole fleet and bucketed by org,
+    // which is the pattern `stuck` above has always used and the rest of this
+    // page did not.
+    //
+    // healthFor used to do three 200-row takes plus two 50-row takes PER ORG:
+    // ~700 documents each, so ~140,000 at the 200-org cap against Convex's
+    // 32,000-per-transaction limit. The page did not get slow past roughly
+    // 25-45 active businesses, it threw — and it is a subscribed query, so it
+    // re-ran on any write to messages or appointments for any org.
+    //
+    // The insight is that these reads are proportional to the wrong thing. A
+    // fleet-wide read of the FAILURES costs what is broken rather than what
+    // exists, and failures are rare; memberships and templates are single
+    // digits per org. Only `upcoming` is genuinely large, and it is a liveness
+    // count rather than a number anyone acts on, so it takes a fleet-wide cap
+    // and says when it hit one.
+    const bucket = <T extends { orgId: Id<"orgs"> }>(rows: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const row of rows) {
+        const key = row.orgId as string;
+        const list = map.get(key);
+        if (list) list.push(row);
+        else map.set(key, [row]);
+      }
+      return map;
+    };
+
+    // Bounded by _creationTime, not by count: the window is the question being
+    // asked, so the cap is a safety net rather than the mechanism.
+    const failedRows = await ctx.db
+      .query("messages")
+      .withIndex("by_status_creation", (q) =>
+        q.eq("status", "failed").gte("_creationTime", since),
+      )
+      .take(FLEET_CAP);
+    const queuedRows = await ctx.db
+      .query("messages")
+      .withIndex("by_status_creation", (q) => q.eq("status", "queued"))
+      .order("desc")
+      .take(FLEET_CAP);
+    const upcomingRows = await ctx.db
+      .query("appointments")
+      .withIndex("by_start", (q) => q.gte("startAt", now))
+      .take(FLEET_CAP);
+    const membershipRows = await ctx.db.query("memberships").take(FLEET_CAP);
+    const templateRows = await ctx.db.query("waTemplates").take(FLEET_CAP);
+    const waAccountRows = await ctx.db.query("waAccounts").take(FLEET_CAP);
+
+    const fleet: FleetReads = {
+      failed: bucket(failedRows),
+      queued: bucket(queuedRows),
+      upcoming: bucket(upcomingRows),
+      memberships: bucket(membershipRows),
+      templates: bucket(templateRows),
+      waAccounts: new Set(waAccountRows.map((row) => row.orgId as string)),
+      // Said out loud rather than silently truncated: a capped count reads as
+      // "this is the number" and the operator would act on it.
+      cappedUpcoming: upcomingRows.length === FLEET_CAP,
+      cappedQueued: queuedRows.length === FLEET_CAP,
+      cappedFailed: failedRows.length === FLEET_CAP,
+    };
     // Concurrent, not sequential. Each healthFor is ~700 documents (three
     // 200-row message/appointment takes plus memberships and templates), so at
     // the 200-org ceiling this query reads ~140k documents against Convex's
@@ -140,11 +212,12 @@ export const fleet = query({
     // query that re-runs on any write to messages, appointments, memberships or
     // usageMonthly for ANY org. Promise.all does not lower the read count, so
     // the ceiling is still there; it does stop the latency being the sum of 200
-    // serial round trips. Bounding the per-org counters with a rollup is the
-    // real fix and wants its own change.
+    // Each healthFor is now two point reads (its newest message, its usage row)
+    // against the pre-bucketed fleet data, so this is ~400 documents plus the
+    // fleet reads above rather than 700 per org.
     const out = await Promise.all(
       orgs.map((org) =>
-        healthFor(ctx, org, now, since, stuckByOrg.get(org._id) ?? 0, mailConfig),
+        healthFor(ctx, org, now, stuckByOrg.get(org._id) ?? 0, mailConfig, fleet),
       ),
     );
     // Loudest first: the operator opens this to find what is broken, not to
@@ -161,59 +234,48 @@ export const fleet = query({
   },
 });
 
+// One fleet-wide read per table, bucketed by org. See the comment at the call
+// site for why this replaced per-org scans.
+type FleetReads = {
+  failed: Map<string, Doc<"messages">[]>;
+  queued: Map<string, Doc<"messages">[]>;
+  upcoming: Map<string, Doc<"appointments">[]>;
+  memberships: Map<string, Doc<"memberships">[]>;
+  templates: Map<string, Doc<"waTemplates">[]>;
+  waAccounts: Set<string>;
+  cappedUpcoming: boolean;
+  cappedQueued: boolean;
+  cappedFailed: boolean;
+};
+
 async function healthFor(
   ctx: QueryCtx,
   org: Doc<"orgs">,
   now: number,
-  since: number,
   stuck: number,
   // Passed in rather than read here: it is deployment-global, and reading it per
   // org meant a full platformConfig scan for every row on the page.
   mailConfig: EmailConfig,
+  fleet: FleetReads,
 ) {
-  const [memberships, waAccount, templates] = await Promise.all([
-    ctx.db
-      .query("memberships")
-      .withIndex("by_org", (q) => q.eq("orgId", org._id))
-      .take(50),
-    ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", org._id))
-      .unique(),
-    ctx.db
-      .query("waTemplates")
-      .withIndex("by_org", (q) => q.eq("orgId", org._id))
-      .take(50),
-  ]);
+  const key = org._id as string;
+  const memberships = fleet.memberships.get(key) ?? [];
+  const templates = fleet.templates.get(key) ?? [];
+  // Already inside the 24h window — the fleet read bounded it by _creationTime
+  // rather than by row count, so there is nothing left to filter here.
+  const recentFailed = fleet.failed.get(key) ?? [];
+  const queuedRows = fleet.queued.get(key) ?? [];
+  const upcoming = fleet.upcoming.get(key) ?? [];
 
-  // Newest first, so the cap drops the OLD rows rather than the ones inside
-  // the window we are asking about.
-  const failedRows = await ctx.db
-    .query("messages")
-    .withIndex("by_org_status", (q) => q.eq("orgId", org._id).eq("status", "failed"))
-    .order("desc")
-    .take(SCAN_CAP);
-  const recentFailed = failedRows.filter((row) => row._creationTime >= since);
-
-  // Queued rows carrying a retry time: sends that failed and are waiting for
-  // another go. Worth showing separately from failures — a salon with twenty
-  // retrying is mid-incident, not broken.
-  const queuedRows = await ctx.db
-    .query("messages")
-    .withIndex("by_org_status", (q) => q.eq("orgId", org._id).eq("status", "queued"))
-    .order("desc")
-    .take(SCAN_CAP);
-
+  // The one genuinely per-org read left, and it is a single document: the
+  // newest message, for the "is this org alive" timestamp. A fleet-wide
+  // equivalent would have to read every org's whole tail to find each one's
+  // first row, which costs more than 200 point reads, not less.
   const lastMessage = await ctx.db
     .query("messages")
     .withIndex("by_org", (q) => q.eq("orgId", org._id))
     .order("desc")
     .first();
-
-  const upcoming = await ctx.db
-    .query("appointments")
-    .withIndex("by_org_start", (q) => q.eq("orgId", org._id).gte("startAt", now))
-    .take(SCAN_CAP);
 
   const monthUsage = await ctx.db
     .query("usageMonthly")
@@ -231,13 +293,15 @@ async function healthFor(
     timezone: org.timezone,
     language: org.language,
     members: memberships.length,
-    waConnected: waAccount !== null,
+    waConnected: fleet.waAccounts.has(key),
     approvedTemplates: templates.filter((t) => t.status === "approved").length,
     calcomConnected: Boolean(org.calcomApiKey && org.calcomEventTypeId),
     emailReady: emailLaneConfigured(mailConfig) && Boolean(customerSender(org, mailConfig)),
     failed24h: recentFailed.length,
     deadLettered24h: recentFailed.filter((row) => row.deadLetteredAt !== undefined).length,
-    capped: failedRows.length === SCAN_CAP,
+    // Now a FLEET-wide cap rather than a per-org one, so it means "this number
+    // may be low across the whole page", which is the honest reading.
+    capped: fleet.cappedFailed || fleet.cappedQueued || fleet.cappedUpcoming,
     retrying: queuedRows.filter((row) => row.nextAttemptAt !== undefined).length,
     stuck,
     lastActivityAt: lastMessage?._creationTime,
