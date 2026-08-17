@@ -565,10 +565,17 @@ deals; we sell services, and an appointment is the thing a customer bought.
     one you scroll to. The pane opening pinned there is what makes it
     survivable. Nudge's rows exist to solve exactly this and we chose
     consistency over it. Don't "fix" it back without asking.
-  - **The subject is not repeated per bubble.** Every message in a thread
-    carries the same one — that is what makes it a thread — so printing it four
-    times says nothing the header hasn't, and pushes the words somebody wrote
-    down each bubble.
+  - **The subject leads each bubble** (Serdar, asked for after a version without
+    it). Not redundant with the card header, which names the THREAD: threads
+    group on a NORMALIZED subject, so the original and its three "Re:" replies
+    sit under one heading and the bubble is the only place you see which a given
+    message was. It also rescues the body-never-arrived case — the provider
+    hands us metadata first and the body on a second call.
+  - **The header wears whatever plane is below it**: the card's white over the
+    index (flush rows on white), the tinted plane over an open thread. Left
+    white it cut a bright band across the top and the tint began abruptly under
+    it, which read as two stacked panes rather than one conversation with a
+    heading.
   - `chatOrder` is therefore WhatsApp **plus** an open email thread, and the
     bubble keeps its `emailHtml` branch (sanitised, and only inside a thread —
     in a list a formatted mail is a wall).

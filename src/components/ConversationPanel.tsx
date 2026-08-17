@@ -364,7 +364,18 @@ export function ConversationPanel({
           action. This is the slot the notes composer occupies below; each
           tab owns what goes here. */}
       {filter === "email" && (
-        <div className="shrink-0 px-3 pt-3">
+        // The header wears whatever plane the thing below it wears. Over the
+        // INDEX that is the card's white, because the index is flush rows on
+        // white. Over an open thread it is the tinted plane — left white it cut
+        // a bright band across the top of the card and the tint started
+        // abruptly under it, which read as two panes stacked rather than one
+        // conversation with a heading. Same rule the takeover chip and the
+        // composer already follow.
+        <div
+          className={`shrink-0 px-3 pt-3 ${
+            chatOrder ? "bg-[var(--thread-bg)] pb-2" : ""
+          }`}
+        >
           {composing ? (
             <div className="space-y-2 rounded-xl border border-[var(--border)] p-2">
               <input
@@ -812,12 +823,21 @@ export function ConversationPanel({
               {/* min-w-0 so a long unbroken word wraps instead of shoving the
                   stamp out of the bubble. */}
               <div className="min-w-0">
-              {/* The subject is NOT repeated per bubble. Every message in a
-                  thread carries the same one — that is what makes it a thread —
-                  so printing it four times down the pane says nothing the
-                  header above hasn't already said, and it pushes the words
-                  somebody actually wrote further down each bubble. The card
-                  header on top is where the subject lives. */}
+              {/* Email carries a subject and WhatsApp doesn't, so it leads the
+                  bubble when there is one (Serdar, 2026-08-17 — asked for after
+                  a version without it).
+
+                  It is not redundant with the card header above, which names
+                  the THREAD: threads group on a normalized subject, so "Saç
+                  boyası hakkında soru" and three "Re:" replies sit under one
+                  heading, and the bubble is the only place you can see which of
+                  those a given message actually was. It also rescues the case
+                  where the body never arrived — the provider hands us the
+                  metadata first and the body on a second call, and a fetch that
+                  fails must still leave a readable bubble. */}
+              {item.emailSubject && (
+                <p className="mb-0.5 font-medium">{item.emailSubject}</p>
+              )}
               {/* The picture IS the message when a customer sends one — "this
                   is the colour I want" — so it leads, capped rather than
                   stretched: a portrait photo blown to bubble width pushes
