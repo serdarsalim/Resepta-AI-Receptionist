@@ -554,13 +554,24 @@ deals; we sell services, and an appointment is the thing a customer bought.
     where a fresh note lands. A permanently open composer is a band of chrome
     between you and the notes you came to read. The one-line pseudo-input that
     used to sit there read as "type here" while doing nothing of the kind.
-- **An open email thread is a mailbox, not a chat**: Gmail's who · what · when,
-  flush rows, newest first, click one to open it, newest arrives open. The
-  sender column is fixed-width so snippets line up, and the customer's own name
-  reads emerald. Bubbles are right for WhatsApp and wrong here — a thread is
-  eleven messages of which you want one, and the one that decides what you do
-  next is the last that arrived. **So `chatOrder` is WhatsApp alone.** Nothing
-  that reaches a bubble is a mail any more: that branch is WhatsApp and forms.
+- **An open email thread is a chat**: bubbles, ours green on the right and
+  theirs white on the left, oldest→newest, pinned to the bottom, with the
+  subject on the card header ABOVE them. It spent one afternoon as Nudge's
+  flush Gmail rows and came back (Serdar, same day). Every other thing you can
+  open in this pane is a bubble — WhatsApp, and now notes — so mail arriving as
+  a table made the email tab the one place the app changed grammar on you.
+  - **The known cost, decided with eyes open:** the newest message sits at the
+    BOTTOM, so in a long exchange the mail that decides what you do next is the
+    one you scroll to. The pane opening pinned there is what makes it
+    survivable. Nudge's rows exist to solve exactly this and we chose
+    consistency over it. Don't "fix" it back without asking.
+  - **The subject is not repeated per bubble.** Every message in a thread
+    carries the same one — that is what makes it a thread — so printing it four
+    times says nothing the header hasn't, and pushes the words somebody wrote
+    down each bubble.
+  - `chatOrder` is therefore WhatsApp **plus** an open email thread, and the
+    bubble keeps its `emailHtml` branch (sanitised, and only inside a thread —
+    in a list a formatted mail is a wall).
 - **Feed pills are their mark and their count, nothing else.** Notes and Form
   used to carry their word (a bare pencil among channel glyphs reads as "edit
   this contact"). Four words across the row was most of the header spent

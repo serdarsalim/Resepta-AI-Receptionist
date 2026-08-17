@@ -588,10 +588,6 @@ const dictionary = {
     de: "(kein Betreff)",
   },
   "email.reply": { tr: "Yanıtla", en: "Reply", de: "Antworten" },
-  // Who sent it, on our side of a thread, when the workspace has no name saved
-  // yet. Never an email address: the row is read at a glance and the address is
-  // the longest, least distinguishing thing we could put there.
-  "email.fromUs": { tr: "Siz", en: "You", de: "Sie" },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
   "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
   "email.bodyPlaceholder": {

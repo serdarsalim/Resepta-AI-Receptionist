@@ -201,13 +201,17 @@ export function ConversationPanel({
   // Chat order is for a conversation you are HAVING: WhatsApp, and an email
   // thread you have opened. The indexes — All, the call list, notes — read
   // newest-first, because you are scanning them rather than talking.
-  // Chat order is for a conversation you are HAVING, and that is WhatsApp
-  // alone. An open email thread used to count too, and it read wrong: the mail
-  // that decides what you do next is the last one that arrived, and
-  // chronological order buries it under history you have already read — off the
-  // bottom of the card, in a long exchange. Every other list in this app is
-  // worked from the top down, and the thread is one now as well.
-  const chatOrder = filter === "whatsapp";
+  // Chat order is for a conversation you are HAVING: WhatsApp, and an email
+  // thread you have opened.
+  //
+  // The thread spent one afternoon as Gmail's flush rows (Nudge's shape) and
+  // came back (Serdar, 2026-08-17). Every other thing you can open in this pane
+  // is a bubble — WhatsApp, and now notes — so mail arriving as a table made
+  // the email tab the one place the app changed grammar on you. The known cost
+  // is that the newest message sits at the BOTTOM: in a long exchange the mail
+  // that decides what you do next is the one you have to scroll to. The pane
+  // opens pinned there, which is what makes that survivable.
+  const chatOrder = filter === "whatsapp" || (filter === "email" && !!openThread);
 
   // Email groups into conversations by normalized subject — "Re: Randevunuz"
   // and "Randevunuz" are one exchange however many clients prefixed it. The
@@ -759,22 +763,6 @@ export function ConversationPanel({
               />
             );
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
-          // An open email thread is a mailbox, not a chat. See EmailThreadRow.
-          if (filter === "email" && openThread)
-            return (
-              <EmailThreadRow
-                key={item.id}
-                item={item}
-                fromLabel={
-                  item.direction === "in"
-                    ? contactName?.trim() || t("calls.theCaller")
-                    : settings?.org.name?.trim() || t("email.fromUs")
-                }
-                // The newest is the one you came to read. Everything under it
-                // is history, one line each until you ask for more.
-                defaultOpen={index === 0}
-              />
-            );
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
           const statusKey = outbound && item.status ? STATUS_KEY[item.status] : undefined;
@@ -824,11 +812,12 @@ export function ConversationPanel({
               {/* min-w-0 so a long unbroken word wraps instead of shoving the
                   stamp out of the bubble. */}
               <div className="min-w-0">
-              {/* No email subject and no email HTML here any more: an open
-                  thread renders as flush rows now (EmailThreadRow), and outside
-                  one the email tab shows its index. Nothing that reaches a
-                  bubble is a mail — this branch is WhatsApp and form
-                  submissions. */}
+              {/* The subject is NOT repeated per bubble. Every message in a
+                  thread carries the same one — that is what makes it a thread —
+                  so printing it four times down the pane says nothing the
+                  header above hasn't already said, and it pushes the words
+                  somebody actually wrote further down each bubble. The card
+                  header on top is where the subject lives. */}
               {/* The picture IS the message when a customer sends one — "this
                   is the colour I want" — so it leads, capped rather than
                   stretched: a portrait photo blown to bubble width pushes
@@ -852,7 +841,12 @@ export function ConversationPanel({
                   {t("message.imageLoading")}
                 </span>
               )}
-              {item.body ? (
+              {/* The sender's own markup, sanitised, but ONLY inside an open
+                  thread. In a list a formatted email is a wall; the flattened
+                  text below is what belongs there. */}
+              {item.emailHtml && openThread ? (
+                <EmailBody html={item.emailHtml} />
+              ) : item.body ? (
                 <p className="whitespace-pre-wrap">{item.body}</p>
               ) : (
                 // Template sends store no body (the text lives in Meta's
@@ -1248,104 +1242,6 @@ function EmailBody({ html }: { html: string }) {
       // Sanitised immediately above; see src/lib/sanitizeHtml.ts.
       dangerouslySetInnerHTML={{ __html: clean }}
     />
-  );
-}
-
-// A collapsed row shows the first line of the mail, never its markup. The
-// plain body the provider handed us where there is one; a flattening of the
-// HTML where there isn't, because a mail that arrived as markup only still
-// needs a line to be recognised by.
-function emailSnippet(body?: string, html?: string): string {
-  const text = body?.trim() || (html ? html.replace(/<[^>]+>/g, " ") : "");
-  return text.replace(/\s+/g, " ").trim();
-}
-
-// One message in an open email thread, Gmail's three columns: who · what ·
-// when. Ported from Nudge 2026-08-17, replacing chat bubbles.
-//
-// Bubbles were wrong here for the reason they are right in WhatsApp. A bubble
-// says somebody said this to somebody, in a rhythm you read straight through —
-// and mail is not read straight through. A thread is eleven messages of which
-// you want one, most of them quoting each other, several of them long enough to
-// fill the pane on their own. Flush rows let you find that one by its sender
-// and its date without scrolling past the other ten.
-function EmailThreadRow({
-  item,
-  fromLabel,
-  defaultOpen,
-}: {
-  item: {
-    at: number;
-    body?: string;
-    emailHtml?: string;
-    direction?: string;
-    status?: string;
-  };
-  fromLabel: string;
-  defaultOpen: boolean;
-}) {
-  const { t, language } = useLanguage();
-  const [open, setOpen] = useState(defaultOpen);
-  const inbound = item.direction === "in";
-  const failed = item.status === "failed";
-  const statusKey = item.status ? STATUS_KEY[item.status] : undefined;
-
-  return (
-    <li className="-mx-4 list-none border-b border-[var(--border)] first:border-t">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
-      >
-        {/* Fixed width, so the snippets line up down the thread instead of
-            starting wherever each name happens to end. The customer's own name
-            reads emerald: which half of an exchange you are looking at is the
-            first thing you need and the last thing worth reading a word for. */}
-        <span
-          className={`w-28 shrink-0 truncate font-medium sm:w-36 ${
-            inbound ? "text-emerald-700 dark:text-emerald-400" : ""
-          }`}
-          title={fromLabel}
-        >
-          {fromLabel}
-        </span>
-        {/* A send that never left says so on its own row. Delivered and read
-            say nothing: a mailbox that annotates every successful line is a
-            mailbox where the failures do not stand out. */}
-        {failed && statusKey && (
-          <span className="shrink-0 text-xs text-red-600 dark:text-red-400">
-            {t(statusKey)}
-          </span>
-        )}
-        {open ? (
-          // The body is directly below; repeating its first line up here reads
-          // as the mail having been sent twice. The spacer holds the date
-          // column where it was.
-          <span className="min-w-0 flex-1" />
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-[var(--muted)]">
-            {emailSnippet(item.body, item.emailHtml)}
-          </span>
-        )}
-        <span className="ml-2 shrink-0 text-xs text-[var(--muted)]">
-          {formatDateTime(item.at, language)}
-        </span>
-      </button>
-      {open && (
-        <div className="px-4 pb-4">
-          {item.emailHtml ? (
-            <EmailBody html={item.emailHtml} />
-          ) : item.body ? (
-            <p className="whitespace-pre-wrap break-words text-sm">{item.body}</p>
-          ) : (
-            // The provider hands us the metadata first and the body on a second
-            // call. A fetch that never landed must still leave a readable row
-            // rather than an empty box under an open chevron.
-            <p className="text-sm text-[var(--muted)]">{t("message.template")}</p>
-          )}
-        </div>
-      )}
-    </li>
   );
 }
 
