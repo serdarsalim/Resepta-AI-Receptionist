@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useConfirm } from "./ConfirmDialog";
+import { useToast } from "@/lib/ToastProvider";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import {
@@ -153,6 +154,11 @@ export function ConversationPanel({
         : ("answering" as const)
       : null;
   const sendSession = useAction(api.wa.sendSession);
+  // Placing a call is owner-only server-side (requireOwner inside testCall), so
+  // the agent list is too — for staff this resolves to undefined and the button
+  // never appears rather than appearing and failing.
+  const voiceAgents = useQuery(api.retell.list, {});
+  const placeCall = useAction(api.retellAgent.testCall);
   const sendEmail = useAction(api.email.sendToCustomer);
   const addNote = useMutation(api.notes.add);
   const cancelScheduled = useMutation(api.wa.cancelScheduled);
@@ -199,6 +205,9 @@ export function ConversationPanel({
   // Rows expanded in place. All is a scan by default — one line each — and a
   // WhatsApp message or a note opens where it sits rather than navigating.
   const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const [calling, setCalling] = useState(false);
+  const [confirmCall, confirmCallDialog] = useConfirm();
+  const toast = useToast();
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
@@ -397,6 +406,47 @@ export function ConversationPanel({
   // rows on a patterned ground read as a table somebody spilled something on,
   // which is the same reason the email index and notes stay on the card. So
   // the call tab paints paper only once a call is open.
+  // Exactly one ENABLED agent, or no button (Serdar's call, 2026-08-17). An org
+  // can hold several voice agents — VoiceView is a list you drill into — so
+  // there is no "the org's agent" to default to, and a button that guesses
+  // rings a real phone from the wrong line. Where there is only one the answer
+  // is unambiguous; where there are several the call is placed from the Voice
+  // agent page, which already made you choose.
+  const dialAgent =
+    voiceAgents && voiceAgents.filter((a) => a.enabled).length === 1
+      ? voiceAgents.find((a) => a.enabled)!.retellAgentId
+      : null;
+  const dialTo = customerRecord?.phone?.trim() || "";
+  const canPlaceCall = !!dialAgent && !!dialTo;
+
+  const startCall = () => {
+    void (async () => {
+      // testCall's own comment: the phone genuinely rings and the minutes are
+      // genuinely billed, and the UI must ask first. The dialog names the
+      // number, because "call this customer" and "call +90 533…" are different
+      // amounts of certainty.
+      const ok = await confirmCall({
+        title: t("calls.placeConfirm").replace("{number}", dialTo),
+        body: t("calls.placeConfirmBody"),
+        confirmLabel: t("calls.place"),
+        destructive: false,
+      });
+      if (!ok) return;
+      setCalling(true);
+      try {
+        await placeCall({ agentId: dialAgent!, toNumber: dialTo });
+        toast(t("calls.placing"));
+      } catch (error) {
+        // The action throws English strings for a bad number or a workspace
+        // with no key. Shown as-is rather than swallowed: a call that never
+        // dialled must not look like one that did.
+        toast(error instanceof Error ? error.message : t("message.failed"));
+      } finally {
+        setCalling(false);
+      }
+    })();
+  };
+
   const surface =
     filter === "whatsapp" || (filter === "call" && !!openCall)
       ? "chat-wallpaper"
@@ -533,8 +583,14 @@ export function ConversationPanel({
           open call gets back-arrow + outcome + when. There is no compose here
           on purpose — placing a call is Retell's job, not a button in a
           conversation pane. */}
-      {filter === "call" && openCall && (
+      {/* The call tab's header, the email tab's shape: the LIST gets only Place
+          call, an open call adds back-arrow + when. It used to render only for
+          an open call, which put the one control you reach for after reading
+          "customer did not answer" one navigation away from the row that said
+          so. */}
+      {filter === "call" && (canPlaceCall || openCall) && (
         <div className="flex shrink-0 items-center gap-2 px-3 pt-3">
+          {openCall && (
           <button
             type="button"
             onClick={() => {
@@ -549,15 +605,29 @@ export function ConversationPanel({
               <path d="m12 19-7-7 7-7" />
             </svg>
           </button>
+          )}
           {/* The outcome pill was here too, printing the same raw
               `call_successful` boolean as the index did. Gone for the same
               reason: the summary is directly below it and says more. */}
           {/* With the weekday: this heading names one moment and nothing else
               on the screen says which day of the week it was, so a bare date
               made the reader count back to find out. */}
-          <h3 className="min-w-0 truncate text-sm font-semibold">
-            {formatDateTimeWithWeekday(openCall.at, language)}
-          </h3>
+          {openCall && (
+            <h3 className="min-w-0 truncate text-sm font-semibold">
+              {formatDateTimeWithWeekday(openCall.at, language)}
+            </h3>
+          )}
+          {canPlaceCall && (
+            <button
+              type="button"
+              onClick={startCall}
+              disabled={calling}
+              className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <FeedIcon type="call" size={14} tinted={false} />
+              {calling ? t("calls.placing") : t("calls.place")}
+            </button>
+          )}
         </div>
       )}
       {filter === "note" && (
@@ -1238,6 +1308,7 @@ export function ConversationPanel({
           )}
         </>
       )}
+      {confirmCallDialog}
     </div>
   );
 }

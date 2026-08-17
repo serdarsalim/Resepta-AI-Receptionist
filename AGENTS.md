@@ -724,6 +724,27 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - `pr-3` on the transcript scroller: the caller's bubbles are right-aligned
     and butt against the scrollbar thumb without it. The left needs no
     counterpart — the scroller's own edge sits inside the pane's padding.
+  - **The agent's bubbles are emerald, the caller's are `--chat-field`.** The
+    caller's used to be `--accent`, which is this app's ACTION colour — Reply,
+    Compose, Send, Place call are all that blue — so blue meant "click me" and
+    "the customer said this" on one screen. Colour carries the PARTY (emerald is
+    our side, the same as an outbound WhatsApp message) and alignment carries
+    the flow, so neither does the other's job.
+- **Place call shows only when the org has exactly ONE enabled voice agent**
+  (Serdar's call, 2026-08-17). An org can hold several — VoiceView is a list you
+  drill into — so there is no "the org's agent" to default to, and a button that
+  guesses rings a real phone from the wrong line. With several, the call is
+  placed from the Voice agent page, which already made you choose.
+  - **It always confirms, naming the number.** `retellAgent.testCall`'s own
+    comment demands it: there is no dry mode in Retell, the phone genuinely
+    rings and the minutes are genuinely billed. "Call this customer" and "call
+    +90 533…" are different amounts of certainty.
+  - The button sits in the call tab's header on the LIST as well as inside an
+    open call — the email tab's shape. List-only would put the one control you
+    reach for after reading "customer did not answer" a navigation away from
+    the row that said so.
+  - The agent list query is owner-gated server-side, so for staff it resolves to
+    undefined and the button never appears rather than appearing and failing.
 
 ### The inbox arrives with nothing selected (2026-08-17)
 

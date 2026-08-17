@@ -1498,6 +1498,21 @@ const dictionary = {
     en: "No calls yet",
     de: "Noch keine Anrufe",
   },
+  // Placing a call from the inbox. The confirm names the NUMBER, because "call
+  // this customer" and "call +90 533…" are different amounts of certainty — and
+  // this rings a real phone and bills real minutes.
+  "calls.place": { tr: "Ara", en: "Place call", de: "Anrufen" },
+  "calls.placing": { tr: "Aranıyor…", en: "Calling…", de: "Wird angerufen…" },
+  "calls.placeConfirm": {
+    tr: "{number} numarası aransın mı?",
+    en: "Call {number}?",
+    de: "{number} anrufen?",
+  },
+  "calls.placeConfirmBody": {
+    tr: "Sesli asistan şimdi arayacak. Telefon gerçekten çalar ve dakikalar faturalanır.",
+    en: "The voice agent will call now. The phone really rings and the minutes are billed.",
+    de: "Der Sprachassistent ruft jetzt an. Das Telefon klingelt wirklich und die Minuten werden berechnet.",
+  },
   "calls.transcript": {
     tr: "Konuşma dökümü",
     en: "Transcript",

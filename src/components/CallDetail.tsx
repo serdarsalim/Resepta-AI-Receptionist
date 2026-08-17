@@ -195,12 +195,23 @@ export function CallTranscript({
             <div
               className={`whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 text-xs ${
                 turn.agent
-                  // --chat-field, not --pane: this sits ON the chat paper, and
-                  // --chat-field is the raised surface defined against it in
-                  // BOTH themes (white on beige, #242424 on #0f0f0f). Same
-                  // token the WhatsApp thread's inbound bubbles read.
-                  ? "bg-[var(--chat-field)] text-[var(--foreground)]"
-                  : "bg-[var(--accent)] text-[var(--accent-fg)]"
+                  // Emerald for OUR side, the same colour and the same weights
+                  // the WhatsApp thread gives an outbound message. The agent is
+                  // us; the caller is not.
+                  //
+                  // The caller's bubbles used to be --accent, and --accent is
+                  // this app's ACTION colour — Reply, Compose, Send, Place call
+                  // are all that blue. Blue meant "click me" and "the customer
+                  // said this" on one screen (Serdar, 2026-08-18). Colour now
+                  // carries the PARTY and alignment carries the flow, so
+                  // neither has to do the other's job.
+                  //
+                  // --chat-field for the caller, not --card: this sits ON the
+                  // chat paper, and --chat-field is the raised surface defined
+                  // against it in both themes (white on beige, #242424 on
+                  // #0f0f0f).
+                  ? "bg-emerald-100 text-[var(--foreground)] dark:bg-emerald-900/30"
+                  : "bg-[var(--chat-field)] text-[var(--foreground)]"
               }`}
             >
               {turn.text}
