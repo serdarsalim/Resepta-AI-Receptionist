@@ -375,9 +375,38 @@ export const setStatus = mutation({
   args: { appointmentId: v.id("appointments"), status: appointmentStatus },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId, user } = await requireOrg(ctx);
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment || appointment.orgId !== orgId) throw new Error("not-found");
+
+    // A cal.com-backed cancellation goes through cal.com FIRST, the order the
+    // header below states and the voice and WhatsApp lanes already follow. This
+    // is the lane staff actually use — the booking sheet's Cancel button — and
+    // it was the only one that wrote the status locally and stopped there. The
+    // slot stayed blocked in cal.com's inventory, the entry stayed on the
+    // salon's Google Calendar, and cal.com kept sending its own reminders for a
+    // visit nobody was attending.
+    //
+    // Returning here means the row does not flip until the action lands, which
+    // is the point: if cal.com refuses, the appointment stays as it was and the
+    // owner is told, because Resepta showing "cancelled" over a slot cal.com
+    // still holds is the worse of the two failures.
+    if (
+      args.status === "cancelled" &&
+      appointment.status !== "cancelled" &&
+      appointment.externalUid
+    ) {
+      await ctx.scheduler.runAfter(0, internal.calcom.pushCancelToCalcom, {
+        appointmentId: args.appointmentId,
+        orgId,
+        externalUid: appointment.externalUid,
+        who: user.name ?? user.email ?? "staff",
+        reason: "Cancelled by the salon",
+        actor: user.name ?? user.email ?? "staff",
+      });
+      return null;
+    }
+
     await ctx.db.patch(args.appointmentId, { status: args.status });
     // Status decides what is owed: marking a no_show arms the winback,
     // cancelling disarms every reminder still queued behind it.
@@ -441,7 +470,13 @@ export const stampConfirmationSent = internalMutation({
 // coming. Never patch status straight from a webhook handler again.
 
 export const markCancelled = internalMutation({
-  args: { appointmentId: v.id("appointments") },
+  args: {
+    appointmentId: v.id("appointments"),
+    // Present when a person inside the salon started this, absent when the
+    // customer or cal.com did. Carries the feed entry that setStatus would have
+    // written itself, had it been allowed to write the status directly.
+    actor: v.optional(v.string()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const appointment = await ctx.db.get(args.appointmentId);
@@ -458,6 +493,15 @@ export const markCancelled = internalMutation({
         args.appointmentId,
         "cancellation",
       );
+      if (args.actor !== undefined) {
+        await recordActivity(ctx, {
+          orgId: appointment.orgId,
+          kind: "appointment_status",
+          customerId: appointment.customerId,
+          appointmentId: args.appointmentId,
+          detail: statusChange(appointment.status, "cancelled"),
+        });
+      }
     }
     return null;
   },

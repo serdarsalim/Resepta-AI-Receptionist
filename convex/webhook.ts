@@ -322,6 +322,17 @@ export async function processInboundMessage(
   // Confirming is Resepta's own concept — cal.com bookings are already
   // accepted, so there is nothing to tell it.
   if (intent === "confirm") {
+    // Only a LIVE booking can be confirmed. The button path takes its
+    // appointment id straight from the payload, so a reminder still sitting in
+    // the customer's thread can be tapped days after the booking was cancelled
+    // — and this used to patch it back to confirmed, re-arming every reminder
+    // the cancellation disarmed and re-blocking the slot it freed, while
+    // cal.com kept its own cancelled state and was never told. The typed-text
+    // path never had this hole, because nextUpcomingOf already filters to
+    // scheduled/confirmed; the button path had to be told the same thing.
+    if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+      return;
+    }
     await ctx.db.patch(appointment._id, { status: "confirmed" });
     // Confirmed is still a live booking, so reminders continue — but
     // the recompute has to run or the field drifts from the row.

@@ -97,6 +97,29 @@ export const handleCalcomEvent = internalMutation({
     if (!org) return { ok: false, reason: "unknown-token" };
 
     const triggerEvent = String(args.payload?.triggerEvent ?? "");
+    // Allowlisted, because the org picks its own triggers in cal.com's
+    // multiselect and our only influence is a hint string next to the URL.
+    // This used to test for CANCELLED and RESCHEDULED and let everything else
+    // fall through to the create path — so BOOKING_REJECTED, or
+    // BOOKING_REQUESTED on a confirmation-required event type, inserted a
+    // "scheduled" appointment and sent the customer a WhatsApp confirmation
+    // for a booking nobody had accepted. A later REJECTED for that same uid
+    // then found the row and only patched its time, so the phantom stayed on
+    // the salon's calendar for good.
+    //
+    // An unrecognised trigger is acknowledged, not failed: cal.com retries a
+    // non-2xx, and "we do not act on this event" is not an error worth
+    // retrying. An empty triggerEvent still runs, which keeps the older
+    // payload shape and hand-rolled test posts working.
+    const HANDLED = [
+      "",
+      "BOOKING_CREATED",
+      "BOOKING_CANCELLED",
+      "BOOKING_RESCHEDULED",
+    ];
+    if (!HANDLED.includes(triggerEvent)) {
+      return { ok: true, reason: `ignored-${triggerEvent}` };
+    }
     const booking = (args.payload?.payload ?? {}) as Record<string, unknown>;
     const uid = String(booking.uid ?? "");
     if (!uid) return { ok: false, reason: "no-uid" };
@@ -269,6 +292,14 @@ export const pushCancelToCalcom = internalAction({
     orgId: v.id("orgs"),
     externalUid: v.string(),
     who: v.string(),
+    // The salon reads this in cal.com and in Google Calendar, so it has to say
+    // who actually cancelled. Defaults to the WhatsApp wording this action was
+    // originally written for.
+    reason: v.optional(v.string()),
+    // Set when a person inside the salon started this, so markCancelled writes
+    // the activity entry setStatus can no longer write itself. Absent for a
+    // customer cancelling by message, which the inbound message already records.
+    actor: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -293,7 +324,7 @@ export const pushCancelToCalcom = internalAction({
     const result = await cancelBooking({
       apiKey,
       uid: args.externalUid,
-      reason: "Cancelled by the customer on WhatsApp",
+      reason: args.reason ?? "Cancelled by the customer on WhatsApp",
     });
     if (!result.ok) {
       await fail(result.reason);
@@ -301,6 +332,7 @@ export const pushCancelToCalcom = internalAction({
     }
     await ctx.runMutation(internal.appointments.markCancelled, {
       appointmentId: args.appointmentId,
+      ...(args.actor !== undefined ? { actor: args.actor } : {}),
     });
     return null;
   },
