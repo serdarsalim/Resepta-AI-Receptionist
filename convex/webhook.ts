@@ -72,7 +72,7 @@ export const handleWhatsappEvent = internalMutation({
           const state = status.status as string | undefined;
           if (!id || !state) continue;
           const errors = status.errors as { title?: string }[] | undefined;
-          await applyWamidStatus(ctx, id, state, errors?.[0]?.title);
+          await applyWamidStatus(ctx, orgId, id, state, errors?.[0]?.title);
         }
 
         for (const message of (value.messages ?? []) as Record<string, unknown>[]) {
@@ -382,7 +382,7 @@ export async function processInboundMessage(
 // That second case is the whole reason to keep this lane after a WABA lands,
 // and it cannot be rebuilt on Cloud API at any price.
 export const handleEvolutionEvent = internalMutation({
-  args: { payload: v.any() },
+  args: { token: v.string(), payload: v.any() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const payload = args.payload as {
@@ -393,22 +393,30 @@ export const handleEvolutionEvent = internalMutation({
     // Evolution sends connection updates, presence, receipts and more down the
     // same webhook. Only new messages matter here.
     if (payload.event !== "messages.upsert") return null;
-    const instance = payload.instance?.trim();
-    if (!instance) return null;
 
-    // The instance names the org, the same job phone_number_id does on the
-    // Cloud lane. Never the customer's number: one person can be a customer
-    // of two salons on this deployment.
+    // The TOKEN names the org, the same job it does on the cal.com route and
+    // phone_number_id does on the Cloud lane. It used to be the instance name
+    // out of the payload — a string nothing in this codebase generates, with no
+    // length or charset rule, which made this endpoint unauthenticated in
+    // practice: an anonymous POST naming an instance and a customer's number
+    // reached the cancel path, pushed that cancellation to cal.com, and
+    // scheduled a chat-agent reply on the org's budget.
+    const token = args.token.trim();
+    if (!token) return null;
     const org = await ctx.db
       .query("orgs")
-      .withIndex("by_evolution_instance", (q) => q.eq("evolutionInstance", instance))
+      .withIndex("by_evolution_token", (q) => q.eq("evolutionWebhookToken", token))
       .unique();
-    // No lane check beyond this. The index lookup IS the guard: an org that
-    // has stopped running Evolution clears its instance name, and a stale
-    // linked phone then resolves to no org at all. Running Cloud as well is
-    // not a reason to reject this — the two lanes are two numbers and both
-    // are live (see schema.ts orgs.evolutionInstance).
     if (!org) return null;
+    // The instance name is now a label, but it still has to MATCH: one
+    // deployment can run several instances, and a payload from the wrong one
+    // must not be filed against this org's customers. Checked only when the org
+    // has a name on file, so an org mid-setup is not locked out of its own
+    // inbound.
+    const instance = payload.instance?.trim();
+    if (org.evolutionInstance && instance && org.evolutionInstance !== instance) {
+      return null;
+    }
 
     const items = Array.isArray(payload.data) ? payload.data : [payload.data ?? {}];
     for (const item of items) {

@@ -340,6 +340,8 @@ export const orgDetail = query({
       calcomEventTypeId: v.union(v.string(), v.null()),
       voiceAgentSource: v.union(v.literal("randevu"), v.literal("account")),
       calcomWebhookToken: v.union(v.string(), v.null()),
+      evolutionInstance: v.union(v.string(), v.null()),
+      evolutionWebhookToken: v.union(v.string(), v.null()),
       wa: v.union(
         v.null(),
         v.object({
@@ -457,6 +459,8 @@ export const orgDetail = query({
       calcomEventTypeId: org.calcomEventTypeId ?? null,
       voiceAgentSource: org.voiceAgentSource ?? "randevu",
       calcomWebhookToken: org.calcomWebhookToken ?? null,
+      evolutionInstance: org.evolutionInstance ?? null,
+      evolutionWebhookToken: org.evolutionWebhookToken ?? null,
       wa: wa
         ? {
             phoneNumberId: wa.phoneNumberId,
@@ -589,6 +593,11 @@ export const setOrgConfig = mutation({
     voiceAgentSource: v.optional(
       v.union(v.literal("randevu"), v.literal("account")),
     ),
+    // Nothing in the app wrote this before, so it was set by hand in the Convex
+    // dashboard. It is a label now rather than the Evolution lane's credential
+    // (see rotateEvolutionWebhookToken), but the webhook still checks the
+    // payload against it, so the operator needs somewhere to type it.
+    evolutionInstance: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -613,6 +622,24 @@ export const setOrgConfig = mutation({
       calcomEventTypeId: applied(args.calcomEventTypeId, org.calcomEventTypeId),
       // Absent means "not part of this patch", the same as every field above.
       voiceAgentSource: args.voiceAgentSource ?? org.voiceAgentSource,
+      // Two orgs on one instance name would make the payload check ambiguous,
+      // and the by_evolution_instance lookup a .unique() throw — the same shape
+      // setWaAccount refuses below for phone_number_id, and worth refusing here
+      // while one operator is looking at the mistake.
+      evolutionInstance: await (async () => {
+        const next = applied(args.evolutionInstance, org.evolutionInstance);
+        if (next === undefined || next === org.evolutionInstance) return next;
+        const clash = await ctx.db
+          .query("orgs")
+          .withIndex("by_evolution_instance", (q) =>
+            q.eq("evolutionInstance", next),
+          )
+          .unique();
+        if (clash && clash._id !== args.orgId) {
+          throw new Error("instance-already-connected");
+        }
+        return next;
+      })(),
     });
     return null;
   },
@@ -1037,6 +1064,33 @@ export const addWalletCredit = mutation({
       detail: `wallet credit ${amount > 0 ? "+" : "−"}$${Math.abs(amount / 1_000_000).toFixed(2)} (manual)`,
     });
     return null;
+  },
+});
+
+// Mints the Evolution inbound webhook's token, which is that endpoint's whole
+// credential — Evolution offers no HMAC and no shared secret of its own, so the
+// org used to be resolved from the instance NAME in the payload and the route
+// was unauthenticated in practice.
+//
+// Operator-side rather than owner-side because /admin is where Evolution gets
+// configured (nothing in the app writes evolutionInstance either), and because
+// the operator is the one who needs a fresh token the moment a webhook URL
+// leaks. Returns it so the console can show the URL to paste.
+export const rotateEvolutionWebhookToken = mutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const token = crypto.randomUUID().replace(/-/g, "");
+    await ctx.db.patch(args.orgId, { evolutionWebhookToken: token });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: "evolution webhook token rotated",
+    });
+    return token;
   },
 });
 

@@ -71,11 +71,21 @@ The Google Cloud authorized redirect URI is:
 https://<deployment>.convex.site/api/auth/callback/google
 ```
 
-`WA_APP_SECRET` is required in production. The Meta route logs a warning and
-accepts unsigned payloads when it is absent for local-development convenience.
-The phone-agent routes do not have an equivalent deployment-wide key: they
-resolve the agent to an org, require that org's provider key and fail closed if
-the key or signature is missing.
+`WA_APP_SECRET` is required, not just in production: the Meta route returns 503
+without it. It used to log a warning and process unsigned payloads, so a
+deployment that forgot the variable had a forgeable endpoint reaching contact
+creation, the 24-hour session window and appointment cancellation.
+
+The Evolution lane has no HMAC of its own, so its endpoint is authenticated by a
+per-org token in the URL — the same shape cal.com uses. Generate it per org from
+the WhatsApp (Evolution API) panel in `/admin/<org>` and paste the URL into
+Evolution's webhook settings; until it exists that route refuses every call.
+The instance name is now only a label, checked against the payload, and is no
+longer what identifies the tenant.
+
+The phone-agent routes have no equivalent deployment-wide key: they resolve the
+agent to an org, require that org's provider key and fail closed if the key or
+signature is missing.
 
 `RESEND_API_KEY` enables customer email and owner alerts. The From domain used
 by an org must be verified in Resend. `RESEND_INBOUND_DOMAIN` is the one shared

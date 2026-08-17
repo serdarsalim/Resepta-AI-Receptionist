@@ -224,6 +224,14 @@ export const recordEmailOpen = internalMutation({
 // silently (receipts for messages we didn't log).
 export async function applyWamidStatus(
   ctx: MutationCtx,
+  // The tenant the webhook resolved. Taken because the caller had it and dropped
+  // it: this looked the message up by wamid ALONE and patched whatever it found,
+  // so a statuses[] entry routed to org A carrying a wamid stored on org B's
+  // message rewrote org B's delivery record — and a "failed" one fed org B's
+  // send-failure alerting. Its sibling four lines away in the same handler does
+  // check (`appointment.orgId !== orgId`); this one had the value in scope and
+  // never compared it.
+  orgId: Id<"orgs">,
   wamid: string,
   status: string,
   error?: string,
@@ -232,7 +240,7 @@ export async function applyWamidStatus(
     .query("messages")
     .withIndex("by_wamid", (q) => q.eq("wamid", wamid))
     .unique();
-  if (!message) return;
+  if (!message || message.orgId !== orgId) return;
   if (status === "delivered" || status === "read") {
     // Never regress read → delivered (Meta retries out of order).
     if (message.status === "read") return;

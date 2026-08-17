@@ -135,6 +135,9 @@ export default function TenantPage() {
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
   const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
+  const rotateEvolutionToken = useMutation(
+    api.platform.rotateEvolutionWebhookToken,
+  );
   const setBillingMode = useMutation(api.platform.setBillingMode);
   const addWalletCredit = useMutation(api.platform.addWalletCredit);
   const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
@@ -901,12 +904,57 @@ export default function TenantPage() {
           <div className="text-sm font-medium">Webhook URL</div>
           <div className="min-w-0 text-xs text-[var(--muted)]">
             {/* cal.com's payload carries no tenant identity, so the org is
-                resolved from this token in the path. It is generated, not
-                typed, which is why this is text and not a field. */}
+                resolved from this token. It is generated, not typed, which is
+                why this is text and not a field.
+
+                Query param, not a path segment: the route is an exact
+                /calcom/webhook and reads searchParams. This used to render
+                /calcom/webhook/<token>, which 404s — the console was handing
+                the operator a URL that could not work. */}
             {detail.calcomWebhookToken ? (
-              <CopyId value={`/calcom/webhook/${detail.calcomWebhookToken}`} />
+              <CopyId value={`/calcom/webhook?token=${detail.calcomWebhookToken}`} />
             ) : (
               "No token generated yet."
+            )}
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="WhatsApp (Evolution API)"
+        description="The self-hosted Baileys lane. Evolution posts a bare JSON body with no HMAC, so the token below is the whole credential for that endpoint — the org used to be resolved from the instance name in the payload, which nothing generates and anyone can guess."
+      >
+        <Row
+          label="Instance name"
+          hint="Must match the instance Evolution posts as. A label now, not a credential — but it is still checked against the payload, so a message from the wrong instance is not filed against this business."
+          current={detail.evolutionInstance ?? undefined}
+          placeholder="salon-a"
+          onSave={(value) => org({ evolutionInstance: value })}
+        />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Webhook URL</div>
+          <div className="min-w-0 space-y-1.5 text-xs text-[var(--muted)]">
+            {detail.evolutionWebhookToken ? (
+              <CopyId
+                value={`/whatsapp/evolution?token=${detail.evolutionWebhookToken}`}
+              />
+            ) : (
+              <p>
+                No token yet, so this endpoint refuses every call. Generate one
+                and paste the URL into Evolution&apos;s webhook settings.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => void rotateEvolutionToken({ orgId })}
+              className="text-[var(--muted)] underline decoration-dotted transition-colors hover:text-[var(--foreground)]"
+            >
+              {detail.evolutionWebhookToken ? "Rotate token" : "Generate token"}
+            </button>
+            {detail.evolutionWebhookToken && (
+              <p>
+                Rotating breaks the URL in Evolution until you paste the new one.
+              </p>
             )}
           </div>
         </div>

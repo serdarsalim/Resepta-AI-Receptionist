@@ -320,6 +320,20 @@ export default defineSchema({
     // here means Evolution, both means both. A selector would have been a
     // third source of truth able to disagree with the two real ones.
     evolutionInstance: v.optional(v.string()),
+    // Authenticates the Evolution inbound webhook, exactly the job
+    // calcomWebhookToken does for cal.com. Evolution posts a bare JSON body
+    // with no HMAC and no shared secret, so the org used to be resolved from
+    // the instance NAME in the payload — a string nothing in this codebase
+    // generates, with no length or charset rule, which made the endpoint
+    // genuinely unauthenticated. An anonymous POST naming an instance and a
+    // customer's number could cancel that customer's next booking, push the
+    // cancellation to cal.com, and spend the org's LLM budget on a reply.
+    //
+    // Now the token in the URL identifies the org and the instance name is
+    // just a label. Set it from Settings → WhatsApp; until it is set the
+    // route refuses, because "no token configured" must not read as "any
+    // caller welcome".
+    evolutionWebhookToken: v.optional(v.string()),
     // From-address for customer emails; delivery goes straight to the email
     // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
     // verified there or sends are rejected. Unset = email off.
@@ -480,7 +494,8 @@ export default defineSchema({
     // Evolution's webhook payload names its instance and nothing else, so this
     // is how an inbound event finds its org — the same job phone_number_id
     // does on the Cloud lane.
-    .index("by_evolution_instance", ["evolutionInstance"]),
+    .index("by_evolution_instance", ["evolutionInstance"])
+    .index("by_evolution_token", ["evolutionWebhookToken"]),
 
   // Per-org integration credentials. One row per (org, provider, field), which
   // is Nudge's shape (convex/lib/connections.ts there) with the one change that

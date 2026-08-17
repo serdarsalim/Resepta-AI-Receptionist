@@ -63,18 +63,24 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const rawBody = await request.text();
 
+    // Fails CLOSED, like /email/inbound and /stripe/webhook do. This used to
+    // log a warning and process the payload unsigned "for local-development
+    // convenience" — one console.warn nobody reads, on the route that mints
+    // contacts, opens the 24-hour session window and cancels appointments. A
+    // deployment that shipped without the variable was fully forgeable by
+    // anyone who knew an org's phone_number_id, and nothing in the app would
+    // have said so.
     const appSecret = process.env.WA_APP_SECRET;
-    if (appSecret) {
-      const valid = await verifyMetaSignature(
-        appSecret,
-        rawBody,
-        request.headers.get("x-hub-signature-256"),
-      );
-      if (!valid) return new Response("bad signature", { status: 401 });
-    } else {
-      // Dev convenience only. Prod must set WA_APP_SECRET (see .env.example).
-      console.warn("WA_APP_SECRET unset — webhook signature NOT verified");
+    if (!appSecret) {
+      console.error("WA_APP_SECRET unset — refusing the WhatsApp webhook");
+      return new Response("not configured", { status: 503 });
     }
+    const valid = await verifyMetaSignature(
+      appSecret,
+      rawBody,
+      request.headers.get("x-hub-signature-256"),
+    );
+    if (!valid) return new Response("bad signature", { status: 401 });
 
     let payload: unknown;
     try {
@@ -91,23 +97,29 @@ http.route({
   }),
 });
 
-// Inbound from the Evolution API lane (self-hosted Baileys).
+// Inbound from the Evolution API lane (self-hosted Baileys). `token` (query
+// param) identifies the org, exactly as on the cal.com route.
 //
-// No signature to verify: Evolution posts a bare JSON body with no shared
-// secret and no HMAC. The org is resolved from the instance name in the
-// payload, and an instance name is a guessable string, so treat this endpoint
-// as UNAUTHENTICATED and size the blast radius accordingly — the handler mints
-// contacts and logs messages, which is the same reach a spoofed Cloud webhook
-// would have if WA_APP_SECRET were unset. Put the Evolution server behind a
-// funnel only this deployment can reach, and give each org an instance name
-// that is not its business name.
+// Evolution posts a bare JSON body with no HMAC and no shared secret of its
+// own, so the token in the URL is the whole credential. It used to be the
+// instance NAME out of the payload — a string nothing in this codebase
+// generates, with no length or charset rule — which left this endpoint
+// unauthenticated in practice while the comment here asked the operator to
+// compensate by choosing a name "that is not its business name". The handler
+// reaches processInboundMessage, which cancels real appointments and spends the
+// org's LLM budget on a reply, so that was the wrong thing to leave to a naming
+// convention.
 //
-// Always 200. Evolution retries anything else, and a retry cannot conjure the
-// org row that was missing.
+// A missing token is a 401 rather than a silent 200: it means the URL in
+// Evolution's settings is the old one, and the operator needs to see that.
+// Anything past that point is acknowledged — Evolution retries a non-2xx, and a
+// retry cannot conjure the org row that was missing.
 http.route({
   path: "/whatsapp/evolution",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const token = new URL(request.url).searchParams.get("token") ?? "";
+    if (!token) return new Response("missing token", { status: 401 });
     let payload: unknown;
     try {
       payload = await request.json();
@@ -115,7 +127,10 @@ http.route({
       return new Response("ok", { status: 200 });
     }
     try {
-      await ctx.runMutation(internal.webhook.handleEvolutionEvent, { payload });
+      await ctx.runMutation(internal.webhook.handleEvolutionEvent, {
+        token,
+        payload,
+      });
     } catch (err) {
       console.error("evolution webhook failed", err);
     }
