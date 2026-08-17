@@ -527,6 +527,11 @@ deals; we sell services, and an appointment is the thing a customer bought.
   transfer directly. Same size in the same weight for both halves is a FORM's
   grammar: on a form you read the question, on a record you read the answer and
   glance left to see what it answers.
+  - The label TRACK is wider than Nudge's (9rem), and the smaller type is what
+    buys the room. Our labels are org-authored questions ("what is your best
+    friends favorite restaurant?"), not CRM property names, so they are the half
+    of the row that runs long — while the values are a first name and a phone
+    number and leave most of their column empty.
   - The value tier is opt-in (`dense` on `InlineEditValue` and `PhoneField`),
     never those components' default. They are also the settings screens'
     controls, and a settings row is a question you answer rather than a line you

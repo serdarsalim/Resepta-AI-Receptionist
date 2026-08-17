@@ -16,8 +16,14 @@ import { useLanguage } from "@/lib/LanguageProvider";
 // in the same weight, which is a form's grammar, not a record's: on a form you
 // read the question, on a record you read the ANSWER and glance left to see
 // what it answers. Nudge's numbers, measured off its live DOM rather than
-// eyeballed — 11px muted-strong label against a text-xs foreground value. The
-// label track narrows with the type it holds.
+// eyeballed — 11px muted-strong label against a text-xs foreground value.
+//
+// The label track is WIDER than Nudge's, not narrower, and the smaller type is
+// why it can be. Our labels are org-authored questions ("what is your best
+// friends favorite restaurant?"), not CRM property names, so they are the half
+// of the row that runs long — while the values are a first name and a phone
+// number and leave most of their column empty. A 6.5rem track broke that
+// question across three lines to protect space nothing was using.
 export function FieldRow({
   label,
   hint,
@@ -28,7 +34,7 @@ export function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(5rem,6.5rem)_minmax(0,1fr)] items-start gap-x-2">
+    <div className="grid grid-cols-[minmax(6rem,9rem)_minmax(0,1fr)] items-start gap-x-3">
       <div className="flex items-center gap-1.5 pt-1 text-[11px] leading-snug text-[var(--muted-strong)]">
         <span className="min-w-0 break-words">{label}</span>
         {hint && <InfoTip text={hint} />}
