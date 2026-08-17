@@ -150,7 +150,7 @@ export function CallTranscript({
 
   if (turns.length === 0) {
     return (
-      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 font-sans text-xs leading-relaxed ${
+      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--paper)] p-3 font-sans text-xs leading-relaxed ${
         fill ? "min-h-32 flex-1" : "max-h-96"
       }`}>
         {transcript}
@@ -168,7 +168,7 @@ export function CallTranscript({
   // grey against.
   return (
     <div
-      className={`thin-scroll space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 ${
+      className={`thin-scroll space-y-2 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--paper)] p-3 ${
         // min-h so a long summary above can never squeeze the transcript to
         // nothing — it keeps its own scrollbar and a floor.
         fill ? "min-h-32 flex-1" : "max-h-96"
@@ -271,7 +271,7 @@ function CollectedList({ values }: { values: Record<string, unknown> }) {
   if (rows.length === 0) return null;
 
   return (
-    <dl className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-2">
+    <dl className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--paper)] px-2.5 py-2">
       {rows.map(([key, text]) => (
         <div key={key} className="flex gap-2 text-xs">
           <dt className="shrink-0 text-[var(--muted)]">{humanizeKey(key)}:</dt>
