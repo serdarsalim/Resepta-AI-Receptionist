@@ -588,6 +588,14 @@ const dictionary = {
     de: "(kein Betreff)",
   },
   "email.reply": { tr: "Yanıtla", en: "Reply", de: "Antworten" },
+  // The "•••" that reveals the quoted thread under a reply. Only ever a
+  // tooltip and a screen-reader label — the control itself stays three dots,
+  // the way every mail client draws it.
+  "email.showQuoted": {
+    tr: "Alıntılanan yazışmayı göster",
+    en: "Show quoted text",
+    de: "Zitierten Text anzeigen",
+  },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
   "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
   "email.bodyPlaceholder": {

@@ -599,6 +599,33 @@ deals; we sell services, and an appointment is the thing a customer bought.
     share one answer about what "empty" means — an empty tiptap document is
     "<p></p>", so `!body` is the wrong test on both sides. Same arrangement
     `lib/emailInbound` already has with `normalizeSubject`.
+- **Quoted replies are split at RENDER, never at ingest** (`lib/emailQuote`).
+  A client does not send what somebody typed, it sends that plus the whole
+  thread quoted underneath — and a bubble shows its whole body, so without this
+  the third message in a thread contains the first two and a four-mail exchange
+  renders as ten. The quote goes behind a "•••", the way every mail client
+  draws it.
+  - **Nothing is stripped on the way in.** The full mail is stored as it
+    arrived. This is a pile of heuristics against a format no two clients agree
+    on, and a heuristic that runs once against the database can destroy a mail;
+    one that runs at render is a display bug you fix by editing the file.
+  - HTML is matched on STRUCTURE (`div.gmail_quote`, `blockquote.gmail_quote`,
+    `#divRplyFwdMsg`, `#appendonsend`, `.moz-cite-prefix`,
+    `blockquote[type=cite]`), never on the "On … wrote:" sentence: that line
+    arrives split across tags, localised and formatted, and a regex loose enough
+    to catch it is loose enough to cut a mail in half at the word "on". Plain
+    text has no structure, so there the attribution IS the signal — and English,
+    German and Turkish disagree about word order, so the pattern requires the
+    line to start with the marker and END on a colon rather than pinning the
+    verb to it.
+  - Two invariants, both worth keeping: `visible + quoted === input` exactly
+    (trimming is the renderer's business), and **if the cut leaves nothing
+    readable, show the whole mail** — a top-posted reply with nothing above the
+    quote must not render an empty bubble.
+  - Only email is split. A WhatsApp message that starts a line with ">" is
+    somebody typing an arrow.
+  - The index snippet uses `quoteFreeSnippet`: a row reading "On Mon 17 Aug,
+    Barber wrote:" is describing the mail BEFORE this one.
 - **The email composer is the rich editor**, `EmailBodyEditor` in `compact`
   mode: no frame of its own (the composer is already a box), no Visual/HTML
   switch (nobody hand-writes HTML in a reply — that earns its place in the

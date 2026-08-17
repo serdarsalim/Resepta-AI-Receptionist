@@ -30,6 +30,11 @@ import {
   noteText,
   plainToHtml,
 } from "../../convex/lib/noteBody";
+import {
+  quoteFreeSnippet,
+  splitQuotedHtml,
+  splitQuotedText,
+} from "../../convex/lib/emailQuote";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -243,7 +248,11 @@ export function ConversationPanel({
                   ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
                   t("email.noSubject"),
                 at: item.at,
-                snippet: ("body" in item ? item.body : undefined) ?? "",
+                // The new content only. A row reading "On Mon 17 Aug, Barber
+                // wrote:" is describing the mail BEFORE this one.
+                snippet: quoteFreeSnippet(
+                  ("body" in item ? item.body : undefined) ?? "",
+                ),
                 inbound:
                   ("direction" in item ? item.direction : undefined) === "in",
                 count: 1,
@@ -916,9 +925,16 @@ export function ConversationPanel({
                   thread. In a list a formatted email is a wall; the flattened
                   text below is what belongs there. */}
               {item.emailHtml && openThread ? (
-                <EmailBody html={item.emailHtml} />
+                <QuotedEmailBody html={item.emailHtml} />
               ) : item.body ? (
-                <p className="whitespace-pre-wrap">{item.body}</p>
+                // Only mail gets split. Quoting is an email convention, and a
+                // WhatsApp message that happens to start a line with ">" is
+                // somebody typing an arrow.
+                item.channel === "email" ? (
+                  <QuotedPlainBody text={item.body} />
+                ) : (
+                  <p className="whitespace-pre-wrap">{item.body}</p>
+                )
               ) : (
                 // Template sends store no body (the text lives in Meta's
                 // approved template), so the bubble would otherwise be blank.
@@ -1300,6 +1316,77 @@ function MediaStrip({
 // the sanitiser above it — never the absence of this call. Links are hardened
 // after mount rather than in the string, because rewriting attributes with a
 // regex is the same mistake as sanitising with one.
+// The "···" every mail client has. A reply carries the whole thread quoted
+// under it, and a bubble shows its whole body, so without this the third
+// message in a thread contains the first two inside it.
+//
+// The quote is HIDDEN, never dropped: what somebody sent is on the record, and
+// the split is a heuristic (lib/emailQuote) against a format no two clients
+// agree on. When it guesses wrong the history is one click away rather than
+// gone, which is the difference between a display bug and a data loss bug.
+function QuotedToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={t("email.showQuoted")}
+      title={t("email.showQuoted")}
+      // Small, grey, and it does not say a word. Every mail client draws this
+      // control as three dots for the same reason: the thing it reveals is
+      // text the reader has already seen, so a labelled button would give it
+      // more of the bubble than it is worth.
+      className={`my-1 flex h-4 items-center rounded px-1.5 text-[10px] leading-none tracking-widest transition-colors ${
+        open
+          ? "bg-[var(--muted-strong)]/20 text-[var(--muted-strong)]"
+          : "bg-[var(--muted-bg)] text-[var(--muted)] hover:bg-[var(--row-hover-bg)] hover:text-[var(--foreground)]"
+      }`}
+    >
+      •••
+    </button>
+  );
+}
+
+function QuotedEmailBody({ html }: { html: string }) {
+  const [open, setOpen] = useState(false);
+  const { visible, quoted } = splitQuotedHtml(html);
+  if (!quoted) return <EmailBody html={html} />;
+  return (
+    <>
+      <EmailBody html={visible} />
+      <QuotedToggle open={open} onToggle={() => setOpen((prev) => !prev)} />
+      {/* Rendered only when opened rather than hidden with CSS: a long thread
+          quotes every mail before it, so this is most of the bytes in the
+          bubble and none of what anyone came to read. */}
+      {open && <EmailBody html={quoted} />}
+    </>
+  );
+}
+
+function QuotedPlainBody({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const { visible, quoted } = splitQuotedText(text);
+  if (!quoted) return <p className="whitespace-pre-wrap">{text}</p>;
+  return (
+    <>
+      <p className="whitespace-pre-wrap">{visible.replace(/\s+$/, "")}</p>
+      <QuotedToggle open={open} onToggle={() => setOpen((prev) => !prev)} />
+      {open && (
+        <p className="whitespace-pre-wrap text-[var(--muted-strong)]">
+          {quoted}
+        </p>
+      )}
+    </>
+  );
+}
+
 function EmailBody({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const clean = sanitizeEmailHtml(html);
