@@ -1650,13 +1650,10 @@ function CallEntry({
       // card used to end wherever the transcript's 24rem cap put it, leaving a
       // band of empty card under the one thing on the screen worth reading.
       <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
-        {/* Only when there is no player. The audio control already reads
-            "0:00 / 1:34", so above one this line was the same fact twice — but
-            on a call with no recording it is the only place the length is
-            said at all. */}
-        {duration && !item.recordingUrl && (
-          <p className="mb-1 shrink-0 text-xs text-[var(--muted)]">{duration}</p>
-        )}
+        {/* No duration line here at all (Serdar, 2026-08-17). The player reads
+            "0:00 / 1:34" and the list row you arrived from carries the length
+            too, so on the opened card it was a third copy of the same number
+            sitting above everything else. */}
         <CallDetail fill call={item} contactName={contactName} />
       </div>
     );
