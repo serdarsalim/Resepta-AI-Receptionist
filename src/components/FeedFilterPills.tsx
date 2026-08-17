@@ -97,6 +97,9 @@ export function FeedFilterPills({
         type="button"
         onClick={() => onChange(tab)}
         aria-label={label}
+        // The word left the pill, so the name has to live somewhere a mouse can
+        // reach. aria-label covers the screen reader; this covers everyone else.
+        title={label}
         aria-pressed={active}
         // Geometry and the three states are Nudge's, read off its live DOM
         // rather than eyeballed: no explicit height (the text sets it), no
@@ -120,16 +123,20 @@ export function FeedFilterPills({
               : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)]/50"
         }`}
       >
-        {/* Channels are icon-only — the glyphs are the ones customers know.
-            Notes has no such glyph, so it carries its word: a bare pencil in a
-            row of channels reads as "edit this contact". */}
+        {/* Every pill with a mark is its mark and its count, nothing else
+            (Serdar's call, 2026-08-17). Notes and Form used to carry their word
+            on the theory that a bare pencil among channel glyphs reads as "edit
+            this contact" — but four words across this row was most of the header
+            spent labelling controls whose marks the reader already knows, and it
+            made the pills renumber sideways every time one was picked. The name
+            is on the tooltip and the aria-label.
+
+            All keeps its word permanently: it has no mark to be, and it is the
+            resting state you come back to. */}
         {/* Tinted in every state, open one included: the glyph's colour is how
             you find the channel, and dropping it to accent on select means the
             pill you're looking at is the one that stopped being recognizable. */}
-        {tab !== "all" && <FeedIcon type={tab} size={15} />}
-        {(tab === "all" || tab === "note" || tab === "form") && (
-          <span>{label}</span>
-        )}
+        {tab === "all" ? <span>{label}</span> : <FeedIcon type={tab} size={15} />}
         {/* Zero renders nothing. A row of noughts is noise, and the dimmed
             pill already says the tab is empty. */}
         {count > 0 && <span className="tabular-nums">{count}</span>}
