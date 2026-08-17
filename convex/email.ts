@@ -13,6 +13,7 @@ import { emailConfig } from "./lib/platformConfig";
 import {
   bareAddress,
   displayName,
+  htmlToText,
   normalizeSubject,
   splitName,
 } from "./lib/emailInbound";
@@ -383,11 +384,29 @@ export const sendToCustomer = action({
     customerId: v.id("customers"),
     subject: v.string(),
     body: v.string(),
+    // Markup from the composer's rich editor. `body` stays the plain lane —
+    // the chat agent, the auto-reply and everything else that writes a
+    // sentence still send only that — so this is additive and every existing
+    // caller keeps working untouched.
+    //
+    // It is safe to send unescaped because of WHERE it comes from: tiptap
+    // serialises its own document, which can only hold the nodes and marks the
+    // editor registers (paragraphs, headings, lists, links, images, tables,
+    // colour). Pasted markup is coerced into that schema on the way in, so
+    // there is no path from a paste to a <script> here. Anything arriving from
+    // OUTSIDE — an inbound mail — is a different question and is sanitised at
+    // render (src/lib/sanitizeHtml.ts), which is where the untrusted markup
+    // actually is.
+    html: v.optional(v.string()),
   },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
   handler: async (ctx, args) => {
     const subject = args.subject.trim();
-    const body = args.body.trim();
+    const html = args.html?.trim() || undefined;
+    // The flattening is what the feed index, the inbox preview and any future
+    // search read. Derived rather than asked for, so the two can never
+    // disagree about what this mail said.
+    const body = html ? htmlToText(html) : args.body.trim();
     if (!body) return { ok: false, reason: "empty" };
     const context = await ctx.runQuery(internal.email.loadSendContext, {
       customerId: args.customerId,
@@ -420,6 +439,7 @@ export const sendToCustomer = action({
       body,
       emailSubject: subject || undefined,
       emailFrom: context.sender,
+      emailHtml: html,
     });
 
     const result = await sendEmail({
@@ -427,10 +447,11 @@ export const sendToCustomer = action({
       from: context.sender,
       to: context.customerEmail,
       subject: subject || context.orgName,
-      // Typed as plain text, sent as HTML: escaped first so a customer name
-      // with an ampersand in it can't become markup, then newlines become
-      // breaks so the mail reads the way it was written.
-      html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+      // Composed markup goes out as it was written. Typed plain text is
+      // escaped first — so a customer name with an ampersand in it can't
+      // become markup — and then newlines become breaks, so the mail reads
+      // the way it was typed.
+      html: html ?? `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
       replyTo,
     });
     await ctx.runMutation(internal.messages.applySendResult, {

@@ -152,8 +152,16 @@ export function htmlToText(html: string): string {
 // one conversation however many clients have prefixed it, and Turkish mail
 // clients add "Yn:" where English ones add "Re:".
 export function normalizeSubject(subject: string): string {
+  return stripReplyPrefixes(subject).toLowerCase();
+}
+
+// The same prefix strip WITHOUT the lowercasing, for the composer: a reply is
+// "Re: " plus the subject as it was written, and "Re: Re: Saç boyası hakkında
+// soru" is what you get if you prepend to a subject that already carries one.
+// Mail clients have stacked these since the 1990s and every one of them stops
+// at a single Re:.
+export function stripReplyPrefixes(subject: string): string {
   return subject
     .replace(/^\s*((re|fwd?|yn|ilt|aw|wg)\s*(\[\d+\])?\s*:\s*)+/i, "")
-    .trim()
-    .toLowerCase();
+    .trim();
 }

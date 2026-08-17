@@ -134,7 +134,17 @@ function Ic({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({
+  editor,
+  showVariables = true,
+}: {
+  editor: Editor;
+  // Tokens are for a TEMPLATE, which is written once and rendered per
+  // customer. A one-off reply is already addressed to somebody — nothing
+  // renders it on the way out, so a {{name}} inserted here would reach the
+  // customer as those eight characters.
+  showVariables?: boolean;
+}) {
   const { t } = useLanguage();
   const {
     triggerRef: paletteTrigger,
@@ -241,7 +251,9 @@ function Toolbar({ editor }: { editor: Editor }) {
         </Ic>
       </ToolbarButton>
       <span className="mx-1 h-4 w-px bg-[var(--border)]" />
-      <VariableInsertDropdown onInsert={(token) => editor.chain().focus().insertContent(token).run()} />
+      {showVariables && (
+        <VariableInsertDropdown onInsert={(token) => editor.chain().focus().insertContent(token).run()} />
+      )}
       <EmojiPicker onPick={(emoji) => editor.chain().focus().insertContent(emoji).run()} title={t("editor.insertEmoji")} />
     </div>
   );
@@ -253,6 +265,8 @@ export function EmailBodyEditor({
   onSave,
   onLiveChange,
   placeholder,
+  compact,
+  showVariables = true,
 }: {
   value: string;
   disabled?: boolean;
@@ -261,6 +275,17 @@ export function EmailBodyEditor({
   // Every edit, unsaved — feeds the live preview beside the editor.
   onLiveChange?: (html: string) => void;
   placeholder?: string;
+  // The conversation composer's shape: no frame of its own, no Visual/HTML
+  // switch, and a body that starts at four lines instead of twelve.
+  //
+  // The frame goes because the COMPOSER is already a box — one border around
+  // subject, body and Send — and a second one nested inside it reads as a
+  // field inside a form inside a card. The switch goes because nobody
+  // hand-writes HTML in a reply to a customer; it earns its place in the
+  // reminder editor, where the thing being written is a template that will go
+  // out a thousand times.
+  compact?: boolean;
+  showVariables?: boolean;
 }) {
   const [mode, setMode] = useState<"visual" | "html">("visual");
   // Last value we persisted (or received) — guards no-op saves on blur.
@@ -314,8 +339,9 @@ export function EmailBodyEditor({
     },
     editorProps: {
       attributes: {
-        class:
-          "email-body-editor email-paper rounded-b-md focus:outline-none px-3 py-2 text-sm min-h-[12rem] max-h-[26rem] overflow-y-auto",
+        class: compact
+          ? "email-body-editor focus:outline-none px-1 py-1 text-sm min-h-[4rem] max-h-[14rem] overflow-y-auto"
+          : "email-body-editor email-paper rounded-b-md focus:outline-none px-3 py-2 text-sm min-h-[12rem] max-h-[26rem] overflow-y-auto",
       },
     },
   });
@@ -350,6 +376,21 @@ export function EmailBodyEditor({
     setMode(next);
   };
 
+  if (compact) {
+    return (
+      <div className={disabled ? "pointer-events-none opacity-50" : ""}>
+        {editor ? (
+          <>
+            <Toolbar editor={editor} showVariables={showVariables} />
+            <EditorContent editor={editor} />
+          </>
+        ) : (
+          <div className="min-h-[4rem] animate-pulse" aria-busy="true" />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`rounded-md border border-[var(--border)] bg-[var(--background)] ${
@@ -377,7 +418,7 @@ export function EmailBodyEditor({
       {mode === "visual" ? (
         editor ? (
           <>
-            <Toolbar editor={editor} />
+            <Toolbar editor={editor} showVariables={showVariables} />
             <EditorContent editor={editor} />
           </>
         ) : (

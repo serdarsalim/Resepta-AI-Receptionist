@@ -40,6 +40,13 @@ export const logOutQueued = internalMutation({
     // subject-less for a second and then pops one is worse than either.
     emailSubject: v.optional(v.string()),
     emailFrom: v.optional(v.string()),
+    // The markup we actually put in the customer's inbox, when the sender
+    // composed in the rich editor. Stored so OUR half of a thread renders the
+    // way it was written — before this, a formatted reply came back as its own
+    // flattened text and the salon's bold headings vanished from their own
+    // record. `body` keeps that flattening beside it: an index and a search
+    // want words, not markup.
+    emailHtml: v.optional(v.string()),
     scheduledFor: v.optional(v.number()),
     // An outbound image from the library. Same field the inbound path uses, so
     // the thread renders both directions without knowing which is which.
@@ -64,6 +71,7 @@ export const logOutQueued = internalMutation({
       body: args.body,
       emailSubject: args.emailSubject,
       emailFrom: args.emailFrom,
+      emailHtml: args.emailHtml,
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
       lane: args.lane,

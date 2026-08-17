@@ -20,8 +20,9 @@ import {
   CallTranscript,
   humanizeCallEnd,
 } from "./CallDetail";
+import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
-import { normalizeSubject } from "../../convex/lib/emailInbound";
+import { normalizeSubject, stripReplyPrefixes } from "../../convex/lib/emailInbound";
 import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -338,14 +339,23 @@ export function ConversationPanel({
     }
   };
 
+  // An "empty" rich editor is not an empty string — tiptap serialises a blank
+  // document as <p></p>, and a paragraph of non-breaking spaces is emptier
+  // still. Send asks whether anything was WRITTEN, not whether markup exists.
+  const emailHasText =
+    emailBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim() !== "";
+
   const submitEmail = async () => {
-    if (!emailBody.trim() || emailSending) return;
+    if (!emailHasText || emailSending) return;
     setEmailSending(true);
     setEmailError(null);
     const result = await sendEmail({
       customerId,
       subject: emailSubject,
-      body: emailBody,
+      // The action flattens the markup itself and stores both, so the feed
+      // index reads words and the thread renders what was actually sent.
+      body: "",
+      html: emailBody,
     });
     setEmailSending(false);
     if (!result.ok) {
@@ -384,13 +394,25 @@ export function ConversationPanel({
                 placeholder={t("email.subject")}
                 disabled={emailSending}
               />
-              <textarea
+              {/* The real editor, not a textarea. This is EMAIL: the thing a
+                  salon wants to send is a price list with the services in bold
+                  and a link to the booking page, and typing that as plain text
+                  meant the one channel that supports formatting was the one
+                  place they could not use it.
+
+                  onLiveChange as well as onSave, because the editor only
+                  reports on BLUR — Send would otherwise sit disabled the whole
+                  time you were typing and only wake up when you clicked away.
+                  Every keystroke updates the draft; the blur is just the last
+                  one. */}
+              <EmailBodyEditor
+                compact
+                showVariables={false}
                 value={emailBody}
-                onChange={(event) => setEmailBody(event.target.value)}
-                placeholder={t("email.bodyPlaceholder")}
-                rows={4}
+                onSave={setEmailBody}
+                onLiveChange={setEmailBody}
                 disabled={emailSending}
-                className="resize-none"
+                placeholder={t("email.bodyPlaceholder")}
               />
               {emailError && (
                 <p className="text-xs text-red-600 dark:text-red-400">
@@ -411,7 +433,7 @@ export function ConversationPanel({
                 <button
                   type="button"
                   onClick={() => void submitEmail()}
-                  disabled={emailSending || !emailBody.trim()}
+                  disabled={emailSending || !emailHasText}
                   className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
                 >
                   {emailSending ? t("common.saving") : t("contact.send")}
@@ -451,8 +473,13 @@ export function ConversationPanel({
                   // client keeps the exchange together; the server threads on
                   // the same normalized key, so "Re:" here is for THEIR inbox,
                   // not ours.
+                  //
+                  // Stripped before prepending, or replying to a reply gives
+                  // "Re: Re: Saç boyası hakkında soru" — the thread's own title
+                  // usually already carries one, because it is the subject of
+                  // whichever mail opened it.
                   setEmailSubject(
-                    openThread ? `Re: ${openThread.subject}` : "",
+                    openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
                   );
                   setComposing(true);
                 }}

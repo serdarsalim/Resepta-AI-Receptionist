@@ -579,6 +579,34 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - `chatOrder` is therefore WhatsApp **plus** an open email thread, and the
     bubble keeps its `emailHtml` branch (sanitised, and only inside a thread —
     in a list a formatted mail is a wall).
+- **The email composer is the rich editor**, `EmailBodyEditor` in `compact`
+  mode: no frame of its own (the composer is already a box), no Visual/HTML
+  switch (nobody hand-writes HTML in a reply — that earns its place in the
+  reminder editor, where the thing being written is a template), and **no
+  variable dropdown**: tokens are for a template that gets rendered per
+  customer, and nothing renders a one-off reply, so an inserted `{{name}}`
+  would reach the customer as those eight characters.
+  - `onLiveChange` AND `onSave`. The editor only reports on BLUR, so a Send
+    gated on the blur-written value sits disabled the whole time you type and
+    wakes only when you click away.
+  - "Empty" is not `""`. tiptap serialises a blank document as `<p></p>`, so
+    Send asks whether anything was WRITTEN (tags stripped, `&nbsp;` collapsed).
+  - `email.sendToCustomer` grew an optional `html`. `body` stays the plain lane
+    — the chat agent and the auto-reply still send only that — and when `html`
+    is present the action derives `body` from it with `htmlToText` so the feed
+    index and the inbox preview read words while the thread renders markup.
+    Outbound rows carry `emailHtml` now (`logOutQueued`), which is what makes
+    OUR half of a thread render the way it was written.
+  - It is safe to send that markup unescaped because of where it comes FROM:
+    tiptap serialises its own document, and pasted markup is coerced into the
+    editor's schema on the way in. Markup arriving from outside — an inbound
+    mail — is sanitised at render, which is where the untrusted HTML actually
+    is. Convex's runtime has no DOM, so `isomorphic-dompurify` cannot run there
+    anyway; don't try to "add server-side sanitising" without reading this.
+  - **Reply strips existing prefixes before prepending** (`stripReplyPrefixes`,
+    the un-lowercased half of `normalizeSubject`). The thread's title is the
+    subject of whichever mail opened it and usually already carries a "Re:", so
+    prepending blind gives "Re: Re: Saç boyası hakkında soru".
 - **Feed pills are their mark and their count, nothing else.** Notes and Form
   used to carry their word (a bare pencil among channel glyphs reads as "edit
   this contact"). Four words across the row was most of the header spent
