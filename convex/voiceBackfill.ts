@@ -22,8 +22,14 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { connectionField } from "./lib/connections";
 import { monthKey } from "./lib/usage";
+import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
+import { coerceVoiceValues } from "./lib/voicePayload";
+import { recordCustomerCreated } from "./lib/newCustomer";
+import { recordActivity } from "./lib/activity";
+import { orgOwnNumbers } from "./retell";
 
 const PAGE = 1000;
 const MAX_PAGES = 50;
@@ -204,5 +210,267 @@ export const run = internalAction({
       paginationKey = body.pagination_key;
     }
     return { listed, matched, stamped };
+  },
+});
+
+// ── Identity repair (the 18 Aug 2026 caller-identity bugs) ───────────────────
+//
+// Two defects put wrong identities on call rows: outbound legs were read as
+// inbound (so the agent's own line became "the caller", and a contact), and
+// national-format caller IDs (05386906897) were stored unnormalized, matching
+// nothing — so those calls linked no contact and their collected values were
+// dropped. Both are fixed at the webhook; this repairs the rows already
+// written, from the raw payloads the voiceEvents inbox still holds.
+//
+//   npx convex run voiceBackfill:repairIdentities '{"orgId": "..."}'
+//
+// Idempotent: re-derived values are compared before patching, contact creation
+// goes through the same match-first path as the webhook, and re-applied
+// collected values fill only fields still empty. Rows whose events have no
+// direction (web calls, pre-inbox rows) keep what they have.
+
+export const repairIdentityBatch = internalMutation({
+  args: { orgId: v.id("orgs"), cursor: v.union(v.string(), v.null()) },
+  returns: v.object({
+    continueCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+    repaired: v.number(),
+    relinked: v.number(),
+    // Newly linked rows with stored collected values: the action re-applies
+    // these through updateContactFromVoice, which a mutation cannot call.
+    collectRedo: v.array(
+      v.object({
+        retellAgentId: v.string(),
+        phone: v.string(),
+        collected: v.record(v.string(), v.any()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("org-not-found");
+    const dialCode = dialCodeForTimezone(org.timezone);
+    const own = await orgOwnNumbers(ctx, args.orgId);
+    const page = await ctx.db
+      .query("calls")
+      .withIndex("by_org_started", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .paginate({ cursor: args.cursor, numItems: 50 });
+
+    let repaired = 0;
+    let relinked = 0;
+    const collectRedo: Array<{
+      retellAgentId: string;
+      phone: string;
+      collected: Record<string, unknown>;
+    }> = [];
+
+    for (const call of page.page) {
+      // What the provider actually said, recovered from the stored payloads.
+      let direction = call.direction;
+      let from: string | undefined;
+      let to: string | undefined;
+      if (call.retellCallId) {
+        const events = await ctx.db
+          .query("voiceEvents")
+          .withIndex("by_org_call", (q) =>
+            q.eq("orgId", args.orgId).eq("retellCallId", call.retellCallId!),
+          )
+          .collect();
+        for (const event of events) {
+          const payload = (event.payload ?? {}) as Record<string, unknown>;
+          const c = ((payload.call ?? payload) || {}) as Record<string, unknown>;
+          if (!from && c.from_number) from = String(c.from_number);
+          if (!to && c.to_number) to = String(c.to_number);
+          const said = String(c.direction ?? "");
+          if (said === "outbound" || said === "inbound") direction = said;
+        }
+      }
+
+      const rawCounterparty =
+        (direction === "outbound" ? to : from) ?? call.fromNumber;
+      const counterparty = rawCounterparty
+        ? normalisePhone(rawCounterparty, dialCode)
+        : null;
+
+      // Detach a row pointing at a contact that IS the org's own line — the
+      // contact the bug created. Cleanup below removes the contact itself.
+      let customerId: Id<"customers"> | undefined = call.customerId;
+      if (customerId) {
+        const linked = await ctx.db.get(customerId);
+        const linkedPhone = linked?.phone ? normalisePhone(linked.phone) : null;
+        if (!linked || (linkedPhone && own.has(linkedPhone))) customerId = undefined;
+      }
+      if (counterparty && !own.has(counterparty)) {
+        const existing = await ctx.db
+          .query("customers")
+          .withIndex("by_org_phone", (q) =>
+            q.eq("orgId", args.orgId).eq("phone", counterparty),
+          )
+          .unique();
+        customerId = existing?._id;
+        if (!customerId) {
+          customerId = await ctx.db.insert("customers", {
+            orgId: args.orgId,
+            firstName: "",
+            phone: counterparty,
+          });
+          await recordCustomerCreated(ctx, {
+            orgId: args.orgId,
+            customerId,
+            source: "voice",
+          });
+        }
+      }
+
+      const fromNumber = counterparty ?? rawCounterparty;
+      const patch: Record<string, unknown> = {};
+      if (direction !== call.direction) patch.direction = direction;
+      if (fromNumber !== call.fromNumber) patch.fromNumber = fromNumber;
+      if (customerId !== call.customerId) {
+        patch.customerId = customerId;
+        relinked += 1;
+        // The webhook dropped these on the floor when the number didn't
+        // match; now that the row has a contact, land them there too.
+        if (customerId && call.retellAgentId && counterparty && call.collected) {
+          collectRedo.push({
+            retellAgentId: call.retellAgentId,
+            phone: counterparty,
+            collected: call.collected,
+          });
+        }
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(call._id, patch);
+        repaired += 1;
+      }
+    }
+
+    return {
+      continueCursor: page.isDone ? null : page.continueCursor,
+      isDone: page.isDone,
+      repaired,
+      relinked,
+      collectRedo,
+    };
+  },
+});
+
+// Deletes the contacts the bug minted for the org's own lines. Only a contact
+// nothing else references — after repairIdentityBatch has repointed the call
+// rows, a bug-made contact references nothing. One with appointments, calls,
+// messages or notes is reported instead of deleted; something real happened
+// under that number and a human should look.
+export const removeOwnNumberContacts = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({ removed: v.array(v.string()), kept: v.array(v.string()) }),
+  handler: async (ctx, args) => {
+    const own = await orgOwnNumbers(ctx, args.orgId);
+    const removed: string[] = [];
+    const kept: string[] = [];
+    for (const number of own) {
+      const customer = await ctx.db
+        .query("customers")
+        .withIndex("by_org_phone", (q) =>
+          q.eq("orgId", args.orgId).eq("phone", number),
+        )
+        .unique();
+      if (!customer) continue;
+      const references = await Promise.all(
+        (["appointments", "calls", "messages", "notes"] as const).map((table) =>
+          ctx.db
+            .query(table)
+            .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+            .first(),
+        ),
+      );
+      if (references.some((row) => row !== null)) {
+        kept.push(number);
+        continue;
+      }
+      await ctx.db.delete(customer._id);
+      await recordActivity(ctx, {
+        orgId: args.orgId,
+        kind: "customer_deleted",
+        detail: number,
+      });
+      removed.push(number);
+    }
+    return { removed, kept };
+  },
+});
+
+// Annotated result types, not inference: the action calls into its own module
+// through internal.*, and letting TypeScript infer the handler's type from
+// that reference is circular — the same reason voiceEvents.process casts.
+type RepairBatchResult = {
+  continueCursor: string | null;
+  isDone: boolean;
+  repaired: number;
+  relinked: number;
+  collectRedo: Array<{
+    retellAgentId: string;
+    phone: string;
+    collected: Record<string, unknown>;
+  }>;
+};
+
+export const repairIdentities = internalAction({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    repaired: v.number(),
+    relinked: v.number(),
+    collectedReapplied: v.number(),
+    removedContacts: v.array(v.string()),
+    keptContacts: v.array(v.string()),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    repaired: number;
+    relinked: number;
+    collectedReapplied: number;
+    removedContacts: string[];
+    keptContacts: string[];
+  }> => {
+    let repaired = 0;
+    let relinked = 0;
+    let collectedReapplied = 0;
+    let cursor: string | null = null;
+    for (;;) {
+      const batch = (await ctx.runMutation(
+        internal.voiceBackfill.repairIdentityBatch,
+        { orgId: args.orgId, cursor },
+      )) as RepairBatchResult;
+      repaired += batch.repaired;
+      relinked += batch.relinked;
+      for (const redo of batch.collectRedo) {
+        const values = coerceVoiceValues(redo.collected);
+        if (Object.keys(values).length === 0) continue;
+        // fillOnlyMissing: this is recovery, not replay — a value someone has
+        // typed in since the broken call outranks what the call collected.
+        const result = await ctx.runMutation(internal.retell.updateContactFromVoice, {
+          retellAgentId: redo.retellAgentId,
+          phone: redo.phone,
+          values,
+          fillOnlyMissing: true,
+        });
+        if (result.ok && result.updated.length > 0) collectedReapplied += 1;
+      }
+      if (batch.isDone || !batch.continueCursor) break;
+      cursor = batch.continueCursor;
+    }
+    const cleanup = (await ctx.runMutation(
+      internal.voiceBackfill.removeOwnNumberContacts,
+      { orgId: args.orgId },
+    )) as { removed: string[]; kept: string[] };
+    return {
+      repaired,
+      relinked,
+      collectedReapplied,
+      removedContacts: cleanup.removed,
+      keptContacts: cleanup.kept,
+    };
   },
 });
