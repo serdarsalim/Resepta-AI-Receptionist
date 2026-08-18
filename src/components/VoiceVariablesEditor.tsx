@@ -11,6 +11,44 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { OptionsEditor } from "./RecordField";
 import { Sheet } from "./Sheet";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
+
+// Chromeless text cells and fixed grid tracks, ported from Nudge's variables
+// table (RetellPromptEditor). Bordering every cell made the table read as
+// boxes before words; text cells now go quiet until hover or focus, while
+// the two CONTROLS a row carries — the name picker and the type popover —
+// stay boxed, because a control you are going to click has to look
+// clickable.
+const CELL_CLASS =
+  "w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-xs outline-none transition-colors hover:border-[var(--border)] focus:border-[var(--accent)] focus:bg-[var(--background)]";
+
+// One set of column tracks for every row — name · type · description
+// (breathes) · remove. Type sits SECOND, beside the name: the two short
+// structural facts group together and the description takes every remaining
+// pixel, because it is the instruction the analysis model follows and the
+// part actually worth reading. items-START so a wrapped description keeps
+// its neighbours aligned to its first line.
+const VAR_GRID =
+  "group grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_1.75rem] items-start gap-x-2";
+
+function RemoveX() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
 
 export type VoiceVariable = {
   key: string;
@@ -566,18 +604,26 @@ export function VoiceVariablesEditor({
         )}
       </div>
 
-      <div className="space-y-4">
+      {/* The grid's tracks need their width; on a narrow screen the SECTION
+          scrolls sideways rather than each row folding into a different
+          shape — Nudge's finding, kept. Popovers are portaled to the body,
+          so the overflow container cannot clip them. */}
+      <div className="overflow-x-auto">
+      <div className="min-w-[38rem] space-y-4">
         {groups.map((group) => {
           const rows = draft
             .map((row, index) => ({ row, index }))
             .filter(({ row }) => phaseOf(row) === group.id);
           return (
             <div key={group.id}>
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
+              {/* Foreground and semibold, not muted: these headings are the
+                  capture phases themselves — the one structural fact each
+                  row no longer repeats — so they carry the table. */}
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
                 {group.title}
                 <InfoTip text={group.tip} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {rows.map(({ row, index }) => (
                   <VariableRow
                     key={index}
@@ -619,6 +665,9 @@ export function VoiceVariablesEditor({
                   />
                 ))}
                 <VariablePicker
+                  addLabel={
+                    group.id === "before" ? t("voiceVariables.addDefault") : undefined
+                  }
                   fields={availableFields}
                   builtins={pickerBuiltinsFor(group.id)}
                   onField={(field) => adoptField(field, group.id)}
@@ -636,39 +685,46 @@ export function VoiceVariablesEditor({
           );
         })}
 
-        {(availableBuiltins.length > 0 || availableFields.length > 0) && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--muted)]">
-              {t("voiceVariables.alwaysAvailable")}
-              <InfoTip text={t("voiceVariables.builtinHint")} />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {availableBuiltins.map((builtin) => (
-                <span
-                  key={builtin.key}
-                  title={builtin.key}
-                  className="rounded-lg bg-[var(--muted-bg)] px-2 py-1 text-xs text-[var(--muted)]"
-                >
-                  {builtin.label}
-                </span>
-              ))}
-              {/* A field the org already configured in Business becomes a
-                  capture row in one click — it must be findable where
-                  variables live, not only where it was created. */}
-              {availableFields.map((field) => (
-                <button
-                  key={field.id}
-                  type="button"
-                  onClick={() => adoptField(field)}
-                  title={t("voiceVariables.customerCard")}
-                  className="rounded-lg border border-dashed border-[var(--border)] px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--muted-bg)]"
-                >
-                  + {field.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Read-only context at the foot, Nudge's treatment: quiet mono
+            pills. Retell's built-in analysis first — always on, produced
+            whether or not any row asks — then the injected context the
+            runtime always sends, then the org's unclaimed fields as one-click
+            adopts. */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {["call_summary", "call_successful"].map((preset) => (
+            <span
+              key={preset}
+              title={t("voiceVariables.presetHint")}
+              className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 font-mono text-[10px] text-[var(--muted)]"
+            >
+              {preset}
+            </span>
+          ))}
+          {availableBuiltins.map((builtin) => (
+            <span
+              key={builtin.key}
+              title={builtin.label}
+              className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 font-mono text-[10px] text-[var(--muted)]"
+            >
+              {builtin.key}
+            </span>
+          ))}
+          {/* A field the org already configured in Business becomes a
+              capture row in one click — it must be findable where
+              variables live, not only where it was created. */}
+          {availableFields.map((field) => (
+            <button
+              key={field.id}
+              type="button"
+              onClick={() => adoptField(field)}
+              title={t("voiceVariables.customerCard")}
+              className="rounded-full border border-dashed border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+            >
+              + {field.label}
+            </button>
+          ))}
+        </div>
+      </div>
       </div>
 
       {confirmRemove !== null && (() => {
@@ -734,6 +790,8 @@ type PickerBuiltin = {
 // by clicking its name.
 function VariablePicker({
   current,
+  title,
+  addLabel,
   fields,
   builtins,
   onField,
@@ -745,6 +803,12 @@ function VariablePicker({
   // undefined renders the "+ Add variable" link; a string renders a row's
   // name cell (empty string = unnamed row).
   current?: string;
+  // The human label behind a key shown mono — tooltip only, so the cell
+  // itself stays exactly what the prompt speaks.
+  title?: string;
+  // The add-link's text. The before group says "+ Add default" (Nudge's
+  // word for pre-call context), the capture groups say "+ Add variable".
+  addLabel?: string;
   fields: VoiceContactField[];
   builtins: PickerBuiltin[];
   onField: (field: VoiceContactField) => void;
@@ -798,16 +862,23 @@ function VariablePicker({
   return (
     <>
       {isName ? (
+        // The name cell reads like Nudge's: monospace key, chromeless until
+        // hover says it is clickable. The caret only shows on hover for the
+        // same reason the border does — at rest the table is text.
         <button
           ref={triggerRef}
           type="button"
           onClick={toggle}
-          className="flex w-full items-center justify-between gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-left text-xs"
+          title={title}
+          className={`${CELL_CLASS} flex items-center justify-between gap-1 text-left font-mono`}
         >
           <span className={`truncate ${current ? "" : "text-[var(--muted)]"}`}>
             {current || t("voiceVariables.label")}
           </span>
-          <span aria-hidden className="shrink-0 text-[10px] text-[var(--muted)]">
+          <span
+            aria-hidden
+            className="shrink-0 text-[10px] text-[var(--muted)] opacity-0 transition-opacity group-hover:opacity-100"
+          >
             ▾
           </span>
         </button>
@@ -816,9 +887,9 @@ function VariablePicker({
           ref={triggerRef}
           type="button"
           onClick={toggle}
-          className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+          className="mt-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
         >
-          {t("voiceVariables.addRow")}
+          {addLabel ?? t("voiceVariables.addRow")}
         </button>
       )}
       {open &&
@@ -951,14 +1022,6 @@ function VariableRow({
 }) {
   const { t } = useLanguage();
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
-  const descriptionRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!autoFocus) return;
-    // Rows arrive named from the picker; the description is what's left.
-    descriptionRef.current?.focus();
-    onFocused();
-  }, [autoFocus, onFocused]);
 
   const optionValues = (linkedSelect ? linkedSelect.options : row.choices ?? []).filter(
     (choice) => choice.trim(),
@@ -973,47 +1036,54 @@ function VariableRow({
           : t("voiceVariables.text");
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className={VAR_GRID}>
       {/* The name is a selection, not free text. Clicking it re-points the
           row at another customer field, a built-in, a newly created field or
-          a call-only name — identity always moves as one piece. */}
-      <div className="w-48 shrink-0">
-        <VariablePicker
-          current={displayLabel}
-          fields={pickerFields}
-          builtins={pickerBuiltins}
-          onField={onPickField}
-          onBuiltin={onPickBuiltin}
-          onCreate={onCreateField}
-          onCallOnly={onRename}
-          allowCallOnly={allowCallOnly}
-        />
-      </div>
-      <input
-        ref={descriptionRef}
-        value={row.description}
-        onChange={(e) => onChange({ description: e.target.value })}
-        placeholder={t("voiceVariables.description")}
-        className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+          a call-only name — identity always moves as one piece. Shown as the
+          KEY, monospace, exactly what the prompt and the analysis speak; the
+          human label rides in the tooltip and in the picker's own list. */}
+      <VariablePicker
+        current={row.key || displayLabel}
+        title={displayLabel}
+        fields={pickerFields}
+        builtins={pickerBuiltins}
+        onField={onPickField}
+        onBuiltin={onPickBuiltin}
+        onCreate={onCreateField}
+        onCallOnly={onRename}
+        allowCallOnly={allowCallOnly}
       />
-      {/* Fixed width: the trigger is a select in behaviour, and a select
-          whose width follows its value gives every row a different edge. */}
+      {/* Boxed while the text cells beside it go chromeless: a picker is a
+          control you are going to click, so it has to look clickable; a name
+          or a description is text you mostly read. */}
       <button
         ref={triggerRef}
         type="button"
         onClick={toggle}
-        className="flex w-[7.5rem] shrink-0 items-center justify-between gap-1 rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+        className="flex w-full items-center justify-between gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
       >
         <span className="truncate">{typeLabel}</span>
         <span aria-hidden className="text-[10px]">▾</span>
       </button>
+      <AutoGrowTextarea
+        value={row.description}
+        onChange={(e) => onChange({ description: e.target.value })}
+        // Rows arrive named from the picker; the description is what's left.
+        autoFocus={autoFocus}
+        onFocus={onFocused}
+        placeholder={t("voiceVariables.description")}
+        className={CELL_CLASS}
+      />
+      {/* Hover-only from sm up; always visible below sm, where there is no
+          hover to reveal it. Opacity rather than hidden so the track keeps
+          its width and the row cannot shift under the pointer. */}
       <button
         type="button"
         onClick={onRemove}
-        title={t("voiceVariables.remove")}
-        className="shrink-0 rounded-lg px-1.5 py-1.5 text-xs text-[var(--muted)] hover:text-red-600"
+        aria-label={t("voiceVariables.remove").replace("{name}", displayLabel)}
+        className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] opacity-100 transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
       >
-        ✕
+        <RemoveX />
       </button>
 
       {open &&
