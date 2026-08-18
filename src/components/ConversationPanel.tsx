@@ -22,6 +22,17 @@ import {
   CallTranscript,
   humanizeCallEnd,
 } from "./CallDetail";
+
+// The header row above the feed has to sit in the same column as the feed, or
+// the primary button (Place call, Compose) hangs past the right edge of the
+// card below it and the back arrow starts left of it. Two things have to be
+// matched, not one: the scroller's own p-4, AND the 9px that `stable-gutter`
+// reserves for .thin-scroll's track — that gutter is OUTSIDE the padding, so a
+// plain px-4 here still lands 9px short. Kept as rem + 9px rather than a
+// resolved pixel value: nothing sets a root font-size, and Serdar's Chrome
+// runs 17px, where a hardcoded 25px would be out. Keep in step with the
+// threadRef div's padding; they are one column.
+const FEED_COL_PAD = "pl-4 pr-[calc(1rem+9px)]";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import { normalizeSubject, stripReplyPrefixes } from "../../convex/lib/emailInbound";
@@ -468,7 +479,7 @@ export function ConversationPanel({
         // abruptly under it, which read as two panes stacked rather than one
         // conversation with a heading. Same rule the takeover chip and the
         // composer already follow.
-        <div className={`shrink-0 px-3 pt-3 ${chatOrder ? "pb-2" : ""}`}>
+        <div className={`shrink-0 pt-3 ${FEED_COL_PAD} ${chatOrder ? "pb-2" : ""}`}>
           {composing ? (
             // Explicitly white, not transparent. The header around it takes the
             // thread's tinted plane, and a composer that inherits it reads as a
@@ -589,7 +600,7 @@ export function ConversationPanel({
           "customer did not answer" one navigation away from the row that said
           so. */}
       {filter === "call" && (canPlaceCall || openCall) && (
-        <div className="flex shrink-0 items-center gap-2 px-3 pt-3">
+        <div className={`flex shrink-0 items-center gap-2 pt-3 ${FEED_COL_PAD}`}>
           {openCall && (
           <button
             type="button"
@@ -631,7 +642,7 @@ export function ConversationPanel({
         </div>
       )}
       {filter === "note" && (
-        <div className="shrink-0 px-4 pt-3">
+        <div className={`shrink-0 pt-3 ${FEED_COL_PAD}`}>
           {/* Collapsed until you mean it. Pinned at the top is right — the list
               runs newest-first, so the input sits next to where a fresh note
               lands — but a composer standing permanently open is a band of
