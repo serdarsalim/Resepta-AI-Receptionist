@@ -637,15 +637,22 @@ export function VoiceVariablesEditor({
   // to the org — so they are offered as before-call context only. Offering
   // "Customer phone" as a question was how a row got created that could
   // never say where its answer went.
+  // Built-ins are NEVER offered to the before group: everything they carry is
+  // already on the always-sent rows, so adopting one there minted an editable
+  // clone of a fact set elsewhere (Serdar, seeing "+ Add default" list rows
+  // he could read right above it). Capture groups keep the ones that land on
+  // a customer column — asking for a first name is a real question.
   const pickerBuiltinsFor = (phase: Phase): PickerBuiltin[] =>
-    availableBuiltins
-      .filter((builtin) => builtin.key !== "services")
-      .filter((builtin) => phase === "before" || customerFieldOf(builtin.key))
-      .map((builtin) => ({
-        key: builtin.key,
-        label: builtin.label,
-        source: builtin.key as PickerBuiltin["source"],
-      }));
+    phase === "before"
+      ? []
+      : availableBuiltins
+          .filter((builtin) => builtin.key !== "services")
+          .filter((builtin) => customerFieldOf(builtin.key))
+          .map((builtin) => ({
+            key: builtin.key,
+            label: builtin.label,
+            source: builtin.key as PickerBuiltin["source"],
+          }));
   // A row's own picker also lists what the row currently is, so the menu
   // always contains the current selection.
   const rowPickerFields = (row: VoiceVariable): VoiceContactField[] => {
@@ -662,6 +669,11 @@ export function VoiceVariablesEditor({
   // the injected variable carries: active services with duration and price,
   // active staff by name, the voice-writable fields by label.
   const currency = orgSettings?.org.currency ?? DEFAULT_CURRENCY;
+  // Every runtime-provided variable by key, for spotting draft rows that
+  // merely restate one.
+  const providedByKey = new Map(
+    [...builtinVoiceVariables(t), ...injectedVoiceContext(t)].map((v) => [v.key, v]),
+  );
   const providedListLines = (key: string): string[] => {
     if (key === "services")
       return (providedServices ?? [])
@@ -749,7 +761,48 @@ export function VoiceVariablesEditor({
                 <InfoTip text={group.tip} />
               </div>
               <div className="space-y-1.5">
-                {rows.map(({ row, index }) => (
+                {rows.map(({ row, index }) => {
+                  // A builtin-keyed row in Before is a leftover clone of an
+                  // always-sent fact: nothing about it is this agent's to
+                  // edit — the key, its content and its meaning are set
+                  // elsewhere. It renders like its injected twin and keeps
+                  // only the ✕, which clears the redundant registry entry.
+                  const provided =
+                    group.id === "before" ? providedByKey.get(row.key) : undefined;
+                  if (provided) {
+                    return (
+                      <div key={index} className={VAR_GRID}>
+                        <span
+                          title={provided.label}
+                          className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]"
+                        >
+                          {provided.key}
+                        </span>
+                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
+                          {t(
+                            provided.kind === "list"
+                              ? "voiceVariables.list"
+                              : "voiceVariables.text",
+                          )}
+                        </span>
+                        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
+                          {provided.description}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeAt(index)}
+                          aria-label={t("voiceVariables.remove").replace(
+                            "{name}",
+                            provided.label,
+                          )}
+                          className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] opacity-100 transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <RemoveX />
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
                   <VariableRow
                     key={index}
                     row={row}
@@ -788,7 +841,8 @@ export function VoiceVariablesEditor({
                     onChange={(next) => patch(index, next)}
                     onRemove={() => removeAt(index)}
                   />
-                ))}
+                  );
+                })}
                 {/* The context the runtime sends whether or not anybody
                     configured it, AS ROWS in the phase it belongs to — the
                     answer to "why are the variables we send not showing in
