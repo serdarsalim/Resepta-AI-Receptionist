@@ -1038,6 +1038,43 @@ went, and the reasoning to preserve:
   owner-only rules. Phone-agent creation is journalled `reversible: false` —
   it makes a real provider resource and `undo` says so in those words.
 
+  The surface has four more lanes, ported from Nudge (2026-08-18):
+
+  - **Ingest** — `create_customers` seeds up to 100 people, deduped by phone,
+    parsing local numbers against the org's dial code exactly as
+    `update_customer` does; an unreadable number is REPORTED, never dropped.
+    `log_activity` writes calls and messages that ALREADY HAPPENED. Nothing it
+    writes is sendable: rows land terminal (`sent`/`received`) with none of
+    `scheduledFor`, `nextAttemptAt` or `sendingAt`, which is what makes all
+    three dispatch paths (`wa.ts`, `delivery.ts` ×2) structurally blind to
+    them. Email logs under the `email_` prefix because `channelOfMessage`
+    reads the prefix to decide the lane. `messages.occurredAt` carries the
+    real moment so imported history does not stack on the import date.
+    KVKK consent is never inferred from importing.
+  - **Reports** — `agentReports.ts`. Counted in the database, never by the
+    model, which otherwise tallies a paged list and produces a confident wrong
+    number. No-show rate is taken over RESOLVED appointments only. The message
+    scan is capped and says when the cap ran out before the window did.
+  - **Prompt lifecycle** — `read/preview/publish_agent_prompt`. The planToken
+    (`lib/planToken.ts`, vendored from Nudge) binds preview to publish: it
+    hashes the exact agent and text, so a prompt cannot reach callers unless
+    the shipped text is the text a human was shown. Undo of a publish branches
+    in the MCP handler, not the mutation — restoring is itself a network
+    publish, and a scheduled one would report success before it happened.
+    `markUndone` re-checks ownership because it is a second door into the
+    state change `undo` guards.
+  - **Automation config** — `list_message_rules`, `get_template`,
+    `set_message_rule`, `update_template`. Every rule write schedules
+    `reminders.backfillOrg`, forward AND on undo, because timing is baked into
+    each appointment's `nextMessageAt`. The trap the descriptions carry: a
+    Meta-approved template still sends the string Meta approved, so rewriting
+    `body` moves email and the shop phone and leaves Cloud WhatsApp unchanged.
+    The result names which case it was.
+
+  The tool LIST is role-scoped (`OWNER_ONLY` in `convex/mcp.ts`) so a stylist
+  is not offered owner-only work. That is presentation, not permission — the
+  handlers still gate.
+
   **The invariant that keeps the sessionless paths safe:** three internal
   functions — `voiceProvisioning.begin`, `retell.agentEditorContext` and
   `retellAgent.publishVariableSet` — accept an optional `orgId` and TRUST it.
