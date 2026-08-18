@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -41,6 +42,16 @@ export function HeaderSearchProvider({ children }: { children: React.ReactNode }
   const [jumpToCustomer, setJumpToCustomer] = useState<
     ((customerId: string) => void) | null
   >(null);
+  // STABLE, or the whole header search dies: this setter sits in the claiming
+  // effect's deps, and when it was recreated inside the value memo, every
+  // keystroke rebuilt it (query is a memo dep) → the effect re-ran → its
+  // cleanup wiped the query. The box ate what you typed, live, 18 Aug 2026.
+  // useState treats a bare function argument as an updater; the wrapper lets
+  // a callback be STORED through the setter without being invoked.
+  const storeJumpToCustomer = useCallback(
+    (jump: ((customerId: string) => void) | null) => setJumpToCustomer(() => jump),
+    [],
+  );
   const value = useMemo(
     () => ({
       query,
@@ -48,12 +59,9 @@ export function HeaderSearchProvider({ children }: { children: React.ReactNode }
       placeholder,
       setPlaceholder,
       jumpToCustomer,
-      // useState treats a bare function argument as an updater; wrap so a
-      // callback can be STORED through the setter without being invoked.
-      setJumpToCustomer: (jump: ((customerId: string) => void) | null) =>
-        setJumpToCustomer(() => jump),
+      setJumpToCustomer: storeJumpToCustomer,
     }),
-    [query, placeholder, jumpToCustomer],
+    [query, placeholder, jumpToCustomer, storeJumpToCustomer],
   );
   return (
     <HeaderSearchContext.Provider value={value}>
