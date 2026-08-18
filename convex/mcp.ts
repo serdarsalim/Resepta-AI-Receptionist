@@ -120,6 +120,50 @@ const TOOLS: ToolDef[] = [
       }),
   },
   {
+    name: "activity_report",
+    title: "How the last N days went",
+    description:
+      "Appointments, calls and messages over a period, with no-show, answered and reply rates already worked out. THIS is the tool for 'how was last week' or 'how many no-shows' — do not answer those by listing customers and counting them, because the list is paged and the count will be wrong. Looks backward; schedule looks forward.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "How many days back, 1-90. Default 7." },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) =>
+      await ctx.runQuery(internal.agentReports.activityReport, {
+        orgId: who.orgId as never,
+        days: num(args, "days"),
+      }),
+  },
+  {
+    name: "get_customer_history",
+    title: "One customer's whole timeline",
+    description:
+      "Everything that has passed between the salon and one person, newest first: messages either way, calls with their summaries, notes and appointments, merged into a single ordered list. get_customer gives the record and the last ten of each; this gives the story. Read it before writing a note or messaging someone, so you are not repeating what they were already told.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerId: { type: "string" },
+        limit: { type: "number", description: "Max entries, 1-200. Default 50." },
+      },
+      required: ["customerId"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) => {
+      const customerId = str(args, "customerId");
+      if (!customerId) throw new Error("customerId is required");
+      return await ctx.runQuery(internal.agentReports.customerHistory, {
+        orgId: who.orgId as never,
+        customerId,
+        limit: num(args, "limit"),
+      });
+    },
+  },
+  {
     name: "add_note",
     title: "Write a note on a customer",
     description:
