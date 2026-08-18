@@ -240,28 +240,83 @@ export const applyLineAssignment = internalMutation({
   },
 });
 
-// Retell owns the routing, so our inboundNumber is a CACHE of a decision made
+// Retell owns the routing, so our copy of it is a CACHE of a decision made
 // somewhere else — and it drifts. Someone moves a line in Retell's own
 // dashboard, or one key serves two orgs and the second one takes the number:
-// either way the row goes on naming a line that no longer rings this agent,
+// either way our rows go on naming lines that no longer ring these agents,
 // and the salon reads it as fact on four screens.
 //
-// So every clean read of the provider's numbers reconciles it. Only ever
-// called with a numbers fetch that came back OK — reconciling from a failed
-// or partial read would clear every line in the org and call it truth.
+// So every clean read of the provider's numbers reconciles BOTH copies: the
+// agentLines table (every line bound to one of this org's agents, inbound or
+// outbound) and the legacy one-line inboundNumber cache (kept as "the
+// agent's primary line" for the surfaces that show a single number). Only
+// ever called with a numbers fetch that came back OK — reconciling from a
+// failed or partial read would clear every line in the org and call it truth.
 export const reconcileLines = internalMutation({
   args: {
     orgId: v.id("orgs"),
-    bindings: v.array(v.object({ number: v.string(), agentId: v.string() })),
+    bindings: v.array(
+      v.object({
+        number: v.string(),
+        nickname: v.optional(v.string()),
+        inboundAgentId: v.optional(v.string()),
+        outboundAgentId: v.optional(v.string()),
+      }),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, { orgId, bindings }) => {
-    const held = new Map(bindings.map((b) => [b.agentId, b.number]));
-    const rows = await ctx.db
+    const agents = await ctx.db
       .query("retellAgents")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
-    for (const row of rows) {
+    const ownAgentIds = new Set(agents.map((a) => a.retellAgentId));
+    // A line belongs in the table only while one of THIS org's agents holds
+    // it in either direction — the account may be shared across orgs.
+    const ours = bindings.filter(
+      (b) =>
+        (b.inboundAgentId && ownAgentIds.has(b.inboundAgentId)) ||
+        (b.outboundAgentId && ownAgentIds.has(b.outboundAgentId)),
+    );
+    const wanted = new Map(ours.map((b) => [b.number, b]));
+    const existing = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    for (const row of existing) {
+      const binding = wanted.get(row.number);
+      if (!binding) {
+        await ctx.db.delete(row._id);
+        continue;
+      }
+      wanted.delete(row.number);
+      // Patch only on a real change — same no-churn rule as the legacy cache
+      // below: repainting the reactive lines query for agreement is noise.
+      if (
+        row.inboundAgentId !== binding.inboundAgentId ||
+        row.outboundAgentId !== binding.outboundAgentId ||
+        row.nickname !== binding.nickname
+      ) {
+        await ctx.db.patch(row._id, {
+          nickname: binding.nickname,
+          inboundAgentId: binding.inboundAgentId,
+          outboundAgentId: binding.outboundAgentId,
+        });
+      }
+    }
+    for (const binding of wanted.values()) {
+      await ctx.db.insert("agentLines", { orgId, ...binding });
+    }
+
+    // Legacy single-line cache: the agent's primary line is its first
+    // inbound one, in the provider's listing order.
+    const held = new Map<string, string>();
+    for (const b of ours) {
+      if (b.inboundAgentId && !held.has(b.inboundAgentId)) {
+        held.set(b.inboundAgentId, b.number);
+      }
+    }
+    for (const row of agents) {
       // undefined on both sides is agreement, not a change: patching every
       // unbound agent on every list would churn the reactive query and
       // repaint the whole section for nothing.
@@ -270,6 +325,95 @@ export const reconcileLines = internalMutation({
       await ctx.db.patch(row._id, { inboundNumber: actual });
     }
     return null;
+  },
+});
+
+// The attach/detach twin of reconcileLines: one line changed at the provider,
+// so one row changes here — without waiting for the next full roster read.
+// null in either agent slot means that direction is now unbound; both null
+// deletes the row.
+export const applyLineBinding = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    number: v.string(),
+    nickname: v.optional(v.string()),
+    inboundAgentId: v.union(v.string(), v.null()),
+    outboundAgentId: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("agentLines")
+      .withIndex("by_number", (q) => q.eq("number", args.number))
+      .collect();
+    const row = rows.find((r) => r.orgId === args.orgId);
+    const inbound = args.inboundAgentId ?? undefined;
+    const outbound = args.outboundAgentId ?? undefined;
+    if (!inbound && !outbound) {
+      if (row) await ctx.db.delete(row._id);
+    } else if (row) {
+      await ctx.db.patch(row._id, {
+        nickname: args.nickname ?? row.nickname,
+        inboundAgentId: inbound,
+        outboundAgentId: outbound,
+      });
+    } else {
+      await ctx.db.insert("agentLines", {
+        orgId: args.orgId,
+        number: args.number,
+        nickname: args.nickname,
+        inboundAgentId: inbound,
+        outboundAgentId: outbound,
+      });
+    }
+    // Keep the legacy primary-line cache coherent for the agents this change
+    // touched: an agent that lost its cached line falls back to another of
+    // its lines; one that gained its first line adopts it.
+    const org = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    const agents = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    for (const agent of agents) {
+      const lines = org.filter((l) => l.inboundAgentId === agent.retellAgentId);
+      const stillHeld = lines.some((l) => l.number === agent.inboundNumber);
+      const primary = stillHeld ? agent.inboundNumber : lines[0]?.number;
+      if ((agent.inboundNumber ?? undefined) !== (primary ?? undefined)) {
+        await ctx.db.patch(agent._id, { inboundNumber: primary });
+      }
+    }
+    return null;
+  },
+});
+
+// The org's lines as the app's reactive truth — what the agents table renders
+// its number chips from. The provider remains the authority; these rows are
+// the copy attach/detach and reconcileLines maintain.
+export const orgLines = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      number: v.string(),
+      nickname: v.union(v.string(), v.null()),
+      inboundAgentId: v.union(v.string(), v.null()),
+      outboundAgentId: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const rows = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return rows.map((r) => ({
+      number: r.number,
+      nickname: r.nickname ?? null,
+      inboundAgentId: r.inboundAgentId ?? null,
+      outboundAgentId: r.outboundAgentId ?? null,
+    }));
   },
 });
 
@@ -685,9 +829,16 @@ export const agentForInboundNumber = internalQuery({
   handler: async (ctx, { number }) => {
     const phone = normalisePhone(number);
     if (!phone) return null;
-    // first(), not unique(): this path must never throw at Retell, and a
-    // double-assigned line is a data problem to surface elsewhere, not a
-    // reason to answer a live ring with a 500.
+    // The lines table first — it knows every number an agent holds, not just
+    // the primary one the legacy cache remembers. first(), not unique(): this
+    // path must never throw at Retell, and a double-assigned line is a data
+    // problem to surface elsewhere, not a reason to answer a ring with a 500.
+    const lines = await ctx.db
+      .query("agentLines")
+      .withIndex("by_number", (q) => q.eq("number", phone))
+      .collect();
+    const bound = lines.find((line) => line.inboundAgentId);
+    if (bound?.inboundAgentId) return bound.inboundAgentId;
     const agent = await ctx.db
       .query("retellAgents")
       .withIndex("by_inbound_number", (q) => q.eq("inboundNumber", phone))
@@ -967,7 +1118,16 @@ type AgentListResult = {
     ownedHere: boolean;
   }[];
   agentSource: "randevu" | "account";
-  phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  phoneNumbers: {
+    number: string;
+    nickname: string;
+    // Per-direction holders, because an agent may hold several lines and a
+    // line's two directions may belong to different agents. agentId remains
+    // as "whoever holds it in any direction" for the picker's taken-check.
+    inboundAgentId: string | null;
+    outboundAgentId: string | null;
+    agentId: string | null;
+  }[];
   voices: {
     id: string;
     name: string;
@@ -1051,7 +1211,13 @@ export const listAgents = action({
             : null,
         })),
         phoneNumbers: [
-          { number: "+902121112233", nickname: "Salon line", agentId: DEMO_AGENTS[0].id },
+          {
+            number: "+902121112233",
+            nickname: "Salon line",
+            inboundAgentId: DEMO_AGENTS[0].id,
+            outboundAgentId: DEMO_AGENTS[0].id,
+            agentId: DEMO_AGENTS[0].id,
+          },
         ],
         voices: [],
         hiddenAgentIds: [],
@@ -1183,6 +1349,9 @@ export const listAgents = action({
       .map((n) => ({
         number: n.phone_number!,
         nickname: n.nickname?.trim() || n.phone_number!,
+        inboundAgentId:
+          n.inbound_agent_id ?? n.inbound_agents?.[0]?.agent_id ?? null,
+        outboundAgentId: n.outbound_agents?.[0]?.agent_id ?? null,
         agentId:
           n.inbound_agent_id ??
           n.inbound_agents?.[0]?.agent_id ??
@@ -1196,9 +1365,12 @@ export const listAgents = action({
     // same breath, so it is the place that puts our copy back in agreement.
     await ctx.runMutation(internal.retell.reconcileLines, {
       orgId: context.orgId,
-      bindings: phoneNumbers.flatMap((n) =>
-        n.agentId ? [{ number: n.number, agentId: n.agentId }] : [],
-      ),
+      bindings: phoneNumbers.map((n) => ({
+        number: n.number,
+        nickname: n.nickname,
+        inboundAgentId: n.inboundAgentId ?? undefined,
+        outboundAgentId: n.outboundAgentId ?? undefined,
+      })),
     });
 
     return {
@@ -2380,17 +2552,26 @@ export async function orgOwnNumbers(
   ctx: { db: QueryCtx["db"] },
   orgId: Id<"orgs">,
 ): Promise<Set<string>> {
-  const agents = await ctx.db
-    .query("retellAgents")
-    .withIndex("by_org", (q) => q.eq("orgId", orgId))
-    .collect();
+  const [agents, lines] = await Promise.all([
+    ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect(),
+    ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect(),
+  ]);
   const own = new Set<string>();
+  const add = (raw: string | undefined) => {
+    const phone = raw ? normalisePhone(raw) : null;
+    if (phone) own.add(phone);
+  };
   for (const agent of agents) {
-    for (const raw of [agent.inboundNumber, agent.transferNumber]) {
-      const phone = raw ? normalisePhone(raw) : null;
-      if (phone) own.add(phone);
-    }
+    add(agent.inboundNumber);
+    add(agent.transferNumber);
   }
+  for (const line of lines) add(line.number);
   return own;
 }
 

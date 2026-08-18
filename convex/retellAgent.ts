@@ -1454,13 +1454,83 @@ async function assignLineTo(
   }
   if (previous && previous !== target) {
     await releaseLineIfHeld(key, previous, agentId);
+    await ctx.runMutation(internal.retell.applyLineBinding, {
+      orgId: context.orgId,
+      number: previous,
+      inboundAgentId: null,
+      outboundAgentId: null,
+    });
   }
   await ctx.runMutation(internal.retell.applyLineAssignment, {
     retellAgentId: agentId,
     number: target,
   });
+  if (target) {
+    await ctx.runMutation(internal.retell.applyLineBinding, {
+      orgId: context.orgId,
+      number: target,
+      inboundAgentId: agentId,
+      outboundAgentId: agentId,
+    });
+  }
   return null;
 }
+
+// The multi-number door: attach ONE MORE line to an agent, leaving its other
+// lines alone — assignLine above is the single-line move the provisioning and
+// MCP paths still speak. The line's whole routing (inbound and outbound)
+// moves to this agent; whichever agent held it stops answering the moment the
+// PATCH lands, same no-undo as every rebind.
+export const attachLine = action({
+  args: { agentId: v.string(), number: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { agentId, number }): Promise<null> => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const site = siteUrl();
+    const target = number.trim();
+    if (!target) throw new Error("number is required");
+    const usable = await ctx.runQuery(internal.retell.lineUsable, {
+      orgId: context.orgId,
+      number: target,
+    });
+    if (!usable.ok) throw new Error(usable.reason);
+    await call(key, "PATCH", `update-phone-number/${encodeURIComponent(target)}`, {
+      inbound_agents: [
+        { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+      ],
+      outbound_agents: [
+        { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+      ],
+      ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
+    });
+    await ctx.runMutation(internal.retell.applyLineBinding, {
+      orgId: context.orgId,
+      number: target,
+      inboundAgentId: agentId,
+      outboundAgentId: agentId,
+    });
+    return null;
+  },
+});
+
+export const detachLine = action({
+  args: { agentId: v.string(), number: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { agentId, number }): Promise<null> => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const target = number.trim();
+    await releaseLineIfHeld(key, target, agentId);
+    await ctx.runMutation(internal.retell.applyLineBinding, {
+      orgId: context.orgId,
+      number: target,
+      inboundAgentId: null,
+      outboundAgentId: null,
+    });
+    return null;
+  },
+});
 
 export const assignLine = action({
   args: {
@@ -1497,16 +1567,24 @@ async function releaseLineIfHeld(key: string, number: string, agentId: string) {
   ) as Array<{
     phone_number?: string;
     inbound_agent_id?: string;
+    outbound_agent_id?: string;
     inbound_agents?: Array<{ agent_id?: string }>;
+    outbound_agents?: Array<{ agent_id?: string }>;
   }>;
   const entry = numbers.find((candidate) => candidate.phone_number === number);
   if (!entry) return;
-  const holds =
+  // Each direction released only where this agent actually holds it — the
+  // other direction may belong to another agent by now.
+  const holdsInbound =
     entry.inbound_agent_id === agentId ||
     entry.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
-  if (!holds) return;
+  const holdsOutbound =
+    entry.outbound_agent_id === agentId ||
+    entry.outbound_agents?.some((candidate) => candidate.agent_id === agentId);
+  if (!holdsInbound && !holdsOutbound) return;
   await call(key, "PATCH", `update-phone-number/${encodeURIComponent(number)}`, {
-    inbound_agents: [],
+    ...(holdsInbound ? { inbound_agents: [] } : {}),
+    ...(holdsOutbound ? { outbound_agents: [] } : {}),
   });
 }
 

@@ -638,6 +638,26 @@ export default defineSchema({
     // the agent from the line that was dialled.
     .index("by_inbound_number", ["inboundNumber"]),
 
+  // One provider phone line and which agent it rings (inbound) or dials as
+  // (outbound). The multi-number generalization of retellAgents.inboundNumber,
+  // which could only remember ONE line per agent — an agent may hold several
+  // of each. Retell owns the routing (a number's inbound_agents /
+  // outbound_agents); these rows are our indexed copy, written by the same
+  // attach/detach actions that change the provider and reconciled on every
+  // clean roster read (retell.reconcileLines). Only lines bound to one of
+  // THIS org's agents get a row: the account may be shared across orgs, and
+  // an unbound number rings nobody.
+  agentLines: defineTable({
+    orgId: v.id("orgs"),
+    number: v.string(),
+    nickname: v.optional(v.string()),
+    inboundAgentId: v.optional(v.string()),
+    outboundAgentId: v.optional(v.string()),
+  })
+    .index("by_org", ["orgId"])
+    // The inbound webhook resolves the dialled number to its agent here.
+    .index("by_number", ["number"]),
+
   // Creating a provider agent spans several non-transactional API calls. This
   // row checkpoints each resource as soon as it exists, so a retry resumes the
   // same setup instead of deliberately creating another agent. A short lease

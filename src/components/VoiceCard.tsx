@@ -33,7 +33,13 @@ type Roster = {
     webhookUrl: string | null;
     ownedHere: boolean;
   }[];
-  phoneNumbers: { number: string; nickname: string; agentId: string | null }[];
+  phoneNumbers: {
+    number: string;
+    nickname: string;
+    inboundAgentId: string | null;
+    outboundAgentId: string | null;
+    agentId: string | null;
+  }[];
   voices: {
     id: string;
     name: string;
@@ -112,7 +118,13 @@ export function VoiceCard({
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
-  const assignLine = useAction(api.retellAgent.assignLine);
+  const attachLine = useAction(api.retellAgent.attachLine);
+  const detachLine = useAction(api.retellAgent.detachLine);
+  // The reactive copy of the provider's routing (agentLines). Chips render
+  // from THIS, not from the roster snapshot: attach/detach update it in the
+  // same mutation that records the provider's acceptance, so the row changes
+  // the moment the change is real — no refetch of the whole roster.
+  const orgLines = useQuery(api.retell.orgLines, {});
   const createAgent = useAction(api.retellAgent.createAgent);
   const setAgentArchived = useMutation(api.retell.setAgentArchived);
   const [wiring, setWiring] = useState<string | null>(null);
@@ -440,39 +452,81 @@ export function VoiceCard({
                       </button>
                     </td>
                     <td className="px-3 py-2">
-                      {/* The account's real numbers, not a text field. Free
-                          text here was how inboundNumber drifted out of
-                          agreement with Retell — and an empty field rendered
-                          its placeholder in a way that read as a value. */}
-                      <select
-                        value={row.inboundNumber ?? ""}
-                        disabled={assigningLine === row.retellAgentId}
-                        onChange={(e) => {
-                          setAssigningLine(row.retellAgentId);
-                          setLineErrorId(null);
-                          void assignLine({
-                            agentId: row.retellAgentId,
-                            number: e.target.value || null,
-                          })
-                            .catch(() => setLineErrorId(row.retellAgentId))
-                            .finally(() => setAssigningLine(null));
-                        }}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-60"
-                      >
-                        <option value="">{t("settings.voiceNoNumber")}</option>
-                        {(roster?.phoneNumbers ?? []).map((n) => (
-                          <option key={n.number} value={n.number}>
-                            {n.number}
-                          </option>
-                        ))}
-                        {/* A stored number the account no longer lists still
-                            renders, so the row shows the truth rather than
-                            silently snapping to None. */}
-                        {row.inboundNumber &&
-                          !roster?.phoneNumbers.some((n) => n.number === row.inboundNumber) && (
-                            <option value={row.inboundNumber}>{row.inboundNumber}</option>
-                          )}
-                      </select>
+                      {/* Every line this agent holds, as removable chips, plus
+                          a picker to attach one more — an agent may answer on
+                          several numbers (retellAgent.attachLine). The chips
+                          read the reactive agentLines copy; the picker's
+                          options are the account's real numbers, never free
+                          text — free text here was how inboundNumber drifted
+                          out of agreement with Retell. */}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {(orgLines ?? [])
+                          .filter(
+                            (line) =>
+                              line.inboundAgentId === row.retellAgentId ||
+                              line.outboundAgentId === row.retellAgentId,
+                          )
+                          .map((line) => (
+                            <span
+                              key={line.number}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 text-xs"
+                            >
+                              {line.number}
+                              <button
+                                type="button"
+                                aria-label={`${t("settings.voiceDetachNumber")} ${line.number}`}
+                                disabled={assigningLine === row.retellAgentId}
+                                onClick={() => {
+                                  setAssigningLine(row.retellAgentId);
+                                  setLineErrorId(null);
+                                  void detachLine({
+                                    agentId: row.retellAgentId,
+                                    number: line.number,
+                                  })
+                                    .catch(() => setLineErrorId(row.retellAgentId))
+                                    .finally(() => setAssigningLine(null));
+                                }}
+                                className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-60"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        <select
+                          value=""
+                          disabled={assigningLine === row.retellAgentId}
+                          onChange={(e) => {
+                            const number = e.target.value;
+                            if (!number) return;
+                            setAssigningLine(row.retellAgentId);
+                            setLineErrorId(null);
+                            void attachLine({ agentId: row.retellAgentId, number })
+                              .catch(() => setLineErrorId(row.retellAgentId))
+                              .finally(() => setAssigningLine(null));
+                          }}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-60"
+                        >
+                          <option value="">{t("settings.voiceAddNumber")}</option>
+                          {/* Numbers not already on this agent. A line held by
+                              another agent still lists — attaching MOVES it,
+                              the same steal the single-select always did. */}
+                          {(roster?.phoneNumbers ?? [])
+                            .filter(
+                              (n) =>
+                                !(orgLines ?? []).some(
+                                  (line) =>
+                                    line.number === n.number &&
+                                    (line.inboundAgentId === row.retellAgentId ||
+                                      line.outboundAgentId === row.retellAgentId),
+                                ),
+                            )
+                            .map((n) => (
+                              <option key={n.number} value={n.number}>
+                                {n.number}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <Toggle
