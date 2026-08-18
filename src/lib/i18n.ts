@@ -2044,15 +2044,17 @@ const dictionary = {
     en: "Connection fixed.",
     de: "Verbindung behoben.",
   },
+  // "The agent", never "her": the persona picks any name and any voice, and
+  // the UI must not assign it a gender the owner did not.
   "voiceDetail.canEndCall": {
-    tr: "Görüşmeyi kapatabilsin",
-    en: "Let her end the call",
-    de: "Darf das Gespräch beenden",
+    tr: "Asistan görüşmeyi kapatabilsin",
+    en: "Let the agent end the call",
+    de: "Agent darf das Gespräch beenden",
   },
   "voiceDetail.canEndCallHint": {
-    tr: "Açıkken arayan vedalaştıktan sonra kısaca veda edip telefonu kapatır. Kapalıyken hattı arayan kapatana kadar açık tutar. Değişiklik hemen yayınlanır.",
-    en: "On, she says a short goodbye and hangs up once the caller is done. Off, the line stays open until the caller hangs up. The change publishes straight away.",
-    de: "An verabschiedet sie sich kurz und legt auf, sobald der Anrufer fertig ist. Aus bleibt die Leitung offen, bis der Anrufer auflegt. Die Änderung wird sofort veröffentlicht.",
+    tr: "Açıkken asistan, arayan vedalaştıktan sonra kısaca veda edip telefonu kapatır. Kapalıyken hattı arayan kapatana kadar açık tutar. Değişiklik hemen yayınlanır.",
+    en: "On, the agent says a short goodbye and hangs up once the caller is done. Off, the line stays open until the caller hangs up. The change publishes straight away.",
+    de: "An verabschiedet sich der Agent kurz und legt auf, sobald der Anrufer fertig ist. Aus bleibt die Leitung offen, bis der Anrufer auflegt. Die Änderung wird sofort veröffentlicht.",
   },
   "voiceDetail.persona": {
     tr: "Ajanın adı",
@@ -2608,10 +2610,17 @@ const dictionary = {
   },
   // The header's dirty state. An edited prompt looks live on screen while the
   // agent is still answering the phone with whatever Retell has; this says so.
+  // Pill and button drop the word "changes": the amber dot and the pair of
+  // actions beside them already say what kind of unsaved is meant.
+  "voiceDetail.renameHint": {
+    tr: "Adı düzenlemek için tıkla",
+    en: "Click to rename",
+    de: "Zum Umbenennen klicken",
+  },
   "voiceDetail.unsaved": {
-    tr: "Kaydedilmemiş değişiklikler",
-    en: "Unsaved changes",
-    de: "Nicht gespeicherte Änderungen",
+    tr: "Kaydedilmedi",
+    en: "Unsaved",
+    de: "Ungespeichert",
   },
   "voiceDetail.unsavedHint": {
     tr: "Bu değişiklikler henüz yayında değil. Siz kaydedene kadar asistan mevcut ayarlarıyla çalışmaya devam eder.",
@@ -2619,9 +2628,9 @@ const dictionary = {
     de: "Diese Änderungen sind noch nicht live. Der Assistent läuft mit seinen gespeicherten Einstellungen weiter, bis Sie speichern.",
   },
   "voiceDetail.discard": {
-    tr: "Değişiklikleri at",
-    en: "Discard changes",
-    de: "Änderungen verwerfen",
+    tr: "Vazgeç",
+    en: "Discard",
+    de: "Verwerfen",
   },
   "voiceDetail.voice": { tr: "Ses", en: "Voice", de: "Stimme" },
   "voiceDetail.voiceHint": {

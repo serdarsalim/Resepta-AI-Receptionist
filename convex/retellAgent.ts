@@ -861,6 +861,39 @@ export const publishVariablesForOrg = internalAction({
     await publishVariableSet(ctx, args),
 });
 
+// Renames the agent's owner-facing label at the provider, through the same
+// draft-then-publish every other agent edit rides, then refreshes the cached
+// name so every list renders it before the next roster read. The header
+// title is the editor (click it) — a name is identity, and identity edits
+// belong on the thing itself, not in a settings row three folds down.
+export const renameAgent = action({
+  args: { agentId: v.string(), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { agentId, name }): Promise<null> => {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Name cannot be empty.");
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const id = encodeURIComponent(agentId);
+    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    if (live.version === undefined) throw new Error("Agent has no version to clone.");
+    const draft = (await (
+      await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+    ).json()) as { version?: number };
+    if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    await call(key, "PATCH", `update-agent/${id}`, {
+      version: draft.version,
+      agent_name: trimmed,
+    });
+    await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+    await ctx.runMutation(internal.retell.rememberAgentName, {
+      retellAgentId: agentId,
+      name: trimmed,
+    });
+    return null;
+  },
+});
+
 // ── Webhook ──────────────────────────────────────────────────────────────────
 
 async function wireAgent(

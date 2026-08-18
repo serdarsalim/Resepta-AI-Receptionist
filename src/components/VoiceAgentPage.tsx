@@ -143,6 +143,11 @@ export function VoiceAgentPage({
   const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
   const attachLine = useAction(api.retellAgent.attachLine);
   const testCall = useAction(api.retellAgent.testCall);
+  const renameAgent = useAction(api.retellAgent.renameAgent);
+  // null = not editing. The title IS the rename control: a name is identity,
+  // and identity edits belong on the thing itself (Serdar asked for the
+  // click-the-title edit twice in one evening).
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   // Deleting lives HERE, at the foot of the editor, not as an × on the list
   // row — a destructive control needs the context of what it destroys
   // (Serdar, 2026-08-18; the table's Disconnect icon moved in). It is the
@@ -409,8 +414,40 @@ export function VoiceAgentPage({
           </button>
           {/* Centred, not left-aligned: butted up against Back it read as the
               button's second line rather than the name of the thing. */}
-          <h2 className="min-w-[8rem] flex-1 text-center text-lg font-semibold">
-            {detail?.name ?? t("settings.voiceAgent")}
+          <h2 className="min-w-0 flex-1 text-center text-lg font-semibold">
+            {nameDraft === null ? (
+              <button
+                type="button"
+                disabled={!detail || saving}
+                onClick={() => detail && setNameDraft(detail.name)}
+                title={t("voiceDetail.renameHint")}
+                className="max-w-full truncate rounded-lg px-2 py-0.5 hover:bg-[var(--muted-bg)] disabled:hover:bg-transparent"
+              >
+                {detail?.name ?? t("settings.voiceAgent")}
+              </button>
+            ) : (
+              <input
+                autoFocus
+                value={nameDraft}
+                maxLength={80}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                  if (event.key === "Escape") setNameDraft(null);
+                }}
+                onBlur={() => {
+                  const next = (nameDraft ?? "").trim();
+                  const current = detail?.name ?? "";
+                  setNameDraft(null);
+                  if (!next || next === current) return;
+                  void run(t("common.saving"), async () => {
+                    await renameAgent({ agentId, name: next });
+                    load();
+                  });
+                }}
+                className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-center text-lg font-semibold"
+              />
+            )}
           </h2>
           {dirty && (
             <>
