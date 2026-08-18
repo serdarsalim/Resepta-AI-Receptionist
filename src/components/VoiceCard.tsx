@@ -125,12 +125,6 @@ function LineMultiSelect({
   // A held line the account no longer lists still renders (and can be
   // unchecked), so the row shows the truth rather than silently dropping it.
   const options = [...new Set([...numbers, ...selected])];
-  const summary =
-    selected.length === 0
-      ? placeholder
-      : selected.length === 1
-        ? selected[0]
-        : `${selected[0]} +${selected.length - 1}`;
   return (
     <>
       <button
@@ -143,11 +137,21 @@ function LineMultiSelect({
           event.stopPropagation();
           toggle();
         }}
-        className="flex w-full min-w-36 items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-left text-xs disabled:opacity-60"
+        className="flex w-full min-w-36 items-start justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-left text-xs disabled:opacity-60"
       >
-        <span className={`truncate ${selected.length === 0 ? "text-[var(--muted)]" : ""}`}>
-          {summary}
-        </span>
+        {/* Every held line, one per row — "+43… +1" made the second number a
+            count you had to open the panel to read (Serdar). */}
+        {selected.length === 0 ? (
+          <span className="truncate text-[var(--muted)]">{placeholder}</span>
+        ) : (
+          <span className="flex min-w-0 flex-col gap-0.5">
+            {selected.map((number) => (
+              <span key={number} className="truncate">
+                {number}
+              </span>
+            ))}
+          </span>
+        )}
         <svg
           width="12"
           height="12"
@@ -157,7 +161,7 @@ function LineMultiSelect({
           strokeWidth="2"
           strokeLinecap="round"
           aria-hidden
-          className="shrink-0 text-[var(--muted)]"
+          className="mt-0.5 shrink-0 text-[var(--muted)]"
         >
           <path d="m6 9 6 6 6-6" />
         </svg>

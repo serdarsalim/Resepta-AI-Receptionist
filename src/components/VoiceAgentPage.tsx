@@ -630,55 +630,44 @@ export function VoiceAgentPage({
                     the response engine at the provider and publishes, so it
                     cannot wait behind an unsaved prompt — the same reasoning
                     the phone line dropdown above runs on. */}
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-1.5 text-xs font-medium">
-                    {t("voiceDetail.canEndCall")}
-                    <InfoTip text={t("voiceDetail.canEndCallHint")} />
-                  </span>
-                  <Toggle
-                    checked={detail.canEndCall}
-                    disabled={saving}
-                    label={t("voiceDetail.canEndCall")}
-                    onChange={(next) =>
-                      void run(t("common.saving"), async () => {
-                        await setEndCallEnabled({ agentId, enabled: next });
-                        load();
-                      })
-                    }
-                  />
-                </div>
-
-                <label className="mt-3 block">
-                  <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+                {/* One quiet two-column grid — label left, control right,
+                    controls sized to their content, never to the card
+                    (Serdar: a full-width name input read as a form field
+                    waiting for an essay, and the toggle flung to the far
+                    edge lost its label). Persona and voice ride Save;
+                    canEndCall stays its own switch — it edits the response
+                    engine at the provider and publishes, so it cannot wait
+                    behind an unsaved prompt. */}
+                <div className="mt-3 grid grid-cols-[max-content_minmax(0,20rem)] items-center gap-x-6 gap-y-2.5">
+                  <label
+                    htmlFor="agent-persona"
+                    className="flex items-center gap-1.5 text-xs font-medium"
+                  >
                     {t("voiceDetail.persona")}
                     <InfoTip text={t("voiceDetail.personaHint")} />
-                  </span>
+                  </label>
                   <input
+                    id="agent-persona"
                     value={persona}
                     onChange={(event) => setPersona(event.target.value)}
                     maxLength={40}
                     placeholder={t("voiceDetail.personaPlaceholder")}
                     className="w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-xs"
                   />
-                </label>
 
-                {/* Voice sits with the prompt: both are "how this agent comes
-                    across", and both ride the same Save. Previously it was
-                    only settable when creating an agent, so changing your
-                    mind meant making a new one. */}
-                <div className="mt-3">
-                  <span className="mb-1 inline-flex items-center gap-1.5 text-xs font-medium">
+                  <label
+                    htmlFor="agent-voice"
+                    className="flex items-center gap-1.5 text-xs font-medium"
+                  >
                     {t("voiceDetail.voice")}
                     <InfoTip text={t("voiceDetail.voiceHint")} />
-                  </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Sized to a voice name, not to the card. A full-width
-                        select for "Andrew · American · male" reads as an empty
-                        field with a word in the corner. */}
+                  </label>
+                  <div className="flex min-w-0 items-center gap-2">
                     <select
+                      id="agent-voice"
                       value={voice}
                       onChange={(e) => setVoice(e.target.value)}
-                      className="w-full max-w-xs rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                      className="w-auto min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
                     >
                       {/* An agent whose voice is not in the catalogue still
                           shows what it is actually using, rather than
@@ -712,6 +701,24 @@ export function VoiceAgentPage({
                       );
                     })()}
                   </div>
+
+                  <span className="flex items-center gap-1.5 text-xs font-medium">
+                    {t("voiceDetail.canEndCall")}
+                    <InfoTip text={t("voiceDetail.canEndCallHint")} />
+                  </span>
+                  <span className="justify-self-start">
+                    <Toggle
+                      checked={detail.canEndCall}
+                      disabled={saving}
+                      label={t("voiceDetail.canEndCall")}
+                      onChange={(next) =>
+                        void run(t("common.saving"), async () => {
+                          await setEndCallEnabled({ agentId, enabled: next });
+                          load();
+                        })
+                      }
+                    />
+                  </span>
                 </div>
 
                 {previous !== null && !promptDirty && (
