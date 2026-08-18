@@ -1237,10 +1237,19 @@ export const listAgents = action({
       }),
     ),
     agentSource: v.union(v.literal("randevu"), v.literal("account")),
+    // Convex validates RETURNS as strictly as arguments: when the handler
+    // grew per-direction holder fields, this validator not naming them made
+    // EVERY roster call throw on return — one-option pickers, a disabled
+    // Add agent, and the "Unavailable agent" rows of 18 Aug 2026, all one
+    // missing pair of lines. TypeScript cannot catch it (extra properties
+    // pass structural assignment), so when the result type changes, change
+    // this with it.
     phoneNumbers: v.array(
       v.object({
         number: v.string(),
         nickname: v.string(),
+        inboundAgentId: v.union(v.string(), v.null()),
+        outboundAgentId: v.union(v.string(), v.null()),
         agentId: v.union(v.string(), v.null()),
       }),
     ),
