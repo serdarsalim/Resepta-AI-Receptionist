@@ -1201,6 +1201,13 @@ export const provisionableContext = internalQuery({
     apiKey: v.union(v.string(), v.null()),
     allowed: v.array(v.string()),
     heldBy: v.array(v.object({ number: v.string(), org: v.string() })),
+    // Every connected agent across the fleet, so the action can resolve a
+    // PROVIDER-side binding (a number's inbound/outbound agents at Retell)
+    // to the business that owns the agent — or to nobody, which is how a
+    // number claimed by a non-Resepta agent on the shared account surfaces.
+    agentOrgs: v.array(
+      v.object({ retellAgentId: v.string(), orgId: v.string(), org: v.string() }),
+    ),
   }),
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx);
@@ -1222,10 +1229,16 @@ export const provisionableContext = internalQuery({
       if (line.orgId === args.orgId || heldBy.has(line.number)) continue;
       heldBy.set(line.number, names.get(line.orgId) ?? "another business");
     }
+    const agents = await ctx.db.query("retellAgents").collect();
     return {
       apiKey: await connectionField(ctx, args.orgId, "retell", "apiKey"),
       allowed: org.allowedPhoneNumbers ?? [],
       heldBy: [...heldBy].map(([number, orgName]) => ({ number, org: orgName })),
+      agentOrgs: agents.map((agent) => ({
+        retellAgentId: agent.retellAgentId,
+        orgId: String(agent.orgId),
+        org: names.get(agent.orgId) ?? "another business",
+      })),
     };
   },
 });
@@ -1257,6 +1270,7 @@ export const listProvisionableNumbers = action({
       apiKey: string | null;
       allowed: string[];
       heldBy: Array<{ number: string; org: string }>;
+      agentOrgs: Array<{ retellAgentId: string; orgId: string; org: string }>;
     };
     if (!context.apiKey) return [];
     const res = await fetch("https://api.retellai.com/v2/list-phone-numbers", {
@@ -1266,16 +1280,47 @@ export const listProvisionableNumbers = action({
     const data: unknown = await res.json();
     const items = (
       Array.isArray(data) ? data : (data as { items?: unknown[] })?.items ?? []
-    ) as Array<{ phone_number?: string; nickname?: string }>;
+    ) as Array<{
+      phone_number?: string;
+      nickname?: string;
+      inbound_agent_id?: string;
+      outbound_agent_id?: string;
+      inbound_agents?: Array<{ agent_id?: string }>;
+      outbound_agents?: Array<{ agent_id?: string }>;
+    }>;
     const heldBy = new Map(context.heldBy.map((h) => [h.number, h.org]));
+    const agentOrg = new Map(context.agentOrgs.map((a) => [a.retellAgentId, a]));
     const rows = items
       .filter((n) => n.phone_number)
-      .map((n) => ({
-        number: n.phone_number!,
-        nickname: n.nickname?.trim() || null,
-        heldBy: heldBy.get(n.phone_number!) ?? null,
-        missing: false,
-      }));
+      .map((n) => {
+        // The provider's own bindings are the third holder source, after
+        // allowlists and our bindings table: a number routed to another
+        // business's agent — or to an agent Resepta doesn't know at all,
+        // which the shared account carries — must not tick as free. This is
+        // exactly how "austrian number" looked free while its outbound
+        // belonged to a Lingua Akademi agent (18 Aug 2026).
+        let held = heldBy.get(n.phone_number!) ?? null;
+        if (!held) {
+          const boundAgents = [
+            n.inbound_agent_id,
+            n.outbound_agent_id,
+            ...(n.inbound_agents ?? []).map((a) => a.agent_id),
+            ...(n.outbound_agents ?? []).map((a) => a.agent_id),
+          ].filter((id): id is string => Boolean(id));
+          for (const id of boundAgents) {
+            const owner = agentOrg.get(id);
+            if (owner && owner.orgId === String(args.orgId)) continue;
+            held = owner ? owner.org : "an agent outside Resepta";
+            break;
+          }
+        }
+        return {
+          number: n.phone_number!,
+          nickname: n.nickname?.trim() || null,
+          heldBy: held,
+          missing: false,
+        };
+      });
     const listed = new Set(rows.map((r) => r.number));
     for (const number of context.allowed) {
       if (listed.has(number)) continue;
