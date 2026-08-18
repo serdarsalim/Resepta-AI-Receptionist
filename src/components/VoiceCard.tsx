@@ -530,9 +530,11 @@ export function VoiceCard({
                         onClick={() => onOpenAgent(row.retellAgentId)}
                         className="underline-offset-2 hover:underline"
                       >
-                        {agent ? (
-                          agent.name
-                        ) : (
+                        {/* Roster name first (live truth), then the cached
+                            name the connect/detail flows stamped — a roster
+                            hiccup must not present as the agent's identity.
+                            Amber only when NOBODY knows a name. */}
+                        {agent?.name ?? row.name ?? (
                           <span className="text-xs text-amber-600 dark:text-amber-400">
                             {t("settings.voiceUnavailable")}
                           </span>
@@ -615,7 +617,8 @@ export function VoiceCard({
                           // its buttons stay OK and Cancel and it prefixes the
                           // origin — so this was arguing for a dialog it was
                           // not using.
-                          const name = agent?.name ?? t("settings.voiceUnavailable");
+                          const name =
+                            agent?.name ?? row.name ?? t("settings.voiceUnavailable");
                           void (async () => {
                             const ok = await confirm({
                               title: t("settings.voiceDisconnectConfirm").replace(

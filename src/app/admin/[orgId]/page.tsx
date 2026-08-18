@@ -452,6 +452,31 @@ export default function TenantPage() {
           ))
         )}
       </Section>
+      {/* Provisioning numbers lives with the agents that answer on them, not
+          under Usage where it sat unfindable — the flow is buy → operator
+          provisions the line here → the tenant's pickers offer it
+          (retell.orgNumberPolicy). */}
+      {voice && (
+        <Section
+          title="Phone lines"
+          description="Comma-separated, full international form. The only numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list. Every business shares one Retell account, and an empty list means NO numbers for them until you provision one here."
+        >
+          <Row
+            label="Phone lines"
+            current={voice.allowedPhoneNumbers.join(", ") || undefined}
+            placeholder="+905321234567, +4319876543"
+            onSave={(value) =>
+              setAllowedPhoneNumbers({
+                orgId,
+                numbers: value
+                  .split(",")
+                  .map((one) => one.trim())
+                  .filter(Boolean),
+              })
+            }
+          />
+        </Section>
+      )}
       </>
       )}
 
@@ -641,21 +666,6 @@ export default function TenantPage() {
                   : Math.round(parsed * 1_000_000),
             });
           }}
-        />
-        <Row
-          label="Phone lines"
-          hint="Comma-separated, full international form. The only numbers this business may route inbound calls to, or place outbound calls from. Every business shares one Retell account, so without a list here the only thing stopping one from taking another's line is that we refuse a number somebody already holds — that check runs either way. Empty = not restricted yet."
-          current={voice.allowedPhoneNumbers.join(", ") || undefined}
-          placeholder="+905321234567, +4319876543"
-          onSave={(value) =>
-            setAllowedPhoneNumbers({
-              orgId,
-              numbers: value
-                .split(",")
-                .map((one) => one.trim())
-                .filter(Boolean),
-            })
-          }
         />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Billing mode</div>
@@ -983,13 +993,12 @@ export default function TenantPage() {
       </>
       )}
 
-      {/* The foot of the page, below every tab, because suspension is not part
-          of any one of them and because the most destructive control here
-          should take a deliberate scroll rather than sit a stray click from
-          "open their app". Still two clicks: the admin shell has no confirm
-          dialog, and a button that arms and disarms itself is the same
-          protection with less machinery. */}
-      {assistant && (
+      {/* Setup only. This used to sit below EVERY tab so it would take a
+          deliberate scroll to reach — which in practice read as the page
+          repeating itself six times (Serdar, 2026-08-18). Setup is where the
+          account-level facts live, so its most account-level control lives
+          there too. The arm-then-confirm button remains the protection. */}
+      {(tab === "setup" || search.active) && assistant && (
         <Section
           title="Account status"
           description="Suspending stops every outbound message: reminders, campaigns, the chat agent. Inbound keeps recording, so un-suspending restores a complete world: losing a customer's messages during a billing dispute is how a late payer becomes an ex-customer."

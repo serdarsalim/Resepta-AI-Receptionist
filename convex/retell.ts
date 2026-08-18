@@ -48,6 +48,11 @@ import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 const agentRow = v.object({
   _id: v.id("retellAgents"),
   retellAgentId: v.string(),
+  // The cached provider name (schema: refreshed on every detail read). The
+  // table renders it when the live roster is slow or failed — a row reading
+  // "Unavailable agent" while the database knows "Bella Randevu Asistanı"
+  // was the roster's transient outage presented as the agent's identity.
+  name: v.optional(v.string()),
   inboundNumber: v.optional(v.string()),
   transferNumber: v.optional(v.string()),
   enabled: v.boolean(),
@@ -66,6 +71,7 @@ export const list = query({
     return rows.map((a) => ({
       _id: a._id,
       retellAgentId: a.retellAgentId,
+      name: a.name,
       inboundNumber: a.inboundNumber,
       transferNumber: a.transferNumber,
       enabled: a.enabled,
