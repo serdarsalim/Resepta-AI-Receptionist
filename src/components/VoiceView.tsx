@@ -103,6 +103,14 @@ function CallHistory() {
                       className="cursor-pointer border-t border-[var(--border)] hover:bg-[var(--muted-bg)]"
                     >
                       <td className="whitespace-nowrap px-3 py-2 font-medium">
+                        {/* fromNumber holds the CUSTOMER'S leg either way
+                            (schema.ts); the arrow is what says the agent
+                            dialled out, without a fifth column. */}
+                        {c.direction === "outbound" && (
+                          <span aria-hidden className="mr-1 text-xs text-[var(--muted)]">
+                            ↗
+                          </span>
+                        )}
                         {c.customerName || c.fromNumber || t("calls.unknown")}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-xs text-[var(--muted-strong)]">

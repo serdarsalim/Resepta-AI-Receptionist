@@ -244,10 +244,19 @@ export const process = internalAction({
         ((call.call_cost ?? {}) as Record<string, unknown>).combined_cost,
       );
 
+      // Retell reports outbound legs (test calls, campaigns) with the agent's
+      // own line in from_number; recordCall branches on direction to pick the
+      // customer's leg. A web call carries no direction and no numbers, and
+      // defaults to inbound.
+      const direction =
+        String(call.direction ?? "") === "outbound" ? ("outbound" as const) : ("inbound" as const);
+
       await ctx.runMutation(internal.retell.recordCall, {
         retellAgentId: row.retellAgentId,
         retellCallId: row.retellCallId,
+        direction,
         fromNumber: String(call.from_number ?? "") || undefined,
+        toNumber: String(call.to_number ?? "") || undefined,
         startedAt,
         durationSec:
           endedAt > startedAt ? Math.round((endedAt - startedAt) / 1000) : undefined,
@@ -267,7 +276,11 @@ export const process = internalAction({
           : undefined,
       });
 
-      const phone = String(call.from_number ?? "");
+      // The customer's leg, same branch as recordCall. updateContactFromVoice
+      // normalizes it and refuses the org's own lines.
+      const phone = String(
+        (direction === "outbound" ? call.to_number : call.from_number) ?? "",
+      );
       const inferred = coerceVoiceValues(afterValues);
       const confirmed = coerceVoiceValues(duringValues);
       if (phone && Object.keys(inferred).length > 0) {

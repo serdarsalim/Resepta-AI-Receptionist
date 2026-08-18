@@ -31,6 +31,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -456,7 +457,21 @@ http.route({
     });
     if (!context) return respond({ error: "agent-not-configured" });
     const { org } = context;
-    const callerPhone = String(args.phone ?? call.from_number ?? "");
+    // The customer's leg by direction — on an outbound call from_number is the
+    // agent's own line — normalized once with the org's dial code, because the
+    // trunk delivers national-format caller IDs (05386906897, live 18 Aug
+    // 2026). Everything downstream (voiceBook's assertE164, cal.com, contact
+    // updates) then speaks one identity. Kept raw when unreadable so the
+    // failure stays visible in the responses rather than becoming "".
+    const rawCallerPhone = String(
+      args.phone ??
+        ((call as { direction?: string }).direction === "outbound"
+          ? call.to_number
+          : call.from_number) ??
+        "",
+    );
+    const callerPhone =
+      normalisePhone(rawCallerPhone, dialCodeForTimezone(org.timezone)) ?? rawCallerPhone;
 
     // The three things an agent-supplied start has to survive before it becomes
     // a row. One copy, shared by both write branches, because it WAS written
@@ -626,7 +641,7 @@ http.route({
             eventTypeId: org.calcomEventTypeId,
             startIso: new Date(startAt).toISOString(),
             name: customerName,
-            phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
+            phone: callerPhone,
             timeZone: org.timezone,
             language: org.language,
           });
@@ -639,7 +654,7 @@ http.route({
         booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
           name: customerName,
-          phone: callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`,
+          phone: callerPhone,
           startAt,
           externalUid,
           services: spokenServices,
@@ -714,10 +729,9 @@ http.route({
       name === "reschedule_appointment"
     ) {
       if (!callerPhone) return respond({ error: "missing-phone" });
-      const phone = callerPhone.startsWith("+") ? callerPhone : `+${callerPhone}`;
       const found = await ctx.runQuery(internal.retell.nextAppointmentForPhone, {
         orgId: org._id,
-        phone,
+        phone: callerPhone,
       });
       const spokenOf = (at: number) =>
         spokenDateTime(at, org.timezone, org.language);

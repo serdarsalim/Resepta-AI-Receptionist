@@ -13,7 +13,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
-import { normalisePhone } from "./lib/phone";
+import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { voiceCatalogue } from "./lib/voiceCatalogue";
 import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
 import { serviceKey } from "./services";
@@ -704,7 +704,10 @@ export const beforeCallContext = internalQuery({
     // balance again.
     if (org.billingMode === "prepaid" && (org.walletBalanceMicroUsd ?? 0) <= 0)
       return null;
-    const normalised = normalisePhone(phone);
+    // The org's dial code, because the trunk delivers national-format caller
+    // IDs (05386906897, live 18 Aug 2026) — without it the regular calling
+    // their own salon greeted as a stranger.
+    const normalised = normalisePhone(phone, dialCodeForTimezone(org.timezone));
     const customer = normalised
       ? await ctx.db
           .query("customers")
@@ -2202,14 +2205,17 @@ export function coerceContactValue(
 // Lenient sibling of assertE164: the voice lane must never throw at Retell,
 // so a number we cannot read comes back as a reason instead of a 500.
 //
-// No dial code passed, deliberately. A caller ID arrives from the carrier
-// already international, and a number the caller SPELLS OUT mid-call is
-// transcribed speech that could be anything — neither is a case where
-// attaching the salon's country to a bare string is safe. The cal.com path
-// does pass one because there the digits came off a form the customer filled
-// in themselves (lib/phone.ts).
-function toE164(raw: string): string | null {
-  return normalisePhone(raw);
+// The dial code is the org's own (dialCodeForTimezone). This used to refuse
+// one on the theory that a caller ID arrives from the carrier already
+// international — and then a Turkish trunk delivered "05386906897", live, on
+// 18 Aug 2026. Without the dial code that string normalises to null, so the
+// call matched no contact, created none, and every value the agent collected
+// was dropped on the floor. A caller ID on the org's own line is dialable
+// from the org's country by definition; attaching the org's dial code to it
+// is the safe reading, and normalisePhone stays strict about numbers that
+// already carry their own.
+function toE164(raw: string, dialCode?: string): string | null {
+  return normalisePhone(raw, dialCode);
 }
 
 // The single mapping both voice write paths share: the mid-call function and
@@ -2338,6 +2344,30 @@ export async function applyVoiceContactValues(
   return { ok: true, updated, updatedLabels, ignored, notForVoice, rejected };
 }
 
+// Every line the org itself answers or transfers on, normalized. A call leg
+// whose counterparty resolves to one of these is the business phoning itself
+// — an outbound test, a transfer leg, a misread — and must never become a
+// contact: the inbox is people, and the salon is not one of its own
+// customers. Checked as a hard guard wherever voice creates or matches a
+// contact, independent of what the payload claims about direction.
+export async function orgOwnNumbers(
+  ctx: { db: QueryCtx["db"] },
+  orgId: Id<"orgs">,
+): Promise<Set<string>> {
+  const agents = await ctx.db
+    .query("retellAgents")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+  const own = new Set<string>();
+  for (const agent of agents) {
+    for (const raw of [agent.inboundNumber, agent.transferNumber]) {
+      const phone = raw ? normalisePhone(raw) : null;
+      if (phone) own.add(phone);
+    }
+  }
+  return own;
+}
+
 // Org comes from the agent id on the signed payload, exactly like every other
 // voice entry point. A payload that names an org is a payload we ignore.
 export const updateContactFromVoice = internalMutation({
@@ -2354,8 +2384,14 @@ export const updateContactFromVoice = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent || !agent.enabled) return contactUpdateFailure("agent-not-configured");
-    const phone = toE164(args.phone);
+    const org = await ctx.db.get(agent.orgId);
+    const phone = toE164(args.phone, org ? dialCodeForTimezone(org.timezone) : undefined);
     if (!phone) return contactUpdateFailure("phone-not-recognised");
+    // The business's own line is not a contact — see orgOwnNumbers. Reached
+    // when an outbound leg's from_number is handed in as "the caller".
+    if ((await orgOwnNumbers(ctx, agent.orgId)).has(phone)) {
+      return contactUpdateFailure("own-number");
+    }
     const existing = await ctx.db
       .query("customers")
       .withIndex("by_org_phone", (q) => q.eq("orgId", agent.orgId).eq("phone", phone))
@@ -2564,7 +2600,13 @@ export const recordCall = internalMutation({
   args: {
     retellAgentId: v.string(),
     retellCallId: v.string(),
+    // Both legs as Retell reported them, plus its direction. Which one is the
+    // customer is decided HERE, not by the caller: an outbound leg carries the
+    // agent's own line in from_number, and reading that as "the caller" is how
+    // the salon's own number spent a morning in the inbox as a contact.
+    direction: v.optional(v.union(v.literal("inbound"), v.literal("outbound"))),
     fromNumber: v.optional(v.string()),
+    toNumber: v.optional(v.string()),
     startedAt: v.number(),
     durationSec: v.optional(v.number()),
     outcome: v.optional(v.string()),
@@ -2618,12 +2660,19 @@ export const recordCall = internalMutation({
     // A withheld or unreadable caller ID still leaves this undefined, because
     // there is no number to build a contact from.
     let customerId: Id<"customers"> | undefined;
-    const callerPhone = args.fromNumber ? toE164(args.fromNumber) : null;
-    if (callerPhone) {
+    const org = await ctx.db.get(agent.orgId);
+    const dialCode = org ? dialCodeForTimezone(org.timezone) : undefined;
+    const direction = args.direction ?? "inbound";
+    // The customer's leg: who called us, or who we dialled. A web test call
+    // carries neither number and stays undefined.
+    const rawCounterparty =
+      direction === "outbound" ? args.toNumber : args.fromNumber;
+    const counterparty = rawCounterparty ? toE164(rawCounterparty, dialCode) : null;
+    if (counterparty && !(await orgOwnNumbers(ctx, agent.orgId)).has(counterparty)) {
       const customer = await ctx.db
         .query("customers")
         .withIndex("by_org_phone", (q) =>
-          q.eq("orgId", agent.orgId).eq("phone", callerPhone),
+          q.eq("orgId", agent.orgId).eq("phone", counterparty),
         )
         .unique();
       customerId = customer?._id;
@@ -2631,7 +2680,7 @@ export const recordCall = internalMutation({
         customerId = await ctx.db.insert("customers", {
           orgId: agent.orgId,
           firstName: "",
-          phone: callerPhone,
+          phone: counterparty,
         });
         await recordCustomerCreated(ctx, {
           orgId: agent.orgId,
@@ -2643,9 +2692,12 @@ export const recordCall = internalMutation({
     await ctx.db.insert("calls", {
       orgId: agent.orgId,
       customerId,
-      direction: "inbound",
+      direction,
       retellAgentId: args.retellAgentId,
-      fromNumber: args.fromNumber,
+      // Normalized when readable so the row and the contact agree on one
+      // identity; the raw string when not, because a number we could not
+      // parse is still worth showing over "Unknown".
+      fromNumber: counterparty ?? rawCounterparty,
       startedAt: args.startedAt,
       durationSec: args.durationSec,
       outcome: args.outcome,

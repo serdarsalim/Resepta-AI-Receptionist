@@ -730,6 +730,10 @@ export default defineSchema({
     customerId: v.optional(v.id("customers")),
     appointmentId: v.optional(v.id("appointments")),
     direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    // The CUSTOMER'S number, despite the name: caller for inbound, callee for
+    // outbound (retell.recordCall picks by direction — Retell puts the agent's
+    // own line in from_number on outbound legs). E.164 when readable, the raw
+    // trunk string when not. Rows from before 18 Aug 2026 may hold either.
     fromNumber: v.optional(v.string()),
     startedAt: v.number(),
     durationSec: v.optional(v.number()),
