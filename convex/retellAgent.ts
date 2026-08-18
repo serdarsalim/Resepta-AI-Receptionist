@@ -610,6 +610,93 @@ export const publishPrompt = action({
   },
 });
 
+// The sessionless doors for the prompt, same shape and same warning as
+// publishVariablesForOrg: editorContext TRUSTS the org it is handed and only
+// checks the agent belongs to it, so these are internal and the org comes off
+// the MCP key. A public action taking an orgId would let a client edit any
+// agent whose id it could name.
+export const readPromptForOrg = internalAction({
+  args: { orgId: v.id("orgs"), agentId: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { orgId, agentId }) => {
+    const context = await editorContext(ctx, agentId, orgId);
+    const key = context.apiKey!;
+    const agent = (await (
+      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
+    ).json()) as AgentDoc;
+    const llmId = agent.response_engine?.llm_id;
+    // A null prompt is not "it has none" — a conversation-flow or custom-llm
+    // agent keeps its behaviour somewhere this editor cannot reach, and saying
+    // so is more use than an empty string the model would try to edit.
+    if (!llmId) {
+      return {
+        name: agent.agent_name ?? agentId,
+        prompt: null,
+        note: "This agent runs on a conversation flow or a custom LLM, so it has no single prompt to read or change here.",
+      };
+    }
+    const llm = (await (
+      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+    ).json()) as LlmDoc;
+    return {
+      name: agent.agent_name ?? agentId,
+      voiceId: agent.voice_id ?? null,
+      prompt: {
+        general: llm.general_prompt ?? "",
+        beginMessage: llm.begin_message ?? "",
+      },
+      collects: (agent.post_call_analysis_data ?? []).map((field) => ({
+        name: String(field.name ?? ""),
+        type: String(field.type ?? ""),
+        description: String(field.description ?? ""),
+      })),
+    };
+  },
+});
+
+export const publishPromptForOrg = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    agentId: v.string(),
+    generalPrompt: v.string(),
+  },
+  returns: v.object({
+    ok: v.boolean(),
+    version: v.union(v.number(), v.null()),
+    previousPrompt: v.string(),
+  }),
+  handler: async (
+    ctx,
+    { orgId, agentId, generalPrompt },
+  ): Promise<{ ok: boolean; version: number | null; previousPrompt: string }> => {
+    const context = await editorContext(ctx, agentId, orgId);
+    const key = context.apiKey!;
+    const agent = (await (
+      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
+    ).json()) as AgentDoc;
+    const llmId = agent.response_engine?.llm_id;
+    if (!llmId) throw new Error("This agent has no editable prompt.");
+    const before = (await (
+      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+    ).json()) as LlmDoc;
+    // Same draft-then-publish every other agent edit rides, and the same
+    // deliberate omissions: no beginMessage and no voiceId, so publishing a
+    // prompt from a chat client cannot quietly drag the opening line or the
+    // voice along with it.
+    const version = await publishViaDraft(key, agentId, llmId, {
+      general_prompt: generalPrompt,
+      mcps: await runtimeMcpConfig(ctx, agentId, context, before),
+      general_tools: withRuntimeMcpTools(before.general_tools),
+    });
+    if (siteUrl()) {
+      await ctx.runMutation(internal.retell.markRuntimeConnected, {
+        retellAgentId: agentId,
+      });
+    }
+    return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
+  },
+});
+
 function variableForRetell(variable: VariableRow): Record<string, unknown> {
   return {
     type: variable.type,

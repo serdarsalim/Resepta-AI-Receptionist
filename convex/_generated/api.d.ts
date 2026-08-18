@@ -56,6 +56,7 @@ import type * as lib_noteBody from "../lib/noteBody.js";
 import type * as lib_orgAuth from "../lib/orgAuth.js";
 import type * as lib_overlap from "../lib/overlap.js";
 import type * as lib_phone from "../lib/phone.js";
+import type * as lib_planToken from "../lib/planToken.js";
 import type * as lib_platformAuth from "../lib/platformAuth.js";
 import type * as lib_platformConfig from "../lib/platformConfig.js";
 import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
@@ -151,6 +152,7 @@ declare const fullApi: ApiFromModules<{
   "lib/orgAuth": typeof lib_orgAuth;
   "lib/overlap": typeof lib_overlap;
   "lib/phone": typeof lib_phone;
+  "lib/planToken": typeof lib_planToken;
   "lib/platformAuth": typeof lib_platformAuth;
   "lib/platformConfig": typeof lib_platformConfig;
   "lib/reminderSchedule": typeof lib_reminderSchedule;

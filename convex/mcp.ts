@@ -15,6 +15,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { httpAction, internalQuery, type ActionCtx } from "./_generated/server";
+import { planToken } from "./lib/planToken";
 import type { VoiceVariableInput } from "./lib/voiceVariables";
 import {
   bearer,
@@ -27,6 +28,26 @@ import {
 } from "./lib/mcpProtocol";
 
 const SERVER_INFO = { name: "randevu", version: "1.1.0" };
+
+// Which lines went and which arrived. A whole-prompt dump makes a human scroll
+// two screens to find the sentence that changed, and approve it without having
+// read it — which defeats the point of showing them at all.
+function lineDiff(before: string, after: string) {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const bSet = new Set(b);
+  const aSet = new Set(a);
+  const removed = a.filter((l) => !bSet.has(l) && l.trim());
+  const added = b.filter((l) => !aSet.has(l) && l.trim());
+  const CAP = 40;
+  return {
+    removed: removed.slice(0, CAP),
+    added: added.slice(0, CAP),
+    ...(removed.length > CAP || added.length > CAP
+      ? { truncated: `Showing ${CAP} lines per side; the change is larger than that.` }
+      : {}),
+  };
+}
 
 type Who = {
   connectionId: string;
@@ -384,6 +405,139 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "read_agent_prompt",
+    title: "Read a phone agent's prompt",
+    description:
+      "The full prompt a phone agent runs on, plus what it collects after a call — without opening the provider's console. Pass the agentId from list_phone_agents. An agent built on a conversation flow has no single prompt and says so.",
+    inputSchema: {
+      type: "object",
+      properties: { agentId: { type: "string", description: "From list_phone_agents." } },
+      required: ["agentId"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      if (!agentId) throw new Error("agentId is required");
+      const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
+        orgId: who.orgId as never,
+        agentId,
+      })) as { retellAgentId: string; name: string };
+      return await ctx.runAction(internal.retellAgent.readPromptForOrg, {
+        orgId: who.orgId as never,
+        agentId: agent.retellAgentId,
+      });
+    },
+  },
+  {
+    name: "preview_agent_prompt",
+    title: "Preview a prompt change before publishing",
+    description:
+      "REQUIRED before publish_agent_prompt. Shows exactly which lines would go and which would arrive, and returns a planToken. Publishing needs that token and it only matches the exact text previewed, so a prompt cannot reach real callers without the change having been shown first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string" },
+        generalPrompt: {
+          type: "string",
+          description: "The complete new prompt, not a fragment — it REPLACES what is there.",
+        },
+      },
+      required: ["agentId", "generalPrompt"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true },
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      const next = typeof args.generalPrompt === "string" ? args.generalPrompt : undefined;
+      if (!agentId) throw new Error("agentId is required");
+      if (next === undefined) throw new Error("generalPrompt is required");
+      const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
+        orgId: who.orgId as never,
+        agentId,
+      })) as { retellAgentId: string; name: string };
+      const read = (await ctx.runAction(internal.retellAgent.readPromptForOrg, {
+        orgId: who.orgId as never,
+        agentId: agent.retellAgentId,
+      })) as { name: string; prompt: { general: string } | null; note?: string };
+      if (!read.prompt) throw new Error(read.note ?? "That agent has no single prompt to change.");
+      const current = read.prompt.general;
+      if (current === next) throw new Error("That is the prompt it already has.");
+      return {
+        agent: read.name,
+        planToken: planToken(agent.retellAgentId, next),
+        diff: lineDiff(current, next),
+        currentLength: current.length,
+        newLength: next.length,
+        warning:
+          "Publishing changes what real callers hear on the very next call. Show the user this diff and get a clear yes before calling publish_agent_prompt.",
+      };
+    },
+  },
+  {
+    name: "publish_agent_prompt",
+    title: "Publish a new prompt to a phone agent",
+    description:
+      "Publishes a new prompt. Requires the planToken from preview_agent_prompt for this exact text. The old prompt can be restored with undo — but any call that comes in while the new one is live uses it, and that part cannot be taken back. Owner only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId: { type: "string" },
+        generalPrompt: { type: "string" },
+        planToken: { type: "string", description: "From preview_agent_prompt." },
+      },
+      required: ["agentId", "generalPrompt", "planToken"],
+      additionalProperties: false,
+    },
+    annotations: { destructiveHint: true },
+    handler: async (ctx, args, who) => {
+      const agentId = str(args, "agentId");
+      const next = typeof args.generalPrompt === "string" ? args.generalPrompt : undefined;
+      const token = str(args, "planToken");
+      if (!agentId) throw new Error("agentId is required");
+      if (next === undefined) throw new Error("generalPrompt is required");
+      await ctx.runQuery(internal.agentTools.assertCanProvision, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        what: "change a phone agent's prompt",
+      });
+      const agent = (await ctx.runQuery(internal.agentTools.resolvePhoneAgent, {
+        orgId: who.orgId as never,
+        agentId,
+      })) as { retellAgentId: string; name: string };
+      // The token is a hash of exactly this agent and this text. A mismatch
+      // means the text drifted after the preview — usually the model tidying it
+      // once more on the way past — so the human approved a diff that is not
+      // the one about to go live.
+      if (token !== planToken(agent.retellAgentId, next)) {
+        throw new Error(
+          "That planToken does not match this prompt. Call preview_agent_prompt with the exact text you intend to publish, show the user the diff, then publish that.",
+        );
+      }
+      const res = (await ctx.runAction(internal.retellAgent.publishPromptForOrg, {
+        orgId: who.orgId as never,
+        agentId: agent.retellAgentId,
+        generalPrompt: next,
+      })) as { version: number | null; previousPrompt: string };
+      const recorded = (await ctx.runMutation(internal.agentTools.recordPromptPublished, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        retellAgentId: agent.retellAgentId,
+        agentName: agent.name,
+        previousPrompt: res.previousPrompt,
+        newPrompt: next,
+      })) as { actionId: string };
+      return {
+        ok: true,
+        note: `Published to ${agent.name}. It is live for the next call.`,
+        version: res.version,
+        actionId: recorded.actionId,
+        undoWith: `undo(actionId: "${recorded.actionId}")`,
+      };
+    },
+  },
+  {
     name: "undo",
     title: "Undo an earlier action",
     description:
@@ -398,6 +552,47 @@ const TOOLS: ToolDef[] = [
     handler: async (ctx, args, who) => {
       const actionId = str(args, "actionId");
       if (!actionId) throw new Error("actionId is required");
+
+      // A phone agent's prompt lives behind a network call, so its reversal is
+      // an action and cannot run inside the mutation that handles everything
+      // else. Branched here rather than having the mutation schedule it: undo
+      // must either happen or say why it did not, and a scheduled restore
+      // would report "done" before it had been.
+      const prior = (await ctx.runQuery(internal.agentTools.getAction, {
+        orgId: who.orgId as never,
+        actionId,
+      })) as { tool: string; before: string; args: string; undone: boolean } | null;
+      if (prior && prior.tool === "publish_agent_prompt") {
+        if (prior.undone) throw new Error("That action was already undone.");
+        const before = JSON.parse(prior.before) as { prompt: string };
+        const journalled = JSON.parse(prior.args) as { retellAgentId?: string };
+        if (!journalled.retellAgentId) {
+          throw new Error(
+            "That publish was recorded without an agent id, so it cannot be undone here.",
+          );
+        }
+        await ctx.runAction(internal.retellAgent.publishPromptForOrg, {
+          orgId: who.orgId as never,
+          agentId: journalled.retellAgentId,
+          generalPrompt: before.prompt,
+        });
+        const summary = "Restored the previous phone-agent prompt.";
+        // Marked only after the republish returned. The ownership check lives
+        // in markUndone as well as here, because this is a second door into
+        // the same state change.
+        await ctx.runMutation(internal.agentTools.markUndone, {
+          orgId: who.orgId as never,
+          userId: who.userId as never,
+          connectionId: who.connectionId as never,
+          actionId,
+          summary,
+        });
+        return {
+          ok: true,
+          note: `${summary} Calls that came in while the new prompt was live used it — that part cannot be taken back.`,
+        };
+      }
+
       const res = await ctx.runMutation(internal.agentTools.undo, {
         orgId: who.orgId as never,
         userId: who.userId as never,

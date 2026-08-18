@@ -1182,6 +1182,46 @@ export const recordVariablesPublished = internalMutation({
 // resource, so the only honest moment to record it is once it exists.
 // reversible:false because nothing here can un-create it — `undo` says so in
 // those words rather than failing on a missing branch.
+// Reversible, unlike the variables lane above — the previous prompt is a
+// string we hold, so putting it back is one more publish. What undo cannot
+// take back is any call that came in while the new one was live, and the
+// tool's own description says exactly that rather than implying a clean
+// rewind.
+export const recordPromptPublished = internalMutation({
+  args: {
+    ...scope,
+    retellAgentId: v.string(),
+    agentName: v.string(),
+    previousPrompt: v.string(),
+    newPrompt: v.string(),
+  },
+  returns: v.any(),
+  handler: async (
+    ctx,
+    { orgId, userId, connectionId, retellAgentId, agentName, previousPrompt, newPrompt },
+  ) => {
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "publish_agent_prompt",
+      args: { retellAgentId },
+      targetTable: "voiceAgents",
+      targetId: retellAgentId,
+      before: { prompt: previousPrompt },
+      after: { prompt: newPrompt },
+      reversible: true,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `Published a new prompt to "${agentName}"`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { actionId };
+  },
+});
+
 export const recordAgentCreated = internalMutation({
   args: { ...scope, retellAgentId: v.string(), name: v.string() },
   returns: v.any(),
@@ -1391,6 +1431,71 @@ export const undo = internalMutation({
       agent: { actorId: userId, connectionId, agentActionId: undoActionId },
     });
     return { summary };
+  },
+});
+
+// The two halves of an undo whose reversal is a NETWORK call, not a database
+// write. A Retell prompt lives behind HTTP, so restoring one is an action and
+// cannot run inside the undo mutation. The MCP handler reads the action with
+// this, republishes, and marks it with markUndone — rather than having the
+// mutation schedule the restore, which would report "done" before it had been
+// and leave nowhere to report a failure.
+export const getAction = internalQuery({
+  args: { orgId: v.id("orgs"), actionId: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { orgId, actionId }) => {
+    const action = await ctx.db.get(actionId as Id<"agentActions">).catch(() => null);
+    if (!action || action.orgId !== orgId) return null;
+    return {
+      tool: action.tool,
+      userId: action.userId,
+      args: action.args,
+      before: action.before,
+      targetId: action.targetId,
+      undone: !!action.undoneAt,
+      reversible: action.reversible,
+    };
+  },
+});
+
+export const markUndone = internalMutation({
+  args: { ...scope, actionId: v.string(), summary: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { orgId, userId, connectionId, actionId, summary }) => {
+    const action = await ctx.db.get(actionId as Id<"agentActions">).catch(() => null);
+    if (!action || action.orgId !== orgId) throw new Error("No such action.");
+    // Re-checked here and not only at the door. This is a second way into the
+    // same state change, and the ownership rule undo enforces would otherwise
+    // hold on one path and not the other — a staff member reading another's
+    // action id out of recent_actions({everyone: true}) could revert their
+    // prompt through this one.
+    if (action.userId !== userId) {
+      throw new Error("That action was somebody else's. You can only undo your own.");
+    }
+    if (action.undoneAt) throw new Error("That action was already undone.");
+    const undoActionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "undo",
+      args: { actionId },
+      targetTable: action.targetTable,
+      targetId: action.targetId,
+      before: JSON.parse(action.after),
+      after: JSON.parse(action.before),
+      reversible: false,
+    });
+    await ctx.db.patch(action._id, {
+      undoneAt: Date.now(),
+      undoneByActionId: undoActionId,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "agent_undo",
+      detail: summary,
+      agent: { actorId: userId, connectionId, agentActionId: undoActionId },
+    });
+    return null;
   },
 });
 
