@@ -24,9 +24,17 @@ export const CHANNEL_LABEL: Record<Channel, TranslationKey> = {
 };
 
 // Channels first, then the two things that are not channels — a form arrival
-// and a note. All is separated by a rule because it isn't one of them; it's
-// the way back out.
-const TABS: readonly FeedFilter[] = [...CHANNELS, "form", "note"];
+// and a note.
+//
+// "all" is not among them and has no pill (Serdar, 2026-08-18). It used to sit
+// past a rule as the way back out, which made five controls in a header whose
+// thread often holds one message, and spent the widest pill in the row saying
+// "no filter". The way back out is now the open pill itself: picking it again
+// clears it, which is what every other filter chip in the world does. The
+// STATE stays — the panel composes and restores scroll against it — only the
+// button is gone.
+type FeedTab = Exclude<FeedFilter, "all">;
+const TABS: readonly FeedTab[] = [...CHANNELS, "form", "note"];
 
 export function FeedFilterPills({
   customerId,
@@ -56,10 +64,8 @@ export function FeedFilterPills({
   // The tab is not a dead end either. Its composer says the number is missing
   // instead of offering a Send that fails (ConversationPanel), which is what
   // hiding the pill was really protecting against.
-  const countOf = (tab: FeedFilter) =>
-    tab === "all"
-      ? (feed?.length ?? 0)
-      : (feed ?? []).filter((item) => item.channel === tab).length;
+  const countOf = (tab: FeedTab) =>
+    (feed ?? []).filter((item) => item.channel === tab).length;
 
   // Form hides when this customer has never sent one, which is the same
   // judgement as WhatsApp's above reached from the other direction. An empty
@@ -77,22 +83,24 @@ export function FeedFilterPills({
   const hasForm = countOf("form") > 0 || value === "form";
   const tabs = TABS.filter((tab) => tab !== "form" || hasForm);
 
-  const pill = (tab: FeedFilter) => {
+  const pill = (tab: FeedTab) => {
     const count = countOf(tab);
     const active = value === tab;
     const label =
-      tab === "all"
-        ? t("inbox.all")
-        : tab === "note"
-          ? t("notes.title")
-          : tab === "form"
-            ? t("forms.title")
-            : t(CHANNEL_LABEL[tab]);
+      tab === "note"
+        ? t("notes.title")
+        : tab === "form"
+          ? t("forms.title")
+          : t(CHANNEL_LABEL[tab]);
     return (
       <button
         key={tab}
         type="button"
-        onClick={() => onChange(tab)}
+        // Picking the open one clears it. This is the only route back to the
+        // merged feed now, and it has to keep working: the composer is live on
+        // "all" and dead on Call and Form (ConversationPanel), so a thread you
+        // could not unfilter would be a thread you could not reply to.
+        onClick={() => onChange(active ? "all" : tab)}
         aria-label={label}
         // The word left the pill, so the name has to live somewhere a mouse can
         // reach. aria-label covers the screen reader; this covers everyone else.
@@ -126,14 +134,11 @@ export function FeedFilterPills({
             this contact" — but four words across this row was most of the header
             spent labelling controls whose marks the reader already knows, and it
             made the pills renumber sideways every time one was picked. The name
-            is on the tooltip and the aria-label.
-
-            All keeps its word permanently: it has no mark to be, and it is the
-            resting state you come back to. */}
+            is on the tooltip and the aria-label. */}
         {/* Tinted in every state, open one included: the glyph's colour is how
             you find the channel, and dropping it to accent on select means the
             pill you're looking at is the one that stopped being recognizable. */}
-        {tab === "all" ? <span>{label}</span> : <FeedIcon type={tab} size={15} />}
+        <FeedIcon type={tab} size={15} />
         {/* Zero renders nothing. A row of noughts is noise, and the dimmed
             pill already says the tab is empty. */}
         {count > 0 && <span className="tabular-nums">{count}</span>}
@@ -147,8 +152,6 @@ export function FeedFilterPills({
     // push the card down. The pills are small enough to hold one line.
     <div className={`flex shrink-0 flex-nowrap items-center gap-1.5 ${className ?? ""}`}>
       {tabs.map(pill)}
-      <span aria-hidden className="mx-0.5 h-5 w-px bg-[var(--border)]" />
-      {pill("all")}
     </div>
   );
 }

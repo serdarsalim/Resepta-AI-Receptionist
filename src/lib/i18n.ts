@@ -1407,7 +1407,6 @@ const dictionary = {
   "channel.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "channel.call": { tr: "Arama", en: "Call", de: "Anruf" },
 
-  "inbox.all": { tr: "Tümü", en: "All", de: "Alle" },
   "inbox.empty": {
     tr: "Henüz konuşma yok. Bir müşteri yazdığında ya da aradığında burada görünür.",
     en: "No conversations yet. When a customer writes or calls, it lands here.",
