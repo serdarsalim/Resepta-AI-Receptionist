@@ -684,24 +684,12 @@ export function VoiceVariablesEditor({
           );
         })}
 
-        {/* The foot shows ONLY what exists nowhere else on this screen:
-            Retell's built-in analysis, always on whether or not any row
-            asks, not editable — Nudge's exact scope for this row. The
-            injected context and the org's unclaimed fields used to pile up
-            here too, and ten unlabelled pills doing three jobs read as
-            nothing; both of those live in the + Add variable picker, which
-            is where you are when you want them. */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          {["call_summary", "call_successful"].map((preset) => (
-            <span
-              key={preset}
-              title={t("voiceVariables.presetHint")}
-              className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 font-mono text-[10px] text-[var(--muted)]"
-            >
-              {preset}
-            </span>
-          ))}
-        </div>
+        {/* No foot row. Nudge pins its analysis presets here (call_summary,
+            call_successful), and the port kept them — but the owner's read
+            was "what's that for", twice, and a row whose reason lives in a
+            tooltip is a row that failed. The summary and outcome still
+            arrive on every call; the call card is where they already
+            explain themselves. */}
       </div>
       </div>
 

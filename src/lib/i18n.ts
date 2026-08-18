@@ -2319,12 +2319,6 @@ const dictionary = {
     en: "+ Add default",
     de: "+ Standard hinzufügen",
   },
-  // Tooltip on the call_summary / call_successful pills at the table's foot.
-  "voiceVariables.presetHint": {
-    tr: "Yerleşik arama analizi — her zaman açık, düzenlenemez.",
-    en: "Built-in call analysis — always on, not editable.",
-    de: "Eingebaute Anrufanalyse — immer aktiv, nicht bearbeitbar.",
-  },
   // The add-variable picker: existing customer fields first, create inline
   // second, call-only as the deliberate exception.
   "voiceVariables.pickerSearch": {
