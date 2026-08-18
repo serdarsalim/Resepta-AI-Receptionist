@@ -874,33 +874,62 @@ function UserMenu({
               </span>
               {t("nav.account")}
             </button>
-            <div className="border-t border-[var(--border)] pt-1.5">
-              <div className="px-3 pb-1 text-[11px] font-medium text-[var(--muted-strong)]">
+            {/* A segmented control, not three stacked rows. The three themes
+                are one setting with one answer; stacked beside Account and
+                Sign out they read as three more commands, and the checkmark
+                is doing work the layout should be doing. Also buys back two
+                rows of menu height.
+
+                role="group" wrapping menuitemradio, rather than radiogroup:
+                the parent is role="menu", and group is the only container it
+                accepts. The radios keep their existing roles.
+
+                Icon over label because the menu is 224px — a column is ~66px,
+                which German ("Automatisch") will not share with a glyph. */}
+            <div className="border-t border-[var(--border)] px-3 pb-2 pt-1.5">
+              <div className="pb-1.5 text-[11px] font-medium text-[var(--muted-strong)]">
                 {t("menu.appearance")}
               </div>
-              {THEME_OPTIONS.map(({ value, key, Icon }) => {
-                const active = mounted && theme === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    onClick={() => chooseTheme(value)}
-                    className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
-                  >
-                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-                      <Icon />
-                    </span>
-                    <span className="flex-1 text-left">{t(key)}</span>
-                    {active && (
+              {/* Ring on the track because in dark --muted-bg IS --card, so an
+                  unringed track is invisible on this surface. Same reason the
+                  selected segment is --background and not the --card the app's
+                  other segmented controls use: --card would vanish into the
+                  track, on the one control whose job is switching dark mode. */}
+              <div
+                role="group"
+                aria-label={t("menu.appearance")}
+                className="grid grid-cols-3 gap-0.5 rounded-lg bg-[var(--muted-bg)] p-0.5 ring-1 ring-inset ring-[var(--border)]"
+              >
+                {THEME_OPTIONS.map(({ value, key, Icon }) => {
+                  const active = mounted && theme === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => chooseTheme(value)}
+                      className={`flex flex-col items-center gap-1 rounded-md px-0.5 py-1.5 transition-colors ${
+                        active
+                          ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
                       <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
-                        <CheckIcon />
+                        <Icon />
                       </span>
-                    )}
-                  </button>
-                );
-              })}
+                      {/* Measured, not guessed: German "Automatisch" wants
+                          57px of the 55px a px-1 column gives it. px-0.5 and
+                          tracking-tight buy it back with ~4px to spare, which
+                          is the margin a font fallback needs. truncate is the
+                          backstop if a future language beats German. */}
+                      <span className="w-full truncate text-center text-[10px] leading-none tracking-tight">
+                        {t(key)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             {/* Operator-only, and invisible to everyone else — the query
                 returns false rather than throwing, so a salon owner's menu is
