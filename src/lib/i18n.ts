@@ -2347,6 +2347,13 @@ const dictionary = {
   // read-only rows in Before the call. Written as answers to "what will the
   // agent know", not as restated labels.
   "voiceVariables.list": { tr: "Liste", en: "List", de: "Liste" },
+  // The capture popover's pre-fill select. It was labelled "Before the call",
+  // which restated a group name instead of saying what the control does.
+  "voiceVariables.source": {
+    tr: "Şuradan doldurulur",
+    en: "Filled from",
+    de: "Vorbefüllt aus",
+  },
   "voiceVariables.descFirstName": {
     tr: "Arayanın müşteri kartındaki adı.",
     en: "The caller's first name, from their customer card.",

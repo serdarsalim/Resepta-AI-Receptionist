@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -8,6 +8,8 @@ import { api } from "../../convex/_generated/api";
 import { keyFromLabel } from "../../convex/lib/keys";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import { localeFor } from "@/lib/datetime";
+import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
@@ -279,8 +281,15 @@ export function VoiceVariablesEditor({
   // work is how it gets abandoned.
   onSaveStateChange?: (state: VoiceEditorSaveState) => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
+  // What the List rows actually contain for THIS org — the same sources
+  // beforeCallContext reads when it builds the injected strings, so clicking
+  // "List · 12" shows the truth, not a paraphrase. Cheap reactive reads on an
+  // owner settings page; orgs.current is open app-wide already.
+  const providedServices = useQuery(api.services.list, {});
+  const providedStaff = useQuery(api.staff.list, {});
+  const orgSettings = useQuery(api.orgs.current, {});
   const createContactField = useMutation(api.contactFields.create);
   const updateContactField = useMutation(api.contactFields.update);
   const [draft, setDraft] = useState(seed ?? initial);
@@ -649,6 +658,35 @@ export function VoiceVariablesEditor({
     const field = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
     return field?.type === "select" ? field : undefined;
   };
+  // The clickable List rows' content, one string per item, matching what
+  // the injected variable carries: active services with duration and price,
+  // active staff by name, the voice-writable fields by label.
+  const currency = orgSettings?.org.currency ?? DEFAULT_CURRENCY;
+  const providedListLines = (key: string): string[] => {
+    if (key === "services")
+      return (providedServices ?? [])
+        .filter((service) => service.active)
+        .map((service) =>
+          [
+            service.name,
+            service.durationMinutes !== undefined
+              ? `${service.durationMinutes} min`
+              : null,
+            service.price !== undefined
+              ? formatMoney(service.price, currency, localeFor(language))
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" \u00b7 "),
+        );
+    if (key === "staff")
+      return (providedStaff ?? [])
+        .filter((person) => person.active)
+        .map((person) => person.name);
+    if (key === "information") return voiceFields.map((field) => field.label);
+    return [];
+  };
+
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
     const phased = pickerBuiltinsFor(phaseOf(row));
     const own = builtinVoiceVariables(t).find(
@@ -773,9 +811,16 @@ export function VoiceVariablesEditor({
                       >
                         {item.key}
                       </span>
-                      <span className="px-2 py-1 text-xs text-[var(--muted)]">
-                        {t(item.kind === "list" ? "voiceVariables.list" : "voiceVariables.text")}
-                      </span>
+                      {item.kind === "list" ? (
+                        <ProvidedListPeek
+                          label={`${t("voiceVariables.list")} \u00b7 ${providedListLines(item.key).length}`}
+                          lines={providedListLines(item.key)}
+                        />
+                      ) : (
+                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
+                          {t("voiceVariables.text")}
+                        </span>
+                      )}
                       <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
                         {item.description}
                       </span>
@@ -1060,6 +1105,46 @@ function VariablePicker({
   );
 }
 
+// A List row's window onto its actual content — the same click that shows a
+// capture row's choices shows what the runtime will send: the real services
+// with prices, the real staff, the real fields. Read-only; the places to
+// change them are Services, Business and Contact fields.
+function ProvidedListPeek({ label, lines }: { label: string; lines: string[] }) {
+  const { triggerRef, panelRef, pos, open, toggle } = useAnchoredPanel(248, 300);
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggle();
+        }}
+        className="flex w-full items-center justify-between gap-1 rounded-md border border-transparent px-2 py-1 text-left text-xs text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
+      >
+        <span className="truncate">{label}</span>
+        <span aria-hidden className="text-[10px]">▾</span>
+      </button>
+      {pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: "fixed", maxHeight: 300, ...pos }}
+            className="thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-xs shadow-lg"
+          >
+            {lines.map((line, index) => (
+              <div key={index} className="truncate rounded px-2 py-1">
+                {line}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 // One variable, editable where it sits. Label and description are plain
 // inputs; everything with a fixed set of answers — type, choices, which phases
 // it is captured in, where the answer lands — is behind the one popover, which
@@ -1193,29 +1278,34 @@ function VariableRow({
                 group a row sits under states it, and each group has its own
                 add link. Moving a row between groups is delete-and-re-add,
                 the cost Nudge accepted for the same clarity. */}
-            {(
-              [
-                ["string", t("voiceVariables.text")],
-                ["number", t("voiceVariables.number")],
-                ["boolean", t("voiceVariables.yesNo")],
-                ["enum", t("voiceVariables.options")],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                role="option"
-                aria-selected={row.type === value}
-                onClick={() => onChange({ type: value })}
-                className={`block w-full rounded px-2 py-1 text-left text-xs hover:bg-[var(--muted-bg)] ${
-                  row.type === value
-                    ? "bg-[var(--muted-bg)] font-medium"
-                    : "text-[var(--muted)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            {/* One row, four segments (Serdar's call): the type is a small
+                closed choice and a vertical list gave it a column's worth of
+                gravity. Selected segment wears the card surface. */}
+            <div className="grid grid-cols-4 gap-0.5 rounded-md bg-[var(--muted-bg)] p-0.5">
+              {(
+                [
+                  ["string", t("voiceVariables.text")],
+                  ["number", t("voiceVariables.number")],
+                  ["boolean", t("voiceVariables.yesNo")],
+                  ["enum", t("voiceVariables.options")],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="option"
+                  aria-selected={row.type === value}
+                  onClick={() => onChange({ type: value })}
+                  className={`truncate rounded px-1.5 py-1 text-center text-[11px] transition-colors ${
+                    row.type === value
+                      ? "bg-[var(--card)] font-medium shadow-sm"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             {/* Confirm-first is the one thing the group cannot express: a
                 variant of during-call capture, not a phase of its own. */}
@@ -1290,10 +1380,18 @@ function VariableRow({
               </div>
             )}
 
+            {/* A context row (Before the call group) captures nothing, so
+                the capture facts — where to pre-fill from, where the answer
+                lands, whether it is required — are questions with no
+                referent there (Serdar: "what do you mean saved to call
+                only?!"). Its popover carries only the static value when the
+                row is a typed default. */}
+            {(!allowCallOnly || row.beforeSource === "static") && (
             <div className="mt-1 space-y-2 border-t border-[var(--border)] px-0.5 pb-1 pt-2">
+            {!allowCallOnly && (
             <label className="flex items-center justify-between gap-3 text-xs">
               <span className="shrink-0 font-medium">
-                {t("voiceDetail.before")}
+                {t("voiceVariables.source")}
               </span>
               <select
                 value={
@@ -1333,6 +1431,7 @@ function VariableRow({
                 ))}
               </select>
             </label>
+            )}
 
             {row.beforeSource === "static" && (
               <label className="flex items-center justify-between gap-3 text-xs">
@@ -1347,6 +1446,8 @@ function VariableRow({
               </label>
             )}
 
+            {!allowCallOnly && (
+            <>
             <label className="flex items-center justify-between gap-3 text-xs">
               <span className="shrink-0 font-medium">
                 {t("voiceVariables.savedTo")}
@@ -1441,8 +1542,11 @@ function VariableRow({
                 className="accent-[var(--accent)]"
               />
             </label>
+            </>
+            )}
 
             </div>
+            )}
           </div>,
           document.body,
         )}
