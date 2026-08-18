@@ -381,7 +381,11 @@ export const read = action({
     // rings it — and move or drop that line without a trip back to the list.
     // Same tolerance as the voice catalogue: a numbers outage costs the
     // dropdown, not the prompt editor.
-    const lines = await (async () => {
+    // Annotated, not inferred: the policy runQuery below references this
+    // module's own api types, and letting the handler's type flow through
+    // that reference is circular (same fix as voiceBackfill.repairIdentities).
+    const lines: { number: string; nickname: string; agentId: string | null }[] =
+      await (async () => {
       try {
         const data: unknown = await (await call(key, "GET", "v2/list-phone-numbers")).json();
         const items = (
@@ -393,7 +397,7 @@ export const read = action({
           inbound_agents?: Array<{ agent_id?: string }>;
           outbound_agents?: Array<{ agent_id?: string }>;
         }>;
-        return items
+        const mapped = items
           .filter((n) => n.phone_number)
           .map((n) => ({
             number: n.phone_number!,
@@ -404,6 +408,15 @@ export const read = action({
               n.outbound_agents?.[0]?.agent_id ??
               null,
           }));
+        // Same read-side gate as the roster (retell.listAgents): a shared-
+        // account org offers only what the operator provisioned to it, plus
+        // whatever it already holds.
+        const policy = (await ctx.runQuery(internal.retell.orgNumberPolicy, {
+          orgId: context.orgId,
+        })) as { restricted: boolean; visible: string[] };
+        if (!policy.restricted) return mapped;
+        const visible = new Set(policy.visible);
+        return mapped.filter((n) => visible.has(n.number));
       } catch {
         return [];
       }

@@ -734,6 +734,35 @@ export const agentEditorContext = internalQuery({
 //      that namespace and rebind a stranger's line to its own agent — their
 //      callers reaching the wrong agent, and those callers' names and emails
 //      landing in the wrong customer table.
+// Which numbers an org's pickers may OFFER — the read-side twin of
+// lineUsable's write-side gate. Provisioned numbers (the /admin allowlist)
+// plus anything the org already holds: a line the operator later removed from
+// the list keeps rendering where it is bound, because hiding it would not
+// unbind it, just make the binding invisible.
+export const orgNumberPolicy = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    restricted: v.boolean(),
+    visible: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return { restricted: true, visible: [] };
+    const allowed = org.allowedPhoneNumbers ?? [];
+    if (allowed.length === 0 && (org.voiceAgentSource ?? "randevu") === "account") {
+      return { restricted: false, visible: [] };
+    }
+    const bound = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    return {
+      restricted: true,
+      visible: [...new Set([...allowed, ...bound.map((line) => line.number)])],
+    };
+  },
+});
+
 export const lineUsable = internalQuery({
   args: { orgId: v.id("orgs"), number: v.string() },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
@@ -743,12 +772,36 @@ export const lineUsable = internalQuery({
     if (!number) return { ok: true };
     const org = await ctx.db.get(args.orgId);
     if (!org) return { ok: false, reason: "no-org" };
-    const allowed = org.allowedPhoneNumbers;
-    if (allowed !== undefined && allowed.length > 0 && !allowed.includes(number)) {
+    const allowed = org.allowedPhoneNumbers ?? [];
+    if (allowed.length > 0 && !allowed.includes(number)) {
       return { ok: false, reason: "number-not-assigned-to-this-workspace" };
     }
+    // An org on the platform's SHARED account starts with nothing: numbers
+    // reach it when the operator provisions them in /admin
+    // (setAllowedPhoneNumbers), not by grabbing from the pool. Empty used to
+    // mean "unrestricted", which handed a fresh org the whole shared
+    // account. An org on its OWN Retell account ("account") keeps empty =
+    // unrestricted — those are its numbers, bought by it.
+    if (allowed.length === 0 && (org.voiceAgentSource ?? "randevu") !== "account") {
+      return { ok: false, reason: "number-not-assigned-to-this-workspace" };
+    }
+    // The multi-number table first: an org's second line, or one it holds
+    // outbound-only, never reaches the legacy inboundNumber cache below, so
+    // that scan alone would let another workspace's line be taken.
+    const lines = await ctx.db
+      .query("agentLines")
+      .withIndex("by_number", (q) => q.eq("number", number))
+      .collect();
+    if (
+      lines.some(
+        (line) =>
+          line.orgId !== args.orgId && (line.inboundAgentId || line.outboundAgentId),
+      )
+    ) {
+      return { ok: false, reason: "number-held-by-another-workspace" };
+    }
     // Scanned, not indexed: retellAgents holds one row per connected agent, so
-    // a handful per org. Worth an index on inboundNumber if the fleet grows.
+    // a handful per org. Kept as the fallback for rows from before agentLines.
     const holder = (await ctx.db.query("retellAgents").collect()).find(
       (row) => row.inboundNumber === number && row.orgId !== args.orgId,
     );
@@ -1381,12 +1434,23 @@ export const listAgents = action({
       })),
     });
 
+    // Reconcile saw every number (it needs the whole account to know the
+    // bindings); the CLIENT sees only what this org may use. Read after the
+    // reconcile on purpose, so a line the org holds is visible through the
+    // just-refreshed table even if the operator's list no longer names it.
+    const policy = await ctx.runQuery(internal.retell.orgNumberPolicy, {
+      orgId: context.orgId,
+    });
+    const visible = new Set(policy.visible);
+
     return {
       configured: true,
       error: null,
       connectedAgentId: context.connectedAgentId,
       agents,
-      phoneNumbers,
+      phoneNumbers: policy.restricted
+        ? phoneNumbers.filter((n) => visible.has(n.number))
+        : phoneNumbers,
       voices,
       hiddenAgentIds: context.hiddenAgentIds,
       agentSource: context.agentSource,
