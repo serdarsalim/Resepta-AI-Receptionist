@@ -1362,6 +1362,16 @@ export default defineSchema({
 
     // Opaque token minted at dispatch; the open pixel resolves the row by it.
     trackingToken: v.optional(v.string()),
+    // When this actually happened, for a row that RECORDS history rather than
+    // making it (agentTools.logActivity). _creationTime is the moment of the
+    // import, so a year of WhatsApp brought in from a salon's old phone would
+    // otherwise stack on the afternoon it was uploaded, in upload order. Unset
+    // on everything the product itself sends, which is the overwhelming
+    // majority — those rows happened when they were created, and the feed
+    // falls back to _creationTime for them. Deliberately not `sentAt`: that
+    // one means "the provider accepted the send" and is read by the open-pixel
+    // prefetch guard, which has nothing to do with a message from 2024.
+    occurredAt: v.optional(v.number()),
     // When the provider accepted the send. _creationTime cannot serve here: a
     // campaign row is created queued and dispatched minutes later, and the
     // prefetch guard in recordEmailOpen needs the moment the mail actually

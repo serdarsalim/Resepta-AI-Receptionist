@@ -431,7 +431,7 @@ export const feedForCustomer = query({
       ...messages.map((m) => ({
         id: m._id as string,
         channel: channelOfMessage(m.kind),
-        at: m._creationTime,
+        at: m.occurredAt ?? m._creationTime,
         direction: m.direction,
         kind: m.kind,
         body: m.body,
@@ -535,7 +535,7 @@ export async function conversationEntries(
     if (neverLeftSilently(m)) continue;
     push(m.customerId, {
       channel: channelOfMessage(m.kind),
-      at: m._creationTime,
+      at: m.occurredAt ?? m._creationTime,
       direction: m.direction,
       body: m.body,
       failed: m.status === "failed",

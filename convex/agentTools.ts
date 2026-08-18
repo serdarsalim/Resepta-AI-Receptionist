@@ -614,6 +614,10 @@ export const logActivity = internalMutation({
               : "reply",
         body: e.body?.trim() || undefined,
         status: e.direction === "outbound" ? "sent" : "received",
+        // What puts the row where it belongs in the timeline. Without it the
+        // feed reads _creationTime and a year of imported history stacks on
+        // the afternoon it was uploaded.
+        occurredAt: e.at,
         ...(e.channel === "email"
           ? {
               emailSubject: e.subject?.trim() || undefined,
