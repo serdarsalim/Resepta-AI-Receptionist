@@ -347,6 +347,308 @@ export const updateCustomer = internalMutation({
   },
 });
 
+// ── Bringing history in ──────────────────────────────────────────────────────
+//
+// The tools above act on a salon that is already running. These two put an
+// existing business's records INTO it: the customer list they arrive with, and
+// the calls and messages that happened before Resepta existed or that happen
+// somewhere it cannot see. Without them a salon's first day is an empty book
+// and the connector's answer to "here are my 300 customers" is to open the app
+// and type.
+
+// Nothing here is a send. The distinction is the STATUS and the absence of the
+// three scheduling stamps, not a flag somebody has to remember: `queued` +
+// `scheduledFor` is what wa.ts picks up, `nextAttemptAt` is what delivery.ts
+// retries, `sendingAt` is what the stuck-send reaper reads. A row written
+// `sent` or `received` with none of them set is unreachable from every
+// dispatch path in the codebase. There is no route from a logged row to a
+// provider, and that is structural rather than promised.
+
+export const createCustomers = internalMutation({
+  args: {
+    ...scope,
+    customers: v.array(
+      v.object({
+        firstName: v.optional(v.string()),
+        lastName: v.optional(v.string()),
+        phone: v.string(),
+        email: v.optional(v.string()),
+        language: v.optional(v.string()),
+        notes: v.optional(v.string()),
+        consentAt: v.optional(v.number()),
+      }),
+    ),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, customers }) => {
+    if (customers.length === 0) throw new Error("customers is empty");
+    // A ceiling rather than a stream, because a Convex mutation has a write
+    // cap and each row costs a dedup read plus an insert plus an activity row.
+    // Chunking is the caller's job and the message says so, rather than the
+    // mutation dying halfway with some of the list written.
+    if (customers.length > 100) {
+      throw new Error(
+        `max 100 customers per call (got ${customers.length}) — send them in batches of 100`,
+      );
+    }
+
+    const created: { id: string; name: string }[] = [];
+    const updated: { id: string; name: string }[] = [];
+    const skippedBadPhone: { name: string; phone: string; why: string }[] = [];
+
+    // Read once, outside the loop: every row parses against the same dial code
+    // and the org row does not change underneath a hundred inserts.
+    const org = await ctx.db.get(orgId);
+    const dialCode = org ? dialCodeForTimezone(org.timezone) : undefined;
+
+    for (const row of customers) {
+      const firstName = row.firstName?.trim() || "";
+      const label =
+        [firstName, row.lastName?.trim()].filter(Boolean).join(" ").trim() ||
+        row.email?.trim() ||
+        row.phone?.trim() ||
+        "(no name)";
+
+      // The phone IS the identity here — customers.phone is required, indexed
+      // by_org_phone, and every WhatsApp path keys on it. Same forgiving parse
+      // update_customer makes on this same door, and for the reason given
+      // there: nobody types +90 when handing their assistant a customer list,
+      // and a bare local number without a dial code would parse as +53, Cuba.
+      // A row that still will not resolve is REPORTED, never dropped — a
+      // seeding tool that quietly loses people is the failure this exists to
+      // fix, and one bad cell in a spreadsheet must not lose the other 99.
+      const phone = normalisePhone(row.phone, dialCode);
+      if (!phone) {
+        skippedBadPhone.push({
+          name: label,
+          phone: row.phone,
+          why: "not a phone number we can reach — give it in full international form, e.g. +905321234567",
+        });
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("customers")
+        .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
+        .unique();
+
+      if (existing) {
+        // Dedup patches identity only, and only where this call actually says
+        // something. Re-running the same list is safe, and a blank column in a
+        // spreadsheet does not erase the email a stylist typed in by hand.
+        const patch: Record<string, string> = {};
+        if (firstName && firstName !== existing.firstName) patch.firstName = firstName;
+        const lastName = row.lastName?.trim();
+        if (lastName && lastName !== existing.lastName) patch.lastName = lastName;
+        const email = row.email?.trim();
+        if (email && email !== existing.email) patch.email = email;
+        const language = row.language?.trim();
+        if (language && language !== existing.language) patch.language = language;
+        if (Object.keys(patch).length > 0) {
+          await ctx.db.patch(existing._id, patch as Partial<Doc<"customers">>);
+        }
+        updated.push({ id: existing._id, name: fullName({ ...existing, ...patch }) });
+        continue;
+      }
+
+      const customerId = await ctx.db.insert("customers", {
+        orgId,
+        // customers.firstName is required. Falling back to the phone keeps the
+        // row addressable in a list rather than rendering as a blank line.
+        firstName: firstName || phone,
+        lastName: row.lastName?.trim() || undefined,
+        phone,
+        email: row.email?.trim() || undefined,
+        language: row.language?.trim() || undefined,
+        notes: row.notes?.trim() || undefined,
+        // KVKK consent is a legal fact about something the CUSTOMER did, and
+        // sends are blocked until it is stamped. Never inferred from the act of
+        // importing: the salon has to say when each person agreed, or the row
+        // arrives without consent and the send path keeps refusing — which is
+        // the correct failure.
+        consentAt: row.consentAt,
+      });
+      // Composed here rather than read back: a hundred inserts would otherwise
+      // cost a hundred extra reads to learn what we just wrote.
+      created.push({
+        id: customerId,
+        name: [firstName, row.lastName?.trim()].filter(Boolean).join(" ").trim() || phone,
+      });
+    }
+
+    if (created.length === 0 && updated.length === 0) {
+      return { created, updated, skippedBadPhone, actionId: null };
+    }
+
+    // One journal row for the call, not one per customer: the undoable unit is
+    // the import, and a 100-row seed leaving 100 entries buries every other
+    // action in recent_actions. The created ids live in `after` — targetId
+    // holds the first so the feed has a row to point at.
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_customers",
+      args: { count: customers.length },
+      targetTable: "customers",
+      targetId: created[0]?.id ?? updated[0]?.id ?? "",
+      before: null,
+      // Only the CREATED ids are the inverse. The updated ones existed before
+      // this call, and deleting them on undo would destroy the salon's own row.
+      after: { createdIds: created.map((c) => c.id) },
+      reversible: true,
+    });
+
+    // One feed line per created customer, unlike the Nudge side which writes
+    // none. The reason it skipped does not apply here: `customer_created` is a
+    // real kind in this union and hangs on exactly one customer, so the row is
+    // what makes an imported person's timeline able to answer "how did they get
+    // here". source is "staff" in spirit — a member of the salon is importing
+    // their own list — so arrivedAt stays unset and 100 imported customers do
+    // not light 100 attention dots for a human to clear by hand.
+    for (const c of created) {
+      await recordActivity(ctx, {
+        orgId,
+        kind: "customer_created",
+        customerId: c.id as Id<"customers">,
+        agent: { actorId: userId, connectionId, agentActionId: actionId },
+      });
+    }
+
+    return { created, updated, skippedBadPhone, actionId };
+  },
+});
+
+export const logActivity = internalMutation({
+  args: {
+    ...scope,
+    entries: v.array(
+      v.object({
+        customerId: v.string(),
+        channel: v.union(v.literal("call"), v.literal("whatsapp"), v.literal("email")),
+        direction: v.union(v.literal("inbound"), v.literal("outbound")),
+        at: v.number(),
+        body: v.optional(v.string()),
+        subject: v.optional(v.string()),
+        from: v.optional(v.string()),
+        durationSeconds: v.optional(v.number()),
+        outcome: v.optional(v.string()),
+        transcript: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, entries }) => {
+    if (entries.length === 0) throw new Error("entries is empty");
+    if (entries.length > 200) {
+      throw new Error(
+        `max 200 entries per call (got ${entries.length}) — send them in batches of 200`,
+      );
+    }
+
+    const now = Date.now();
+    // Resolved once per customer rather than per entry: a thread of forty
+    // messages with one person is the normal shape, and customerInOrg is a
+    // read apiece. The org check still happens for every id that appears.
+    const seen = new Map<string, Doc<"customers">>();
+    const calls: Id<"calls">[] = [];
+    const messages: Id<"messages">[] = [];
+    const skipped: { customerId: string; why: string }[] = [];
+
+    for (const e of entries) {
+      // A future timestamp is the one that matters. `at` in the future on a
+      // logged row would put history in front of the appointments a salon is
+      // reading the timeline for, and it is nearly always a seconds/millis
+      // mix-up — worth naming rather than storing.
+      if (!Number.isFinite(e.at) || e.at <= 0 || e.at > now) {
+        skipped.push({
+          customerId: e.customerId,
+          why: `"at" must be epoch MILLISECONDS in the past (got ${e.at})`,
+        });
+        continue;
+      }
+      let customer = seen.get(e.customerId);
+      if (!customer) {
+        customer = await customerInOrg(ctx, orgId, e.customerId);
+        seen.set(e.customerId, customer);
+      }
+
+      if (e.channel === "call") {
+        const id = await ctx.db.insert("calls", {
+          orgId,
+          customerId: customer._id,
+          direction: e.direction,
+          // The CUSTOMER's number either way, which is what this column holds
+          // despite its name (see the schema comment).
+          fromNumber: customer.phone,
+          startedAt: e.at,
+          durationSec: e.durationSeconds,
+          outcome: e.outcome,
+          summary: e.body?.trim() || undefined,
+          transcript: e.transcript?.trim() || undefined,
+        });
+        calls.push(id);
+        continue;
+      }
+
+      // status is the safety property, not a flag: outbound lands `sent` and
+      // inbound lands `received`, both terminal. Neither is `queued`, and none
+      // of scheduledFor / nextAttemptAt / sendingAt is written — so no dispatch
+      // path in the codebase can see this row.
+      const id = await ctx.db.insert("messages", {
+        orgId,
+        customerId: customer._id,
+        direction: e.direction === "outbound" ? "out" : "in",
+        // The PREFIX is what says which lane carried this — channelOfMessage
+        // reads `email_*` as email, `form_*` as the request form, and anything
+        // else as WhatsApp. A logged email under a bare kind would render in
+        // the WhatsApp column of the conversation it belongs to, so the prefix
+        // is not decoration.
+        kind:
+          e.channel === "email"
+            ? e.direction === "outbound"
+              ? "email_logged"
+              : "email_reply"
+            : e.direction === "outbound"
+              ? "logged"
+              : "reply",
+        body: e.body?.trim() || undefined,
+        status: e.direction === "outbound" ? "sent" : "received",
+        ...(e.channel === "email"
+          ? {
+              emailSubject: e.subject?.trim() || undefined,
+              emailFrom: e.from?.trim() || customer.email || undefined,
+            }
+          : {}),
+      });
+      messages.push(id);
+    }
+
+    if (calls.length === 0 && messages.length === 0) {
+      return { calls: 0, messages: 0, skipped, actionId: null };
+    }
+
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "log_activity",
+      args: { count: entries.length },
+      targetTable: calls.length > 0 ? "calls" : "messages",
+      targetId: calls[0] ?? messages[0] ?? "",
+      before: null,
+      after: { callIds: calls, messageIds: messages },
+      reversible: true,
+    });
+
+    // No activityLog row. That feed records what somebody DID to the business —
+    // and logging history is not the history happening. The entries show up
+    // where they belong, on the customer's own timeline, and the journal plus
+    // recent_actions is the audit surface for the import itself.
+    return { calls: calls.length, messages: messages.length, skipped, actionId };
+  },
+});
+
 // ── Configuration ────────────────────────────────────────────────────────────
 // Setting the business up, rather than running it day to day. These exist
 // because a connector that can read a salon's book but cannot give it a
@@ -1002,6 +1304,60 @@ export const undo = internalMutation({
       }
       await ctx.db.delete(field._id);
       summary = `Removed the contact field "${field.label}".`;
+    } else if (action.tool === "create_customers") {
+      // Only the rows this call CREATED. The ones it deduped into existed
+      // before it ran, and deleting them would take the salon's own record —
+      // and its appointments and messages — with them. `after.createdIds` is
+      // written for exactly this reason.
+      const ids = ((after as unknown as { createdIds?: string[] }).createdIds ?? []);
+      let removed = 0;
+      const kept: string[] = [];
+      for (const id of ids) {
+        const customer = await ctx.db.get(id as Id<"customers">).catch(() => null);
+        if (!customer || customer.orgId !== orgId) continue;
+        // A customer who has DONE something since is no longer just an
+        // imported row. Deleting one with an appointment on the book leaves a
+        // dangling customerId that every read path dereferences, so the import
+        // is unwound around them and they are named back. Same rule as the
+        // other branches: undo takes back its own change, it does not win
+        // races with the business.
+        const appointment = await ctx.db
+          .query("appointments")
+          .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+          .first();
+        const message = await ctx.db
+          .query("messages")
+          .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+          .first();
+        if (appointment || message) {
+          kept.push(fullName(customer));
+          continue;
+        }
+        await ctx.db.delete(customer._id);
+        removed += 1;
+      }
+      summary =
+        `Removed ${removed} imported customer${removed === 1 ? "" : "s"}.` +
+        (kept.length > 0
+          ? ` Kept ${kept.length} who already have appointments or messages: ${kept.join(", ")}.`
+          : "");
+    } else if (action.tool === "log_activity") {
+      const callIds = ((after as unknown as { callIds?: string[] }).callIds ?? []);
+      const messageIds = ((after as unknown as { messageIds?: string[] }).messageIds ?? []);
+      let removed = 0;
+      for (const id of callIds) {
+        const row = await ctx.db.get(id as Id<"calls">).catch(() => null);
+        if (!row || row.orgId !== orgId) continue;
+        await ctx.db.delete(row._id);
+        removed += 1;
+      }
+      for (const id of messageIds) {
+        const row = await ctx.db.get(id as Id<"messages">).catch(() => null);
+        if (!row || row.orgId !== orgId) continue;
+        await ctx.db.delete(row._id);
+        removed += 1;
+      }
+      summary = `Removed ${removed} logged entr${removed === 1 ? "y" : "ies"} from the timeline.`;
     } else {
       throw new Error(`No undo is implemented for ${action.tool}.`);
     }

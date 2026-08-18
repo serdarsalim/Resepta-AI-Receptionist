@@ -200,6 +200,146 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "create_customers",
+    title: "Bring a customer list in",
+    description:
+      "Add people to the book — one, or up to 100 in a call. Deduped by phone: a number already on file updates that person instead of making a second row, so re-running the same list is safe. Numbers may be written the way the salon says them ('0532 123 45 67'); they are read against the business's own country and stored international. A number that still cannot be read is REPORTED BACK, never dropped silently. Nothing is sent and no reminder is scheduled — these arrive as records. KVKK consent is NOT implied by importing: leave consentAt unset unless the salon can say when that person actually agreed, because WhatsApp sends stay blocked without it and that is the correct failure. Reversible: undo deletes the ones it created, keeping anyone who has since got an appointment or a message.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customers: {
+          type: "array",
+          maxItems: 100,
+          description: "The people to add. Phone is the identity and what a repeat run matches on.",
+          items: {
+            type: "object",
+            properties: {
+              firstName: { type: "string", description: "What staff would call them." },
+              lastName: { type: "string" },
+              phone: {
+                type: "string",
+                description:
+                  "Local or international. '0532 123 45 67' is read against the salon's country; '+905321234567' always works.",
+              },
+              email: { type: "string" },
+              language: { type: "string", description: "Two-letter code, e.g. tr, en, de." },
+              notes: { type: "string", description: "Anything a colleague should know." },
+              consentAt: {
+                type: "number",
+                description:
+                  "Epoch ms of when this person agreed to be messaged. OMIT unless the salon actually knows — do not stamp it to make sends work.",
+              },
+            },
+            required: ["phone"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["customers"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const raw = args.customers;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("customers must be a non-empty array");
+      }
+      const res = await ctx.runMutation(internal.agentTools.createCustomers, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        customers: raw as never,
+      });
+      const parts = [`Added ${res.created.length}`];
+      if (res.updated.length > 0) parts.push(`updated ${res.updated.length} already on file`);
+      if (res.skippedBadPhone.length > 0) {
+        parts.push(`could not read the number for ${res.skippedBadPhone.length}`);
+      }
+      return {
+        ok: true,
+        note: `${parts.join(", ")}.`,
+        created: res.created,
+        updated: res.updated,
+        skippedBadPhone: res.skippedBadPhone,
+        actionId: res.actionId,
+        ...(res.actionId ? { undoWith: `undo(actionId: "${res.actionId}")` } : {}),
+      };
+    },
+  },
+  {
+    name: "log_activity",
+    title: "Record calls and messages that already happened",
+    description:
+      "Put history onto a customer's timeline: a call the salon took, a WhatsApp exchange, an email thread. NOTHING IS SENT — these are records of things that already occurred, written finished so no dispatch path can see them. Use it to bring an existing business's history in, or to log a conversation that happened somewhere Resepta cannot see. Up to 200 entries a call, across any number of customers. Reversible with undo.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        entries: {
+          type: "array",
+          maxItems: 200,
+          items: {
+            type: "object",
+            properties: {
+              customerId: {
+                type: "string",
+                description: "Who it happened with. Search first; never invent one.",
+              },
+              channel: { type: "string", enum: ["call", "whatsapp", "email"] },
+              direction: {
+                type: "string",
+                enum: ["inbound", "outbound"],
+                description: "inbound = the customer contacted the salon, outbound = the salon contacted them.",
+              },
+              at: {
+                type: "number",
+                description:
+                  "When it happened, epoch MILLISECONDS, and in the past. Each message in a thread gets its own time or they all stack on one moment.",
+              },
+              body: {
+                type: "string",
+                description: "What was said. For a call, the summary; for a message, that one message's text.",
+              },
+              subject: { type: "string", description: "Email only." },
+              from: { type: "string", description: "Email only — the sending address. Defaults to the customer's." },
+              durationSeconds: { type: "number", description: "Call only." },
+              outcome: { type: "string", description: "Call only — e.g. booked, no answer, called back." },
+              transcript: { type: "string", description: "Call only — the full transcript if there is one." },
+            },
+            required: ["customerId", "channel", "direction", "at"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["entries"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const raw = args.entries;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("entries must be a non-empty array");
+      }
+      const res = await ctx.runMutation(internal.agentTools.logActivity, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        entries: raw as never,
+      });
+      const parts: string[] = [];
+      if (res.calls > 0) parts.push(`${res.calls} call${res.calls === 1 ? "" : "s"}`);
+      if (res.messages > 0) {
+        parts.push(`${res.messages} message${res.messages === 1 ? "" : "s"}`);
+      }
+      return {
+        ok: true,
+        note: parts.length > 0 ? `Logged ${parts.join(" and ")}. Nothing was sent.` : "Nothing was logged.",
+        skipped: res.skipped,
+        actionId: res.actionId,
+        ...(res.actionId ? { undoWith: `undo(actionId: "${res.actionId}")` } : {}),
+      };
+    },
+  },
+  {
     name: "undo",
     title: "Undo an earlier action",
     description:
