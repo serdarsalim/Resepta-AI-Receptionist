@@ -685,11 +685,13 @@ export function VoiceVariablesEditor({
           );
         })}
 
-        {/* Read-only context at the foot, Nudge's treatment: quiet mono
-            pills. Retell's built-in analysis first — always on, produced
-            whether or not any row asks — then the injected context the
-            runtime always sends, then the org's unclaimed fields as one-click
-            adopts. */}
+        {/* The foot shows ONLY what exists nowhere else on this screen:
+            Retell's built-in analysis, always on whether or not any row
+            asks, not editable — Nudge's exact scope for this row. The
+            injected context and the org's unclaimed fields used to pile up
+            here too, and ten unlabelled pills doing three jobs read as
+            nothing; both of those live in the + Add variable picker, which
+            is where you are when you want them. */}
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
           {["call_summary", "call_successful"].map((preset) => (
             <span
@@ -699,29 +701,6 @@ export function VoiceVariablesEditor({
             >
               {preset}
             </span>
-          ))}
-          {availableBuiltins.map((builtin) => (
-            <span
-              key={builtin.key}
-              title={builtin.label}
-              className="rounded-full border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 font-mono text-[10px] text-[var(--muted)]"
-            >
-              {builtin.key}
-            </span>
-          ))}
-          {/* A field the org already configured in Business becomes a
-              capture row in one click — it must be findable where
-              variables live, not only where it was created. */}
-          {availableFields.map((field) => (
-            <button
-              key={field.id}
-              type="button"
-              onClick={() => adoptField(field)}
-              title={t("voiceVariables.customerCard")}
-              className="rounded-full border border-dashed border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--accent)] hover:bg-[var(--muted-bg)]"
-            >
-              + {field.label}
-            </button>
           ))}
         </div>
       </div>
