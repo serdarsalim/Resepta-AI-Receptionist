@@ -12,6 +12,7 @@ import { Toggle } from "./Toggle";
 import {
   VoiceVariablesEditor,
   builtinVoiceVariables,
+  injectedVoiceContext,
   type VoiceContactField,
   type VoiceEditorSaveState,
   type VoiceVariable,
@@ -347,7 +348,14 @@ export function VoiceAgentPage({
       label: row.label,
     }));
     const seen = new Set(rows.map((row) => row.key));
-    return [...rows, ...builtinVoiceVariables(t).filter((row) => !seen.has(row.key))];
+    // The runtime's own tokens too, or the editor amber-flags the template's
+    // core vocabulary ({{now}}, {{contact}}…) as typos — half the strip under
+    // the prompt was that false alarm.
+    return [
+      ...rows,
+      ...builtinVoiceVariables(t).filter((row) => !seen.has(row.key)),
+      ...injectedVoiceContext(t).filter((row) => !seen.has(row.key)),
+    ];
   }, [detail, t]);
 
   // Not from the backend: the backend would have to pick a language. Which of

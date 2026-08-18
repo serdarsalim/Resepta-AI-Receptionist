@@ -299,19 +299,23 @@ export function PromptEditor({
         className={`mt-1 flex flex-wrap items-center gap-1.5 ${singleLine ? "hidden" : ""}`}
       >
         <span className="text-[11px] text-[var(--muted)]">{t("voiceDetail.atHint")}</span>
-        {used.map((chip) => (
-          <span
-            key={chip.key}
-            title={chip.label ?? t("voiceVariables.notConfigured")}
-            className={`rounded-md px-1.5 py-0.5 text-[11px] ${
-              chip.label
-                ? "bg-[var(--muted-bg)]"
-                : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-            }`}
-          >
-            {chip.label ?? chip.key}
-          </span>
-        ))}
+        {/* ONLY the tokens that will not resolve — a typo'd {{variabel}} gets
+            spoken literally on a live call, and this is the one surface that
+            catches it. Recognized tokens used to render here too, grey, and
+            a healthy prompt wore a row of chips restating what the editor
+            already highlights inline; the strip now stays empty until it has
+            a problem to report. */}
+        {used
+          .filter((chip) => !chip.label)
+          .map((chip) => (
+            <span
+              key={chip.key}
+              title={t("voiceVariables.notConfigured")}
+              className="rounded-md bg-amber-50 px-1.5 py-0.5 font-mono text-[11px] text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+            >
+              {chip.key}
+            </span>
+          ))}
       </div>
       {menu &&
         createPortal(

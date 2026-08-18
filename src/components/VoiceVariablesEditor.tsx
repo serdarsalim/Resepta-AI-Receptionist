@@ -9,7 +9,6 @@ import { keyFromLabel } from "../../convex/lib/keys";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
-import { OptionsEditor } from "./RecordField";
 import { Sheet } from "./Sheet";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
@@ -134,6 +133,34 @@ export function builtinVoiceVariables(
     { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
     { key: "business_name", label: t("voiceVariables.businessName") },
     { key: "services", label: t("voiceVariables.servicesList") },
+  ];
+}
+
+// Context the RUNTIME sends with every call, configured or not — the
+// template's own vocabulary, over and above the adoptable built-ins. These
+// were invisible in the variables table and half-surfaced as unexplained
+// chips under the prompt, which read as "variables that exist nowhere"
+// (Serdar, 2026-08-18). They render as read-only rows in Before the call —
+// not toggles: {{now}} missing is the resolved-"yarın"-to-2025 bug, and a
+// switch whose only function is breaking the agent is not a setting.
+export function injectedVoiceContext(
+  t: (
+    key:
+      | "voiceVariables.agentName"
+      | "voiceVariables.now"
+      | "voiceVariables.staffList"
+      | "voiceVariables.customerCard"
+      | "voiceVariables.informationList"
+      | "voiceVariables.customerName",
+  ) => string,
+): { key: string; label: string }[] {
+  return [
+    { key: "agent_name", label: t("voiceVariables.agentName") },
+    { key: "customer_name", label: t("voiceVariables.customerName") },
+    { key: "now", label: t("voiceVariables.now") },
+    { key: "staff", label: t("voiceVariables.staffList") },
+    { key: "contact", label: t("voiceVariables.customerCard") },
+    { key: "information", label: t("voiceVariables.informationList") },
   ];
 }
 
@@ -663,6 +690,27 @@ export function VoiceVariablesEditor({
                     onRemove={() => removeAt(index)}
                   />
                 ))}
+                {/* The context the runtime sends whether or not anybody
+                    configured it, AS ROWS in the phase it belongs to — the
+                    answer to "why are the variables we send not showing in
+                    Before". Read-only and muted: these are facts about every
+                    agent, not choices about this one, and a control that
+                    could only break the agent is not offered. */}
+                {group.id === "before" &&
+                  [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
+                    <div key={item.key} className={VAR_GRID}>
+                      <span className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]">
+                        {item.key}
+                      </span>
+                      <span className="px-2 py-1 text-xs text-[var(--muted)]">
+                        {t("voiceVariables.alwaysSent")}
+                      </span>
+                      <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
+                        {item.label}
+                      </span>
+                      <span />
+                    </div>
+                  ))}
                 <VariablePicker
                   addLabel={
                     group.id === "before" ? t("voiceVariables.addDefault") : undefined
@@ -987,11 +1035,18 @@ function VariableRow({
   allowCallOnly: boolean;
 }) {
   const { t } = useLanguage();
-  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(300, 420, "right");
+  const { triggerRef, panelRef, pos, open, toggle } = useAnchoredPanel(300, 420, "right");
 
-  const optionValues = (linkedSelect ? linkedSelect.options : row.choices ?? []).filter(
-    (choice) => choice.trim(),
-  );
+  // Raw for editing — a just-added empty choice must survive its own render —
+  // filtered only for the count the trigger shows. A linked select's options
+  // live on the customer field (the same registry the Business card edits);
+  // the row's copy mirrors them for the draft.
+  const rawChoices = linkedSelect ? linkedSelect.options : row.choices ?? [];
+  const setChoices = (next: string[]) => {
+    if (linkedSelect) onSetFieldOptions(next);
+    onChange({ choices: next });
+  };
+  const optionValues = rawChoices.filter((choice) => choice.trim());
   const typeLabel =
     row.type === "enum"
       ? `${t("voiceVariables.options")} · ${optionValues.length}`
@@ -1058,75 +1113,113 @@ function VariableRow({
           <div
             ref={panelRef}
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
-            className="fixed z-50 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-lg"
+            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
           >
-            {/* Label left, control right: six stacked label-above-control
-                blocks made the popover twice as tall as its content. */}
-            <label className="flex items-center justify-between gap-3 text-xs">
-              <span className="shrink-0 font-medium">{t("voiceVariables.type")}</span>
-              <select
-                value={row.type}
-                onChange={(e) =>
-                  onChange({ type: e.target.value as VoiceVariable["type"] })
-                }
-                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+            {/* Nudge's TypePicker, structure and reasoning both: the type is
+                a LIST you pick from, not a <select> the OS paints its own
+                way; a list's choices are managed right here rather than in a
+                separate editor; and the capture PHASE is not asked — the
+                group a row sits under states it, and each group has its own
+                add link. Moving a row between groups is delete-and-re-add,
+                the cost Nudge accepted for the same clarity. */}
+            {(
+              [
+                ["string", t("voiceVariables.text")],
+                ["number", t("voiceVariables.number")],
+                ["boolean", t("voiceVariables.yesNo")],
+                ["enum", t("voiceVariables.options")],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="option"
+                aria-selected={row.type === value}
+                onClick={() => onChange({ type: value })}
+                className={`block w-full rounded px-2 py-1 text-left text-xs hover:bg-[var(--muted-bg)] ${
+                  row.type === value
+                    ? "bg-[var(--muted-bg)] font-medium"
+                    : "text-[var(--muted)]"
+                }`}
               >
-                <option value="string">{t("voiceVariables.text")}</option>
-                <option value="number">{t("voiceVariables.number")}</option>
-                <option value="boolean">{t("voiceVariables.yesNo")}</option>
-                <option value="enum">{t("voiceVariables.options")}</option>
-              </select>
-            </label>
+                {label}
+              </button>
+            ))}
 
-            {row.type === "enum" && (
-              <OptionsEditor
-                options={optionValues}
-                onChange={(options) => {
-                  // A linked select's options live on the customer field —
-                  // same registry the Business card edits — and the row's
-                  // copy just mirrors them for the draft.
-                  if (linkedSelect) onSetFieldOptions(options);
-                  onChange({ choices: options });
-                }}
-              />
+            {/* Confirm-first is the one thing the group cannot express: a
+                variant of during-call capture, not a phase of its own. */}
+            {supportsLive && row.duringMode !== "none" && (
+              <div className="mt-1 border-t border-[var(--border)] pt-1">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={row.duringMode === "confirm"}
+                  onClick={() =>
+                    onChange({
+                      duringMode: row.duringMode === "confirm" ? "if_missing" : "confirm",
+                    })
+                  }
+                  className={`block w-full rounded px-2 py-1 text-left text-xs hover:bg-[var(--muted-bg)] ${
+                    row.duringMode === "confirm"
+                      ? "bg-[var(--muted-bg)] font-medium"
+                      : "text-[var(--muted)]"
+                  }`}
+                >
+                  {row.duringMode === "confirm" ? "✓ " : ""}
+                  {t("voiceVariables.confirm")}
+                </button>
+              </div>
             )}
 
-            {/* The capture phase. Changing it moves the row to that group,
-                which is the only way to move a row between them. */}
-            <label className="flex items-center justify-between gap-3 text-xs">
-              <span className="shrink-0 font-medium">
-                {t("voiceVariables.capturedWhen")}
-              </span>
-              <select
-                value={row.duringMode !== "none" ? row.duringMode : row.afterCall ? "after" : "before"}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next === "before") {
-                    onChange({
-                      duringMode: "none",
-                      afterCall: false,
-                      beforeSource: row.beforeSource === "none" ? "static" : row.beforeSource,
-                    });
-                  } else if (next === "after") {
-                    onChange({ duringMode: "none", afterCall: true });
-                  } else {
-                    onChange({
-                      duringMode: next as VoiceVariable["duringMode"],
-                      afterCall: true,
-                    });
-                  }
-                }}
-                className="w-40 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-              >
-                <option value="before">{t("voiceDetail.before")}</option>
-                {supportsLive && (
-                  <option value="if_missing">{t("voiceVariables.askMissing")}</option>
-                )}
-                {supportsLive && <option value="confirm">{t("voiceVariables.confirm")}</option>}
-                <option value="after">{t("voiceVariables.extract")}</option>
-              </select>
-            </label>
+            {row.type === "enum" && (
+              <div className="mt-1 border-t border-[var(--border)] pt-1">
+                <div className="px-2 py-1 text-[11px] font-medium text-[var(--muted)]">
+                  {t("voiceVariables.options")}
+                </div>
+                <div className="space-y-1 px-1">
+                  {rawChoices.map((choice, index) => (
+                    <div key={index} className="flex items-center gap-1">
+                      <input
+                        value={choice}
+                        autoFocus={choice === "" && index === rawChoices.length - 1}
+                        onChange={(e) =>
+                          setChoices(
+                            rawChoices.map((c, j) => (j === index ? e.target.value : c)),
+                          )
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            setChoices([...rawChoices, ""]);
+                          }
+                        }}
+                        placeholder={t("voiceVariables.choice")}
+                        className="w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setChoices(rawChoices.filter((_, j) => j !== index))
+                        }
+                        aria-label={t("voiceVariables.removeChoice")}
+                        className="rounded p-1 text-[var(--muted)] hover:text-[var(--foreground)]"
+                      >
+                        <RemoveX />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChoices([...rawChoices, ""])}
+                  className="mt-1 px-2 py-1 text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                >
+                  {t("voiceVariables.addChoice")}
+                </button>
+              </div>
+            )}
 
+            <div className="mt-1 space-y-2 border-t border-[var(--border)] px-0.5 pb-1 pt-2">
             <label className="flex items-center justify-between gap-3 text-xs">
               <span className="shrink-0 font-medium">
                 {t("voiceDetail.before")}
@@ -1278,15 +1371,6 @@ function VariableRow({
               />
             </label>
 
-            <div className="flex justify-between">
-              <code className="self-center text-[10px] text-[var(--muted)]">{row.key}</code>
-              <button
-                type="button"
-                onClick={close}
-                className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              >
-                {t("voiceVariables.done")}
-              </button>
             </div>
           </div>,
           document.body,

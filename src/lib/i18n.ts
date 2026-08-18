@@ -2319,6 +2319,47 @@ const dictionary = {
     en: "+ Add default",
     de: "+ Standard hinzufügen",
   },
+  // The read-only rows in "Before the call": context the runtime sends with
+  // EVERY call, configured or not. These labels also name the same tokens in
+  // the prompt editor, so the two surfaces stop disagreeing about what a
+  // variable is.
+  "voiceVariables.alwaysSent": {
+    tr: "Her zaman gönderilir",
+    en: "Always sent",
+    de: "Wird immer gesendet",
+  },
+  "voiceVariables.agentName": {
+    tr: "Asistanın adı",
+    en: "Agent's name",
+    de: "Name des Agenten",
+  },
+  "voiceVariables.now": {
+    tr: "Şu anki tarih ve saat",
+    en: "Current date and time",
+    de: "Aktuelles Datum und Uhrzeit",
+  },
+  "voiceVariables.staffList": {
+    tr: "Personel adları",
+    en: "Staff names",
+    de: "Mitarbeiternamen",
+  },
+  "voiceVariables.informationList": {
+    tr: "Toplanabilir bilgiler",
+    en: "Collectable fields",
+    de: "Erfassbare Felder",
+  },
+  // The type popover's inline choices editor (Nudge's Choices section).
+  "voiceVariables.choice": { tr: "Seçenek", en: "Choice", de: "Option" },
+  "voiceVariables.addChoice": {
+    tr: "+ Seçenek ekle",
+    en: "+ Add choice",
+    de: "+ Option hinzufügen",
+  },
+  "voiceVariables.removeChoice": {
+    tr: "Seçeneği kaldır",
+    en: "Remove choice",
+    de: "Option entfernen",
+  },
   // The add-variable picker: existing customer fields first, create inline
   // second, call-only as the deliberate exception.
   "voiceVariables.pickerSearch": {
