@@ -2157,10 +2157,15 @@ const dictionary = {
     en: "This agent has no prompt that can be edited here.",
     de: "Dieser Assistent hat keine Anweisung, die sich hier bearbeiten lässt.",
   },
+  // The three groups are the agent's three behaviours, named as such —
+  // knows, asks, learns — because owners think in what the agent DOES, not
+  // in the call's timeline (that lives in each group's InfoTip). The
+  // sequence also tells the product's whole loop: knows, asks, learns,
+  // knows more next time.
   "voiceDetail.before": {
-    tr: "Arama öncesi",
-    en: "Before the call",
-    de: "Vor dem Anruf",
+    tr: "Bilir",
+    en: "Knows",
+    de: "Weiß",
   },
   "voiceDetail.beforeHint": {
     tr: "Arama başlarken asistana verilen bilgiler; kimi aradığını böylece önceden bilir.",
@@ -2173,9 +2178,9 @@ const dictionary = {
     de: "Keine Angaben.",
   },
   "voiceDetail.during": {
-    tr: "Arama sırasında",
-    en: "During the call",
-    de: "Während des Anrufs",
+    tr: "Sorar",
+    en: "Asks",
+    de: "Fragt",
   },
   "voiceDetail.duringHint": {
     tr: "Asistanın konuşma sırasında çağırabildiği fonksiyonlar. Takvime bakıp randevu almasını bunlar sağlar.",
@@ -2188,9 +2193,9 @@ const dictionary = {
     de: "Keine Funktionen. Er kann sprechen, aber keine Termine vergeben.",
   },
   "voiceDetail.after": {
-    tr: "Arama sonrası",
-    en: "After the call",
-    de: "Nach dem Anruf",
+    tr: "Öğrenir",
+    en: "Learns",
+    de: "Lernt",
   },
   "voiceDetail.afterHint": {
     tr: "Arama bittiğinde konuşmadan tamamlanan bilgiler.",
