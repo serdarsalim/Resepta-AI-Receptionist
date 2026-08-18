@@ -1423,3 +1423,56 @@ buttons. Secondary/ghost buttons are text + hover wash
 (`text-muted hover:bg-muted-bg`), primary buttons are solid accent fill.
 A bordered chip where a ghost button belongs reads as sloppy; check every
 new control against this before shipping it.
+
+## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
+
+A marathon session; the durable rules it produced:
+
+**Caller identity.** A call row's `fromNumber` is the CUSTOMER's leg —
+caller for inbound, callee for outbound; `recordCall` picks by the direction
+Retell reports (never assume inbound). Every voice entry point normalises
+numbers with the org's dial code (`dialCodeForTimezone`): the Turkish trunk
+delivers national-format caller IDs (05386906897), so "carriers always send
+E.164" is disproven and must not return as an assumption. `orgOwnNumbers` is
+a hard guard wherever voice creates or matches a contact — the business is
+never its own customer.
+
+**Numbers.** `agentLines` is the per-number, per-direction binding table
+(inbound and outbound may be different agents), reconciled from every clean
+roster read and written directly by `attachLine`/`detachLine`. Provisioning
+is operator-only for shared-account orgs: `orgs.allowedPhoneNumbers`, empty
+= NOTHING (default-deny); tenant pickers offer allowlist ∪ bound
+(`retell.orgNumberPolicy`). Nothing in the product MOVES a line implicitly —
+the agent editor's select attaches; it once moved, and silently released the
+salon's main line. The inbound webhook resolves the agent from the DIALLED
+number (`agentForInboundNumber`): Retell's weighted `inbound_agents` binding
+sends `call_inbound` with no agent_id, and the early "unknown agent" return
+was why agents ran without `{{now}}` and booked into the wrong year.
+
+**The variables doctrine (Serdar's, hold to it).** Groups are the agent's
+behaviours — Bilir / Sorar / Öğrenir. Bilir renders the runtime's injected
+context as read-only rows that mirror `beforeCallContext`'s dynamicVariables
+key for key; if the runtime gains a variable it must appear there or the
+table is lying. Identity (name, email) and the booking's own questions need
+NO registry rows and NO prompt paragraphs: identity keys are always writable
+through save_customer_details, and the template + booking tools force the
+asks. The registry exists ONLY to teach the post-call analysis about
+org-specific fields. An empty Sorar is the healthy default, not a gap.
+
+**Confirmations vs. late emails.** The agent asks for e-posta AFTER booking
+(a booking must not wait on spelling), so booking-time confirmations can
+race an empty email column and fail `no-email-address`.
+`retryConfirmationsAwaitingEmail` (appointments.ts) re-fires booking rules
+when an email lands — voice or staff edit — guarded on ALL confirmation
+attempts having failed, so a channel that already carried the message never
+double-sends. Any new email-writing path must call it.
+
+**Two Convex/React traps that each cost hours here.** (1) Convex validates
+RETURNS as strictly as arguments: extending a handler's result without
+extending its `returns` validator makes every call throw at runtime, and
+TypeScript cannot catch it — extra properties pass structural assignment.
+When a result type changes, change the validator in the same edit. (2) A
+context value's setters must be referentially stable (useCallback): a setter
+minted inside the value memo re-triggers every effect that lists it in deps
+— the header search's claiming effect ran per keystroke and its cleanup
+wiped the query.
