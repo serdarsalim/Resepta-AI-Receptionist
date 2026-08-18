@@ -103,6 +103,52 @@ export const setCustomValue = mutation({
   },
 });
 
+// The header's jump list (CustomerJump): enough of a match to pick a person,
+// nothing more. Same fold as the table's own search (useTableState.foldSearch
+// — İ/ı and ß included, "gul" finds "Gül"), so the box and the jump list
+// never disagree about who matches. Collect-and-filter like everything else
+// at salon scale; take 8 keeps it a picker rather than a result page.
+export const quickSearch = query({
+  args: { q: v.string() },
+  returns: v.array(
+    v.object({
+      id: v.id("customers"),
+      name: v.string(),
+      phone: v.string(),
+    }),
+  ),
+  handler: async (ctx, { q }) => {
+    const { orgId } = await requireOrg(ctx);
+    const fold = (value: string) =>
+      value
+        .replace(/[İIı]/g, "i")
+        .replace(/ß/g, "ss")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "");
+    const needle = fold(q.trim());
+    // Below two characters most of the book matches and the list is noise.
+    // The component applies the same floor; this one holds if it ever slips.
+    if (needle.length < 2) return [];
+    const rows = await ctx.db
+      .query("customers")
+      .withIndex("by_org", (index) => index.eq("orgId", orgId))
+      .collect();
+    const out: Array<{ id: Doc<"customers">["_id"]; name: string; phone: string }> = [];
+    for (const c of rows) {
+      const hay = fold(`${c.firstName} ${c.lastName ?? ""} ${c.phone} ${c.email ?? ""}`);
+      if (!hay.includes(needle)) continue;
+      out.push({
+        id: c._id,
+        name: `${c.firstName} ${c.lastName ?? ""}`.trim(),
+        phone: c.phone,
+      });
+      if (out.length >= 8) break;
+    }
+    return out;
+  },
+});
+
 export const list = query({
   args: {},
   returns: v.array(customerRow),

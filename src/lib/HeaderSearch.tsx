@@ -24,6 +24,13 @@ type HeaderSearchValue = {
   setQuery: (query: string) => void;
   placeholder: string | null;
   setPlaceholder: (placeholder: string | null) => void;
+  // Set by the contact page only (also Nudge's shape). The box keeps
+  // filtering whatever the view is showing; claiming this slot ALSO offers
+  // matching customers as a jump list, so looking somebody else up doesn't
+  // mean going back to Customers first. The shell renders the list
+  // (CustomerJump) because the shell renders the input it anchors to.
+  jumpToCustomer: ((customerId: string) => void) | null;
+  setJumpToCustomer: (jump: ((customerId: string) => void) | null) => void;
 };
 
 const HeaderSearchContext = createContext<HeaderSearchValue | null>(null);
@@ -31,9 +38,22 @@ const HeaderSearchContext = createContext<HeaderSearchValue | null>(null);
 export function HeaderSearchProvider({ children }: { children: React.ReactNode }) {
   const [query, setQuery] = useState("");
   const [placeholder, setPlaceholder] = useState<string | null>(null);
+  const [jumpToCustomer, setJumpToCustomer] = useState<
+    ((customerId: string) => void) | null
+  >(null);
   const value = useMemo(
-    () => ({ query, setQuery, placeholder, setPlaceholder }),
-    [query, placeholder],
+    () => ({
+      query,
+      setQuery,
+      placeholder,
+      setPlaceholder,
+      jumpToCustomer,
+      // useState treats a bare function argument as an updater; wrap so a
+      // callback can be STORED through the setter without being invoked.
+      setJumpToCustomer: (jump: ((customerId: string) => void) | null) =>
+        setJumpToCustomer(() => jump),
+    }),
+    [query, placeholder, jumpToCustomer],
   );
   return (
     <HeaderSearchContext.Provider value={value}>
@@ -53,21 +73,30 @@ export function useHeaderSearchSlot(): HeaderSearchValue {
 // What a view calls. Pass the placeholder to claim the header's box; pass null
 // to stand down, which the appointments calendar does — searching a week grid
 // means nothing, and a box that cannot act is worse than no box.
-export function useHeaderSearch(placeholder: string | null): Search {
+//
+// onJumpToCustomer must be REFERENTIALLY STABLE (useCallback or a stable prop)
+// — it sits in the claiming effect's deps, and a fresh identity every render
+// would re-claim the slot in a loop.
+export function useHeaderSearch(
+  placeholder: string | null,
+  onJumpToCustomer?: (customerId: string) => void,
+): Search {
   const context = useContext(HeaderSearchContext);
   if (!context) throw new Error("useHeaderSearch outside HeaderSearchProvider");
-  const { query, setQuery, setPlaceholder } = context;
+  const { query, setQuery, setPlaceholder, setJumpToCustomer } = context;
 
   useEffect(() => {
     setPlaceholder(placeholder);
+    setJumpToCustomer(onJumpToCustomer ?? null);
     // Clearing on the way out matters as much as claiming on the way in. A
     // query typed in Customers must not still be filtering the Inbox after a
     // tab switch, invisibly, because the box it was typed into is gone.
     return () => {
       setPlaceholder(null);
+      setJumpToCustomer(null);
       setQuery("");
     };
-  }, [placeholder, setPlaceholder, setQuery]);
+  }, [placeholder, onJumpToCustomer, setPlaceholder, setJumpToCustomer, setQuery]);
 
   return useSearchFrom(query, setQuery);
 }

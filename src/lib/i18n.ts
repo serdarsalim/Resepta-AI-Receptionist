@@ -3228,6 +3228,16 @@ const dictionary = {
   // so a 19-character "Resepta ara" would pin it at the clamp ceiling on every
   // tab; the page title beside it already says what you are searching.
   "common.search": { tr: "Ara…", en: "Search…", de: "Suchen…" },
+  // The header search's jump list (CustomerJump). "Recent" heads the
+  // last-opened customers shown on focus with an empty box; the other two
+  // head and empty-state the live match list.
+  "search.recent": { tr: "Son açılanlar", en: "Recent", de: "Zuletzt geöffnet" },
+  "search.goToCustomer": { tr: "Müşteriye git", en: "Go to customer", de: "Zu Kunde wechseln" },
+  "search.noCustomers": {
+    tr: "Eşleşen müşteri yok.",
+    en: "No customers match.",
+    de: "Keine passenden Kunden.",
+  },
   "common.back": { tr: "Geri", en: "Back", de: "Zurück" },
   "common.optional": { tr: "isteğe bağlı", en: "optional", de: "optional" },
 

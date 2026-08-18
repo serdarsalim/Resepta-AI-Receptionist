@@ -35,6 +35,7 @@ import {
 const FEED_COL_PAD = "pl-4 pr-[calc(1rem+9px)]";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
+import type { Search } from "@/lib/useTableState";
 import { normalizeSubject, stripReplyPrefixes } from "../../convex/lib/emailInbound";
 import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import {
@@ -135,6 +136,7 @@ export function ConversationPanel({
   lastInboundAt,
   filter = "all",
   onFilterChange,
+  search,
   className,
 }: {
   customerId: Id<"customers">;
@@ -148,6 +150,10 @@ export function ConversationPanel({
   // so the panel asks rather than sets. Without this the index can only
   // expand things in place, which is exactly the flatness it exists to fix.
   onFilterChange?: (next: FeedFilter) => void;
+  // The contact page's header search, filtering this feed by text — what was
+  // said, wherever it was said (body, subject, call summary or transcript).
+  // Optional: the inbox pane has its own search over conversations instead.
+  search?: Search;
   className?: string;
 }) {
   const { t, language } = useLanguage();
@@ -222,7 +228,17 @@ export function ConversationPanel({
   const threadRef = useRef<HTMLDivElement>(null);
 
   const visible = (feed ?? []).filter(
-    (item) => filter === "all" || item.channel === filter,
+    (item) =>
+      (filter === "all" || item.channel === filter) &&
+      // Text search spans every place words live in a feed item. A call
+      // matches on what was SAID (summary/transcript), not just its label.
+      (!search?.active ||
+        search.matches(
+          "body" in item ? item.body : undefined,
+          "emailSubject" in item ? item.emailSubject : undefined,
+          "summary" in item ? item.summary : undefined,
+          "transcript" in item ? item.transcript : undefined,
+        )),
   );
   // Messages read as a chat — oldest at the top, newest by the composer at the
   // bottom. Notes don't: nobody is having a conversation with themselves, so

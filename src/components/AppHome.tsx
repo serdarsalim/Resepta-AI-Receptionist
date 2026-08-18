@@ -66,7 +66,11 @@ export function AppHome() {
   return (
     <AppShell tab={tab} onTab={setTab}>
       {contactId ? (
-        <ContactView customerId={contactId} onClose={() => setContactId(null)} />
+        <ContactView
+          customerId={contactId}
+          onClose={() => setContactId(null)}
+          onOpenContact={setContactId}
+        />
       ) : (
         <>
           {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}

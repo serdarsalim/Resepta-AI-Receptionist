@@ -433,6 +433,7 @@ export function SearchInput({
   className = "",
   ref,
   onBlur,
+  onFocus,
   fluid,
 }: {
   value: string;
@@ -447,6 +448,9 @@ export function SearchInput({
   // handle on the field and a say in when the field gives focus back.
   ref?: React.Ref<HTMLInputElement>;
   onBlur?: () => void;
+  // The header's jump list (CustomerJump) shows recents on focus with an
+  // empty box, so the shell needs to know when the field holds focus.
+  onFocus?: () => void;
 }) {
   const t = useT();
   return (
@@ -472,6 +476,7 @@ export function SearchInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
+        onFocus={onFocus}
         placeholder={placeholder}
         aria-label={placeholder}
         // Sized to its CONTENT, not to focus: compact at rest, growing as the

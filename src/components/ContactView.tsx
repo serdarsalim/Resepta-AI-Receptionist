@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -19,6 +19,8 @@ import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
 import { DEFAULT_DURATION } from "@/lib/calendarDrag";
 import { useBookingSheet } from "./useBookingSheet";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
+import { rememberCustomer } from "@/lib/recentCustomers";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -94,9 +96,13 @@ function MetaLabel({ label, hint }: { label: string; hint?: string }) {
 export function ContactView({
   customerId,
   onClose,
+  onOpenContact,
 }: {
   customerId: Id<"customers">;
   onClose: () => void;
+  // The header jump list navigates to OTHER customers from here, so this page
+  // needs the same door the list views hand around.
+  onOpenContact: (customerId: Id<"customers">) => void;
 }) {
   const { t, language } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
@@ -116,6 +122,28 @@ export function ContactView({
   // land mid-thread.
   const [mobilePane, setMobilePane] = useState<"record" | "conversation">("record");
   const [filter, setFilter] = useState<FeedFilter>("all");
+
+  // The header box, claimed like every list tab claims it — and with the
+  // customer-jump slot filled, which is this page's whole difference: the box
+  // filters THIS customer's feed live, and matching customers appear in a
+  // list you have to click (CustomerJump). Stable callback, per the hook's
+  // contract.
+  const jumpToCustomer = useCallback(
+    (id: string) => onOpenContact(id as Id<"customers">),
+    [onOpenContact],
+  );
+  const search = useHeaderSearch(t("common.search"), jumpToCustomer);
+
+  // Feed the recents list at the point of OPENING, whatever route opened this
+  // page — that's what makes recents useful on their very first use.
+  const recentName = customer
+    ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
+    : null;
+  const recentPhone = customer?.phone ?? null;
+  useEffect(() => {
+    if (recentName === null || recentPhone === null) return;
+    rememberCustomer({ id: customerId, name: recentName, phone: recentPhone });
+  }, [customerId, recentName, recentPhone]);
 
   // Two groups, in the order a reader works through the record: what staff
   // typed, then what the calls collected and will keep collecting on their own.
@@ -478,6 +506,7 @@ export function ContactView({
             lastInboundAt={customer.lastInboundAt}
             filter={filter}
             onFilterChange={setFilter}
+            search={search}
             className="flex-1"
           />
         </section>

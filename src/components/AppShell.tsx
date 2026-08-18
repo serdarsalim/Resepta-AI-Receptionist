@@ -14,6 +14,7 @@ import { OperatorBanner } from "./OperatorBanner";
 import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { SearchInput } from "./DataTable";
+import { CustomerJump } from "./CustomerJump";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
 // fixed-height pane, recessed sidebar, floating main card that scrolls
@@ -385,9 +386,17 @@ function ShellHeader({
   onOpenAccount: () => void;
 }) {
   const { t } = useLanguage();
-  const { query, setQuery, placeholder } = useHeaderSearchSlot();
+  const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
   const [expanded, setExpanded] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  // The search wrapper, handed to CustomerJump so its list lines up with the
+  // input rather than the whole right-hand cluster. State, not a ref: the
+  // list must re-render when the anchor appears.
+  const [searchAnchor, setSearchAnchor] = useState<HTMLDivElement | null>(null);
+  // Focus gates the recents list — the one thing shown with an empty box.
+  // Blur is fine as the off switch: CustomerJump preventDefaults mousedown
+  // inside the list, so a pick never blurs the input first.
+  const [searchFocused, setSearchFocused] = useState(false);
 
   useEffect(() => {
     if (expanded) searchRef.current?.focus();
@@ -452,6 +461,7 @@ function ShellHeader({
         )}
         {placeholder && (
           <div
+            ref={setSearchAnchor}
             className={
               expanded ? "min-w-0 flex-1 sm:flex-none" : "hidden sm:block"
             }
@@ -462,11 +472,27 @@ function ShellHeader({
               onChange={setQuery}
               placeholder={placeholder}
               fluid={expanded}
+              onFocus={() => setSearchFocused(true)}
               onBlur={() => {
+                setSearchFocused(false);
                 // Collapse only when it would take nothing with it.
                 if (!query) setExpanded(false);
               }}
             />
+            {jumpToCustomer && (
+              <CustomerJump
+                query={query}
+                anchor={searchAnchor}
+                focused={searchFocused}
+                onPick={(customerId) => {
+                  // Clear the box on the way out: the term filtered the
+                  // PREVIOUS page; carrying it onto the next customer would
+                  // open them pre-filtered by a phrase typed to find them.
+                  setQuery("");
+                  jumpToCustomer(customerId);
+                }}
+              />
+            )}
           </div>
         )}
         {/* Phones only. On desktop this lives in the sidebar footer, and two
