@@ -5,6 +5,7 @@ import { assertE164, requireOrg } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { conversationEntries, summariseEntries, type ConversationEntry } from "./messages";
+import { retryConfirmationsAwaitingEmail } from "./appointments";
 
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
@@ -283,6 +284,12 @@ export const update = mutation({
       patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
     }
     await ctx.db.patch(args.customerId, patch);
+    // Staff typing in a missing email repays the same debt the voice path
+    // does: a confirmation that failed no-email-address is re-fired for
+    // future bookings the moment the address exists.
+    if (typeof patch.email === "string" && !customer.email) {
+      await retryConfirmationsAwaitingEmail(ctx, args.customerId);
+    }
     return null;
   },
 });

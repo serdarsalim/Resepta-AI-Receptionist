@@ -171,7 +171,9 @@ export default function TenantPage() {
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
-  const [tab, setTab] = useState<"setup" | "agents" | "assistant" | "usage" | "members" | "activity">("setup");
+  const [tab, setTab] = useState<
+    "setup" | "agents" | "assistant" | "usage" | "members" | "sends" | "activity"
+  >("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
@@ -270,7 +272,8 @@ export default function TenantPage() {
           { id: "assistant" as const, label: "Assistant" },
           { id: "usage" as const, label: "Usage" },
           { id: "members" as const, label: "Members" },
-          { id: "activity" as const, label: "Activity" },
+          { id: "sends" as const, label: "Sends" },
+          { id: "activity" as const, label: "Logs" },
         ]}
         active={tab}
         onSelect={setTab}
@@ -287,21 +290,24 @@ export default function TenantPage() {
           straight back out. An audit log is a debugging surface, its readers
           are operators, and a salon owner has no use for a page of "settings
           changed / businessHours". */}
+      {/* Two feeds, two TABS (Serdar, 2026-08-18): what people DID and what
+          the org SENT answer different questions, and stacking them under one
+          Activity tab made each the other's noise. */}
       {tab === "activity" && (
-        <>
-          <Section
-            title="Account activity"
-            description="Who did what inside the app: bookings, customers, settings, members. Operator actions are attributed to the person, not the brand."
-          >
-            <UserActivity orgId={orgId} />
-          </Section>
-          <Section
-            title="Message activity"
-            description="The org's latest messages in both directions with their delivery outcome, newest first."
-          >
-            <Activity orgId={orgId} />
-          </Section>
-        </>
+        <Section
+          title="Account activity"
+          description="Who did what inside the app: bookings, customers, settings, members. Operator actions are attributed to the person, not the brand."
+        >
+          <UserActivity orgId={orgId} />
+        </Section>
+      )}
+      {tab === "sends" && (
+        <Section
+          title="Message activity"
+          description="The org's latest messages in both directions with their delivery outcome, newest first."
+        >
+          <Activity orgId={orgId} />
+        </Section>
       )}
 
       {(tab === "setup" || search.active) && (

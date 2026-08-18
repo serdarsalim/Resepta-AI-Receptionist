@@ -15,7 +15,11 @@ import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { voiceCatalogue } from "./lib/voiceCatalogue";
-import { nextUpcomingOf, scheduleConfirmationIfConfigured } from "./appointments";
+import {
+  nextUpcomingOf,
+  retryConfirmationsAwaitingEmail,
+  scheduleConfirmationIfConfigured,
+} from "./appointments";
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
@@ -2625,6 +2629,12 @@ export async function applyVoiceContactValues(
   }
   if (updated.length > 0) {
     await ctx.db.patch(customer._id, { custom, ...identityPatch });
+    // The email arriving NOW is what an earlier no-email-address confirmation
+    // was waiting for — the agent asks for the address after booking, so the
+    // booking-time send raced an empty column and lost. Repay it.
+    if (identityPatch.email && !customer.email) {
+      await retryConfirmationsAwaitingEmail(ctx, customer._id);
+    }
   }
   return { ok: true, updated, updatedLabels, ignored, notForVoice, rejected };
 }

@@ -352,6 +352,46 @@ export async function scheduleLifecycleMessages(
   }
 }
 
+// A confirmation that failed only because the customer had no email yet is
+// debt the email's ARRIVAL repays. The voice agent asks for the address
+// AFTER booking (deliberately — a booking must not wait on someone spelling
+// their email), so the booking-time send finds an empty column and files
+// no-email-address (live, Bella, 18 Aug 2026). Called wherever an email
+// lands on a customer: re-fires the booking rules for each FUTURE
+// appointment whose confirmations ALL failed. The all-failed guard is what
+// makes re-firing safe — if any channel already carried a confirmation
+// (a delivered WhatsApp, say), nothing re-fires and nobody hears about the
+// same booking twice.
+export async function retryConfirmationsAwaitingEmail(
+  ctx: MutationCtx,
+  customerId: Id<"customers">,
+) {
+  const rows = await ctx.db
+    .query("messages")
+    .withIndex("by_customer", (q) => q.eq("customerId", customerId))
+    .collect();
+  const byAppointment = new Map<string, Doc<"messages">[]>();
+  for (const message of rows) {
+    if (message.kind !== "confirmation" || !message.appointmentId) continue;
+    const bucket = byAppointment.get(message.appointmentId) ?? [];
+    bucket.push(message);
+    byAppointment.set(message.appointmentId, bucket);
+  }
+  for (const [appointmentId, attempts] of byAppointment) {
+    const awaiting = attempts.some(
+      (message) => message.status === "failed" && message.error === "no-email-address",
+    );
+    const carried = attempts.some((message) => message.status !== "failed");
+    if (!awaiting || carried) continue;
+    const appointment = await ctx.db.get(appointmentId as Id<"appointments">);
+    if (!appointment || appointment.startAt <= Date.now()) continue;
+    if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+      continue;
+    }
+    await scheduleLifecycleMessages(ctx, appointment.orgId, appointment._id, "booking");
+  }
+}
+
 // The old name, kept callable while every intake path moves over.
 export async function scheduleConfirmationIfConfigured(
   ctx: MutationCtx,
