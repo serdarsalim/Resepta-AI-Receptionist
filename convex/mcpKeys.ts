@@ -17,7 +17,8 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { requireOrg } from "./lib/orgAuth";
+import { actingAsOrg, requireOrg } from "./lib/orgAuth";
+import { emailIsPlatformAdmin } from "./lib/platformAuth";
 
 // mk_<48 hex>, 192 bits from the Web Crypto CSPRNG. A distinct prefix from
 // anything else in the product so "which key is this" is answerable by looking.
@@ -48,24 +49,29 @@ export const create = mutation({
   returns: v.string(),
   handler: async (ctx, { client, name }) => {
     const { user, orgId } = await requireOrg(ctx);
-    // An operator working INSIDE a tenant cannot mint one of these.
+    // An operator working INSIDE a tenant CAN mint one, and it works. This
+    // refused until 2026-08-19, for a reason that was half right: requireOrg
+    // resolves an operator to the tenant they are acting into, so the row comes
+    // out as {orgId: the salon, userId: the operator}, and verify re-checking
+    // `memberships` — which an operator does not have there — rejected every
+    // call the key was ever used for. The key was born dead.
     //
-    // requireOrg resolves an operator's org to whichever tenant they are
-    // acting into, so the row came out as {orgId: the salon, userId: the
-    // operator} — and verify re-checks memberships, which an operator does not
-    // have there. The key was born dead: minted, shown once, and rejected by
-    // every call it was ever used for.
+    // The old repair was to refuse the mint. The objection to the other repair
+    // was that honouring an operator would be "a bearer token that answers to
+    // nobody's membership". That reading was wrong about which authority is
+    // stronger. It answers to PLATFORM_ADMIN_EMAILS, which is the same env
+    // allowlist that let the operator into this business at all, and which
+    // lib/orgAuth already calls exactly as strong as acting-as itself: it
+    // evaporates the moment the address comes off the list, and no
+    // application-level bug can mint one. A membership row is the weaker
+    // credential — it lives in the database every org-scoped mutation writes.
     //
-    // Refused rather than repaired, because the repair is the dangerous one.
-    // Teaching verify to honour actingAsOrgId would turn a session-scoped
-    // operator capability into a long-lived bearer token that outlives the
-    // session, sits in a config file, and answers to nobody's membership —
-    // exactly the escalation lib/platformAuth keeps out of the database.
+    // What the key grants is also strictly LESS than its holder already has: it
+    // reaches one org, while /admin reaches every org on the deployment.
     //
-    // The salon mints its own key. That is not a workaround, it is the point:
-    // this credential says "a member of this business authorised a client",
-    // and an operator cannot honestly say that on their behalf.
-    if (user.actingAsOrgId === orgId) throw new Error("acting-as-cannot-mint");
+    // Stamped viaOperator so verify knows which door to check, and so the
+    // salon's feed says "Autotakt", never the operator's name.
+    const operator = actingAsOrg(user) === orgId;
     const key = mintKey();
     await ctx.db.insert("mcpConnections", {
       orgId,
@@ -74,6 +80,7 @@ export const create = mutation({
       key,
       client,
       createdAt: Date.now(),
+      ...(operator ? { viaOperator: true } : {}),
     });
     return key;
   },
@@ -154,6 +161,7 @@ export const verify = internalQuery({
       orgName: v.string(),
       role: v.string(),
       label: v.string(),
+      viaOperator: v.boolean(),
     }),
     v.null(),
   ),
@@ -165,20 +173,38 @@ export const verify = internalQuery({
       .unique();
     if (!row || row.revoked) return null;
 
-    // The membership re-check. Everything above is what the key CLAIMS; this is
-    // what is still true. A revoked membership kills the connector without
-    // anyone having to remember it exists.
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_user_org", (q) =>
-        q.eq("userId", row.userId).eq("orgId", row.orgId),
-      )
-      .unique();
-    if (!membership) return null;
-
     const user = await ctx.db.get(row.userId);
     const org = await ctx.db.get(row.orgId);
     if (!user || !org) return null;
+
+    // The re-check. Everything above is what the key CLAIMS; this is what is
+    // still true, and it is re-derived on EVERY call so revoking access
+    // anywhere kills the connector without anyone having to remember it exists.
+    //
+    // Two doors, because there are two ways to be entitled to this business.
+    // A member's key answers to their membership row. An operator's key
+    // answers to the env allowlist — the same authority behind acting-as, and
+    // the one that has to be right for /admin to open at all. Neither door
+    // accepts the other's credential: a member who becomes an operator does
+    // not keep a revoked membership alive, and an operator taken off the
+    // allowlist does not get a membership they never had.
+    let role: string;
+    if (row.viaOperator) {
+      if (!emailIsPlatformAdmin(user.email)) return null;
+      // Owner, for the same reason requireOrg hands acting-as owner: an
+      // operator is here to fix something, and read-only answers none of the
+      // calls that prompt one.
+      role = "owner";
+    } else {
+      const membership = await ctx.db
+        .query("memberships")
+        .withIndex("by_user_org", (q) =>
+          q.eq("userId", row.userId).eq("orgId", row.orgId),
+        )
+        .unique();
+      if (!membership) return null;
+      role = membership.role;
+    }
 
     const userName = user.name || user.email || "Unknown";
     return {
@@ -189,9 +215,10 @@ export const verify = internalQuery({
       client: row.client,
       userName,
       orgName: org.name,
-      role: membership.role,
+      role,
       // Composed once, here, so no tool can render it differently.
       label: `${userName} · ${CLIENT_LABEL[row.client] ?? row.name}`,
+      viaOperator: !!row.viaOperator,
     };
   },
 });

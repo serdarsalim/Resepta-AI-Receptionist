@@ -72,7 +72,20 @@ export async function recordActivity(
     // remember to pass it and none can forget. The actor row keeps the real
     // user id either way; only the DISPLAY changes (convex/activity.ts).
     let viaOperator: boolean | undefined;
-    if (actorId) {
+    // An operator's CONNECTOR, read off the connection rather than the actor.
+    // The check below reads acting-as, which is session state, and a connector
+    // outlives the session that minted it — so by the time it writes anything
+    // the operator is long since out of that business and the derivation says
+    // "no". Read here rather than passed in by each tool, because a tool that
+    // forgets prints the operator's name in a salon's feed, and the whole
+    // point of the read path (convex/activity.ts) is that it never does.
+    if (args.agent) {
+      const connection = await ctx.db.get(args.agent.connectionId);
+      if (connection?.viaOperator && connection.orgId === args.orgId) {
+        viaOperator = true;
+      }
+    }
+    if (!viaOperator && actorId) {
       const actor = await ctx.db.get(actorId);
       // Both halves, same as the gate: the column names an org, the allowlist
       // decides whether it counts. And it must be THIS org — an operator

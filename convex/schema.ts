@@ -1596,6 +1596,20 @@ export default defineSchema({
     // Revoked rather than deleted, so lastUsedAt and the journal rows pointing
     // at this connection survive someone asking what it did.
     revoked: v.optional(v.boolean()),
+    // Minted by the platform operator while working inside this business, so
+    // there is no membership row behind it and never will be. verify() accepts
+    // it on the allowlist instead — the same authority that let them in, and a
+    // stronger one than membership: it evaporates the moment the address comes
+    // off PLATFORM_ADMIN_EMAILS.
+    //
+    // Stamped at mint rather than derived at call time, because acting-as is
+    // SESSION state and this key outlives the session. Without the stamp,
+    // verify could not tell an operator's key from a member's whose membership
+    // had just been revoked, and would have to guess which one to keep alive.
+    //
+    // It also carries the feed's manners: writes through this connection are
+    // "Autotakt did this", never the operator's own name (see lib/activity).
+    viaOperator: v.optional(v.boolean()),
   })
     .index("by_key", ["key"])
     .index("by_org", ["orgId", "createdAt"])

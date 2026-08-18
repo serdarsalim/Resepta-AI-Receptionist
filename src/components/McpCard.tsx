@@ -31,10 +31,11 @@ export function McpCard({ site }: { site: SiteUrl }) {
   );
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  // The one refusal this card can hit: an operator inside a tenant. Said out
-  // loud, because the alternative was a button that appeared to work and
-  // handed back a key that never would.
-  const [refused, setRefused] = useState(false);
+  // Minting used to have one known refusal — an operator inside a tenant — and
+  // this held a boolean that printed that exact sentence. Operators can mint
+  // now (convex/mcpKeys.ts), so a boolean would print a specific, wrong reason
+  // for whatever the real failure was. A message, or nothing.
+  const [error, setError] = useState<string | null>(null);
 
   const endpoint = site.isMisconfigured ? null : `${site.url}/mcp`;
 
@@ -47,10 +48,10 @@ export function McpCard({ site }: { site: SiteUrl }) {
 
   const mint = (client: "claude" | "chatgpt") => {
     setBusy(true);
-    setRefused(false);
+    setError(null);
     void create({ client })
       .then((key) => setMinted({ key, client }))
-      .catch(() => setRefused(true))
+      .catch(() => setError(t("mcp.mintFailed")))
       .finally(() => setBusy(false));
   };
 
@@ -70,9 +71,9 @@ export function McpCard({ site }: { site: SiteUrl }) {
           Local to this card, not pushed into Card, because every other card
           ends in an input where p-4 is right. */}
       <div className="space-y-4 pb-2">
-        {refused && (
+        {error && (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            {t("mcp.actingAsCannotMint")}
+            {error}
           </p>
         )}
 

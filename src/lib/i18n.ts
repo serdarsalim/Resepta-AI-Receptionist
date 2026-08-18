@@ -2672,10 +2672,10 @@ const dictionary = {
   // The key would carry THEIR membership into a business they are only
   // visiting, and the connector re-checks that membership on every call, so
   // the key would be dead the moment it left the screen.
-  "mcp.actingAsCannotMint": {
-    tr: "Bir işletmenin içinde operatör olarak çalışırken anahtar oluşturulamaz — bağlantı her çağrıda üyelik kontrol eder ve sizin bu işletmede üyeliğiniz yok. Anahtarı işletmenin kendi ekibi oluşturmalı.",
-    en: "You can't mint a key while working inside a business as an operator — the connector re-checks membership on every call, and you aren't a member here. The business mints its own.",
-    de: "Als Operator innerhalb eines Betriebs lässt sich kein Schlüssel erstellen — der Connector prüft bei jedem Aufruf die Mitgliedschaft, und Sie sind hier kein Mitglied. Der Betrieb erstellt seinen eigenen Schlüssel.",
+  "mcp.mintFailed": {
+    tr: "Anahtar oluşturulamadı. Tekrar deneyin.",
+    en: "Couldn't create the key. Try again.",
+    de: "Schlüssel konnte nicht erstellt werden. Bitte erneut versuchen.",
   },
   "mcp.endpoint": {
     tr: "Bağlantı adresi",

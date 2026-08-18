@@ -59,6 +59,7 @@ type Who = {
   orgName: string;
   role: string;
   label: string;
+  viaOperator: boolean;
 };
 
 type ToolDef = ProtocolToolDef<ActionCtx, Who>;
@@ -90,7 +91,14 @@ const TOOLS: ToolDef[] = [
       actingAs: who.userName,
       role: who.role,
       client: who.client,
-      note: `Everything done here is recorded in the ${who.orgName} activity feed as "${who.label}".`,
+      // An operator's key is entitled by the platform allowlist rather than by
+      // membership, and its writes appear to the salon as the brand. Saying so
+      // matters: somebody using this key is working inside a business that is
+      // not theirs, and the feed will not carry their name to remind them.
+      ...(who.viaOperator ? { connectedAs: "platform operator" } : {}),
+      note: who.viaOperator
+        ? `You are connected to ${who.orgName} as the platform operator, not as a member of it. Everything done here is recorded in their activity feed as the operator brand, not under your name.`
+        : `Everything done here is recorded in the ${who.orgName} activity feed as "${who.label}".`,
     }),
   },
   {
