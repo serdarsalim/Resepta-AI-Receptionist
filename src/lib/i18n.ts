@@ -2323,11 +2323,6 @@ const dictionary = {
   // EVERY call, configured or not. These labels also name the same tokens in
   // the prompt editor, so the two surfaces stop disagreeing about what a
   // variable is.
-  "voiceVariables.alwaysSent": {
-    tr: "Her zaman gönderilir",
-    en: "Always sent",
-    de: "Wird immer gesendet",
-  },
   "voiceVariables.agentName": {
     tr: "Asistanın adı",
     en: "Agent's name",
