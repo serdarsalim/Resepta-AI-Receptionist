@@ -74,7 +74,7 @@ export function kindForTrigger(
 // keeps. before_start keeps the legacy 1..168h window; after_end allows up to
 // 30 days (a review ask two hours later and a rebooking nudge three weeks
 // later are both real); no_show keeps the winback's 1..90 days, in hours.
-function clampOffset(trigger: RuleTrigger, offsetHours: number): number {
+export function clampOffset(trigger: RuleTrigger, offsetHours: number): number {
   const h = Math.round(offsetHours);
   switch (trigger) {
     case "booking":

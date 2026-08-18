@@ -538,6 +538,130 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: "list_message_rules",
+    title: "What the business sends on its own",
+    description:
+      "Every automatic message rule — the confirmation, the reminders, the cancellation note, the winback, the out-of-hours reply — with its timing, its channel and whether it is paused, plus which languages it has its own wording in. Read this before changing anything: a rule's offsetHours means different things per trigger (hours BEFORE the start for a reminder, hours AFTER the end for a follow-up).",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, _args, who) =>
+      await ctx.runQuery(internal.agentTools.listMessageRules, {
+        orgId: who.orgId as never,
+      }),
+  },
+  {
+    name: "get_template",
+    title: "The exact words one message sends",
+    description:
+      "One piece of wording in full, by templateId from list_message_rules. Read metaStatus before offering to rewrite it: when a template is Meta-approved, the WhatsApp Cloud lane sends the string Meta approved, NOT this body — so editing the words changes the email and shop-phone lanes and leaves Cloud WhatsApp saying what it said before.",
+    inputSchema: {
+      type: "object",
+      properties: { templateId: { type: "string" } },
+      required: ["templateId"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) => {
+      const templateId = str(args, "templateId");
+      if (!templateId) throw new Error("templateId is required");
+      return await ctx.runQuery(internal.agentTools.getTemplate, {
+        orgId: who.orgId as never,
+        templateId,
+      });
+    },
+  },
+  {
+    name: "set_message_rule",
+    title: "Change when and how the business sends",
+    description:
+      "Create a rule, or change an existing one's timing, channel or paused state. Pass ruleId to change one, or trigger to create one. offsetHours is read against the trigger and clamped to what that trigger allows — 1-168 before a start, 1-720 after an end, 24-2160 after a no-show, and ignored entirely for booking, cancellation and out_of_hours, which fire on the event. THIS CHANGES WHAT REAL CUSTOMERS RECEIVE, including for appointments already on the book, so say what will change and get a clear yes first. Owner only. Reversible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ruleId: { type: "string", description: "From list_message_rules. Omit to create a new rule." },
+        trigger: {
+          type: "string",
+          enum: ["booking", "before_start", "after_end", "cancellation", "no_show", "out_of_hours"],
+          description: "Required when creating; ignored when changing an existing rule.",
+        },
+        offsetHours: { type: "number", description: "Hours from the anchor. Clamped per trigger." },
+        channel: { type: "string", enum: ["whatsapp", "email", "both"] },
+        paused: { type: "boolean", description: "true stops it sending without deleting it." },
+      },
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const ruleId = str(args, "ruleId");
+      const trigger = str(args, "trigger");
+      const channel = str(args, "channel");
+      const res = (await ctx.runMutation(internal.agentTools.upsertMessageRule, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        ...(ruleId ? { ruleId } : {}),
+        ...(trigger ? { trigger } : {}),
+        ...(typeof args.offsetHours === "number" ? { offsetHours: args.offsetHours } : {}),
+        ...(channel ? { channel } : {}),
+        ...(typeof args.paused === "boolean" ? { paused: args.paused } : {}),
+      })) as { ruleId: string; trigger: string; created: boolean; actionId: string };
+      return {
+        ok: true,
+        note: `${res.created ? "Added" : "Changed"} the ${res.trigger} rule. Appointments already on the book have been rescheduled to match.`,
+        ruleId: res.ruleId,
+        actionId: res.actionId,
+        undoWith: `undo(actionId: "${res.actionId}")`,
+      };
+    },
+  },
+  {
+    name: "update_template",
+    title: "Rewrite what a message says",
+    description:
+      "Change the words one rule sends. READ get_template FIRST and show the owner the current text beside the new one — this is what their customers read, and there is no draft state between saving and sending. If the template is Meta-approved, the WhatsApp Cloud lane keeps sending the approved string and only email and the shop phone pick up the new wording; the result says which case it was. Approval is never touched, because a reword must not cost an approval that took weeks. Owner only. Reversible.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "From list_message_rules or get_template." },
+        body: { type: "string", description: "The complete new text, with its [name] / [business] / [date] tokens kept." },
+        subject: { type: "string", description: "Email subject line. Only used on the email lane." },
+      },
+      required: ["templateId"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const templateId = str(args, "templateId");
+      if (!templateId) throw new Error("templateId is required");
+      const body = typeof args.body === "string" ? args.body : undefined;
+      const subject = typeof args.subject === "string" ? args.subject : undefined;
+      if (body === undefined && subject === undefined) {
+        throw new Error("Pass body, subject, or both.");
+      }
+      const res = (await ctx.runMutation(internal.agentTools.updateTemplateBody, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        templateId,
+        ...(body !== undefined ? { body } : {}),
+        ...(subject !== undefined ? { subject } : {}),
+      })) as {
+        kind: string;
+        language: string;
+        metaApproved: boolean;
+        actionId: string;
+      };
+      return {
+        ok: true,
+        note: res.metaApproved
+          ? `Rewrote the ${res.kind} wording (${res.language}). This template is Meta-approved, so WhatsApp sent over the Cloud number KEEPS THE OLD WORDING — the new text goes out by email and from the shop phone. Changing what Cloud sends means registering a new template with Meta.`
+          : `Rewrote the ${res.kind} wording (${res.language}). It is live on the next send.`,
+        actionId: res.actionId,
+        undoWith: `undo(actionId: "${res.actionId}")`,
+      };
+    },
+  },
+  {
     name: "undo",
     title: "Undo an earlier action",
     description:

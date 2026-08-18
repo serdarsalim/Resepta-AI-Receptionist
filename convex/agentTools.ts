@@ -14,12 +14,14 @@
 //   2. Undo goes forward through the same write path, never a raw patch.
 
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
 import { connectionField } from "./lib/connections";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
+import { clampOffset, sortRules } from "./messageRules";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
 
@@ -1254,6 +1256,250 @@ export const recordAgentCreated = internalMutation({
 
 // ── Undo ─────────────────────────────────────────────────────────────────────
 
+// ── The automation itself ────────────────────────────────────────────────────
+//
+// What the salon sends without anyone pressing anything: the confirmation, the
+// reminders, the cancellation note, the winback, the out-of-hours reply. Rules
+// hold the WHEN and the channel; waTemplates rows hold the WORDS.
+//
+// Owner-gated throughout, matching messageRules.add/update which take
+// requireOwner. And every rule write schedules reminders.backfillOrg for the
+// same reason the app's own mutations do: timing and pause state are baked
+// into each appointment's nextMessageAt, so a rule changed without the sweep
+// is a change the salon can see and the cron cannot.
+
+export const listMessageRules = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.any(),
+  handler: async (ctx, { orgId }) => {
+    const org = await ctx.db.get(orgId);
+    const rules = await ctx.db
+      .query("messageRules")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const templates = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return {
+      // An org between the deploy and the migration run has no rows, and an
+      // empty list there means "not migrated yet", not "sends nothing".
+      migrated: org?.rulesMigratedAt !== undefined,
+      defaultChannel: org?.messageChannel ?? "both",
+      rules: sortRules(rules).map((rule) => ({
+        id: rule._id,
+        trigger: rule.trigger,
+        offsetHours: rule.offsetHours,
+        channel: rule.channel,
+        paused: rule.paused ?? false,
+        wording: templates
+          .filter((t) => t.ruleId === rule._id)
+          .map((t) => ({ language: t.language, templateId: t._id })),
+      })),
+      // The kind-level rows every rule falls back to when it has no wording of
+      // its own. Resolution at send time is (ruleId, language) first, then
+      // (kind, language) with no ruleId.
+      fallbackWording: templates
+        .filter((t) => t.ruleId === undefined)
+        .map((t) => ({ templateId: t._id, kind: t.kind, language: t.language })),
+    };
+  },
+});
+
+export const getTemplate = internalQuery({
+  args: { orgId: v.id("orgs"), templateId: v.string() },
+  returns: v.any(),
+  handler: async (ctx, { orgId, templateId }) => {
+    const row = await ctx.db.get(templateId as Id<"waTemplates">).catch(() => null);
+    if (!row || row.orgId !== orgId) throw new Error("No template with that id.");
+    return {
+      id: row._id,
+      kind: row.kind,
+      language: row.language,
+      ruleId: row.ruleId ?? null,
+      body: row.body,
+      subject: row.subject ?? null,
+      // The fact that decides whether editing `body` changes anything on the
+      // busiest lane. Meta approved an exact string; the Cloud API sends that
+      // registered template, not what the salon typed.
+      metaName: row.metaName ?? null,
+      metaStatus: row.status,
+    };
+  },
+});
+
+export const upsertMessageRule = internalMutation({
+  args: {
+    ...scope,
+    ruleId: v.optional(v.string()),
+    trigger: v.optional(v.string()),
+    offsetHours: v.optional(v.number()),
+    channel: v.optional(v.string()),
+    paused: v.optional(v.boolean()),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, ruleId, trigger, offsetHours, channel, paused }) => {
+    await assertOwner(ctx, orgId, userId, "change what the business sends automatically");
+    const CHANNELS = ["whatsapp", "email", "both"] as const;
+    if (channel !== undefined && !CHANNELS.includes(channel as (typeof CHANNELS)[number])) {
+      throw new Error(`channel must be one of ${CHANNELS.join(", ")}.`);
+    }
+
+    if (ruleId) {
+      const rule = await ctx.db.get(ruleId as Id<"messageRules">).catch(() => null);
+      if (!rule || rule.orgId !== orgId) throw new Error("No rule with that id.");
+      const before: Record<string, string> = {};
+      const after: Record<string, string> = {};
+      const patch: Partial<Doc<"messageRules">> = {};
+      if (offsetHours !== undefined) {
+        const clamped = clampOffset(rule.trigger, offsetHours);
+        before.offsetHours = String(rule.offsetHours);
+        after.offsetHours = String(clamped);
+        patch.offsetHours = clamped;
+      }
+      if (channel !== undefined) {
+        before.channel = rule.channel;
+        after.channel = channel;
+        patch.channel = channel as Doc<"messageRules">["channel"];
+      }
+      if (paused !== undefined) {
+        before.paused = String(rule.paused ?? false);
+        after.paused = String(paused);
+        patch.paused = paused;
+      }
+      if (Object.keys(patch).length === 0) throw new Error("Nothing to change.");
+      await ctx.db.patch(rule._id, patch);
+      const actionId = await journal(ctx, {
+        orgId,
+        connectionId,
+        userId,
+        tool: "set_message_rule",
+        args: { ruleId, offsetHours, channel, paused },
+        targetTable: "messageRules",
+        targetId: rule._id,
+        before,
+        after,
+        reversible: true,
+      });
+      await recordActivity(ctx, {
+        orgId,
+        kind: "settings_changed",
+        detail: `message rule changed: ${rule.trigger} (${Object.keys(after).join(", ")})`,
+        agent: { actorId: userId, connectionId, agentActionId: actionId },
+      });
+      await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
+      return { ruleId: rule._id, trigger: rule.trigger, created: false, actionId };
+    }
+
+    const TRIGGERS = [
+      "booking",
+      "before_start",
+      "after_end",
+      "cancellation",
+      "no_show",
+      "out_of_hours",
+    ] as const;
+    if (!trigger || !TRIGGERS.includes(trigger as (typeof TRIGGERS)[number])) {
+      throw new Error(
+        `Creating a rule needs a trigger, one of ${TRIGGERS.join(", ")}. To change an existing one, pass its ruleId.`,
+      );
+    }
+    const t = trigger as Doc<"messageRules">["trigger"];
+    const org = await ctx.db.get(orgId);
+    const newId = await ctx.db.insert("messageRules", {
+      orgId,
+      trigger: t,
+      offsetHours: clampOffset(t, offsetHours ?? 0),
+      channel: (channel as Doc<"messageRules">["channel"]) ?? org?.messageChannel ?? "both",
+      ...(paused !== undefined ? { paused } : {}),
+    });
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "set_message_rule",
+      args: { trigger: t, offsetHours, channel, paused },
+      targetTable: "messageRules",
+      targetId: newId,
+      before: null,
+      after: { trigger: t },
+      reversible: true,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `message rule added: ${t}`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
+    return { ruleId: newId, trigger: t, created: true, actionId };
+  },
+});
+
+export const updateTemplateBody = internalMutation({
+  args: {
+    ...scope,
+    templateId: v.string(),
+    body: v.optional(v.string()),
+    subject: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, templateId, body, subject }) => {
+    await assertOwner(ctx, orgId, userId, "change the wording the business sends");
+    const row = await ctx.db.get(templateId as Id<"waTemplates">).catch(() => null);
+    if (!row || row.orgId !== orgId) throw new Error("No template with that id.");
+    const before: Record<string, string> = {};
+    const after: Record<string, string> = {};
+    const patch: Partial<Doc<"waTemplates">> = {};
+    if (body !== undefined && body.trim() && body !== row.body) {
+      // Optional on the row: a Meta-only template can carry an approved
+      // registration and no authored body at all.
+      before.body = row.body ?? "";
+      after.body = body;
+      patch.body = body;
+      // The salon rewrote the words, so any cached flattening of the old ones
+      // is now a lie. Cleared rather than recomputed: the render path rebuilds
+      // it, and a stale preview is worse than an absent one.
+      patch.bodyHtml = undefined;
+      patch.bodyPreview = undefined;
+    }
+    if (subject !== undefined && subject !== (row.subject ?? "")) {
+      before.subject = row.subject ?? "";
+      after.subject = subject;
+      patch.subject = subject.trim() || undefined;
+    }
+    if (Object.keys(after).length === 0) throw new Error("Nothing to change.");
+    await ctx.db.patch(row._id, patch);
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "update_template",
+      args: { templateId },
+      targetTable: "waTemplates",
+      targetId: row._id,
+      before,
+      after,
+      reversible: true,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `wording changed: ${row.kind} (${row.language})`,
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return {
+      templateId: row._id,
+      kind: row.kind,
+      language: row.language,
+      // metaName is untouched on purpose — a reword must never cost an approval
+      // that took weeks, which is the same call resetToDefaults makes.
+      metaApproved: !!row.metaName && row.status === "approved",
+      actionId,
+    };
+  },
+});
+
 export const undo = internalMutation({
   args: { ...scope, actionId: v.string() },
   returns: v.object({ summary: v.string() }),
@@ -1402,6 +1648,71 @@ export const undo = internalMutation({
         removed += 1;
       }
       summary = `Removed ${removed} logged entr${removed === 1 ? "y" : "ies"} from the timeline.`;
+    } else if (action.tool === "set_message_rule") {
+      const rule = await ctx.db.get(action.targetId as Id<"messageRules">).catch(() => null);
+      if (!rule || rule.orgId !== orgId) throw new Error("That rule is already gone.");
+      if (before === null) {
+        // It did not exist before this action, so the inverse is removal —
+        // along with any per-rule wording, which would otherwise be an orphan
+        // row pointing at a deleted rule.
+        const wording = await ctx.db
+          .query("waTemplates")
+          .withIndex("by_org", (q) => q.eq("orgId", orgId))
+          .collect();
+        for (const t of wording) {
+          if (t.ruleId === rule._id) await ctx.db.delete(t._id);
+        }
+        await ctx.db.delete(rule._id);
+        summary = `Removed the ${rule.trigger} rule.`;
+      } else {
+        // Same drift rule as everywhere else: if the owner retimed it after the
+        // agent did, restoring throws their change away. Refuse and name it.
+        const current: Record<string, string> = {
+          offsetHours: String(rule.offsetHours),
+          channel: rule.channel,
+          paused: String(rule.paused ?? false),
+        };
+        const drifted = Object.entries(after).filter(([k, wrote]) => current[k] !== wrote);
+        if (drifted.length > 0) {
+          throw new Error(
+            `Refusing to undo: ${drifted
+              .map(([k, wrote]) => `"${k}" now reads "${current[k]}", not "${wrote}"`)
+              .join("; ")}. Someone changed it after this action.`,
+          );
+        }
+        const restore: Partial<Doc<"messageRules">> = {};
+        if (before.offsetHours != null) restore.offsetHours = Number(before.offsetHours);
+        if (before.channel != null) {
+          restore.channel = before.channel as Doc<"messageRules">["channel"];
+        }
+        if (before.paused != null) restore.paused = before.paused === "true";
+        await ctx.db.patch(rule._id, restore);
+        summary = `Put the ${rule.trigger} rule back.`;
+      }
+      // The same sweep the forward write schedules. Undoing a timing change
+      // without it leaves every appointment carrying the nextMessageAt the
+      // undone rule computed.
+      await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
+    } else if (action.tool === "update_template") {
+      const row = await ctx.db.get(action.targetId as Id<"waTemplates">).catch(() => null);
+      if (!row || row.orgId !== orgId) throw new Error("That wording is already gone.");
+      const current: Record<string, string> = {
+        body: row.body ?? "",
+        subject: row.subject ?? "",
+      };
+      const drifted = Object.entries(after).filter(([k, wrote]) => current[k] !== wrote);
+      if (drifted.length > 0) {
+        throw new Error(
+          `Refusing to undo: the ${drifted.map(([k]) => k).join(" and ")} has been rewritten since. Undoing would discard that.`,
+        );
+      }
+      const restore: Partial<Doc<"waTemplates">> = {};
+      if (before?.body != null) restore.body = before.body;
+      if (before?.subject != null) restore.subject = before.subject || undefined;
+      restore.bodyHtml = undefined;
+      restore.bodyPreview = undefined;
+      await ctx.db.patch(row._id, restore);
+      summary = `Restored the ${row.kind} wording (${row.language}).`;
     } else {
       throw new Error(`No undo is implemented for ${action.tool}.`);
     }
