@@ -141,7 +141,7 @@ export function VoiceAgentPage({
   const syncTemplate = useAction(api.retellAgent.syncTemplate);
   const setAgentPersona = useMutation(api.retell.setAgentPersona);
   const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
-  const assignLine = useAction(api.retellAgent.assignLine);
+  const attachLine = useAction(api.retellAgent.attachLine);
   const testCall = useAction(api.retellAgent.testCall);
   // Deleting lives HERE, at the foot of the editor, not as an × on the list
   // row — a destructive control needs the context of what it destroys
@@ -308,10 +308,18 @@ export function VoiceAgentPage({
   // Binding a line is immediate and unrelated to the draft: it changes which
   // phone rings this agent, not what the agent says. Riding Save would mean an
   // unsaved prompt held the phone number hostage.
-  const chooseLine = (number: string | null) => {
+  //
+  // ATTACHING, never moving. This select carried assignLine's move semantics,
+  // and picking a second line here silently released the agent's first one at
+  // the provider — live, 18 Aug 2026, the salon's main line stopped ringing.
+  // Picking a number now ADDS it to this agent in both directions; taking a
+  // line away lives in the agents table's per-direction pickers, where
+  // removal looks like removal.
+  const chooseLine = (number: string) => {
     setAssigning(true);
     setLineError(false);
-    void assignLine({ agentId, number })
+    void attachLine({ agentId, number, direction: "inbound" })
+      .then(() => attachLine({ agentId, number, direction: "outbound" }))
       .then(() => load())
       .catch(() => setLineError(true))
       .finally(() => setAssigning(false));
@@ -455,13 +463,17 @@ export function VoiceAgentPage({
               disabled={assigning || saving}
               title={t("settings.inboundNumber")}
               aria-label={t("settings.inboundNumber")}
-              onChange={(e) => chooseLine(e.target.value || null)}
+              onChange={(e) => {
+                if (e.target.value) chooseLine(e.target.value);
+              }}
               // w-auto is load-bearing: globals.css gives every select
               // width:100% in the base layer, so a select without it eats its
               // whole flex line and drops Test call to the next row.
               className="w-auto shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
             >
-              <option value="">{t("voiceDetail.noLine")}</option>
+              {/* No "None": with attach semantics an empty pick means
+                  nothing, and detaching lives in the agents table where it
+                  reads as removal. */}
               {/* The number, never the nickname. A nickname is what someone
                   called the line at the provider, and prepending it pushed the
                   number itself out of a control this narrow — leaving "austrian
