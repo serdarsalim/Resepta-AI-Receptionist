@@ -13,10 +13,10 @@
 // Secrets are shown masked and re-pasted to change. Nothing here reads a
 // credential back to the browser; see convex/connections.ts for why.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
@@ -29,7 +29,7 @@ import {
   TabStrip,
   UserActivity,
 } from "../parts";
-import { SearchInput } from "@/components/DataTable";
+import { CheckMark, SearchInput } from "@/components/DataTable";
 import { useSearch } from "@/lib/useTableState";
 
 // Label left, control right, current value underneath as a hint. Autosave on
@@ -148,6 +148,22 @@ export default function TenantPage() {
   // provider, and a state that arms and disarms itself is the same protection
   // with less machinery.
   const [armedSuspend, setArmedSuspend] = useState(false);
+  // The Retell account's real numbers, for the Phone lines checklist. An
+  // action, not a query — the provider is the truth and nothing mirrors the
+  // full account. null = loading, "error" = the fetch failed visibly.
+  const listProvisionable = useAction(api.platform.listProvisionableNumbers);
+  const [provisionable, setProvisionable] = useState<
+    | Array<{ number: string; nickname: string | null; heldBy: string | null; missing: boolean }>
+    | null
+    | "error"
+  >(null);
+  useEffect(() => {
+    if (!allowed) return;
+    setProvisionable(null);
+    void listProvisionable({ orgId })
+      .then(setProvisionable)
+      .catch(() => setProvisionable("error"));
+  }, [allowed, listProvisionable, orgId]);
   // Same box as the fleet page and the salon app: this page is six tabs of
   // labelled rows, and "where do I set the transfer number" should not be a
   // hunt through all six.
@@ -459,22 +475,65 @@ export default function TenantPage() {
       {voice && (
         <Section
           title="Phone lines"
-          description="Comma-separated, full international form. The only numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list. Every business shares one Retell account, and an empty list means NO numbers for them until you provision one here."
+          description="Tick the numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and an empty list means NO numbers for them until you provision one here. The rows are the Retell account's real numbers, so provisioning is a click, never retyped E.164."
         >
-          <Row
-            label="Phone lines"
-            current={voice.allowedPhoneNumbers.join(", ") || undefined}
-            placeholder="+905321234567, +4319876543"
-            onSave={(value) =>
-              setAllowedPhoneNumbers({
-                orgId,
-                numbers: value
-                  .split(",")
-                  .map((one) => one.trim())
-                  .filter(Boolean),
-              })
-            }
-          />
+          {provisionable === null ? (
+            <p className="py-2.5 text-xs text-[var(--muted)]">
+              Loading the account&apos;s numbers…
+            </p>
+          ) : provisionable === "error" ? (
+            <p className="py-2.5 text-xs text-amber-700 dark:text-amber-400">
+              Could not list the Retell account&apos;s numbers. Check the Voice key on Setup.
+            </p>
+          ) : provisionable.length === 0 ? (
+            <p className="py-2.5 text-xs text-[var(--muted)]">
+              The Retell account has no phone numbers (or no Voice key is set).
+            </p>
+          ) : (
+            <div className="py-1.5">
+              {provisionable.map((line) => {
+                const on = voice.allowedPhoneNumbers.includes(line.number);
+                // A line another business holds cannot be ticked ON from
+                // here — one number, one business. It can still be ticked
+                // OFF if this org has it, whoever else claims it.
+                const blocked = !on && line.heldBy !== null;
+                return (
+                  <button
+                    key={line.number}
+                    type="button"
+                    disabled={blocked}
+                    onClick={() =>
+                      setAllowedPhoneNumbers({
+                        orgId,
+                        numbers: on
+                          ? voice.allowedPhoneNumbers.filter((n) => n !== line.number)
+                          : [...voice.allowedPhoneNumbers, line.number],
+                      })
+                    }
+                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckMark on={on} />
+                    <span className="font-mono text-xs">{line.number}</span>
+                    {line.nickname && (
+                      <span className="truncate text-xs text-[var(--muted)]">
+                        {line.nickname}
+                      </span>
+                    )}
+                    {line.missing && (
+                      <span className="text-xs text-amber-700 dark:text-amber-400">
+                        not on the Retell account — untick to clean up
+                      </span>
+                    )}
+                    {line.heldBy && (
+                      <span className="ml-auto shrink-0 text-xs text-[var(--muted)]">
+                        held by {line.heldBy}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Section>
       )}
       </>

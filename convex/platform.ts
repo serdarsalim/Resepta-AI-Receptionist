@@ -19,9 +19,16 @@
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import {
+  action,
+  internalQuery,
+  mutation,
+  query,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { connectionField } from "./lib/connections";
 import {
   isPlatformAdmin,
   platformAdminEmails,
@@ -1185,6 +1192,99 @@ export const rotateEvolutionWebhookToken = mutation({
 // the phones down fleet-wide. The cross-org claim check in retell.lineUsable
 // runs regardless, so an org with no list still cannot take a line somebody
 // else is holding.
+// What the provisioning checklist below needs in one authorized read: the
+// org's key, its current allowlist, and who already holds every number —
+// through other orgs' allowlists and through live agent bindings both.
+export const provisionableContext = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    apiKey: v.union(v.string(), v.null()),
+    allowed: v.array(v.string()),
+    heldBy: v.array(v.object({ number: v.string(), org: v.string() })),
+  }),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const heldBy = new Map<string, string>();
+    // Allowlists first — provisioning intent counts as held even before a
+    // line is bound to an agent — then live bindings for anything unlisted.
+    const orgs = await ctx.db.query("orgs").collect();
+    const names = new Map(orgs.map((o) => [o._id, o.name]));
+    for (const other of orgs) {
+      if (other._id === args.orgId) continue;
+      for (const number of other.allowedPhoneNumbers ?? []) {
+        if (!heldBy.has(number)) heldBy.set(number, other.name);
+      }
+    }
+    const lines = await ctx.db.query("agentLines").collect();
+    for (const line of lines) {
+      if (line.orgId === args.orgId || heldBy.has(line.number)) continue;
+      heldBy.set(line.number, names.get(line.orgId) ?? "another business");
+    }
+    return {
+      apiKey: await connectionField(ctx, args.orgId, "retell", "apiKey"),
+      allowed: org.allowedPhoneNumbers ?? [],
+      heldBy: [...heldBy].map(([number, orgName]) => ({ number, org: orgName })),
+    };
+  },
+});
+
+// The provisioning picker's options: the Retell account's REAL numbers, so
+// the operator ticks lines instead of retyping E.164 into a text field — the
+// same free-text-drifts lesson the tenant pickers already learned. A number
+// this org's allowlist names that the account no longer lists still renders,
+// flagged, so unticking it is how the stale entry gets cleaned up.
+export const listProvisionableNumbers = action({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      number: v.string(),
+      nickname: v.union(v.string(), v.null()),
+      heldBy: v.union(v.string(), v.null()),
+      missing: v.boolean(),
+    }),
+  ),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<
+    Array<{ number: string; nickname: string | null; heldBy: string | null; missing: boolean }>
+  > => {
+    const context = (await ctx.runQuery(internal.platform.provisionableContext, {
+      orgId: args.orgId,
+    })) as {
+      apiKey: string | null;
+      allowed: string[];
+      heldBy: Array<{ number: string; org: string }>;
+    };
+    if (!context.apiKey) return [];
+    const res = await fetch("https://api.retellai.com/v2/list-phone-numbers", {
+      headers: { authorization: `Bearer ${context.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`list-numbers-http-${res.status}`);
+    const data: unknown = await res.json();
+    const items = (
+      Array.isArray(data) ? data : (data as { items?: unknown[] })?.items ?? []
+    ) as Array<{ phone_number?: string; nickname?: string }>;
+    const heldBy = new Map(context.heldBy.map((h) => [h.number, h.org]));
+    const rows = items
+      .filter((n) => n.phone_number)
+      .map((n) => ({
+        number: n.phone_number!,
+        nickname: n.nickname?.trim() || null,
+        heldBy: heldBy.get(n.phone_number!) ?? null,
+        missing: false,
+      }));
+    const listed = new Set(rows.map((r) => r.number));
+    for (const number of context.allowed) {
+      if (listed.has(number)) continue;
+      rows.push({ number, nickname: null, heldBy: null, missing: true });
+    }
+    return rows;
+  },
+});
+
 export const setAllowedPhoneNumbers = mutation({
   args: { orgId: v.id("orgs"), numbers: v.array(v.string()) },
   returns: v.null(),
