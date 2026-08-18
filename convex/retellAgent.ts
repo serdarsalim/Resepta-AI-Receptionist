@@ -1476,15 +1476,19 @@ async function assignLineTo(
   return null;
 }
 
-// The multi-number door: attach ONE MORE line to an agent, leaving its other
-// lines alone — assignLine above is the single-line move the provisioning and
-// MCP paths still speak. The line's whole routing (inbound and outbound)
-// moves to this agent; whichever agent held it stops answering the moment the
-// PATCH lands, same no-undo as every rebind.
+// The multi-number door: bind ONE MORE line to an agent in ONE direction,
+// leaving its other lines and the line's other direction alone — assignLine
+// above is the single-line move the provisioning and MCP paths still speak.
+// The two directions are separate controls because they are separate facts: a
+// line can ring one agent and be another agent's caller ID. Whichever agent
+// held this direction stops the moment the PATCH lands, same no-undo as every
+// rebind.
+const lineDirection = v.union(v.literal("inbound"), v.literal("outbound"));
+
 export const attachLine = action({
-  args: { agentId: v.string(), number: v.string() },
+  args: { agentId: v.string(), number: v.string(), direction: lineDirection },
   returns: v.null(),
-  handler: async (ctx, { agentId, number }): Promise<null> => {
+  handler: async (ctx, { agentId, number, direction }): Promise<null> => {
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const site = siteUrl();
@@ -1495,38 +1499,42 @@ export const attachLine = action({
       number: target,
     });
     if (!usable.ok) throw new Error(usable.reason);
+    const binding = [
+      { agent_id: agentId, agent_version: "latest_published", weight: 1 },
+    ];
     await call(key, "PATCH", `update-phone-number/${encodeURIComponent(target)}`, {
-      inbound_agents: [
-        { agent_id: agentId, agent_version: "latest_published", weight: 1 },
-      ],
-      outbound_agents: [
-        { agent_id: agentId, agent_version: "latest_published", weight: 1 },
-      ],
-      ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
+      ...(direction === "inbound"
+        ? {
+            inbound_agents: binding,
+            ...(site ? { inbound_webhook_url: `${site}/retell/inbound` } : {}),
+          }
+        : { outbound_agents: binding }),
     });
     await ctx.runMutation(internal.retell.applyLineBinding, {
       orgId: context.orgId,
       number: target,
-      inboundAgentId: agentId,
-      outboundAgentId: agentId,
+      ...(direction === "inbound"
+        ? { inboundAgentId: agentId }
+        : { outboundAgentId: agentId }),
     });
     return null;
   },
 });
 
 export const detachLine = action({
-  args: { agentId: v.string(), number: v.string() },
+  args: { agentId: v.string(), number: v.string(), direction: lineDirection },
   returns: v.null(),
-  handler: async (ctx, { agentId, number }): Promise<null> => {
+  handler: async (ctx, { agentId, number, direction }): Promise<null> => {
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const target = number.trim();
-    await releaseLineIfHeld(key, target, agentId);
+    await releaseLineIfHeld(key, target, agentId, direction);
     await ctx.runMutation(internal.retell.applyLineBinding, {
       orgId: context.orgId,
       number: target,
-      inboundAgentId: null,
-      outboundAgentId: null,
+      ...(direction === "inbound"
+        ? { inboundAgentId: null }
+        : { outboundAgentId: null }),
     });
     return null;
   },
@@ -1556,7 +1564,14 @@ export const assignLineForOrg = internalAction({
 // Unbinding must not clobber routing the agent no longer owns: another agent
 // may have taken the line between the read and this write, so release only a
 // line the departing agent still answers.
-async function releaseLineIfHeld(key: string, number: string, agentId: string) {
+async function releaseLineIfHeld(
+  key: string,
+  number: string,
+  agentId: string,
+  // Scope the release to one direction (detachLine); absent releases both —
+  // the full-move and disconnect paths.
+  direction?: "inbound" | "outbound",
+) {
   const numberData: unknown = await (
     await call(key, "GET", "v2/list-phone-numbers")
   ).json();
@@ -1576,11 +1591,13 @@ async function releaseLineIfHeld(key: string, number: string, agentId: string) {
   // Each direction released only where this agent actually holds it — the
   // other direction may belong to another agent by now.
   const holdsInbound =
-    entry.inbound_agent_id === agentId ||
-    entry.inbound_agents?.some((candidate) => candidate.agent_id === agentId);
+    (entry.inbound_agent_id === agentId ||
+      entry.inbound_agents?.some((candidate) => candidate.agent_id === agentId)) &&
+    direction !== "outbound";
   const holdsOutbound =
-    entry.outbound_agent_id === agentId ||
-    entry.outbound_agents?.some((candidate) => candidate.agent_id === agentId);
+    (entry.outbound_agent_id === agentId ||
+      entry.outbound_agents?.some((candidate) => candidate.agent_id === agentId)) &&
+    direction !== "inbound";
   if (!holdsInbound && !holdsOutbound) return;
   await call(key, "PATCH", `update-phone-number/${encodeURIComponent(number)}`, {
     ...(holdsInbound ? { inbound_agents: [] } : {}),

@@ -16,8 +16,10 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 // not fix that. InfoTip is the same pattern for tooltips.
 
 // Checkmark box. A stock checkbox is outside the house style, and this one
-// reads the same in both panels.
-function CheckMark({ on }: { on: boolean }) {
+// reads the same in every panel — exported with the two panel classes below
+// so other multi-select dropdowns (VoiceCard's number pickers) are this one
+// visual, not a drifting copy.
+export function CheckMark({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
@@ -32,10 +34,10 @@ function CheckMark({ on }: { on: boolean }) {
   );
 }
 
-const PANEL_CLASS =
+export const PANEL_CLASS =
   "thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm text-[var(--foreground)] shadow-lg";
 
-const ITEM_CLASS =
+export const ITEM_CLASS =
   "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)]";
 
 // A dropdown action. Used for the rare actions parked at the foot of the

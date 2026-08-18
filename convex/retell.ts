@@ -330,15 +330,17 @@ export const reconcileLines = internalMutation({
 
 // The attach/detach twin of reconcileLines: one line changed at the provider,
 // so one row changes here — without waiting for the next full roster read.
-// null in either agent slot means that direction is now unbound; both null
-// deletes the row.
+// Each direction updates independently, because the UI binds them
+// independently: absent = leave that direction alone, null = unbind it, a
+// string = bind it to that agent. A row with both directions unbound is
+// deleted.
 export const applyLineBinding = internalMutation({
   args: {
     orgId: v.id("orgs"),
     number: v.string(),
     nickname: v.optional(v.string()),
-    inboundAgentId: v.union(v.string(), v.null()),
-    outboundAgentId: v.union(v.string(), v.null()),
+    inboundAgentId: v.optional(v.union(v.string(), v.null())),
+    outboundAgentId: v.optional(v.union(v.string(), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -347,8 +349,14 @@ export const applyLineBinding = internalMutation({
       .withIndex("by_number", (q) => q.eq("number", args.number))
       .collect();
     const row = rows.find((r) => r.orgId === args.orgId);
-    const inbound = args.inboundAgentId ?? undefined;
-    const outbound = args.outboundAgentId ?? undefined;
+    const inbound =
+      args.inboundAgentId === undefined
+        ? row?.inboundAgentId
+        : args.inboundAgentId ?? undefined;
+    const outbound =
+      args.outboundAgentId === undefined
+        ? row?.outboundAgentId
+        : args.outboundAgentId ?? undefined;
     if (!inbound && !outbound) {
       if (row) await ctx.db.delete(row._id);
     } else if (row) {

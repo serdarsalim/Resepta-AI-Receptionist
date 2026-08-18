@@ -1909,6 +1909,11 @@ const dictionary = {
     en: "Inbound number",
     de: "Eingehende Rufnummer",
   },
+  "settings.outboundNumber": {
+    tr: "Giden arama numarası",
+    en: "Outbound number",
+    de: "Ausgehende Rufnummer",
+  },
   "settings.transferNumber": {
     tr: "Aktarma numarası",
     en: "Transfer number",
@@ -1935,17 +1940,11 @@ const dictionary = {
     de: "Noch keine Anrufe.",
   },
   "settings.voiceNoNumber": { tr: "— Yok —", en: "— None —", de: "— Keine —" },
-  // The multi-line cell: the picker that attaches one more number to an
-  // agent, and the accessible label on each chip's remove button.
+  // The number multi-selects' resting label, when a direction has no line.
   "settings.voiceAddNumber": {
     tr: "+ Numara ekle",
     en: "+ Add number",
     de: "+ Nummer hinzufügen",
-  },
-  "settings.voiceDetachNumber": {
-    tr: "Numarayı kaldır:",
-    en: "Remove number:",
-    de: "Nummer entfernen:",
   },
   // Broken-plumbing notice in the salon's words. Deliberately no "webhook":
   // the owner should read a symptom and a fix, not our vocabulary.

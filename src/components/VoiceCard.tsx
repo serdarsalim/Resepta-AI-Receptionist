@@ -2,6 +2,7 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -10,6 +11,8 @@ import { type SiteUrl } from "@/lib/siteUrl";
 import { ActionTip, InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { CheckMark, ITEM_CLASS, PANEL_CLASS } from "./DataTable";
 
 
 // The roster comes from the org's OWN Retell account (convex/retell.ts
@@ -91,6 +94,105 @@ function languageLabel(tag: string, locale: string, multiple: string): string {
   } catch {
     return tag;
   }
+}
+
+// One direction's numbers for one agent: a trigger that reads like an input
+// and an anchored checkbox panel over every line on the account. The native
+// <select> this replaces could neither show multiple selections nor render as
+// anything but the OS popup. Toggling a number another agent holds MOVES it,
+// the same steal the old single-select always did — the ✓ simply shows where
+// it is now.
+function LineMultiSelect({
+  numbers,
+  selected,
+  disabled,
+  placeholder,
+  label,
+  emptyLabel,
+  onToggle,
+}: {
+  numbers: string[];
+  selected: string[];
+  disabled: boolean;
+  placeholder: string;
+  // Names the control for screen readers; the column header names it for
+  // everyone else.
+  label: string;
+  // Shown in the panel when the account has no numbers at all.
+  emptyLabel: string;
+  onToggle: (number: string, next: boolean) => void;
+}) {
+  const { triggerRef, panelRef, pos, open, toggle } = useAnchoredPanel(224, 264);
+  // A held line the account no longer lists still renders (and can be
+  // unchecked), so the row shows the truth rather than silently dropping it.
+  const options = [...new Set([...numbers, ...selected])];
+  const summary =
+    selected.length === 0
+      ? placeholder
+      : selected.length === 1
+        ? selected[0]
+        : `${selected[0]} +${selected.length - 1}`;
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          toggle();
+        }}
+        className="flex w-full min-w-36 items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-left text-xs disabled:opacity-60"
+      >
+        <span className={`truncate ${selected.length === 0 ? "text-[var(--muted)]" : ""}`}>
+          {summary}
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden
+          className="shrink-0 text-[var(--muted)]"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: "fixed", maxHeight: 264, ...pos }}
+            className={`${PANEL_CLASS} text-xs`}
+          >
+            {options.length === 0 && (
+              <div className="px-2.5 py-1.5 text-[var(--muted)]">{emptyLabel}</div>
+            )}
+            {options.map((number) => {
+              const on = selected.includes(number);
+              return (
+                <button
+                  key={number}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onToggle(number, !on)}
+                  className={`${ITEM_CLASS} disabled:opacity-60`}
+                >
+                  <CheckMark on={on} />
+                  <span className="truncate">{number}</span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
 }
 
 export function VoiceCard({
@@ -386,6 +488,10 @@ export function VoiceCard({
               <tr>
                 <th className="px-3 py-2 font-medium">{t("settings.voiceAgent")}</th>
                 <th className="px-3 py-2 font-medium">{t("settings.inboundNumber")}</th>
+                {/* Separate column because it is a separate fact: who a line
+                    RINGS and who it dials AS may be different agents, and a
+                    campaign org cares about the second without the first. */}
+                <th className="px-3 py-2 font-medium">{t("settings.outboundNumber")}</th>
                 <th className="px-2 py-2 font-medium">
                   <span className="inline-flex items-center gap-1">
                     {t("settings.voiceEnabled")}
@@ -451,83 +557,46 @@ export function VoiceCard({
                           : t("settings.voiceDetails")}
                       </button>
                     </td>
-                    <td className="px-3 py-2">
-                      {/* Every line this agent holds, as removable chips, plus
-                          a picker to attach one more — an agent may answer on
-                          several numbers (retellAgent.attachLine). The chips
-                          read the reactive agentLines copy; the picker's
-                          options are the account's real numbers, never free
-                          text — free text here was how inboundNumber drifted
-                          out of agreement with Retell. */}
-                      <div className="flex flex-wrap items-center gap-1">
-                        {(orgLines ?? [])
-                          .filter(
-                            (line) =>
-                              line.inboundAgentId === row.retellAgentId ||
-                              line.outboundAgentId === row.retellAgentId,
-                          )
-                          .map((line) => (
-                            <span
-                              key={line.number}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-2 py-0.5 text-xs"
-                            >
-                              {line.number}
-                              <button
-                                type="button"
-                                aria-label={`${t("settings.voiceDetachNumber")} ${line.number}`}
-                                disabled={assigningLine === row.retellAgentId}
-                                onClick={() => {
-                                  setAssigningLine(row.retellAgentId);
-                                  setLineErrorId(null);
-                                  void detachLine({
-                                    agentId: row.retellAgentId,
-                                    number: line.number,
-                                  })
-                                    .catch(() => setLineErrorId(row.retellAgentId))
-                                    .finally(() => setAssigningLine(null));
-                                }}
-                                className="text-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-60"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        <select
-                          value=""
+                    {/* The agent's lines, one multi-select per DIRECTION
+                        (retellAgent.attachLine/detachLine). The checkmarks
+                        read the reactive agentLines copy; the options are the
+                        account's real numbers, never free text — free text
+                        here was how inboundNumber drifted out of agreement
+                        with Retell. */}
+                    {(["inbound", "outbound"] as const).map((direction) => (
+                      <td key={direction} className="px-3 py-2">
+                        <LineMultiSelect
+                          numbers={(roster?.phoneNumbers ?? []).map((n) => n.number)}
+                          selected={(orgLines ?? [])
+                            .filter(
+                              (line) =>
+                                (direction === "inbound"
+                                  ? line.inboundAgentId
+                                  : line.outboundAgentId) === row.retellAgentId,
+                            )
+                            .map((line) => line.number)}
                           disabled={assigningLine === row.retellAgentId}
-                          onChange={(e) => {
-                            const number = e.target.value;
-                            if (!number) return;
+                          placeholder={t("settings.voiceAddNumber")}
+                          label={t(
+                            direction === "inbound"
+                              ? "settings.inboundNumber"
+                              : "settings.outboundNumber",
+                          )}
+                          emptyLabel={t("settings.voiceNoNumber")}
+                          onToggle={(number, next) => {
                             setAssigningLine(row.retellAgentId);
                             setLineErrorId(null);
-                            void attachLine({ agentId: row.retellAgentId, number })
+                            void (next ? attachLine : detachLine)({
+                              agentId: row.retellAgentId,
+                              number,
+                              direction,
+                            })
                               .catch(() => setLineErrorId(row.retellAgentId))
                               .finally(() => setAssigningLine(null));
                           }}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-60"
-                        >
-                          <option value="">{t("settings.voiceAddNumber")}</option>
-                          {/* Numbers not already on this agent. A line held by
-                              another agent still lists — attaching MOVES it,
-                              the same steal the single-select always did. */}
-                          {(roster?.phoneNumbers ?? [])
-                            .filter(
-                              (n) =>
-                                !(orgLines ?? []).some(
-                                  (line) =>
-                                    line.number === n.number &&
-                                    (line.inboundAgentId === row.retellAgentId ||
-                                      line.outboundAgentId === row.retellAgentId),
-                                ),
-                            )
-                            .map((n) => (
-                              <option key={n.number} value={n.number}>
-                                {n.number}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </td>
+                        />
+                      </td>
+                    ))}
                     <td className="px-3 py-2">
                       <Toggle
                         checked={row.enabled}
@@ -565,7 +634,7 @@ export function VoiceCard({
                   </tr>
                   {openInfo === row.retellAgentId && (
                     <tr className="bg-[var(--muted-bg)]">
-                      <td colSpan={4} className="px-3 pb-3 pt-1">
+                      <td colSpan={5} className="px-3 pb-3 pt-1">
                         <div className="grid gap-4 text-xs sm:grid-cols-2">
                           <div>
                             <div className="mb-1 font-medium">
@@ -636,7 +705,7 @@ export function VoiceCard({
                     health?.needsAttention ||
                     lineErrorId === row.retellAgentId) && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
-                      <td colSpan={4} className="px-3 py-2">
+                      <td colSpan={5} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                           {connectionNeedsFix && (
                             <span>
