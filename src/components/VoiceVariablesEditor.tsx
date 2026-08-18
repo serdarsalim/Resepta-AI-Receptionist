@@ -579,7 +579,6 @@ export function VoiceVariablesEditor({
           <InfoTip
             text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.builtinHint")}`}
           />
-          <span className="text-xs text-[var(--muted)]">{draft.length || ""}</span>
         </div>
         {status && <span className="text-xs text-[var(--muted)]">{status}</span>}
         {previous && !dirty && (
