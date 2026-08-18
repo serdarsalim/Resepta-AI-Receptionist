@@ -696,21 +696,27 @@ export function VoiceVariablesEditor({
                     Before". Read-only and muted: these are facts about every
                     agent, not choices about this one, and a control that
                     could only break the agent is not offered. */}
-                {group.id === "before" &&
-                  [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
-                    <div key={item.key} className={VAR_GRID}>
-                      <span className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]">
-                        {item.key}
-                      </span>
-                      <span className="px-2 py-1 text-xs text-[var(--muted)]">
-                        {t("voiceVariables.alwaysSent")}
-                      </span>
-                      <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-                        {item.label}
-                      </span>
-                      <span />
+                {group.id === "before" && (
+                  <>
+                    {/* One statement over the block, not a tag on every row
+                        — "always sent" is a fact about the set. */}
+                    <div className="mt-2 px-2 pb-0.5 text-[11px] font-medium text-[var(--muted)]">
+                      {t("voiceVariables.alwaysSent")}
                     </div>
-                  ))}
+                    {[...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
+                      <div key={item.key} className={VAR_GRID}>
+                        <span className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]">
+                          {item.key}
+                        </span>
+                        <span />
+                        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
+                          {item.label}
+                        </span>
+                        <span />
+                      </div>
+                    ))}
+                  </>
+                )}
                 <VariablePicker
                   addLabel={
                     group.id === "before" ? t("voiceVariables.addDefault") : undefined
