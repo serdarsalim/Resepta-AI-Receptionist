@@ -721,9 +721,22 @@ deals; we sell services, and an appointment is the thing a customer bought.
   - No "Transcript" heading. A column of chat bubbles is self-evidently the
     conversation, and the label was one more line of chrome between the summary
     and the thing you opened the call to read.
-  - `pr-3` on the transcript scroller: the caller's bubbles are right-aligned
-    and butt against the scrollbar thumb without it. The left needs no
-    counterpart — the scroller's own edge sits inside the pane's padding.
+  - **The PANE scrolls the whole call, not just the transcript (2026-08-18).**
+    It used to stand its own scrollbar down (`overflow-hidden`) for an open call
+    and let the transcript scroll inside a `flex-1` — right that two scrollbars
+    in one card is a trap, wrong about which one to remove. The summary card is
+    `shrink-0`, so eight collected values pinned most of the pane, left the
+    transcript on its 128px floor, and CLIPPED whatever the card itself could
+    not fit, with no way to reach it. **The summary is read ONCE and the
+    transcript is read THROUGH, so the summary is what scrolls away.**
+    `CallTranscript`'s `flow` prop is that mode. Voice → Calls and the mixed
+    feed keep the 24rem cap, where an uncapped transcript would bury every card
+    after it.
+  - `pr-3` on the transcript scroller belongs to the CAPPED mode only: there the
+    caller's bubbles are right-aligned and butt against its own thumb. In `flow`
+    the transcript has no thumb — the pane's scroller reserves its gutter
+    outside the padding — so the bubbles run to the same edge as everything else
+    on the paper.
   - **OUR side is on the RIGHT — the agent — and the caller is on the left**,
     the same arrangement the WhatsApp thread uses in the same pane. It was the
     other way round, which is what call-ANALYTICS tools do because there the
@@ -1340,6 +1353,15 @@ the point.
 When you add a stacked-card view, add the class. The last card butting against
 the bottom of the window reads as the page being cut off rather than ending.
 
+**It applies inside a scrolling PANE too, which the carve-out above does not
+cover.** The opened call is a column inside the conversation panel's own
+scroller, so `.page-stack` correctly cannot reach it — but the last thing said
+still lands jammed against the pane's bottom edge, and that is the line you are
+most likely to be reading, since a call ends with what was agreed. `CallDetail`'s
+`flow` mode carries its own `pb-24` — the same 6rem. Free on a short call: a
+column that does not overflow never scrolls, so the padding is paper that was
+already empty.
+
 ## Scrollbars: two weights, width-only hover
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),
@@ -1362,6 +1384,24 @@ implementation in `src/app/globals.css`. The short form:
   selector(::-webkit-scrollbar)` guard.** Declaring it unguarded switches
   Chrome's webkit pseudo-elements off wholesale, which is exactly how the
   previous rules sat here as dead code while Chrome painted its own 11px bar.
+
+## A header row sits in the same column as the feed below it
+
+`ConversationPanel`'s header slot holds a different thing per tab — the email
+header, the call header, the note composer — and they carried `px-3`, `px-3` and
+`px-4` against a scroller on `p-4`. So Place call hung past the right edge of the
+card beneath it, the back arrow started left of it, and the row jogged sideways
+when you switched tabs.
+
+**Two things have to be matched, not one:** the scroller's padding AND the 9px
+that `stable-gutter` reserves for `.thin-scroll`'s track. That gutter sits
+OUTSIDE the padding, so matching `px-4` alone still lands 9px short — which is
+exactly how this looked "nearly right" for months. One `FEED_COL_PAD` constant
+covers all three now; keep it in step with the `threadRef` div.
+
+Keep it as `calc(1rem + 9px)`, never a resolved pixel value. Nothing sets a root
+font-size, so `rem` tracks the browser's font preference and Serdar's Chrome runs
+17px, where a hardcoded 25px is out by a pixel and a half.
 
 ## Borders only when absolutely necessary (Serdar's design language)
 
