@@ -693,7 +693,11 @@ http.route({
     // Set org-defined contact properties mid-call. The org decides which
     // properties exist (Settings → contact fields); this endpoint only fills
     // in the ones already there.
-    if (name === "update_contact") {
+    //
+    // Two names for one write: save_customer_details is what every agent
+    // prompt teaches — it arrived here from the runtime MCP surface (template
+    // v10), where Retell's round trip cost ~12 seconds of dead air per save.
+    if (name === "update_contact" || name === "save_customer_details") {
       if (!callerPhone) return respond({ saved: false, message: "No number for this contact." });
       const values = voiceValuesFromToolArgs(args);
       if (Object.keys(values).length === 0) {

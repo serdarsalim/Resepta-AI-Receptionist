@@ -1,7 +1,14 @@
 // Runtime MCP surface for a phone agent. This is intentionally separate from
 // the user-facing /mcp connector: a phone agent acts as the connected agent,
-// not as a staff member, and receives only the two customer-context tools it
-// needs during a conversation.
+// not as a staff member.
+//
+// LEGACY since template v10: no current agent engine references these tools.
+// Retell's MCP transport cost a flat ~12 seconds of dead air per call on a
+// live phone line, so save_customer_details now rides /retell/functions like
+// every other tool, and withRuntimeSaveTool strips the MCP copy on any
+// publish. This server stays up for agents whose owners have published
+// nothing since v10 — their engines still hold the MCP tool and it must keep
+// answering. Remove it only when no enabled agent predates v10.
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";

@@ -22,6 +22,7 @@ import {
 } from "./lib/voiceRuntime";
 import {
   appointmentReceptionistTemplate,
+  saveCustomerDetailsTool,
   summaryAnalysisField,
   END_CALL_TOOL_NAME,
   VOICE_AGENT_TEMPLATE_VERSION,
@@ -182,51 +183,39 @@ async function runtimeMcpConfig(
   ];
 }
 
-// No input_schema on these: the deployed general_tools validator only accepts
-// string-valued input_schema.properties/required and 400s on object schemas,
-// while tool discovery pulls the real schemas from /retell/mcp anyway.
-const RUNTIME_MCP_TOOLS = [
-  // get_call_context USED TO BE HERE AND IS DELIBERATELY GONE.
-  //
-  // It cost a caller twenty seconds of silence on a recorded call — he gave
-  // his name at 13.1s and the agent said nothing until he asked what had
-  // happened at 33.2s. That gap never showed up in the latency percentiles,
-  // because a turn where the agent never speaks produces no end-to-end
-  // sample; the only clue was e2e n=2 on a 37-second call.
-  //
-  // And it was fetching nothing. Every field it returned — the caller, the
-  // clock, the roster, the collectable fields, the services — is injected by
-  // beforeCallContext while the phone is still ringing. Verified on that same
-  // call: all 21 variables arrived. So the agent had every fact already, was
-  // told in its prompt not to call a tool for them, and reached for the tool
-  // anyway. A tool that exists WILL be called. The only reliable way to stop
-  // an agent using a tool is to take it away.
-  {
-    type: "mcp",
-    mcp_id: "randevu",
-    name: "save_customer_details",
-    description:
-      "Save information immediately after the caller provides or explicitly confirms it. Use only the keys listed in your instructions, never guess, and pass {{user_number}} as phone.",
-    // Talk while it runs. This is now the only MCP tool left, so it is the
-    // only remaining place a caller can be left listening to nothing.
-    speak_during_execution: true,
-    speak_after_execution: false,
-  },
-] satisfies Record<string, unknown>[];
-
-function withRuntimeMcpTools(tools: Record<string, unknown>[] | undefined) {
-  if (!siteUrl()) return tools ?? [];
-  const managedNames = new Set(RUNTIME_MCP_TOOLS.map((tool) => tool.name));
+// NO MCP TOOLS RIDE ON A LIVE CALL ANY MORE. Both that ever did are gone,
+// for the same reason, measured twice:
+//
+// get_call_context cost a caller twenty seconds of silence on a recorded
+// call — he gave his name at 13.1s and the agent said nothing until he asked
+// what had happened at 33.2s — and it was fetching nothing: every field it
+// returned is injected by beforeCallContext while the phone still rings. A
+// tool that exists WILL be called; the only reliable way to stop an agent
+// using a tool is to take it away (template v7).
+//
+// save_customer_details survived it because the write is real work — and
+// then showed the same signature: a flat ~12 seconds of dead air per save,
+// four saves on an 18 Aug call burning 50 of its 180 seconds, while the
+// custom-function tools on /retell/functions answered in about a second.
+// The transport was the whole cost. So the same write now rides the function
+// endpoint (template v10); this helper swaps the tool on every publish path,
+// which is how pre-v10 agents get the fast one without waiting for their
+// owner to click the template banner. /retell/mcp stays up for agents that
+// have published nothing since.
+function withRuntimeSaveTool(tools: Record<string, unknown>[] | undefined) {
+  const site = siteUrl();
+  if (!site) return tools ?? [];
   return [
     ...(tools ?? []).filter(
       (tool) =>
-        !(
-          tool.type === "mcp" &&
-          tool.mcp_id === "randevu" &&
-          managedNames.has(String(tool.name ?? ""))
-        ),
+        // Every randevu MCP tool goes, whatever its name — this is also what
+        // finally sweeps a stray get_call_context off a pre-v7 engine.
+        !(tool.type === "mcp" && tool.mcp_id === "randevu") &&
+        // And the custom namesake, so a re-publish refreshes its URL and
+        // flags instead of stacking a second copy beside it.
+        String(tool.name ?? "") !== "save_customer_details",
     ),
-    ...RUNTIME_MCP_TOOLS,
+    saveCustomerDetailsTool(site),
   ];
 }
 
@@ -596,7 +585,7 @@ export const publishPrompt = action({
       general_prompt: generalPrompt,
       ...(beginMessage !== undefined ? { begin_message: beginMessage } : {}),
       mcps: await runtimeMcpConfig(ctx, agentId, context, before),
-      general_tools: withRuntimeMcpTools(before.general_tools),
+      general_tools: withRuntimeSaveTool(before.general_tools),
     },
     voiceId?.trim() ? { voice_id: voiceId.trim() } : undefined);
     if (siteUrl()) {
@@ -686,7 +675,7 @@ export const publishPromptForOrg = internalAction({
     const version = await publishViaDraft(key, agentId, llmId, {
       general_prompt: generalPrompt,
       mcps: await runtimeMcpConfig(ctx, agentId, context, before),
-      general_tools: withRuntimeMcpTools(before.general_tools),
+      general_tools: withRuntimeSaveTool(before.general_tools),
     });
     if (siteUrl()) {
       await ctx.runMutation(internal.retell.markRuntimeConnected, {
@@ -842,7 +831,7 @@ async function publishVariableSet(
     (tool) => tool.type !== "extract_dynamic_variable",
   );
   const during = next.filter((variable) => variable.duringMode !== "none");
-  const generalTools = withRuntimeMcpTools([
+  const generalTools = withRuntimeSaveTool([
     ...preservedTools,
     ...(during.length > 0
       ? [
@@ -1013,7 +1002,7 @@ async function wireAgent(
     await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
       ...(llmVersion !== undefined ? { version: llmVersion } : {}),
       mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
-      general_tools: withRuntimeMcpTools(liveLlm.general_tools),
+      general_tools: withRuntimeSaveTool(liveLlm.general_tools),
     });
   }
   await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
@@ -1445,7 +1434,7 @@ export const syncTemplate = action({
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
         model: template.llm.model,
         model_temperature: template.llm.model_temperature,
-        general_tools: withRuntimeMcpTools([...templateTools, ...kept]),
+        general_tools: withRuntimeSaveTool([...templateTools, ...kept]),
         mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
       });
     }
@@ -1532,7 +1521,7 @@ export const setEndCallEnabled = action({
     const llmVersion = draftAgent.response_engine?.version;
     await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
       ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-      general_tools: withRuntimeMcpTools(
+      general_tools: withRuntimeSaveTool(
         enabled && endCallTool ? [...others, endCallTool] : others,
       ),
     });

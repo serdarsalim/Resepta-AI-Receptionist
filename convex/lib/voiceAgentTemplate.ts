@@ -41,7 +41,16 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // rule is back, asked once after the booking is saved.
 // v9: goods — services without a duration take no slot, repeat-per-piece for
 // quantity, and the lead-time refusal gets its own remedy line.
-export const VOICE_AGENT_TEMPLATE_VERSION = 9;
+// v10 (2026-08-19): save_customer_details leaves MCP for the function
+// endpoint. Retell's MCP round trip cost a flat ~12 seconds of dead air per
+// save — an 18 Aug Bella call saved four times and spent 50 of its 180
+// seconds in silence, the caller asking "nasıl yani?" into the first gap —
+// while the HTTP tools on /retell/functions answer in about a second. Same
+// name, same mutation, only the transport changes; and the filler line goes
+// with it (speak_during_execution off), because a sub-second write needs no
+// "kaydediyorum" to paper over. The /retell/mcp server keeps serving pre-v10
+// agents until their owners publish anything.
+export const VOICE_AGENT_TEMPLATE_VERSION = 10;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -280,6 +289,32 @@ function customTool(
     speak_after_execution: true,
     timeout_ms: 15000,
   };
+}
+
+// Deliberately NOT in the template's tool list. Like the MCP tool it
+// replaces, it is appended by every publish path in retellAgent.ts
+// (withRuntimeSaveTool), so it reaches an existing agent the next time
+// anything about that agent is published — not only when its owner clicks
+// the template-update banner. The keys it may write are per-business
+// ({{information}} in the prompt), so the schema stays a free object rather
+// than enumerating properties a sync would have to chase.
+export function saveCustomerDetailsTool(site: string) {
+  return customTool(
+    site,
+    "save_customer_details",
+    "Save details the caller provides or explicitly confirms, using only the keys listed in your instructions. Never guess a value. Repeating the same save is safe.",
+    {
+      type: "object",
+      properties: {
+        values: {
+          type: "object",
+          description:
+            "Configured information keys from your instructions, each set to the caller-confirmed value.",
+        },
+      },
+      required: ["values"],
+    },
+  );
 }
 
 // Retell's own end-of-call tool. Not a custom function: hanging up is the
