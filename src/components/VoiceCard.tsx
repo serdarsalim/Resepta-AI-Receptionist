@@ -4,11 +4,10 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
-import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
-import { ActionTip, InfoTip } from "./InfoTip";
+import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
@@ -215,8 +214,6 @@ export function VoiceCard({
     isOwner ? {} : "skip",
   );
   const connect = useMutation(api.retell.connect);
-  const disconnect = useMutation(api.retell.disconnect);
-  const [confirm, confirmDialog] = useConfirm();
   const update = useMutation(api.retell.update);
   const listAgents = useAction(api.retell.listAgents);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
@@ -473,7 +470,6 @@ export function VoiceCard({
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
-      {confirmDialog}
       <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
 
       {connected.length > 0 && (
@@ -498,7 +494,6 @@ export function VoiceCard({
                     <InfoTip text={t("settings.voiceEnabledHint")} />
                   </span>
                 </th>
-                <th className="px-2 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -605,39 +600,10 @@ export function VoiceCard({
                         onChange={(next) => void update({ agentId: row._id, enabled: next })}
                       />
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <ActionTip
-                        label={t("settings.voiceDisconnect")}
-                        className="transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                        onClick={() => {
-                          // An icon button has no label to slow the hand down,
-                          // so the confirm carries the reassurance: the agent
-                          // itself survives, only the link goes. Which is
-                          // exactly the wording window.confirm cannot deliver —
-                          // its buttons stay OK and Cancel and it prefixes the
-                          // origin — so this was arguing for a dialog it was
-                          // not using.
-                          const name =
-                            agent?.name ?? row.name ?? t("settings.voiceUnavailable");
-                          void (async () => {
-                            const ok = await confirm({
-                              title: t("settings.voiceDisconnectConfirm").replace(
-                                "{name}",
-                                name,
-                              ),
-                              confirmLabel: t("settings.voiceDisconnect"),
-                            });
-                            if (ok) await disconnect({ agentId: row._id });
-                          })();
-                        }}
-                      >
-                        ✕
-                      </ActionTip>
-                    </td>
                   </tr>
                   {openInfo === row.retellAgentId && (
                     <tr className="bg-[var(--muted-bg)]">
-                      <td colSpan={5} className="px-3 pb-3 pt-1">
+                      <td colSpan={4} className="px-3 pb-3 pt-1">
                         <div className="grid gap-4 text-xs sm:grid-cols-2">
                           <div>
                             <div className="mb-1 font-medium">
@@ -708,7 +674,7 @@ export function VoiceCard({
                     health?.needsAttention ||
                     lineErrorId === row.retellAgentId) && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
-                      <td colSpan={5} className="px-3 py-2">
+                      <td colSpan={4} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                           {connectionNeedsFix && (
                             <span>

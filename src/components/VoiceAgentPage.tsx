@@ -1,10 +1,11 @@
 "use client";
 
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
+import { useConfirm } from "./ConfirmDialog";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -141,6 +142,14 @@ export function VoiceAgentPage({
   const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
   const assignLine = useAction(api.retellAgent.assignLine);
   const testCall = useAction(api.retellAgent.testCall);
+  // Deleting lives HERE, at the foot of the editor, not as an × on the list
+  // row — a destructive control needs the context of what it destroys
+  // (Serdar, 2026-08-18; the table's Disconnect icon moved in). It is the
+  // same disconnect as ever: the link goes, the provider agent survives.
+  const disconnect = useMutation(api.retell.disconnect);
+  const connectedRows = useQuery(api.retell.list, {});
+  const connectedRow = connectedRows?.find((row) => row.retellAgentId === agentId);
+  const [confirmDelete, confirmDeleteDialog] = useConfirm();
 
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -722,9 +731,61 @@ export function VoiceAgentPage({
                 onSaveStateChange={onVarsSaveState}
               />
             </div>
+
+            {/* The editor's foot, mirroring Nudge's bottom Publish: after a
+                long scroll through prompt and variables, the way out should
+                not be back at the top. Delete sits left, apart from the pair
+                that saves work — destructive and constructive controls do not
+                share a corner. */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
+              {connectedRow && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await confirmDelete({
+                        title: t("settings.voiceDisconnectConfirm").replace(
+                          "{name}",
+                          detail.name,
+                        ),
+                        confirmLabel: t("settings.voiceDisconnect"),
+                      });
+                      if (!ok) return;
+                      await disconnect({ agentId: connectedRow._id });
+                      onBack();
+                    })();
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/30"
+                >
+                  {t("settings.voiceDisconnect")}
+                </button>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                {dirty && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={discardAll}
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-red-300 hover:text-red-600 disabled:opacity-50"
+                  >
+                    {t("voiceDetail.discard")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={saving || !dirty}
+                  onClick={saveAll}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
+                >
+                  {saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
+      {confirmDeleteDialog}
 
       {testOpen && detail && (
         <Sheet
