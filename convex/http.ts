@@ -404,8 +404,21 @@ http.route({
       payload.call_inbound && typeof payload.call_inbound === "object"
         ? (payload.call_inbound as Record<string, unknown>)
         : payload;
-    const agentId = String(inbound.agent_id ?? "");
+    let agentId = String(inbound.agent_id ?? "");
     const fromNumber = String(inbound.from_number ?? "");
+    // A number bound via Retell's weighted inbound_agents array sends no
+    // agent_id here; the dialled line still names the agent. Without this,
+    // the early "unknown agent" return meant every inbound call on such a
+    // number ran without dynamic variables — see agentForInboundNumber.
+    if (!agentId) {
+      const toNumber = String(inbound.to_number ?? "");
+      if (toNumber) {
+        agentId =
+          (await ctx.runQuery(internal.retell.agentForInboundNumber, {
+            number: toNumber,
+          })) ?? "";
+      }
+    }
     if (!agentId) return new Response("unknown agent", { status: 200 });
     const context = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,

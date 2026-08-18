@@ -632,7 +632,11 @@ export default defineSchema({
     signatureRejectedRoute: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
-    .index("by_agent", ["retellAgentId"]),
+    .index("by_agent", ["retellAgentId"])
+    // The inbound webhook's fallback: Retell's weighted inbound_agents
+    // binding sends call_inbound without an agent_id, so the handler resolves
+    // the agent from the line that was dialled.
+    .index("by_inbound_number", ["inboundNumber"]),
 
   // Creating a provider agent spans several non-transactional API calls. This
   // row checkpoints each resource as soon as it exists, so a retry resumes the

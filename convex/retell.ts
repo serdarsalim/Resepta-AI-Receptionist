@@ -670,6 +670,32 @@ export const replaceAgentVariables = internalMutation({
 // The inbound call webhook has no signed-in user. Tenant resolution therefore
 // starts from the Retell agent id, exactly like the function and call-ended
 // webhooks, and every subsequent read stays on that org.
+// Who answers on this line. The inbound webhook used to trust call_inbound's
+// agent_id alone — but a number bound through Retell's newer weighted
+// inbound_agents array sends that field EMPTY (observed live, 18 Aug 2026:
+// top-level inbound_agent_id null, only the array set). The handler answered
+// "unknown agent", Retell connected the call to the bound agent anyway, and
+// the agent ran with zero dynamic variables: no {{now}} — it resolved
+// "yarın" to a 2025 date and every booking failed as start-is-in-the-past —
+// no customer recognition, no business name. This resolver is the fallback:
+// the dialled number names the agent when the payload does not.
+export const agentForInboundNumber = internalQuery({
+  args: { number: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, { number }) => {
+    const phone = normalisePhone(number);
+    if (!phone) return null;
+    // first(), not unique(): this path must never throw at Retell, and a
+    // double-assigned line is a data problem to surface elsewhere, not a
+    // reason to answer a live ring with a 500.
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_inbound_number", (q) => q.eq("inboundNumber", phone))
+      .first();
+    return agent?.retellAgentId ?? null;
+  },
+});
+
 export const beforeCallContext = internalQuery({
   args: { retellAgentId: v.string(), phone: v.string() },
   returns: v.any(),
