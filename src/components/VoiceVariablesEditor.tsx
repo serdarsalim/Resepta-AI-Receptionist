@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { keyFromLabel } from "../../convex/lib/keys";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
@@ -107,32 +108,72 @@ export type VoiceContactField = {
 // One list, exported so the @ picker in the instructions and the Variables
 // table show the SAME variables — two surfaces disagreeing about what a
 // variable is was the confusion this replaces.
-export function builtinVoiceVariables(
-  t: (
-    key:
-      | "customers.firstName"
-      | "customers.lastName"
-      | "voiceVariables.customerPhone"
-      | "voiceVariables.customerEmail"
-      | "voiceVariables.customerLanguage"
-      | "voiceVariables.nextAppointment"
-      | "voiceVariables.businessName"
-      | "voiceVariables.servicesList",
-  ) => string,
-): { key: string; label: string }[] {
+// One row's worth of facts about a variable the runtime provides: the key the
+// prompt speaks, the human label the pickers show, what it actually carries
+// (the read-only rows' third column), and whether it is one value or a list.
+export type ProvidedVariable = {
+  key: string;
+  label: string;
+  description: string;
+  kind: "text" | "list";
+};
+
+type ProvidedT = (key: TranslationKey) => string;
+
+export function builtinVoiceVariables(t: ProvidedT): ProvidedVariable[] {
   return [
     // The SAME translation keys Business → Fields uses for its identity rows.
     // Deliberately not a second vocabulary: seeing "Customer name" in the
     // agent and "First name"/"Last name" everywhere else reads as a third
     // thing that exists nowhere, and there is no such thing.
-    { key: "customer_first_name", label: t("customers.firstName") },
-    { key: "customer_last_name", label: t("customers.lastName") },
-    { key: "customer_phone", label: t("voiceVariables.customerPhone") },
-    { key: "customer_email", label: t("voiceVariables.customerEmail") },
-    { key: "customer_language", label: t("voiceVariables.customerLanguage") },
-    { key: "next_appointment", label: t("voiceVariables.nextAppointment") },
-    { key: "business_name", label: t("voiceVariables.businessName") },
-    { key: "services", label: t("voiceVariables.servicesList") },
+    {
+      key: "customer_first_name",
+      label: t("customers.firstName"),
+      description: t("voiceVariables.descFirstName"),
+      kind: "text",
+    },
+    {
+      key: "customer_last_name",
+      label: t("customers.lastName"),
+      description: t("voiceVariables.descLastName"),
+      kind: "text",
+    },
+    {
+      key: "customer_phone",
+      label: t("voiceVariables.customerPhone"),
+      description: t("voiceVariables.descPhone"),
+      kind: "text",
+    },
+    {
+      key: "customer_email",
+      label: t("voiceVariables.customerEmail"),
+      description: t("voiceVariables.descEmail"),
+      kind: "text",
+    },
+    {
+      key: "customer_language",
+      label: t("voiceVariables.customerLanguage"),
+      description: t("voiceVariables.descLanguage"),
+      kind: "text",
+    },
+    {
+      key: "next_appointment",
+      label: t("voiceVariables.nextAppointment"),
+      description: t("voiceVariables.descNextAppointment"),
+      kind: "text",
+    },
+    {
+      key: "business_name",
+      label: t("voiceVariables.businessName"),
+      description: t("voiceVariables.descBusinessName"),
+      kind: "text",
+    },
+    {
+      key: "services",
+      label: t("voiceVariables.servicesList"),
+      description: t("voiceVariables.descServices"),
+      kind: "list",
+    },
   ];
 }
 
@@ -143,24 +184,44 @@ export function builtinVoiceVariables(
 // (Serdar, 2026-08-18). They render as read-only rows in Before the call —
 // not toggles: {{now}} missing is the resolved-"yarın"-to-2025 bug, and a
 // switch whose only function is breaking the agent is not a setting.
-export function injectedVoiceContext(
-  t: (
-    key:
-      | "voiceVariables.agentName"
-      | "voiceVariables.now"
-      | "voiceVariables.staffList"
-      | "voiceVariables.customerCard"
-      | "voiceVariables.informationList"
-      | "voiceVariables.customerName",
-  ) => string,
-): { key: string; label: string }[] {
+export function injectedVoiceContext(t: ProvidedT): ProvidedVariable[] {
   return [
-    { key: "agent_name", label: t("voiceVariables.agentName") },
-    { key: "customer_name", label: t("voiceVariables.customerName") },
-    { key: "now", label: t("voiceVariables.now") },
-    { key: "staff", label: t("voiceVariables.staffList") },
-    { key: "contact", label: t("voiceVariables.customerCard") },
-    { key: "information", label: t("voiceVariables.informationList") },
+    {
+      key: "agent_name",
+      label: t("voiceVariables.agentName"),
+      description: t("voiceVariables.descAgentName"),
+      kind: "text",
+    },
+    {
+      key: "customer_name",
+      label: t("voiceVariables.customerName"),
+      description: t("voiceVariables.descCustomerName"),
+      kind: "text",
+    },
+    {
+      key: "now",
+      label: t("voiceVariables.now"),
+      description: t("voiceVariables.descNow"),
+      kind: "text",
+    },
+    {
+      key: "staff",
+      label: t("voiceVariables.staffList"),
+      description: t("voiceVariables.descStaff"),
+      kind: "list",
+    },
+    {
+      key: "contact",
+      label: t("voiceVariables.customerCard"),
+      description: t("voiceVariables.descContact"),
+      kind: "text",
+    },
+    {
+      key: "information",
+      label: t("voiceVariables.informationList"),
+      description: t("voiceVariables.descInformation"),
+      kind: "list",
+    },
   ];
 }
 
@@ -696,20 +757,27 @@ export function VoiceVariablesEditor({
                     Before". Read-only and muted: these are facts about every
                     agent, not choices about this one, and a control that
                     could only break the agent is not offered. */}
-                {/* No heading, no tag: the group's own (i) already says
-                    before-call context always goes with the call, and rows
-                    that offer no controls say the rest by being muted. Key,
-                    then the empty type track (nothing is captured here),
-                    then what it means where descriptions live. */}
+                {/* The same three columns as every other row — key, type,
+                    description — no heading, no tag: the group's own (i)
+                    already says before-call context goes with every call,
+                    and rows without controls say the rest by being muted.
+                    This list mirrors beforeCallContext's dynamicVariables
+                    key for key; if the runtime gains a variable, it appears
+                    here or the table is lying. */}
                 {group.id === "before" &&
                   [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
                     <div key={item.key} className={VAR_GRID}>
-                      <span className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]">
+                      <span
+                        title={item.label}
+                        className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]"
+                      >
                         {item.key}
                       </span>
-                      <span />
+                      <span className="px-2 py-1 text-xs text-[var(--muted)]">
+                        {t(item.kind === "list" ? "voiceVariables.list" : "voiceVariables.text")}
+                      </span>
                       <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-                        {item.label}
+                        {item.description}
                       </span>
                       <span />
                     </div>

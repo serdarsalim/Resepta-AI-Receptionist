@@ -2343,6 +2343,80 @@ const dictionary = {
     en: "Collectable fields",
     de: "Erfassbare Felder",
   },
+  // What each always-sent variable actually does — the third column of the
+  // read-only rows in Before the call. Written as answers to "what will the
+  // agent know", not as restated labels.
+  "voiceVariables.list": { tr: "Liste", en: "List", de: "Liste" },
+  "voiceVariables.descFirstName": {
+    tr: "Arayanın müşteri kartındaki adı.",
+    en: "The caller's first name, from their customer card.",
+    de: "Der Vorname des Anrufers, aus seiner Kundenkarte.",
+  },
+  "voiceVariables.descLastName": {
+    tr: "Arayanın müşteri kartındaki soyadı.",
+    en: "The caller's last name, from their customer card.",
+    de: "Der Nachname des Anrufers, aus seiner Kundenkarte.",
+  },
+  "voiceVariables.descPhone": {
+    tr: "Arayanın telefon numarası.",
+    en: "The caller's phone number.",
+    de: "Die Telefonnummer des Anrufers.",
+  },
+  "voiceVariables.descEmail": {
+    tr: "Arayanın kayıtlı e-posta adresi.",
+    en: "The caller's saved email address.",
+    de: "Die gespeicherte E-Mail-Adresse des Anrufers.",
+  },
+  "voiceVariables.descLanguage": {
+    tr: "Arayanın kayıtlı dili.",
+    en: "The caller's saved language.",
+    de: "Die gespeicherte Sprache des Anrufers.",
+  },
+  "voiceVariables.descNextAppointment": {
+    tr: "Arayanın bir sonraki randevusu.",
+    en: "The caller's next upcoming appointment.",
+    de: "Der nächste anstehende Termin des Anrufers.",
+  },
+  "voiceVariables.descBusinessName": {
+    tr: "İşletmenizin adı.",
+    en: "Your business's name.",
+    de: "Der Name Ihres Betriebs.",
+  },
+  "voiceVariables.descServices": {
+    tr: "Sunduğunuz hizmetler, fiyat ve süreleriyle.",
+    en: "Every service you offer, with prices and durations.",
+    de: "Alle angebotenen Leistungen, mit Preisen und Dauer.",
+  },
+  "voiceVariables.descAgentName": {
+    tr: "Asistanın arayana söylediği kendi adı.",
+    en: "The name the agent introduces herself with.",
+    de: "Der Name, mit dem sich die Assistentin vorstellt.",
+  },
+  "voiceVariables.descCustomerName": {
+    tr: "Arayanın tam adı.",
+    en: "The caller's full name.",
+    de: "Der vollständige Name des Anrufers.",
+  },
+  "voiceVariables.descNow": {
+    tr: "İşletmenizin saat dilimindeki güncel tarih ve saat — \"yarın\" buna göre çözülür.",
+    en: "Today's date and time in your timezone — \"tomorrow\" resolves against this.",
+    de: "Datum und Uhrzeit in Ihrer Zeitzone — \"morgen\" wird daran aufgelöst.",
+  },
+  "voiceVariables.descStaff": {
+    tr: "Aktif personelinizin adları.",
+    en: "Your active staff's names.",
+    de: "Die Namen Ihres aktiven Personals.",
+  },
+  "voiceVariables.descContact": {
+    tr: "Arayanın müşteri kartının tamamı.",
+    en: "The caller's whole customer card.",
+    de: "Die vollständige Kundenkarte des Anrufers.",
+  },
+  "voiceVariables.descInformation": {
+    tr: "Asistanın bu aramada doldurabileceği alanlar.",
+    en: "The fields the agent may fill on this call.",
+    de: "Die Felder, die die Assistentin in diesem Anruf ausfüllen darf.",
+  },
   // The type popover's inline choices editor (Nudge's Choices section).
   "voiceVariables.choice": { tr: "Seçenek", en: "Choice", de: "Option" },
   "voiceVariables.addChoice": {
