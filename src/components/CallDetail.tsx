@@ -132,26 +132,34 @@ export function parseTranscript(raw: string): Turn[] {
 export function CallTranscript({
   transcript,
   contactName,
-  fill = false,
+  flow = false,
 }: {
   transcript: string;
   // Labels the human side. Falls back to a generic "Caller" for a first-time
   // number that has no name on it yet.
   contactName?: string | null;
-  // Take the height left in the pane instead of capping at 24rem. For the call
-  // tab's detail view, where the transcript IS the page and a box ending
-  // two-thirds down leaves a band of empty card under the thing you are
-  // reading. The mixed feed keeps the cap: there the transcript is one card
-  // among many and a full-height one would bury everything after it.
-  fill?: boolean;
+  // Render at natural height with NO inner scroll, so the pane's own scroller
+  // carries the whole call. For the call tab's detail view, where the
+  // transcript IS the page.
+  //
+  // This replaced a `fill` variant that took the height LEFT in the pane under
+  // the summary card. That sounds right and isn't: the card above is shrink-0,
+  // so a call carrying eight collected values pinned most of the pane and
+  // squeezed the transcript to its 128px floor — about three bubbles on a
+  // laptop. The summary is read ONCE and the transcript is read THROUGH, so the
+  // summary is what should scroll away. (Ported from nudge, 2026-08-18.)
+  //
+  // The mixed feed and Voice → Calls keep the 24rem cap: there the transcript
+  // is one card among many and an uncapped one would bury everything after it.
+  flow?: boolean;
 }) {
   const { t } = useLanguage();
   const turns = useMemo(() => parseTranscript(transcript), [transcript]);
 
   if (turns.length === 0) {
     return (
-      <pre className={`thin-scroll overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--chat-field)] p-3 font-sans text-xs leading-relaxed ${
-        fill ? "min-h-32 flex-1" : "max-h-96"
+      <pre className={`whitespace-pre-wrap break-words rounded-lg border border-[var(--border)] bg-[var(--chat-field)] p-3 font-sans text-xs leading-relaxed ${
+        flow ? "" : "thin-scroll max-h-96 overflow-y-auto"
       }`}>
         {transcript}
       </pre>
@@ -173,13 +181,13 @@ export function CallTranscript({
       // level (paper → card → bubble) and would leave the agent's bubble with
       // nothing to be white against.
       //
-      // pr-3 for the scrollbar: the agent's bubbles are right-aligned, so
-      // without it they butt straight against the thumb. The left needs no
-      // counterpart — the scroller's own left edge already sits inside the
-      // pane's padding. min-h so a long summary above can never squeeze this to
-      // nothing; it keeps its own scrollbar and a floor.
-      className={`thin-scroll space-y-2 overflow-y-auto pr-3 ${
-        fill ? "min-h-32 flex-1" : "max-h-96"
+      // Capped mode gets pr-3 for its own scrollbar: the agent's bubbles are
+      // right-aligned, so without it they butt straight against the thumb. In
+      // flow mode there is no thumb here — the pane's scroller reserves its own
+      // gutter outside this padding — so the bubbles run to the same edge as
+      // everything else on the paper.
+      className={`space-y-2 ${
+        flow ? "" : "thin-scroll max-h-96 overflow-y-auto pr-3"
       }`}
     >
       {/* OUR side is on the right, theirs on the left — the same arrangement the
@@ -333,14 +341,15 @@ export function CallDetail({
   call,
   contactName,
   className = "",
-  fill = false,
+  flow = false,
 }: {
   call: CallDetailItem;
   contactName?: string | null;
   className?: string;
-  // Fill the pane: the recording, summary and collected values keep their own
-  // height and the TRANSCRIPT takes whatever is left. See CallTranscript.
-  fill?: boolean;
+  // Render the whole call at natural height and let the PANE scroll it, rather
+  // than pinning the player and the summary and scrolling only the transcript.
+  // See CallTranscript for why that shape was wrong.
+  flow?: boolean;
 }) {
   const { t } = useLanguage();
   const ended = humanizeCallEnd(call.disconnectionReason, t);
@@ -364,8 +373,13 @@ export function CallDetail({
   return (
     <div
       className={
-        fill
-          ? `flex min-h-0 flex-1 flex-col gap-3 ${className}`
+        flow
+          // pb-24 is scroll-past-the-end room: without it the last thing said
+          // sits jammed against the pane's bottom edge, which is the line you
+          // are most likely to be reading, since a call ends with what was
+          // agreed. Free on a short call — a column that does not overflow
+          // never scrolls, so the padding is paper that was already empty.
+          ? `flex flex-col gap-3 pb-24 ${className}`
           : `space-y-3 ${className}`
       }
     >
@@ -399,7 +413,7 @@ export function CallDetail({
           the summary and the thing you opened the call to read. */}
       {call.transcript && (
         <CallTranscript
-          fill={fill}
+          flow={flow}
           transcript={call.transcript}
           contactName={contactName}
         />

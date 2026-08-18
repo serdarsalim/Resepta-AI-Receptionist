@@ -712,12 +712,16 @@ export function ConversationPanel({
         // now, so they take a gap of their own — a wider one than the chat's,
         // because each carries a byline above it and the two would otherwise
         // sit closer to the note above than to their own.
-        className={`thin-scroll stable-gutter min-h-0 flex-1 p-4 ${
-          // A call detail owns the pane: it is a flex column whose transcript
-          // takes the leftover height and scrolls on its own. Two scrollbars in
-          // one card is a trap, so this one stands down.
-          openCall ? "flex flex-col overflow-hidden" : "overflow-y-auto"
-        } ${
+        // This scrolls in EVERY state, including an open call. It used to
+        // stand down to overflow-hidden for a call, on the reasoning that the
+        // detail owned the pane and its transcript scrolled on its own — which
+        // was right about two scrollbars being a trap and wrong about which one
+        // to remove. The summary card above the transcript is shrink-0, so a
+        // call carrying eight collected values pinned most of the pane, left
+        // the transcript on its 128px floor, and CLIPPED anything the card
+        // itself could not fit with no way to reach it. The card is read once
+        // and the transcript is read through, so the card is what scrolls away.
+        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
           // Only the chat wears a plane of its own. The feed view renders calls
           // and email rows with their own edges, which want the card's white
           // under them.
@@ -1720,15 +1724,13 @@ function CallEntry({
       // really containers (the collected values and the transcript, which
       // scrolls) keep their own edges and now read as the only boxes here.
       //
-      // Fills the pane and lets the transcript take what is left of it. The
-      // card used to end wherever the transcript's 24rem cap put it, leaving a
-      // band of empty card under the one thing on the screen worth reading.
-      <div className="flex min-h-0 flex-1 flex-col text-sm">
+      // Natural height, scrolled by the pane — see the threadRef div above.
+      <div className="text-sm">
         {/* No duration line here at all (Serdar, 2026-08-17). The player reads
             "0:00 / 1:34" and the list row you arrived from carries the length
             too, so on the opened card it was a third copy of the same number
             sitting above everything else. */}
-        <CallDetail fill call={item} contactName={contactName} />
+        <CallDetail flow call={item} contactName={contactName} />
       </div>
     );
   }
