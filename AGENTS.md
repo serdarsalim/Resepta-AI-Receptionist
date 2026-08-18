@@ -408,6 +408,19 @@ The invariants, and where they live:
   quantity and still dedupes repeated time-bound services. That is why the
   tool schema never changed and deployed agents kept working (template
   bumps: voice v9, chat v3).
+- **⚠️ Still open from the build session, verify before trusting goods in
+  prod.** (1) **Existing Retell agents are still on template v8** — v9 reaches
+  a deployed agent only when its owner clicks the update banner, so until then
+  those agents still refuse same-time repeats. Harmless, just stale, but it
+  means "goods work" is false for any workspace that has not clicked.
+  (2) **None of this has been walked against a live DB.** Schema and function
+  changes went in untested: walk one flow of each kind — create a good in
+  Business, book it three times at the same time from the calendar, once from
+  the /book page with a quantity, and a voice sim if you can get one.
+  (3) `chatAgentTemplate`'s service list renders lead time in English
+  ("order 1 day(s) ahead") even inside tr/de prompts — cosmetic and
+  prompt-internal. Consciously rejected for v1: stock tracking, per-slot caps,
+  cutoff times; the next bakery-shaped step if asked is `max_per_day` per good.
 - **Goods never touch cal.com.** No zero-length representation exists there,
   and an externalUid makes voiceBook skip its own guards. http.ts and
   chatAgent.ts ask `retell.classifyServices` first; schedule.create skips
