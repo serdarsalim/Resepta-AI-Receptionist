@@ -63,6 +63,20 @@ type Who = {
 
 type ToolDef = ProtocolToolDef<ActionCtx, Who>;
 
+// Owner-gated at the handler, and therefore hidden from everyone else's tool
+// list. Kept as a name set beside the array rather than a flag on each entry:
+// the gate itself lives in the handler (assertOwner / assertCanProvision), and
+// a second field would read like the thing doing the gating.
+const OWNER_ONLY = new Set([
+  "create_contact_field",
+  "create_phone_agent",
+  "assign_phone_number",
+  "set_agent_variables",
+  "publish_agent_prompt",
+  "set_message_rule",
+  "update_template",
+]);
+
 const TOOLS: ToolDef[] = [
   {
     name: "whoami",
@@ -1184,7 +1198,13 @@ export const handler = httpAction(async (ctx, req) => {
   });
 
   return await serveMcp<ActionCtx, Who>(ctx, req, who, {
-    tools: TOOLS,
+    // Role-scoped, so a stylist's Claude does not offer to rewrite the salon's
+    // confirmation message and then fail at the last step. This is NOT the
+    // permission boundary — every one of these handlers re-derives the role
+    // from `memberships` and refuses on its own, which is what actually stops
+    // a non-owner who names the tool anyway. Hiding them just means the model
+    // never proposes work the person cannot authorise.
+    tools: who.role === "owner" ? TOOLS : TOOLS.filter((t) => !OWNER_ONLY.has(t.name)),
     serverInfo: SERVER_INFO,
     instructions: `You are connected to ${who.orgName}, an appointment business. Everything you do is recorded in their activity feed against ${who.userName}, and reversible actions can be undone. Read before you write — check a customer's history before logging a note about it. Never invent a customer id; search first. Setting the business up has an order: services and contact fields first, then a phone agent, because the agent reads both at call time and one built against an empty business has nothing to say. Creating a phone agent makes a real resource at the phone provider and cannot be undone — confirm the name and language with the owner before you call it.`,
   });
