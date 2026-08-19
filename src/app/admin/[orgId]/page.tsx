@@ -175,7 +175,7 @@ export default function TenantPage() {
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
   const [tab, setTab] = useState<
-    "setup" | "agents" | "assistant" | "usage" | "members" | "sends" | "activity"
+    "setup" | "agents" | "assistant" | "members" | "sends" | "activity"
   >("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
@@ -273,7 +273,6 @@ export default function TenantPage() {
           { id: "setup" as const, label: "Setup" },
           { id: "agents" as const, label: "Agents" },
           { id: "assistant" as const, label: "Assistant" },
-          { id: "usage" as const, label: "Usage" },
           { id: "members" as const, label: "Members" },
           { id: "sends" as const, label: "Sends" },
           { id: "activity" as const, label: "Logs" },
@@ -701,7 +700,12 @@ export default function TenantPage() {
       </>
       )}
 
-      {(tab === "usage" || search.active) && voice && (
+      {/* Under Agents rather than a tab of its own (Serdar, 2026-08-20): the
+          meter and the wallet are facts ABOUT the phone agents, and Assistant
+          already keeps its cost card on the same page as the thing it
+          meters. A seventh tab for two cards was navigation, not
+          organization. */}
+      {(tab === "agents" || search.active) && voice && (
       <>
       <Section
         title="Voice meter"
