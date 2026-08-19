@@ -561,6 +561,132 @@ export function ModelRow({
   );
 }
 
+// One LLM provider on one line: the key on the left half of the control
+// column, the model beside it (Serdar, 2026-08-19). They are one decision —
+// "what does this provider run as" — and stacked as four rows the page read
+// as four unrelated settings. The key half follows SecretRow's contract
+// (tail as placeholder, typing replaces, blank keeps); the model half is
+// ModelRow's picker, fed on first focus. The model placeholder is the REAL
+// default that applies when blank, same truthfulness rule as everywhere.
+export function KeyModelRow({
+  label,
+  hint,
+  masked,
+  onSaveKey,
+  model,
+  modelPlaceholder,
+  loadOptions,
+  onSaveModel,
+}: {
+  label: string;
+  hint?: string;
+  masked?: string | null;
+  onSaveKey: (value: string) => unknown;
+  model?: string | null;
+  modelPlaceholder?: string;
+  loadOptions: () => Promise<{ models: string[]; reason: string | null }>;
+  onSaveModel: (value: string) => unknown;
+}) {
+  const [keyDraft, setKeyDraft] = useState("");
+  const [modelDraft, setModelDraft] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<string[] | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+  const { hidden } = useRowSearch(label);
+  if (hidden) return null;
+  const filter = (modelDraft ?? "").trim().toLowerCase();
+  const matches = (options ?? []).filter((o) => o.toLowerCase().includes(filter));
+  const fetchOnce = () => {
+    if (options !== null) return;
+    setOptions([]);
+    void loadOptions()
+      .then((r) => {
+        setOptions(r.models);
+        setReason(r.reason);
+      })
+      .catch(() => setReason("fetch-failed"));
+  };
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-medium">{label}</div>
+        {hint && <InfoTip text={hint} />}
+      </div>
+      <div className="flex min-w-0 gap-2">
+        <input
+          value={keyDraft}
+          onChange={(e) => setKeyDraft(e.target.value)}
+          onBlur={() => {
+            const value = keyDraft.trim();
+            if (!value) return;
+            void onSaveKey(value);
+            setKeyDraft("");
+          }}
+          placeholder={masked ?? undefined}
+          aria-label={`${label} API key`}
+          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            value={modelDraft ?? model ?? ""}
+            onChange={(e) => {
+              setModelDraft(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => {
+              fetchOnce();
+              setOpen(true);
+            }}
+            onBlur={() => {
+              setOpen(false);
+              if (modelDraft === null || modelDraft === (model ?? "")) return;
+              void onSaveModel(modelDraft);
+              setModelDraft(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") {
+                setModelDraft(null);
+                setOpen(false);
+              }
+            }}
+            placeholder={modelPlaceholder}
+            autoComplete="off"
+            aria-label={`${label} model`}
+            className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+          />
+          {open && matches.length > 0 && (
+            <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
+              {matches.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  // mousedown, ahead of the input's blur-commit, or the click
+                  // would save the half-typed draft instead of the pick.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setModelDraft(o);
+                    setOpen(false);
+                    if (o !== (model ?? "")) void onSaveModel(o);
+                  }}
+                  className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          {options !== null && options.length === 0 && reason && (
+            <div className="mt-0.5 text-xs text-[var(--muted)]">
+              couldn&apos;t list models ({reason}) — type a name instead
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A secret already installed shows its tail as the input's own placeholder.
 // Typing replaces it; leaving the box blank keeps what is there. The tail is
 // a PLACEHOLDER, never the input's value: a value would submit the mask as

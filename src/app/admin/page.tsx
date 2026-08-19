@@ -27,7 +27,7 @@ import {
   ago,
   AdminSearchProvider,
   Count,
-  ModelRow,
+  KeyModelRow,
   Plane,
   Row,
   Section,
@@ -35,7 +35,6 @@ import {
   Setup,
   TabStrip,
 } from "./parts";
-import { InfoTip } from "@/components/InfoTip";
 import { SearchInput } from "@/components/DataTable";
 import { useSearch } from "@/lib/useTableState";
 
@@ -317,11 +316,23 @@ export default function AdminPage() {
               paste here turns every org's chat agent on. The Retell default
               is a STAMP source: it is copied into each new org's own
               connections row at auto-provision time, so editing it here
-              changes future orgs only, never running ones. */}
+              changes future orgs only, never running ones. Retell leads the
+              section (Serdar, 2026-08-19): it is the key the operator
+              actually comes here for, and it was hiding at the bottom. */}
           <Section
             title="AI & Voice defaults"
             description="Platform keys for the chat agent and phone-agent auto-provisioning. Per-org overrides live on each business's Setup tab and always win."
           >
+            <SecretRow
+              label="Retell default key"
+              hint={
+                mail.fromEnv.retellApiKey
+                  ? "Currently coming from the RETELL_API_KEY env var. Saving here overrides it. Stamped into each NEW org at auto-provisioning; existing orgs keep the key on their row."
+                  : "Stamped into each NEW org's own connections row at auto-provisioning. Existing orgs keep the key on their row. Must be the workspace's webhook signing key."
+              }
+              masked={mail.retellApiKey}
+              onSave={(value) => setConfig({ key: "retellApiKey", value })}
+            />
             {/* Which dialect every org's chat agent speaks by default. The
                 key rows below both stay settable — switching provider is one
                 click, not a re-paste — and the active one is marked so a
@@ -357,54 +368,73 @@ export default function AdminPage() {
                 </span>
               </div>
             </div>
-            <SecretRow
-              label="Anthropic API key"
-              hint={
+            <KeyModelRow
+              label="Anthropic (Claude)"
+              hint={`${
                 mail.fromEnv.anthropicApiKey
-                  ? "Currently coming from the ANTHROPIC_API_KEY env var. Saving here overrides it."
+                  ? "The key currently comes from the ANTHROPIC_API_KEY env var; saving here overrides it."
                   : mail.chatAgentProvider === "anthropic"
                     ? "The active key: powers every org's chat agent unless the org has its own."
                     : "Kept for when the provider switches back; inactive while OpenAI is selected."
-              }
+              } The model beside it is what every org runs on this provider — pick from what the key can reach or type any name; blank = claude-sonnet-5. A model lib/llm.ts has not priced meters at $0 until its row is added.`}
               masked={mail.anthropicApiKey}
-              onSave={(value) => setConfig({ key: "anthropicApiKey", value })}
-            />
-            <ModelRow
-              label="Anthropic model"
-              hint={`What every org runs while it resolves to Anthropic. Pick from what the platform key can reach, or type any name. Blank = the default, claude-sonnet-5.${
-                mail.chatAgentProvider === "anthropic"
-                  ? " This is the active provider."
-                  : " Inactive while OpenAI is selected; kept for the switch back."
-              } A model lib/llm.ts has not priced meters at $0 until its row is added.`}
-              current={mail.anthropicModel ?? undefined}
-              placeholder="claude-sonnet-5"
+              onSaveKey={(value) => setConfig({ key: "anthropicApiKey", value })}
+              model={mail.anthropicModel}
+              modelPlaceholder="claude-sonnet-5"
               loadOptions={() => listModels({ provider: "anthropic" })}
-              onSave={(value) => setConfig({ key: "anthropicModel", value })}
+              onSaveModel={(value) => setConfig({ key: "anthropicModel", value })}
             />
-            <SecretRow
-              label="OpenAI API key"
-              hint={
+            <KeyModelRow
+              label="OpenAI (GPT)"
+              hint={`${
                 mail.fromEnv.openaiApiKey
-                  ? "Currently coming from the OPENAI_API_KEY env var. Saving here overrides it."
+                  ? "The key currently comes from the OPENAI_API_KEY env var; saving here overrides it."
                   : mail.chatAgentProvider === "openai"
                     ? "The active key: powers every org's chat agent unless the org has its own."
                     : "Kept for when the provider switches; inactive while Anthropic is selected."
-              }
+              } The model beside it is what every org runs on this provider — pick from what the key can reach or type any name; blank = gpt-5.2. A model lib/llm.ts has not priced meters at $0 until its row is added.`}
               masked={mail.openaiApiKey}
-              onSave={(value) => setConfig({ key: "openaiApiKey", value })}
-            />
-            <ModelRow
-              label="OpenAI model"
-              hint={`What every org runs while it resolves to OpenAI. Pick from what the platform key can reach, or type any name. Blank = the default, gpt-5.2.${
-                mail.chatAgentProvider === "openai"
-                  ? " This is the active provider."
-                  : " Inactive while Anthropic is selected; kept for the switch."
-              } A model lib/llm.ts has not priced meters at $0 until its row is added.`}
-              current={mail.openaiModel ?? undefined}
-              placeholder="gpt-5.2"
+              onSaveKey={(value) => setConfig({ key: "openaiApiKey", value })}
+              model={mail.openaiModel}
+              modelPlaceholder="gpt-5.2"
               loadOptions={() => listModels({ provider: "openai" })}
-              onSave={(value) => setConfig({ key: "openaiModel", value })}
+              onSaveModel={(value) => setConfig({ key: "openaiModel", value })}
             />
+          </Section>
+
+          {/* The Tech Provider shape (lib/platformConfig resolveWaAccount):
+              one Meta system-user token for every hosted number, so wiring a
+              business is just its phone number id and WABA id on the Setup
+              tab. A business with its own Meta app pastes its own token
+              there, which always wins over this one. */}
+          <Section
+            title="WhatsApp (Meta Cloud API)"
+            description="The platform's Meta access token. Every business without a token of its own sends and receives through this one."
+          >
+            <SecretRow
+              label="Access token"
+              hint={
+                mail.fromEnv.whatsappAccessToken
+                  ? "Currently coming from the WHATSAPP_ACCESS_TOKEN env var. Saving here overrides it. Rotating it re-keys every hosted business at once."
+                  : "A system-user token from the platform's Meta Business portfolio. Rotating it re-keys every hosted business at once; businesses with their own token are untouched."
+              }
+              masked={mail.whatsappAccessToken}
+              onSave={(value) => setConfig({ key: "whatsappAccessToken", value })}
+            />
+          </Section>
+
+          {/* The Resend doctrine once more: one Stripe account for the whole
+              deployment, because the platform sells the credit and Stripe
+              pays the platform whichever org the money lands on. */}
+          <Section
+            title="Billing"
+            description={`What businesses pay, and the platform's Stripe account for prepaid wallet top-ups. In Stripe, add a webhook endpoint pointing at ${
+              (process.env.NEXT_PUBLIC_CONVEX_URL ?? "<convex-url>").replace(
+                ".convex.cloud",
+                ".convex.site",
+              )
+            }/stripe/webhook with the checkout.session.completed event, and paste its signing secret below. Businesses on invoice mode never touch the Stripe half.`}
+          >
             <Row
               label="Voice rate (USD per minute)"
               hint="What every business pays per called minute, billed per second. Set once here; a business's own Usage tab can override it. Changes only price calls from now on; history keeps its stamped rate."
@@ -424,56 +454,6 @@ export default function AdminPage() {
                 });
               }}
             />
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-              <div className="flex items-center gap-2">
-                <div className="text-sm font-medium">Kill switch</div>
-                <InfoTip text="Immediate, platform-wide, reversible. Also visible on each business's Assistant tab." />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void setConfig({
-                      key: "chatAgentDisabled",
-                      value: mail.chatAgentDisabled ? "" : "true",
-                    })
-                  }
-                  className={`rounded-lg px-2 py-1 text-xs ${
-                    mail.chatAgentDisabled
-                      ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-                  }`}
-                >
-                  {mail.chatAgentDisabled
-                    ? "Every agent is stopped. Click to re-enable"
-                    : "Stop every org's chat agent"}
-                </button>
-              </div>
-            </div>
-            <SecretRow
-              label="Retell default key"
-              hint={
-                mail.fromEnv.retellApiKey
-                  ? "Currently coming from the RETELL_API_KEY env var. Saving here overrides it. Stamped into each NEW org at auto-provisioning; existing orgs keep the key on their row."
-                  : "Stamped into each NEW org's own connections row at auto-provisioning. Existing orgs keep the key on their row. Must be the workspace's webhook signing key."
-              }
-              masked={mail.retellApiKey}
-              onSave={(value) => setConfig({ key: "retellApiKey", value })}
-            />
-          </Section>
-
-          {/* The Resend doctrine once more: one Stripe account for the whole
-              deployment, because the platform sells the credit and Stripe
-              pays the platform whichever org the money lands on. */}
-          <Section
-            title="Billing (Stripe)"
-            description={`The platform's Stripe account for prepaid wallet top-ups. In Stripe, add a webhook endpoint pointing at ${
-              (process.env.NEXT_PUBLIC_CONVEX_URL ?? "<convex-url>").replace(
-                ".convex.cloud",
-                ".convex.site",
-              )
-            }/stripe/webhook with the checkout.session.completed event, and paste its signing secret below. Businesses on invoice mode never touch any of this.`}
-          >
             <SecretRow
               label="Secret key"
               hint={
@@ -494,6 +474,36 @@ export default function AdminPage() {
               masked={mail.stripeWebhookSecret}
               onSave={(value) => setConfig({ key: "stripeWebhookSecret", value })}
             />
+          </Section>
+
+          {/* Its own card at the very bottom (Serdar, 2026-08-19): an
+              emergency brake sitting between ordinary key rows read as one
+              more setting, and the one time it matters is the one time it
+              must not be hunted for. */}
+          <Section
+            title="Kill switch"
+            description="Stops every org's chat agent before the model runs. Immediate, platform-wide, reversible. Also visible on each business's Assistant tab."
+          >
+            <div className="py-2.5">
+              <button
+                type="button"
+                onClick={() =>
+                  void setConfig({
+                    key: "chatAgentDisabled",
+                    value: mail.chatAgentDisabled ? "" : "true",
+                  })
+                }
+                className={`rounded-lg px-2 py-1 text-xs ${
+                  mail.chatAgentDisabled
+                    ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+                }`}
+              >
+                {mail.chatAgentDisabled
+                  ? "Every agent is stopped. Click to re-enable"
+                  : "Stop every org's chat agent"}
+              </button>
+            </div>
           </Section>
         </div>
         </AdminSearchProvider>
