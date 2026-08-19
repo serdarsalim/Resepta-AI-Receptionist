@@ -362,24 +362,103 @@ rather than after what it does.
   A default only fires for a token the renderer already knows THAT RESOLVED TO
   EMPTY. Threaded through every send path (`wa.ts`, `campaigns.ts`,
   `lib/awayReply.ts`); add it to any new one.
-- **Only tokens that can honestly be blank get a row.** Not `[business]` (an
-  org always has a name), not `[date]` (every lifecycle send has a time), not
-  `[booking_link]`/`[phone]` (configuration — a blank one means go and set it
-  in Business settings, not write a sentence about not having it), not
-  `[manage_link]` (structural), and not `[name]` (the renderer already tidies
-  "Hello [name]!" down to "Hello!"). What is left: the org's own contact
-  fields, and the booking facts an appointment can genuinely lack.
-- **The preview always draws.** It used to demand a contact and a booking,
-  refusing to invent names and prices — right about invention, wrong about
-  refusing. It now auto-picks one of the salon's REAL bookings (soonest ahead
-  that actually has line items, since a booking with no services previews
-  every price token as an empty slot), and where there is nothing to fill
-  from, a built-in previews as its own label in guillemets — ⟨Services with
-  prices⟩ — never as silence. Reading order is **real value → the owner's
-  default → the labelled slot**, so the preview shows what would actually
-  send. Contact fields deliberately keep resolving to nothing: the preview
-  speaks about a real customer, and a field that person never answered is
-  honestly blank for them.
+- **Only tokens that sit MID-SENTENCE and can honestly be blank get a row**
+  (narrowed 2026-08-19). Not `[business]` (an org always has a name), not
+  `[date]` (every lifecycle send has a time), not `[booking_link]`/`[phone]`
+  (configuration — a blank one means go and set it in Business settings, not
+  write a sentence about not having it), not `[manage_link]` (structural), and
+  not `[name]` (the renderer already tidies "Hello [name]!" down to "Hello!").
+  `[service]`, `[pricelist]` and `[price]` went too: the stock texts give them
+  their own LINE, and a line that resolves to nothing collapses cleanly — a
+  missing list is less information, not a broken sentence, and a fallback
+  there papers over an appointment with no line items, which is data to fix
+  rather than write around. What is left is the honest list: `[staff]` ("your
+  appointment with [staff]" → "your appointment with", which the whitespace
+  cleanup does NOT repair — it fixes spaces and punctuation, never a dangling
+  preposition) and the org's own contact fields. Stored defaults keep firing
+  at send time whatever the editor offers; narrowing the list only stops it
+  soliciting new ones.
+- **The preview invents the PERSON and reads the salon's real SERVICES**
+  (2026-08-19). Three answers were tried in order: invent everything (a €350
+  haircut in a shop charging €35 reads as a pricing bug in the product, and
+  you cannot tell a broken `[pricelist]` from an invented number), refuse to
+  draw without a real booking, then auto-pick a real customer — which put
+  someone's actual name in a settings screen, unasked, to make a template
+  legible. The rule that survives is narrower than "never invent": **inventing
+  a price is a claim about the business; inventing a first name is not.** So a
+  fictional customer (per language, `settings.previewFirstName`) books the
+  org's own first active service at its own price, in its currency, language
+  and timezone. Everything an owner could mistake for their data still is
+  their data. Reading order is **sample value → the owner's default → the
+  labelled slot**, so a token with nothing behind it previews as ⟨Services
+  with prices⟩, never as silence. Contact fields get the guillemets too now:
+  they were exempt while the pane spoke about a real person (a field they
+  never answered is honestly blank — information, not a gap), and with nobody
+  real to be honest about, a silently empty `[hair_type]` is indistinguishable
+  from one misspelled.
+
+## Messages: the tab, the editor, the draft buffer (2026-08-19)
+
+- **The tab is Messages, not Reminders.** Six message types live there and
+  exactly one is a reminder; the tab was named after its smallest member,
+  leaving the confirmation, cancellation notice, follow-up, win-back and away
+  reply with no word on the sidebar — and making "when booked" read as a
+  strange kind of reminder. The nav `id` has been `"messages"` all along. Its
+  symbol is a speech bubble, not a bell: a bell says "we will nudge you",
+  which describes one of the six.
+- **Wording is edited through a DRAFT BUFFER, never live** (`waTemplates.draft`
+  + `draftUpdatedAt`, ported from Nudge's `templates.draft`). Reminders send
+  from a cron, so writing straight to the live row on blur meant a body caught
+  mid-sentence was a body a customer could receive — you were editing
+  production one keystroke at a time. Blur writes the buffer; the live fields
+  do not move until `orgs.commitTemplateDraft`. **No send path may read
+  `draft`.** Three bugs are already paid for and must not be reintroduced:
+  (1) a draft equal to live is CLEARED rather than stored, or type-then-delete
+  pins the "Unsaved" pill forever; (2) the equality check compares the row **as
+  it would look after commit**, not the blob alone — a draft is partial (body
+  edits buffer `body` + `bodyHtml` and nothing else), so comparing it bare
+  reads every untouched field as cleared; (3) Discard re-seeds the editor from
+  the LIVE fields rather than waiting for the cleared row, because the
+  subscription can still be emitting the blob being thrown away. Meta
+  registration (`metaName`, approval `status`) deliberately bypasses the
+  buffer and writes live — publishing WORDS must never cost an approval that
+  took weeks.
+- **The preview is a TAB, not a second column.** Visual | HTML | Preview,
+  inside the editor's own frame. The old split rendered the same formatted
+  message twice side by side and gave the box you type in half the width;
+  Visual already shows the email as it looks, and what the preview alone can
+  say is that `[name]` becomes a name and `[date]` becomes a date — a
+  different VIEW of the body, which is what a tab is for. Switching to Preview
+  and back must never re-parse, or a round trip rewrites the author's HTML
+  with tiptap's serialization of it. A WhatsApp-only rule keeps its pane below
+  the textarea: there it duplicates nothing, being the only rendering. The
+  paper carries no border of its own — inside the editor's panel it would be
+  three rectangles drawn around one message.
+- **Adding a message shows the words first, in two steps.** Step one picks the
+  type; step two carries it as a heading with Back, plus timing and the
+  seeded subject/body. One growing form pushed the list, the option just
+  clicked and the Add button down the page — the dialog moved under the
+  pointer while being read. The seed resolves **this org's own kind-level
+  fallback, then stock** — the same order `ensureTemplate` uses, or the sheet
+  previews one thing and saves another. Stepping back and re-picking the same
+  type keeps your edits; only a genuine change of type re-seeds.
+- **Stock wording lives in `convex/lib/templateTexts.ts`, a PURE module**, so
+  the browser can read it without pulling the server file's mutations and
+  generated api into the bundle. Every lifecycle message ends with the ACTION
+  it is trying to cause, on its own line so `renderTokens` drops it cleanly:
+  the reminder carries `[manage_link]` (a reminder you cannot act on is how a
+  no-show happens instead of a reschedule) and the follow-up carries
+  `[booking_link]` (a thank-you that never invites the next visit spends a
+  send on nothing). Both used to end on "reply to us", which hands the work
+  back to the salon.
+- **"Reset to defaults" is gone.** It offered to throw away every rule and
+  every word an owner had written in exchange for a state reachable one rule
+  at a time. A destructive button does not earn its place under a list by
+  being quiet. `messageRules.resetToDefaults` stays for support to call.
+- **`booking` / `cancellation` / `out_of_hours` fire immediately and have no
+  timing control** (`clampOffset` pins them to 0). A confirmation minutes late
+  reads as the booking not having worked — the customer is still holding their
+  phone. If a real case appears, it is a suppression rule, not a delay.
 
 ## Goods (2026-08-15) — services without a duration
 
@@ -1311,7 +1390,28 @@ survives in the schema, dead and commented, because Convex cannot drop a field
 while documents still carry values.
 
 The rule the old note was reaching for still stands: never coin a term like
-"bookable person" when the product already has a plainer one.
+"bookable person" when the product already has a plainer one. **Name the set,
+not its best-known member** — "Reminders" named a tab holding six message
+types of which one was a reminder, and "Add reminder" a sheet that adds any of
+the six.
+
+**6. `ROW_GRID` is the settings-page grammar, not a universal layout.** Its
+260px label column is sized for Business's longest labels ("Incoming email
+address"); borrow it under short labels like "When" and "Channel" and the
+column is mostly void, with values starting a hand's width from the words
+naming them. Keep the grammar (label left, capped value right, never a control
+stretched across the card) and size the columns to the labels you actually
+have. In the same spirit, cap a control to the text it will ever hold
+(`sm:max-w-72` on a name or an email local part) rather than narrowing the
+shared grid — the wide rows, seven day chips on one line and the open/close
+pickers, need the full 24rem.
+
+**7. Selected state needs a shape, not only a hue.** A coloured pill reads as a
+decorative tag and its unselected sibling as a button nobody has found; put a
+check inside the active one. And mind what a colour already MEANS on the page
+— amber is the "unsaved" signal in the message editor, so an amber ON-state
+read as a warning; the active channel is emerald, which is what the app's
+toggles already say by "on".
 
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 section below)
 
@@ -1422,12 +1522,23 @@ booking sheet is open.
 
 Every floating element — dropdown menu, tooltip, combobox list — renders
 through `createPortal(document.body)` with `position: fixed`, measured from
-the trigger's `getBoundingClientRect()` at open time, clamped to the viewport,
-closed on outside-mousedown AND on scroll (capture). An `absolute` child
-clips on the nearest `overflow-hidden`/scroll ancestor — every card and the
-shell's main pane are exactly that. `InfoTip` and `RowMenu` are the reference
-implementations. Serdar has flagged this repeatedly across projects; treat a
-clipped popup as a bug you introduced knowingly.
+the trigger's `getBoundingClientRect()` at open time and clamped to the
+viewport. An `absolute` child clips on the nearest `overflow-hidden`/scroll
+ancestor — every card and the shell's main pane are exactly that. `InfoTip`
+and `RowMenu` are the reference implementations. Serdar has flagged this
+repeatedly across projects; treat a clipped popup as a bug you introduced
+knowingly.
+
+**Scroll REPOSITIONS the panel; it does not close it** (`useAnchoredPanel`,
+fixed 2026-08-19). Closing was the cheap answer to a fixed panel drifting away
+from its trigger, and it made long lists unusable: reaching a variable below
+the fold meant scrolling the page, and the scroll that brought the trigger
+into view dismissed what you had just opened. Capture listeners on `scroll`
+and `resize` re-measure instead. Two guards that must survive any rewrite —
+a scroll whose target is INSIDE the panel is ignored (the panel's own list
+scrolls, and moving the list must not move the panel), and the panel closes
+only when the trigger has actually left the viewport, since a panel anchored
+to an off-screen control is the drift this exists to prevent.
 
 ## Tabs are underlined, never pills
 
