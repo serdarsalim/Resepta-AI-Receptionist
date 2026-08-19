@@ -247,8 +247,6 @@ export function AppointmentModal({
       .slice(0, 8);
   }, [customerOptions, customerQuery]);
 
-  const pickedCustomer = customerOptions?.find((c) => c._id === picked);
-
   // Save is off until there is a customer at all — a picked record or at
   // least a typed name. The finer checks (a phone for a new customer) surface
   // as native validation on Save instead of a button that silently refuses.
@@ -604,29 +602,12 @@ export function AppointmentModal({
                     )}
                   </label>
 
-                {picked ? (
-                  /* Who you picked, read back. Not decoration: the box shows
-                     a name, which is not proof the sheet resolved it to
-                     anybody — this card is the proof, carrying the two facts
-                     a booking cares about. Typing again clears the pick and
-                     brings the phone fields back. */
-                  <dl className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <dt className="text-[var(--muted)]">{t("customers.phone")}</dt>
-                      <dd className="tabular-nums">{pickedCustomer?.phone ?? "—"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <dt className="text-[var(--muted)]">{t("customers.consentShort")}</dt>
-                      <dd>
-                        {pickedCustomer === undefined
-                          ? "—"
-                          : pickedCustomer.consented
-                            ? t("customers.consentGiven")
-                            : t("customers.noConsent")}
-                      </dd>
-                    </div>
-                  </dl>
-                ) : (
+                {/* Phone and consent exist only while a customer is being
+                    CREATED. A picked customer already has both on their
+                    record — repeating them here was answering a question
+                    nobody asked, so a resolved pick leaves nothing but the
+                    name, the way Google's popup carries just a title. */}
+                {!picked && (
                   <>
                     <label className="block text-xs font-medium" htmlFor="modal-phone">
                       {t("customers.phone")}
