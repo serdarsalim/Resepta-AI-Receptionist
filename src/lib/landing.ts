@@ -12,8 +12,18 @@ export type LandingStep = {
   body: string;
 };
 
+export type LandingTier = {
+  name: string;
+  price: string;
+  period: string;
+  // "Everything in X, plus:" — absent on the first tier.
+  includesLead?: string;
+  features: string[];
+  recommended?: boolean;
+};
+
 export type LandingCopy = {
-  nav: { cost: string; how: string };
+  nav: { cost: string; how: string; pricing: string };
   signIn: string;
   cta: string;
   ctaNote: string;
@@ -50,6 +60,12 @@ export type LandingCopy = {
     channelsNote: string;
     closing: string;
   };
+  pricing: {
+    title: string;
+    body: string;
+    recommendedLabel: string;
+    tiers: LandingTier[];
+  };
   footerLine: string;
   footerProduct: string;
   footerResources: string;
@@ -63,7 +79,7 @@ export type LandingCopy = {
 
 export const LANDING: Record<Language, LandingCopy> = {
   tr: {
-    nav: { cost: "Maliyet", how: "Nasıl çalışır" },
+    nav: { cost: "Maliyet", how: "Nasıl çalışır", pricing: "Fiyatlar" },
     signIn: "Giriş yapın",
     cta: "Hemen başlayın",
     ctaNote: "Şifre yok. Kurulumdaki tek soru işletmenizin adı.",
@@ -119,6 +135,48 @@ export const LANDING: Record<Language, LandingCopy> = {
         "Bugün rezervasyonu telefon alıyor. WhatsApp ve e-posta şimdiden onay ve hatırlatmaları taşıyor; sırada onlardan da randevu almak var.",
       closing: "Bir sonraki arama her hâlükârda gelecek.",
     },
+    pricing: {
+      title: "Fiyatlar",
+      body: "Bir ön büro maaş ister; bu ₺1.990'dan başlıyor. Her planda sesli asistan, takvim ve müşteri kayıtları var — fark dakikalarda ve kanallarda.",
+      recommendedLabel: "Önerilen",
+      tiers: [
+        {
+          name: "Başlangıç",
+          price: "₺1.990",
+          period: "/ ay",
+          features: [
+            "Kendi numarasında sesli asistan",
+            "Ayda 100 arama dakikası",
+            "Randevu takvimi ve müşteri kayıtları",
+            "E-posta onay ve hatırlatmaları",
+            "Google Takvim eşitlemesi",
+          ],
+        },
+        {
+          name: "İşletme",
+          price: "₺3.990",
+          period: "/ ay",
+          includesLead: "Başlangıç'taki her şey, artı:",
+          recommended: true,
+          features: [
+            "Ayda 300 arama dakikası",
+            "WhatsApp onay ve hatırlatmaları",
+            "Gelmeyen ve iptal takipleri",
+          ],
+        },
+        {
+          name: "Pro",
+          price: "₺7.990",
+          period: "/ ay",
+          includesLead: "İşletme'deki her şey, artı:",
+          features: [
+            "Ayda 800 arama dakikası",
+            "Ek numaralar ve sesli asistanlar",
+            "Öncelikli destek",
+          ],
+        },
+      ],
+    },
     footerLine: "Randevulu işletmeler için bağlantılı arama, müşteri ve takip otomasyonu.",
     footerProduct: "Ürün",
     footerResources: "Kaynaklar",
@@ -131,7 +189,7 @@ export const LANDING: Record<Language, LandingCopy> = {
   },
 
   en: {
-    nav: { cost: "The cost", how: "How it works" },
+    nav: { cost: "The cost", how: "How it works", pricing: "Pricing" },
     signIn: "Sign in",
     cta: "Get started",
     ctaNote: "No password. The only setup question is your business name.",
@@ -187,6 +245,48 @@ export const LANDING: Record<Language, LandingCopy> = {
         "Calls book today. WhatsApp and email already carry confirmations and reminders — taking bookings through them is next.",
       closing: "The next call is coming either way.",
     },
+    pricing: {
+      title: "Pricing",
+      body: "A front desk costs a salary. This one starts at $49 a month. Every plan includes the voice agent, the calendar, and the customer records — the difference is minutes and channels.",
+      recommendedLabel: "Recommended",
+      tiers: [
+        {
+          name: "Starter",
+          price: "$49",
+          period: "/ month",
+          features: [
+            "Voice agent on its own number",
+            "100 call minutes a month",
+            "Booking calendar and customer records",
+            "Email confirmations and reminders",
+            "Google Calendar sync",
+          ],
+        },
+        {
+          name: "Business",
+          price: "$99",
+          period: "/ month",
+          includesLead: "Everything in Starter, plus:",
+          recommended: true,
+          features: [
+            "300 call minutes a month",
+            "WhatsApp confirmations and reminders",
+            "No-show and cancellation follow-ups",
+          ],
+        },
+        {
+          name: "Pro",
+          price: "$199",
+          period: "/ month",
+          includesLead: "Everything in Business, plus:",
+          features: [
+            "800 call minutes a month",
+            "Additional numbers and voice agents",
+            "Priority support",
+          ],
+        },
+      ],
+    },
     footerLine: "Connected calls, customers, and follow-up for appointment businesses.",
     footerProduct: "Product",
     footerResources: "Resources",
@@ -199,7 +299,7 @@ export const LANDING: Record<Language, LandingCopy> = {
   },
 
   de: {
-    nav: { cost: "Die Kosten", how: "So funktioniert es" },
+    nav: { cost: "Die Kosten", how: "So funktioniert es", pricing: "Preise" },
     signIn: "Anmelden",
     cta: "Jetzt starten",
     ctaNote: "Kein Passwort. Die einzige Frage bei der Einrichtung: der Name Ihres Betriebs.",
@@ -254,6 +354,48 @@ export const LANDING: Record<Language, LandingCopy> = {
       channelsNote:
         "Gebucht wird heute am Telefon. WhatsApp und E-Mail übernehmen bereits Bestätigungen und Erinnerungen — Buchungen darüber folgen.",
       closing: "Der nächste Anruf kommt so oder so.",
+    },
+    pricing: {
+      title: "Preise",
+      body: "Ein Empfang kostet ein Gehalt; hier geht es ab 49 € im Monat los. Jeder Plan enthält Sprachassistent, Kalender und Kundenprofile — der Unterschied liegt in Minuten und Kanälen.",
+      recommendedLabel: "Empfohlen",
+      tiers: [
+        {
+          name: "Starter",
+          price: "49 €",
+          period: "/ Monat",
+          features: [
+            "Sprachassistent auf eigener Nummer",
+            "100 Anrufminuten pro Monat",
+            "Terminkalender und Kundenprofile",
+            "Bestätigungen und Erinnerungen per E-Mail",
+            "Google-Kalender-Synchronisierung",
+          ],
+        },
+        {
+          name: "Business",
+          price: "99 €",
+          period: "/ Monat",
+          includesLead: "Alles aus Starter, plus:",
+          recommended: true,
+          features: [
+            "300 Anrufminuten pro Monat",
+            "WhatsApp-Bestätigungen und -Erinnerungen",
+            "Nachfassen bei No-Shows und Absagen",
+          ],
+        },
+        {
+          name: "Pro",
+          price: "199 €",
+          period: "/ Monat",
+          includesLead: "Alles aus Business, plus:",
+          features: [
+            "800 Anrufminuten pro Monat",
+            "Zusätzliche Nummern und Sprachassistenten",
+            "Bevorzugter Support",
+          ],
+        },
+      ],
     },
     footerLine: "Verbundene Anrufe, Kunden und Nachbereitung für Terminbetriebe.",
     footerProduct: "Produkt",

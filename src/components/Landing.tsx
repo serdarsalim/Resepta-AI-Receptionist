@@ -31,6 +31,9 @@ export function Landing() {
             <a className="transition-colors hover:text-[var(--foreground)]" href="#how">
               {copy.nav.how}
             </a>
+            <a className="transition-colors hover:text-[var(--foreground)]" href="#pricing">
+              {copy.nav.pricing}
+            </a>
             <a
               className="transition-colors hover:text-[var(--foreground)]"
               href={DOCS_ORIGIN}
@@ -154,6 +157,54 @@ export function Landing() {
             <p className="mt-12 max-w-[58ch] text-sm leading-relaxed text-[var(--muted)]">
               {copy.how.channelsNote}
             </p>
+          </div>
+        </section>
+
+        <section id="pricing" className="scroll-mt-24 border-y border-[var(--border)] bg-[var(--pane)]">
+          <div className="mx-auto max-w-3xl px-6 py-20 sm:py-24">
+            <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">
+              {copy.pricing.title}
+            </h2>
+            <p className="mt-4 max-w-[58ch] leading-relaxed text-[var(--muted-strong)]">
+              {copy.pricing.body}
+            </p>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              {copy.pricing.tiers.map((tier) => (
+                <div
+                  key={tier.name}
+                  className={`rounded-xl border bg-[var(--card)] p-5 ${
+                    tier.recommended ? "border-[var(--accent)]" : "border-[var(--border)]"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="font-semibold">{tier.name}</h3>
+                    {tier.recommended && (
+                      <span className="text-xs font-medium text-[var(--accent)]">
+                        {copy.pricing.recommendedLabel}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-3">
+                    <span className="text-3xl font-semibold tabular-nums tracking-[-0.02em]">
+                      {tier.price}
+                    </span>
+                    <span className="ml-1 text-sm text-[var(--muted)]">{tier.period}</span>
+                  </p>
+                  {tier.includesLead && (
+                    <p className="mt-5 text-xs text-[var(--muted)]">{tier.includesLead}</p>
+                  )}
+                  <ul className={`space-y-2.5 text-sm leading-snug text-[var(--muted-strong)] ${tier.includesLead ? "mt-2.5" : "mt-5"}`}>
+                    {tier.features.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2.5">
+                        <span className="mt-[0.4375rem] h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
 
             <div className="mt-16">
               <p className="text-xl font-semibold tracking-[-0.01em]">{copy.how.closing}</p>
@@ -163,12 +214,13 @@ export function Landing() {
               >
                 {copy.cta}
               </Link>
+              <p className="mt-3 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border)] bg-[var(--pane)]">
+      <footer>
         <div className="mx-auto max-w-3xl px-6 py-12 text-sm text-[var(--muted)]">
           <div className="flex items-center gap-2.5 text-[var(--foreground)]">
             <Mark small />
@@ -180,6 +232,7 @@ export function Landing() {
             <FooterNav title={copy.footerProduct}>
               <a href="#cost">{copy.nav.cost}</a>
               <a href="#how">{copy.nav.how}</a>
+              <a href="#pricing">{copy.nav.pricing}</a>
               {/* The demo shows the workspace UI with sample data — a footer
                   resource, not a call to action promising interactivity. */}
               <a href={DEMO_ORIGIN} target="_blank" rel="noreferrer">
