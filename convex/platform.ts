@@ -1316,7 +1316,12 @@ export const listProvisionableNumbers = action({
           for (const id of boundAgents) {
             const owner = agentOrg.get(id);
             if (owner && owner.orgId === String(args.orgId)) continue;
-            held = owner ? owner.org : "an agent outside Resepta";
+            // A binding we can resolve names the business. One we cannot is
+            // an agent NO business has connected — usually a dashboard-made
+            // agent awaiting connection — so print its id rather than
+            // asserting where it lives ("an agent outside Resepta" claimed
+            // more than the data knows; Serdar, 2026-08-20).
+            held = owner ? owner.org : `unconnected ${id}`;
             break;
           }
         }

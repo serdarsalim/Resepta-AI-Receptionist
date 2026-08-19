@@ -178,6 +178,9 @@ export default function TenantPage() {
     "setup" | "agents" | "assistant" | "members" | "sends" | "activity"
   >("setup");
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
+  // Phone lines shows only this business's numbers until the operator asks
+  // to add one — the account list is pick-time inventory, not standing state.
+  const [addingLine, setAddingLine] = useState(false);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
 
@@ -475,7 +478,7 @@ export default function TenantPage() {
       {voice && (
         <Section
           title="Phone lines"
-          description="Tick the numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and an empty list means NO numbers for them until you provision one here. The rows are the Retell account's real numbers, so provisioning is a click, never retyped E.164."
+          description="The numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and no lines means NO numbers for them until you provision one here. Add a phone line offers the Retell account's real numbers, so provisioning is a click, never retyped E.164."
         >
           {provisionable === null ? (
             <p className="py-2.5 text-xs text-[var(--muted)]">
@@ -491,7 +494,21 @@ export default function TenantPage() {
             </p>
           ) : (
             <div className="py-1.5">
-              {provisionable.map((line) => {
+              {/* This business's lines only, until "Add a phone line" opens
+                  the whole account (Serdar, 2026-08-20): the full inventory —
+                  every other client's number, each with its holder — is
+                  pick-time information, and as the standing view it read as
+                  a page of other people's lines under a business that has
+                  one. Stale allowlist entries (missing) always show, since
+                  unticking one here is how they get cleaned up. */}
+              {provisionable
+                .filter(
+                  (line) =>
+                    addingLine ||
+                    voice.allowedPhoneNumbers.includes(line.number) ||
+                    line.missing,
+                )
+                .map((line) => {
                 const on = voice.allowedPhoneNumbers.includes(line.number);
                 // A line another business holds cannot be ticked ON from
                 // here — one number, one business. It can still be ticked
@@ -526,12 +543,31 @@ export default function TenantPage() {
                     )}
                     {line.heldBy && (
                       <span className="ml-auto shrink-0 text-xs text-[var(--muted)]">
-                        held by {line.heldBy}
+                        (held by {line.heldBy})
                       </span>
                     )}
                   </button>
                 );
               })}
+              {!addingLine &&
+                !provisionable.some(
+                  (line) =>
+                    voice.allowedPhoneNumbers.includes(line.number) ||
+                    line.missing,
+                ) && (
+                  <p className="px-2 py-1.5 text-xs text-[var(--muted)]">
+                    No line provisioned yet.
+                  </p>
+                )}
+              <div className="px-2 pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAddingLine((open) => !open)}
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  {addingLine ? "Done" : "Add a phone line…"}
+                </button>
+              </div>
             </div>
           )}
         </Section>
