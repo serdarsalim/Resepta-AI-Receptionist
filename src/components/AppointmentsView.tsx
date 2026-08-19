@@ -1541,11 +1541,21 @@ function Calendar({
                   // that is what makes the gesture feel like placing a booking
                   // rather than selecting a range. The live time range rides
                   // inside as soon as there is room for a line of text.
+                  // The band already wears the tense the booking will get:
+                  // draw a slot on this afternoon and it is solid, draw one
+                  // over yesterday and it is the same faded wash the saved
+                  // block will be. Anything else has the chip changing colour
+                  // the moment Save lands. Same rule as blockStyle — past is
+                  // decided by the slot's END against the live clock.
                   return (
                     <div
                       aria-hidden
                       data-slot-band
-                      className="pointer-events-none absolute z-20 overflow-hidden rounded-md bg-[var(--event)] px-1.5 py-0.5 text-[11px] leading-tight text-white opacity-90 shadow-md"
+                      className={`pointer-events-none absolute z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight opacity-90 shadow-md ${
+                        band.day + band.endMinute * 60_000 < now
+                          ? "bg-[var(--event-past)] text-[var(--event-past-fg)]"
+                          : "bg-[var(--event)] text-white"
+                      }`}
                       style={{
                         top: ((band.startMinute - dayStart * 60) / 60) * HOUR_PX,
                         height: bandHeight,
