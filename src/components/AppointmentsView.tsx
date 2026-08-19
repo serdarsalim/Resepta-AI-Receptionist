@@ -80,28 +80,6 @@ const VIEW_KEY: Record<ViewMode, string> = {
   list: "L",
 };
 
-// Does the period on screen contain today? Drives whether Today is offered at
-// all — a button that jumps you to where you already are is a control with
-// nothing to do.
-function periodHasToday(view: ViewMode, anchor: number): boolean {
-  const today = startOfDay(Date.now());
-  const here = new Date(anchor);
-  const now = new Date(today);
-  switch (view) {
-    case "day":
-      return startOfDay(anchor) === today;
-    case "week":
-      return startOfWeek(anchor) === startOfWeek(today);
-    case "month":
-      return here.getFullYear() === now.getFullYear() && here.getMonth() === now.getMonth();
-    case "year":
-      return here.getFullYear() === now.getFullYear();
-    // The list already reads forward from now, so it is never anywhere else.
-    case "list":
-      return true;
-  }
-}
-
 export function AppointmentsView({
   onOpenContact,
 }: {
@@ -316,10 +294,29 @@ export function AppointmentsView({
           of grid to show two arrows and a date — on the screen where vertical
           space IS the product, since every pixel here is a bookable minute.
           Lifted out, it also stops each view carrying its own copy. */}
+      {/* Google's header order: Today pill on the left, then the arrows and
+          the period, and the view picker as a matching pill on the right.
+          Today is always offered — an outlined pill that sometimes vanished
+          made the row twitch, and pressing it while already on today costs
+          nothing.
+
+          No "new appointment" button: the grid is the button. Click or drag
+          any slot, or any month cell, exactly where the booking goes — a
+          toolbar button that opened on "the next round hour" was a worse
+          version of every click the calendar already takes, and the owner
+          never used Google's either.
+
+          "Edit hours" used to sit here too; it read as misfiled next to the
+          controls that act on this view. Hours live in Business → Hours. */}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <ViewMenu view={view} onView={setView} />
         {view !== "list" && (
           <>
+            <button
+              className="rounded-full border border-[var(--border)] px-4 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+              onClick={() => setAnchor(startOfDay(Date.now()))}
+            >
+              {t("appointments.today")}
+            </button>
             <button
               aria-label={t("appointments.previous")}
               className="rounded-md px-1.5 py-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -337,36 +334,8 @@ export function AppointmentsView({
             <h3 className="ml-1 text-sm font-medium">{heading}</h3>
           </>
         )}
-        {/* Right cluster. Today can be rendered conditionally now rather than
-            merely hidden: it sits at the end of a right-aligned group, so its
-            coming and going moves nothing — the arrows are at the other end of
-            the row, and New appointment is pinned to the edge.
-
-            "Edit hours" used to sit here, on the theory that it explained the
-            shading it stood next to. It didn't read that way: a link out to
-            another tab, parked beside the one button that acts on this one,
-            just looked misfiled. Hours live in Business → Hours, which is
-            where someone changing them goes looking. */}
         <div className="ml-auto flex items-center gap-2">
-          {view !== "list" && !periodHasToday(view, anchor) && (
-            <button
-              className="rounded-md px-2.5 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              onClick={() => setAnchor(startOfDay(Date.now()))}
-            >
-              {t("appointments.today")}
-            </button>
-          )}
-          <button
-            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
-            onClick={() => {
-              // No slot was clicked, so open on the next round hour — which is
-              // what "new appointment" from a toolbar means.
-              const next = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
-              booking.open({ startAt: next, durationMinutes: DEFAULT_DURATION });
-            }}
-          >
-            {t("appointments.new")}
-          </button>
+          <ViewMenu view={view} onView={setView} />
         </div>
       </div>
 
@@ -788,9 +757,9 @@ function ViewMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        // Ghost, not bordered: borders belong to containers here, and a
-        // bordered control beside a solid primary reads as a third weight.
-        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+        // An outlined pill, twin to the Today button across the row — the
+        // two ends of the header carry the same weight, Google's balance.
+        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-4 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
       >
         {current ? t(current.key) : ""}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
