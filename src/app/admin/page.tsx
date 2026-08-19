@@ -412,7 +412,7 @@ export default function AdminPage() {
           >
             <Row
               label="Voice rate (USD per minute)"
-              hint="What every business pays per called minute, billed per second. Set once here; the Voice meter on a business's Agents tab can override it. Changes only price calls from now on; history keeps its stamped rate."
+              hint="What every business pays per called minute, billed per second. Set once here; the Voice meter on a business's Voice agent tab can override it. Changes only price calls from now on; history keeps its stamped rate."
               current={
                 mail.voiceRateMicroUsdPerMinute === null
                   ? undefined
@@ -457,7 +457,7 @@ export default function AdminPage() {
               must not be hunted for. */}
           <Section
             title="Kill switch"
-            description="Stops every org's chat agent before the model runs. Immediate, platform-wide, reversible. Also visible on each business's Assistant tab."
+            description="Stops every org's chat agent before the model runs. Immediate, platform-wide, reversible. Also visible on each business's Chat agent tab."
           >
             <div className="py-2.5">
               <button

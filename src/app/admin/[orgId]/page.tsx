@@ -274,8 +274,8 @@ export default function TenantPage() {
       <TabStrip
         tabs={[
           { id: "setup" as const, label: "Setup" },
-          { id: "agents" as const, label: "Agents" },
-          { id: "assistant" as const, label: "Assistant" },
+          { id: "agents" as const, label: "Voice agent" },
+          { id: "assistant" as const, label: "Chat agent" },
           { id: "members" as const, label: "Members" },
           { id: "sends" as const, label: "Sends" },
           { id: "activity" as const, label: "Logs" },
