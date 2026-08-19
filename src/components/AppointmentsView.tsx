@@ -487,10 +487,6 @@ export function AppointmentsView({
               setMoveError(result.reason ?? t("appointments.moveFailed"));
             }
           }}
-          onOpenDay={(dayMs) => {
-            setAnchor(dayMs);
-            setView("day");
-          }}
         />
       )}
 
@@ -712,14 +708,6 @@ type CalendarAppointment = {
 // pale wash of the same hue. The tense split outranks the status split —
 // whether it already happened is the first thing a glance wants — so past
 // scheduled and past confirmed both fade the same way.
-// A cluster stands for several bookings that may hold several DIFFERENT
-// statuses, so it cannot wear one of them. What it can wear is the one fact
-// true of all of them at once: whether the day has been and gone.
-const CLUSTER_STYLE = {
-  past: "bg-[var(--event-past)] text-[var(--event-past-fg)]",
-  upcoming: "bg-[var(--event-soft)] text-[var(--foreground)]",
-};
-
 function blockStyle(status: string, isPast: boolean): string {
   // A no-show stays red in both tenses: it is the one state worth spotting
   // weeks later.
@@ -939,53 +927,13 @@ function laneOut(rows: CalendarAppointment[]): Placed[] {
   return placed;
 }
 
-// Three bookings sharing a 160px week column leave ~50px each, which is a
-// sliver with no readable content. Past this many, the cluster stops trying
-// to be a schedule and becomes a count you can click into.
-// Was a flat count: three overlapping bookings collapsed, two split the column
-// and took their chances. In a seven-day week two lanes is ~73px each, which
-// renders "Fatma …" and "Emre Çe…" — a name truncated to nothing and no time
-// at all. The threshold is a WIDTH now, measured against the same
-// NARROW_BLOCK_PX the blocks already use to decide whether they can carry
-// their own content.
-//
-// Never merge overlapping bookings into one block, which is what this looks
-// like it should do — Google, Apple and Outlook all keep them side by side,
-// because a merged block hides which customer it is and gives you nothing to
-// click. Collapsing to a COUNT is different: it admits there is no room and
-// hands you the day view, where a salon gets one column per person the way
-// Fresha and Booksy do.
-const MIN_LANE_PX = 80;
-
-type PlacedItem =
-  | { kind: "one"; key: string; row: CalendarAppointment; lane: number; lanes: number }
-  | { kind: "cluster"; key: string; startAt: number; endAt: number; count: number };
-
-// Day view always draws every booking: its columns are wide, and two bookings
-// in one person's column is a real double-booking worth seeing. Week view
-// folds the crowded clusters, and leaves clusters of one or two alone.
-// `columnPx` is the width one column gets, or 0 to never collapse — day view
-// passes 0 because its clusters would open the day you are already looking at.
-function placeColumn(rows: CalendarAppointment[], columnPx: number): PlacedItem[] {
-  const items: PlacedItem[] = [];
-  const folded = new Set<string>();
-  for (const { row, lane, lanes, cluster } of laneOut(rows)) {
-    if (columnPx <= 0 || columnPx / lanes >= MIN_LANE_PX) {
-      items.push({ kind: "one", key: row._id, row, lane, lanes });
-      continue;
-    }
-    if (folded.has(cluster.key)) continue;
-    folded.add(cluster.key);
-    items.push({
-      kind: "cluster",
-      key: cluster.key,
-      startAt: cluster.startAt,
-      endAt: cluster.endAt,
-      count: cluster.size,
-    });
-  }
-  return items;
-}
+// Every overlapping booking draws, side by side, in every view — the Google
+// behaviour, chosen over the count-chip this replaced. Week view used to fold
+// three-deep clusters into "3 bookings" once lanes fell under a readable
+// width; the owner asked for what Google does instead: always split the
+// column, let the narrow blocks truncate, and keep every booking clickable.
+// A merged block was never on the table — it hides which customer it is and
+// gives you nothing to click.
 
 // One column of the grid. In week view that is a day; in day view it is a
 // person, so a salon can read its chairs side by side.
@@ -1019,7 +967,6 @@ function Calendar({
   anchor,
   onOpenBlock,
   provisional,
-  onOpenDay,
   onDraft,
   onMove,
   businessHours,
@@ -1029,7 +976,6 @@ function Calendar({
   view: "day" | "week";
   anchor: number;
   onOpenBlock: (row: CalendarAppointment, anchor?: Rect) => void;
-  onOpenDay: (dayMs: number) => void;
   // Click or drag on empty grid: hand the parent a start and a length and let
   // it open the sheet. The grid never creates anything itself.
   onDraft: (
@@ -1571,59 +1517,7 @@ function Calendar({
                     </div>
                   );
                 })()}
-                {placeColumn(
-                  column.rows,
-                  view === "week" ? APPROX_GRID_PX / columns.length : 0,
-                ).map((item) => {
-                  if (item.kind === "cluster") {
-                    const dayIsPast = column.day < startOfDay(now);
-                    const top =
-                      ((minutesInto(item.startAt) - dayStart * 60) / 60) * HOUR_PX;
-                    const height = Math.max(
-                      ((item.endAt - item.startAt) / 3_600_000) * HOUR_PX - 2,
-                      20,
-                    );
-                    const count = `${item.count} ${t("appointments.bookings")}`;
-                    return (
-                      <button
-                        key={item.key}
-                        // Same guard the single blocks carry. Without it the
-                        // press reached the column, started drawing a new slot,
-                        // and the release opened the booking sheet before this
-                        // click could run: the one place already too full to
-                        // read was the one place that offered to add to it.
-                        //
-                        // No drag of its own. A cluster is several bookings at
-                        // once and there is nothing coherent to move; it is a
-                        // door into the day, not a block.
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={() => onOpenDay(column.day)}
-                        title={count}
-                        style={{ top, height, left: 2, right: 2 }}
-                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 ${
-                          dayIsPast ? CLUSTER_STYLE.past : CLUSTER_STYLE.upcoming
-                        }`}
-                      >
-                        {height < 40 ? (
-                          <span className="block truncate">
-                            <span className="font-medium tabular-nums">
-                              {formatTime(item.startAt, language)}
-                            </span>{" "}
-                            {count}
-                          </span>
-                        ) : (
-                          <>
-                            <span className="block truncate font-medium tabular-nums">
-                              {formatTime(item.startAt, language)}
-                            </span>
-                            <span className="block truncate">{count}</span>
-                          </>
-                        )}
-                      </button>
-                    );
-                  }
-
-                  const { row, lane, lanes } = item;
+                {laneOut(column.rows).map(({ row, lane, lanes }) => {
                   // An explicit 0 is a goods order: drawn as a pin, moved but
                   // never resized, dashed so a handover reads differently
                   // from twenty minutes of somebody's chair.
@@ -1643,7 +1537,7 @@ function Calendar({
                   const narrow = columnPx / lanes < NARROW_BLOCK_PX;
                   return (
                     <button
-                      key={item.key}
+                      key={row._id}
                       onClick={(event) => {
                         // Swallow the click that trails a real drag; a genuine
                         // click (including from the keyboard) opens the sheet.
@@ -1696,7 +1590,11 @@ function Calendar({
                         width: `calc(${100 / lanes}% - 4px)`,
                         touchAction: "none",
                       }}
-                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${blockStyle(
+                      // ring-1 in the card colour: the hairline that keeps two
+                      // same-coloured chips sharing a slot readable as two —
+                      // Google's white seam. Invisible against the card when a
+                      // block stands alone.
+                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight ring-1 ring-[var(--card)] transition-opacity hover:opacity-80 active:cursor-grabbing ${blockStyle(
                         row.status,
                         row.startAt +
                           (row.durationMinutes ?? DEFAULT_DURATION) * 60_000 <
