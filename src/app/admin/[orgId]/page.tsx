@@ -1055,23 +1055,11 @@ export default function TenantPage() {
         </div>
       </Section>
 
-      <Section
-        title="Email"
-        description="Resend sender identity for reminder and campaign mail."
-      >
-        <Row
-          label="Address"
-          hint="Local part only — 'bella' mails as bella@ the platform's sending domain. Replies to it land in the app's Inbox, and it doubles as the From, so answers thread back into the timeline. The one email field a hosted business needs."
-          current={detail.inboundAddress}
-          onSave={(value) => org({ inboundAddress: value })}
-        />
-        <Row
-          label="Custom From (own domain)"
-          hint="Only for a business sending from its OWN domain, which must be verified in Resend or every send is rejected. Empty is the normal state: mail then leaves from the address above."
-          current={detail.emailFrom}
-          onSave={(value) => org({ emailFrom: value })}
-        />
-      </Section>
+      {/* No Email card here (Serdar, 2026-08-20). Both of its fields are the
+          salon's own settings (BusinessView: inbound address, custom From),
+          and the address auto-assigns when missing — this page's header rule
+          applies: a field on both screens is a bug in one of them. The
+          setOrgConfig args survive for the CLI. */}
 
       </>
       )}
