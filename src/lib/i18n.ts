@@ -1241,6 +1241,11 @@ const dictionary = {
     en: "These words are not live yet. Customers keep getting the last version you saved until you press Save.",
     de: "Dieser Text ist noch nicht live. Bis Sie speichern, erhalten Kundinnen und Kunden weiterhin die zuletzt gespeicherte Fassung.",
   },
+  "settings.templateNotLive": {
+    tr: "Taslak kaydedildi · henüz yayında değil",
+    en: "Draft saved · not live yet",
+    de: "Entwurf gespeichert · noch nicht live",
+  },
   "settings.templateDiscard": {
     tr: "Değişiklikleri at",
     en: "Discard",

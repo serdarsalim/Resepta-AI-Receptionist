@@ -400,9 +400,7 @@ function RuleEditor({
   const previewItems = useMemo(() => {
     const rows = services ?? [];
     const first = rows.find((row) => row.active) ?? rows[0];
-    return first
-      ? [{ name: first.name, price: first.price, quantity: 1 }]
-      : [];
+    return first ? [{ name: first.name, price: first.price, quantity: 1 }] : [];
   }, [services]);
 
   // Tomorrow, on the hour, in the org's own timezone. A date has to be made up
@@ -444,8 +442,7 @@ function RuleEditor({
     // silently empty [hair_type] is indistinguishable from one misspelled.
     const custom: Record<string, string> = {};
     for (const field of contactFields) {
-      custom[field.key] =
-        liveDefaults?.[field.key] || `⟨${field.label}⟩`;
+      custom[field.key] = liveDefaults?.[field.key] || `⟨${field.label}⟩`;
     }
     const items = previewItems;
     // × quantity. AGENTS.md, under Goods: "Quantity rides the line, price stays
@@ -660,8 +657,13 @@ function RuleEditor({
       </div>
       {lane === "email" ? (
         /* The email as the customer's mail client shows it: white paper no
-           matter the app theme, subject on top, the authored HTML below. */
-        <div className="email-paper flex flex-col overflow-hidden rounded-lg border border-[var(--border)]">
+           matter the app theme, subject on top, the authored HTML below.
+           NO border of its own — it lives inside the editor's frame now, and
+           a bordered card inside a bordered panel inside a card was three
+           rectangles drawn around one message. The white ground is what
+           separates it; the only rule left is the one under the subject,
+           which is doing a job a mail client does too. */
+        <div className="email-paper -m-3 flex flex-col">
           <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
             {renderFor(subject) ||
               [orgName || "—", previewValues?.appointmentAt]
@@ -669,7 +671,7 @@ function RuleEditor({
                 .join(", ")}
           </p>
           <div
-            className="email-body-editor min-h-40 px-3 py-2 text-sm"
+            className="email-body-editor min-h-40 px-3 py-3 text-sm"
             dangerouslySetInnerHTML={{
               __html:
                 renderedEmailHtml ||
@@ -690,7 +692,7 @@ function RuleEditor({
           brackets under a preview that has none is the sort of caption people
           learn to stop reading. */}
       {showsPlaceholder && (
-        <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+        <p className="pt-1 text-[11px] leading-relaxed text-[var(--muted)]">
           {t("editor.previewPlaceholder")}
         </p>
       )}
@@ -1520,7 +1522,9 @@ function RulesCard({
                         confirmLabel: t("settings.templateDiscard"),
                       });
                       if (!ok) return;
-                      await discardTemplateDraft({ templateId: ownTemplate._id });
+                      await discardTemplateDraft({
+                        templateId: ownTemplate._id,
+                      });
                       setResetToken((n) => n + 1);
                     })();
                   }}
@@ -1535,7 +1539,9 @@ function RulesCard({
                     void (async () => {
                       setSaving(true);
                       try {
-                        await commitTemplateDraft({ templateId: ownTemplate._id });
+                        await commitTemplateDraft({
+                          templateId: ownTemplate._id,
+                        });
                       } finally {
                         setSaving(false);
                       }
@@ -1554,38 +1560,55 @@ function RulesCard({
             lanes it travels — in one strip above the words it sends. Both used
             to live on the list row, back when the row expanded in place; a row
             that opens a page cannot also be a control panel. */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-[var(--border)] pb-3">
-          <span className="flex items-center gap-1.5 text-sm">
-            {ruleWhen(opened)}
-            {opened.trigger === "no_show" && <InfoTip text={winbackHint} />}
-            {opened.trigger === "after_end" && (
-              <InfoTip text={t("settings.ruleFollowupHint")} />
-            )}
-            {opened.trigger === "out_of_hours" && (
-              <InfoTip text={t("settings.ruleOutOfHoursHint")} />
-            )}
+        <div className="mb-4 flex flex-wrap items-start gap-x-10 gap-y-3">
+          <span className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--muted)]">
+              {t("settings.rulesWhen")}
+            </span>
+            <span className="flex items-center gap-1.5 text-sm">
+              {ruleWhen(opened)}
+              {opened.trigger === "no_show" && <InfoTip text={winbackHint} />}
+              {opened.trigger === "after_end" && (
+                <InfoTip text={t("settings.ruleFollowupHint")} />
+              )}
+              {opened.trigger === "out_of_hours" && (
+                <InfoTip text={t("settings.ruleOutOfHoursHint")} />
+              )}
+            </span>
           </span>
-          <span className="flex flex-wrap items-center gap-1.5 text-xs">
-            {wiredFor(opened).map((channel) => {
-              const on = activeChannels(opened).has(channel);
-              return (
-                <button
-                  key={channel}
-                  type="button"
-                  role="switch"
-                  aria-checked={on}
-                  aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
-                  onClick={() => toggleChannel(opened, channel)}
-                  className={`rounded-full px-2.5 py-0.5 transition-colors ${
-                    on
-                      ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                      : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {channelLabel(channel)}
-                </button>
-              );
-            })}
+          {/* Labelled, both of them. These are two different KINDS of thing
+              wearing the same clothes: the left is a fact about when the rule
+              fires, the right is a set of switches you can press. Unlabelled
+              they read as one drifting phrase — "When booked Email" — and the
+              amber pill looks like a tag rather than the control it is. The
+              words are the list's own column headings, so drilling into a rule
+              lands on the same vocabulary you left. */}
+          <span className="flex flex-col gap-1">
+            <span className="text-[11px] text-[var(--muted)]">
+              {t("settings.rulesWhere")}
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5 text-xs">
+              {wiredFor(opened).map((channel) => {
+                const on = activeChannels(opened).has(channel);
+                return (
+                  <button
+                    key={channel}
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
+                    onClick={() => toggleChannel(opened, channel)}
+                    className={`rounded-full px-2.5 py-0.5 transition-colors ${
+                      on
+                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {channelLabel(channel)}
+                  </button>
+                );
+              })}
+            </span>
           </span>
         </div>
         <RuleEditor
@@ -1605,8 +1628,18 @@ function RulesCard({
             void saveTemplateDraft({ templateId, ...patch })
           }
         />
-        {/* Deleting lives with the thing being deleted. */}
-        <div className="flex justify-end pt-2">
+        {/* Deleting lives with the thing being deleted, and sits at the far
+            end from Save: the two are opposite intentions, and a destructive
+            button next to the one people press on every visit is a mis-click
+            waiting to happen.
+
+            Save is rendered whether or not there is anything to save, and
+            disabled when there is not. The header pair appears and disappears
+            with the draft, which is right for a strip that would otherwise be
+            empty — but the foot of the form is where people look for Save,
+            and a button that is missing until you have earned it is a button
+            you have to learn about first. */}
+        <div className="flex items-center justify-between gap-2 pt-2">
           <button
             type="button"
             onClick={() => void deleteRule(opened)}
@@ -1614,6 +1647,31 @@ function RulesCard({
           >
             {t("settings.deleteRule")}
           </button>
+          <span className="flex items-center gap-2">
+            <span className="text-xs text-[var(--muted)]">
+              {ownTemplate?.hasUnsavedChanges
+                ? t("settings.templateNotLive")
+                : ""}
+            </span>
+            <button
+              type="button"
+              disabled={!ownTemplate?.hasUnsavedChanges || saving}
+              onClick={() => {
+                if (!ownTemplate) return;
+                void (async () => {
+                  setSaving(true);
+                  try {
+                    await commitTemplateDraft({ templateId: ownTemplate._id });
+                  } finally {
+                    setSaving(false);
+                  }
+                })();
+              }}
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
+            >
+              {saving ? t("common.saving") : t("common.save")}
+            </button>
+          </span>
         </div>
         {/* The confirm has to be mounted in THIS branch too. useConfirm's
             promise only resolves when its dialog is on screen, so without
