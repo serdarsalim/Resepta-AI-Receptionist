@@ -37,6 +37,7 @@ import { isDemo } from "./demo";
 import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
 import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
+import { resolvePublicPhone } from "./lib/publicPhone";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -66,7 +67,15 @@ export const loadSessionContext = internalQuery({
     const evolution = org
       ? await loadEvolutionCreds(ctx, orgId, org.evolutionInstance)
       : null;
-    return { customer, waAccount, org, evolution, contactFields };
+    return {
+      customer,
+      waAccount,
+      // publicPhone resolved here, where there is a db: the actions that read
+      // this context render [phone] but cannot query the agent table.
+      org: org ? { ...org, publicPhone: await resolvePublicPhone(ctx, org) } : org,
+      evolution,
+      contactFields,
+    };
   },
 });
 
@@ -287,7 +296,15 @@ export const loadAwayReplyContext = internalQuery({
         .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
         .collect(),
     ]);
-    return { customer, org, waAccount, rule, templates, contactFields };
+    return {
+      customer,
+      // Same as loadSessionContext: [phone] is resolved where the db is.
+      org: { ...org, publicPhone: await resolvePublicPhone(ctx, org) },
+      waAccount,
+      rule,
+      templates,
+      contactFields,
+    };
   },
 });
 
@@ -395,7 +412,8 @@ export const loadSendContext = internalQuery({
     return {
       appointment,
       customer,
-      org,
+      // Same as loadSessionContext: [phone] is resolved where the db is.
+      org: org ? { ...org, publicPhone: await resolvePublicPhone(ctx, org) } : org,
       waAccount,
       templates,
       evolution,

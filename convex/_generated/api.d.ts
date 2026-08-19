@@ -59,6 +59,7 @@ import type * as lib_phone from "../lib/phone.js";
 import type * as lib_planToken from "../lib/planToken.js";
 import type * as lib_platformAuth from "../lib/platformAuth.js";
 import type * as lib_platformConfig from "../lib/platformConfig.js";
+import type * as lib_publicPhone from "../lib/publicPhone.js";
 import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
@@ -155,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   "lib/planToken": typeof lib_planToken;
   "lib/platformAuth": typeof lib_platformAuth;
   "lib/platformConfig": typeof lib_platformConfig;
+  "lib/publicPhone": typeof lib_publicPhone;
   "lib/reminderSchedule": typeof lib_reminderSchedule;
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/sendFailure": typeof lib_sendFailure;

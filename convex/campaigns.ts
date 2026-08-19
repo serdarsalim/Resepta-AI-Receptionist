@@ -44,6 +44,7 @@ import { isDemo } from "./demo";
 import { customerSender } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
+import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
 
 const DAY_MS = 24 * 3600_000;
@@ -308,6 +309,8 @@ export const fanOut = internalMutation({
     if (!campaign) return 0;
     const org = await ctx.db.get(campaign.orgId);
     if (!org) return 0;
+    // Once per campaign, not per customer: [phone] is the org's number.
+    const publicPhone = await resolvePublicPhone(ctx, org);
 
     // The campaign template's authored email subject. Looked up here rather
     // than taken from loadForSend, whose template list is filtered to
@@ -348,7 +351,7 @@ export const fanOut = internalMutation({
         lastName: customer.lastName,
         businessName: org.name,
         // Business number and link, same binding as every other send path.
-        phone: org.publicPhone,
+        phone: publicPhone,
         email: customer.email,
         bookingLink: org.bookingUrl,
         custom: customValues,

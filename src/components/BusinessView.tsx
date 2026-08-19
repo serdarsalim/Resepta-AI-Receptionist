@@ -78,16 +78,13 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.general" },
   { card: "general", key: "settings.businessName" },
-  { card: "general", key: "settings.revenueEnabled" },
-  { card: "general", key: "settings.formEnabled" },
-  { card: "general", key: "settings.formEmbed" },
   { card: "general", key: "settings.inboundAddress" },
   { card: "general", key: "settings.emailFrom" },
   { card: "general", key: "settings.language" },
-  { card: "general", key: "settings.publicPhone" },
   { card: "booking", key: "settings.bookingPage" },
   { card: "booking", key: "settings.bookingMode" },
   { card: "general", key: "settings.currency" },
+  { card: "general", key: "settings.revenueEnabled" },
   { card: "hours", key: "settings.hours" },
   { card: "hours", key: "settings.timezone" },
   { card: "hours", key: "settings.businessHours" },
@@ -231,115 +228,15 @@ export function BusinessView() {
 // AccountView import: the three surfaces must line up when you flip between
 // them, which they stop doing the moment the string exists in three places.
 
-// The paste-into-your-website snippet. Self-contained on purpose: no hosted
-// script to keep alive, nothing to version, and nothing that breaks a salon's
-// homepage the day we redeploy. The listener matches the iframe by its own
-// contentWindow rather than by URL, so a page carrying two of these sizes each
-// one correctly.
-function EmbedSnippet({ src }: { src: string }) {
-  const { t } = useLanguage();
-  const [copied, setCopied] = useState(false);
-  // The snippet is never shown. A salon owner does not read HTML, and a box
-  // of angle brackets in their settings is something to be afraid of breaking
-  // rather than something to use. Self-contained on purpose: no hosted script
-  // to keep alive, and
-  // the listener matches the iframe by its own contentWindow, so a page
-  // carrying two of these sizes each one correctly.
-  const snippet = [
-    `<iframe src="${src}" style="width:100%;border:0" height="620" title="Resepta"></iframe>`,
-    `<script>addEventListener("message",function(e){if(!e.data||e.data.type!=="randevu:height")return;document.querySelectorAll("iframe").forEach(function(f){if(f.contentWindow===e.source)f.style.height=e.data.height+"px"})})</script>`,
-  ].join("\n");
-  return (
-    <span className="flex items-center">
-      <button
-        type="button"
-        onClick={async () => {
-          await navigator.clipboard.writeText(snippet);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 2000);
-        }}
-        className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
-      >
-        {copied ? t("common.copied") : t("settings.formEmbedCopy")}
-      </button>
-    </span>
-  );
-}
-
-// Name, language, sender address. This used to be Settings' first
-// chip, which put the business's own identity behind a page about
-// connections. It is not a connection, so it leads here instead.
-// The agents' lines as chips, plus a box for a number we do not host. Lifted
-// verbatim out of Reminders' old MessageVariablesCard: the behaviour was
-// right, only its address was wrong.
-function PublicPhoneField({
-  phone,
-  voiceNumbers,
-  onSave,
-}: {
-  phone: string;
-  voiceNumbers: { number: string; agentName?: string | null }[];
-  onSave: (next: string) => void;
-}) {
-  const { t } = useLanguage();
-  const isAgentNumber = voiceNumbers.some((line) => line.number === phone);
-  return (
-    <div className="space-y-1.5">
-      {voiceNumbers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {voiceNumbers.map((line) => {
-            const active = phone === line.number;
-            return (
-              <button
-                key={line.number}
-                type="button"
-                onClick={() => onSave(active ? "" : line.number)}
-                className={`rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-                  active
-                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                    : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {line.number}
-                <span className="ml-1 opacity-70">
-                  · {line.agentName ?? t("settings.voiceAgentNumber")}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <input
-        // Keyed so picking a chip refreshes the uncontrolled input.
-        key={phone}
-        defaultValue={isAgentNumber ? "" : phone}
-        placeholder={isAgentNumber ? t("settings.publicPhoneCustom") : "+90…"}
-        onBlur={(e) => {
-          const next = e.target.value.trim();
-          // An empty custom field while a chip is picked is not a clear — the
-          // chip is the value; clearing means unpicking the chip.
-          if (!next && isAgentNumber) return;
-          onSave(next);
-        }}
-      />
-    </div>
-  );
-}
-
 // Online booking, as its own card rather than a row inside "Message
 // variables". It is a CHANNEL — a public page customers land on — which is
-// what every appointment product treats it as, and it belongs beside the
-// request form for the same reason.
+// what every appointment product treats it as.
 //
-// ── ONE CHOICE, NOT A TOGGLE PLUS AN OVERRIDE ──────────────────────────────
-//
-// The old shape put the switch and a free-text URL side by side as equals, so
-// the box read as an override of the page you had just switched on, and there
-// was no way to tell which one a message would actually use. It is one
-// question with two answers now: our page, or a link of your own. The URL box
-// exists only under the second, and [booking_link] resolves to whichever is
-// selected — which is the whole point of the field and was previously
-// something you had to infer.
+// A plain switch. It was three chips for a while (our page / your own link /
+// off), but "my own link" meant switching OUR page off while still printing a
+// URL in messages — a state that read as off here and as on in a customer's
+// inbox. One page, on or off; [booking_link] resolves to the page when it is
+// on and to nothing when it is not.
 function BookingCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
@@ -347,39 +244,25 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
   const enableBooking = useMutation(api.booking.enable);
   const [copied, setCopied] = useState(false);
   if (!settings) return null;
-  const { bookingUrl, bookingEnabled, publicSlug } = settings.org;
+  const { bookingEnabled, publicSlug } = settings.org;
   const nativeBookingUrl =
     publicSlug && typeof window !== "undefined"
       ? `${window.location.origin}/book/${publicSlug}`
       : null;
-  const usingOwnLink = !bookingEnabled && !!bookingUrl;
-  // "Off" is a real third state and has to stay reachable: a salon that takes
-  // no online bookings at all should not be forced to host a page or paste a
-  // link, and [booking_link] then resolves to nothing, cleanly.
-  const mode: "off" | "native" | "own" = bookingEnabled
-    ? "native"
-    : usingOwnLink
-      ? "own"
-      : "off";
 
-  const choose = (next: "off" | "native" | "own") =>
+  const toggle = (next: boolean) =>
     void (async () => {
-      if (next === "native") {
+      if (next) {
         const slug = await enableBooking({ enabled: true });
         if (slug) {
           await update({ bookingUrl: `${window.location.origin}/book/${slug}` });
         }
         return;
       }
-      // Leaving our page behind clears the link only if the link WAS ours: a
-      // URL the salon pasted is not ours to delete.
-      if (bookingEnabled) {
-        await enableBooking({ enabled: false });
-        if (nativeBookingUrl && bookingUrl === nativeBookingUrl) {
-          await update({ bookingUrl: "" });
-        }
-      }
-      if (next === "off" && !bookingEnabled) await update({ bookingUrl: "" });
+      await enableBooking({ enabled: false });
+      // Off means off everywhere: a cleared link is what makes the reminder
+      // and the closed-hours reply stop offering a page that no longer answers.
+      await update({ bookingUrl: "" });
     })();
 
   return (
@@ -390,41 +273,23 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
     >
       <div className={ROW_GRID}>
         <RowLabel label={t("settings.bookingMode")} />
+        {/* The switch, then the link on its own line. Wrapping them into one
+            flex row put "Copy" on a third line under a URL that had already
+            wrapped — three stacked fragments for one address. */}
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(
-              [
-                ["native", t("settings.bookingModeNative")],
-                ["own", t("settings.bookingModeOwn")],
-                ["off", t("settings.bookingModeOff")],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={mode === key}
-                onClick={() => choose(key)}
-                className={`rounded-full px-2.5 py-1 text-sm transition-colors ${
-                  mode === key
-                    ? "bg-[var(--accent)]/10 font-medium text-[var(--accent)]"
-                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Ours: the link is derived, so it is shown as a fact to copy
-              rather than a box to edit. Editing it was never meaningful — the
-              page lives at that address whatever the field says. */}
-          {mode === "native" && nativeBookingUrl && (
-            <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center">
+            <Toggle checked={bookingEnabled ?? false} onChange={toggle} />
+          </span>
+          {/* The link is derived, so it is shown as a fact to copy rather
+              than a box to edit. Editing it was never meaningful — the page
+              lives at that address whatever the field says. */}
+          {bookingEnabled && nativeBookingUrl && (
+            <div className="flex items-baseline gap-2">
               <a
                 href={nativeBookingUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="break-all text-xs text-[var(--muted)] underline underline-offset-2 hover:text-[var(--foreground)]"
+                className="min-w-0 truncate text-xs text-[var(--muted)] underline underline-offset-2 hover:text-[var(--foreground)]"
               >
                 {nativeBookingUrl}
               </a>
@@ -436,20 +301,11 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
                     setTimeout(() => setCopied(false), 1200);
                   });
                 }}
-                className="rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
               >
                 {copied ? t("common.copied") : t("common.copy")}
               </button>
             </div>
-          )}
-
-          {mode === "own" && (
-            <input
-              key={bookingUrl ?? ""}
-              defaultValue={bookingUrl ?? ""}
-              placeholder="https://…"
-              onBlur={(e) => void update({ bookingUrl: e.target.value.trim() })}
-            />
           )}
         </div>
       </div>
@@ -461,12 +317,6 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
-  const enableForm = useMutation(api.forms.enable);
-  const voiceNumbers = useQuery(api.orgs.voiceNumbers, {}) ?? [];
-  // Read at render rather than baked in: the same deployment serves localhost
-  // and the real domain, and a hardcoded host would hand the salon a link that
-  // works for nobody but whoever built it.
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
   // The incoming address is the one field here a server can REFUSE — it is a
   // routing key, so another org may already answer to it. Without this the
   // rejection landed in an unhandled promise: nothing on screen, the typed
@@ -485,82 +335,33 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
       ) : (
         <div className={ROW_GRID}>
           <RowLabel label={t("settings.businessName")} />
+          {/* Capped per input rather than by narrowing ROW_GRID: the shared
+              column has to stay 24rem for the rows that need it (seven day
+              chips on one line, the open/close pickers). These values are a
+              name, an email local part and two-word selects — a box wider
+              than the text it will ever hold reads as an invitation to write
+              an essay. */}
           <input
+            className="sm:max-w-72"
             defaultValue={settings.org.name}
             onBlur={(e) => void update({ name: e.target.value })}
           />
-          {/* The number customers are told to ring, beside the business name
-              because that is what it is: a fact about the business, not a
-              setting for one feature. It spent its first life in a card called
-              "Message variables" over in Reminders, which is where a salon
-              owner would never look for their own phone number — and which
-              named an implementation detail (the [phone] token) rather than
-              the thing itself. The token still reads this value; it just is
-              not what the field is FOR.
-
-              The agents' own lines are offered first and cost one tap: a
-              number an agent answers around the clock is the one worth
-              printing in an automated message. SINGLE number by design — one
-              clear call to action, not a switchboard. */}
-          <RowLabel
-            label={t("settings.publicPhone")}
-            hint={t("settings.publicPhoneHint")}
-          />
-          <PublicPhoneField
-            phone={settings.org.publicPhone ?? ""}
-            voiceNumbers={voiceNumbers}
-            onSave={(next) => void update({ publicPhone: next })}
-          />
+          {/* The "number for customers to call" row lived here until
+              2026-08-19. It duplicated the voice agent's own inbound-number
+              picker — the [phone] token now resolves to that line on the
+              server, so there is nothing left for an owner to configure. */}
           {/* Timezone moved to Hours (2026-08-12). It is the clock the open and
               close times are read in, so it belongs on that screen; here it was
               a lone qualifier for a setting one chip away. */}
           {/* The address customers write TO. One verified domain serves every
               business; this left-hand part is what routes an incoming email to
               THIS org, so it has to be unique and the save rejects a clash. */}
-          {/* Off by default: an org that never fills in prices would get a nav
-              item leading to three zeroes, which reads as broken not unused. */}
-          <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
-          <span className="flex items-center">
-            <Toggle
-              checked={settings.org.revenueEnabled ?? false}
-              onChange={(next) => void update({ revenueEnabled: next })}
-            />
-          </span>
-          {/* The public request form. Off by default: a live URL that answers
-              before anyone has looked at what it asks is worse than a 404. */}
-          <RowLabel label={t("settings.formEnabled")} hint={t("settings.formEnabledHint")} />
-          <span className="flex flex-wrap items-center gap-2">
-            <Toggle
-              checked={settings.org.formEnabled ?? false}
-              onChange={(next) => void enableForm({ enabled: next })}
-            />
-            {settings.org.formEnabled && settings.org.publicSlug && (
-              // Shown as the whole URL, not a slug: what the salon needs is
-              // something to paste into an Instagram bio, and a fragment they
-              // have to assemble themselves is a step where people give up.
-              <a
-                href={`/r/${settings.org.publicSlug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate text-sm text-[var(--accent)] hover:underline"
-              >
-                {`${origin}/r/${settings.org.publicSlug}`}
-              </a>
-            )}
-          </span>
-          {settings.org.formEnabled && settings.org.publicSlug && (
-            <>
-              {/* The link is for a bio; this is for a website. Two different
-                  jobs, so both are offered rather than making the salon work
-                  out that one can be turned into the other. */}
-              <RowLabel label={t("settings.formEmbed")} hint={t("settings.formEmbedHint")} />
-              <EmbedSnippet
-                src={`${origin}/r/${settings.org.publicSlug}?embed=1`}
-              />
-            </>
-          )}
+          {/* The request-form toggle and embed snippet left on 2026-08-19:
+              the /r page and the booking page were two public channels for
+              the same job, and the booking card next door is the one that
+              survived. */}
           <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1 sm:max-w-72">
             {/* The salon's OWN name, slugged the way the server will slug it
                 (lib/inboundAddress) — so the placeholder is both an example
                 and a preview of what typing their name would give them. A
@@ -619,6 +420,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             hint={t("settings.languageHint")}
           />
           <select
+            className="sm:max-w-72"
             defaultValue={settings.org.language}
             onChange={(e) => void update({ language: e.target.value })}
           >
@@ -636,6 +438,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               one would silently rewrite what customers were charged. */}
           <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
           <select
+            className="sm:max-w-72"
             defaultValue={settings.org.currency}
             onChange={(e) => void update({ currency: e.target.value })}
           >
@@ -645,6 +448,18 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </option>
             ))}
           </select>
+          {/* Last on purpose: an opt-in extra, below the facts of the
+              business. It follows currency because that is the unit the tab
+              it unlocks counts in. Off by default: an org that never fills in
+              prices would get a nav item leading to three zeroes, which reads
+              as broken not unused. */}
+          <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
+          <span className="flex items-center">
+            <Toggle
+              checked={settings.org.revenueEnabled ?? false}
+              onChange={(next) => void update({ revenueEnabled: next })}
+            />
+          </span>
         </div>
       )}
     </Card>
@@ -2084,59 +1899,45 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
         )}
 
-        {/* A button, not a pair of empty inputs living at the foot of the list
-            forever. Adding somebody is a twice-a-year job and it should not
-            charge rent on every visit. */}
-        {isOwner && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            + {t("roster.add")}
-          </button>
-        )}
+        {/* Quiet history on the left, the row's one action on the right —
+            the same corner every list in the app keeps its primary button. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Former members, folded into the card that answers "who works
+              here" — they are its history, not a second population deserving
+              a card of their own. Only when there is somebody in it: an
+              always-present "Deactivated (0)" is a permanent reminder of a
+              state most salons never use. */}
+          {deactivated.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDeactivated((open) => !open)}
+              aria-expanded={showDeactivated}
+              title={t("roster.deactivatedHint")}
+              className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {`${t("roster.deactivatedTitle")} (${deactivated.length})`}{" "}
+              {showDeactivated ? "▾" : "▸"}
+            </button>
+          )}
+          {/* A button, not a pair of empty inputs living at the foot of the
+              list forever. Adding somebody is a twice-a-year job and it
+              should not charge rent on every visit. Filled, and the same
+              shape as VoiceCard's "Add agent": both open a sheet, both are
+              their card's one primary action, so they should not read as two
+              different kinds of control. */}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="ml-auto h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            >
+              + {t("roster.add")}
+            </button>
+          )}
+        </div>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      </div>
-
-      {adding && (
-        <AddPersonSheet onClose={() => setAdding(false)} />
-      )}
-      {inviteFor && (
-        <GrantLoginSheet
-          staffId={inviteFor.staffId}
-          name={inviteFor.name}
-          unclaimed={unclaimed}
-          onLink={(userId) =>
-            guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
-          }
-          onClose={() => setInviteFor(null)}
-        />
-      )}
-    </Card>
-
-    {/* Only when there is somebody in it. An always-present "Deactivated (0)"
-        is a permanent reminder of a state most salons never use. */}
-    {deactivated.length > 0 && (
-      <Card
-        title={`${t("roster.deactivatedTitle")} (${deactivated.length})`}
-        tip={t("roster.deactivatedHint")}
-        disabled={!isOwner}
-      >
-        <button
-          type="button"
-          onClick={() => setShowDeactivated((open) => !open)}
-          aria-expanded={showDeactivated}
-          className="rounded-lg px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        >
-          {/* The count is already in the card title and the names are in the
-              list; a summary that repeats both says nothing twice. */}
-          {showDeactivated ? "▾" : "▸"} {t(showDeactivated ? "common.hide" : "common.show")}
-        </button>
-
-        {showDeactivated && (
-          <ul className="mt-2 divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        {showDeactivated && deactivated.length > 0 && (
+          <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
             {deactivated.map((row) => (
               <li key={row.key} className="group flex items-center gap-3 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate">{row.name}</span>
@@ -2181,8 +1982,26 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
             ))}
           </ul>
         )}
-      </Card>
-    )}
+
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      </div>
+
+      {adding && (
+        <AddPersonSheet onClose={() => setAdding(false)} />
+      )}
+      {inviteFor && (
+        <GrantLoginSheet
+          staffId={inviteFor.staffId}
+          name={inviteFor.name}
+          unclaimed={unclaimed}
+          onLink={(userId) =>
+            guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
+          }
+          onClose={() => setInviteFor(null)}
+        />
+      )}
+    </Card>
+
     {confirmDialog}
     </>
   );

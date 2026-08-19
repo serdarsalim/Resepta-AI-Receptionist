@@ -526,26 +526,6 @@ const dictionary = {
   },
   "appointments.total": { tr: "Toplam", en: "Total", de: "Gesamt" },
   "services.price": { tr: "Fiyat", en: "Price", de: "Preis" },
-  "settings.formEnabled": {
-    tr: "Talep formu",
-    en: "Request form",
-    de: "Anfrageformular",
-  },
-  "settings.formEnabledHint": {
-    tr: "Müşterilerin doldurup size ulaşabileceği herkese açık sayfa. Gelen talepler müşterinin sohbetine düşer; randevu otomatik oluşturulmaz.",
-    en: "A public page customers fill in to reach you. Requests land in that customer's conversation; no appointment is created automatically.",
-    de: "Eine öffentliche Seite, über die Kunden Sie erreichen. Anfragen landen im Gespräch des Kunden; ein Termin wird nicht automatisch angelegt.",
-  },
-  "settings.formEmbed": {
-    tr: "Web sitesine ekle",
-    en: "Embed on your website",
-    de: "Auf Ihrer Website einbetten",
-  },
-  "settings.formEmbedHint": {
-    tr: "Formu kendi sitenizin içinde gösterir.",
-    en: "Shows the form inside your own website.",
-    de: "Zeigt das Formular in Ihrer eigenen Website.",
-  },
   "settings.formEmbedCopy": {
     tr: "Kodu kopyala",
     en: "Copy embed code",
@@ -2787,56 +2767,25 @@ const dictionary = {
     en: "to",
     de: "bis",
   },
-  // The booking page and the public phone were a card called "Message
-  // variables" until 2026-08-14. The name described the [booking_link] and
-  // [phone] tokens rather than the things themselves, which put a salon's own
-  // phone number under a heading no owner would ever open. Both live in
-  // Business settings now and the tokens simply read them.
-  "settings.publicPhone": {
-    tr: "Müşterilerin arayacağı numara",
-    en: "Number for customers to call",
-    de: "Rufnummer für Ihre Kundschaft",
-  },
+  // The booking page was part of a card called "Message variables" until
+  // 2026-08-14. The name described the [booking_link] token rather than the
+  // thing itself. It lives in Business settings now and the token simply
+  // reads it. (Its sibling, the public phone field, went entirely on
+  // 2026-08-19 — [phone] resolves from the voice agent's inbound line.)
   "settings.bookingMode": {
     tr: "Randevu alma",
     en: "Taking bookings",
     de: "Terminbuchung",
   },
-  "settings.bookingModeNative": {
-    tr: "Resepta sayfası",
-    en: "Resepta page",
-    de: "Resepta-Seite",
-  },
-  "settings.bookingModeOwn": {
-    tr: "Kendi linkim",
-    en: "My own link",
-    de: "Eigener Link",
-  },
-  "settings.bookingModeOff": { tr: "Kapalı", en: "Off", de: "Aus" },
   "settings.bookingPage": {
     tr: "Online randevu sayfası",
     en: "Online booking page",
     de: "Online-Buchungsseite",
   },
   "settings.bookingPageHint": {
-    tr: "Müşterileriniz online randevuyu nereden alsın. Resepta sayfasında müşteri hizmet ve saat seçer, randevu doğrudan takviminize düşer; çalışma saatlerinin tanımlı olması gerekir. Kendi linkiniz varsa onu yazın. Mesajlarınızdaki randevu linki her zaman burada seçtiğinizi gösterir.",
-    en: "Where customers book online. On the Resepta page they pick a service and a time and the appointment lands straight on your calendar; your opening hours have to be set. Use your own link if you already have one. The booking link in your messages always points at whichever you pick here.",
-    de: "Wo Ihre Kundschaft online bucht. Auf der Resepta-Seite wählt sie Leistung und Uhrzeit, der Termin landet direkt in Ihrem Kalender; dafür müssen Ihre Öffnungszeiten hinterlegt sein. Haben Sie bereits einen eigenen Link, nutzen Sie diesen. Der Buchungslink in Ihren Nachrichten zeigt immer auf das, was Sie hier wählen.",
-  },
-  "settings.publicPhoneHint": {
-    tr: "Bilerek tek numara: otomatik bir mesajda tek ve net bir arama noktası olmalı. Önerimiz sesli asistanın hattı — 7/24 açık olan o.",
-    en: "One number on purpose: an automated message should have a single, clear line to call. Our suggestion is the voice agent's — it answers around the clock.",
-    de: "Bewusst eine einzige Nummer: eine automatische Nachricht braucht genau eine klare Rufnummer. Unsere Empfehlung ist die Leitung des Sprachassistenten — sie ist rund um die Uhr erreichbar.",
-  },
-  "settings.publicPhoneCustom": {
-    tr: "Ya da başka bir numara yazın…",
-    en: "Or type another number…",
-    de: "Oder eine andere Nummer eingeben…",
-  },
-  "settings.voiceAgentNumber": {
-    tr: "Sesli asistan",
-    en: "Voice agent",
-    de: "Sprachassistent",
+    tr: "Müşterilerinizin hizmet ve saat seçip randevu aldığı herkese açık sayfa; randevu doğrudan takviminize düşer. Çalışma saatlerinin tanımlı olması gerekir. Mesajlarınızdaki randevu linki bu sayfayı gösterir; kapalıyken link gönderilmez.",
+    en: "The public page where customers pick a service and a time; the appointment lands straight on your calendar. Your opening hours have to be set. The booking link in your messages points at this page — switched off, no link is sent.",
+    de: "Die öffentliche Seite, auf der Ihre Kundschaft Leistung und Uhrzeit wählt; der Termin landet direkt in Ihrem Kalender. Dafür müssen Ihre Öffnungszeiten hinterlegt sein. Der Buchungslink in Ihren Nachrichten zeigt auf diese Seite — ist sie aus, wird kein Link gesendet.",
   },
   "settings.calcomApiKey": {
     tr: "cal.com API anahtarı",

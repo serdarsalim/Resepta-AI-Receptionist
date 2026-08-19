@@ -326,18 +326,22 @@ rather than after what it does.
   match that exists in the data. The open conversation falls back outside the
   filtered list, or reading an unread one under the Unread chip would blank
   the pane as its own row dropped out.
-- **"Message variables" is gone; its two fields went where they belong.** That
-  card named the `[booking_link]` and `[phone]` TOKENS rather than the things
-  themselves, and filed a salon's own phone number in Reminders where no owner
-  would look for it. No mature appointment product has a screen for setting
-  the value of a template token. The number customers call is a row in
-  Business → General beside the business name (agent-line chips included — a
-  number an agent answers around the clock is the one worth printing), and
-  online booking is its own card next to the request form. **The booking link
-  is a CHOICE, not an override**: Resepta page / my own link / off, with the
-  URL box only under the second and the derived link shown as a fact to copy.
-  Do not re-pair a toggle with a free-text URL as equals; that shape is what
-  made it read as an override, and neither said which a message would use.
+- **"Message variables" is gone, and so is setting `[phone]` at all
+  (2026-08-19).** That card named the `[booking_link]` and `[phone]` TOKENS
+  rather than the things themselves. The phone field then moved to Business →
+  General with agent-line chips — and got deleted too, because it re-asked a
+  question the voice-agent table already answers: the number customers call IS
+  the enabled agent's inbound line. `[phone]` now resolves at send time in
+  `convex/lib/publicPhone.ts` (first enabled agent's inbound number, stored
+  `orgs.publicPhone` only as the legacy pre-agent fallback; nothing writes it
+  any more). Do not add a phone settings field back. **Online booking is a
+  card with ONE switch**: the Resepta page, on or off, the derived link shown
+  as a fact to copy. "My own link" died 2026-08-19 — it meant switching the
+  page off while messages kept printing a URL, off here and on in the
+  customer's inbox. The request-form toggle and embed snippet left General the
+  same day: `/r` and `/book` were two public channels for the same job and
+  the booking page is the one the settings offer (the `/r` route itself still
+  answers for orgs that had it enabled).
 - **Reminders rules open as a PAGE, not an expanding row.** The id lives in
   the URL (`?rule=`) like the app's tab does, so a refresh or a trip to
   another tab and back returns to the rule. A row that navigates must not also

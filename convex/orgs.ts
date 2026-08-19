@@ -8,6 +8,7 @@ import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import { assignInboundAddress, resolveInboundAddress } from "./lib/inboundAddress";
+import { resolvePublicPhone } from "./lib/publicPhone";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -209,7 +210,9 @@ export const current = query({
         autoReplyEnabled: org.autoReplyEnabled ?? false,
         autoReplyText: org.autoReplyText,
         bookingUrl: org.bookingUrl,
-        publicPhone: org.publicPhone,
+        // Resolved, not stored: the enabled voice agent's inbound line, so the
+        // reminder preview shows the same [phone] the send paths print.
+        publicPhone: await resolvePublicPhone(ctx, org),
       },
       me: {
         name: user.name,
@@ -252,32 +255,6 @@ export const current = query({
   },
 });
 
-// The voice agents' inbound lines — what the [phone] picker suggests, because
-// a number an agent answers 24/7 is the one worth printing in an automated
-// message. Deduped: two agents on one line are one suggestion.
-export const voiceNumbers = query({
-  args: {},
-  returns: v.array(
-    v.object({ number: v.string(), agentName: v.union(v.string(), v.null()) }),
-  ),
-  handler: async (ctx) => {
-    const { orgId } = await requireOrg(ctx);
-    const agents = await ctx.db
-      .query("retellAgents")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .collect();
-    const seen = new Set<string>();
-    const numbers: { number: string; agentName: string | null }[] = [];
-    for (const agent of agents) {
-      const number = agent.inboundNumber?.trim();
-      if (!number || !agent.enabled || seen.has(number)) continue;
-      seen.add(number);
-      numbers.push({ number, agentName: agent.name ?? null });
-    }
-    return numbers;
-  },
-});
-
 export const update = mutation({
   args: {
     name: v.optional(v.string()),
@@ -308,7 +285,6 @@ export const update = mutation({
     autoReplyEnabled: v.optional(v.boolean()),
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
-    publicPhone: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -425,9 +401,6 @@ export const update = mutation({
       // Stored only if it is a URL a customer could actually tap. A malformed
       // link in an away-reply is worse than no link.
       patch.bookingUrl = /^https?:\/\/\S+$/.test(url) ? url : undefined;
-    }
-    if (args.publicPhone !== undefined) {
-      patch.publicPhone = args.publicPhone.trim() || undefined;
     }
 
     // An org with no incoming address is quietly broken: it sends from the

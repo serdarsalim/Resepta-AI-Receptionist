@@ -38,8 +38,9 @@ export function VariableInsertDropdown({
     { key: "pricelist", label: t("vars.priceList") },
     { key: "price", label: t("vars.price") },
     { key: "staff", label: t("vars.staff") },
-    // The org's own booking link and public number (orgs.bookingUrl /
-    // orgs.publicPhone) — "book here" and "call us" in any template.
+    // The org's own booking link (orgs.bookingUrl) and public number (the
+    // voice agent's inbound line, resolved server-side by lib/publicPhone) —
+    // "book here" and "call us" in any template.
     { key: "booking_link", label: t("vars.bookingLink") },
     { key: "phone", label: t("vars.phone") },
     // This appointment's own reschedule/cancel page. Resolves only in

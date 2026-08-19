@@ -4,6 +4,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { assertE164, requireOwner } from "./lib/orgAuth";
 import { splitName } from "./lib/emailInbound";
+import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import {
   getLocalPartsSafe,
@@ -594,7 +595,7 @@ export const manage = query({
       services: (appointment.items ?? []).map((item) => item.name),
       canModify: !providerOwned,
       // The number the salon answers on, for the "call us" fallback.
-      phone: org.publicPhone ?? null,
+      phone: (await resolvePublicPhone(ctx, org)) ?? null,
     };
   },
 });

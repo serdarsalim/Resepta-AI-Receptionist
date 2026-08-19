@@ -39,9 +39,9 @@ export type TokenValues = {
   // Already formatted in the org's timezone and language by lib/format.
   appointmentAt?: string;
   staffName?: string;
-  // The BUSINESS's number — orgs.publicPhone, the one the org chose to give
-  // customers (the voice agent's inbound line, usually). Never the customer's
-  // own phone: a message TO someone has no reason to tell them their number.
+  // The BUSINESS's number — the enabled voice agent's inbound line, resolved
+  // at send time by lib/publicPhone. Never the customer's own phone: a
+  // message TO someone has no reason to tell them their number.
   phone?: string;
   email?: string;
   // orgs.bookingUrl — the org's public booking page. In every template so the

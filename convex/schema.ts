@@ -386,9 +386,11 @@ export default defineSchema({
     // native /book page exists for this org it auto-fills from there; until
     // then it is whatever external page the org pasted (historically cal.com).
     bookingUrl: v.optional(v.string()),
-    // Number to tell a customer to call — the [phone] template token. Single
-    // by design: one clear CTA in an automated message. The picker suggests
-    // the voice agent's inbound number, because that one answers 24/7.
+    // LEGACY (2026-08-19). The [phone] token resolves at send time from the
+    // enabled voice agent's inbound line (lib/publicPhone) — the settings
+    // field that wrote this duplicated that picker and went. Kept because a
+    // pre-agent org may have typed a front-desk number here; it is the
+    // resolver's fallback and nothing writes it any more.
     publicPhone: v.optional(v.string()),
     // DEAD. Nothing reads or writes this any more (Serdar, 2026-08-02).
     //

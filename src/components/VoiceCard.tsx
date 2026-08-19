@@ -443,6 +443,18 @@ export function VoiceCard({
 
   const agentActions = (
     <>
+      {/* Refresh first, primary action last: the row is right-aligned, so the
+          rightmost seat is the anchor position and the quiet icon should not
+          sit outside the button people actually reach for. */}
+      <button
+        type="button"
+        onClick={load}
+        disabled={loading}
+        aria-label={t("settings.voiceRefresh")}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
+      >
+        <RefreshIcon spinning={loading} />
+      </button>
       {/* Adding opens a sheet. A permanent picker under the table would be a
           question the page asks on every visit to pay for a task done once. */}
       <button
@@ -456,15 +468,6 @@ export function VoiceCard({
         className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
       >
         {t("settings.voiceConnect")}
-      </button>
-      <button
-        type="button"
-        onClick={load}
-        disabled={loading}
-        aria-label={t("settings.voiceRefresh")}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
-      >
-        <RefreshIcon spinning={loading} />
       </button>
     </>
   );

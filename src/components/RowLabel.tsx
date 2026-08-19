@@ -21,7 +21,10 @@ import { InfoTip } from "./InfoTip";
 // width:100%, so a 1fr column stretched a timezone picker and a two-letter
 // language select clear across a 48rem card — the control announcing itself as
 // far more important than the label, and a text field wide enough to look like
-// it wants an essay. 24rem is about as wide as any value here ever is.
+// it wants an essay. 24rem is what the WIDEST rows need — seven day chips on
+// one line, a pair of time pickers — so the column stays there; a row whose
+// value is a short string caps its own control tighter (sm:max-w-72 on the
+// General card's inputs) instead of shrinking every row to the narrowest one.
 //
 // The grid string lives HERE, next to the comment that documents it. It used to
 // be a local const copy-pasted into SettingsView, BusinessView and AccountView,

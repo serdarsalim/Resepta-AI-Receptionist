@@ -20,6 +20,7 @@ import {
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { outOfHoursMessage } from "./lib/awayReply";
+import { resolvePublicPhone } from "./lib/publicPhone";
 import { SESSION_WINDOW_MS } from "./webhook";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
@@ -240,7 +241,9 @@ export const loadOutOfHoursContext = internalQuery({
     ]);
     return {
       customer,
-      org,
+      // publicPhone resolved here, where there is a db: the action that reads
+      // this context renders [phone] but cannot query the agent table.
+      org: { ...org, publicPhone: await resolvePublicPhone(ctx, org) },
       rule,
       templates,
       contactFields,
