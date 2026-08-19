@@ -295,7 +295,6 @@ export default function AdminPage() {
               label="Sending domain"
               hint="Verified in Resend. Carries every org's incoming address and the noreply sender."
               current={mail.domain}
-              placeholder="mail.example.com"
               onSave={(value) => setConfig({ key: "resendInboundDomain", value })}
             />
             <SecretRow
@@ -414,7 +413,6 @@ export default function AdminPage() {
                   ? undefined
                   : String(mail.voiceRateMicroUsdPerMinute / 1_000_000)
               }
-              placeholder="0.30"
               onSave={(value) => {
                 const parsed = Number(value.replace(",", "."));
                 return setConfig({

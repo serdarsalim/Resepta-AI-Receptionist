@@ -719,9 +719,12 @@ export default function TenantPage() {
               ? undefined
               : String(voice.rateMicroUsdPerMinute / 1_000_000)
           }
+          // The real resolution is org ?? platform ?? 0, so with no platform
+          // rate the truthful "what applies when empty" is nothing at all —
+          // the old "0.30" here promised a price nobody would be charged.
           placeholder={
             voice.defaultRateMicroUsdPerMinute === null
-              ? "0.30"
+              ? undefined
               : String(voice.defaultRateMicroUsdPerMinute / 1_000_000)
           }
           onSave={(value) => {
@@ -776,7 +779,6 @@ export default function TenantPage() {
             <Row
               label="Add credit (USD)"
               hint="Manual credit on top of Stripe top-ups: goodwill, a correction, or negative to claw one back. Applies immediately."
-              placeholder="20"
               onSave={(value) => {
                 const parsed = Number(value.replace(",", "."));
                 if (!value.trim() || Number.isNaN(parsed) || parsed === 0) {
@@ -911,7 +913,6 @@ export default function TenantPage() {
           label="Phone number ID"
           hint="Meta's phone_number_id. Inbound resolves the org by this."
           current={detail.wa?.phoneNumberId}
-          placeholder="123456789012345"
           onSave={(value) => wa({ phoneNumberId: value })}
         />
         <Row
@@ -923,7 +924,6 @@ export default function TenantPage() {
           label="Display number"
           hint="What the salon sees. Cosmetic."
           current={detail.wa?.displayNumber}
-          placeholder="+905321234567"
           onSave={(value) => wa({ displayNumber: value })}
         />
         <SecretRow
@@ -1013,7 +1013,6 @@ export default function TenantPage() {
           label="Instance name"
           hint="Must match the instance Evolution posts as. A label now, not a credential — but it is still checked against the payload, so a message from the wrong instance is not filed against this business."
           current={detail.evolutionInstance ?? undefined}
-          placeholder="salon-a"
           onSave={(value) => org({ evolutionInstance: value })}
         />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
@@ -1053,14 +1052,12 @@ export default function TenantPage() {
           label="From address"
           hint="Domain must be verified in Resend or sends are rejected."
           current={detail.emailFrom}
-          placeholder="info@salonunuz.com"
           onSave={(value) => org({ emailFrom: value })}
         />
         <Row
           label="Inbound address"
           hint="Local part only. Replies land here."
           current={detail.inboundAddress}
-          placeholder="guzellik"
           onSave={(value) => org({ inboundAddress: value })}
         />
       </Section>

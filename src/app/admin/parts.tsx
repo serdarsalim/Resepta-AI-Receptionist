@@ -561,15 +561,17 @@ export function ModelRow({
   );
 }
 
-// A secret already installed shows its tail and an empty box. Typing replaces
-// it; leaving it blank keeps what is there. An input pre-filled with a masked
-// string would submit the mask as the new value the first time somebody
-// tabbed through it.
+// A secret already installed shows its tail as the input's own placeholder.
+// Typing replaces it; leaving the box blank keeps what is there. The tail is
+// a PLACEHOLDER, never the input's value: a value would submit the mask as
+// the new key the first time somebody tabbed through the field.
 //
-// The masked tail sits UNDER THE LABEL rather than beside the input, so the
-// control column starts at the same x as every plain row. Three sections each
-// indenting their inputs differently is what it looked like otherwise, and the
-// eye reads that as three unrelated forms.
+// It used to sit under the label instead, which read as two facts in two
+// places (Serdar, 2026-08-19). Now the field itself answers both questions:
+// grey tail = this key is installed, empty = nothing is. That contract only
+// holds if no field in the console wears an example placeholder — grey text
+// in an input is a statement about what is stored or what applies, never
+// decoration.
 export function SecretRow({
   label,
   hint,
@@ -586,15 +588,9 @@ export function SecretRow({
   if (hidden) return null;
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-      {/* The masked tail stays visible — it is data ("which key is in
-          there"), not prose. Only the explanation folds behind the (i),
-          matching Row. */}
-      <div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium">{label}</div>
-          {hint && <InfoTip text={hint} />}
-        </div>
-        <div className="font-mono text-xs text-[var(--muted)]">{masked ?? "not set"}</div>
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-medium">{label}</div>
+        {hint && <InfoTip text={hint} />}
       </div>
       <div className="min-w-0">
         <input
@@ -606,7 +602,7 @@ export function SecretRow({
             void onSave(value);
             setDraft("");
           }}
-          placeholder={masked ? "replace…" : "paste…"}
+          placeholder={masked ?? undefined}
           className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
         />
       </div>
