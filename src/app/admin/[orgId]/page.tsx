@@ -1060,16 +1060,16 @@ export default function TenantPage() {
         description="Resend sender identity for reminder and campaign mail."
       >
         <Row
-          label="From address"
-          hint="Domain must be verified in Resend or sends are rejected."
-          current={detail.emailFrom}
-          onSave={(value) => org({ emailFrom: value })}
-        />
-        <Row
-          label="Inbound address"
-          hint="Local part only. Replies land here."
+          label="Address"
+          hint="Local part only — 'bella' mails as bella@ the platform's sending domain. Replies to it land in the app's Inbox, and it doubles as the From, so answers thread back into the timeline. The one email field a hosted business needs."
           current={detail.inboundAddress}
           onSave={(value) => org({ inboundAddress: value })}
+        />
+        <Row
+          label="Custom From (own domain)"
+          hint="Only for a business sending from its OWN domain, which must be verified in Resend or every send is rejected. Empty is the normal state: mail then leaves from the address above."
+          current={detail.emailFrom}
+          onSave={(value) => org({ emailFrom: value })}
         />
       </Section>
 

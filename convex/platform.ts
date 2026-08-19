@@ -1296,6 +1296,11 @@ export const listProvisionableNumbers = action({
     }>;
     const heldBy = new Map(context.heldBy.map((h) => [h.number, h.org]));
     const agentOrg = new Map(context.agentOrgs.map((a) => [a.retellAgentId, a]));
+    // Holders we can only identify as a provider agent id. Resolved to the
+    // agent's display NAME in one list-agents call after the scan — the
+    // operator recognises "Lingua Akademi Asistanı", not agent_8bdd…
+    // (Serdar, 2026-08-20) — and only when at least one row needs it.
+    const unnamedHolders = new Map<string, string>();
     const rows = items
       .filter((n) => n.phone_number)
       .map((n) => {
@@ -1318,10 +1323,13 @@ export const listProvisionableNumbers = action({
             if (owner && owner.orgId === String(args.orgId)) continue;
             // A binding we can resolve names the business. One we cannot is
             // an agent NO business has connected — usually a dashboard-made
-            // agent awaiting connection — so print its id rather than
-            // asserting where it lives ("an agent outside Resepta" claimed
-            // more than the data knows; Serdar, 2026-08-20).
-            held = owner ? owner.org : `unconnected ${id}`;
+            // agent awaiting connection — held as its display name below.
+            if (owner) {
+              held = owner.org;
+            } else {
+              held = id;
+              unnamedHolders.set(n.phone_number!, id);
+            }
             break;
           }
         }
@@ -1332,6 +1340,35 @@ export const listProvisionableNumbers = action({
           missing: false,
         };
       });
+    if (unnamedHolders.size > 0) {
+      const names = new Map<string, string>();
+      try {
+        const agentsRes = await fetch("https://api.retellai.com/v2/list-agents", {
+          headers: { authorization: `Bearer ${context.apiKey}` },
+        });
+        if (agentsRes.ok) {
+          const agentsData = (await agentsRes.json()) as Array<{
+            agent_id?: string;
+            agent_name?: string;
+          }>;
+          for (const agent of agentsData ?? []) {
+            if (agent.agent_id && agent.agent_name?.trim()) {
+              names.set(agent.agent_id, agent.agent_name.trim());
+            }
+          }
+        }
+      } catch {
+        // Name lookup is cosmetic; the generic label below still holds.
+      }
+      for (const row of rows) {
+        const id = unnamedHolders.get(row.number);
+        if (!id) continue;
+        const name = names.get(id);
+        // "agent" stays in the label so a nameless or org-named agent cannot
+        // be mistaken for a connected business.
+        row.heldBy = name ? `agent “${name}”` : "an unconnected agent";
+      }
+    }
     const listed = new Set(rows.map((r) => r.number));
     for (const number of context.allowed) {
       if (listed.has(number)) continue;
