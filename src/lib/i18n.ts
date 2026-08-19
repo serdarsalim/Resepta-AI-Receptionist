@@ -1182,11 +1182,6 @@ const dictionary = {
   // The preview's contact picker. Not optional any more: the preview renders
   // ONE customer's real booking or it renders nothing, so this is the switch
   // that turns it on.
-  "settings.previewPickContact": {
-    tr: "Müşteri seçin…",
-    en: "Pick a contact…",
-    de: "Kontakt wählen…",
-  },
   // Why the preview pane is empty. Sample names and invented prices used to
   // fill it, and an owner reading "€350,00" for a haircut they charge €35 for
   // cannot tell a template bug from a made-up number.
@@ -1227,6 +1222,17 @@ const dictionary = {
     tr: "Bu mesajın işletme dilinde onaylı bir WhatsApp şablonu yok. Şablonun dili işletme diliyle birebir eşleşmeli. Başka dildeki şablon yedek olarak kullanılmaz.",
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
+  },
+  // The preview's invented customer. A NAME is safe to make up — it claims
+  // nothing about the business — where a price is not; the services and their
+  // prices in the preview come from the salon's own catalogue. Per language so
+  // a Turkish salon does not read its own messages addressed to "Alex".
+  "settings.previewFirstName": { tr: "Ayşe", en: "Alex", de: "Alex" },
+  "settings.previewLastName": { tr: "Yılmaz", en: "Morgan", de: "Schmidt" },
+  "settings.previewEmail": {
+    tr: "ayse@ornek.com",
+    en: "alex@example.com",
+    de: "alex@beispiel.de",
   },
   "settings.templateUnsaved": {
     tr: "Kaydedilmedi",

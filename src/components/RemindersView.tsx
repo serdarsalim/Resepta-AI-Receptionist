@@ -370,119 +370,105 @@ function RuleEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, resetToken]);
 
-  // ── Preview data: a real booking, or no preview at all ──────────────────
+  // ── Preview data: an invented PERSON, the salon's real SERVICES ─────────
   //
-  // This used to fall back to samples — "Emma", a €350 haircut, tomorrow at
-  // 14:00 — and that made the pane a liar in the exact place it is trusted.
-  // An owner checking whether [pricelist] reads right cannot tell a broken
-  // template from an invented number, and a €350.00 sample in a shop that
-  // charges €35 reads as a pricing bug in the product. So: the preview renders
-  // ONE customer's ONE real appointment, or it renders a line telling you to
-  // pick one. Nothing in this pane is ever made up.
-  const contacts = useQuery(api.customers.options, {}) ?? [];
-  const [contactQuery, setContactQuery] = useState("");
-  const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
-  // A real booking of this salon's own, so the preview is filled the moment
-  // the page opens and nobody has to configure a fallback to see the sentence
-  // work. Auto-picked, never sticky: choosing someone yourself replaces it,
-  // and clearing the box drops back to this.
-  const sample = useQuery(api.appointments.sampleForPreview, {});
-  const effectiveContactId = contactId ?? sample?.customerId ?? null;
+  // The pane used to speak about a real customer and their real booking,
+  // auto-picked, with a typeahead to choose another. That was a reaction to an
+  // older sample — "Emma", a €350 haircut — which made the pane a liar in the
+  // exact place it is trusted: an owner checking whether [pricelist] reads
+  // right cannot tell a broken template from an invented number, and €350.00
+  // in a shop that charges €35 reads as a pricing bug in the product.
+  //
+  // That reasoning was right about MONEY and wrong about the name. Inventing a
+  // price is a claim about the business; inventing a first name is not. So the
+  // person is fictional now — no more of a real customer's name appearing,
+  // unasked, in a settings screen — and everything a salon could mistake for
+  // its own data still comes from its own data: the service list, its prices,
+  // the org's currency, language and timezone.
+  //
+  // Four queries went with the picker (customers.options, customers.get,
+  // appointments.sampleForPreview, appointments.listForCustomer).
+  const services = useQuery(api.services.list, {});
   // Which lane the preview is showing. One message goes out two ways, so this
   // is a view of the same thing rather than two things — stacking both cards
   // made the pane look like the rule sends twice.
   const [lanePref, setLanePref] = useState<"email" | "whatsapp">("email");
-  const picked = useQuery(
-    api.customers.get,
-    effectiveContactId ? { customerId: effectiveContactId } : "skip",
-  );
-  const matches =
-    contactQuery.trim() && !contactId
-      ? contacts
-          .filter((c) =>
-            `${c.firstName} ${c.lastName ?? ""} ${c.phone}`
-              .toLocaleLowerCase(orgLanguage)
-              .includes(contactQuery.trim().toLocaleLowerCase(orgLanguage)),
-          )
-          .slice(0, 6)
+
+  // The line items: the salon's first active service, priced as they priced
+  // it. A shop with an empty catalogue previews the token as a placeholder
+  // rather than as an invented haircut.
+  const previewItems = useMemo(() => {
+    const rows = services ?? [];
+    const first = rows.find((row) => row.active) ?? rows[0];
+    return first
+      ? [{ name: first.name, price: first.price, quantity: 1 }]
       : [];
+  }, [services]);
 
-  // The booking the preview speaks about: the soonest one still ahead, and
-  // failing that the most recent past one. Rows arrive newest-first.
-  const appointments = useQuery(
-    api.appointments.listForCustomer,
-    effectiveContactId ? { customerId: effectiveContactId } : "skip",
-  );
-  const appointment = useMemo(() => {
-    if (!appointments?.length) return null;
-    const now = Date.now();
-    const upcoming = [...appointments].reverse().find((a) => a.startAt >= now);
-    return upcoming ?? appointments[0];
-  }, [appointments]);
+  // Tomorrow, on the hour, in the org's own timezone. A date has to be made up
+  // for the token to render at all, and unlike a price it claims nothing about
+  // the business. Anchored to the DAY so it does not flicker as the clock
+  // moves under a re-render.
+  const previewStartAt = useMemo(() => {
+    const day = new Date();
+    day.setHours(14, 0, 0, 0);
+    return day.getTime() + 24 * 3600_000;
+  }, []);
 
-  // Null until there is a real customer AND a real booking to render — the
-  // pane reads that as "nothing to show yet" rather than filling the gap.
+  // Built the way convex/wa.ts builds it at send time, including prices being
+  // MINOR units (an older sample divided by nothing and printed €350.00 for a
+  // 350-kuruş line).
   //
-  // Every value below is built the way convex/wa.ts builds it at send time,
-  // including prices being MINOR units (the old sample divided by nothing and
-  // printed €350.00 for a 350-kuruş line).
   // Live, not persisted: you are typing a fallback to watch the sentence
   // settle, so the preview has to read what is in the box right now.
   const liveDefaults = tokenDefaults(defaults);
   const previewValues = useMemo(() => {
-    if (!picked) return null;
-    // The away reply speaks to a person, not a booking — everyone else still
-    // needs the real appointment their tokens describe.
-    if (!appointment && rule.trigger !== "out_of_hours") return null;
     const formatMoney = (minor: number) =>
       new Intl.NumberFormat(orgLanguage, {
         style: "currency",
         currency: orgCurrency,
       }).format(minor / 100);
-    // Every org field key present, empty when valueless — mirrors the send
-    // path exactly, so a real field renders to nothing rather than staying a
-    // literal token in the preview.
-    const custom: Record<string, string> = {};
-    for (const field of contactFields) {
-      custom[field.key] = picked.custom?.[field.key] ?? "";
-    }
-    const items = appointment?.items ?? [];
-    // × quantity. AGENTS.md, under Goods: "Quantity rides the line, price stays
-    // per unit … if you sum prices anywhere new, multiply." This preview was a
-    // new sum that did not, so three cakes at ₺120 previewed as ₺120 and were
-    // sent as ₺360 — the owner tuning wording against a third of what the
-    // customer receives, in the pane whose own comment promises it is "built the
-    // way convex/wa.ts builds it at send time".
-    const totalMinor = items.reduce(
-      (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
-      0,
-    );
     // A real send collapses a token with nothing behind it, along with the
     // whitespace it leaves — renderTokens does that on purpose, so a message
     // never goes out saying "Merhaba ," or carrying an empty bracket. In a
     // PREVIEW that same kindness is a lie: the line simply vanishes, and the
     // writer cannot tell a token that will fill on a real send from one they
-    // misspelled. So a built-in with no sample data behind it previews as its
-    // own label in guillemets instead of as nothing.
-    //
-    // Contact fields are deliberately NOT given this treatment. The preview
-    // speaks about a real customer, and a field that person never answered is
-    // honestly blank for them — that is information, not a gap.
+    // misspelled. So a token with no sample data behind it previews as its own
+    // label in guillemets instead of as nothing.
     const sample = (value: string | undefined, key: string, label: string) =>
       value?.trim() || liveDefaults?.[key] || `⟨${label}⟩`;
+    // Contact fields get the same treatment now. They used not to: the pane
+    // spoke about a REAL customer, so a field that person had never answered
+    // was honestly blank for them — information, not a gap. Against an
+    // invented customer there is no such person to be honest about, and a
+    // silently empty [hair_type] is indistinguishable from one misspelled.
+    const custom: Record<string, string> = {};
+    for (const field of contactFields) {
+      custom[field.key] =
+        liveDefaults?.[field.key] || `⟨${field.label}⟩`;
+    }
+    const items = previewItems;
+    // × quantity. AGENTS.md, under Goods: "Quantity rides the line, price stays
+    // per unit … if you sum prices anywhere new, multiply."
+    const totalMinor = items.reduce(
+      (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
+      0,
+    );
     return {
-      firstName: picked.firstName,
-      lastName: picked.lastName,
+      firstName: t("settings.previewFirstName"),
+      lastName: t("settings.previewLastName"),
       // The BUSINESS's number and link — what [phone] and [booking_link]
       // resolve to at send time (see convex/lib/renderTokens).
       phone: sample(orgPublicPhone, "phone", t("vars.phone")),
-      email: picked.email,
+      email: t("settings.previewEmail"),
       bookingLink: sample(orgBookingUrl, "booking_link", t("vars.bookingLink")),
       businessName: orgName,
-      appointmentAt: appointment
-        ? formatAppointmentTime(appointment.startAt, orgTimezone, orgLanguage)
-        : (liveDefaults?.date ?? `⟨${t("vars.date")}⟩`),
-      staffName: sample(appointment?.staffName, "staff", t("vars.staff")),
+      appointmentAt: formatAppointmentTime(
+        previewStartAt,
+        orgTimezone,
+        orgLanguage,
+      ),
+      staffName: sample(undefined, "staff", t("vars.staff")),
       serviceName: sample(
         // The send path prefixes the quantity here too (convex/wa.ts).
         items
@@ -498,9 +484,8 @@ function RuleEditor({
       servicePriceList: sample(
         items
           .map((item) => {
-            // Quantity prefix and line worth, both of which the send path emits
-            // and this dropped — and price !== undefined, so a service priced 0
-            // previews as free rather than as unpriced. Mirrors convex/wa.ts.
+            // price !== undefined, so a service priced 0 previews as free
+            // rather than as unpriced. Mirrors convex/wa.ts.
             const quantity = item.quantity ?? 1;
             const label =
               quantity > 1 ? `${quantity}× ${item.name}` : item.name;
@@ -531,9 +516,8 @@ function RuleEditor({
     orgPublicPhone,
     orgBookingUrl,
     contactFields,
-    picked,
-    appointment,
-    rule.trigger,
+    previewItems,
+    previewStartAt,
     liveDefaults,
     t,
   ]);
@@ -642,10 +626,6 @@ function RuleEditor({
   const showsPlaceholder =
     /⟨[^⟩]+⟩/.test(lane === "email" ? renderedEmailHtml : rendered) ||
     /⟨[^⟩]+⟩/.test(renderFor(subject));
-  const pickedLabel = picked
-    ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
-    : "";
-
   // The preview, as ONE node the editor can host in its own tab strip. It
   // used to be a second column: the same formatted message rendered twice,
   // side by side, each in half the width. What the preview alone can say is
@@ -653,10 +633,10 @@ function RuleEditor({
   // VIEW of the body, which is what a tab is for, not a different panel.
   const previewPane = (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-end gap-2">
-        {/* Two lanes, one message: a toggle, not two cards. Only rendered
-            when the rule really can travel both ways — otherwise the label
-            alone says which lane you are looking at. */}
+      {/* Two lanes, one message: a toggle, not two cards. Only rendered when
+          the rule really can travel both ways — otherwise there is nothing to
+          choose and the row would be a control with one option. */}
+      <div className="flex items-center justify-end gap-2 empty:hidden">
         {lanes.length > 1 && (
           <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
             {lanes.map((option) => (
@@ -677,64 +657,7 @@ function RuleEditor({
             ))}
           </span>
         )}
-        {/* Typeahead over real contacts — the preview's only data source.
-            Picking one fills every token from their record and their next
-            booking; the × empties the pane again. */}
-        <span className="relative min-w-0 max-w-56 flex-1">
-          <input
-            className="h-9 w-full text-sm"
-            value={
-              contactId
-                ? pickedLabel
-                : contactQuery || (sample && !contactQuery ? sample.name : "")
-            }
-            placeholder={t("settings.previewPickContact")}
-            onChange={(e) => {
-              setContactId(null);
-              setContactQuery(e.target.value);
-            }}
-          />
-          {(contactId || contactQuery) && (
-            <button
-              type="button"
-              aria-label={t("common.delete")}
-              onClick={() => {
-                setContactId(null);
-                setContactQuery("");
-              }}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              ×
-            </button>
-          )}
-          {matches.length > 0 && (
-            <ul className="absolute right-0 top-full z-30 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
-              {matches.map((c) => (
-                <li key={c._id}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      setContactId(c._id);
-                    }}
-                    className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
-                  >
-                    <span className="truncate">
-                      {c.firstName} {c.lastName ?? ""}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-[var(--muted)]">
-                      {c.phone}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </span>
       </div>
-      {/* No contact, or a contact with nothing booked: say which, and say
-          nothing else. An empty pane with a reason beats a filled pane with
-          invented facts. */}
       {lane === "email" ? (
         /* The email as the customer's mail client shows it: white paper no
            matter the app theme, subject on top, the authored HTML below. */
