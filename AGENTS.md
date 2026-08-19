@@ -60,14 +60,23 @@ style issue.
   (An agency/partner-operated admin surface is the likely next layer — note
   that Google-only means the partner can't pre-provision credentials; if that
   model wins, add a second provider then. See "Open product questions".)
-- **Appointment intake is cal.com by design, but cal.com IS NOT WIRED YET.**
-  Read this before designing anything around availability. The integration
-  exists in code and is entirely gated on `org.calcomApiKey &&
-  org.calcomEventTypeId`: `convex/calcom.ts` handles BOOKING_CREATED /
-  RESCHEDULED / CANCELLED, and the org is resolved from a per-org token in the
-  webhook URL (`orgs.calcomWebhookToken`) because cal.com's payload carries no
-  tenant identity. `getAvailableSlots` is called from `convex/http.ts` for the
-  public booking page only.
+- **Appointment intake is NATIVE; cal.com is parked, not removed** (Serdar,
+  2026-08-19 — reversing the earlier "cal.com by design" stance). The native
+  lane already computes availability (`booking.ts` freeStarts: capacity,
+  customer conflicts, lead times) and cal.com was never wired for any real
+  org, so new features build native-only and MUST NOT fork on
+  `org.calcomApiKey`. The integration stays in code for the eventuality:
+  entirely gated on `org.calcomApiKey && org.calcomEventTypeId`,
+  `convex/calcom.ts` handles BOOKING_CREATED / RESCHEDULED / CANCELLED, the
+  org resolved from a per-org token in the webhook URL
+  (`orgs.calcomWebhookToken`) because cal.com's payload carries no tenant
+  identity, and its admin card hidden behind `SHOW_CALCOM_CARD`. The salon's
+  own calendar is fed by email instead: `users.notifyNewBooking` mails a real
+  ICS invite per system-sourced booking and its retraction on cancel
+  (`scheduleLifecycleMessages` → `lib/alerts.ts`), with
+  `appointments.icsSequence` bumping on every startAt change so clients honor
+  the update. The known next step if invite-per-email proves too weak: a
+  token-authed read-only ICS feed route the owner subscribes to once.
 
   With no key configured, `schedule.create` takes its documented no-key path
   and the appointment is Resepta's alone. **Consequence: today nothing checks
@@ -1188,6 +1197,9 @@ went, and the reasoning to preserve:
   call and neither read nor write anything.
 - **Bookings (cal.com) config**: operator-only, admin console
   (`platform.setOrgConfig`). Never show a salon a cal.com key field again.
+  The admin card itself is hidden too (Serdar, 2026-08-19) — the
+  `SHOW_CALCOM_CARD` guard in `src/app/admin/[orgId]/page.tsx` keeps its JSX
+  compiling while nobody can configure the lane. See "Appointment intake".
 
 Retell facts that keep getting relearned (also encoded in `convex/retellAgent.ts`
 comments): a published agent/LLM refuses PATCH — every publish is
