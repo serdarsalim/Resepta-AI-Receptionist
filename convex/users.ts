@@ -23,6 +23,7 @@ export const myProfile = query({
     notifyInbound: v.boolean(),
     notifyFailedSend: v.boolean(),
     notifyNewContact: v.boolean(),
+    notifyNewBooking: v.boolean(),
   }),
   handler: async (ctx) => {
     const { user, role, orgId } = await requireOrg(ctx);
@@ -40,6 +41,7 @@ export const myProfile = query({
       notifyInbound: alertEnabled(user, "inbound"),
       notifyFailedSend: alertEnabled(user, "failed-send"),
       notifyNewContact: alertEnabled(user, "new-contact"),
+      notifyNewBooking: alertEnabled(user, "new-booking"),
     };
   },
 });
@@ -54,6 +56,7 @@ export const setMyProfile = mutation({
     notifyInbound: v.optional(v.boolean()),
     notifyFailedSend: v.optional(v.boolean()),
     notifyNewContact: v.optional(v.boolean()),
+    notifyNewBooking: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -73,6 +76,9 @@ export const setMyProfile = mutation({
     }
     if (args.notifyNewContact !== undefined) {
       patch.notifyNewContact = args.notifyNewContact;
+    }
+    if (args.notifyNewBooking !== undefined) {
+      patch.notifyNewBooking = args.notifyNewBooking;
     }
     if (Object.keys(patch).length === 0) return null;
     await ctx.db.patch(user._id, patch);

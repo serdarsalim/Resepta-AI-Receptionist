@@ -143,6 +143,19 @@ const dictionary = {
     en: "Tells you when someone new arrives through the voice agent, your request form, WhatsApp or cal.com. Contacts you or your team type in yourselves never send an email.",
     de: "Meldet neue Kontakte über den Sprachagenten, Ihr Anfrageformular, WhatsApp oder cal.com. Von Ihnen oder Ihrem Team selbst angelegte Kontakte lösen keine E-Mail aus.",
   },
+  "account.notifyNewBooking": {
+    tr: "Yeni bir randevu alındığında e-posta gönder",
+    en: "Email me when a new booking is made",
+    de: "E-Mail schicken, wenn ein neuer Termin gebucht wird",
+  },
+  // The calendar invite is the point of this switch, so the hint leads with
+  // it — without that sentence it reads as one more notification, not as
+  // "your Google Calendar fills itself in".
+  "account.notifyNewBookingHint": {
+    tr: "Randevu sayfası, sesli asistan veya sohbet üzerinden randevu alındığında e-posta gelir. Ekteki takvim daveti randevuyu kendi takviminize ekler; iptal edilirse kaldırır. Elle girdiğiniz randevular e-posta göndermez.",
+    en: "You get an email when a booking arrives through the booking page, the voice agent or chat. Its calendar invite adds the appointment to your own calendar and removes it again if it is cancelled. Bookings you type in yourself never send one.",
+    de: "Sie bekommen eine E-Mail, wenn ein Termin über die Buchungsseite, den Sprachagenten oder den Chat eingeht. Die Kalendereinladung trägt ihn in Ihren eigenen Kalender ein und entfernt ihn bei Stornierung wieder. Selbst eingetragene Termine lösen keine E-Mail aus.",
+  },
   "account.role": { tr: "Rolünüz", en: "Your role", de: "Ihre Rolle" },
   "account.language": {
     tr: "Uygulama dili",

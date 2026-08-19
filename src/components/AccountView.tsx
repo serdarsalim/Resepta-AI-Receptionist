@@ -43,6 +43,7 @@ const SEARCH_INDEX: { card: AccountCard; key: TranslationKey }[] = [
   { card: "notifications", key: "account.notifyInbound" },
   { card: "notifications", key: "account.notifyFailed" },
   { card: "notifications", key: "account.notifyNewContact" },
+  { card: "notifications", key: "account.notifyNewBooking" },
   { card: "ai", key: "settings.ai" },
   { card: "ai", key: "mcp.endpoint" },
 ];
@@ -223,6 +224,16 @@ export function AccountView() {
             checked={profile.notifyNewContact}
             label={t("account.notifyNewContact")}
             onChange={(next) => void save({ notifyNewContact: next })}
+          />
+
+          <RowLabel
+            label={t("account.notifyNewBooking")}
+            hint={t("account.notifyNewBookingHint")}
+          />
+          <Toggle
+            checked={profile.notifyNewBooking}
+            label={t("account.notifyNewBooking")}
+            onChange={(next) => void save({ notifyNewBooking: next })}
           />
         </div>
       </Card>

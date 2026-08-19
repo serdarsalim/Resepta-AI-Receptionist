@@ -61,6 +61,13 @@ export default defineSchema({
     // system-created contacts alert; see lib/newCustomer.ts for why an echo of
     // your own typing is how a sender gets filtered into a folder.
     notifyNewContact: v.optional(v.boolean()),
+    // A booking nobody in the salon typed in — the booking page, the voice
+    // agent, the chat agent. The email carries a real calendar invite
+    // (lib/ics.ts), so Gmail puts the appointment on the reader's own
+    // calendar; a cancellation retracts it under the same UID. Same
+    // system-only rule as notifyNewContact: appointments.source gates it in
+    // scheduleLifecycleMessages, so the grid never echoes your own typing.
+    notifyNewBooking: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("by_org", ["orgId"]),

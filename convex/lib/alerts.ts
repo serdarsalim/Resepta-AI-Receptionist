@@ -42,15 +42,22 @@ import { internalAction, internalQuery, query } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { requireOrg } from "./orgAuth";
 import { emailLaneConfigured, productSender, sendEmail } from "./email";
+import { appointmentIcs } from "./ics";
 import { emailConfig } from "./platformConfig";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
-export type AlertKind = "inbound" | "failed-send" | "new-contact" | "billing";
+export type AlertKind =
+  | "inbound"
+  | "failed-send"
+  | "new-contact"
+  | "new-booking"
+  | "billing";
 
 export const alertKindValidator = v.union(
   v.literal("inbound"),
   v.literal("failed-send"),
   v.literal("new-contact"),
+  v.literal("new-booking"),
   v.literal("billing"),
 );
 
@@ -63,6 +70,7 @@ export function alertEnabled(
     notifyInbound?: boolean;
     notifyFailedSend?: boolean;
     notifyNewContact?: boolean;
+    notifyNewBooking?: boolean;
   },
   kind: AlertKind,
 ): boolean {
@@ -75,7 +83,9 @@ export function alertEnabled(
       ? prefs.notifyInbound
       : kind === "failed-send"
         ? prefs.notifyFailedSend
-        : prefs.notifyNewContact;
+        : kind === "new-booking"
+          ? prefs.notifyNewBooking
+          : prefs.notifyNewContact;
   return stored ?? true;
 }
 
@@ -99,6 +109,8 @@ export type AlertTemplate =
   | "failedOther"
   | "failedCalendarCancel"
   | "newContact"
+  | "newBooking"
+  | "bookingCancelled"
   | "voiceBudget80"
   | "voiceBudget100"
   | "walletLow"
@@ -114,6 +126,8 @@ export const alertTemplateValidator = v.union(
   v.literal("failedOther"),
   v.literal("failedCalendarCancel"),
   v.literal("newContact"),
+  v.literal("newBooking"),
+  v.literal("bookingCancelled"),
   v.literal("voiceBudget80"),
   v.literal("voiceBudget100"),
   v.literal("walletLow"),
@@ -239,6 +253,47 @@ const ALERT_COPY: Record<
       tr: "{who} kayıtlara eklendi ({detail}). Kişi kartından geçmişi ve iletişim bilgileri görülebilir.",
       en: "{who} was added to your contacts ({detail}). Their record has the history and contact details.",
       de: "{who} wurde zu Ihren Kontakten hinzugefügt ({detail}). Der Datensatz enthält Verlauf und Kontaktdaten.",
+    },
+  },
+  // A booking nobody in the salon typed in landed on the calendar. {detail}
+  // is the appointment time, already in the org's timezone and language. The
+  // mail carries a real calendar invite (deliverOrgAlert attaches it when the
+  // call site passes an appointmentId), which is the reason this template
+  // exists at all: the body says what happened, the attachment puts it on the
+  // reader's own Google/Apple/Outlook calendar. The body still names the
+  // invite so a client that shows it as a bare .ics file doesn't leave the
+  // reader wondering what the attachment is for.
+  newBooking: {
+    kind: "new-booking",
+    subject: {
+      tr: "Yeni randevu: {who}",
+      en: "New booking: {who}",
+      de: "Neue Buchung: {who}",
+    },
+    body: {
+      tr: "{who} için randevu alındı: {detail}. Ekteki davet randevuyu takviminize ekler.",
+      en: "An appointment was booked for {who}: {detail}. The attached invite adds it to your calendar.",
+      de: "Für {who} wurde ein Termin gebucht: {detail}. Die angehängte Einladung trägt ihn in Ihren Kalender ein.",
+    },
+  },
+  // The retraction half of newBooking, riding the same switch: whoever asked
+  // to have bookings on their calendar needs cancellations to take them off
+  // again. The attached CANCEL shares the invite's UID and outranks it, so
+  // the entry disappears instead of gaining a struck-through twin. A customer
+  // cancelling by WhatsApp reply can also produce inboundCancelled — that one
+  // says a customer WROTE, this one keeps the calendar honest; each has its
+  // own switch.
+  bookingCancelled: {
+    kind: "new-booking",
+    subject: {
+      tr: "Randevu iptal edildi: {who}",
+      en: "Booking cancelled: {who}",
+      de: "Buchung storniert: {who}",
+    },
+    body: {
+      tr: "{who} randevusu iptal edildi ({detail}). Ekteki dosya kaydı takviminizden kaldırır.",
+      en: "The appointment for {who} was cancelled ({detail}). The attachment removes it from your calendar.",
+      de: "Der Termin für {who} wurde storniert ({detail}). Der Anhang entfernt ihn aus Ihrem Kalender.",
     },
   },
   // The voice meter's budget alerts (schema: orgs.voiceMonthlyBudgetMicroUsd).
@@ -377,6 +432,56 @@ export const alertRecipients = internalQuery({
   },
 });
 
+// Everything the new-booking mail's calendar invite needs, read at DELIVERY
+// time rather than snapshotted into the queue: the alert runs detached, and
+// if the appointment moved in the gap, the invite should carry where it
+// moved TO. Null when the appointment vanished — the alert then goes out as
+// plain text, which still says what happened.
+export const icsContext = internalQuery({
+  args: { appointmentId: v.id("appointments") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      startAtMs: v.number(),
+      durationMinutes: v.number(),
+      // "Ayşe Yılmaz — Erkek saç kesimi". The reader's calendar should name
+      // the CUSTOMER; the salon's own name on the salon's own calendar says
+      // nothing.
+      summary: v.string(),
+      staffName: v.optional(v.string()),
+      orgName: v.string(),
+      sequence: v.optional(v.number()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const appointment = await ctx.db.get(args.appointmentId);
+    if (!appointment) return null;
+    const org = await ctx.db.get(appointment.orgId);
+    const customer = await ctx.db.get(appointment.customerId);
+    const staff = appointment.staffId
+      ? await ctx.db.get(appointment.staffId)
+      : null;
+    const customerName =
+      [customer?.firstName, customer?.lastName].filter(Boolean).join(" ") ||
+      customer?.phone ||
+      "?";
+    const itemNames = (appointment.items ?? [])
+      .map((item) => item.name)
+      .join(", ");
+    return {
+      startAtMs: appointment.startAt,
+      durationMinutes:
+        appointment.durationMinutes ??
+        appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
+        30,
+      summary: itemNames ? `${customerName} — ${itemNames}` : customerName,
+      staffName: staff?.name,
+      orgName: org?.name ?? "Resepta",
+      sequence: appointment.icsSequence,
+    };
+  },
+});
+
 // Can an alert queued right now actually land anywhere? AccountView ships two
 // switches that default to ON and promise email; when the org has no send lane
 // those switches are on and do nothing, which reads worse than off. This is the
@@ -442,6 +547,10 @@ export const deliverOrgAlert = internalAction({
     template: alertTemplateValidator,
     who: v.string(),
     detail: v.optional(v.string()),
+    // Set by the new-booking templates only: the mail then carries the
+    // appointment as a calendar invite (REQUEST) or its retraction (CANCEL).
+    appointmentId: v.optional(v.id("appointments")),
+    icsMethod: v.optional(v.union(v.literal("REQUEST"), v.literal("CANCEL"))),
   },
   returns: v.null(),
   // Annotated on purpose: referencing a sibling function in this same module
@@ -487,15 +596,48 @@ export const deliverOrgAlert = internalAction({
       const subject = fill(copy.subject[language], args.who, args.detail ?? "");
       const body = fill(copy.body[language], args.who, args.detail ?? "");
       const html = `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`;
+      // The booking alerts carry the appointment as a calendar invite. Read
+      // fresh here, not snapshotted at queue time — see icsContext. A missing
+      // row degrades to a plain-text alert rather than dropping it.
+      const event =
+        args.appointmentId && args.icsMethod
+          ? await ctx.runQuery(internal.lib.alerts.icsContext, {
+              appointmentId: args.appointmentId,
+            })
+          : null;
       // sendEmail reports failure rather than throwing, and one bad address
       // must not cost the rest of the team their alert.
       for (const to of recipients.emails) {
+        // Built per recipient: without an ATTENDEE matching the To address,
+        // Gmail shows a bare attachment instead of the inline event card.
+        // Same UID as the customer's invite — a different mailbox, so no
+        // collision, and the salon's entry stands for the same event.
+        const ics =
+          event && args.icsMethod
+            ? {
+                method: args.icsMethod,
+                content: appointmentIcs({
+                  method: args.icsMethod,
+                  uid: String(args.appointmentId),
+                  startAtMs: event.startAtMs,
+                  durationMinutes: event.durationMinutes,
+                  summary: event.summary,
+                  ...(event.staffName ? { description: event.staffName } : {}),
+                  organizerName: event.orgName,
+                  organizerEmail: `noreply@${mailConfig.domain}`,
+                  attendeeName: to,
+                  attendeeEmail: to,
+                  sequence: event.sequence,
+                }),
+              }
+            : undefined;
         await sendEmail({
           apiKey: mailConfig.apiKey,
           from,
           to,
           subject,
           html,
+          ics,
         });
       }
     } catch {
@@ -514,6 +656,10 @@ export async function queueOrgAlert(
     template: AlertTemplate;
     who: string;
     detail?: string;
+    // newBooking / bookingCancelled only: makes the mail carry the
+    // appointment as a calendar invite. See deliverOrgAlert.
+    appointmentId?: Id<"appointments">;
+    icsMethod?: "REQUEST" | "CANCEL";
   },
 ): Promise<void> {
   try {

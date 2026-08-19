@@ -8,6 +8,7 @@ import { getLocalPartsSafe } from "./lib/businessHours";
 import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity, statusChange } from "./lib/activity";
 import { formatAppointmentTime } from "./lib/format";
+import { queueOrgAlert } from "./lib/alerts";
 
 // A line as the client asks for it: which service, and optionally what it
 // actually cost this time. Everything else on the stored line — the name, the
@@ -284,18 +285,51 @@ export async function scheduleLifecycleMessages(
   orgId: Id<"orgs">,
   appointmentId: Id<"appointments">,
   trigger: "booking" | "cancellation",
+  options?: {
+    // retryConfirmationsAwaitingEmail re-fires the CUSTOMER's confirmation
+    // when their email arrives late; the owner already heard about that
+    // booking the first time through and must not hear about it again.
+    suppressOwnerAlert?: boolean;
+  },
 ) {
   const org = await ctx.db.get(orgId);
   if (!org) return;
+  const appointment = await ctx.db.get(appointmentId);
   // Every booking the customer hears about carries a manage token, whichever
   // door it came in through — [manage_link] in a confirmation has to resolve
   // for a voice booking and a hand-typed one, not only for the booking page
   // (which mints its own at insert).
   if (trigger === "booking") {
-    const appointment = await ctx.db.get(appointmentId);
     if (appointment && appointment.manageToken === undefined) {
       await ctx.db.patch(appointmentId, { manageToken: crypto.randomUUID() });
     }
+  }
+  // The salon's own side of the event, riding users.notifyNewBooking: an
+  // email whose calendar invite puts the booking on the reader's calendar
+  // (REQUEST), and takes it off again when it dies (CANCEL). Same door-based
+  // rule as notifyNewContact: only bookings nobody in the salon typed —
+  // booking page, voice, chat, cal.com — alert; the grid's own entries are
+  // an echo of the reader's typing. A reschedule passes back through the
+  // booking trigger, so the invite goes again at its bumped icsSequence and
+  // the calendar entry moves.
+  if (
+    appointment &&
+    appointment.source &&
+    appointment.source !== "manual" &&
+    !options?.suppressOwnerAlert
+  ) {
+    const customer = await ctx.db.get(appointment.customerId);
+    await queueOrgAlert(ctx, {
+      orgId,
+      template: trigger === "booking" ? "newBooking" : "bookingCancelled",
+      who:
+        [customer?.firstName, customer?.lastName].filter(Boolean).join(" ") ||
+        customer?.phone ||
+        "?",
+      detail: formatAppointmentTime(appointment.startAt, org.timezone, org.language),
+      appointmentId,
+      icsMethod: trigger === "booking" ? "REQUEST" : "CANCEL",
+    });
   }
   // Every matching live rule fires — two booking messages is a choice the
   // owner made by having two rows, not a bug to dedupe away.
@@ -351,7 +385,11 @@ export async function retryConfirmationsAwaitingEmail(
     if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
       continue;
     }
-    await scheduleLifecycleMessages(ctx, appointment.orgId, appointment._id, "booking");
+    await scheduleLifecycleMessages(ctx, appointment.orgId, appointment._id, "booking", {
+      // The customer's confirmation is the debt being repaid here; the owner
+      // was told at booking time and this re-fire is not news to them.
+      suppressOwnerAlert: true,
+    });
   }
 }
 
