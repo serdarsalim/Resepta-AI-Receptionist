@@ -11,7 +11,12 @@ import {
   moneyInputValue,
   parseMoney,
 } from "@/lib/money";
-import { toDatetimeLocalValue, fromDatetimeLocalValue } from "@/lib/datetime";
+import {
+  toDatetimeLocalValue,
+  fromDatetimeLocalValue,
+  formatDayHeading,
+  formatTime,
+} from "@/lib/datetime";
 import { PhoneInput } from "./PhoneField";
 import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -108,6 +113,10 @@ export function AppointmentModal({
 
   const [startAt, setStartAt] = useState(draft.startAt);
   const [durationMinutes, setDurationMinutes] = useState(draft.durationMinutes);
+  // The time reads as prose until somebody means to change it — Google's row.
+  // Once opened it stays open for the life of the sheet; collapsing a field
+  // someone is mid-edit in has no upside.
+  const [timeEditing, setTimeEditing] = useState(false);
   // Line rows, held as strings because that is what the inputs speak. An empty
   // list is a real state — a blocked-out hour with no service on it — so the
   // modal opens with no rows rather than one blank one begging to be filled.
@@ -217,7 +226,7 @@ export function AppointmentModal({
     // even the initial notification observe() guarantees, while offsetHeight
     // demonstrably changes. That is worth understanding before relying on it.
     // Until then this list must grow when anything new changes the height.
-  }, [anchor, picked, lines.length, error, canForce]);
+  }, [anchor, picked, timeEditing, lines.length, error, canForce]);
 
   // Only fetched once there is something to match. A booking whose customer
   // is already fixed, or where nothing has been typed yet, never loads the
@@ -635,38 +644,69 @@ export function AppointmentModal({
               Google's popup does — the icon column is what makes a stack of
               unrelated fields read as one event card. */}
           <div className="flex gap-3">
-            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+            <span
+              className={`${timeEditing ? "mt-6" : "mt-2"} shrink-0 text-[var(--muted)]`}
+              aria-hidden
+            >
               <ClockIcon />
             </span>
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
-              <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
-                {t("appointments.when")}
-                <input
-                  type="datetime-local"
-                  className="mt-1"
-                  value={toDatetimeLocalValue(startAt)}
-                  onChange={(e) => {
-                    const next = fromDatetimeLocalValue(e.target.value);
-                    if (!Number.isNaN(next)) setStartAt(next);
-                  }}
-                />
-              </label>
-              {/* An order of goods has a moment, not a length — showing a
-                  minutes field for it would be a number that means nothing. */}
-              {!goodsOnly && (
-                <label className="block text-xs font-medium">
-                  {t("appointments.duration")}
+            {timeEditing ? (
+              <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
+                <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
+                  {t("appointments.when")}
                   <input
-                    type="number"
-                    min={5}
-                    step={5}
+                    type="datetime-local"
                     className="mt-1"
-                    value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
+                    // Mounts on the click that asked to edit, so focus lands
+                    // where the click was aimed.
+                    autoFocus
+                    value={toDatetimeLocalValue(startAt)}
+                    onChange={(e) => {
+                      const next = fromDatetimeLocalValue(e.target.value);
+                      if (!Number.isNaN(next)) setStartAt(next);
+                    }}
                   />
                 </label>
-              )}
-            </div>
+                {/* An order of goods has a moment, not a length — showing a
+                    minutes field for it would be a number that means nothing. */}
+                {!goodsOnly && (
+                  <label className="block text-xs font-medium">
+                    {t("appointments.duration")}
+                    <input
+                      type="number"
+                      min={5}
+                      step={5}
+                      className="mt-1"
+                      value={durationMinutes}
+                      onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
+                    />
+                  </label>
+                )}
+              </div>
+            ) : (
+              /* Google's time row: the whole thing is prose — the day, then
+                 the span as start – end, the duration only implied. One
+                 click swaps in the editors; picking a service still
+                 restretches the range live because it is computed, not
+                 copied. */
+              <button
+                type="button"
+                onClick={() => setTimeEditing(true)}
+                className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+              >
+                <span className="flex flex-wrap items-baseline gap-x-3">
+                  <span>{formatDayHeading(startAt, language)}</span>
+                  <span className="tabular-nums">
+                    {goodsOnly
+                      ? formatTime(startAt, language)
+                      : `${formatTime(startAt, language)} – ${formatTime(
+                          startAt + durationMinutes * 60_000,
+                          language,
+                        )}`}
+                  </span>
+                </span>
+              </button>
+            )}
           </div>
 
           {/* One row per service delivered. A cut plus a beard trim is one
@@ -721,7 +761,10 @@ export function AppointmentModal({
                   type="number"
                   min={0}
                   step="0.01"
-                  className="w-24 shrink-0"
+                  // Wide enough for a four-digit price with cents — 5600.00
+                  // clipped at w-24. The select is the flexible one, so this
+                  // is where the room comes from.
+                  className="w-28 shrink-0"
                   value={line.price}
                   placeholder={currencySymbol(currency, language)}
                   onChange={(e) =>
@@ -765,45 +808,49 @@ export function AppointmentModal({
             </div>
           </div>
 
-          {/* Paired, the way When and Duration are. Member was a half-width
-              select sitting alone on a full-width row, so the sheet spent two
-              rows and a whole textarea's worth of height on two fields that
-              are each one line of answer. */}
+          {/* Each its own row, each behind its own glyph — Google gives the
+              description a separate line under the guests for the same
+              reason: who does the work and what to remember about it are
+              different kinds of fact, and pairing them just squeezed both. */}
           <div className="flex gap-3">
             <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
               <PersonIcon />
             </span>
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
-              <label className="block text-xs font-medium">
-                {staffLabel}
-                <select
-                  className="mt-1"
-                  value={staffId}
-                  onChange={(e) => setStaffId(e.target.value)}
-                >
-                  <option value="">—</option>
-                  {staff
-                    .filter((person) => person.active || person._id === draft.staffId)
-                    .map((person) => (
-                      <option key={person._id} value={person._id}>
-                        {person.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="block text-xs font-medium">
-                {t("appointments.notes")}
-                {/* One row, and it grows as you type rather than reserving
-                    space for words nobody has written. Most bookings carry no
-                    note at all. */}
-                <textarea
-                  rows={1}
-                  className="mt-1 resize-y"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </label>
-            </div>
+            <label className="block min-w-0 flex-1 text-xs font-medium">
+              {staffLabel}
+              <select
+                className="mt-1"
+                value={staffId}
+                onChange={(e) => setStaffId(e.target.value)}
+              >
+                <option value="">—</option>
+                {staff
+                  .filter((person) => person.active || person._id === draft.staffId)
+                  .map((person) => (
+                    <option key={person._id} value={person._id}>
+                      {person.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex gap-3">
+            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+              <NotesIcon />
+            </span>
+            <label className="block min-w-0 flex-1 text-xs font-medium">
+              {t("appointments.notes")}
+              {/* One row, and it grows as you type rather than reserving
+                  space for words nobody has written. Most bookings carry no
+                  note at all. */}
+              <textarea
+                rows={1}
+                className="mt-1 resize-y"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
           </div>
           {/* Enter submits, which is what a booking form should do. */}
           <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
@@ -893,6 +940,14 @@ function PersonIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function NotesIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 6h16M4 12h16M4 18h10" />
     </svg>
   );
 }
