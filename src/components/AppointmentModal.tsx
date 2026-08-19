@@ -454,20 +454,24 @@ export function AppointmentModal({
 
         <form ref={formRef} className="space-y-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           {draft.customerId ? (
-            // The customer IS this booking's title, so it wears the title
-            // slot: big type over the underline, exactly where Google puts
-            // "Add title". The name is still the way to the record.
-            <div className="border-b-2 border-[var(--border)] pb-1.5">
+            // Same [icon][label][field] geometry as every other row; the
+            // icon slot is an empty spacer here. The name is a fact, printed
+            // where the input would be — and still the way to the record.
+            <div className="flex items-center gap-3 text-xs font-medium">
+              <span className="w-5 shrink-0" aria-hidden />
+              <span className="w-24 shrink-0">{t("customers.name")}</span>
               {onOpenCustomer ? (
                 <button
                   type="button"
                   onClick={() => onOpenCustomer(draft.customerId!)}
-                  className="text-xl font-normal text-[var(--foreground)] transition-colors hover:text-[var(--accent)]"
+                  className="min-w-0 flex-1 truncate text-left text-sm font-normal underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
                 >
                   {draft.customerName}
                 </button>
               ) : (
-                <span className="text-xl font-normal">{draft.customerName}</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-normal">
+                  {draft.customerName}
+                </span>
               )}
             </div>
           ) : (
@@ -493,11 +497,12 @@ export function AppointmentModal({
                       a short window, or with a conflict banner showing. It
                       currently happens not to clip, and "happens not to" is
                       what this repo keeps shipping and regretting. */}
-                  <label className="block" htmlFor="modal-customer">
-                    {/* The label lives on for screen readers; sighted users get
-                        what Google gives them — a big placeholder where the
-                        title goes. */}
-                    <span className="sr-only">{t("appointments.findCustomer")}</span>
+                  <label
+                    className="flex items-center gap-3 text-xs font-medium"
+                    htmlFor="modal-customer"
+                  >
+                    <span className="w-5 shrink-0" aria-hidden />
+                    <span className="w-24 shrink-0">{t("customers.name")}</span>
                     <input
                       id="modal-customer"
                       type="search"
@@ -506,11 +511,7 @@ export function AppointmentModal({
                       aria-expanded={listOpen}
                       aria-controls="modal-customer-list"
                       required
-                      // Google's title field: no box, just a baseline that
-                      // thickens to accent on focus. rounded-none because the
-                      // base layer rounds every input, and a rounded underline
-                      // curls at the ends.
-                      className="rounded-none border-0 border-b-2 border-[var(--border)] bg-transparent px-0 py-1.5 text-xl placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                      className="min-w-0 flex-1"
                       placeholder={t("appointments.findCustomerHint")}
                       value={customerQuery}
                       ref={searchRef}
@@ -628,6 +629,7 @@ export function AppointmentModal({
                       className="flex items-center gap-3 text-xs font-medium"
                       htmlFor="modal-phone"
                     >
+                      <span className="w-5 shrink-0" aria-hidden />
                       <span className="w-24 shrink-0">{t("customers.phone")}</span>
                       <PhoneInput
                         id="modal-phone"
@@ -686,28 +688,33 @@ export function AppointmentModal({
                 )}
               </div>
             ) : (
-              /* Google's time row: the whole thing is prose — the day, then
-                 the span as start – end, the duration only implied. One
-                 click swaps in the editors; picking a service still
-                 restretches the range live because it is computed, not
-                 copied. */
-              <button
-                type="button"
-                onClick={() => setTimeEditing(true)}
-                className="min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
-              >
-                <span className="flex flex-wrap items-baseline gap-x-3">
-                  <span>{formatDayHeading(startAt, language)}</span>
-                  <span className="tabular-nums">
-                    {goodsOnly
-                      ? formatTime(startAt, language)
-                      : `${formatTime(startAt, language)} – ${formatTime(
-                          startAt + durationMinutes * 60_000,
-                          language,
-                        )}`}
-                  </span>
+              /* Google's time row: the value is prose — the day, then the
+                 span as start – end, the duration only implied. The "When"
+                 label sits in the shared label column in BOTH states, so
+                 clicking to edit swaps only the value; a label that appeared
+                 out of nowhere made the whole column jump. */
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="w-24 shrink-0 text-xs font-medium">
+                  {t("appointments.when")}
                 </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeEditing(true)}
+                  className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  <span className="flex flex-wrap items-baseline gap-x-3">
+                    <span>{formatDayHeading(startAt, language)}</span>
+                    <span className="tabular-nums">
+                      {goodsOnly
+                        ? formatTime(startAt, language)
+                        : `${formatTime(startAt, language)} – ${formatTime(
+                            startAt + durationMinutes * 60_000,
+                            language,
+                          )}`}
+                    </span>
+                  </span>
+                </button>
+              </div>
             )}
           </div>
 

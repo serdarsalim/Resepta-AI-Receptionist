@@ -305,9 +305,9 @@ const dictionary = {
   "appointments.more": { tr: "+{n} daha", en: "+{n} more", de: "+{n} weitere" },
   "appointments.findCustomer": { tr: "Müşteri ara", en: "Find customer", de: "Kunde suchen" },
   "appointments.findCustomerHint": {
-    tr: "İsim veya telefon",
-    en: "Name or phone",
-    de: "Name oder Telefon",
+    tr: "Müşterinin adı",
+    en: "Customer's name",
+    de: "Name des Kunden",
   },
   "appointments.createCustomer": {
     tr: "Yeni müşteri: \"{name}\"",
