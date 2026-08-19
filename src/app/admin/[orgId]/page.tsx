@@ -317,9 +317,18 @@ export default function TenantPage() {
 
       {(tab === "setup" || search.active) && (
       <>
+      {/* One card where there were two (Serdar, 2026-08-20): "Voice" held
+          the key and "Voice agents" held a Connectable-agents toggle whose
+          value is a fact about the key — the platform key means the shared
+          workspace (picker scoped to this business's own agents), any other
+          key means the client's own account (whole workspace visible). That
+          scope now derives when the key is saved (connections.setFieldInternal),
+          so the toggle had nothing left to decide. The odd case — a second
+          key for the shared workspace — is set by hand via
+          platform.setOrgConfig, which still accepts voiceAgentSource. */}
       <Section
-        title="Voice"
-        description="The client's own Retell account. The key decides whose agents Voice agent lists, and it must be the account's webhook signing key."
+        title="Voice agents"
+        description="The Retell key this business runs on — it must be the workspace's webhook signing key. Which agents the business may connect follows from the key by itself: the platform key scopes the picker to its own agents, its own key opens its whole workspace."
       >
         {(conns ?? []).filter((row) => row.provider === "retell").map((row) => (
           <SecretRow
@@ -964,37 +973,6 @@ export default function TenantPage() {
           masked={detail.wa?.accessToken}
           onSave={(value) => wa({ accessToken: value })}
         />
-      </Section>
-
-      <Section
-        title="Voice agents"
-        description="One Retell workspace can serve several businesses. This decides which of its agents this business may connect, not which it already has, which nothing here changes."
-      >
-        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-          <div className="text-sm font-medium">Connectable agents</div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(["randevu", "account"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => void org({ voiceAgentSource: option })}
-                className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                  detail.voiceAgentSource === option
-                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {option === "randevu" ? "Only this business's" : "Whole workspace"}
-              </button>
-            ))}
-          </div>
-          <div />
-          <div className="text-xs text-[var(--muted)]">
-            {detail.voiceAgentSource === "randevu"
-              ? "Only agents Resepta created for this business. The safe default when the Retell key is shared with another business."
-              : "Every agent in the Retell workspace this key opens, including other businesses'. Agents already claimed elsewhere still cannot be connected."}
-          </div>
-        </div>
       </Section>
 
       {/* Hidden, not removed (Serdar, 2026-08-19): the cal.com lane stays

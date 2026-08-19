@@ -14,6 +14,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { internal } from "./_generated/api";
 import { requirePlatformAdmin } from "./lib/platformAuth";
 import { CONNECTION_SPECS, connectionField, connectionSpec, maskSecret } from "./lib/connections";
+import { platformValue } from "./lib/platformConfig";
 
 // Actions have no ctx.db, so every action-side credential read lands here.
 // Internal: an action is trusted to have resolved its own org first.
@@ -55,6 +56,10 @@ export const setFieldInternal = internalMutation({
     // has one not-configured state instead of two.
     if (!value) {
       if (existing) await ctx.db.delete(existing._id);
+      if (args.provider === "retell" && args.field === "apiKey") {
+        // Keyless lists nothing anyway; park the scope on the safe answer.
+        await ctx.db.patch(args.orgId, { voiceAgentSource: "randevu" });
+      }
       return null;
     }
     const patch = {
@@ -71,6 +76,23 @@ export const setFieldInternal = internalMutation({
         field: args.field,
         ...patch,
       });
+    // orgs.voiceAgentSource is DERIVED here, once, at the moment the key
+    // lands — it was a console toggle the operator had to remember, and a
+    // forgotten flip leaked other clients' agents into a salon's picker
+    // (Serdar, 2026-08-20). The platform key means the shared workspace, so
+    // the picker narrows to this org's own agents; any other key is the
+    // client's own Retell account, whose whole workspace is theirs to see.
+    // Decided at WRITE time on purpose: a later platform-key rotation must
+    // not silently reclassify stamped orgs as private-workspace (the stamp
+    // keeps the old string), which a read-time comparison would do. The rare
+    // exception — a second key minted for the shared workspace — is set by
+    // hand through platform.setOrgConfig, which still accepts the field.
+    if (args.provider === "retell" && args.field === "apiKey") {
+      const platformKey = await platformValue(ctx, "retellApiKey");
+      await ctx.db.patch(args.orgId, {
+        voiceAgentSource: platformKey === value ? "randevu" : "account",
+      });
+    }
     return null;
   },
 });

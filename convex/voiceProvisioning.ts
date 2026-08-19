@@ -349,6 +349,10 @@ export const stampDefaultRetellKey = internalMutation({
       label: "Platform default (auto-provisioned)",
       updatedAt: Date.now(),
     });
+    // The stamped key IS the platform key, i.e. the shared workspace — scope
+    // the picker to this org's own agents. Set here because the stamp writes
+    // the connections row directly, past setFieldInternal's derivation.
+    await ctx.db.patch(args.orgId, { voiceAgentSource: "randevu" });
     return null;
   },
 });
