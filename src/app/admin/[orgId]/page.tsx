@@ -340,55 +340,28 @@ export default function TenantPage() {
           both. */}
       {(tab === "agents" || search.active) && (
       <>
+      {/* ONE list (Serdar, 2026-08-20). This was two cards — "Agent setup",
+          the auto-provisioning job log, above "Connected agents" — and for a
+          business whose agent was born in the Retell dashboard and then
+          connected, the pair read as a contradiction: "no agent has been
+          created yet" printed over a live, enabled agent. Where an agent came
+          from is not a card boundary. Provisioning jobs still in flight or
+          failed render below the agents; a COMPLETE job's outcome IS the
+          agent row, so it is not repeated as history. */}
       <Section
-        title="Agent setup"
-        description="Provisioning jobs for agents Resepta created, newest first. A failed job keeps its provider ids, so a retry repairs rather than duplicating."
+        title="Agents"
+        description="Every agent answering for this business — created by Resepta or connected from the Retell workspace — with whether Resepta's private runtime is published to it and whether call results are arriving. A failed provisioning job keeps its provider ids, so a retry repairs rather than duplicating."
       >
-        {detail.voiceProvisioning.length === 0 ? (
+        {detail.agents.length === 0 &&
+        !detail.voiceProvisioning.some((job) => job.status !== "complete") ? (
           <p className="py-2.5 text-xs text-[var(--muted)]">
-            No agent has been created from Resepta yet.
+            No agent yet. Resepta provisions one at onboarding, or the business
+            connects an existing Retell agent from its Phone page once the key
+            is in.
           </p>
         ) : (
-          <div className="py-2.5">
-            <div className="mt-1 space-y-2">
-              {detail.voiceProvisioning.map((job, index) => (
-                <div key={`${job.updatedAt}-${index}`} className="text-xs">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <Pill tone={job.status === "failed" ? "warn" : job.status === "complete" ? "ok" : "muted"}>
-                      {job.status}
-                    </Pill>
-                    <span className="font-medium">{job.name}</span>
-                    <span className="text-[var(--muted)]">{job.template}</span>
-                    <span className="ml-auto text-[var(--muted)]">{shortDate(job.updatedAt)}</span>
-                  </div>
-                  {(job.retellAgentId || job.retellLlmId) && (
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      {job.retellAgentId && <CopyId value={job.retellAgentId} />}
-                      {job.retellLlmId && <CopyId value={job.retellLlmId} />}
-                    </div>
-                  )}
-                  {job.error && (
-                    <div className="mt-1 break-words rounded-lg bg-amber-50 px-2 py-1.5 font-mono text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                      {job.error}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </Section>
-
-      <Section
-        title="Connected agents"
-        description="Every agent mapped to this business, with whether Resepta's private runtime is published to it and whether call results are arriving."
-      >
-        {detail.agents.length === 0 ? (
-          <p className="py-2.5 text-xs text-[var(--muted)]">
-            No agents connected. The business can add one in Voice agent once the key is in.
-          </p>
-        ) : (
-          detail.agents.map((agent) => (
+          <>
+          {detail.agents.map((agent) => (
             <div key={agent.retellAgentId} className="space-y-2 py-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <CopyId value={agent.retellAgentId} />
@@ -473,7 +446,39 @@ export default function TenantPage() {
                 </div>
               )}
             </div>
-          ))
+          ))}
+          {detail.voiceProvisioning.some((job) => job.status !== "complete") && (
+            <div className="py-2.5">
+              <div className="space-y-2">
+                {detail.voiceProvisioning
+                  .filter((job) => job.status !== "complete")
+                  .map((job, index) => (
+                    <div key={`${job.updatedAt}-${index}`} className="text-xs">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Pill tone={job.status === "failed" ? "warn" : "muted"}>
+                          {job.status}
+                        </Pill>
+                        <span className="font-medium">{job.name}</span>
+                        <span className="text-[var(--muted)]">{job.template}</span>
+                        <span className="ml-auto text-[var(--muted)]">{shortDate(job.updatedAt)}</span>
+                      </div>
+                      {(job.retellAgentId || job.retellLlmId) && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {job.retellAgentId && <CopyId value={job.retellAgentId} />}
+                          {job.retellLlmId && <CopyId value={job.retellLlmId} />}
+                        </div>
+                      )}
+                      {job.error && (
+                        <div className="mt-1 break-words rounded-lg bg-amber-50 px-2 py-1.5 font-mono text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                          {job.error}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          </>
         )}
       </Section>
       {/* Provisioning numbers lives with the agents that answer on them, not
