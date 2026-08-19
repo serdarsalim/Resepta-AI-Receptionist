@@ -857,6 +857,12 @@ function AddRuleSheet({
   // screen, on a rule that was already live.
   const [body, setBody] = useState("");
   const [subject, setSubject] = useState("");
+  // TWO STEPS, not one growing form. Timing and a five-line message unfolding
+  // under the picked option pushed the list, the option you had just clicked
+  // and the Add button all down the page — the dialog moved under the pointer
+  // at the exact moment you were reading it. Picking is one question; what it
+  // says and when is the next.
+  const [step, setStep] = useState<"pick" | "compose">("pick");
 
   const selected =
     ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
@@ -883,15 +889,21 @@ function AddRuleSheet({
   };
 
   const pick = (option: AddOption) => {
-    setTrigger(option.trigger);
     setError(null);
-    const seed = seedFor(option);
-    setBody(seed.body);
-    setSubject(seed.subject);
-    if (option.timing) {
-      setAmount(String(option.timing.defaultAmount));
-      setUnit(option.timing.defaultUnit);
+    setStep("compose");
+    // Re-seed only when the message type actually changes. Stepping back and
+    // clicking the same option again is how you re-read the list, not how you
+    // ask for your edits to be thrown away.
+    if (option.trigger !== trigger) {
+      const seed = seedFor(option);
+      setBody(seed.body);
+      setSubject(seed.subject);
+      if (option.timing) {
+        setAmount(String(option.timing.defaultAmount));
+        setUnit(option.timing.defaultUnit);
+      }
     }
+    setTrigger(option.trigger);
   };
 
   // The bounds live in hours; the message has to speak the unit the box is
@@ -952,7 +964,7 @@ function AddRuleSheet({
           submit();
         }}
       >
-        <fieldset>
+        <fieldset className={step === "pick" ? "" : "hidden"}>
           <legend className="mb-1.5 text-xs text-[var(--muted)]">
             {t("settings.ruleAddPick")}
           </legend>
@@ -995,10 +1007,42 @@ function AddRuleSheet({
           </div>
         </fieldset>
 
+        {/* Step two: what it says and when. */}
+        {step === "compose" && selected && (
+          <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+            <button
+              type="button"
+              onClick={() => {
+                setStep("pick");
+                setError(null);
+              }}
+              className="flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M15 5l-7 7 7 7" />
+              </svg>
+              {t("common.back")}
+            </button>
+            <span className="min-w-0 truncate text-sm font-medium">
+              {t(selected.nameKey)}
+            </span>
+          </div>
+        )}
+
         {/* Only the three triggers that hang off a clock get a timing row. The
             event ones fire on the mutation, so a number there would be a
             promise nothing keeps (messageRules.clampOffset pins them to 0). */}
-        {selected?.timing && (
+        {step === "compose" && selected?.timing && (
           <div>
             <span className="mb-1.5 block text-xs text-[var(--muted)]">
               {t("settings.ruleAddTiming")}
@@ -1040,7 +1084,7 @@ function AddRuleSheet({
             on a second screen — so the stock text was something you inherited
             rather than something you agreed to. Editable here because the
             moment you read a sentence is the moment you want to change it. */}
-        {selected && (
+        {step === "compose" && selected && (
           <div className="space-y-1.5">
             <span className="block text-xs text-[var(--muted)]">
               {t("settings.ruleAddMessage")}
@@ -1078,13 +1122,18 @@ function AddRuleSheet({
           >
             {t("common.cancel")}
           </button>
-          <button
-            type="submit"
-            disabled={!selected}
-            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
-          >
-            {t("common.add")}
-          </button>
+          {/* Add belongs to step two only. On step one every option is its own
+              button, so a disabled Add sitting under the list was a control
+              that could never be the next thing you pressed. */}
+          {step === "compose" && (
+            <button
+              type="submit"
+              disabled={!selected}
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
+            >
+              {t("common.add")}
+            </button>
+          )}
         </div>
       </form>
     </Sheet>
