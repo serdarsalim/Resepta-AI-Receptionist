@@ -259,20 +259,6 @@ export default function AdminPage() {
           salon — configured here rather than per tenant, and rather than in
           an env var only a terminal can reach. Per-org overrides live on each
           business's own Setup tab. */}
-      {tab === "platform" && deployment && deployment.platformAdmins.length > 0 && (
-        <p className="mb-4 text-xs text-[var(--muted)]">
-          {/* Printed because the answer otherwise lives in an env var only a
-              terminal can read — and the question ("which address is the
-              operator?") comes up while looking at this page. No add button
-              on purpose: the allowlist being out of the app's reach is what
-              makes it safe. See convex/lib/platformAuth.ts. */}
-          Platform admins: {deployment.platformAdmins.join(" · ")}
-          <span className="ml-2 opacity-70">
-            (set with{" "}
-            <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>)
-          </span>
-        </p>
-      )}
       {tab === "platform" && mail && (
         <AdminSearchProvider search={search}>
         <div className="space-y-4">
@@ -302,13 +288,11 @@ export default function AdminPage() {
               masked={mail.webhookSecret}
               onSave={(value) => setConfig({ key: "resendWebhookSecret", value })}
             />
-            <Row
-              label="Product name"
-              hint="How invites and alerts sign themselves. Not what customers see; salon mail carries the salon's name."
-              current={mail.productName}
-              placeholder="Resepta"
-              onSave={(value) => setConfig({ key: "productName", value })}
-            />
+            {/* Product name has no row here any more (Serdar, 2026-08-20):
+                the name is settled, and a rename field on a settings page
+                invites the one edit nobody should make casually. The
+                productName key survives for platformConfig:setFromCli should
+                the product ever actually rename. */}
           </Section>
 
           {/* The two agent keys, same doctrine split (docs/chat-agent.md):
@@ -496,6 +480,22 @@ export default function AdminPage() {
               </button>
             </div>
           </Section>
+
+          {/* A footer, not a header (Serdar, 2026-08-20): who the operators
+              are is reference material, not the page's opening line. Printed
+              at all because the answer otherwise lives in an env var only a
+              terminal can read. No add button on purpose: the allowlist
+              being out of the app's reach is what makes it safe. See
+              convex/lib/platformAuth.ts. */}
+          {deployment && deployment.platformAdmins.length > 0 && (
+            <p className="pt-2 text-xs text-[var(--muted)]">
+              Platform admins: {deployment.platformAdmins.join(" · ")}
+              <span className="ml-2 opacity-70">
+                (set with{" "}
+                <code className="font-mono">npx convex env set PLATFORM_ADMIN_EMAILS</code>)
+              </span>
+            </p>
+          )}
         </div>
         </AdminSearchProvider>
       )}
