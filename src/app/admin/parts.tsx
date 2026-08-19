@@ -455,6 +455,112 @@ export function Row({
   );
 }
 
+// A Row whose value is a model name, with a picker fed live from the
+// provider's own model list the first time the field is focused (the nudge
+// listOpenAiModels pattern: names churn, and a scoped key only reaches what
+// it was granted, so a checked-in list would offer models that 403). Free
+// text stays the contract — a picker that could not load must not stop the
+// operator typing a model name — which is why a failed fetch becomes one
+// muted line under the input rather than an error state.
+export function ModelRow({
+  label,
+  hint,
+  current,
+  placeholder,
+  loadOptions,
+  onSave,
+}: {
+  label: string;
+  hint?: string;
+  current?: string | null;
+  placeholder?: string;
+  loadOptions: () => Promise<{ models: string[]; reason: string | null }>;
+  onSave: (value: string) => unknown;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  // null = never fetched; [] = fetched and empty, with reason saying why.
+  const [options, setOptions] = useState<string[] | null>(null);
+  const [reason, setReason] = useState<string | null>(null);
+  const { hidden } = useRowSearch(label);
+  if (hidden) return null;
+  const filter = (draft ?? "").trim().toLowerCase();
+  const matches = (options ?? []).filter((o) => o.toLowerCase().includes(filter));
+  const fetchOnce = () => {
+    if (options !== null) return;
+    setOptions([]);
+    void loadOptions()
+      .then((r) => {
+        setOptions(r.models);
+        setReason(r.reason);
+      })
+      .catch(() => setReason("fetch-failed"));
+  };
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-medium">{label}</div>
+        {hint && <InfoTip text={hint} />}
+      </div>
+      <div className="relative min-w-0">
+        <input
+          value={draft ?? current ?? ""}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            fetchOnce();
+            setOpen(true);
+          }}
+          onBlur={() => {
+            setOpen(false);
+            if (draft === null || draft === (current ?? "")) return;
+            void onSave(draft);
+            setDraft(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") {
+              setDraft(null);
+              setOpen(false);
+            }
+          }}
+          placeholder={placeholder}
+          autoComplete="off"
+          className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+        />
+        {open && matches.length > 0 && (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
+            {matches.map((o) => (
+              <button
+                key={o}
+                type="button"
+                // mousedown, ahead of the input's blur-commit, or the click
+                // would save the half-typed draft instead of the pick.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setDraft(o);
+                  setOpen(false);
+                  if (o !== (current ?? "")) void onSave(o);
+                }}
+                className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
+              >
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
+        {options !== null && options.length === 0 && reason && (
+          <div className="mt-0.5 text-xs text-[var(--muted)]">
+            couldn&apos;t list models ({reason}) — type a name instead
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // A secret already installed shows its tail and an empty box. Typing replaces
 // it; leaving it blank keeps what is there. An input pre-filled with a masked
 // string would submit the mask as the new value the first time somebody

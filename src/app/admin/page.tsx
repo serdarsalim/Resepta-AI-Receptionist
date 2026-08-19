@@ -19,7 +19,7 @@
 // second copy of every operational term for nobody.
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ import {
   ago,
   AdminSearchProvider,
   Count,
+  ModelRow,
   Plane,
   Row,
   Section,
@@ -48,6 +49,9 @@ export default function AdminPage() {
   const deployment = useQuery(api.platform.deploymentHealth, allowed ? {} : "skip");
   const mail = useQuery(api.platformConfig.status, allowed ? {} : "skip");
   const setConfig = useMutation(api.platformConfig.set);
+  // The model pickers' option source: each provider's own /v1/models, read
+  // with the platform key, fetched lazily on first focus (see ModelRow).
+  const listModels = useAction(api.platformConfig.listModels);
   // Two rooms, not one scroll: the tenant list is what the operator opens
   // this page FOR, and deployment settings are visited a handful of times
   // ever. Living below the table meant the settings had no address and the
@@ -366,6 +370,18 @@ export default function AdminPage() {
               masked={mail.anthropicApiKey}
               onSave={(value) => setConfig({ key: "anthropicApiKey", value })}
             />
+            <ModelRow
+              label="Anthropic model"
+              hint={`What every org runs while it resolves to Anthropic. Pick from what the platform key can reach, or type any name. Blank = the default, claude-sonnet-5.${
+                mail.chatAgentProvider === "anthropic"
+                  ? " This is the active provider."
+                  : " Inactive while OpenAI is selected; kept for the switch back."
+              } A model lib/llm.ts has not priced meters at $0 until its row is added.`}
+              current={mail.anthropicModel ?? undefined}
+              placeholder="claude-sonnet-5"
+              loadOptions={() => listModels({ provider: "anthropic" })}
+              onSave={(value) => setConfig({ key: "anthropicModel", value })}
+            />
             <SecretRow
               label="OpenAI API key"
               hint={
@@ -377,6 +393,18 @@ export default function AdminPage() {
               }
               masked={mail.openaiApiKey}
               onSave={(value) => setConfig({ key: "openaiApiKey", value })}
+            />
+            <ModelRow
+              label="OpenAI model"
+              hint={`What every org runs while it resolves to OpenAI. Pick from what the platform key can reach, or type any name. Blank = the default, gpt-5.2.${
+                mail.chatAgentProvider === "openai"
+                  ? " This is the active provider."
+                  : " Inactive while Anthropic is selected; kept for the switch."
+              } A model lib/llm.ts has not priced meters at $0 until its row is added.`}
+              current={mail.openaiModel ?? undefined}
+              placeholder="gpt-5.2"
+              loadOptions={() => listModels({ provider: "openai" })}
+              onSave={(value) => setConfig({ key: "openaiModel", value })}
             />
             <Row
               label="Voice rate (USD per minute)"
@@ -397,15 +425,6 @@ export default function AdminPage() {
                       : String(Math.max(0, Math.round(parsed * 1_000_000))),
                 });
               }}
-            />
-            <Row
-              label="Model override"
-              hint="Optional exact model name for the selected provider (defaults: claude-sonnet-5 / gpt-5.2). Applies only while an org resolves to the platform provider. Unknown names fail visibly in the flight recorder and meter at $0 until priced in lib/llm.ts."
-              current={mail.chatAgentModel ?? undefined}
-              placeholder={
-                mail.chatAgentProvider === "openai" ? "gpt-5.2" : "claude-sonnet-5"
-              }
-              onSave={(value) => setConfig({ key: "chatAgentModel", value })}
             />
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
               <div className="flex items-center gap-2">
