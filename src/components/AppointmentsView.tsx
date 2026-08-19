@@ -707,27 +707,31 @@ type CalendarAppointment = {
   total?: number;
 };
 
-// Fill per status. No left accent bars: the fill carries the state, and a
-// cancelled or missed booking should read quieter than a live one.
+// Fill per status AND per tense, the way Google Calendar paints it: an
+// upcoming booking is a solid lavender chip with white text, a past one the
+// pale wash of the same hue. The tense split outranks the status split —
+// whether it already happened is the first thing a glance wants — so past
+// scheduled and past confirmed both fade the same way.
 // A cluster stands for several bookings that may hold several DIFFERENT
 // statuses, so it cannot wear one of them. What it can wear is the one fact
-// true of all of them at once: whether the day has been and gone. Past reads
-// grey like every other finished block on the row; upcoming keeps the live
-// tint. An outlined white chip was tried and read as a hole in the grid.
+// true of all of them at once: whether the day has been and gone.
 const CLUSTER_STYLE = {
-  past: "bg-[var(--muted-bg)] text-[var(--muted)]",
-  upcoming: "bg-[var(--brand-soft)] text-[var(--foreground)]",
+  past: "bg-[var(--event-past)] text-[var(--event-past-fg)]",
+  upcoming: "bg-[var(--event-soft)] text-[var(--foreground)]",
 };
 
-const BLOCK_STYLE: Record<string, string> = {
-  // Booked but unconfirmed reads lighter than confirmed, so a glance down the
-  // week shows who has answered.
-  scheduled: "bg-[var(--brand-soft)] text-[var(--foreground)]",
-  confirmed:
-    "bg-[color-mix(in_srgb,var(--brand)_26%,var(--card))] text-[var(--foreground)]",
-  completed: "bg-[var(--muted-bg)] text-[var(--muted)]",
-  no_show: "bg-red-500/10 text-red-700 dark:text-red-400",
-};
+function blockStyle(status: string, isPast: boolean): string {
+  // A no-show stays red in both tenses: it is the one state worth spotting
+  // weeks later.
+  if (status === "no_show") return "bg-red-500/10 text-red-700 dark:text-red-400";
+  if (status === "completed" || isPast)
+    return "bg-[var(--event-past)] text-[var(--event-past-fg)]";
+  // Booked but unconfirmed reads a shade lighter than confirmed, so a glance
+  // down the week still shows who has answered — but both are unmistakably
+  // "still to come" next to the washed-out past.
+  if (status === "confirmed") return "bg-[var(--event)] text-white";
+  return "bg-[color-mix(in_srgb,var(--event)_72%,var(--card))] text-white";
+}
 
 // Body in lib/datetime, alongside addLocalDays — the two have to agree about
 // what a day is, and they were in different files.
@@ -844,6 +848,33 @@ const startOfWeek = startOfLocalWeek;
 function minutesInto(ms: number): number {
   const d = new Date(ms);
   return d.getHours() * 60 + d.getMinutes();
+}
+
+// Wall-clock label for a minute-of-day, for the slot being drawn — the band
+// works in grid minutes, not timestamps, so formatTime can't serve it.
+function formatMinutes(minute: number): string {
+  const clamped = Math.max(0, Math.min(minute, 24 * 60));
+  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(
+    clamped % 60,
+  ).padStart(2, "0")}`;
+}
+
+// "GMT+03" for the gutter corner, computed from the BUSINESS's zone — the
+// same zone the closed shading uses, so the two can never disagree. Google
+// prints the viewer's offset there; ours is a business tool, and the offset
+// that explains the grid is the salon's.
+function gmtLabel(timezone: string | undefined, at: number): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      timeZoneName: "shortOffset",
+    }).formatToParts(new Date(at));
+    const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+    // "GMT+3" → "GMT+03"; "GMT+5:30" and plain "GMT" pass through untouched.
+    return name.replace(/^GMT([+-])(\d)$/, "GMT$10$2");
+  } catch {
+    return "GMT";
+  }
 }
 
 type Cluster = { key: string; startAt: number; endAt: number; size: number };
@@ -1337,7 +1368,13 @@ function Calendar({
       {/* pt-3: the row sits inside a card now, and a weekday name flush
           against the card's top edge reads as clipped. */}
       <div className="flex pr-[10px] pt-3">
-        <div className="w-12 shrink-0" />
+        {/* The gutter's slice of the header carries the UTC offset, exactly
+            where Google puts it: it labels the hour column under it. */}
+        <div className="flex w-12 shrink-0 items-end justify-end pb-2 pr-2">
+          <span className="text-[10px] text-[var(--muted)]">
+            {gmtLabel(timezone, days[0])}
+          </span>
+        </div>
         {staffColumns
           ? columns.map((column) => (
               <div
@@ -1351,13 +1388,16 @@ function Calendar({
               const isToday = startOfDay(now) === day;
               return (
                 <div key={day} className="min-w-0 flex-1 pb-2 text-center">
-                  <div className="text-xs text-[var(--muted)]">
+                  {/* Full-strength ink, not the timestamp grey: the dates and
+                      hours are the grid's coordinates, and coordinates you
+                      squint at defeat the grid. */}
+                  <div className="text-xs font-medium text-[var(--foreground)]">
                     {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(day))}
                   </div>
                   <div
                     className={`mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
                       isToday
-                        ? "bg-[var(--brand)] font-semibold text-white"
+                        ? "bg-[var(--accent)] font-semibold text-white"
                         : "text-[var(--foreground)]"
                     }`}
                   >
@@ -1385,7 +1425,7 @@ function Calendar({
                 key={hour}
                 // The first label would be half cut by the top edge, so it
                 // hangs below its line instead of centring on it.
-                className={`absolute right-2 text-[11px] tabular-nums text-[var(--muted)] ${
+                className={`absolute right-2 text-[11px] tabular-nums text-[var(--foreground)] ${
                   i === 0 ? "" : "-translate-y-1/2"
                 }`}
                 style={{ top: i * HOUR_PX }}
@@ -1401,7 +1441,7 @@ function Calendar({
                 is correct — the current time is the more useful of the two. */}
             {columns.some((column) => startOfDay(now) === column.day) && (
               <span
-                className="absolute right-1 z-30 -translate-y-1/2 rounded bg-[var(--brand)] px-1 text-[10px] font-medium tabular-nums leading-4 text-white"
+                className="absolute right-1 z-30 -translate-y-1/2 rounded bg-[var(--now-line)] px-1 text-[10px] font-medium tabular-nums leading-4 text-white"
                 style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
               >
                 {formatTime(now, language)}
@@ -1492,21 +1532,33 @@ function Calendar({
                 {(() => {
                   const band = drag ?? provisional;
                   if (!band || band.day !== column.day) return null;
+                  const bandHeight = Math.max(
+                    ((band.endMinute - band.startMinute) / 60) * HOUR_PX - 2,
+                    14,
+                  );
+                  // A solid chip, not a dashed outline: Google draws the slot
+                  // you are creating as the event it is about to become, and
+                  // that is what makes the gesture feel like placing a booking
+                  // rather than selecting a range. The live time range rides
+                  // inside as soon as there is room for a line of text.
                   return (
                     <div
                       aria-hidden
                       data-slot-band
-                      className="pointer-events-none absolute z-20 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand-soft)] opacity-80"
+                      className="pointer-events-none absolute z-20 overflow-hidden rounded-md bg-[var(--event)] px-1.5 py-0.5 text-[11px] leading-tight text-white opacity-90 shadow-md"
                       style={{
                         top: ((band.startMinute - dayStart * 60) / 60) * HOUR_PX,
-                        height: Math.max(
-                          ((band.endMinute - band.startMinute) / 60) * HOUR_PX - 2,
-                          14,
-                        ),
+                        height: bandHeight,
                         left: 2,
                         right: 2,
                       }}
-                    />
+                    >
+                      {bandHeight >= 18 && (
+                        <span className="block truncate font-medium tabular-nums">
+                          {formatMinutes(band.startMinute)} – {formatMinutes(band.endMinute)}
+                        </span>
+                      )}
+                    </div>
                   );
                 })()}
                 {placeColumn(
@@ -1634,9 +1686,12 @@ function Calendar({
                         width: `calc(${100 / lanes}% - 4px)`,
                         touchAction: "none",
                       }}
-                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${
-                        BLOCK_STYLE[row.status] ?? BLOCK_STYLE.scheduled
-                      } ${isGood ? "border border-dashed border-current/40" : ""} ${
+                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight transition-opacity hover:opacity-80 active:cursor-grabbing ${blockStyle(
+                        row.status,
+                        row.startAt +
+                          (row.durationMinutes ?? DEFAULT_DURATION) * 60_000 <
+                          now,
+                      )} ${isGood ? "border border-dashed border-current/40" : ""} ${
                         drag?.row?._id === row._id
                           ? "opacity-30"
                           : ""
@@ -1696,10 +1751,10 @@ function Calendar({
                 {showNow && (
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 z-30 border-t border-[var(--brand)]"
+                    className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-[var(--now-line)]"
                     style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
                   >
-                    <span className="absolute -left-0.5 -top-[3px] h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
+                    <span className="absolute -left-[5px] -top-[7px] h-3 w-3 rounded-full bg-[var(--now-line)]" />
                   </div>
                 )}
               </div>

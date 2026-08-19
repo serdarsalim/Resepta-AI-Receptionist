@@ -127,7 +127,7 @@ export function YearGrid({
                     onClick={() => onOpenDay(day)}
                     className={`relative mx-auto flex h-5 w-5 items-center justify-center rounded-full text-[10px] tabular-nums transition-colors ${
                       isToday
-                        ? "bg-[var(--brand)] font-medium text-white"
+                        ? "bg-[var(--accent)] font-medium text-white"
                         : booked
                           ? "font-medium text-[var(--foreground)] hover:bg-[var(--muted-bg)]"
                           : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
@@ -139,7 +139,7 @@ export function YearGrid({
                         what. Suppressed under today's filled circle, where it
                         would be a dot on a dot. */}
                     {booked && !isToday && (
-                      <span className="absolute -bottom-px h-1 w-1 rounded-full bg-[var(--brand)]" />
+                      <span className="absolute -bottom-px h-1 w-1 rounded-full bg-[var(--event)]" />
                     )}
                   </button>
                 );

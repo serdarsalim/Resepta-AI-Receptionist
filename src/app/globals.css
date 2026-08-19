@@ -81,6 +81,18 @@
   --accent-fg: #ffffff;
   /* Brand-tinted wash for positive pills (confirmed status). */
   --brand-soft: color-mix(in srgb, var(--brand) 12%, var(--card));
+  /* Calendar event colour — lavender, per Google Calendar's playbook: a hue
+     that belongs to EVENTS and nothing else. Not --brand (green means the
+     product), not --accent (blue means "do something"). Upcoming events wear
+     the solid; past ones the pale wash, so a glance separates what is coming
+     from what is already done. */
+  --event: #7c5cf0;
+  --event-soft: color-mix(in srgb, var(--event) 18%, var(--card));
+  --event-past: color-mix(in srgb, var(--event) 9%, var(--card));
+  --event-past-fg: color-mix(in srgb, var(--event) 45%, var(--muted));
+  /* The now-line. Red like every calendar people already read, and red ONLY
+     here — it marks the moment, it is not a danger state. */
+  --now-line: #ef4444;
   /* Calendar rules. Not --border: that one is tuned for the edge of a card,
      where it has to be found, and a grid drawn at that weight reads as a
      spreadsheet. These are the faintest lines that still divide. */
@@ -140,6 +152,14 @@
   --accent: #3b82f6;
   --accent-fg: #ffffff;
   --brand-soft: color-mix(in srgb, var(--brand) 18%, var(--card));
+  /* A touch lighter than the light-mode violet so the solid chips do not go
+     muddy on near-black; the washes mix a little stronger for the same
+     reason. */
+  --event: #8b6ef5;
+  --event-soft: color-mix(in srgb, var(--event) 24%, var(--card));
+  --event-past: color-mix(in srgb, var(--event) 12%, var(--card));
+  --event-past-fg: color-mix(in srgb, var(--event) 55%, var(--muted));
+  --now-line: #ef4444;
   --grid-line: color-mix(in srgb, var(--border) 85%, transparent);
   --grid-line-soft: color-mix(in srgb, var(--border) 45%, transparent);
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);

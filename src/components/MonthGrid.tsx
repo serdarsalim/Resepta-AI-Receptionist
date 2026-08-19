@@ -121,7 +121,7 @@ export function MonthGrid({
         {headers.map((name) => (
           <div
             key={name}
-            className="pb-1 text-center text-[11px] font-medium text-[var(--muted)]"
+            className="pb-1 text-center text-[11px] font-medium text-[var(--foreground)]"
           >
             {name}
           </div>
@@ -162,7 +162,7 @@ export function MonthGrid({
                 }}
                 className={`mb-0.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums transition-colors ${
                   isToday
-                    ? "bg-[var(--brand)] font-medium text-white"
+                    ? "bg-[var(--accent)] font-medium text-white"
                     : inMonth
                       ? "text-[var(--foreground)] hover:bg-[var(--muted-bg)]"
                       : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
@@ -190,7 +190,11 @@ export function MonthGrid({
                     className={`block w-full truncate rounded px-1 text-left text-[11px] leading-4 transition-opacity hover:opacity-80 ${
                       row.status === "cancelled"
                         ? "text-[var(--muted)] line-through"
-                        : "bg-[var(--brand-soft)] text-[var(--foreground)]"
+                        : // Same tense split as the week grid: what already
+                          // happened fades, what is coming carries the colour.
+                          day < today
+                          ? "bg-[var(--event-past)] text-[var(--event-past-fg)]"
+                          : "bg-[var(--event-soft)] text-[var(--foreground)]"
                     }`}
                   >
                     <span className="tabular-nums">{formatTime(row.startAt, language)}</span>{" "}
