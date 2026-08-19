@@ -712,11 +712,14 @@ function RuleEditor({
     // half a page so that the other half could show the same words again.
     <div className="space-y-4 pb-4">
       {/* When, Channel, Subject: the settings-page grammar — label left,
-          capped input right (ROW_GRID, same as Business and Account), because
-          that is what these are: three properties of one message. The subject
-          used to be a bare full-width box above the editor, which read as a
-          second body; a labelled row cannot be mistaken for one. */}
-      <div className={ROW_GRID}>
+          capped input right — but NOT the settings-page grid. ROW_GRID
+          reserves 260px for labels because Business has labels like "Incoming
+          email address"; the longest word here is "Email subject", and under
+          it that column was mostly void, with the values starting a hand's
+          width from the words that name them. Same grammar, local measurements:
+          a label column sized to these labels, tight row gap, rows centred
+          because every one of them is a single line. */}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-[minmax(6rem,8rem)_minmax(0,24rem)] sm:items-center">
         {meta}
         {emailEnabled && (
           <>
@@ -1590,11 +1593,11 @@ function RulesCard({
                         : undefined
                 }
               />
-              <span className="flex min-h-9 items-center gap-1.5 text-sm">
+              <span className="flex min-h-8 items-center gap-1.5 text-sm">
                 {ruleWhen(opened)}
               </span>
               <RowLabel label={t("settings.rulesWhere")} />
-              <span className="flex min-h-9 flex-wrap items-center gap-1.5 text-xs">
+              <span className="flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
                 {wiredFor(opened).map((channel) => {
                   const on = activeChannels(opened).has(channel);
                   return (
@@ -1605,9 +1608,9 @@ function RulesCard({
                       aria-checked={on}
                       aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
                       onClick={() => toggleChannel(opened, channel)}
-                      className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 transition-colors ${
+                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors ${
                         on
-                          ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                           : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
                       }`}
                     >
@@ -1616,8 +1619,8 @@ function RulesCard({
                           state as a button not yet discovered. */}
                       {on && (
                         <svg
-                          width="11"
-                          height="11"
+                          width="12"
+                          height="12"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -2151,7 +2154,10 @@ export function RemindersView() {
   return (
     // Wider than the settings default: the expanded rule panel is a real
     // split-pane (editor beside a rendered email) and 3xl squeezed both.
-    <div className="mx-auto max-w-5xl space-y-4 page-stack">
+    // max-w-3xl like Services: both pages are a list of the org's own rows,
+    // and the editor inside is a message column — 5xl gave it newspaper-wide
+    // lines nobody writes an SMS-length text in.
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {!isOwner && (
         <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
           {t("settings.ownerOnly")}
