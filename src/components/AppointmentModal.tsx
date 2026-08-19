@@ -11,13 +11,9 @@ import {
   moneyInputValue,
   parseMoney,
 } from "@/lib/money";
-import {
-  toDatetimeLocalValue,
-  fromDatetimeLocalValue,
-  formatDayHeading,
-  formatTime,
-} from "@/lib/datetime";
+import { formatDayHeading, formatTime } from "@/lib/datetime";
 import { PhoneInput } from "./PhoneField";
+import { WhenPicker } from "./WhenPicker";
 import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -650,37 +646,23 @@ export function AppointmentModal({
               icon shouted over 12px of label. Two columns, every row. */}
           <div>
             {timeEditing ? (
-              <div className="min-w-0 space-y-3">
-                <label className="flex items-center gap-3 text-xs font-medium">
-                  <span className="w-24 shrink-0">{t("appointments.when")}</span>
-                  <input
-                    type="datetime-local"
-                    className="min-w-0 flex-1"
-                    // Mounts on the click that asked to edit, so focus lands
-                    // where the click was aimed.
-                    autoFocus
-                    value={toDatetimeLocalValue(startAt)}
-                    onChange={(e) => {
-                      const next = fromDatetimeLocalValue(e.target.value);
-                      if (!Number.isNaN(next)) setStartAt(next);
-                    }}
-                  />
-                </label>
-                {/* An order of goods has a moment, not a length — showing a
-                    minutes field for it would be a number that means nothing. */}
-                {!goodsOnly && (
-                  <label className="flex items-center gap-3 text-xs font-medium">
-                    <span className="w-24 shrink-0">{t("appointments.duration")}</span>
-                    <input
-                      type="number"
-                      min={5}
-                      step={5}
-                      className="min-w-0 flex-1"
-                      value={durationMinutes}
-                      onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
-                    />
-                  </label>
-                )}
+              /* Google's editor: a date chip that opens a mini month, and
+                 start–end time chips that type OR pick. Duration is what the
+                 booking machinery speaks, so WhenPicker reports one — but
+                 the owner only ever handles times. This replaces a native
+                 datetime-local (which typed the year to 0025 with no way
+                 back) and a raw minutes box. */
+              <div className="flex min-w-0 items-start gap-3 text-xs font-medium">
+                <span className="w-24 shrink-0 pt-2.5">{t("appointments.when")}</span>
+                <WhenPicker
+                  startAt={startAt}
+                  durationMinutes={durationMinutes}
+                  showEnd={!goodsOnly}
+                  onChange={(nextStart, nextDuration) => {
+                    setStartAt(nextStart);
+                    setDurationMinutes(nextDuration);
+                  }}
+                />
               </div>
             ) : (
               /* Google's time row: the value is prose — the day, then the

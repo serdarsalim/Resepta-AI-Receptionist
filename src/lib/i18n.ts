@@ -2948,6 +2948,7 @@ const dictionary = {
   },
   "services.active": { tr: "Kullanımda", en: "Active", de: "Aktiv" },
   "services.minutes": { tr: "dk", en: "min", de: "Min." },
+  "services.hours": { tr: "sa", en: "hr", de: "Std." },
 
   "fields.title": {
     tr: "Kişi alanları",
