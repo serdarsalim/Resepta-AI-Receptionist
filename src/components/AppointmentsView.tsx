@@ -951,6 +951,10 @@ const APPROX_GRID_PX = 1050;
 // How close to the bottom edge counts as "resize" rather than "move". Sized for
 // a fingertip, not a mouse pointer.
 const RESIZE_HANDLE_PX = 10;
+// The bare strip every chip leaves at the column's right edge, so a full slot
+// still has grid to press for another booking. Google's proportions: chips
+// hug the left, the breathing room is all on the right.
+const BLOCK_RIGHT_GUTTER_PX = 14;
 
 // Geometry lives in lib/calendarDrag.ts so the arithmetic can be tested without
 // a browser; this only adds what the grid needs on top of it.
@@ -1505,8 +1509,10 @@ function Calendar({
                       style={{
                         top: ((band.startMinute - dayStart * 60) / 60) * HOUR_PX,
                         height: bandHeight,
-                        left: 2,
-                        right: 2,
+                        // Same asymmetry as the saved chips, so the draft sits
+                        // exactly where the booking will land.
+                        left: 1,
+                        right: BLOCK_RIGHT_GUTTER_PX,
                       }}
                     >
                       {bandHeight >= 18 && (
@@ -1583,11 +1589,16 @@ function Calendar({
                       title={[name, row.serviceName, row.staffName]
                         .filter(Boolean)
                         .join(" · ")}
+                      // Chips sit nearly flush left and stop short of the
+                      // column's right edge — Google's asymmetry. The bare
+                      // strip is the point: a fully booked slot still leaves
+                      // grid to press for the NEXT booking, instead of every
+                      // pixel of a busy hour opening something already there.
                       style={{
                         top,
                         height,
-                        left: `calc(${(lane / lanes) * 100}% + 2px)`,
-                        width: `calc(${100 / lanes}% - 4px)`,
+                        left: `calc((100% - ${BLOCK_RIGHT_GUTTER_PX}px) * ${lane / lanes} + 1px)`,
+                        width: `calc((100% - ${BLOCK_RIGHT_GUTTER_PX}px) / ${lanes} - 2px)`,
                         touchAction: "none",
                       }}
                       // ring-1 in the card colour: the hairline that keeps two

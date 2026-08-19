@@ -29,11 +29,12 @@ import type { Id } from "../../convex/_generated/dataModel";
 // The modal also traps focus and closes on Escape, because the grid behind it
 // is a field of buttons and tabbing into them would be a trap of its own.
 
-// The same 32rem the centred sheet has always been (max-w-lg). Anchoring moved
-// the panel; it did not shrink the form. Google's popover is narrower because
-// it is a QUICK create with "More options" behind it, and a salon that has to
-// take a second step to name a service has not been helped.
-const PANEL_W = 512;
+// Google's popover width, near enough. The sheet could afford to come down
+// from 32rem once the labels moved into their own left column and the wide
+// two-panel customer picker died — the fields left over are one column of
+// answers, and width past what they need just pushes the calendar further
+// out from under the popup.
+const PANEL_W = 448;
 
 export type ModalDraft = {
   appointmentId?: Id<"appointments">;
@@ -434,7 +435,7 @@ export function AppointmentModal({
         className={
           placement
             ? "max-h-[90vh] overflow-y-auto rounded-3xl border border-transparent bg-[var(--card)] p-5 shadow-2xl dark:border-[var(--border)]"
-            : "max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-transparent bg-[var(--card)] p-5 shadow-xl dark:border-[var(--border)] sm:rounded-3xl"
+            : "max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-transparent bg-[var(--card)] p-5 shadow-xl dark:border-[var(--border)] sm:rounded-3xl"
         }
       >
         {/* No printed heading — Google's popup leads with the title field and
