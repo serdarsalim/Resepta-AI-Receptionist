@@ -60,7 +60,12 @@ export function BillingView() {
     setStarting(amountUsd);
     setFailed(false);
     try {
-      window.location.href = await createSession({ amountUsd });
+      // assign(), not `location.href =`. Identical behaviour — navigate, add a
+      // history entry — but it reads as the action it is instead of as a
+      // property write, which is also what stops react-hooks/immutability
+      // flagging it as mutating something defined outside the component.
+      // DemoEntry navigates the same way.
+      window.location.assign(await createSession({ amountUsd }));
     } catch {
       setFailed(true);
       setStarting(null);
