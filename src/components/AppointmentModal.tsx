@@ -411,34 +411,45 @@ export function AppointmentModal({
         // books from the counter phone more often than from a desk. Anchored,
         // it keeps the same width it always had: the form did not get smaller
         // just because it moved.
+        // Google's popover chrome: big radius, deep shadow, no drawn border —
+        // the shadow IS the edge. Dark mode keeps a hairline because a shadow
+        // is invisible on near-black (same rule as --card-shadow).
         className={
           placement
-            ? "max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl"
-            : "max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl"
+            ? "max-h-[90vh] overflow-y-auto rounded-3xl border border-transparent bg-[var(--card)] p-5 shadow-2xl dark:border-[var(--border)]"
+            : "max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-transparent bg-[var(--card)] p-5 shadow-xl dark:border-[var(--border)] sm:rounded-3xl"
         }
       >
-        <h2 className="mb-3 text-sm font-semibold">
-          {editing ? t("appointments.edit") : t("appointments.new")}
-        </h2>
+        {/* No printed heading — Google's popup leads with the title field and
+            lets the X carry "this is dismissible". The dialog still announces
+            itself through aria-label above. */}
+        <div className="mb-1 flex justify-end">
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={onClose}
+            className="rounded-full p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            <XIcon />
+          </button>
+        </div>
 
-        <form ref={formRef} className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <form ref={formRef} className="space-y-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           {draft.customerId ? (
-            <div className="text-sm">
-              <span className="text-[var(--muted)]">{t("appointments.customer")}: </span>
-              {/* The name is the way to the record. Underlined because a link
-                  that only reveals itself on hover is a link nobody finds —
-                  and this is the one route from a booking to the person's
-                  history, consent and contact details. */}
+            // The customer IS this booking's title, so it wears the title
+            // slot: big type over the underline, exactly where Google puts
+            // "Add title". The name is still the way to the record.
+            <div className="border-b-2 border-[var(--border)] pb-1.5">
               {onOpenCustomer ? (
                 <button
                   type="button"
                   onClick={() => onOpenCustomer(draft.customerId!)}
-                  className="font-medium underline underline-offset-2 transition-colors hover:text-[var(--accent)]"
+                  className="text-xl font-normal text-[var(--foreground)] transition-colors hover:text-[var(--accent)]"
                 >
                   {draft.customerName}
                 </button>
               ) : (
-                <span className="font-medium">{draft.customerName}</span>
+                <span className="text-xl font-normal">{draft.customerName}</span>
               )}
             </div>
           ) : (
@@ -450,35 +461,27 @@ export function AppointmentModal({
                   either (schedule.prepareCreate accepts customerId OR
                   newCustomer, and dedupes the latter by phone); this is the
                   half that was missing. */}
-              <div className="space-y-1.5">
-                <span className="block text-xs text-[var(--muted)]">
-                  {t("appointments.customer")}
-                </span>
-                {/* The segmented control this app already uses, the same one
-                    the calendar switches views with. Two radios in a modal
-                    read as a question to answer before you may proceed; a
-                    segment reads as which of two things you are looking at,
-                    which is what this is. type="button" on both: inside a form
-                    a bare button submits it. */}
-                <div className="inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5 text-sm">
-                  {(["existing", "new"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      aria-pressed={mode === option}
-                      onClick={() => setMode(option)}
-                      className={`rounded-md px-3 py-1 transition-colors ${
-                        mode === option
-                          ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
-                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                      }`}
-                    >
-                      {option === "existing"
-                        ? t("appointments.existingCustomer")
-                        : t("appointments.newCustomer")}
-                    </button>
-                  ))}
-                </div>
+              {/* Existing or new, as Google's Event/Task chips: the active one
+                  is a soft accent pill, the other plain text. type="button" on
+                  both: inside a form a bare button submits it. */}
+              <div className="flex gap-1 text-sm">
+                {(["existing", "new"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={mode === option}
+                    onClick={() => setMode(option)}
+                    className={`rounded-lg px-3 py-1 transition-colors ${
+                      mode === option
+                        ? "bg-[color-mix(in_srgb,var(--accent)_12%,var(--card))] font-medium text-[var(--accent)]"
+                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {option === "existing"
+                      ? t("appointments.existingCustomer")
+                      : t("appointments.newCustomer")}
+                  </button>
+                ))}
               </div>
 
               {/* Both panels occupy ONE grid cell, so the region is always as
@@ -515,8 +518,11 @@ export function AppointmentModal({
                       a short window, or with a conflict banner showing. It
                       currently happens not to clip, and "happens not to" is
                       what this repo keeps shipping and regretting. */}
-                  <label className="block text-xs font-medium" htmlFor="modal-customer">
-                    {t("appointments.findCustomer")}
+                  <label className="block" htmlFor="modal-customer">
+                    {/* The label lives on for screen readers; sighted users get
+                        what Google gives them — a big placeholder where the
+                        title goes. */}
+                    <span className="sr-only">{t("appointments.findCustomer")}</span>
                     <input
                       id="modal-customer"
                       type="search"
@@ -524,7 +530,11 @@ export function AppointmentModal({
                       role="combobox"
                       aria-expanded={listOpen}
                       aria-controls="modal-customer-list"
-                      className="mt-1"
+                      // Google's title field: no box, just a baseline that
+                      // thickens to accent on focus. rounded-none because the
+                      // base layer rounds every input, and a rounded underline
+                      // curls at the ends.
+                      className="rounded-none border-0 border-b-2 border-[var(--border)] bg-transparent px-0 py-1.5 text-xl placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
                       placeholder={t("appointments.findCustomerHint")}
                       value={customerQuery}
                       ref={searchRef}
@@ -633,9 +643,12 @@ export function AppointmentModal({
                   }`}
                   aria-hidden={mode !== "new"}
                 >
+                  {/* The name pair is this mode's title field, so it wears the
+                      same underline the search box does — placeholders carry
+                      the prompts, the labels stay for screen readers. */}
                   <div className="grid grid-cols-2 gap-3">
-                    <label className="block text-xs font-medium">
-                      {t("customers.firstName")}
+                    <label className="block">
+                      <span className="sr-only">{t("customers.firstName")}</span>
                       <input
                         ref={firstFieldRef}
                         name="firstName"
@@ -644,12 +657,17 @@ export function AppointmentModal({
                         // open, and a required field nobody can see refuses
                         // the form with nothing on screen to fix.
                         required={mode === "new"}
-                        className="mt-1"
+                        placeholder={t("customers.firstName")}
+                        className="rounded-none border-0 border-b-2 border-[var(--border)] bg-transparent px-0 py-1.5 text-xl placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
                       />
                     </label>
-                    <label className="block text-xs font-medium">
-                      {t("customers.lastName")}
-                      <input name="lastName" className="mt-1" />
+                    <label className="block">
+                      <span className="sr-only">{t("customers.lastName")}</span>
+                      <input
+                        name="lastName"
+                        placeholder={t("customers.lastName")}
+                        className="rounded-none border-0 border-b-2 border-[var(--border)] bg-transparent px-0 py-1.5 text-xl placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                      />
                     </label>
                   </div>
                   <label className="block text-xs font-medium" htmlFor="modal-phone">
@@ -670,39 +688,51 @@ export function AppointmentModal({
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
-              {t("appointments.when")}
-              <input
-                type="datetime-local"
-                className="mt-1"
-                value={toDatetimeLocalValue(startAt)}
-                onChange={(e) => {
-                  const next = fromDatetimeLocalValue(e.target.value);
-                  if (!Number.isNaN(next)) setStartAt(next);
-                }}
-              />
-            </label>
-            {/* An order of goods has a moment, not a length — showing a
-                minutes field for it would be a number that means nothing. */}
-            {!goodsOnly && (
-              <label className="block text-xs font-medium">
-                {t("appointments.duration")}
+          {/* From here down, every row leads with a small grey glyph the way
+              Google's popup does — the icon column is what makes a stack of
+              unrelated fields read as one event card. */}
+          <div className="flex gap-3">
+            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+              <ClockIcon />
+            </span>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
+              <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
+                {t("appointments.when")}
                 <input
-                  type="number"
-                  min={5}
-                  step={5}
+                  type="datetime-local"
                   className="mt-1"
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
+                  value={toDatetimeLocalValue(startAt)}
+                  onChange={(e) => {
+                    const next = fromDatetimeLocalValue(e.target.value);
+                    if (!Number.isNaN(next)) setStartAt(next);
+                  }}
                 />
               </label>
-            )}
+              {/* An order of goods has a moment, not a length — showing a
+                  minutes field for it would be a number that means nothing. */}
+              {!goodsOnly && (
+                <label className="block text-xs font-medium">
+                  {t("appointments.duration")}
+                  <input
+                    type="number"
+                    min={5}
+                    step={5}
+                    className="mt-1"
+                    value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
+                  />
+                </label>
+              )}
+            </div>
           </div>
 
           {/* One row per service delivered. A cut plus a beard trim is one
               visit with two lines, not two bookings on top of each other. */}
-          <div className="space-y-1.5">
+          <div className="flex gap-3">
+            <span className="mt-0.5 shrink-0 text-[var(--muted)]" aria-hidden>
+              <TagIcon />
+            </span>
+            <div className="min-w-0 flex-1 space-y-1.5">
             <span className="block text-xs text-[var(--muted)]">
               {t("appointments.service")}
             </span>
@@ -789,42 +819,48 @@ export function AppointmentModal({
                 </span>
               )}
             </div>
+            </div>
           </div>
 
           {/* Paired, the way When and Duration are. Member was a half-width
               select sitting alone on a full-width row, so the sheet spent two
               rows and a whole textarea's worth of height on two fields that
               are each one line of answer. */}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs font-medium">
-              {staffLabel}
-              <select
-                className="mt-1"
-                value={staffId}
-                onChange={(e) => setStaffId(e.target.value)}
-              >
-                <option value="">—</option>
-                {staff
-                  .filter((person) => person.active || person._id === draft.staffId)
-                  .map((person) => (
-                    <option key={person._id} value={person._id}>
-                      {person.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="block text-xs font-medium">
-              {t("appointments.notes")}
-              {/* One row, and it grows as you type rather than reserving space
-                  for words nobody has written. Most bookings carry no note at
-                  all. */}
-              <textarea
-                rows={1}
-                className="mt-1 resize-y"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
+          <div className="flex gap-3">
+            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+              <PersonIcon />
+            </span>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
+              <label className="block text-xs font-medium">
+                {staffLabel}
+                <select
+                  className="mt-1"
+                  value={staffId}
+                  onChange={(e) => setStaffId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {staff
+                    .filter((person) => person.active || person._id === draft.staffId)
+                    .map((person) => (
+                      <option key={person._id} value={person._id}>
+                        {person.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block text-xs font-medium">
+                {t("appointments.notes")}
+                {/* One row, and it grows as you type rather than reserving
+                    space for words nobody has written. Most bookings carry no
+                    note at all. */}
+                <textarea
+                  rows={1}
+                  className="mt-1 resize-y"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
           </div>
           {/* Enter submits, which is what a booking form should do. */}
           <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
@@ -866,15 +902,18 @@ export function AppointmentModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              className="rounded-full px-4 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
             >
               {t("common.cancel")}
             </button>
+            {/* Google's Save: an accent pill, and the only filled control on
+                the card. Accent, not brand — Save is an action, and actions
+                are blue everywhere else in this app. */}
             <button
               type="button"
               onClick={submit}
               disabled={pending || customerIncomplete}
-              className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {pending ? t("common.loading") : t("common.save")}
             </button>
@@ -883,5 +922,42 @@ export function AppointmentModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+// The row glyphs, drawn in the same outline stroke as the app's chevrons.
+// 20px, currentColor: the wrapping span decides the grey.
+function ClockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+      <circle cx="7.5" cy="7.5" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PersonIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
   );
 }
