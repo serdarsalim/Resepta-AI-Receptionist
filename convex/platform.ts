@@ -442,6 +442,9 @@ export const orgDetail = query({
       agents: v.array(
         v.object({
           retellAgentId: v.string(),
+          // The provider's display name, from the cache retellAgents.name —
+          // an operator recognises "Bella Randevu Asistanı", not agent_bfc9….
+          name: v.union(v.string(), v.null()),
           inboundNumber: v.union(v.string(), v.null()),
           transferNumber: v.union(v.string(), v.null()),
           enabled: v.boolean(),
@@ -564,6 +567,7 @@ export const orgDetail = query({
         const latestFailure = ownEvents.find((event) => event.status === "failed");
         return {
           retellAgentId: a.retellAgentId,
+          name: a.name ?? null,
           inboundNumber: a.inboundNumber ?? null,
           transferNumber: a.transferNumber ?? null,
           enabled: a.enabled,

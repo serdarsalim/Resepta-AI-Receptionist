@@ -361,50 +361,37 @@ export default function TenantPage() {
           </p>
         ) : (
           <>
+          {/* One line per agent (Serdar, 2026-08-20). The four-fact grid —
+              last call result, last analysis, "Clear" inbox — printed the
+              healthy answer to diagnostic questions nobody had asked, four
+              cells of "fine" under every agent. What survives is the name an
+              operator actually recognises, plus what can be WRONG: the
+              runtime (an agent without it answers with nothing), the inbox
+              only when something is stuck, and the enabled pill. Actual
+              failures keep their amber block below. */}
           {detail.agents.map((agent) => (
             <div key={agent.retellAgentId} className="space-y-2 py-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {agent.name && <span className="text-sm font-medium">{agent.name}</span>}
                 <CopyId value={agent.retellAgentId} />
                 <span className="text-xs text-[var(--muted)]">
                   {agent.inboundNumber ?? "No line"}
                 </span>
+                {agent.runtimeConnectedAt ? (
+                  <Pill tone="ok">runtime {shortDate(agent.runtimeConnectedAt)}</Pill>
+                ) : (
+                  <Pill tone="warn">No runtime</Pill>
+                )}
+                {(agent.pendingEvents > 0 || agent.failedEvents > 0) && (
+                  <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
+                    {agent.pendingEvents} pending · {agent.failedEvents} failed
+                  </Pill>
+                )}
                 <span className="ml-auto">
                   <Pill tone={agent.enabled ? "ok" : "warn"}>
                     {agent.enabled ? "Enabled" : "Disabled"}
                   </Pill>
                 </span>
-              </div>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-4">
-                <Fact label="Resepta runtime">
-                  {agent.runtimeConnectedAt ? (
-                    <Pill tone="ok">{shortDate(agent.runtimeConnectedAt)}</Pill>
-                  ) : (
-                    <Pill tone="warn">Not connected</Pill>
-                  )}
-                </Fact>
-                <Fact label="Last call result">
-                  {agent.lastCallEventAt ? (
-                    shortDate(agent.lastCallEventAt)
-                  ) : (
-                    <span className="text-[var(--muted)]">None yet</span>
-                  )}
-                </Fact>
-                <Fact label="Last analysis">
-                  {agent.lastAnalyzedEventAt ? (
-                    shortDate(agent.lastAnalyzedEventAt)
-                  ) : (
-                    <span className="text-[var(--muted)]">None yet</span>
-                  )}
-                </Fact>
-                <Fact label="Event inbox">
-                  {agent.pendingEvents === 0 && agent.failedEvents === 0 ? (
-                    <span className="text-[var(--muted)]">Clear</span>
-                  ) : (
-                    <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
-                      {agent.pendingEvents} pending · {agent.failedEvents} failed
-                    </Pill>
-                  )}
-                </Fact>
               </div>
               {agent.latestFailure && (
                 <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
