@@ -892,11 +892,6 @@ const dictionary = {
     en: "The language customers are messaged in. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
     de: "Die Sprache der Kundennachrichten. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
   },
-  "settings.reminders": {
-    tr: "Hatırlatmalar",
-    en: "Reminders",
-    de: "Erinnerungen",
-  },
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
     en: "Send a confirmation when a booking is made",
@@ -944,10 +939,12 @@ const dictionary = {
     en: "One message to a customer who didn't show up. A win-back already sent is never repeated.",
     de: "Eine einzige Nachricht an Kundinnen und Kunden, die nicht erschienen sind. Eine bereits gesendete Rückgewinnung wird nicht wiederholt.",
   },
+  // "Add reminder" until 2026-08-19, and wrong for the same reason the tab
+  // was: five of the six things this sheet adds are not reminders.
   "settings.ruleAdd": {
-    tr: "Hatırlatma ekle",
-    en: "Add reminder",
-    de: "Erinnerung hinzufügen",
+    tr: "Mesaj ekle",
+    en: "Add message",
+    de: "Nachricht hinzufügen",
   },
   // The add sheet. It replaced a row of preset chips ("+ 2 days before",
   // "+ 1 hour before"), which could only ever offer the handful of timings
@@ -1721,10 +1718,13 @@ const dictionary = {
   // "Voice" was never the load-bearing half.
   "nav.voiceShort": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
-  "nav.reminders": {
-    tr: "Hatırlatmalar",
-    en: "Reminders",
-    de: "Erinnerungen",
+  // Named for the whole set, not its best-known member: a confirmation, a
+  // cancellation notice, a follow-up, a win-back and an away reply are not
+  // reminders, and five of the six had no word on the sidebar.
+  "nav.messages": {
+    tr: "Mesajlar",
+    en: "Messages",
+    de: "Nachrichten",
   },
 
   "settings.voice": {

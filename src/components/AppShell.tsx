@@ -106,11 +106,12 @@ const SettingsIcon = makeIcon(
   </>,
 );
 
-const BellIcon = makeIcon(
-  <>
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </>,
+// A speech bubble, not a bell. A bell says "we will nudge you", and only one
+// of the six messages behind this tab is a nudge — the others are what the
+// salon says when a booking lands, when one is cancelled, after a visit, and
+// when someone writes in while the doors are shut.
+const MessagesIcon = makeIcon(
+  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />,
 );
 
 // Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
@@ -224,9 +225,15 @@ const NAV_TABS: {
   },
   // Directly below Calendar, because that is what it acts on: every rule here
   // fires off an appointment. It spent a session inside Business on the
-  // argument that rules are config — true on paper, wrong in use. Reminders is
-  // the thing this product does to keep chairs full, so it stays one click
-  // away and adjacent to the bookings it chases.
+  // argument that rules are config — true on paper, wrong in use. This is the
+  // thing the product does to keep chairs full, so it stays one click away and
+  // adjacent to the bookings it chases.
+  //
+  // Called MESSAGES, not Reminders (2026-08-19). Six message types live here
+  // and exactly one of them is a reminder — the tab was named after its
+  // smallest member, which left the confirmation, the cancellation notice, the
+  // follow-up, the win-back and the away reply with no name on the sidebar at
+  // all. The id has read "messages" the whole time; only the label lagged.
   //
   // Off the phone tab bar, in the drawer with Business. That argument is about
   // where it sits in the sidebar and it still holds there; the bar is a
@@ -235,8 +242,8 @@ const NAV_TABS: {
   // day.
   {
     id: "messages",
-    key: "nav.reminders",
-    Icon: BellIcon,
+    key: "nav.messages",
+    Icon: MessagesIcon,
     color: "#6366f1",
     drawerOnly: true,
   },
