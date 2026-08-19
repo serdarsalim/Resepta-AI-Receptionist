@@ -335,9 +335,9 @@ export default function AdminPage() {
             />
             {/* Which dialect every org's chat agent speaks by default. The
                 key rows below both stay settable — switching provider is one
-                click, not a re-paste — and the active one is marked so a
-                pill flipped without its key configured is visible here, not
-                discovered in the flight recorder. */}
+                click, not a re-paste. Whether the active provider has a key
+                is readable off its own row (an empty field IS the answer);
+                the status line that used to repeat it here is gone. */}
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
               <div className="text-sm font-medium">Chat agent provider</div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -357,15 +357,6 @@ export default function AdminPage() {
                     {option === "anthropic" ? "Anthropic (Claude)" : "OpenAI (GPT)"}
                   </button>
                 ))}
-                <span className="text-xs text-[var(--muted)]">
-                  {mail.chatAgentProvider === "openai"
-                    ? mail.openaiApiKey
-                      ? "using the OpenAI key below"
-                      : "⚠ no OpenAI key set, so every turn will skip"
-                    : mail.anthropicApiKey
-                      ? "using the Anthropic key below"
-                      : "⚠ no Anthropic key set, so every turn will skip"}
-                </span>
               </div>
             </div>
             <KeyModelRow
