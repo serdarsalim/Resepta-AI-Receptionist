@@ -120,14 +120,24 @@ const ADD_OPTIONS: AddOption[] = [
     nameKey: "settings.ruleReminder",
     whenKey: "settings.ruleBeforeAppointment",
     repeatable: true,
-    timing: { minHours: 1, maxHours: 168, defaultAmount: 24, defaultUnit: "hours" },
+    timing: {
+      minHours: 1,
+      maxHours: 168,
+      defaultAmount: 24,
+      defaultUnit: "hours",
+    },
   },
   {
     trigger: "after_end",
     nameKey: "settings.ruleFollowup",
     whenKey: "settings.ruleAfterAppointment",
     repeatable: true,
-    timing: { minHours: 1, maxHours: 720, defaultAmount: 24, defaultUnit: "hours" },
+    timing: {
+      minHours: 1,
+      maxHours: 720,
+      defaultAmount: 24,
+      defaultUnit: "hours",
+    },
   },
   {
     trigger: "cancellation",
@@ -138,7 +148,12 @@ const ADD_OPTIONS: AddOption[] = [
     trigger: "no_show",
     nameKey: "settings.ruleWinback",
     whenKey: "settings.ruleAfterNoShow",
-    timing: { minHours: 24, maxHours: 90 * 24, defaultAmount: 14, defaultUnit: "days" },
+    timing: {
+      minHours: 24,
+      maxHours: 90 * 24,
+      defaultAmount: 14,
+      defaultUnit: "days",
+    },
   },
   {
     trigger: "out_of_hours",
@@ -196,7 +211,10 @@ function htmlToText(html: string): string {
   // SSR guard: this only runs for real in the browser; the server render just
   // needs to not crash before hydration.
   if (typeof window === "undefined") {
-    return prepared.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    return prepared
+      .replace(/<[^>]+>/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
   const doc = new DOMParser().parseFromString(prepared, "text/html");
   return (doc.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
@@ -415,7 +433,7 @@ function RuleEditor({
       businessName: orgName,
       appointmentAt: appointment
         ? formatAppointmentTime(appointment.startAt, orgTimezone, orgLanguage)
-        : liveDefaults?.date ?? `⟨${t("vars.date")}⟩`,
+        : (liveDefaults?.date ?? `⟨${t("vars.date")}⟩`),
       staffName: sample(appointment?.staffName, "staff", t("vars.staff")),
       serviceName: sample(
         // The send path prefixes the quantity here too (convex/wa.ts).
@@ -436,7 +454,8 @@ function RuleEditor({
             // and this dropped — and price !== undefined, so a service priced 0
             // previews as free rather than as unpriced. Mirrors convex/wa.ts.
             const quantity = item.quantity ?? 1;
-            const label = quantity > 1 ? `${quantity}× ${item.name}` : item.name;
+            const label =
+              quantity > 1 ? `${quantity}× ${item.name}` : item.name;
             return `• ${label}${
               item.price !== undefined
                 ? ` — ${formatMoney(item.price * quantity)}`
@@ -472,7 +491,9 @@ function RuleEditor({
   ]);
 
   if (!template) {
-    return <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>;
+    return (
+      <p className="py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>
+    );
   }
 
   // Inserts land at the CURSOR, not the end — Nudge's VariableChips pattern.
@@ -555,12 +576,17 @@ function RuleEditor({
           {
             ...previewValues,
             serviceName: previewValues.serviceName?.replace(/\n/g, "<br/>"),
-            servicePriceList: previewValues.servicePriceList?.replace(/\n/g, "<br/>"),
+            servicePriceList: previewValues.servicePriceList?.replace(
+              /\n/g,
+              "<br/>",
+            ),
           },
           liveDefaults,
         ),
       )
-    : sanitizeEmailHtml(renderTokens(liveHtml, contactlessValues, liveDefaults));
+    : sanitizeEmailHtml(
+        renderTokens(liveHtml, contactlessValues, liveDefaults),
+      );
   // Whether what the reader is looking at right now contains a placeholder.
   // Checked against the RENDERED text of whichever lane is showing, subject
   // included — the raw template always holds tokens, which would light this
@@ -572,247 +598,252 @@ function RuleEditor({
     ? `${picked.firstName} ${picked.lastName ?? ""}`.trim()
     : "";
 
-  return (
-    <div className="grid gap-4 pb-4 sm:grid-cols-2">
-      <div className="space-y-2">
-        {/* Subject first — that is the order an email reads in. Placeholder
-            instead of a label so the input gets the full row width. */}
-        {emailEnabled && (
-          // h-10 matches the preview header row beside it, so the editor box
-          // and the preview paper start on the same line.
-          <input
-            className="h-10 w-full"
-            value={subject}
-            placeholder={t("settings.templateSubject")}
-            aria-label={t("settings.templateSubject")}
-            onChange={(e) => setSubject(e.target.value)}
-            onBlur={() => onSaveTemplate(template._id, { subject })}
-          />
+  // The preview, as ONE node the editor can host in its own tab strip. It
+  // used to be a second column: the same formatted message rendered twice,
+  // side by side, each in half the width. What the preview alone can say is
+  // that [name] becomes Kerem and [date] becomes Friday 31 July — a different
+  // VIEW of the body, which is what a tab is for, not a different panel.
+  const previewPane = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-end gap-2">
+        {/* Two lanes, one message: a toggle, not two cards. Only rendered
+            when the rule really can travel both ways — otherwise the label
+            alone says which lane you are looking at. */}
+        {lanes.length > 1 && (
+          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
+            {lanes.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setLanePref(option)}
+                className={`rounded-full px-2.5 py-1 transition-colors ${
+                  lane === option
+                    ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option === "email"
+                  ? t("settings.ruleEmail")
+                  : t("channel.whatsapp")}
+              </button>
+            ))}
+          </span>
         )}
-        {emailEnabled ? (
-          // The real email editor — Visual/HTML tabs, toolbar with variables
-          // and emoji built in. Every save writes BOTH projections: the HTML
-          // the email sends and the plain text the WhatsApp lane sends.
-          <EmailBodyEditor
-            value={template.bodyHtml ?? plainToHtml(template.body ?? "")}
-            placeholder={t("settings.templateBodyPlaceholder")}
-            onLiveChange={setLiveHtml}
-            onSave={(html) => {
-              setLiveHtml(html);
-              onSaveTemplate(template._id, {
-                bodyHtml: html,
-                body: htmlToText(html),
-              });
+        {/* Typeahead over real contacts — the preview's only data source.
+            Picking one fills every token from their record and their next
+            booking; the × empties the pane again. */}
+        <span className="relative min-w-0 max-w-56 flex-1">
+          <input
+            className="h-9 w-full text-sm"
+            value={
+              contactId
+                ? pickedLabel
+                : contactQuery || (sample && !contactQuery ? sample.name : "")
+            }
+            placeholder={t("settings.previewPickContact")}
+            onChange={(e) => {
+              setContactId(null);
+              setContactQuery(e.target.value);
             }}
           />
-        ) : (
-          <>
-            <textarea
-              ref={bodyRef}
-              rows={5}
-              className="w-full"
-              value={body}
-              placeholder={t("settings.templateBodyPlaceholder")}
-              aria-label={t("settings.templateBody")}
-              onChange={(e) => setBody(e.target.value)}
-              onBlur={() => onSaveTemplate(template._id, { body })}
+          {(contactId || contactQuery) && (
+            <button
+              type="button"
+              aria-label={t("common.delete")}
+              onClick={() => {
+                setContactId(null);
+                setContactQuery("");
+              }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              ×
+            </button>
+          )}
+          {matches.length > 0 && (
+            <ul className="absolute right-0 top-full z-30 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+              {matches.map((c) => (
+                <li key={c._id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setContactId(c._id);
+                    }}
+                    className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                  >
+                    <span className="truncate">
+                      {c.firstName} {c.lastName ?? ""}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-[var(--muted)]">
+                      {c.phone}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </span>
+      </div>
+      {/* No contact, or a contact with nothing booked: say which, and say
+          nothing else. An empty pane with a reason beats a filled pane with
+          invented facts. */}
+      {lane === "email" ? (
+        /* The email as the customer's mail client shows it: white paper no
+           matter the app theme, subject on top, the authored HTML below. */
+        <div className="email-paper flex flex-col overflow-hidden rounded-lg border border-[var(--border)]">
+          <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
+            {renderFor(subject) ||
+              [orgName || "—", previewValues?.appointmentAt]
+                .filter(Boolean)
+                .join(", ")}
+          </p>
+          <div
+            className="email-body-editor min-h-40 px-3 py-2 text-sm"
+            dangerouslySetInnerHTML={{
+              __html:
+                renderedEmailHtml ||
+                `<p style="color:#9ca3af">${t("settings.templateBodyPlaceholder")}</p>`,
+            }}
+          />
+        </div>
+      ) : (
+        <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+          {rendered || (
+            <span className="text-[var(--muted)]">
+              {t("settings.templateBodyPlaceholder")}
+            </span>
+          )}
+        </div>
+      )}
+      {/* Only when a placeholder is actually on screen. A standing note about
+          brackets under a preview that has none is the sort of caption people
+          learn to stop reading. */}
+      {showsPlaceholder && (
+        <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+          {t("editor.previewPlaceholder")}
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    // ONE column. The editor gets the full width of the panel, the way every
+    // mail composer worth using does — the split gave the box you type in
+    // half a page so that the other half could show the same words again.
+    <div className="space-y-2 pb-4">
+      {/* Subject first — that is the order an email reads in. Placeholder
+            instead of a label so the input gets the full row width. */}
+      {emailEnabled && (
+        // h-10 matches the preview header row beside it, so the editor box
+        // and the preview paper start on the same line.
+        <input
+          className="h-10 w-full"
+          value={subject}
+          placeholder={t("settings.templateSubject")}
+          aria-label={t("settings.templateSubject")}
+          onChange={(e) => setSubject(e.target.value)}
+          onBlur={() => onSaveTemplate(template._id, { subject })}
+        />
+      )}
+      {emailEnabled ? (
+        // The real email editor — Visual/HTML tabs, toolbar with variables
+        // and emoji built in. Every save writes BOTH projections: the HTML
+        // the email sends and the plain text the WhatsApp lane sends.
+        <EmailBodyEditor
+          value={template.bodyHtml ?? plainToHtml(template.body ?? "")}
+          placeholder={t("settings.templateBodyPlaceholder")}
+          previewPane={previewPane}
+          previewLabel={t("settings.rulePreview")}
+          onLiveChange={setLiveHtml}
+          onSave={(html) => {
+            setLiveHtml(html);
+            onSaveTemplate(template._id, {
+              bodyHtml: html,
+              body: htmlToText(html),
+            });
+          }}
+        />
+      ) : (
+        <>
+          <textarea
+            ref={bodyRef}
+            rows={5}
+            className="w-full"
+            value={body}
+            placeholder={t("settings.templateBodyPlaceholder")}
+            aria-label={t("settings.templateBody")}
+            onChange={(e) => setBody(e.target.value)}
+            onBlur={() => onSaveTemplate(template._id, { body })}
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <VariableInsertDropdown onInsert={insertAtCursor} />
+            <EmojiPicker
+              onPick={insertAtCursor}
+              title={t("editor.insertEmoji")}
             />
-            <div className="flex flex-wrap items-center gap-1.5">
-              <VariableInsertDropdown onInsert={insertAtCursor} />
-              <EmojiPicker onPick={insertAtCursor} title={t("editor.insertEmoji")} />
-            </div>
-          </>
-        )}
-        {/* Session text needs no Meta approval, so the Cloud note would
+          </div>
+          {/* A plain textarea has no tab strip to host the preview, and
+                here it duplicates nothing: the box shows [name], this shows
+                what [name] becomes. */}
+          {previewPane}
+        </>
+      )}
+      {/* Session text needs no Meta approval, so the Cloud note would
             mislead on the away reply. */}
-        {waConnected && rule.trigger !== "out_of_hours" && (
-          <p className="text-xs text-[var(--muted)]">{t("settings.ruleCloudNote")}</p>
-        )}
-        {/* Email engagement, once this message has actually sent one. Rates
+      {waConnected && rule.trigger !== "out_of_hours" && (
+        <p className="text-xs text-[var(--muted)]">
+          {t("settings.ruleCloudNote")}
+        </p>
+      )}
+      {/* Email engagement, once this message has actually sent one. Rates
             over the template, never per-customer facts — the opens hint
             explains why the number is a trend, not a truth. */}
-        {(template.emailSentCount ?? 0) > 0 && (
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-            <span>
-              {t("settings.statSent")}: {template.emailSentCount}×
-              {template.emailLastSentAt
-                ? ` · ${new Intl.DateTimeFormat(orgLanguage, {
-                    day: "numeric",
-                    month: "short",
-                  }).format(template.emailLastSentAt)}`
-                : ""}
-            </span>
-            <span className="flex items-center gap-1">
-              {t("settings.statOpens")}:{" "}
-              {Math.round(
-                ((template.emailOpenCount ?? 0) / (template.emailSentCount ?? 1)) * 100,
-              )}
-              %
-              <InfoTip text={t("settings.templateEmailOpensHint")} />
-            </span>
-            <span>
-              {t("settings.statReplies")}:{" "}
-              {Math.round(
-                ((template.emailReplyCount ?? 0) / (template.emailSentCount ?? 1)) * 100,
-              )}
-              %
-            </span>
-          </p>
-        )}
+      {(template.emailSentCount ?? 0) > 0 && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
+          <span>
+            {t("settings.statSent")}: {template.emailSentCount}×
+            {template.emailLastSentAt
+              ? ` · ${new Intl.DateTimeFormat(orgLanguage, {
+                  day: "numeric",
+                  month: "short",
+                }).format(template.emailLastSentAt)}`
+              : ""}
+          </span>
+          <span className="flex items-center gap-1">
+            {t("settings.statOpens")}:{" "}
+            {Math.round(
+              ((template.emailOpenCount ?? 0) /
+                (template.emailSentCount ?? 1)) *
+                100,
+            )}
+            %
+            <InfoTip text={t("settings.templateEmailOpensHint")} />
+          </span>
+          <span>
+            {t("settings.statReplies")}:{" "}
+            {Math.round(
+              ((template.emailReplyCount ?? 0) /
+                (template.emailSentCount ?? 1)) *
+                100,
+            )}
+            %
+          </span>
+        </p>
+      )}
 
-        {/* Directly under the body it repairs — the fallback is part of
+      {/* Directly under the body it repairs — the fallback is part of
             writing the sentence, not a setting somewhere else. Renders
             nothing until the body uses a token we can resolve. */}
-        {templateId && (
-          <VariableDefaultsEditor
-            bodies={[body, subject]}
-            defaults={defaults}
-            onChange={(next) => {
-              setDefaults(next);
-              onSaveTemplate(templateId, { variableDefaults: next });
-            }}
-          />
-        )}
-      </div>
-
-      {/* A flex column so the preview surface stretches to the editor's
-          height — the two panes read as one aligned unit, not a tall form
-          beside a floating card. */}
-      <div className="flex flex-col gap-2">
-        {/* Right-aligned as one cluster. justify-between pushed the word
-            "Preview" to the far left of the column and left it stranded a
-            hand's width from the box it labels, reading as a heading for the
-            whole pane rather than as the label on that control. */}
-        <div className="flex h-10 items-center justify-end gap-2">
-          {/* Two lanes, one message: a toggle, not two cards. Only rendered
-              when the rule really can travel both ways — otherwise the label
-              alone says which lane you are looking at. */}
-          {lanes.length > 1 ? (
-            <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
-              {lanes.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setLanePref(option)}
-                  className={`rounded-full px-2.5 py-1 transition-colors ${
-                    lane === option
-                      ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp")}
-                </button>
-              ))}
-            </span>
-          ) : (
-            <span className="text-xs text-[var(--muted)]">
-              {t("settings.rulePreview")}
-            </span>
-          )}
-          {/* Typeahead over real contacts — the preview's only data source.
-              Picking one fills every token from their record and their next
-              booking; the × empties the pane again. */}
-          <span className="relative min-w-0 flex-1 max-w-56">
-            <input
-              // h-10 like the subject box across the gutter: the two are the
-              // top row of their columns and any difference reads as a
-              // misalignment rather than as a smaller control.
-              className="h-10 w-full text-sm"
-              value={
-                contactId
-                  ? pickedLabel
-                  : contactQuery || (sample && !contactQuery ? sample.name : "")
-              }
-              placeholder={t("settings.previewPickContact")}
-              onChange={(e) => {
-                setContactId(null);
-                setContactQuery(e.target.value);
-              }}
-            />
-            {(contactId || contactQuery) && (
-              <button
-                type="button"
-                aria-label={t("common.delete")}
-                onClick={() => {
-                  setContactId(null);
-                  setContactQuery("");
-                }}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                ×
-              </button>
-            )}
-            {matches.length > 0 && (
-              <ul className="absolute right-0 top-full z-30 mt-1 w-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
-                {matches.map((c) => (
-                  <li key={c._id}>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setContactId(c._id);
-                      }}
-                      className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
-                    >
-                      <span className="truncate">
-                        {c.firstName} {c.lastName ?? ""}
-                      </span>
-                      <span className="shrink-0 text-[10px] text-[var(--muted)]">
-                        {c.phone}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </span>
-        </div>
-        {/* No framing surface around the previews — the paper's top edge sits
-            exactly where the editor box's does, which is what makes the two
-            columns read as one aligned pair. */}
-        <div className="flex flex-1 flex-col gap-3">
-          {/* No contact, or a contact with nothing booked: say which, and say
-              nothing else. An empty pane with a reason beats a filled pane
-              with invented facts. */}
-          {lane === "email" ? (
-            /* The email as the customer's mail client shows it: white paper no
-               matter the app theme, subject on top, the authored HTML below.
-               flex-1 so the paper runs the full height beside the editor. */
-            <div className="email-paper flex flex-1 flex-col overflow-hidden rounded-lg border border-[var(--border)]">
-              <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
-                {renderFor(subject) ||
-                  [orgName || "—", previewValues?.appointmentAt]
-                    .filter(Boolean)
-                    .join(", ")}
-              </p>
-              <div
-                className="email-body-editor flex-1 px-3 py-2 text-sm"
-                dangerouslySetInnerHTML={{
-                  __html:
-                    renderedEmailHtml ||
-                    `<p style="color:#9ca3af">${t("settings.templateBodyPlaceholder")}</p>`,
-                }}
-              />
-            </div>
-          ) : (
-            <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
-              {rendered || (
-                <span className="text-[var(--muted)]">
-                  {t("settings.templateBodyPlaceholder")}
-                </span>
-              )}
-            </div>
-          )}
-          {/* Only when a placeholder is actually on screen. A standing note
-              about brackets under a preview that has none is the sort of
-              caption people learn to stop reading. */}
-          {showsPlaceholder && (
-            <p className="text-[11px] leading-relaxed text-[var(--muted)]">
-              {t("editor.previewPlaceholder")}
-            </p>
-          )}
-        </div>
-      </div>
+      {templateId && (
+        <VariableDefaultsEditor
+          bodies={[body, subject]}
+          defaults={defaults}
+          onChange={(next) => {
+            setDefaults(next);
+            onSaveTemplate(templateId, { variableDefaults: next });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -840,7 +871,8 @@ function AddRuleSheet({
   const [unit, setUnit] = useState<"hours" | "days">("hours");
   const [error, setError] = useState<string | null>(null);
 
-  const selected = ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
+  const selected =
+    ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
   const taken = (option: AddOption) =>
     !option.repeatable && rules.some((rule) => rule.trigger === option.trigger);
 
@@ -878,7 +910,9 @@ function AddRuleSheet({
             .replace("{max}", String(bounds.max))
             .replace(
               "{unit}",
-              unit === "days" ? t("settings.ruleUnitDays") : t("settings.ruleUnitHours"),
+              unit === "days"
+                ? t("settings.ruleUnitDays")
+                : t("settings.ruleUnitHours"),
             ),
         );
         return;
@@ -887,7 +921,9 @@ function AddRuleSheet({
       // Two rules at the same moment would send the same message twice.
       if (
         rules.some(
-          (rule) => rule.trigger === selected.trigger && rule.offsetHours === offsetHours,
+          (rule) =>
+            rule.trigger === selected.trigger &&
+            rule.offsetHours === offsetHours,
         )
       ) {
         setError(t("settings.ruleExists"));
@@ -935,9 +971,13 @@ function AddRuleSheet({
                     onChange={() => pick(option)}
                   />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{t(option.nameKey)}</span>
+                    <span className="block text-sm font-medium">
+                      {t(option.nameKey)}
+                    </span>
                     <span className="block text-xs text-[var(--muted)]">
-                      {disabled ? t("settings.ruleAlreadyAdded") : t(option.whenKey)}
+                      {disabled
+                        ? t("settings.ruleAlreadyAdded")
+                        : t(option.whenKey)}
                     </span>
                   </span>
                 </label>
@@ -979,14 +1019,18 @@ function AddRuleSheet({
                 <option value="hours">{t("settings.ruleUnitHours")}</option>
                 <option value="days">{t("settings.ruleUnitDays")}</option>
               </select>
-              <span className="text-sm text-[var(--muted)]">{t(selected.whenKey)}</span>
+              <span className="text-sm text-[var(--muted)]">
+                {t(selected.whenKey)}
+              </span>
             </div>
           </div>
         )}
 
         {/* Reserved whether or not it holds anything, so a rejected number does
             not shove the buttons out from under the pointer. */}
-        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
 
         <div className="flex justify-end gap-2">
           <button
@@ -1117,7 +1161,9 @@ function RulesCard({
     const metaSource =
       own && own.status === "approved" && own.metaName ? own : fallback;
     const cloudApproved =
-      waConnected && metaSource?.status === "approved" && Boolean(metaSource?.metaName);
+      waConnected &&
+      metaSource?.status === "approved" &&
+      Boolean(metaSource?.metaName);
     const waOk = evolutionEnabled || cloudApproved;
     return [
       ...(waOk ? (["whatsapp"] as const) : []),
@@ -1185,7 +1231,8 @@ function RulesCard({
     openRule(rule._id);
     // Creates the rule's own wording row (copied from the kind fallback) the
     // first time it is opened; a no-op after that.
-    if (isOwner) void ensureTemplate({ ruleId: rule._id, language: org.language });
+    if (isOwner)
+      void ensureTemplate({ ruleId: rule._id, language: org.language });
   };
   // A rule deleted in another tab, or an id someone pasted: fall back to the
   // list rather than holding a page that cannot render.
@@ -1416,8 +1463,12 @@ function RulesCard({
               {t("settings.rulesWhen")}
               <InfoTip text={t("settings.rulesHint")} />
             </span>
-            <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhat")}</span>
-            <span className="text-xs text-[var(--muted)]">{t("settings.rulesWhere")}</span>
+            <span className="text-xs text-[var(--muted)]">
+              {t("settings.rulesWhat")}
+            </span>
+            <span className="text-xs text-[var(--muted)]">
+              {t("settings.rulesWhere")}
+            </span>
           </div>
         </div>
 
@@ -1446,7 +1497,9 @@ function RulesCard({
                   <div className={RULE_COLUMNS}>
                     <span className="flex items-center gap-1.5 text-sm">
                       {ruleWhenStatic(rule)}
-                      {rule.trigger === "no_show" && <InfoTip text={winbackHint} />}
+                      {rule.trigger === "no_show" && (
+                        <InfoTip text={winbackHint} />
+                      )}
                       {rule.trigger === "after_end" && (
                         <InfoTip text={t("settings.ruleFollowupHint")} />
                       )}
@@ -1454,7 +1507,9 @@ function RulesCard({
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
                     </span>
-                    <span className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}>
+                    <span
+                      className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}
+                    >
                       {ruleName(rule.trigger)}
                     </span>
                     {/* Which lanes this rule is ON, stated. The switches moved
@@ -1472,8 +1527,12 @@ function RulesCard({
                             {channelLabel(channel)}
                           </span>
                         ))}
-                      {rowChannels.every((channel) => !activeChannels(rule).has(channel)) && (
-                        <span className="text-[var(--muted)]">{t("settings.ruleOff")}</span>
+                      {rowChannels.every(
+                        (channel) => !activeChannels(rule).has(channel),
+                      ) && (
+                        <span className="text-[var(--muted)]">
+                          {t("settings.ruleOff")}
+                        </span>
                       )}
                     </span>
                   </div>
@@ -1512,7 +1571,11 @@ function RulesCard({
         {confirmDialog}
       </Card>
       {adding && (
-        <AddRuleSheet rules={rules} onAdd={doAdd} onClose={() => setAdding(false)} />
+        <AddRuleSheet
+          rules={rules}
+          onAdd={doAdd}
+          onClose={() => setAdding(false)}
+        />
       )}
     </div>
   );
@@ -1576,7 +1639,10 @@ export function BusinessHoursCard({
             carries nine rows across three unrelated jobs, and a chip strip
             where one chip scrolls while five swap the pane is two grammars in
             one control. Moving the single coupled row is the smaller fix. */}
-        <RowLabel label={t("settings.timezone")} hint={t("settings.timezoneHint")} />
+        <RowLabel
+          label={t("settings.timezone")}
+          hint={t("settings.timezoneHint")}
+        />
         <TimezoneSelect
           value={org.timezone}
           onChange={(zone) => update({ timezone: zone })}
@@ -1633,9 +1699,13 @@ export function BusinessHoursCard({
             aria-label={t("settings.openFrom")}
             className="min-w-0 flex-1"
             defaultValue={
-              hours.startMinute == null ? "" : minutesToTimeValue(hours.startMinute)
+              hours.startMinute == null
+                ? ""
+                : minutesToTimeValue(hours.startMinute)
             }
-            onChange={(e) => patchHours({ startMinute: timeValueToMinutes(e.target.value) })}
+            onChange={(e) =>
+              patchHours({ startMinute: timeValueToMinutes(e.target.value) })
+            }
           />
           <span className="shrink-0 text-sm text-[var(--muted)]">
             {t("settings.openUntil")}
@@ -1644,8 +1714,12 @@ export function BusinessHoursCard({
             type="time"
             aria-label={t("settings.openTo")}
             className="min-w-0 flex-1"
-            defaultValue={hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)}
-            onChange={(e) => patchHours({ endMinute: timeValueToMinutes(e.target.value) })}
+            defaultValue={
+              hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)
+            }
+            onChange={(e) =>
+              patchHours({ endMinute: timeValueToMinutes(e.target.value) })
+            }
           />
         </div>
       </div>
@@ -1723,7 +1797,9 @@ function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
           </>
         ) : (
           <>
-            <span className="text-[var(--muted)]">{t("settings.waNotLinked")}</span>
+            <span className="text-[var(--muted)]">
+              {t("settings.waNotLinked")}
+            </span>
             <button
               type="button"
               onClick={() => void showQr()}
@@ -1738,7 +1814,13 @@ function ShopPhoneCard({ isOwner }: { isOwner: boolean }) {
         <div className="mt-3 flex flex-wrap items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element -- a data: URI
               from the Evolution server, not an asset next/image can optimise */}
-          <img src={qr} alt="" width={192} height={192} className="rounded-lg bg-white p-2" />
+          <img
+            src={qr}
+            alt=""
+            width={192}
+            height={192}
+            className="rounded-lg bg-white p-2"
+          />
           <div className="text-xs text-[var(--muted)]">
             <p>{t("settings.waScanHint")}</p>
             <p className="mt-1">{t("settings.waWaitingScan")}</p>
@@ -1816,138 +1898,141 @@ export function RemindersView() {
       />
 
       <>
-          {/* No connect form here. The Meta credentials — phone number id,
+        {/* No connect form here. The Meta credentials — phone number id,
               access token — are operator plumbing, entered from /admin like
               the Retell key. A salon owner was being shown a password field
               for an account they do not have; all they need to know is
               whether the number works, and the templates card already goes
               amber when it does not. */}
-          {settings.whatsapp.connected && (
-            <Card disabled={!isOwner}>
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                  {t("settings.waConnected")}
-                </span>
-                <span className="text-[var(--muted)]">
-                  {settings.whatsapp.displayNumber ?? settings.whatsapp.phoneNumberId}
-                </span>
-              </div>
-            </Card>
-          )}
+        {settings.whatsapp.connected && (
+          <Card disabled={!isOwner}>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                {t("settings.waConnected")}
+              </span>
+              <span className="text-[var(--muted)]">
+                {settings.whatsapp.displayNumber ??
+                  settings.whatsapp.phoneNumberId}
+              </span>
+            </div>
+          </Card>
+        )}
 
-          {/* The templates the rules send, one editor per kind. The body is
+        {/* The templates the rules send, one editor per kind. The body is
               the salon's own words in named tokens; where a send actually
               leaves from is a single status line, and the Meta registration
               (name + approval) is a technical detail row that only exists
               while a Business number is connected — the shop phone and email
               need no approval from anybody. */}
-          {metaTemplates.length > 0 && (
+        {metaTemplates.length > 0 && (
           <Card
             title={t("settings.templates")}
             tip={t("settings.templatesHint")}
             disabled={!isOwner}
           >
             <div className="divide-y divide-[var(--border)]">
-              {metaTemplates
-                .map((template) => (
-                  <div key={template._id} className="space-y-2 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-medium">
-                        {template.kind === "confirmation"
-                          ? t("settings.ruleConfirmation")
-                          : template.kind === "reminder"
-                            ? t("settings.ruleReminder")
-                            : template.kind === "winback"
-                              ? t("settings.ruleWinback")
-                              : template.kind === "followup"
-                                ? t("settings.ruleFollowup")
-                                : template.kind === "cancellation"
-                                  ? t("settings.ruleCancellation")
-                                  : t("settings.templateKindCampaign")}
-                      </span>
-                      {/* Which number this leaves from, in the salon's words.
+              {metaTemplates.map((template) => (
+                <div key={template._id} className="space-y-2 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium">
+                      {template.kind === "confirmation"
+                        ? t("settings.ruleConfirmation")
+                        : template.kind === "reminder"
+                          ? t("settings.ruleReminder")
+                          : template.kind === "winback"
+                            ? t("settings.ruleWinback")
+                            : template.kind === "followup"
+                              ? t("settings.ruleFollowup")
+                              : template.kind === "cancellation"
+                                ? t("settings.ruleCancellation")
+                                : t("settings.templateKindCampaign")}
+                    </span>
+                    {/* Which number this leaves from, in the salon's words.
                           Cloud wins whenever it exists (lib/waLane rule 2),
                           so the shop-phone line only shows when the shop
                           phone is the org's only WhatsApp. Neither lane: the
                           rules card already says so once, in amber. */}
-                      {(settings.whatsapp.connected || settings.evolutionEnabled) && (
-                        <span className="text-xs text-[var(--muted)]">
-                          {settings.whatsapp.connected
-                            ? t("settings.templateLaneCloud")
-                            : t("settings.templateLaneShopPhone")}
-                        </span>
-                      )}
-                    </div>
-                    {/* Outside the campaign guard: a campaign has no body
+                    {(settings.whatsapp.connected ||
+                      settings.evolutionEnabled) && (
+                      <span className="text-xs text-[var(--muted)]">
+                        {settings.whatsapp.connected
+                          ? t("settings.templateLaneCloud")
+                          : t("settings.templateLaneShopPhone")}
+                      </span>
+                    )}
+                  </div>
+                  {/* Outside the campaign guard: a campaign has no body
                         here, but its emails need a subject like everyone
                         else's (campaigns.fanOut renders it per customer). On
                         the rules model every other subject lives in its
                         rule's panel. */}
-                    {template.kind === "campaign" && settings.emailEnabled && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
-                          {t("settings.templateSubject")}
-                        </span>
-                        <input
-                          className="min-w-0 flex-1"
-                          defaultValue={template.subject ?? ""}
-                          onBlur={(e) =>
-                            void updateTemplate({
-                              templateId: template._id,
-                              subject: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    )}
-                    {settings.whatsapp.connected && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="flex w-36 shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
-                          {t("settings.templateName")}
-                          {/* The exact string Meta approved, for checking the
+                  {template.kind === "campaign" && settings.emailEnabled && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
+                        {t("settings.templateSubject")}
+                      </span>
+                      <input
+                        className="min-w-0 flex-1"
+                        defaultValue={template.subject ?? ""}
+                        onBlur={(e) =>
+                          void updateTemplate({
+                            templateId: template._id,
+                            subject: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                  {settings.whatsapp.connected && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="flex w-36 shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
+                        {t("settings.templateName")}
+                        {/* The exact string Meta approved, for checking the
                               authored body against it. */}
-                          {template.bodyPreview && <InfoTip text={template.bodyPreview} />}
-                        </span>
-                        <input
-                          className="min-w-0 flex-1"
-                          defaultValue={template.metaName ?? ""}
-                          onBlur={(e) =>
-                            void updateTemplate({
-                              templateId: template._id,
-                              metaName: e.target.value,
-                            })
-                          }
-                        />
-                        <select
-                          defaultValue={template.status}
-                          aria-label={t("settings.templateStatus")}
-                          onChange={(e) =>
-                            void updateTemplate({
-                              templateId: template._id,
-                              status: e.target.value as
-                                | "draft"
-                                | "pending"
-                                | "approved"
-                                | "rejected",
-                            })
-                          }
-                        >
-                          <option value="draft">{t("template.draft")}</option>
-                          <option value="pending">{t("template.pending")}</option>
-                          <option value="approved">{t("template.approved")}</option>
-                          <option value="rejected">{t("template.rejected")}</option>
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                        {template.bodyPreview && (
+                          <InfoTip text={template.bodyPreview} />
+                        )}
+                      </span>
+                      <input
+                        className="min-w-0 flex-1"
+                        defaultValue={template.metaName ?? ""}
+                        onBlur={(e) =>
+                          void updateTemplate({
+                            templateId: template._id,
+                            metaName: e.target.value,
+                          })
+                        }
+                      />
+                      <select
+                        defaultValue={template.status}
+                        aria-label={t("settings.templateStatus")}
+                        onChange={(e) =>
+                          void updateTemplate({
+                            templateId: template._id,
+                            status: e.target.value as
+                              "draft" | "pending" | "approved" | "rejected",
+                          })
+                        }
+                      >
+                        <option value="draft">{t("template.draft")}</option>
+                        <option value="pending">{t("template.pending")}</option>
+                        <option value="approved">
+                          {t("template.approved")}
+                        </option>
+                        <option value="rejected">
+                          {t("template.rejected")}
+                        </option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </Card>
-          )}
-        </>
+        )}
+      </>
 
       <ShopPhoneCard isOwner={isOwner} />
-
     </div>
   );
 }

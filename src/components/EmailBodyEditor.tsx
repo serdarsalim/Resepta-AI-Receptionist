@@ -284,6 +284,8 @@ export function EmailBodyEditor({
   placeholder,
   compact,
   showVariables = true,
+  previewPane,
+  previewLabel,
 }: {
   value: string;
   disabled?: boolean;
@@ -303,8 +305,15 @@ export function EmailBodyEditor({
   // out a thousand times.
   compact?: boolean;
   showVariables?: boolean;
+  // A rendered read-only view of this same body, supplied by the parent. When
+  // given it becomes a third tab beside Visual and HTML, because it is the
+  // same message a third way — not a second panel to place on the page. The
+  // editor pane and the preview pane side by side showed the identical
+  // formatted text twice and halved the width of the one you type in.
+  previewPane?: React.ReactNode;
+  previewLabel?: string;
 }) {
-  const [mode, setMode] = useState<"visual" | "html">("visual");
+  const [mode, setMode] = useState<"visual" | "html" | "preview">("visual");
   // Last value we persisted (or received) — guards no-op saves on blur.
   const savedRef = useRef(value);
   const [htmlDraft, setHtmlDraft] = useState(value);
@@ -381,8 +390,15 @@ export function EmailBodyEditor({
     setHtmlDraft(value);
   }, [value, editor]);
 
-  const switchMode = (next: "visual" | "html") => {
+  const switchMode = (next: "visual" | "html" | "preview") => {
     if (next === mode) return;
+    // Preview reads; it never writes. Coming back from it must not re-parse
+    // anything, or a round trip through the tab would rewrite the author's
+    // HTML with tiptap's re-serialization of it.
+    if (next === "preview" || mode === "preview") {
+      setMode(next);
+      return;
+    }
     if (next === "html") {
       // Carry the latest visual content into the textarea.
       if (editor) setHtmlDraft(editor.isEmpty ? "" : editor.getHTML());
@@ -416,7 +432,10 @@ export function EmailBodyEditor({
     >
       <div className="flex shrink-0 items-center justify-end border-b border-[var(--border)] bg-[var(--muted-bg)]/50 px-2 py-1">
         <div className="flex overflow-hidden rounded-md border border-[var(--border)] text-xs">
-          {(["visual", "html"] as const).map((m) => (
+          {(previewPane
+            ? (["visual", "html", "preview"] as const)
+            : (["visual", "html"] as const)
+          ).map((m) => (
             <button
               key={m}
               type="button"
@@ -427,12 +446,18 @@ export function EmailBodyEditor({
                   : "text-[var(--muted)] hover:text-[var(--foreground)]"
               }`}
             >
-              {m === "visual" ? "Visual" : "HTML"}
+              {m === "visual"
+                ? "Visual"
+                : m === "html"
+                  ? "HTML"
+                  : (previewLabel ?? "Preview")}
             </button>
           ))}
         </div>
       </div>
-      {mode === "visual" ? (
+      {mode === "preview" ? (
+        <div className="p-3">{previewPane}</div>
+      ) : mode === "visual" ? (
         editor ? (
           <>
             <Toolbar editor={editor} showVariables={showVariables} />
