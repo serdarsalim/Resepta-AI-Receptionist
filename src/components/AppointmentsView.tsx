@@ -816,6 +816,49 @@ function formatMinutes(minute: number): string {
   ).padStart(2, "0")}`;
 }
 
+// The gutter-corner offset chip. Ink, not the timestamp grey — it is a grid
+// coordinate like the hour labels beside it. Hovering (or focusing) it names
+// the zone in full, instantly: "GMT+03" is ambiguous the two weeks a year
+// when DST makes Istanbul and Vienna disagree about it. Portal + fixed for
+// the tip, the InfoTip rule — the header sits over a scroll container.
+function GmtBadge({ timezone, at }: { timezone?: string; at: number }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+  const zoneName = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    setPos({ top: r.bottom + 6, left: Math.max(8, r.left) });
+  };
+  const hide = () => setPos(null);
+  return (
+    <>
+      <span
+        ref={ref}
+        tabIndex={0}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        className="cursor-default text-[10px] text-[var(--foreground)]"
+      >
+        {gmtLabel(timezone, at)}
+      </span>
+      {pos &&
+        createPortal(
+          <span
+            role="tooltip"
+            style={{ position: "fixed", top: pos.top, left: pos.left }}
+            className="pointer-events-none z-[100] whitespace-nowrap rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg"
+          >
+            {zoneName}
+          </span>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 // "GMT+03" for the gutter corner, computed from the BUSINESS's zone — the
 // same zone the closed shading uses, so the two can never disagree. Google
 // prints the viewer's offset there; ours is a business tool, and the offset
@@ -1285,14 +1328,15 @@ function Calendar({
           heading above, and a date row on top of a name row is two headers
           stacked for one thing. */}
       {/* pt-3: the row sits inside a card now, and a weekday name flush
-          against the card's top edge reads as clipped. */}
-      <div className="flex pr-[10px] pt-3">
+          against the card's top edge reads as clipped. border-b: the rule
+          under the header runs the FULL card width, gutter included — the
+          hour lines start after the gutter, so without this the divider
+          looked like it stopped short of the GMT corner. */}
+      <div className="flex border-b border-[var(--grid-line)] pr-[10px] pt-3">
         {/* The gutter's slice of the header carries the UTC offset, exactly
             where Google puts it: it labels the hour column under it. */}
         <div className="flex w-12 shrink-0 items-end justify-end pb-2 pr-2">
-          <span className="text-[10px] text-[var(--muted)]">
-            {gmtLabel(timezone, days[0])}
-          </span>
+          <GmtBadge timezone={timezone} at={days[0]} />
         </div>
         {staffColumns
           ? columns.map((column) => (

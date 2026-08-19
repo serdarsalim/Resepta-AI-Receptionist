@@ -147,8 +147,12 @@ export function MonthGrid({
               // point at, so the whole surface is one target rather than a
               // small "+" somebody has to find.
               onClick={() => onDraftDay(day)}
+              // Grey means CLOSED, and only closed. Out-of-month cells used
+              // to share the same fill, which made the July days at the top
+              // of August read as shut on a Tuesday; Google marks them with
+              // a muted date number and nothing else, and so do we.
               className={`relative min-w-0 overflow-hidden border-b border-r border-[var(--grid-line)] p-1 text-left transition-colors hover:bg-[var(--row-hover-bg)] ${
-                inMonth && !closed ? "" : "bg-[var(--closed-bg)]"
+                closed ? "bg-[var(--closed-bg)]" : ""
               }`}
             >
               {/* The date opens the day. Its own button, because the cell
