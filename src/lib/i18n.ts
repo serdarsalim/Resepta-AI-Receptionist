@@ -303,13 +303,16 @@ const dictionary = {
   "appointments.year": { tr: "Yıl", en: "Year", de: "Jahr" },
   // {n} is how many more bookings that day holds than the cell can show.
   "appointments.more": { tr: "+{n} daha", en: "+{n} more", de: "+{n} weitere" },
-  "appointments.existingCustomer": { tr: "Kayıtlı", en: "Existing", de: "Vorhanden" },
-  "appointments.newCustomer": { tr: "Yeni", en: "New", de: "Neu" },
   "appointments.findCustomer": { tr: "Müşteri ara", en: "Find customer", de: "Kunde suchen" },
   "appointments.findCustomerHint": {
     tr: "İsim veya telefon",
     en: "Name or phone",
     de: "Name oder Telefon",
+  },
+  "appointments.createCustomer": {
+    tr: "Yeni müşteri: \"{name}\"",
+    en: "New customer: \"{name}\"",
+    de: "Neuer Kunde: \"{name}\"",
   },
   "appointments.addForCustomer": {
     tr: "Randevu ekle",
