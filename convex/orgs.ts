@@ -145,6 +145,11 @@ export const current = query({
         language: v.string(),
         status: templateStatus,
         bodyPreview: v.optional(v.string()),
+        // The editor's unsaved buffer, and the flag the pill keys on. The
+        // blob rides along so the editor can seed draft-first and resume a
+        // half-written message where it was left.
+        draft: v.optional(v.any()),
+        hasUnsavedChanges: v.boolean(),
         // Per-template email engagement: sent/opens/replies and the last
         // send, rendered as the stats footer in each rule's editor.
         emailSentCount: v.optional(v.number()),
@@ -242,6 +247,8 @@ export const current = query({
         language: t.language,
         status: t.status,
         bodyPreview: t.bodyPreview,
+        draft: t.draft,
+        hasUnsavedChanges: t.draft !== undefined && t.draft !== null,
         emailSentCount: t.emailSentCount,
         emailOpenCount: t.emailOpenCount,
         emailReplyCount: t.emailReplyCount,
@@ -586,6 +593,163 @@ export const backfillInboundAddresses = internalMutation({
       filled.push(`${org.name} -> ${assigned}`);
     }
     return filled;
+  },
+});
+
+// ── The unsaved-changes buffer ──────────────────────────────────────────────
+//
+// Ported from Nudge (convex/templates.ts saveDraft/commitDraft/discardDraft),
+// including the bugs it learned about the hard way — see the equal-to-live
+// clear below.
+//
+// The editor writes HERE on every blur. The live fields, which are the ones
+// lib/reminderSchedule and wa.sendAppointmentMessage read at send time, do not
+// move until an owner presses Save. That is the whole point: a reminder body
+// caught mid-sentence must not be a body a customer receives.
+
+// The slice of updateTemplate's args an editor can buffer. Kept as one shape
+// so the draft blob and the committed patch cannot drift apart.
+const templateDraftFields = {
+  body: v.optional(v.string()),
+  bodyHtml: v.optional(v.string()),
+  subject: v.optional(v.string()),
+  variableDefaults: v.optional(
+    v.array(v.object({ key: v.string(), value: v.string() })),
+  ),
+};
+
+type TemplateDraft = {
+  body?: string;
+  bodyHtml?: string;
+  subject?: string;
+  variableDefaults?: { key: string; value: string }[];
+};
+
+// Normalised the same way on both sides, so a draft built by the editor can be
+// compared against fields written by any other path. Trims to match what
+// updateTemplate stores, and treats "" and absent as the same thing — because
+// updateTemplate stores an empty string as undefined.
+function templateComparable(values: TemplateDraft) {
+  return JSON.stringify({
+    body: values.body?.trim() || null,
+    bodyHtml: values.bodyHtml?.trim() || null,
+    subject: values.subject?.trim() || null,
+    variableDefaults: (values.variableDefaults ?? [])
+      .map((pair) => ({
+        key: pair.key.trim().toLowerCase(),
+        value: pair.value.trim(),
+      }))
+      .filter((pair) => pair.key && pair.value),
+  });
+}
+
+export const saveTemplateDraft = mutation({
+  args: { templateId: v.id("waTemplates"), ...templateDraftFields },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const template = await ctx.db.get(args.templateId);
+    if (!template || template.orgId !== orgId) throw new Error("not-found");
+    const { templateId, ...draft } = args;
+    // A draft that would change NOTHING is cleared rather than stored. Type a
+    // letter, delete it again, and the draft now matches the live row —
+    // keeping it would pin the Unsaved pill forever on an edit that no longer
+    // exists. (Nudge shipped exactly this bug first.)
+    const merged: TemplateDraft = {
+      ...(template.draft as TemplateDraft | undefined),
+      ...draft,
+    };
+    const live: TemplateDraft = {
+      body: template.body,
+      bodyHtml: template.bodyHtml,
+      subject: template.subject,
+      variableDefaults: template.variableDefaults,
+    };
+    // Compared as the row WOULD LOOK after commit, not as the blob looks on
+    // its own. A draft is partial — editing the body buffers body and bodyHtml
+    // and nothing else — so comparing the bare blob reads every untouched
+    // field as cleared, and the pill would stick forever on an edit that was
+    // typed and deleted again. `??` and not a spread, so an emptied box (the
+    // owner's "back to nothing") still counts as a real change.
+    const effective: TemplateDraft = {
+      body: merged.body ?? live.body,
+      bodyHtml: merged.bodyHtml ?? live.bodyHtml,
+      subject: merged.subject ?? live.subject,
+      variableDefaults: merged.variableDefaults ?? live.variableDefaults,
+    };
+    if (templateComparable(effective) === templateComparable(live)) {
+      await ctx.db.patch(templateId, {
+        draft: undefined,
+        draftUpdatedAt: undefined,
+      });
+      return null;
+    }
+    await ctx.db.patch(templateId, {
+      draft: merged,
+      draftUpdatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+// Save: copy the buffer onto the live fields, then clear it. Returns false
+// when there was nothing buffered, so the caller can tell a no-op from a
+// publish. Meta registration survives untouched — metaName and approval status
+// live on this row too, and publishing WORDS must never cost an approval that
+// took weeks.
+export const commitTemplateDraft = mutation({
+  args: { templateId: v.id("waTemplates") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const template = await ctx.db.get(args.templateId);
+    if (!template || template.orgId !== orgId) throw new Error("not-found");
+    const draft = template.draft as TemplateDraft | undefined | null;
+    if (draft === undefined || draft === null) return false;
+    const patch: Record<string, unknown> = {
+      draft: undefined,
+      draftUpdatedAt: undefined,
+    };
+    // Same normalisation updateTemplate applies, because this IS that write —
+    // an empty box means "back to nothing", not "leave the old words".
+    if (draft.body !== undefined) patch.body = draft.body.trim() || undefined;
+    if (draft.bodyHtml !== undefined) {
+      patch.bodyHtml = draft.bodyHtml.trim() || undefined;
+    }
+    if (draft.subject !== undefined) {
+      patch.subject = draft.subject.trim() || undefined;
+    }
+    if (draft.variableDefaults !== undefined) {
+      const rows = draft.variableDefaults
+        .map((pair) => ({
+          key: pair.key.trim().toLowerCase(),
+          value: pair.value.trim(),
+        }))
+        .filter((pair) => pair.key && pair.value);
+      patch.variableDefaults = rows.length ? rows : undefined;
+    }
+    await ctx.db.patch(args.templateId, patch);
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: `message wording saved: ${template.kind}`,
+    });
+    return true;
+  },
+});
+
+export const discardTemplateDraft = mutation({
+  args: { templateId: v.id("waTemplates") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const template = await ctx.db.get(args.templateId);
+    if (!template || template.orgId !== orgId) throw new Error("not-found");
+    await ctx.db.patch(args.templateId, {
+      draft: undefined,
+      draftUpdatedAt: undefined,
+    });
+    return null;
   },
 });
 

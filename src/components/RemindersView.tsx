@@ -89,7 +89,39 @@ type TemplateRow = {
   emailOpenCount?: number;
   emailReplyCount?: number;
   emailLastSentAt?: number;
+  // The editor's unsaved buffer (schema waTemplates.draft) and the flag the
+  // "Unsaved" pill keys on. Dirtiness is SERVER state here, not a client
+  // compare, so the rule header can render it without reaching into the
+  // editor's local state.
+  draft?: TemplateDraftBlob;
+  hasUnsavedChanges?: boolean;
 };
+
+type TemplateDraftBlob = {
+  body?: string;
+  bodyHtml?: string;
+  subject?: string;
+  variableDefaults?: VariableDefault[];
+};
+
+// What the editor opens with: the DRAFT when one exists, so a half-written
+// message resumes where it was left, and the live fields otherwise. The same
+// precedence orgs.commitTemplateDraft applies, so what you see is what Save
+// publishes.
+//
+// ignoreDraft is the Discard path. Seeding from the live fields there is
+// immune to the stale beat — the subscription can still be emitting the blob
+// being thrown away, and live fields do not move on a discard.
+function editorSeed(template?: TemplateRow, ignoreDraft = false) {
+  const draft = ignoreDraft ? undefined : template?.draft;
+  const body = draft?.body ?? template?.body ?? "";
+  return {
+    body,
+    subject: draft?.subject ?? template?.subject ?? "",
+    bodyHtml: draft?.bodyHtml ?? template?.bodyHtml ?? plainToHtml(body),
+    defaults: draft?.variableDefaults ?? template?.variableDefaults ?? [],
+  };
+}
 
 // What "Add reminder" can add, and what timing each one accepts. The bounds
 // are messageRules.clampOffset's, restated here so the sheet can refuse a
@@ -276,6 +308,7 @@ function RuleEditor({
   orgPublicPhone,
   emailEnabled,
   waConnected,
+  resetToken,
   onSaveTemplate,
 }: {
   rule: RuleRowData;
@@ -289,6 +322,9 @@ function RuleEditor({
   orgPublicPhone?: string;
   emailEnabled: boolean;
   waConnected: boolean;
+  // Bumped by the page's Discard. The editor holds the working copy, so only
+  // the owner of the buffer can tell it the buffer is gone.
+  resetToken: number;
   onSaveTemplate: (
     templateId: Id<"waTemplates">,
     patch: {
@@ -300,32 +336,39 @@ function RuleEditor({
   ) => void;
 }) {
   const { t } = useLanguage();
-  const [body, setBody] = useState(template?.body ?? "");
-  const [subject, setSubject] = useState(template?.subject ?? "");
+  const [body, setBody] = useState(() => editorSeed(template).body);
+  const [subject, setSubject] = useState(() => editorSeed(template).subject);
   // What the WYSIWYG editor currently holds, saved or not — the previews
   // track it live. Seeded from the stored HTML, or the plain body lifted into
   // HTML for rows that predate the editor.
-  const [liveHtml, setLiveHtml] = useState(
-    template?.bodyHtml ?? plainToHtml(template?.body ?? ""),
-  );
+  const [liveHtml, setLiveHtml] = useState(() => editorSeed(template).bodyHtml);
   // The "when empty, print…" table. Held here so the preview can render the
   // UNSAVED value — you are typing a fallback to see how the sentence reads,
   // and a preview that waited for the blur would be showing the old one.
   const [defaults, setDefaults] = useState<VariableDefault[]>(
-    template?.variableDefaults ?? [],
+    () => editorSeed(template).defaults,
   );
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   // The row is created by ensureTemplate when the panel opens; until the
   // query catches up there is nothing to bind to.
   const templateId = template?._id;
+  const lastResetRef = useRef(resetToken);
   useEffect(() => {
-    setBody(template?.body ?? "");
-    setSubject(template?.subject ?? "");
-    setDefaults(template?.variableDefaults ?? []);
-    setLiveHtml(template?.bodyHtml ?? plainToHtml(template?.body ?? ""));
-    // Re-seed exactly when the editor starts talking about a different row.
+    // A bumped token means Discard just ran — take the live fields and leave
+    // the draft alone, per editorSeed's note.
+    const afterDiscard = lastResetRef.current !== resetToken;
+    lastResetRef.current = resetToken;
+    const seed = editorSeed(template, afterDiscard);
+    setBody(seed.body);
+    setSubject(seed.subject);
+    setDefaults(seed.defaults);
+    setLiveHtml(seed.bodyHtml);
+    // Re-seed exactly when the editor starts talking about a different row, or
+    // when a discard has thrown the buffer away. NOT on every refetch: the
+    // autosave that follows each blur would otherwise reset the box under a
+    // still-typing owner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId]);
+  }, [templateId, resetToken]);
 
   // ── Preview data: a real booking, or no preview at all ──────────────────
   //
@@ -1158,6 +1201,15 @@ function RulesCard({
   const removeRule = useMutation(api.messageRules.remove);
   const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
+  // Blur writes go to the BUFFER, never to the live row: reminders send from a
+  // cron, so a body caught mid-sentence used to be a body a customer could
+  // receive. Save is what makes words live. (Ported from Nudge's
+  // templates.saveDraft/commitDraft/discardDraft.)
+  const saveTemplateDraft = useMutation(api.orgs.saveTemplateDraft);
+  const commitTemplateDraft = useMutation(api.orgs.commitTemplateDraft);
+  const discardTemplateDraft = useMutation(api.orgs.discardTemplateDraft);
+  const [saving, setSaving] = useState(false);
+  const [resetToken, setResetToken] = useState(0);
   // For the preview's custom-token map — the same registry the variable
   // dropdown reads, so preview and menu can never disagree.
   const contactFieldRows = useQuery(api.contactFields.list, {}) ?? [];
@@ -1434,26 +1486,96 @@ function RulesCard({
     );
     return (
       <Card disabled={!isOwner}>
-        {/* Back arrow left, title centred, an equal-width spacer right so the
-            centring is of the ROW and not of what happens to be left over
-            after the button. The arrow carries the label as its tooltip and
-            its accessible name rather than printing it: a word next to a
-            glyph that already says "back" is the second half of the same
-            sentence, and it was competing with the title for rank. */}
-        <div className="mb-3 flex items-center gap-2">
+        {/* Back left, title centred. The button PRINTS its label rather than
+            hiding it in a tooltip: a bare glyph is only obvious to someone who
+            already knows the way out, and this page is reached by drilling in
+            from a list you need to get back to. */}
+        {/* Three columns with equal outer tracks, so the title is centred on
+            the ROW rather than on whatever is left over beside the button —
+            which matters now that the button's width follows a translated
+            word ("Back" / "Geri" / "Zurück"). */}
+        <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <button
             type="button"
             onClick={() => openRule(null)}
             title={t("settings.rulesBack")}
-            aria-label={t("settings.rulesBack")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            className="flex h-9 w-fit shrink-0 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
           >
-            ←
+            {/* A chevron, not "←". The long-shafted arrow read as a stray
+                line of punctuation at the size the row needs, and it was
+                drawn in muted grey — the way back should be the most
+                findable thing on a page you opened by drilling in. */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+            {t("common.back")}
           </button>
-          <h2 className="min-w-0 flex-1 truncate text-center text-lg font-semibold">
+          <h2 className="min-w-0 truncate text-center text-lg font-semibold">
             {ruleName(opened.trigger)}
           </h2>
-          <span className="h-9 w-9 shrink-0" aria-hidden />
+          {/* Save and Discard live in the header rather than under the body:
+              on a long message the foot of the page is below the fold, and a
+              Save button people have to hunt for is a Save button that does
+              not get pressed. They appear only when there is something to
+              save — a permanently lit Save teaches you to ignore it. */}
+          <span className="flex items-center justify-end gap-2">
+            {ownTemplate?.hasUnsavedChanges && (
+              <>
+                <span
+                  className="hidden shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 sm:inline-flex dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400"
+                  title={t("settings.templateUnsavedHint")}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  {t("settings.templateUnsaved")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      const ok = await confirm({
+                        title: t("settings.templateDiscard"),
+                        body: t("settings.templateDiscardConfirm"),
+                        confirmLabel: t("settings.templateDiscard"),
+                      });
+                      if (!ok) return;
+                      await discardTemplateDraft({ templateId: ownTemplate._id });
+                      setResetToken((n) => n + 1);
+                    })();
+                  }}
+                  className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-red-300 hover:text-red-600 dark:hover:text-red-400"
+                >
+                  {t("settings.templateDiscard")}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      setSaving(true);
+                      try {
+                        await commitTemplateDraft({ templateId: ownTemplate._id });
+                      } finally {
+                        setSaving(false);
+                      }
+                    })();
+                  }}
+                  className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-60"
+                >
+                  {saving ? t("common.saving") : t("common.save")}
+                </button>
+              </>
+            )}
+          </span>
         </div>
 
         {/* Everything editable about the rule ITSELF — when it fires and which
@@ -1506,8 +1628,9 @@ function RulesCard({
           orgPublicPhone={org.publicPhone}
           emailEnabled={emailEnabled}
           waConnected={waConnected}
+          resetToken={resetToken}
           onSaveTemplate={(templateId, patch) =>
-            void updateTemplate({ templateId, ...patch })
+            void saveTemplateDraft({ templateId, ...patch })
           }
         />
         {/* Deleting lives with the thing being deleted. */}
@@ -1597,9 +1720,25 @@ function RulesCard({
                       )}
                     </span>
                     <span
-                      className={`text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}
+                      className={`flex min-w-0 items-center gap-2 text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}
                     >
-                      {ruleName(rule.trigger)}
+                      <span className="truncate">{ruleName(rule.trigger)}</span>
+                      {/* A pending draft is visible without opening anything —
+                          otherwise the only way to learn that words are
+                          waiting to go live is to remember. */}
+                      {templates.some(
+                        (tpl) =>
+                          tpl.ruleId === rule._id &&
+                          tpl.language === org.language &&
+                          tpl.hasUnsavedChanges,
+                      ) && (
+                        <span
+                          className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          title={t("settings.templateUnsavedHint")}
+                        >
+                          {t("settings.templateUnsaved")}
+                        </span>
+                      )}
                     </span>
                     {/* Which lanes this rule is ON, stated. The switches moved
                         inside with everything else editable. */}

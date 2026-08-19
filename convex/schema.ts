@@ -1264,6 +1264,19 @@ export default defineSchema({
     // When this template last actually sent an email — the "Sent 3× · last
     // Aug 2" line in the editor, without scanning messages to answer it.
     emailLastSentAt: v.optional(v.number()),
+    // ── Unsaved-changes buffer (EDITOR ONLY; no send path may read this) ────
+    //
+    // Ported from Nudge's templates.draft. Reminder wording used to save
+    // straight onto the live fields on blur, and reminders go out on a cron —
+    // so a body caught mid-sentence was a body a customer could receive. The
+    // live fields keep serving sends untouched until orgs.commitTemplateDraft
+    // copies this blob onto them; discardTemplateDraft just clears it.
+    //
+    // Present ⇔ the "Unsaved" pill. Stored as v.any() on purpose: it mirrors
+    // updateTemplate's arg set, but nothing reads it structurally — it is
+    // validated against the real typed fields at commit time.
+    draft: v.optional(v.any()),
+    draftUpdatedAt: v.optional(v.number()),
   }).index("by_org", ["orgId"]),
 
   messages: defineTable({

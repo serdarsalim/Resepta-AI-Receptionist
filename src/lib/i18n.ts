@@ -1228,6 +1228,26 @@ const dictionary = {
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
+  "settings.templateUnsaved": {
+    tr: "Kaydedilmedi",
+    en: "Unsaved",
+    de: "Nicht gespeichert",
+  },
+  "settings.templateUnsavedHint": {
+    tr: "Bu metin henüz yayında değil. Kaydedene kadar müşterilere en son kaydettiğiniz sürüm gider.",
+    en: "These words are not live yet. Customers keep getting the last version you saved until you press Save.",
+    de: "Dieser Text ist noch nicht live. Bis Sie speichern, erhalten Kundinnen und Kunden weiterhin die zuletzt gespeicherte Fassung.",
+  },
+  "settings.templateDiscard": {
+    tr: "Değişiklikleri at",
+    en: "Discard",
+    de: "Verwerfen",
+  },
+  "settings.templateDiscardConfirm": {
+    tr: "Kaydedilmemiş değişiklikler silinsin mi? En son kaydettiğiniz sürüm yayında kalır.",
+    en: "Throw away the unsaved changes? The last version you saved stays live.",
+    de: "Nicht gespeicherte Änderungen verwerfen? Die zuletzt gespeicherte Fassung bleibt live.",
+  },
   "settings.ruleAddMessage": {
     tr: "Gönderilecek mesaj",
     en: "The message it sends",
