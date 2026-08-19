@@ -1071,6 +1071,14 @@ export default defineSchema({
     nextMessageAt: v.optional(v.number()),
     confirmationSentAt: v.optional(v.number()),
     winbackSentAt: v.optional(v.number()),
+    // How many times this appointment's TIME has changed, for the calendar
+    // invites (lib/ics.ts). RFC 5546 makes a mail client compare SEQUENCE to
+    // decide whether an invite with a UID it already holds is an update or a
+    // stale duplicate — a reschedule that re-sends SEQUENCE:0 leaves Outlook
+    // and Apple Mail showing the old time. Unset reads as 0; every patch that
+    // moves startAt bumps it. CANCEL derives its own value (stored + 1) at
+    // build time, per §3.8.7.4's "must outrank the REQUEST it retracts".
+    icsSequence: v.optional(v.number()),
     // Intake: unset = typed into Resepta; "calcom" = arrived via the cal.com
     // webhook. externalUid is cal.com's booking uid — how RESCHEDULED and
     // CANCELLED events find the row they refer to.

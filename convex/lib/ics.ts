@@ -55,6 +55,9 @@ export function appointmentIcs(args: {
   // bare attachment instead of the inline event card.
   attendeeName: string;
   attendeeEmail: string;
+  // appointments.icsSequence — how many times the time has moved. Unset means
+  // the appointment never rescheduled, which is the old hardcoded 0.
+  sequence?: number;
 }): string {
   const now = utcStamp(Date.now());
   const lines = [
@@ -73,7 +76,7 @@ export function appointmentIcs(args: {
     `ATTENDEE;CN=${escapeText(args.attendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=` +
       `${args.method === "CANCEL" ? "DECLINED" : "NEEDS-ACTION"};RSVP=TRUE:mailto:${args.attendeeEmail}`,
     // CANCEL must outrank the REQUEST it retracts (§3.8.7.4), hence the bump.
-    `SEQUENCE:${args.method === "CANCEL" ? 1 : 0}`,
+    `SEQUENCE:${(args.sequence ?? 0) + (args.method === "CANCEL" ? 1 : 0)}`,
     `STATUS:${args.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     "END:VEVENT",
     "END:VCALENDAR",

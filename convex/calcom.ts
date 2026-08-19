@@ -174,6 +174,7 @@ export const handleCalcomEvent = internalMutation({
         status: "scheduled",
         reminderSentOffsets: [],
         confirmationSentAt: undefined,
+        icsSequence: (existing.icsSequence ?? 0) + 1,
       });
       await syncAppointmentSchedule(ctx, existing._id);
       await scheduleConfirmationIfConfigured(ctx, org._id, existing._id);
@@ -248,7 +249,11 @@ export const handleCalcomEvent = internalMutation({
     if (!customer) return { ok: false, reason: "customer-failed" };
 
     if (existing) {
-      await ctx.db.patch(existing._id, { startAt, durationMinutes });
+      await ctx.db.patch(existing._id, {
+        startAt,
+        durationMinutes,
+        icsSequence: (existing.icsSequence ?? 0) + 1,
+      });
       await syncAppointmentSchedule(ctx, existing._id);
       return { ok: true };
     }

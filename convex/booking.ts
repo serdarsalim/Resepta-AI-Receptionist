@@ -675,11 +675,14 @@ export const reschedule = mutation({
     ) {
       return { ok: false, reason: "customer-busy" };
     }
-    await ctx.db.patch(appointment._id, { startAt: args.startMs });
+    await ctx.db.patch(appointment._id, {
+      startAt: args.startMs,
+      icsSequence: (appointment.icsSequence ?? 0) + 1,
+    });
     await syncAppointmentSchedule(ctx, appointment._id);
     // The confirmation goes again with the new time. Its ICS rides the same
-    // UID (the appointment id), so the customer's calendar entry MOVES
-    // rather than gaining a twin.
+    // UID (the appointment id) at a bumped SEQUENCE, so the customer's
+    // calendar entry MOVES rather than gaining a twin or keeping the old slot.
     await scheduleConfirmationIfConfigured(ctx, org._id, appointment._id);
     return { ok: true };
   },

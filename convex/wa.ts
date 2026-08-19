@@ -911,6 +911,7 @@ export const sendAppointmentMessage = internalAction({
                   [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
                   customer.email,
                 attendeeEmail: customer.email,
+                sequence: appointment.icsSequence,
               }),
             }
           : undefined;

@@ -519,6 +519,9 @@ export const markRescheduled = internalMutation({
       status: "scheduled",
       reminderSentOffsets: [],
       confirmationSentAt: undefined,
+      // The re-confirmation's invite must outrank the one already in the
+      // customer's mailbox (schema: icsSequence).
+      icsSequence: (appointment.icsSequence ?? 0) + 1,
       ...(args.durationMinutes !== undefined
         ? { durationMinutes: args.durationMinutes }
         : {}),
