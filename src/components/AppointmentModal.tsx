@@ -458,7 +458,6 @@ export function AppointmentModal({
             // icon slot is an empty spacer here. The name is a fact, printed
             // where the input would be — and still the way to the record.
             <div className="flex items-center gap-3 text-xs font-medium">
-              <span className="w-5 shrink-0" aria-hidden />
               <span className="w-24 shrink-0">{t("customers.name")}</span>
               {onOpenCustomer ? (
                 <button
@@ -501,7 +500,6 @@ export function AppointmentModal({
                     className="flex items-center gap-3 text-xs font-medium"
                     htmlFor="modal-customer"
                   >
-                    <span className="w-5 shrink-0" aria-hidden />
                     <span className="w-24 shrink-0">{t("customers.name")}</span>
                     <input
                       id="modal-customer"
@@ -629,7 +627,6 @@ export function AppointmentModal({
                       className="flex items-center gap-3 text-xs font-medium"
                       htmlFor="modal-phone"
                     >
-                      <span className="w-5 shrink-0" aria-hidden />
                       <span className="w-24 shrink-0">{t("customers.phone")}</span>
                       <PhoneInput
                         id="modal-phone"
@@ -647,15 +644,13 @@ export function AppointmentModal({
             </>
           )}
 
-          {/* From here down, every row leads with a small grey glyph the way
-              Google's popup does — the icon column is what makes a stack of
-              unrelated fields read as one event card. */}
-          <div className="flex gap-3">
-            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
-              <ClockIcon />
-            </span>
+          {/* No glyph column. Icons were tried the Google way and lost: with
+              labels on every row the glyphs were decoration, half the rows
+              had no natural symbol and wore an empty spacer, and 20px of
+              icon shouted over 12px of label. Two columns, every row. */}
+          <div>
             {timeEditing ? (
-              <div className="min-w-0 flex-1 space-y-3">
+              <div className="min-w-0 space-y-3">
                 <label className="flex items-center gap-3 text-xs font-medium">
                   <span className="w-24 shrink-0">{t("appointments.when")}</span>
                   <input
@@ -693,7 +688,7 @@ export function AppointmentModal({
                  label sits in the shared label column in BOTH states, so
                  clicking to edit swaps only the value; a label that appeared
                  out of nowhere made the whole column jump. */
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <span className="w-24 shrink-0 text-xs font-medium">
                   {t("appointments.when")}
                 </span>
@@ -721,9 +716,6 @@ export function AppointmentModal({
           {/* One row per service delivered. A cut plus a beard trim is one
               visit with two lines, not two bookings on top of each other. */}
           <div className="flex gap-3">
-            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
-              <TagIcon />
-            </span>
             <span className="w-24 shrink-0 pt-2.5 text-xs font-medium">
               {t("appointments.service")}
             </span>
@@ -817,16 +809,10 @@ export function AppointmentModal({
             </div>
           </div>
 
-          {/* Each its own row, each behind its own glyph — Google gives the
-              description a separate line under the guests for the same
-              reason: who does the work and what to remember about it are
-              different kinds of fact, and pairing them just squeezed both. */}
-          <div className="flex items-center gap-3">
-            <span className="shrink-0 text-[var(--muted)]" aria-hidden>
-              <PersonIcon />
-            </span>
-            <label className="flex min-w-0 flex-1 items-center gap-3 text-xs font-medium">
-              <span className="w-24 shrink-0">{staffLabel}</span>
+          {/* Each its own row — who does the work and what to remember about
+              it are different kinds of fact, and pairing them squeezed both. */}
+          <label className="flex min-w-0 items-center gap-3 text-xs font-medium">
+            <span className="w-24 shrink-0">{staffLabel}</span>
               <select
                 className="min-w-0 flex-1"
                 value={staffId}
@@ -842,25 +828,19 @@ export function AppointmentModal({
                   ))}
               </select>
             </label>
-          </div>
 
-          <div className="flex gap-3">
-            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
-              <NotesIcon />
-            </span>
-            <label className="flex min-w-0 flex-1 items-start gap-3 text-xs font-medium">
-              <span className="w-24 shrink-0 pt-2.5">{t("appointments.notes")}</span>
-              {/* One row, and it grows as you type rather than reserving
-                  space for words nobody has written. Most bookings carry no
-                  note at all. */}
-              <textarea
-                rows={1}
-                className="min-w-0 flex-1 resize-y"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
-          </div>
+          <label className="flex min-w-0 items-start gap-3 text-xs font-medium">
+            <span className="w-24 shrink-0 pt-2.5">{t("appointments.notes")}</span>
+            {/* One row, and it grows as you type rather than reserving
+                space for words nobody has written. Most bookings carry no
+                note at all. */}
+            <textarea
+              rows={1}
+              className="min-w-0 flex-1 resize-y"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
           {/* Enter submits, which is what a booking form should do. */}
           <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
         </form>
@@ -921,43 +901,6 @@ export function AppointmentModal({
       </div>
     </div>,
     document.body,
-  );
-}
-
-// The row glyphs, drawn in the same outline stroke as the app's chevrons.
-// 20px, currentColor: the wrapping span decides the grey.
-function ClockIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" />
-    </svg>
-  );
-}
-
-function TagIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-      <circle cx="7.5" cy="7.5" r="0.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function PersonIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function NotesIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 6h16M4 12h16M4 18h10" />
-    </svg>
   );
 }
 
