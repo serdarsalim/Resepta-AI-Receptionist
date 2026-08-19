@@ -273,18 +273,21 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
     >
       <div className={ROW_GRID}>
         <RowLabel label={t("settings.bookingMode")} />
-        {/* The switch, then the link on its own line. Wrapping them into one
-            flex row put "Copy" on a third line under a URL that had already
-            wrapped — three stacked fragments for one address. */}
-        <div className="space-y-2">
-          <span className="flex items-center">
-            <Toggle checked={bookingEnabled ?? false} onChange={toggle} />
-          </span>
-          {/* The link is derived, so it is shown as a fact to copy rather
-              than a box to edit. Editing it was never meaningful — the page
-              lives at that address whatever the field says. */}
+        {/* One line: switch, address, Copy — the same shape the request-form
+            row had. The toggle stays leftmost so it lines up with every other
+            toggle in this column rather than floating behind a URL.
+
+            The link TRUNCATES rather than wrapping. It is a fact to copy, not
+            prose to read, and Copy is the affordance that matters; a URL
+            allowed to wrap took two lines and pushed the button onto a
+            third. */}
+        <div className="flex items-center gap-2">
+          <Toggle checked={bookingEnabled ?? false} onChange={toggle} />
+          {/* Derived, so it is shown rather than edited. Editing it was never
+              meaningful — the page lives at that address whatever a field
+              says. */}
           {bookingEnabled && nativeBookingUrl && (
-            <div className="flex items-baseline gap-2">
+            <>
               <a
                 href={nativeBookingUrl}
                 target="_blank"
@@ -305,7 +308,7 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
               >
                 {copied ? t("common.copied") : t("common.copy")}
               </button>
-            </div>
+            </>
           )}
         </div>
       </div>
