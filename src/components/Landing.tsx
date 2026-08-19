@@ -18,13 +18,13 @@ export function Landing() {
 
   return (
     <div className="min-h-dvh bg-[var(--background)]">
-      <div className="mx-auto max-w-3xl px-6">
-        <nav className="flex h-16 items-center gap-6">
+      <header>
+        <nav className="mx-auto flex h-16 max-w-3xl items-center gap-6 px-6">
           <a href="#top" className="flex shrink-0 items-center gap-2.5">
             <Mark />
             <span className="text-lg font-semibold tracking-tight">Resepta</span>
           </a>
-          <div className="hidden items-center gap-5 text-sm text-[var(--muted-strong)] md:flex">
+          <div className="hidden items-center gap-5 whitespace-nowrap text-sm text-[var(--muted-strong)] md:flex">
             <a className="transition-colors hover:text-[var(--foreground)]" href="#cost">
               {copy.nav.cost}
             </a>
@@ -63,15 +63,17 @@ export function Landing() {
             </Link>
             <Link
               href="/signin"
-              className="hidden rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 sm:block"
+              className="hidden whitespace-nowrap rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 sm:block"
             >
               {copy.cta}
             </Link>
           </div>
         </nav>
+      </header>
 
-        <main id="top">
-          <section className="landing-rise pb-24 pt-20 sm:pb-28 sm:pt-28">
+      <main id="top">
+        <section className="landing-rise">
+          <div className="mx-auto max-w-3xl px-6 pb-24 pt-20 sm:pb-28 sm:pt-28">
             <h1 className="max-w-[16ch] text-[clamp(2.4rem,6vw,3.6rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
               {copy.headline}
             </h1>
@@ -93,9 +95,14 @@ export function Landing() {
               </a>
             </div>
             <p className="mt-4 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
-          </section>
+          </div>
+        </section>
 
-          <section id="cost" className="scroll-mt-24 border-t border-[var(--border)] py-20 sm:py-24">
+        {/* The three beats are separated by surface, not by hairlines alone:
+            the cost band runs full-bleed on --pane with the card lifted on
+            top of it, the story returns to the page background. */}
+        <section id="cost" className="scroll-mt-24 border-y border-[var(--border)] bg-[var(--pane)]">
+          <div className="mx-auto max-w-3xl px-6 py-20 sm:py-24">
             <h2 className="max-w-[26ch] text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">
               {copy.cost.title}
             </h2>
@@ -107,9 +114,11 @@ export function Landing() {
                 ₺500 default into a USD result. */}
             <CostCalculator key={language} cost={copy.cost} />
             <p className="mt-4 text-sm text-[var(--muted)]">{copy.cost.statLine}</p>
-          </section>
+          </div>
+        </section>
 
-          <section id="how" className="scroll-mt-24 border-t border-[var(--border)] py-20 sm:py-24">
+        <section id="how" className="scroll-mt-24">
+          <div className="mx-auto max-w-3xl px-6 py-20 sm:py-24">
             <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">
               {copy.how.title}
             </h2>
@@ -155,10 +164,12 @@ export function Landing() {
                 {copy.cta}
               </Link>
             </div>
-          </section>
-        </main>
+          </div>
+        </section>
+      </main>
 
-        <footer className="border-t border-[var(--border)] py-12 text-sm text-[var(--muted)]">
+      <footer className="border-t border-[var(--border)] bg-[var(--pane)]">
+        <div className="mx-auto max-w-3xl px-6 py-12 text-sm text-[var(--muted)]">
           <div className="flex items-center gap-2.5 text-[var(--foreground)]">
             <Mark small />
             <span className="font-semibold">Resepta</span>
@@ -210,8 +221,8 @@ export function Landing() {
               {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
           </div>
-        </footer>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -219,11 +230,8 @@ export function Landing() {
 // The visitor's own numbers make the argument; the page only does the
 // arithmetic. The one external statistic stays outside this card, cited.
 function CostCalculator({ cost }: { cost: LandingCopy["cost"] }) {
-  const [missedInput, setMissedInput] = useState(String(cost.defaultMissed));
-  const [valueInput, setValueInput] = useState(String(cost.defaultValue));
-
-  const missed = clampNumber(missedInput);
-  const value = clampNumber(valueInput);
+  const [missed, setMissed] = useState(cost.defaultMissed);
+  const [value, setValue] = useState(cost.defaultValue);
   const yearly = Math.round(missed * value * 52);
 
   const currencyFormat = useMemo(
@@ -242,29 +250,25 @@ function CostCalculator({ cost }: { cost: LandingCopy["cost"] }) {
 
   return (
     <div className="mt-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm text-[var(--muted-strong)]">{cost.missedLabel}</span>
-          <input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={missedInput}
-            onChange={(event) => setMissedInput(event.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 tabular-nums"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm text-[var(--muted-strong)]">{cost.valueLabel}</span>
-          <input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={valueInput}
-            onChange={(event) => setValueInput(event.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 tabular-nums"
-          />
-        </label>
+      <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
+        <Slider
+          label={cost.missedLabel}
+          display={String(missed)}
+          value={missed}
+          min={0}
+          max={cost.missedMax}
+          step={1}
+          onChange={setMissed}
+        />
+        <Slider
+          label={cost.valueLabel}
+          display={currencyFormat.format(value)}
+          value={value}
+          min={0}
+          max={cost.valueMax}
+          step={cost.valueStep}
+          onChange={setValue}
+        />
       </div>
 
       <p className="mt-7">
@@ -344,10 +348,46 @@ function CostChart({
   );
 }
 
-function clampNumber(raw: string): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) return 0;
-  return Math.min(parsed, 1_000_000);
+// The current value sits at the end of the label row, so the reader never
+// has to guess what position the thumb translates to.
+function Slider({
+  label,
+  display,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  display: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  const pct = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="text-[var(--muted-strong)]">{label}</span>
+        <span className="font-medium tabular-nums">{display}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="landing-range mt-3.5"
+        style={{
+          backgroundImage: `linear-gradient(to right, var(--accent) ${pct}%, transparent ${pct}%)`,
+        }}
+      />
+    </label>
+  );
 }
 
 function FooterNav({ title, children }: { title: string; children: React.ReactNode }) {

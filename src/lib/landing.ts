@@ -32,6 +32,11 @@ export type LandingCopy = {
     currency: string;
     defaultMissed: number;
     defaultValue: number;
+    // Slider bounds are per-currency: a sensible ceiling in lira is not a
+    // sensible ceiling in euros.
+    missedMax: number;
+    valueMax: number;
+    valueStep: number;
     resultSuffix: string;
     chartCaption: string;
     // The one borrowed statistic on the page, kept because it can be
@@ -77,6 +82,9 @@ export const LANDING: Record<Language, LandingCopy> = {
       currency: "TRY",
       defaultMissed: 5,
       defaultValue: 500,
+      missedMax: 40,
+      valueMax: 5000,
+      valueStep: 50,
       resultSuffix: "her yıl masada kalıyor",
       chartCaption: "Ay ay nasıl biriktiği",
       statLine:
@@ -142,6 +150,9 @@ export const LANDING: Record<Language, LandingCopy> = {
       currency: "USD",
       defaultMissed: 5,
       defaultValue: 40,
+      missedMax: 40,
+      valueMax: 500,
+      valueStep: 5,
       resultSuffix: "left on the table every year",
       chartCaption: "How it adds up, month by month",
       statLine:
@@ -207,6 +218,9 @@ export const LANDING: Record<Language, LandingCopy> = {
       currency: "EUR",
       defaultMissed: 5,
       defaultValue: 40,
+      missedMax: 40,
+      valueMax: 500,
+      valueStep: 5,
       resultSuffix: "bleiben jedes Jahr liegen",
       chartCaption: "So summiert es sich, Monat für Monat",
       statLine:
