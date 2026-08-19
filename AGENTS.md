@@ -340,8 +340,20 @@ rather than after what it does.
   page off while messages kept printing a URL, off here and on in the
   customer's inbox. The request-form toggle and embed snippet left General the
   same day: `/r` and `/book` were two public channels for the same job and
-  the booking page is the one the settings offer (the `/r` route itself still
-  answers for orgs that had it enabled).
+  the booking page is the one that stayed.
+
+  **The `/r` route is RETIRED** (2026-08-19, Serdar: "I used it nowhere").
+  `convex/forms.ts` and `src/app/r/` are deleted, `/r/(.*)` is out of
+  `proxy.ts`'s public matcher, and `orgs.formEnabled` is dead-and-commented in
+  the schema (Convex cannot drop a field while documents carry values).
+  `publicSlug` is LIVE — the booking page mints and uses the same slug, and
+  `slugify` moved to `convex/booking.ts`, its only remaining consumer. The
+  `"form"` FEED channel stays wired end to end (`messages.channelOfMessage`,
+  `FeedIcon`, `FeedFilterPills`): `form_request` rows are historical data and
+  must still render, and the filter pill already hides itself for a customer
+  who has none. Do not rebuild a second public page that collects a name and a
+  service without writing an appointment — that was the whole shape, and it
+  put a stranger's request in a queue for staff to retype.
 - **Reminders rules open as a PAGE, not an expanding row.** The id lives in
   the URL (`?rule=`) like the app's tab does, so a refresh or a trip to
   another tab and back returns to the rule. A row that navigates must not also

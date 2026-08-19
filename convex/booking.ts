@@ -17,8 +17,24 @@ import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
 } from "./appointments";
-import { slugify } from "./forms";
+
 import { customerConflict } from "./lib/overlap";
+
+// Turkish-folded, lowercased, hyphenated. Lived in forms.ts until the request
+// form was retired (2026-08-19); this file is its only consumer now, and it is
+// the file that mints `publicSlug` in the first place. Kept separate from
+// lib/inboundAddress's slugger on purpose: that one feeds a mail routing key,
+// this one feeds a URL.
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
+    .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
 
 // The native booking page: /book/<slug>. The fifth intake, and the first one
 // that writes an APPOINTMENT — the form (forms.ts) lands a message for staff

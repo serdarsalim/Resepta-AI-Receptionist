@@ -634,18 +634,6 @@ const dictionary = {
   "forms.name": { tr: "Adınız", en: "Your name", de: "Ihr Name" },
   "forms.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
   "forms.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
-  "forms.services": {
-    tr: "Ne yaptırmak istersiniz?",
-    en: "What would you like booked?",
-    de: "Was möchten Sie buchen?",
-  },
-  "forms.note": { tr: "Not", en: "Note", de: "Notiz" },
-  "forms.send": { tr: "Gönder", en: "Send request", de: "Anfrage senden" },
-  "forms.thanks": {
-    tr: "Teşekkürler, talebiniz bize ulaştı. En kısa sürede sizi arayacağız.",
-    en: "Thanks — we've got your request and will be in touch to confirm a time.",
-    de: "Danke, Ihre Anfrage ist angekommen. Wir melden uns zur Terminbestätigung.",
-  },
   // The public booking page (/book/<slug>) and the manage page (/appt/<token>).
   "booking.pickService": {
     tr: "Hizmet seçin",

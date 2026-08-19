@@ -51,7 +51,6 @@ export const current = query({
       currency: v.string(),
       inboundAddress: v.optional(v.string()),
       publicSlug: v.optional(v.string()),
-      formEnabled: v.optional(v.boolean()),
       bookingEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
       // Shows the Balance tab (prepaid only) — the wallet itself is
@@ -192,7 +191,6 @@ export const current = query({
         currency: org.currency ?? DEFAULT_CURRENCY,
         inboundAddress: org.inboundAddress,
         publicSlug: org.publicSlug,
-        formEnabled: org.formEnabled,
         bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
         billingMode: org.billingMode,

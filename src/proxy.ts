@@ -8,17 +8,16 @@ import { DEMO_HOST, DOCS_HOST, hostFromHeader } from "@/lib/hosts";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 
-// The public request form. Whoever opens /r/<slug> is a customer of the salon,
-// not a user of this product — they have no account and never will, and the
-// page is designed to be embedded in the salon's own website. Sending them to
-// a Google sign-in screen breaks the feature outright.
+// The public pages. Whoever opens /book/<slug> is a customer of the salon, not
+// a user of this product — they have no account and never will. Sending them
+// to a Google sign-in screen breaks the feature outright.
 //
 // Safe to leave unauthenticated because the BACKEND is what enforces this, not
-// the route: every function the page calls (convex/forms.ts `publicForm` and
-// `submit`) is keyed by the org's public slug rather than by requireOrg, and
-// publishes only the business name and its active service names — no prices,
-// no counts, no customer data. A slug whose form is switched off is
-// indistinguishable from one that does not exist.
+// the route: every function these pages call is keyed by the org's public slug
+// (or an appointment's manage token) rather than by requireOrg, and publishes
+// only the business name and its active service names — no prices, no counts,
+// no customer data. A slug whose page is switched off is indistinguishable
+// from one that does not exist.
 //
 // Anything added to this matcher must clear the same bar. A route is public
 // when the functions behind it are public; making one reachable without
@@ -36,12 +35,12 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // and the real thing under <Authenticated>, and every Convex function behind
 // the app half still goes through requireOrg. Letting the request past this
 // redirect exposes a page, not a tenant.
-// /book/<slug> and /appt/<token> clear the bar the same way /r does, and they
-// shipped without being added here — which meant the booking page an owner
-// shares and the manage link we send over WhatsApp (convex/wa.ts) both bounced
-// the customer to a Google sign-in screen. Neither audience has an account.
+// /book/<slug> and /appt/<token> both shipped without being added here — which
+// meant the booking page an owner shares and the manage link we send over
+// WhatsApp (convex/wa.ts) both bounced the customer to a Google sign-in
+// screen. Neither audience has an account.
 //
-// The functions behind them are keyed the same way the request form's are:
+// The functions behind them are keyed to what the visitor was given:
 // convex/booking.ts `page`, `slots` and `book` take the org's public slug;
 // `manage`, `reschedule` and `cancel` take the appointment's manage token and
 // nothing else. The token IS the permission, scoped to one appointment, so a
@@ -49,7 +48,6 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // owner-side toggle in the same file, takes neither and stays behind requireOrg
 // where it belongs.
 const isPublicPage = createRouteMatcher([
-  "/r/(.*)",
   "/book/(.*)",
   "/appt/(.*)",
   "/privacy",

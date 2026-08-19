@@ -202,6 +202,14 @@ export default defineSchema({
     publicSlug: v.optional(v.string()),
     // Off until switched on. A form URL that answers before anyone has looked
     // at what it asks is worse than a 404.
+    // DEAD (2026-08-19). Gated the public request form at /r/<slug> — a
+    // second public page asking a stranger for their name and a service,
+    // which then landed as a message for staff to book by hand. It and
+    // /book/<slug> were two channels for one job; the booking page, which
+    // actually writes the appointment, is the one that stayed. Nothing reads
+    // or writes this any more, and Convex cannot drop a field while documents
+    // still carry values. `publicSlug` below is LIVE — the booking page uses
+    // the same slug.
     formEnabled: v.optional(v.boolean()),
     // The native booking page (/book/<slug>) — services, live slots, a real
     // appointment at the end. Shares publicSlug with the request form; its own
