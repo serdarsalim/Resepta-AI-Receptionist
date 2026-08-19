@@ -35,11 +35,21 @@ export const PLATFORM_KEYS = {
   // lives in `connections` ("llm"/"apiKey") and wins when present.
   anthropicApiKey: "ANTHROPIC_API_KEY",
   openaiApiKey: "OPENAI_API_KEY",
-  // Which dialect the chat agent speaks by default ("anthropic" | "openai")
-  // and an optional model-name override for that provider. Table-only: both
-  // are admin decisions, not deploy artifacts. Resolution order and the
-  // per-org override live in lib/chatLlm.ts.
+  // Which dialect the chat agent speaks by default ("anthropic" | "openai").
+  // Table-only: an admin decision, not a deploy artifact. Resolution order
+  // and the per-org override live in lib/chatLlm.ts.
   chatAgentProvider: null,
+  // Per-provider model for every org, picked in /admin from what the
+  // platform's own key can reach (platformConfig.listModels). Two rows, not
+  // one, so the idle provider keeps its choice — the whole point of storing
+  // both keys is that switching provider is one click, and a single model row
+  // typed for Claude would ride along to OpenAI as a 404 on every turn.
+  // Blank = DEFAULT_MODELS in lib/llm.ts.
+  anthropicModel: null,
+  openaiModel: null,
+  // Legacy single override from before the per-provider rows above; still
+  // read as their fallback (for the platform provider only) so a deployment
+  // configured the old way keeps its model, but never written by the UI.
   chatAgentModel: null,
   // The shared Retell workspace key auto-provisioning stamps into a new org's
   // connections row (docs/chat-agent.md §7). The env var is the same one the

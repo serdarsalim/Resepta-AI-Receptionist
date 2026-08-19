@@ -7,8 +7,8 @@
 //   1. The org's own connections rows ("llm"): provider, apiKey. Operator-set
 //      per client; a key here is that client on their own billing.
 //   2. The platform settings: chatAgentProvider picks the dialect,
-//      anthropicApiKey / openaiApiKey supply the key, chatAgentModel
-//      optionally overrides the provider's default model.
+//      anthropicApiKey / openaiApiKey supply the key, anthropicModel /
+//      openaiModel optionally override that provider's default model.
 //
 // A per-org provider with no per-org key still reads the PLATFORM key for
 // that provider — "this client runs on OpenAI" and "this client pays their
@@ -82,13 +82,23 @@ export async function resolveChatLlm(
       ctx,
       provider === "openai" ? "openaiApiKey" : "anthropicApiKey",
     ));
-  // The model override was typed with the PLATFORM's provider in mind, so it
-  // only applies while this org resolves to that same provider — an org
-  // moved to OpenAI must not inherit a Claude model name, or every one of
-  // its turns dies on a 404 the operator caused two screens away.
-  const override =
+  // The model rows are PER PROVIDER (anthropicModel / openaiModel), so the
+  // one read here is typed for exactly the provider this org resolved to —
+  // an org moved to OpenAI can never inherit a Claude model name. The legacy
+  // single row (chatAgentModel) predates that split and keeps its old guard:
+  // it was typed with the platform's provider in mind, so it only applies
+  // while this org resolves to that same provider.
+  const override = (await platformValue(
+    ctx,
+    provider === "openai" ? "openaiModel" : "anthropicModel",
+  ))?.trim();
+  const legacy =
     provider === (platformProvider ?? "anthropic")
       ? (await platformValue(ctx, "chatAgentModel"))?.trim()
       : undefined;
-  return { provider, model: override || DEFAULT_MODELS[provider], apiKey };
+  return {
+    provider,
+    model: override || legacy || DEFAULT_MODELS[provider],
+    apiKey,
+  };
 }

@@ -5,7 +5,14 @@
 // Convex surface around it.
 
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
@@ -53,7 +60,8 @@ export const status = query({
     anthropicApiKey: v.union(v.string(), v.null()),
     openaiApiKey: v.union(v.string(), v.null()),
     chatAgentProvider: v.union(v.literal("anthropic"), v.literal("openai")),
-    chatAgentModel: v.union(v.string(), v.null()),
+    anthropicModel: v.union(v.string(), v.null()),
+    openaiModel: v.union(v.string(), v.null()),
     chatAgentDisabled: v.boolean(),
     retellApiKey: v.union(v.string(), v.null()),
     voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
@@ -94,7 +102,15 @@ export const status = query({
       anthropicApiKey: anthropicKey ? maskSecret(anthropicKey) : null,
       openaiApiKey: openaiKey ? maskSecret(openaiKey) : null,
       chatAgentProvider: provider === "openai" ? ("openai" as const) : ("anthropic" as const),
-      chatAgentModel: (await platformValue(ctx, "chatAgentModel"))?.trim() || null,
+      // The legacy single override (chatAgentModel) shows through the row for
+      // the provider it was typed for, exactly mirroring how lib/chatLlm.ts
+      // resolves it — what this page displays is what the runtime uses.
+      anthropicModel:
+        row("anthropicModel") ??
+        (provider !== "openai" ? row("chatAgentModel") : null),
+      openaiModel:
+        row("openaiModel") ??
+        (provider === "openai" ? row("chatAgentModel") : null),
       chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       voiceRateMicroUsdPerMinute:
@@ -126,6 +142,11 @@ const settableKey = v.union(
   v.literal("anthropicApiKey"),
   v.literal("openaiApiKey"),
   v.literal("chatAgentProvider"),
+  v.literal("anthropicModel"),
+  v.literal("openaiModel"),
+  // Legacy single model override, superseded by the per-provider rows above.
+  // Still settable so a CLI clear ('{"key":"chatAgentModel","value":""}') can
+  // retire an old row.
   v.literal("chatAgentModel"),
   v.literal("retellApiKey"),
   v.literal("chatAgentDisabled"),
@@ -177,6 +198,77 @@ export const set = mutation({
       });
     }
     return null;
+  },
+});
+
+// The platform key for one provider, in the clear — for listModels below,
+// which runs as an action and so has no ctx.db of its own. Internal AND
+// admin-gated: auth rides ctx.runQuery, so the gate still runs.
+export const llmKey = internalQuery({
+  args: { provider: v.union(v.literal("anthropic"), v.literal("openai")) },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    return platformValue(
+      ctx,
+      args.provider === "openai" ? "openaiApiKey" : "anthropicApiKey",
+    );
+  },
+});
+
+// The models the PLATFORM key can actually reach, for the model pickers on
+// /admin. Live rather than a checked-in list (the nudge listOpenAiModels
+// argument): names churn, and a project-scoped OpenAI key only reaches what
+// its project was granted — a static list would confidently offer models the
+// key 403s on. Returns [] with a reason instead of throwing, so the picker
+// degrades to plain free text rather than blocking the field.
+export const listModels = action({
+  args: { provider: v.union(v.literal("anthropic"), v.literal("openai")) },
+  returns: v.object({
+    models: v.array(v.string()),
+    reason: v.union(v.string(), v.null()),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ models: string[]; reason: string | null }> => {
+    const apiKey = await ctx.runQuery(internal.platformConfig.llmKey, {
+      provider: args.provider,
+    });
+    if (!apiKey) return { models: [], reason: "no-api-key" };
+    try {
+      if (args.provider === "anthropic") {
+        const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        });
+        if (!res.ok) return { models: [], reason: `anthropic-http-${res.status}` };
+        const data = (await res.json()) as { data?: Array<{ id?: string }> };
+        // Already newest-first and all chat-capable; nothing to filter.
+        const ids = (data.data ?? []).map((m) => String(m.id ?? "")).filter(Boolean);
+        return { models: Array.from(new Set(ids)), reason: null };
+      }
+      const res = await fetch("https://api.openai.com/v1/models", {
+        headers: { authorization: `Bearer ${apiKey}` },
+      });
+      if (!res.ok) return { models: [], reason: `openai-http-${res.status}` };
+      const data = (await res.json()) as { data?: Array<{ id?: string }> };
+      const ids = (data.data ?? [])
+        .map((m) => String(m.id ?? ""))
+        .filter(Boolean)
+        // Chat-completions families only. The account also lists embeddings,
+        // TTS, moderation and image models, none of which the agent can speak.
+        .filter((id) => /^(gpt|o\d|chatgpt)/i.test(id))
+        .filter(
+          (id) =>
+            !/(audio|realtime|transcribe|tts|image|search|embed|moderation)/i.test(id),
+        )
+        // Newest first: OpenAI returns creation order, and the model the
+        // operator wants is nearly always the most recent one.
+        .sort((a, b) => b.localeCompare(a));
+      return { models: Array.from(new Set(ids)), reason: null };
+    } catch (e) {
+      return { models: [], reason: e instanceof Error ? e.message : "fetch-failed" };
+    }
   },
 });
 

@@ -84,7 +84,10 @@ with per-visitor rate limits if the demo needs it.
   recorded on every turn.
 - **Provider choice** is a fleet-page setting (`chatAgentProvider`,
   anthropic | openai) with both keys storable at once, an optional
-  deployment-wide model override (`chatAgentModel`), and a per-org provider
+  per-provider deployment-wide model pick (`anthropicModel` / `openaiModel`,
+  chosen on /admin from what the platform key can reach via
+  `platformConfig.listModels`; the legacy single `chatAgentModel` row still
+  reads as their fallback), and a per-org provider
   + key override in `connections` ("llm"). `lib/chatLlm.ts` is the ONE
   resolution, shared by the runtime and the admin health fact.
 - **Key resolution (two patterns, each matching an existing doctrine):**

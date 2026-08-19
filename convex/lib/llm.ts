@@ -12,7 +12,8 @@
 export type LlmProvider = "anthropic" | "openai";
 
 // Per-provider defaults, overridable deployment-wide via the platformConfig
-// row chatAgentModel — so a new model name is an admin edit, not a deploy.
+// rows anthropicModel / openaiModel — so a new model name is an admin edit,
+// not a deploy.
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-5.2",
@@ -34,9 +35,9 @@ export const DEFAULT_MONTHLY_BUDGET_MICRO_USD = 20_000_000;
 // billed at (chatAgentTurns.costMicroUsd), so editing this table never
 // rewrites history — it only changes turns that have not happened yet.
 // Bump the version when a rate changes so a turn row names its rate card.
-// An unknown model (an operator's chatAgentModel override this table has not
-// met) records cost 0 — visibly wrong in the admin panel, which is the nudge
-// to add its row here.
+// An unknown model (an operator's model override this table has not met)
+// records cost 0 — visibly wrong in the admin panel, which is the nudge to
+// add its row here.
 export const PRICE_TABLE_VERSION = 2;
 
 const PRICES: Record<string, { inUsdPerMTok: number; outUsdPerMTok: number }> = {
