@@ -70,15 +70,22 @@ export function VariableDefaultsEditor({
   //   [name]                      renderTokens tidies the greeting when it is
   //                               blank ("Hello [name]!" → "Hello!"), so the
   //                               sentence already survives without help
+  //   [service] / [pricelist] /   narrowed out 2026-08-19. The stock texts put
+  //   [price]                     them on their own lines, and a line that
+  //                               resolves to nothing collapses cleanly — a
+  //                               missing list is less information, not a
+  //                               broken sentence. A fallback there papers
+  //                               over an appointment with no line items,
+  //                               which is data the owner should fix, not
+  //                               write around. And the preview shows the
+  //                               hole as ⟨Services⟩ now, so the loss is no
+  //                               longer invisible.
   //
-  // What is left is the honest list: the org's own contact fields, which are
-  // blank for anyone who never answered them, and the three booking facts a
-  // real appointment can genuinely lack.
+  // What is left is the honest list: tokens that sit MID-SENTENCE and can
+  // genuinely be blank. [staff] ("your appointment with [staff]" → "your
+  // appointment with") and the org's own contact fields, which are blank for
+  // anyone who never answered them.
   const labels = new Map<string, string>([
-    ["service", t("vars.service")],
-    ["pricelist", t("vars.priceList")],
-    ["fiyatlistesi", t("vars.priceList")],
-    ["price", t("vars.price")],
     ["staff", t("vars.staff")],
     ...fields.map((field) => [field.key, field.label] as [string, string]),
   ]);

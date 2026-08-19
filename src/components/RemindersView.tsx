@@ -308,6 +308,7 @@ function RuleEditor({
   orgPublicPhone,
   emailEnabled,
   waConnected,
+  meta,
   resetToken,
   onSaveTemplate,
 }: {
@@ -322,6 +323,12 @@ function RuleEditor({
   orgPublicPhone?: string;
   emailEnabled: boolean;
   waConnected: boolean;
+  // The rule's own properties — when it fires, which lanes it travels — as
+  // leading rows of THIS form's grid rather than a strip above it. They are
+  // the same kind of thing as the subject: a labelled field describing the
+  // message. RulesCard owns the mutations behind them, so it supplies the
+  // rows and the editor only places them.
+  meta: React.ReactNode;
   // Bumped by the page's Discard. The editor holds the working copy, so only
   // the owner of the buffer can tell it the buffer is gone.
   resetToken: number;
@@ -703,21 +710,29 @@ function RuleEditor({
     // ONE column. The editor gets the full width of the panel, the way every
     // mail composer worth using does — the split gave the box you type in
     // half a page so that the other half could show the same words again.
-    <div className="space-y-2 pb-4">
-      {/* Subject first — that is the order an email reads in. Placeholder
-            instead of a label so the input gets the full row width. */}
-      {emailEnabled && (
-        // h-10 matches the preview header row beside it, so the editor box
-        // and the preview paper start on the same line.
-        <input
-          className="h-10 w-full"
-          value={subject}
-          placeholder={t("settings.templateSubject")}
-          aria-label={t("settings.templateSubject")}
-          onChange={(e) => setSubject(e.target.value)}
-          onBlur={() => onSaveTemplate(template._id, { subject })}
-        />
-      )}
+    <div className="space-y-4 pb-4">
+      {/* When, Channel, Subject: the settings-page grammar — label left,
+          capped input right (ROW_GRID, same as Business and Account), because
+          that is what these are: three properties of one message. The subject
+          used to be a bare full-width box above the editor, which read as a
+          second body; a labelled row cannot be mistaken for one. */}
+      <div className={ROW_GRID}>
+        {meta}
+        {emailEnabled && (
+          <>
+            <RowLabel
+              label={t("settings.templateSubject")}
+              hint={t("settings.templateSubjectHint")}
+            />
+            <input
+              value={subject}
+              placeholder={t("settings.templateSubject")}
+              onChange={(e) => setSubject(e.target.value)}
+              onBlur={() => onSaveTemplate(template._id, { subject })}
+            />
+          </>
+        )}
+      </div>
       {emailEnabled ? (
         // The real email editor — Visual/HTML tabs, toolbar with variables
         // and emoji built in. Every save writes BOTH projections: the HTML
@@ -1556,63 +1571,71 @@ function RulesCard({
           </span>
         </div>
 
-        {/* Everything editable about the rule ITSELF — when it fires and which
-            lanes it travels — in one strip above the words it sends. Both used
-            to live on the list row, back when the row expanded in place; a row
-            that opens a page cannot also be a control panel. */}
-        <div className="mb-4 flex flex-wrap items-start gap-x-10 gap-y-3">
-          <span className="flex flex-col gap-1">
-            <span className="text-[11px] text-[var(--muted)]">
-              {t("settings.rulesWhen")}
-            </span>
-            <span className="flex items-center gap-1.5 text-sm">
-              {ruleWhen(opened)}
-              {opened.trigger === "no_show" && <InfoTip text={winbackHint} />}
-              {opened.trigger === "after_end" && (
-                <InfoTip text={t("settings.ruleFollowupHint")} />
-              )}
-              {opened.trigger === "out_of_hours" && (
-                <InfoTip text={t("settings.ruleOutOfHoursHint")} />
-              )}
-            </span>
-          </span>
-          {/* Labelled, both of them. These are two different KINDS of thing
-              wearing the same clothes: the left is a fact about when the rule
-              fires, the right is a set of switches you can press. Unlabelled
-              they read as one drifting phrase — "When booked Email" — and the
-              amber pill looks like a tag rather than the control it is. The
-              words are the list's own column headings, so drilling into a rule
-              lands on the same vocabulary you left. */}
-          <span className="flex flex-col gap-1">
-            <span className="text-[11px] text-[var(--muted)]">
-              {t("settings.rulesWhere")}
-            </span>
-            <span className="flex flex-wrap items-center gap-1.5 text-xs">
-              {wiredFor(opened).map((channel) => {
-                const on = activeChannels(opened).has(channel);
-                return (
-                  <button
-                    key={channel}
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
-                    onClick={() => toggleChannel(opened, channel)}
-                    className={`rounded-full px-2.5 py-0.5 transition-colors ${
-                      on
-                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                        : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {channelLabel(channel)}
-                  </button>
-                );
-              })}
-            </span>
-          </span>
-        </div>
         <RuleEditor
           rule={opened}
+          // When and Channel, as rows of the editor's own grid. They used to
+          // be an unlabelled strip above it ("When booked  Email"), which read
+          // as one drifting phrase and hid that the amber pill is a switch.
+          meta={
+            <>
+              <RowLabel
+                label={t("settings.rulesWhen")}
+                hint={
+                  opened.trigger === "no_show"
+                    ? winbackHint
+                    : opened.trigger === "after_end"
+                      ? t("settings.ruleFollowupHint")
+                      : opened.trigger === "out_of_hours"
+                        ? t("settings.ruleOutOfHoursHint")
+                        : undefined
+                }
+              />
+              <span className="flex min-h-9 items-center gap-1.5 text-sm">
+                {ruleWhen(opened)}
+              </span>
+              <RowLabel label={t("settings.rulesWhere")} />
+              <span className="flex min-h-9 flex-wrap items-center gap-1.5 text-xs">
+                {wiredFor(opened).map((channel) => {
+                  const on = activeChannels(opened).has(channel);
+                  return (
+                    <button
+                      key={channel}
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
+                      onClick={() => toggleChannel(opened, channel)}
+                      className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 transition-colors ${
+                        on
+                          ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      {/* The check is what says "pressed" — colour alone made
+                          the on-state read as a decorative tag, and the off
+                          state as a button not yet discovered. */}
+                      {on && (
+                        <svg
+                          width="11"
+                          height="11"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      )}
+                      {channelLabel(channel)}
+                    </button>
+                  );
+                })}
+              </span>
+            </>
+          }
           template={ownTemplate}
           contactFields={contactFieldRows}
           orgName={org.name}

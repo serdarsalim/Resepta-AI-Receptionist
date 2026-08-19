@@ -1231,6 +1231,11 @@ const dictionary = {
     en: "alex@example.com",
     de: "alex@beispiel.de",
   },
+  "settings.templateSubjectHint": {
+    tr: "Yalnızca e-postada görünür. WhatsApp mesajının konu satırı yoktur.",
+    en: "Email only. A WhatsApp message has no subject line.",
+    de: "Nur in der E-Mail. Eine WhatsApp-Nachricht hat keine Betreffzeile.",
+  },
   "settings.templateUnsaved": {
     tr: "Kaydedilmedi",
     en: "Unsaved",
