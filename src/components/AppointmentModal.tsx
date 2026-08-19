@@ -382,7 +382,10 @@ export function AppointmentModal({
         firstName: firstName ?? "",
         lastName: rest.join(" ") || undefined,
         phone: String(data.get("phone") ?? "").trim(),
-        consent: data.get("consent") === "on",
+        // A customer added at the counter gave their number to be contacted
+        // about this booking — consent is the posture, not a checkbox to
+        // trip over mid-booking. The contact record is where it is revoked.
+        consent: true,
       };
       if (!values.newCustomer.firstName || !values.newCustomer.phone) return;
     }
@@ -618,8 +621,13 @@ export function AppointmentModal({
                     name, the way Google's popup carries just a title. */}
                 {!picked && (
                   <>
-                    <label className="block text-xs font-medium" htmlFor="modal-phone">
-                      {t("customers.phone")}
+                    {/* Label left, field right — the settings-form shape every
+                        row below shares from here on. */}
+                    <label
+                      className="flex items-center gap-3 text-xs font-medium"
+                      htmlFor="modal-phone"
+                    >
+                      <span className="w-24 shrink-0">{t("customers.phone")}</span>
                       <PhoneInput
                         id="modal-phone"
                         name="phone"
@@ -627,12 +635,8 @@ export function AppointmentModal({
                         // so required is unconditional; reportValidity in
                         // submit() is what surfaces it.
                         required
-                        className="mt-1"
+                        className="min-w-0 flex-1"
                       />
-                    </label>
-                    <label className="flex items-start gap-2 text-xs font-medium">
-                      <input name="consent" type="checkbox" defaultChecked className="mt-1 w-auto" />
-                      <span>{t("customers.consent")}</span>
                     </label>
                   </>
                 )}
@@ -644,19 +648,16 @@ export function AppointmentModal({
               Google's popup does — the icon column is what makes a stack of
               unrelated fields read as one event card. */}
           <div className="flex gap-3">
-            <span
-              className={`${timeEditing ? "mt-6" : "mt-2"} shrink-0 text-[var(--muted)]`}
-              aria-hidden
-            >
+            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
               <ClockIcon />
             </span>
             {timeEditing ? (
-              <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
-                <label className={`block text-xs font-medium${goodsOnly ? " col-span-2" : ""}`}>
-                  {t("appointments.when")}
+              <div className="min-w-0 flex-1 space-y-3">
+                <label className="flex items-center gap-3 text-xs font-medium">
+                  <span className="w-24 shrink-0">{t("appointments.when")}</span>
                   <input
                     type="datetime-local"
-                    className="mt-1"
+                    className="min-w-0 flex-1"
                     // Mounts on the click that asked to edit, so focus lands
                     // where the click was aimed.
                     autoFocus
@@ -670,13 +671,13 @@ export function AppointmentModal({
                 {/* An order of goods has a moment, not a length — showing a
                     minutes field for it would be a number that means nothing. */}
                 {!goodsOnly && (
-                  <label className="block text-xs font-medium">
-                    {t("appointments.duration")}
+                  <label className="flex items-center gap-3 text-xs font-medium">
+                    <span className="w-24 shrink-0">{t("appointments.duration")}</span>
                     <input
                       type="number"
                       min={5}
                       step={5}
-                      className="mt-1"
+                      className="min-w-0 flex-1"
                       value={durationMinutes}
                       onChange={(e) => setDurationMinutes(Number(e.target.value) || 5)}
                     />
@@ -712,13 +713,13 @@ export function AppointmentModal({
           {/* One row per service delivered. A cut plus a beard trim is one
               visit with two lines, not two bookings on top of each other. */}
           <div className="flex gap-3">
-            <span className="mt-0.5 shrink-0 text-[var(--muted)]" aria-hidden>
+            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
               <TagIcon />
             </span>
-            <div className="min-w-0 flex-1 space-y-1.5">
-            <span className="block text-xs text-[var(--muted)]">
+            <span className="w-24 shrink-0 pt-2.5 text-xs font-medium">
               {t("appointments.service")}
             </span>
+            <div className="min-w-0 flex-1 space-y-1.5">
             {lines.map((line, index) => (
               <div key={index} className="flex items-center gap-2">
                 <select
@@ -812,14 +813,14 @@ export function AppointmentModal({
               description a separate line under the guests for the same
               reason: who does the work and what to remember about it are
               different kinds of fact, and pairing them just squeezed both. */}
-          <div className="flex gap-3">
-            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+          <div className="flex items-center gap-3">
+            <span className="shrink-0 text-[var(--muted)]" aria-hidden>
               <PersonIcon />
             </span>
-            <label className="block min-w-0 flex-1 text-xs font-medium">
-              {staffLabel}
+            <label className="flex min-w-0 flex-1 items-center gap-3 text-xs font-medium">
+              <span className="w-24 shrink-0">{staffLabel}</span>
               <select
-                className="mt-1"
+                className="min-w-0 flex-1"
                 value={staffId}
                 onChange={(e) => setStaffId(e.target.value)}
               >
@@ -836,17 +837,17 @@ export function AppointmentModal({
           </div>
 
           <div className="flex gap-3">
-            <span className="mt-6 shrink-0 text-[var(--muted)]" aria-hidden>
+            <span className="mt-2 shrink-0 text-[var(--muted)]" aria-hidden>
               <NotesIcon />
             </span>
-            <label className="block min-w-0 flex-1 text-xs font-medium">
-              {t("appointments.notes")}
+            <label className="flex min-w-0 flex-1 items-start gap-3 text-xs font-medium">
+              <span className="w-24 shrink-0 pt-2.5">{t("appointments.notes")}</span>
               {/* One row, and it grows as you type rather than reserving
                   space for words nobody has written. Most bookings carry no
                   note at all. */}
               <textarea
                 rows={1}
-                className="mt-1 resize-y"
+                className="min-w-0 flex-1 resize-y"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
