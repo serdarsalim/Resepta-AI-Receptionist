@@ -16,6 +16,7 @@ import {
   withOpenPixel,
 } from "./lib/email";
 import { appointmentIcs } from "./lib/ics";
+import { resolveWaAccount } from "./lib/platformConfig";
 import {
   fetchWaMedia,
   sendWaCloudImage,
@@ -51,10 +52,14 @@ export const loadSessionContext = internalQuery({
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) return null;
     const [waAccount, org, contactFields] = await Promise.all([
+      // Resolved here, not at the send: the platform-token fallback
+      // (lib/platformConfig resolveWaAccount) needs ctx.db, and the action
+      // reading this context has none.
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
-        .unique(),
+        .unique()
+        .then((row) => resolveWaAccount(ctx, row)),
       ctx.db.get(orgId),
       ctx.db
         .query("contactFields")
@@ -285,7 +290,8 @@ export const loadAwayReplyContext = internalQuery({
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
-        .unique(),
+        .unique()
+        .then((row) => resolveWaAccount(ctx, row)),
       ctx.db.get(args.ruleId),
       ctx.db
         .query("waTemplates")
@@ -391,7 +397,8 @@ export const loadSendContext = internalQuery({
         ctx.db
           .query("waAccounts")
           .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
-          .unique(),
+          .unique()
+          .then((row) => resolveWaAccount(ctx, row)),
         ctx.db
           .query("waTemplates")
           .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
@@ -965,10 +972,13 @@ export const accountForOrg = internalQuery({
   args: { orgId: v.id("orgs") },
   returns: v.union(v.object({ accessToken: v.string() }), v.null()),
   handler: async (ctx, args) => {
-    const account = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .unique();
+    const account = await resolveWaAccount(
+      ctx,
+      await ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .unique(),
+    );
     return account ? { accessToken: account.accessToken } : null;
   },
 });
@@ -1036,10 +1046,13 @@ export const loadScheduledSendContext = internalQuery({
     if (!customer) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
-    const waAccount = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
-      .unique();
+    const waAccount = await resolveWaAccount(
+      ctx,
+      await ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .unique(),
+    );
     const evolution = await loadEvolutionCreds(ctx, customer.orgId, org.evolutionInstance);
     return { customer, org, waAccount, evolution };
   },

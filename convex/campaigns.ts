@@ -42,7 +42,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { customerSender } from "./lib/email";
-import { emailConfig } from "./lib/platformConfig";
+import { emailConfig, resolveWaAccount } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
@@ -272,7 +272,10 @@ export const loadForSend = internalQuery({
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", campaign.orgId))
-        .unique(),
+        .unique()
+        // hasWa below is a promise about SENDING, so the row only counts once
+        // a token resolves — its own or the platform's.
+        .then((row) => resolveWaAccount(ctx, row)),
     ]);
     if (!org) return null;
     const recipients = await matchSegment(ctx, campaign.orgId, campaign.segment);

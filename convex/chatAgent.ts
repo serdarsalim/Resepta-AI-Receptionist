@@ -11,7 +11,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { monthKey } from "./lib/usage";
 
-import { platformValue } from "./lib/platformConfig";
+import { platformValue, resolveWaAccount } from "./lib/platformConfig";
 import {
   DEFAULT_MONTHLY_BUDGET_MICRO_USD,
   appendToolRound,
@@ -125,10 +125,15 @@ export const loadTurnContext = internalQuery({
     // The send lane, resolved the way every reply resolves it. Checked even
     // for shadow so a shadow week surfaces "this org cannot actually send"
     // before going live does.
-    const waAccount = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
-      .unique();
+    // Resolved before the lane decision: a row riding the platform token IS
+    // a working Cloud lane, and a row with no token anywhere is not one.
+    const waAccount = await resolveWaAccount(
+      ctx,
+      await ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .unique(),
+    );
     const evolution = await loadEvolutionCreds(ctx, customer.orgId, org.evolutionInstance);
     const lane = laneForReply(
       laneAvailability({ org, waAccount, evolutionConfigured: Boolean(evolution) }),

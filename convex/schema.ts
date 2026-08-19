@@ -1134,7 +1134,11 @@ export default defineSchema({
     orgId: v.id("orgs"),
     phoneNumberId: v.string(),
     wabaId: v.optional(v.string()),
-    accessToken: v.string(),
+    // Unset = the platform token (lib/platformConfig resolveWaAccount): the
+    // Tech Provider shape, where this row carries only routing facts and one
+    // deployment-wide token authenticates every hosted number. Set only for
+    // an org on its own Meta app; the row's own value always wins.
+    accessToken: v.optional(v.string()),
     displayNumber: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])

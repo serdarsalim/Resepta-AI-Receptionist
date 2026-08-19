@@ -762,12 +762,14 @@ export const setWaAccount = mutation({
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
       .unique();
     if (!existing) {
-      if (!args.accessToken?.trim()) throw new Error("access-token-required");
+      // No token is a valid account now: the row rides the platform token
+      // (lib/platformConfig resolveWaAccount) — the Tech Provider shape,
+      // where per-org setup is just the routing facts.
       await ctx.db.insert("waAccounts", {
         orgId: args.orgId,
         phoneNumberId,
         wabaId: args.wabaId?.trim() || undefined,
-        accessToken: args.accessToken.trim(),
+        accessToken: args.accessToken?.trim() || undefined,
         displayNumber: args.displayNumber?.trim() || undefined,
       });
       return null;

@@ -47,7 +47,7 @@ import {
   sendEmail,
   withOpenPixel,
 } from "./lib/email";
-import { emailConfig, type EmailConfig } from "./lib/platformConfig";
+import { emailConfig, resolveWaAccount, type EmailConfig } from "./lib/platformConfig";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
@@ -122,10 +122,13 @@ export const claimForRetry = internalMutation({
     }
     if (isDemo(org)) return { refused: "demo-org" as const };
 
-    const waAccount = await ctx.db
-      .query("waAccounts")
-      .withIndex("by_org", (q) => q.eq("orgId", message.orgId))
-      .unique();
+    const waAccount = await resolveWaAccount(
+      ctx,
+      await ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", message.orgId))
+        .unique(),
+    );
 
     // The template row is looked up by the name the FIRST attempt recorded, so
     // a retry sends the same template even if the org has since registered

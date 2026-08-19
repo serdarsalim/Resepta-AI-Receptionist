@@ -57,6 +57,17 @@ export const PLATFORM_KEYS = {
   // has one signing key. A STAMP source, never a runtime fallback — the
   // connections doctrine stands.
   retellApiKey: "RETELL_API_KEY",
+  // The platform's Meta Cloud API token (the Tech Provider shape): one
+  // system-user token owned by the platform, while each org's waAccounts row
+  // carries only the routing facts — phone number id, WABA id. Unlike the
+  // Retell key above this is a LIVE fallback (resolveWaAccount below), not a
+  // stamp, and the difference is deliberate: a Retell key IS the workspace
+  // the org's agents live in, so re-pointing it would strand them, whereas a
+  // Meta token is pure auth over phone-number ids that never move — and Meta
+  // tokens rotate, so one rotation here has to reach every hosted org at
+  // once. An org with its own Meta app keeps its own token; the row's own
+  // value always wins.
+  whatsappAccessToken: "WHATSAPP_ACCESS_TOKEN",
   // Platform-wide chat agent kill switch (§5): "true" stops every org's
   // agent before the model runs. Table-only on purpose — flipping it is an
   // operator action from /admin, not a deploy.
@@ -125,6 +136,24 @@ export async function platformValue(
   if (stored) return stored;
   const envName = PLATFORM_KEYS[key];
   return envName ? clean(process.env[envName]) : null;
+}
+
+// A waAccounts row ready to send with: the org's own token when it carries
+// one, the platform token when it doesn't. Returns null when NEITHER exists,
+// because every caller already treats a missing row as "Cloud is off" — a row
+// that can authenticate nothing degrades the same way instead of producing
+// Bearer-less requests against Meta. Called in the loader QUERIES (which have
+// ctx.db), so the actions they feed keep receiving an account whose
+// accessToken is a plain guaranteed string.
+export async function resolveWaAccount<T extends { accessToken?: string }>(
+  ctx: Ctx,
+  account: T | null,
+): Promise<(T & { accessToken: string }) | null> {
+  if (!account) return null;
+  const token =
+    clean(account.accessToken) ??
+    (await platformValue(ctx, "whatsappAccessToken"));
+  return token ? { ...account, accessToken: token } : null;
 }
 
 // Inbound webhook signature checking, which runs in an httpAction and so needs

@@ -928,6 +928,7 @@ export default function TenantPage() {
         />
         <SecretRow
           label="Access token"
+          hint="Empty = the platform token (Platform tab) authenticates this number. Paste one only when this business runs its own Meta app."
           masked={detail.wa?.accessToken}
           onSave={(value) => wa({ accessToken: value })}
         />

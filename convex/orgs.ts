@@ -117,7 +117,8 @@ export const current = query({
         phoneNumberId: v.string(),
         wabaId: v.optional(v.string()),
         displayNumber: v.optional(v.string()),
-        tokenTail: v.string(),
+        // Absent when the row rides the platform token (schema: waAccounts).
+        tokenTail: v.optional(v.string()),
       }),
       v.object({ connected: v.literal(false) }),
     ),
@@ -230,7 +231,7 @@ export const current = query({
             phoneNumberId: waAccount.phoneNumberId,
             wabaId: waAccount.wabaId,
             displayNumber: waAccount.displayNumber,
-            tokenTail: waAccount.accessToken.slice(-4),
+            tokenTail: waAccount.accessToken?.slice(-4),
           }
         : { connected: false as const },
       templates: templates.map((t) => ({

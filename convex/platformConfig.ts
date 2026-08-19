@@ -64,6 +64,9 @@ export const status = query({
     openaiModel: v.union(v.string(), v.null()),
     chatAgentDisabled: v.boolean(),
     retellApiKey: v.union(v.string(), v.null()),
+    // The Meta Cloud API platform token every waAccounts row without its own
+    // token rides (lib/platformConfig resolveWaAccount).
+    whatsappAccessToken: v.union(v.string(), v.null()),
     voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
     // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
     stripeSecretKey: v.union(v.string(), v.null()),
@@ -78,6 +81,7 @@ export const status = query({
       anthropicApiKey: v.boolean(),
       openaiApiKey: v.boolean(),
       retellApiKey: v.boolean(),
+      whatsappAccessToken: v.boolean(),
       stripeSecretKey: v.boolean(),
       stripeWebhookSecret: v.boolean(),
     }),
@@ -92,6 +96,7 @@ export const status = query({
     const openaiKey = await platformValue(ctx, "openaiApiKey");
     const provider = (await platformValue(ctx, "chatAgentProvider"))?.toLowerCase();
     const retellKey = await platformValue(ctx, "retellApiKey");
+    const waToken = await platformValue(ctx, "whatsappAccessToken");
     const stripeKey = await platformValue(ctx, "stripeSecretKey");
     const stripeWebhook = await platformValue(ctx, "stripeWebhookSecret");
     return {
@@ -113,6 +118,7 @@ export const status = query({
         (provider === "openai" ? row("chatAgentModel") : null),
       chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
+      whatsappAccessToken: waToken ? maskSecret(waToken) : null,
       voiceRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
       stripeSecretKey: stripeKey ? maskSecret(stripeKey) : null,
@@ -124,6 +130,7 @@ export const status = query({
         anthropicApiKey: Boolean(anthropicKey) && !row("anthropicApiKey"),
         openaiApiKey: Boolean(openaiKey) && !row("openaiApiKey"),
         retellApiKey: Boolean(retellKey) && !row("retellApiKey"),
+        whatsappAccessToken: Boolean(waToken) && !row("whatsappAccessToken"),
         stripeSecretKey: Boolean(stripeKey) && !row("stripeSecretKey"),
         stripeWebhookSecret:
           Boolean(stripeWebhook) && !row("stripeWebhookSecret"),
@@ -149,6 +156,7 @@ const settableKey = v.union(
   // retire an old row.
   v.literal("chatAgentModel"),
   v.literal("retellApiKey"),
+  v.literal("whatsappAccessToken"),
   v.literal("chatAgentDisabled"),
   v.literal("voiceRateMicroUsdPerMinute"),
   // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
