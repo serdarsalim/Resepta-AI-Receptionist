@@ -1228,16 +1228,6 @@ const dictionary = {
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
-  "settings.resetRules": {
-    tr: "Varsayılanlara sıfırla",
-    en: "Reset to defaults",
-    de: "Auf Standard zurücksetzen",
-  },
-  "settings.resetRulesConfirm": {
-    tr: "Tüm mesaj kuralları ve yazdığınız özel metinler silinir; varsayılan kural seti hazır metinlerle geri gelir. WhatsApp onayları etkilenmez.",
-    en: "This deletes every message rule and the custom texts you wrote, and restores the stock rule set with stock wording. WhatsApp approvals are not affected.",
-    de: "Alle Nachrichtenregeln und Ihre eigenen Texte werden gelöscht; das Standard-Regelset mit Standardtexten kommt zurück. WhatsApp-Genehmigungen bleiben unberührt.",
-  },
   "settings.deleteRule": {
     tr: "Kuralı sil",
     en: "Delete rule",

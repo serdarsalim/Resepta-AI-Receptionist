@@ -1084,7 +1084,6 @@ function RulesCard({
   const addRule = useMutation(api.messageRules.add);
   const updateRule = useMutation(api.messageRules.update);
   const removeRule = useMutation(api.messageRules.remove);
-  const resetRules = useMutation(api.messageRules.resetToDefaults);
   const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
   // For the preview's custom-token map — the same registry the variable
@@ -1548,26 +1547,12 @@ function RulesCard({
           </p>
         )}
 
-        {/* The escape hatch, deliberately quiet and in the corner: back to the
-            stock rules and stock wording. */}
-        <div className="mt-3 flex justify-end">
-          <button
-            type="button"
-            onClick={async () => {
-              const ok = await confirm({
-                title: t("settings.resetRules"),
-                body: t("settings.resetRulesConfirm"),
-                confirmLabel: t("settings.resetRules"),
-              });
-              if (!ok) return;
-              openRule(null);
-              void resetRules({});
-            }}
-            className="text-xs text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
-          >
-            {t("settings.resetRules")}
-          </button>
-        </div>
+        {/* "Reset to defaults" stood here until 2026-08-19. It offered to
+            throw away every rule and every word an owner had written, in
+            exchange for a state they can reach a rule at a time — a
+            destructive button parked under a list, earning its place by
+            being quiet. api.messageRules.resetToDefaults still exists for
+            support to call. */}
         {confirmDialog}
       </Card>
       {adding && (
