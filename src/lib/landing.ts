@@ -26,7 +26,6 @@ export type LandingCopy = {
   nav: { cost: string; how: string; pricing: string };
   signIn: string;
   cta: string;
-  ctaNote: string;
   headline: string;
   subhead: string;
   seeHow: string;
@@ -82,7 +81,6 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: { cost: "Maliyet", how: "Nasıl çalışır", pricing: "Fiyatlar" },
     signIn: "Giriş yapın",
     cta: "Hemen başlayın",
-    ctaNote: "Şifre yok. Kurulumdaki tek soru işletmenizin adı.",
     headline: "Bir daha randevu kaçmasın.",
     subhead:
       "Siz müsait olmadığınızda Resepta açar: işletmenizi tanıyan sesli asistan aramayı yanıtlar, randevuyu takvime işler ve siz işinize dönmeden onayı gönderir.",
@@ -146,7 +144,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           period: "/ ay",
           features: [
             "Kendi numarasında sesli asistan",
-            "Ayda 100 arama dakikası",
+            "Ayda 200 arama dakikası",
             "Randevu takvimi ve müşteri kayıtları",
             "E-posta onay ve hatırlatmaları",
             "Google Takvim eşitlemesi",
@@ -159,7 +157,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           includesLead: "Başlangıç'taki her şey, artı:",
           recommended: true,
           features: [
-            "Ayda 300 arama dakikası",
+            "Ayda 400 arama dakikası",
             "WhatsApp onay ve hatırlatmaları",
             "Gelmeyen ve iptal takipleri",
           ],
@@ -192,7 +190,6 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: { cost: "The cost", how: "How it works", pricing: "Pricing" },
     signIn: "Sign in",
     cta: "Get started",
-    ctaNote: "No password. The only setup question is your business name.",
     headline: "Never miss another booking.",
     subhead:
       "Resepta picks up when you can't: a voice agent trained on your business answers the call, books the appointment into your calendar, and sends the confirmation before you're free again.",
@@ -256,7 +253,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           period: "/ month",
           features: [
             "Voice agent on its own number",
-            "100 call minutes a month",
+            "200 call minutes a month",
             "Booking calendar and customer records",
             "Email confirmations and reminders",
             "Google Calendar sync",
@@ -269,7 +266,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           includesLead: "Everything in Starter, plus:",
           recommended: true,
           features: [
-            "300 call minutes a month",
+            "400 call minutes a month",
             "WhatsApp confirmations and reminders",
             "No-show and cancellation follow-ups",
           ],
@@ -302,7 +299,6 @@ export const LANDING: Record<Language, LandingCopy> = {
     nav: { cost: "Die Kosten", how: "So funktioniert es", pricing: "Preise" },
     signIn: "Anmelden",
     cta: "Jetzt starten",
-    ctaNote: "Kein Passwort. Die einzige Frage bei der Einrichtung: der Name Ihres Betriebs.",
     headline: "Kein Termin geht mehr verloren.",
     subhead:
       "Resepta geht ran, wenn Sie nicht können: Ein Sprachassistent, der Ihren Betrieb kennt, nimmt den Anruf an, trägt den Termin in den Kalender ein und verschickt die Bestätigung, bevor Sie wieder Zeit haben.",
@@ -366,7 +362,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           period: "/ Monat",
           features: [
             "Sprachassistent auf eigener Nummer",
-            "100 Anrufminuten pro Monat",
+            "200 Anrufminuten pro Monat",
             "Terminkalender und Kundenprofile",
             "Bestätigungen und Erinnerungen per E-Mail",
             "Google-Kalender-Synchronisierung",
@@ -379,7 +375,7 @@ export const LANDING: Record<Language, LandingCopy> = {
           includesLead: "Alles aus Starter, plus:",
           recommended: true,
           features: [
-            "300 Anrufminuten pro Monat",
+            "400 Anrufminuten pro Monat",
             "WhatsApp-Bestätigungen und -Erinnerungen",
             "Nachfassen bei No-Shows und Absagen",
           ],

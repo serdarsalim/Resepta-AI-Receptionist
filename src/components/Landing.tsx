@@ -19,45 +19,44 @@ export function Landing() {
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       <header>
-        <nav className="mx-auto flex h-16 max-w-3xl items-center gap-6 px-6">
-          <a href="#top" className="flex shrink-0 items-center gap-2.5">
-            <Mark />
-            <span className="text-lg font-semibold tracking-tight">Resepta</span>
-          </a>
-          <div className="hidden items-center gap-5 whitespace-nowrap text-sm text-[var(--muted-strong)] md:flex">
-            <a className="transition-colors hover:text-[var(--foreground)]" href="#cost">
-              {copy.nav.cost}
+        <nav className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-4 px-6">
+          <div className="flex min-w-0 items-center gap-8">
+            <a href="#top" className="flex shrink-0 items-center gap-2.5">
+              <Mark />
+              <span className="text-lg font-semibold tracking-tight">Resepta</span>
             </a>
-            <a className="transition-colors hover:text-[var(--foreground)]" href="#how">
-              {copy.nav.how}
-            </a>
-            <a className="transition-colors hover:text-[var(--foreground)]" href="#pricing">
-              {copy.nav.pricing}
-            </a>
-            <a
-              className="transition-colors hover:text-[var(--foreground)]"
-              href={DOCS_ORIGIN}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {copy.help}
-            </a>
+            <div className="hidden items-center gap-6 whitespace-nowrap text-sm text-[var(--muted-strong)] md:flex">
+              <a className="transition-colors hover:text-[var(--foreground)]" href="#cost">
+                {copy.nav.cost}
+              </a>
+              <a className="transition-colors hover:text-[var(--foreground)]" href="#how">
+                {copy.nav.how}
+              </a>
+              <a className="transition-colors hover:text-[var(--foreground)]" href="#pricing">
+                {copy.nav.pricing}
+              </a>
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-            <select
-              aria-label="Language"
-              className="w-auto bg-transparent text-sm"
-              value={language}
-              onChange={(event) => {
-                if (isLanguage(event.target.value)) setLanguage(event.target.value);
-              }}
-            >
-              {LANGUAGES.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
+            {/* The select wears the same ghost treatment as the links beside
+                it; appearance-none strips the OS chrome, the chevron is ours. */}
+            <span className="relative">
+              <select
+                aria-label="Language"
+                className="cursor-pointer appearance-none rounded-lg border-none bg-transparent py-2 pl-3 pr-7 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                value={language}
+                onChange={(event) => {
+                  if (isLanguage(event.target.value)) setLanguage(event.target.value);
+                }}
+              >
+                {LANGUAGES.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon />
+            </span>
             <Link
               href="/signin"
               className="rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -66,7 +65,7 @@ export function Landing() {
             </Link>
             <Link
               href="/signin"
-              className="hidden whitespace-nowrap rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 sm:block"
+              className="ml-2 hidden rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 sm:block"
             >
               {copy.cta}
             </Link>
@@ -97,7 +96,6 @@ export function Landing() {
                 {copy.seeHow} <span aria-hidden>↓</span>
               </a>
             </div>
-            <p className="mt-4 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
           </div>
         </section>
 
@@ -214,7 +212,6 @@ export function Landing() {
               >
                 {copy.cta}
               </Link>
-              <p className="mt-3 text-sm text-[var(--muted)]">{copy.ctaNote}</p>
             </div>
           </div>
         </section>
@@ -472,6 +469,21 @@ function Mark({ small = false }: { small?: boolean }) {
         />
       </svg>
     </span>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg
+      className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
