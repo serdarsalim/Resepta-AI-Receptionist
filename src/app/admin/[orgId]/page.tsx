@@ -32,6 +32,9 @@ import {
 import { CheckMark, SearchInput } from "@/components/DataTable";
 import { useSearch } from "@/lib/useTableState";
 
+// The cal.com card is parked, not deleted — see the guard at its Section.
+const SHOW_CALCOM_CARD = false;
+
 // Label left, control right, current value underneath as a hint. Autosave on
 // blur, no Save button, matching the app's own settings conventions.
 // Status is a dot plus a word, never a bare lowercase token floating in a
@@ -961,6 +964,12 @@ export default function TenantPage() {
         </div>
       </Section>
 
+      {/* Hidden, not removed (Serdar, 2026-08-19): the cal.com lane stays
+          dormant — no org is wired, native booking owns availability, and the
+          card only invited the operator to configure a path nothing uses.
+          The guard keeps the JSX compiling so the card cannot rot while it
+          waits; flip the constant to show it again. */}
+      {SHOW_CALCOM_CARD && (
       <Section
         title="Bookings"
         description="cal.com powers availability and conflict checks. Without a key, voice bookings record without checking the calendar."
@@ -994,6 +1003,7 @@ export default function TenantPage() {
           </div>
         </div>
       </Section>
+      )}
 
       <Section
         title="WhatsApp (Evolution API)"
