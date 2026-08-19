@@ -1309,6 +1309,70 @@ while documents still carry values.
 The rule the old note was reaching for still stands: never coin a term like
 "bookable person" when the product already has a plainer one.
 
+## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 section below)
+
+Serdar's brief: make the calendar and its popup read like Google Calendar,
+step by step, over one long session. What holds now:
+
+- **Events wear their own hue: lavender.** `--event` (light `#7c5cf0`, dark
+  `#8b6ef5`) plus `--event-soft` / `--event-past` / `--event-past-fg` in
+  globals.css. NOT `--brand` (green means the product) and NOT `--accent`
+  (blue means "do something"). The brand green no longer appears on any
+  event surface.
+- **Tense outranks status** (`blockStyle` in AppointmentsView). Upcoming =
+  solid lavender with white text, confirmed a shade deeper than scheduled;
+  past = the pale wash — decided by the block's END against the live clock,
+  so a booking fades the minute it finishes, not at midnight. `no_show`
+  stays red in both tenses. The draw-band is tense-aware the same way, so a
+  slot drawn over yesterday is muted before it is saved.
+- **The now-line is red** (`--now-line`), Google's red, and red means ONLY
+  "now" — never danger. Today's circles (week header, month, year) are
+  `--accent` blue.
+- **Overlaps always render side by side.** The week view's "3 bookings"
+  cluster chip is deleted — Serdar chose Google's behaviour: every
+  overlapping booking draws in its own lane, truncates, and stays
+  clickable. Each chip wears `ring-1 ring-[var(--card)]` — the white seam
+  that keeps two touching solid chips readable as two.
+- **Chips hug the left and leave the right free.** 1px off the left rule,
+  `BLOCK_RIGHT_GUTTER_PX` (14) bare on the right, so a fully booked slot
+  still has grid to press for the NEXT booking. The draft band uses the
+  same insets so it lands exactly where the saved chip will.
+- **The gutter corner prints the GMT offset** (`gmtLabel`), computed from
+  the BUSINESS's timezone — the same zone the closed shading uses, so the
+  two can never disagree.
+- **Header order is Google's**: Today as an always-visible outlined pill on
+  the left (`periodHasToday` is deleted — a pill that vanished made the row
+  twitch), arrows + heading next, the view picker as a matching outlined
+  pill on the right. **There is no "new appointment" button — don't
+  reintroduce it.** The grid is the button: click or drag a slot, or a
+  month cell. Serdar flip-flopped on this and landed on remove.
+- **The booking sheet is a 448px Google card**: rounded-3xl, shadow-only
+  edge (hairline border only in dark), X to close, blue pill Save that runs
+  `reportValidity` so a missing phone is a browser bubble, not a dead click.
+- **One customer field, no Existing/New toggle.** It searches as you type;
+  picking a match links that record and shows NOTHING else (no phone/consent
+  readback — the record holds those). No pick means the typed text IS the
+  new customer's name (first word → firstName, rest → lastName) and a phone
+  field waits below. The dropdown's last row says so: "+ New customer: …".
+  **Consent is always true for counter-created customers** — the checkbox
+  was removed on Serdar's call; the contact record is where consent is
+  revoked.
+- **Every popup row is two columns**: label (`w-24`) then field, all on one
+  left edge. Row icons were tried the Google way and deleted — with labels
+  present they were decoration, and half the rows had no natural glyph.
+- **When is prose until clicked** ("Perşembe, 20 Ağustos  10:00 – 11:30"),
+  then swaps to `WhenPicker` (its own file): a date chip opening a mini
+  month popover, and start–end time chips that accept typed "930" / "9:30" /
+  "9" or a pick from 15-minute lists (end options carry their duration).
+  Duration is what WhenPicker REPORTS — the machinery still speaks minutes —
+  but the owner only ever handles times. Moving the start keeps the length;
+  an end at or before the start is refused, not reinterpreted (no
+  cross-midnight bookings). The native datetime-local input is gone; it
+  typed the year to 0025 with no way back.
+- The sheet-height dependency rule below still applies: `timeEditing` and
+  `picked` are in the placement effect's list now. Add anything new that
+  changes height.
+
 ## The calendar (rebuilt 2026-07-29)
 
 Four views behind one dropdown — Day, Week, Month, Year, plus List — with
@@ -1322,8 +1386,8 @@ booking sheet is open.
   derivable from `anchor` alone. Stepping is not a fixed number of days —
   months and years are walked with `addMonths` / `addYears`, both of which pin
   the date before moving the unit (31 Jan + 1 month is otherwise 3 March).
-- **Today shows only when you are elsewhere** (`periodHasToday`). It sits at the
-  end of a right-aligned cluster so its appearing moves nothing.
+- ~~Today shows only when you are elsewhere~~ Superseded 2026-08-19: Today is
+  an always-visible outlined pill on the left; `periodHasToday` is deleted.
 - **The query window follows the anchor**, padded a fortnight. It used to be a
   fixed window around page load, which silently returned nothing past six weeks
   out — indistinguishable from "no bookings". If you add a view, extend `range`
@@ -1340,10 +1404,8 @@ booking sheet is open.
   ResizeObserver would make the list unnecessary and does not work here — its
   callbacks are never delivered in this app, not even the initial one
   `observe()` guarantees. Worth diagnosing; until then the list is manual.
-- **Week folds crowded clusters, day never does.** A cluster block is a door
-  into the day, not a booking: it has no drag and it stops its own pointerdown,
-  or the press reaches the column and offers to add to the fullest slot on
-  screen.
+- ~~Week folds crowded clusters, day never does.~~ Superseded 2026-08-19: the
+  cluster chip is deleted; overlaps always render side by side in every view.
 - **The year reads from `appointments.startsInRange`**, not `listRange`.
   `listRange` resolves a customer and staff row per appointment, which is
   thousands of document reads to place dots. Bucket to local midnight on the

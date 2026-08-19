@@ -134,6 +134,16 @@ Painting only the *open* hours white and letting the plane show through closed
 time was tried and reverted — the white band is an overlay, so it buried the
 hour lines it was laid over and the grid lost its ruler.
 
+### Events wear lavender, and only events do (2026-08-19)
+
+`--event` (`#7c5cf0` light / `#8b6ef5` dark) with `--event-soft`,
+`--event-past`, `--event-past-fg` derived beside it. A third hue on purpose:
+`--brand` green means the product, `--accent` blue means "do something", so
+bookings needed a colour that means neither. Tense outranks status — an
+upcoming booking is the solid with white text, a finished one the pale wash,
+decided by its end against the live clock. The now-line is `--now-line` red,
+Google's red, and red there means only "now"; today's circles are `--accent`.
+
 ## What we deliberately did not take from the reference
 
 - **Its exact palette.** Meta's blue-grey system on a gradient page. Lifting
