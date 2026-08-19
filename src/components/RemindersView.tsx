@@ -18,6 +18,11 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import {
+  DEFAULT_TEMPLATE_TEXTS,
+  type TemplateKind,
+} from "../../convex/lib/templateTexts";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
@@ -858,11 +863,22 @@ function RuleEditor({
 // timing is a number you type with the unit beside it.
 function AddRuleSheet({
   rules,
+  templates,
+  orgLanguage,
   onAdd,
   onClose,
 }: {
   rules: RuleRowData[];
-  onAdd: (trigger: RuleTrigger, offsetHours?: number) => void;
+  // The org's kind-level fallback rows, so the sheet shows the wording this
+  // business will actually get rather than the shipped stock text they may
+  // have already rewritten. Same resolution order as ensureTemplate.
+  templates: TemplateRow[];
+  orgLanguage: string;
+  onAdd: (
+    trigger: RuleTrigger,
+    offsetHours: number | undefined,
+    text: { body: string; subject: string },
+  ) => void;
   onClose: () => void;
 }) {
   const { t } = useLanguage();
@@ -870,15 +886,42 @@ function AddRuleSheet({
   const [amount, setAmount] = useState("");
   const [unit, setUnit] = useState<"hours" | "days">("hours");
   const [error, setError] = useState<string | null>(null);
+  // The wording, seeded on pick and editable here. Adding a reminder without
+  // seeing what it says meant discovering the words afterwards, in a second
+  // screen, on a rule that was already live.
+  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState("");
 
   const selected =
     ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
   const taken = (option: AddOption) =>
     !option.repeatable && rules.some((rule) => rule.trigger === option.trigger);
 
+  // ensureTemplate's order, mirrored: this org's own fallback for the kind,
+  // then the stock text for the language, then English. Getting this wrong
+  // would show one message in the sheet and save a different one.
+  const seedFor = (option: AddOption) => {
+    const kind = KIND_FOR_TRIGGER[option.trigger];
+    const fallback = templates.find(
+      (tpl) =>
+        tpl.ruleId === undefined &&
+        tpl.kind === kind &&
+        tpl.language === orgLanguage,
+    );
+    const stock = (DEFAULT_TEMPLATE_TEXTS[orgLanguage] ??
+      DEFAULT_TEMPLATE_TEXTS.en)[kind as TemplateKind];
+    return {
+      body: fallback?.body ?? stock?.body ?? "",
+      subject: fallback?.subject ?? stock?.subject ?? "",
+    };
+  };
+
   const pick = (option: AddOption) => {
     setTrigger(option.trigger);
     setError(null);
+    const seed = seedFor(option);
+    setBody(seed.body);
+    setSubject(seed.subject);
     if (option.timing) {
       setAmount(String(option.timing.defaultAmount));
       setUnit(option.timing.defaultUnit);
@@ -930,7 +973,7 @@ function AddRuleSheet({
         return;
       }
     }
-    onAdd(selected.trigger, offsetHours);
+    onAdd(selected.trigger, offsetHours, { body, subject });
     onClose();
   };
 
@@ -1023,6 +1066,35 @@ function AddRuleSheet({
                 {t(selected.whenKey)}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* The words, before the rule exists. Picking a message type used to
+            add it sight-unseen and leave you to find the wording afterwards
+            on a second screen — so the stock text was something you inherited
+            rather than something you agreed to. Editable here because the
+            moment you read a sentence is the moment you want to change it. */}
+        {selected && (
+          <div className="space-y-1.5">
+            <span className="block text-xs text-[var(--muted)]">
+              {t("settings.ruleAddMessage")}
+            </span>
+            <input
+              value={subject}
+              placeholder={t("settings.templateSubject")}
+              aria-label={t("settings.templateSubject")}
+              onChange={(event) => setSubject(event.target.value)}
+            />
+            <AutoGrowTextarea
+              value={body}
+              rows={5}
+              placeholder={t("settings.templateBodyPlaceholder")}
+              aria-label={t("settings.templateBody")}
+              onChange={(event) => setBody(event.target.value)}
+            />
+            <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+              {t("settings.ruleAddMessageHint")}
+            </p>
           </div>
         )}
 
@@ -1332,8 +1404,26 @@ function RulesCard({
     }
   };
 
-  const doAdd = (trigger: RuleTrigger, offsetHours?: number) =>
-    void addRule({ trigger, offsetHours: offsetHours ?? 0 });
+  // Three steps because the wording has nowhere to live until the rule does:
+  // add creates the row, ensureTemplate mints its template (seeded from the
+  // same fallback-then-stock order the sheet previewed), and only then can the
+  // edited text be written. Saved unconditionally — the sheet's box is what
+  // the owner just read and approved, so it is the truth even when they
+  // changed nothing.
+  const doAdd = async (
+    trigger: RuleTrigger,
+    offsetHours: number | undefined,
+    text: { body: string; subject: string },
+  ) => {
+    const ruleId = await addRule({ trigger, offsetHours: offsetHours ?? 0 });
+    const templateId = await ensureTemplate({ ruleId, language: org.language });
+    await updateTemplate({
+      templateId,
+      body: text.body,
+      bodyHtml: plainToHtml(text.body),
+      subject: text.subject,
+    });
+  };
 
   // One rule, full width, with the way back in the header — the drill-in
   // VoiceView uses for an agent. The list is gone while you are in here on
@@ -1558,7 +1648,11 @@ function RulesCard({
       {adding && (
         <AddRuleSheet
           rules={rules}
-          onAdd={doAdd}
+          templates={templates}
+          orgLanguage={org.language}
+          onAdd={(trigger, offsetHours, text) =>
+            void doAdd(trigger, offsetHours, text)
+          }
           onClose={() => setAdding(false)}
         />
       )}

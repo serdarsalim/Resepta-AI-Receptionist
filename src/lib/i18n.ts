@@ -1228,6 +1228,16 @@ const dictionary = {
     en: "This message has no approved WhatsApp template in the business language. The template's language must match exactly. A template in another language is never used as a fallback.",
     de: "Für diese Nachricht gibt es keine genehmigte WhatsApp-Vorlage in der Sprache des Betriebs. Die Sprache der Vorlage muss exakt übereinstimmen. Eine Vorlage in einer anderen Sprache wird nicht ersatzweise verwendet.",
   },
+  "settings.ruleAddMessage": {
+    tr: "Gönderilecek mesaj",
+    en: "The message it sends",
+    de: "Die Nachricht, die gesendet wird",
+  },
+  "settings.ruleAddMessageHint": {
+    tr: "Hazır metinle başlar. Şimdi düzenleyebilir veya sonradan kuralın kendi sayfasından değiştirebilirsiniz.",
+    en: "Starts from the stock wording. Edit it now, or change it later on the rule's own page.",
+    de: "Beginnt mit dem Standardtext. Passen Sie ihn jetzt an oder später auf der Seite der Regel.",
+  },
   "settings.deleteRule": {
     tr: "Kuralı sil",
     en: "Delete rule",

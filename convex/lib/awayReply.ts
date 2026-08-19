@@ -15,7 +15,7 @@
 // an approved template and belongs nowhere near this file.
 
 import type { Doc, Id } from "../_generated/dataModel";
-import { DEFAULT_TEMPLATE_TEXTS } from "../messageRules";
+import { DEFAULT_TEMPLATE_TEXTS } from "./templateTexts";
 import { renderTokens, tokenDefaults } from "./renderTokens";
 
 // The same exact-language match as wa.sendAppointmentMessage — the customer's
