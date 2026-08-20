@@ -26,6 +26,7 @@ import {
   AdminSearchProvider,
   Plane,
   Row,
+  SearchSelect,
   Section,
   SecretRow,
   TabStrip,
@@ -421,11 +422,30 @@ export default function TenantPage() {
                   default forever. */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-[var(--muted)]">Model</span>
-                <select
+                <SearchSelect
+                  className="w-72"
                   value={agent.llmModel ?? ""}
                   disabled={settingModel === agent.retellAgentId}
-                  onChange={(event) => {
-                    const model = event.target.value || null;
+                  placeholder="Model"
+                  searchPlaceholder="Search models"
+                  options={[
+                    {
+                      value: "",
+                      label: `Platform default — ${
+                        VOICE_MODEL_CHOICES.find(
+                          (choice) => choice.id === VOICE_AGENT_MODEL,
+                        )?.label ?? VOICE_AGENT_MODEL
+                      }`,
+                    },
+                    ...VOICE_MODEL_CHOICES.map((choice) => ({
+                      value: choice.id,
+                      label: choice.label,
+                      hint: `$${choice.usdPerMinute.toFixed(3)}/min`,
+                    })),
+                  ]}
+                  onChange={(next) => {
+                    const model = next || null;
+                    if ((agent.llmModel ?? null) === model) return;
                     setSettingModel(agent.retellAgentId);
                     setModelError(null);
                     void setAgentModel({ orgId, retellAgentId: agent.retellAgentId, model })
@@ -438,19 +458,7 @@ export default function TenantPage() {
                       )
                       .finally(() => setSettingModel(null));
                   }}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-50"
-                >
-                  <option value="">
-                    Platform default —{" "}
-                    {VOICE_MODEL_CHOICES.find((choice) => choice.id === VOICE_AGENT_MODEL)
-                      ?.label ?? VOICE_AGENT_MODEL}
-                  </option>
-                  {VOICE_MODEL_CHOICES.map((choice) => (
-                    <option key={choice.id} value={choice.id}>
-                      {choice.label} · ${choice.usdPerMinute.toFixed(3)}/min
-                    </option>
-                  ))}
-                </select>
+                />
                 {settingModel === agent.retellAgentId && (
                   <span className="text-[var(--muted)]">Publishing…</span>
                 )}
