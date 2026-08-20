@@ -4,8 +4,8 @@ import { useMutation, useQuery, useConvex } from "convex/react";
 import { useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useNumberDocumentUpload } from "./NumberRequestCard";
 import { LANGUAGES, type Language } from "@/lib/i18n";
 import {
   INDUSTRY_KEYS,
@@ -108,9 +108,12 @@ export function OnboardingWizard() {
   const update = useMutation(api.orgs.update);
   const applyPreset = useMutation(api.onboarding.applyIndustryPreset);
   const createKnowledge = useMutation(api.knowledge.create);
-  const generateUploadUrl = useMutation(api.numberRequests.generateUploadUrl);
-  const submitDocument = useMutation(api.numberRequests.submit);
   const numberRequest = useQuery(api.numberRequests.mine, {});
+  const {
+    uploading,
+    error: uploadError,
+    upload: uploadDocument,
+  } = useNumberDocumentUpload();
 
   const [step, setStep] = useState<Step>("language");
   const [name, setName] = useState("");
@@ -120,8 +123,6 @@ export function OnboardingWizard() {
   const [address, setAddress] = useState("");
   const [website, setWebsite] = useState("");
   const [about, setAbout] = useState("");
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -133,40 +134,6 @@ export function OnboardingWizard() {
     // Persisted immediately: org.language must be in place before the name
     // save fires auto-provisioning, and every later step writes in it.
     void update({ language: lang });
-  };
-
-  const uploadDocument = async (file: File) => {
-    setUploadError(null);
-    const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type)) {
-      setUploadError(t("onboarding.uploadFailedType"));
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError(t("onboarding.uploadFailedSize"));
-      return;
-    }
-    setUploading(true);
-    try {
-      const url = await generateUploadUrl();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as {
-        storageId: Id<"_storage">;
-      };
-      await submitDocument({ storageId, fileName: file.name });
-    } catch (err) {
-      setUploadError(
-        String(err).includes("too-large")
-          ? t("onboarding.uploadFailedSize")
-          : t("onboarding.uploadFailedType"),
-      );
-    } finally {
-      setUploading(false);
-    }
   };
 
   // Everything the wizard collected, committed with the name save last (see

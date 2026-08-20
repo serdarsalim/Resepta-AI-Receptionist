@@ -389,6 +389,21 @@ const dictionary = {
     en: "Setting up...",
     de: "Wird eingerichtet...",
   },
+  "numberReq.pending": {
+    tr: "Belgeniz alındı. Numaranız 24 saat içinde tanımlanacak.",
+    en: "Your document is in. Your number will be provisioned within 24 hours.",
+    de: "Ihr Dokument ist eingegangen. Ihre Nummer wird innerhalb von 24 Stunden bereitgestellt.",
+  },
+  "numberReq.approved": {
+    tr: "Onaylandı. Numaranız kısa süre içinde burada görünecek.",
+    en: "Approved. Your number will appear here shortly.",
+    de: "Genehmigt. Ihre Nummer erscheint hier in Kürze.",
+  },
+  "numberReq.denied": {
+    tr: "Belge kabul edilmedi. Lütfen yeni bir belge yükleyin.",
+    en: "The document was not accepted. Please upload a new one.",
+    de: "Das Dokument wurde nicht akzeptiert. Bitte laden Sie ein neues hoch.",
+  },
   "onboarding.kbAddress": {
     tr: "Adres ve ulaşım",
     en: "Address & directions",

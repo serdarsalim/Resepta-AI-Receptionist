@@ -140,6 +140,12 @@ export default function TenantPage() {
   const setAgentModel = useAction(api.platform.setAgentModel);
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
+  const numberReqs = useQuery(
+    api.platform.orgNumberRequests,
+    allowed ? { orgId } : "skip",
+  );
+  const decideNumberRequest = useMutation(api.platform.decideNumberRequest);
+  const [numberNote, setNumberNote] = useState("");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
   const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
   const rotateEvolutionToken = useMutation(
@@ -803,6 +809,98 @@ export default function TenantPage() {
         )}
       </Section>
       </>
+      )}
+
+      {/* The tenant's number request (numberRequests.ts): the registration
+          document regulators want before a number can be provisioned. The
+          decision here is the operator's own cue to go buy the line at the
+          provider and assign it above — the app never purchases numbers. */}
+      {(tab === "agents" || search.active) && numberReqs && numberReqs.length > 0 && (
+        <Section
+          title="Number provisioning"
+          description="The business uploaded its company registration to request a phone number. Download it, verify it, then approve (and go provision the line at the provider) or deny with a reason the business will read."
+        >
+          <div className="space-y-3 py-2">
+            {numberReqs.map((req) => (
+              <div
+                key={req.requestId}
+                className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  {req.url ? (
+                    <a
+                      href={req.url}
+                      target="_blank"
+                      rel="noopener"
+                      className="font-medium text-[var(--accent)] hover:underline"
+                    >
+                      {req.fileName}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{req.fileName}</span>
+                  )}
+                  <span className="text-xs text-[var(--muted)]">
+                    {Math.max(1, Math.round(req.size / 1024))} KB ·{" "}
+                    {new Date(req.createdAt).toLocaleString("en-GB")}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      req.status === "pending"
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : req.status === "approved"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                    }`}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+                {req.note && (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Note to the business: {req.note}
+                  </p>
+                )}
+                {req.status === "pending" && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      value={numberNote}
+                      onChange={(e) => setNumberNote(e.target.value)}
+                      placeholder="Note to the business (required to deny)"
+                      className="min-w-64 flex-1 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void decideNumberRequest({
+                          requestId: req.requestId,
+                          decision: "approved",
+                          note: numberNote.trim() || undefined,
+                        }).then(() => setNumberNote(""));
+                      }}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!numberNote.trim()}
+                      onClick={() => {
+                        void decideNumberRequest({
+                          requestId: req.requestId,
+                          decision: "denied",
+                          note: numberNote.trim(),
+                        }).then(() => setNumberNote(""));
+                      }}
+                      className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
       )}
 
       {/* Under Agents rather than a tab of its own (Serdar, 2026-08-20): the

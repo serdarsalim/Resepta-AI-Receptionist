@@ -11,6 +11,7 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { KnowledgeCard } from "./KnowledgeCard";
+import { NumberRequestCard } from "./NumberRequestCard";
 import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
@@ -227,7 +228,13 @@ export function VoiceView() {
       </div>
 
       {section === "agents" && (
-        <VoiceCard isOwner={isOwner} site={site} onOpenAgent={openAgent} />
+        <div className="space-y-4">
+          <VoiceCard isOwner={isOwner} site={site} onOpenAgent={openAgent} />
+          {/* The wizard's 24-hour number promise, followed through: where
+              the registration document and the request stand. Owner-only —
+              the query resolves null for staff and the card handles it. */}
+          {isOwner && <NumberRequestCard />}
+        </div>
       )}
       {section === "calls" && <CallHistory />}
       {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
