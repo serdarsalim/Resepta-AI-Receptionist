@@ -9,7 +9,6 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
 import { DEFAULT_TITLE, workspaceTitle } from "@/lib/brand";
-import Link from "next/link";
 import { OperatorBanner } from "./OperatorBanner";
 import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
@@ -98,14 +97,6 @@ const BusinessIcon = makeIcon(
     <path d="M1 14h6M9 8h6M17 16h6" />
   </>,
 );
-// One gear definition, used at 18px in the sidebar and 16px in the user menu.
-const SettingsIcon = makeIcon(
-  <>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </>,
-);
-
 // A speech bubble, not a bell. A bell says "we will nudge you", and only one
 // of the six messages behind this tab is a nudge — the others are what the
 // salon says when a booking lands, when one is cancelled, after a visit, and
@@ -772,9 +763,6 @@ function UserMenu({
   const { signOut } = useAuthActions();
   const { theme, setTheme, mounted } = useTheme();
   const saveTheme = useMutation(api.users.setMyTheme);
-  // False for every salon user, and false is what it returns rather than
-  // throwing — so this costs one cheap query and reveals nothing.
-  const isPlatformAdmin = useQuery(api.platform.amPlatformAdmin, {});
   // Menu position, measured from the trigger at open time. Null = closed.
   // Same mechanism as WorkspaceSwitcher below, deliberately: the header sits
   // inside `flex min-h-0 flex-1 flex-col overflow-hidden`, so an absolute
@@ -1011,24 +999,9 @@ function UserMenu({
                 })}
               </div>
             </div>
-            {/* Operator-only, and invisible to everyone else — the query
-                returns false rather than throwing, so a salon owner's menu is
-                exactly what it was before this existed. English on purpose:
-                the fleet page has one reader (see src/app/admin/page.tsx). */}
-            {isPlatformAdmin && (
-              <div className="border-t border-[var(--border)]">
-                <Link
-                  href="/admin"
-                  role="menuitem"
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
-                >
-                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
-                    <SettingsIcon />
-                  </span>
-                  Fleet
-                </Link>
-              </div>
-            )}
+            {/* The Fleet entry left this menu on 2026-08-20: the operator
+                already has the Admin item in the sidebar (below Business),
+                and one door to the console is enough. */}
             <div className="border-t border-[var(--border)]">
               <a
                 href="https://docs.resepta.xyz"
