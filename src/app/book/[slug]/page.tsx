@@ -17,6 +17,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
+import { MAX_LINES_PER_BOOKING } from "../../../../convex/booking";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
@@ -87,10 +88,6 @@ export default function BookingPage({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
-  // The bar's detail panel. Closed by default: on the service step the ticked
-  // rows are already on screen, and it is the two steps after — where the list
-  // is gone — that the customer may want to check what they picked.
-  const [basketOpen, setBasketOpen] = useState(false);
 
   // Resolved against the published list every render rather than stored, so a
   // service the salon retires while someone has the page open drops out of the
@@ -269,15 +266,7 @@ export default function BookingPage({
   // Goods multiply, services do not — the same asymmetry totalPrice applies.
   const lineWorth = (row: (typeof picked)[number]) =>
     (row.price ?? 0) * (row.durationMinutes === undefined ? row.quantity : 1);
-  // ONE line names itself; two or more count, and open. Joining them with " + "
-  // read as a formula and then truncated anyway — "Saç kesimi + Sakal tıraşı +
-  // Saç boya…" told the customer neither what the third thing was nor that
-  // there were only three. A count is honest at every length, and the detail
-  // is one tap away rather than one guess.
-  const summaryName =
-    picked.length === 1
-      ? lineName(picked[0])
-      : t("booking.itemCount").replace("{n}", String(picked.length));
+
   // "1 sa 30 dk" in Turkish, "1 hr 30 min" in English — Intl decides the unit
   // word and the order, which differ by locale and are not ours to guess. A
   // selection of goods alone has no minutes to announce.
@@ -294,6 +283,34 @@ export default function BookingPage({
     if (!hours) return unit(rest, "minute");
     return rest ? `${unit(hours, "hour")} ${unit(rest, "minute")}` : unit(hours, "hour");
   };
+
+  // ONE line names itself; two or more count. Joining them with " + " read as
+  // a formula and truncated anyway — "Saç kesimi + Sakal tıraşı + Saç boya…"
+  // told the customer neither what the third thing was nor that there were
+  // only three.
+  const summaryName =
+    picked.length === 1
+      ? lineName(picked[0])
+      : t("booking.itemCount").replace("{n}", String(picked.length));
+  // Before a time is picked the duration is the whole answer; after, the time
+  // leads and the duration stays, because "how long will I be there" does not
+  // stop mattering once you know when you are arriving.
+  const barMeta =
+    startMs !== null
+      ? `${dateTimeLabel(startMs)} · ${minutesLabel(totalMinutes)}`
+      : minutesLabel(totalMinutes);
+  // The lines are listed ONLY where they are not already on screen. On the
+  // service step the ticked rows sit six inches above the bar, so a panel
+  // repeating them is a copy of the thing it is summarising — and the chevron
+  // that used to hide it was a control whose whole job was to spare the reader
+  // that copy. Delete the copy and the control goes with it.
+  const showLines = step !== "service" && picked.length > 1;
+  // The SERVER's cap, imported rather than restated. Without it the page let a
+  // customer tick a twelfth line and said nothing: resolveLines then refused
+  // the whole booking, so the slot grid answered "no free times" — a lie — and
+  // the real refusal arrived as a generic failure after they had typed their
+  // phone number.
+  const basketFull = lines.length >= MAX_LINES_PER_BOOKING;
   const back =
     step === "time"
       ? () => {
@@ -319,6 +336,11 @@ export default function BookingPage({
       {step === "service" && (
         <section>
           <h2 className="mb-3 text-sm font-semibold">{t("booking.pickService")}</h2>
+          {basketFull && (
+            <p className="mb-3 text-xs text-[var(--muted)]">
+              {t("booking.maxLines").replace("{n}", String(MAX_LINES_PER_BOOKING))}
+            </p>
+          )}
           {/* MULTI-SELECT since 2026-08-20, reversing this page's own
               "tapping an answer IS the advance" rule for this step only. A
               haircut plus a beard trim is one visit — appointments.items has
@@ -382,8 +404,12 @@ export default function BookingPage({
                       <button
                         type="button"
                         aria-pressed={Boolean(line)}
+                        // Full basket disables what is NOT already in it —
+                        // removing a line has to stay possible, or the only
+                        // way out of a full basket is reloading the page.
+                        disabled={basketFull && !line}
                         onClick={() => toggleLine(row._id)}
-                        className={`flex min-w-0 flex-1 items-center justify-between gap-3 py-3.5 pl-4 text-left text-sm sm:pl-5 ${
+                        className={`flex min-w-0 flex-1 items-center justify-between gap-3 py-3.5 pl-4 text-left text-sm disabled:opacity-45 sm:pl-5 ${
                           stepping ? "pr-2" : "pr-4 sm:pr-5"
                         }`}
                       >
@@ -473,12 +499,27 @@ export default function BookingPage({
               {t("booking.slotTaken")}
             </p>
           )}
-          {slots === undefined ? (
-            <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-          ) : slots.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">{t("booking.noSlots")}</p>
-          ) : (
-            <div className="space-y-3">
+          {/* The grid RESERVES its room. All three states live in one box with
+              a floor under it — loading, no-times, and a full morning — so the
+              card is the size it is going to be before the query lands and
+              stays that size as the customer taps down the day strip. Without
+              it the card grew when the slots arrived and resized again on every
+              day with a different number of them, which is the reflow this
+              wizard exists to avoid: the whole reason it swaps screens rather
+              than revealing sections is that nothing should move under a
+              thumb already on its way down.
+
+              14rem is two shelves — a morning and an afternoon — which is what
+              a working day actually returns. A third shelf still grows the
+              card, but an evening's worth of slots appearing is a fact about
+              that day rather than a jump between two of them. */}
+          <div className="min-h-[14rem]">
+            {slots === undefined ? (
+              <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+            ) : slots.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">{t("booking.noSlots")}</p>
+            ) : (
+              <div className="space-y-3">
               {shelves.map((shelf) => (
                 <div key={shelf.key}>
                   <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
@@ -501,9 +542,10 @@ export default function BookingPage({
                     ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
@@ -612,10 +654,19 @@ export default function BookingPage({
           while a long service list scrolls past it. */}
       {picked.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur sm:sticky sm:inset-x-auto sm:-mx-5 sm:-mb-5 sm:mt-5 sm:rounded-b-lg">
-          {/* The detail, above the summary that opens it — so the row the
-              customer tapped does not move out from under their finger. */}
-          {basketOpen && picked.length > 1 && (
-            <ul className="mx-auto w-full max-w-md space-y-1.5 border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
+          {/* The lines, ONLY on the steps where they are not already on screen.
+              On the service step the ticked rows sit six inches above this bar
+              and a panel repeating them is a copy of the thing it summarises;
+              from the time step on, that list is gone and the customer has
+              nothing else to check what they picked against.
+
+              No chevron either way. It shipped behind one for about an hour,
+              which was a control whose whole job was to spare the reader a
+              duplicate — delete the duplicate and the control goes with it.
+              Capped and scrollable only so the largest basket the server will
+              take (resolveLines, ten lines) cannot swallow a phone. */}
+          {showLines && (
+            <ul className="mx-auto max-h-[30vh] w-full max-w-md space-y-1.5 overflow-y-auto border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
               {picked.map((row) => (
                 <li
                   key={row._id}
@@ -637,53 +688,10 @@ export default function BookingPage({
             </ul>
           )}
           <div className="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-3 sm:px-5">
-            {/* A button ONLY when there is something to open. One line already
-                says everything the panel would, and a chevron that reveals a
-                copy of the line above it is a control that does nothing. */}
-            {picked.length > 1 ? (
-              <button
-                type="button"
-                onClick={() => setBasketOpen((open) => !open)}
-                aria-expanded={basketOpen}
-                className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{summaryName}</span>
-                  <span className="block truncate text-xs text-[var(--muted)]">
-                    {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
-                  </span>
-                </span>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden
-                  className={`shrink-0 text-[var(--muted)] transition-transform ${
-                    basketOpen ? "rotate-180" : ""
-                  }`}
-                >
-                  <path
-                    d="M4 6l4 4 4-4"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            ) : (
-              <div className="min-w-0 flex-1 text-sm">
-                <p className="truncate font-medium">{summaryName}</p>
-                <p className="truncate text-xs text-[var(--muted)]">
-                  {/* Duration is the running answer to "how long am I going to
-                      be there", and the number that changes as lines go in and
-                      out. Once a time is picked it gives way to the time —
-                      the more specific fact, and both would not fit. */}
-                  {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
-                </p>
-              </div>
-            )}
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="truncate font-medium">{summaryName}</p>
+              <p className="truncate text-xs text-[var(--muted)]">{barMeta}</p>
+            </div>
             {anyPriced && (
               <p className="shrink-0 text-sm font-semibold tabular-nums">
                 {priceLabel(totalPrice)}

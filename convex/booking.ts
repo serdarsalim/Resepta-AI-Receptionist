@@ -67,7 +67,7 @@ type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
 //
 // A brake, not a business rule — the same reasoning as MAX_UPCOMING_PER_PHONE.
 // A real customer picks two or three; nobody real picks eleven.
-const MAX_LINES_PER_BOOKING = 10;
+export const MAX_LINES_PER_BOOKING = 10;
 
 // Resolves what was picked into the numbers every guard downstream needs.
 // Both the slot grid and the write go through here so they cannot disagree

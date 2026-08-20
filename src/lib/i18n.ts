@@ -675,6 +675,15 @@ const dictionary = {
   // German; "items" covers a haircut and a shampoo in one word, which "service"
   // does not.
   "booking.itemCount": { tr: "{n} kalem", en: "{n} items", de: "{n} Positionen" },
+  // Shown once the basket is full, in place of nothing at all. The server caps
+  // a booking at MAX_LINES_PER_BOOKING; without this the page let a customer
+  // tick past it and the refusal arrived after they had typed their phone
+  // number, as a generic failure.
+  "booking.maxLines": {
+    tr: "Tek seferde en fazla {n} kalem seçebilirsiniz.",
+    en: "You can book up to {n} items at a time.",
+    de: "Sie können bis zu {n} Positionen auf einmal buchen.",
+  },
   // The sticky bar's action on the first step. It exists because that step
   // became multi-select — the other two still advance on the tap.
   "booking.continue": { tr: "Devam", en: "Continue", de: "Weiter" },
