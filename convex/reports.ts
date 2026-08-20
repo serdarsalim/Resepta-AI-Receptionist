@@ -1,10 +1,11 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { query } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
 import { localDayRangeUtc, todayInZone } from "./lib/businessHours";
 
-// The takings. One question — "what did we make" — answered for three windows
-// and nothing else.
+// The takings. One question — "what did we make" — answered for three windows,
+// with the pageable ledger of visits behind the figures and nothing else.
 //
 // COMPLETED appointments only. A booking that was cancelled or no-showed
 // earned nothing, and one still in the future has not earned anything YET;
@@ -39,21 +40,6 @@ export const revenue = query({
     today: v.number(),
     week: v.number(),
     month: v.number(),
-    // The week's completed visits, newest first — the working shown under the
-    // total. A number you cannot check is a number you end up arguing with.
-    recent: v.array(
-      v.object({
-        _id: v.id("appointments"),
-        startAt: v.number(),
-        customerName: v.string(),
-        services: v.string(),
-        total: v.number(),
-      }),
-    ),
-    // Completed but never priced. Not folded into the totals and not hidden:
-    // this is exactly how a takings figure quietly goes wrong, so the report
-    // says how many visits it could not count.
-    unpriced: v.number(),
   }),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
@@ -90,59 +76,105 @@ export const revenue = query({
     let todayTotal = 0;
     let weekTotal = 0;
     let monthTotal = 0;
-    let unpriced = 0;
-    const recent: {
-      _id: typeof rows[number]["_id"];
-      startAt: number;
-      customerName: string;
-      services: string;
-      total: number;
-    }[] = [];
 
     for (const row of rows) {
       if (row.status !== "completed") continue;
-      const items = row.items ?? [];
-      const priced = items.filter((item) => item.price !== undefined);
-      if (priced.length === 0) {
-        unpriced++;
-        continue;
-      }
-      // price is PER UNIT on a goods line; the line is worth price × quantity.
-      const total = priced.reduce(
-        (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
-        0,
-      );
+      const total = lineTotal(row.items ?? []);
+      if (total === undefined) continue;
       monthTotal += total;
-      if (row.startAt >= weekStart) {
-        weekTotal += total;
-        const customer = await ctx.db.get(row.customerId);
-        recent.push({
-          _id: row._id,
-          startAt: row.startAt,
-          customerName: customer
-            ? `${customer.firstName} ${customer.lastName ?? ""}`.trim() ||
-              customer.phone
-            : "",
-          services: items
-            .map((item) =>
-              (item.quantity ?? 1) > 1 ? `${item.quantity}× ${item.name}` : item.name,
-            )
-            .join(", "),
-          total,
-        });
-      }
+      if (row.startAt >= weekStart) weekTotal += total;
       if (row.startAt >= todayStart) todayTotal += total;
     }
 
-    recent.sort((a, b) => b.startAt - a.startAt);
     return {
       currency: org.currency ?? "TRY",
       priceDecimals: org.priceDecimals,
       today: todayTotal,
       week: weekTotal,
       month: monthTotal,
-      recent,
-      unpriced,
     };
+  },
+});
+
+// A visit's worth, or undefined when nobody priced it — the caller decides
+// whether an unpriced visit is skipped or shown, but never sums it as zero
+// into a figure that then looks authoritative.
+// price is PER UNIT on a goods line; the line is worth price × quantity.
+function lineTotal(
+  items: { price?: number; quantity?: number }[],
+): number | undefined {
+  const priced = items.filter((item) => item.price !== undefined);
+  if (priced.length === 0) return undefined;
+  return priced.reduce(
+    (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
+    0,
+  );
+}
+
+// The ledger under the three figures: every completed, priced visit, newest
+// first, pageable back to the org's first day. Search matches the customer's
+// name or the services line, and is applied AFTER the page is read — a page
+// can come back short or empty while the cursor still advances, which the
+// paginated hook on the client absorbs. A salon's history is thousands of
+// rows at most; a search index over a denormalized name column is machinery
+// this screen does not need yet.
+export const revenueList = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
+  },
+  // Paginated: the page shape is convex's, the items are ours.
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    // Same upper bound as the totals: a future visit mis-tapped to
+    // "completed" is not takings yet and must not lead the list either.
+    const horizon = dayStartMs(shiftDays(todayInZone(org.timezone), 1), org.timezone);
+
+    const result = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) =>
+        q.eq("orgId", orgId).lt("startAt", horizon),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    // Names in one pass; a page of visits from one regular is one read.
+    const customerIds = [...new Set(result.page.map((row) => row.customerId))];
+    const customers = new Map(
+      (await Promise.all(customerIds.map((id) => ctx.db.get(id)))).flatMap(
+        (customer) => (customer ? [[customer._id, customer] as const] : []),
+      ),
+    );
+
+    const needle = args.search?.trim().toLocaleLowerCase();
+    const page = [];
+    for (const row of result.page) {
+      if (row.status !== "completed") continue;
+      const items = row.items ?? [];
+      const total = lineTotal(items);
+      if (total === undefined) continue;
+      const customer = customers.get(row.customerId);
+      const customerName = customer
+        ? `${customer.firstName} ${customer.lastName ?? ""}`.trim() ||
+          customer.phone
+        : "";
+      const services = items
+        .map((item) =>
+          (item.quantity ?? 1) > 1 ? `${item.quantity}× ${item.name}` : item.name,
+        )
+        .join(", ");
+      if (
+        needle &&
+        !`${customerName} ${services}`.toLocaleLowerCase().includes(needle)
+      ) {
+        continue;
+      }
+      page.push({ _id: row._id, startAt: row.startAt, customerName, services, total });
+    }
+
+    return { ...result, page };
   },
 });
