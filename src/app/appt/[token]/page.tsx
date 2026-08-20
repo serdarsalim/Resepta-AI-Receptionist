@@ -9,6 +9,7 @@ import { useMutation, useQuery } from "convex/react";
 import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
 
 function todayIn(timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -25,8 +26,17 @@ export default function ManageAppointmentPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = use(params);
-  const { t } = useLanguage();
+  const { language: viewerLanguage } = useLanguage();
   const appointment = useQuery(api.booking.manage, { token });
+  // The salon's customer language, same call as /book/<slug> — and it matters
+  // more here. This page is only ever opened from a link inside a message we
+  // sent, so its chrome answering in a different language than the message
+  // that carried it is the product contradicting itself one tap apart. The
+  // dates below already formatted through appointment.language; only the
+  // words did not.
+  const pageLanguage: Language =
+    appointment && isLanguage(appointment.language) ? appointment.language : viewerLanguage;
+  const t = (key: TranslationKey) => translate(pageLanguage, key);
   const reschedule = useMutation(api.booking.reschedule);
   const cancel = useMutation(api.booking.cancel);
 
@@ -77,14 +87,14 @@ export default function ManageAppointmentPage({
 
   if (appointment === undefined) {
     return (
-      <Shell>
+      <Shell language={pageLanguage}>
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       </Shell>
     );
   }
   if (appointment === null) {
     return (
-      <Shell>
+      <Shell language={pageLanguage}>
         <p className="text-sm text-[var(--muted)]">{t("forms.notFound")}</p>
       </Shell>
     );
@@ -95,7 +105,7 @@ export default function ManageAppointmentPage({
     (appointment.status === "scheduled" || appointment.status === "confirmed");
 
   return (
-    <Shell title={appointment.orgName}>
+    <Shell title={appointment.orgName} language={pageLanguage}>
       <div className="space-y-4">
         <div>
           {appointment.services.length > 0 && (
@@ -228,9 +238,22 @@ export default function ManageAppointmentPage({
   );
 }
 
-function Shell({ title, children }: { title?: string; children: React.ReactNode }) {
+function Shell({
+  title,
+  language,
+  children,
+}: {
+  title?: string;
+  language?: Language;
+  children: React.ReactNode;
+}) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10">
+    // Nested lang overrides LanguageProvider's <html lang> for this subtree —
+    // see the same note on the booking page's Shell.
+    <main
+      lang={language}
+      className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-10"
+    >
       <div className="card-raised p-5">
         {title && <h1 className="mb-4 text-lg font-semibold">{title}</h1>}
         {children}

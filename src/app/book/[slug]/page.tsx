@@ -19,6 +19,7 @@ import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
 import { PhoneInput } from "@/components/PhoneField";
 import { formatMoney } from "@/lib/money";
 
@@ -55,8 +56,22 @@ export default function BookingPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const { t } = useLanguage();
+  const { language: viewerLanguage } = useLanguage();
   const page = useQuery(api.booking.page, { slug });
+  // The page speaks the SALON'S customer language, not the visitor's. Every
+  // other language decision on this page already works that way — the times
+  // and the prices format through page.language — and only the chrome was
+  // reading the viewer's app setting, so a Türkiye salon's page greeted its
+  // Turkish customers in whatever the owner last picked in their own account
+  // menu. That is the same setting that decides the WhatsApp a customer gets;
+  // a booking page that answers a Turkish reminder in English is one product
+  // speaking two languages to one person.
+  //
+  // The viewer's language survives as the fallback for the two states that
+  // render before the org is known: loading, and a slug that answers nothing.
+  const pageLanguage: Language =
+    page && isLanguage(page.language) ? page.language : viewerLanguage;
+  const t = (key: TranslationKey) => translate(pageLanguage, key);
   const book = useMutation(api.booking.book);
 
   const [step, setStep] = useState<Step>("service");
@@ -125,14 +140,14 @@ export default function BookingPage({
 
   if (page === undefined) {
     return (
-      <Shell>
+      <Shell language={pageLanguage}>
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       </Shell>
     );
   }
   if (page === null) {
     return (
-      <Shell>
+      <Shell language={pageLanguage}>
         <p className="text-sm text-[var(--muted)]">{t("forms.notFound")}</p>
       </Shell>
     );
@@ -140,7 +155,7 @@ export default function BookingPage({
 
   if (done) {
     return (
-      <Shell title={page.orgName} logoUrl={page.logoUrl}>
+      <Shell title={page.orgName} logoUrl={page.logoUrl} language={pageLanguage}>
         <p className="text-sm font-medium">{t("booking.booked")}</p>
         <p className="mt-1 text-sm text-[var(--muted)]">{dateTimeLabel(done.startMs)}</p>
         {done.token && (
@@ -161,7 +176,7 @@ export default function BookingPage({
   // An org with no posted hours cannot honestly draw a slot grid.
   if (!page.hasHours || page.services.length === 0) {
     return (
-      <Shell title={page.orgName} logoUrl={page.logoUrl}>
+      <Shell title={page.orgName} logoUrl={page.logoUrl} language={pageLanguage}>
         <p className="text-sm text-[var(--muted)]">{t("booking.callInstead")}</p>
       </Shell>
     );
@@ -208,7 +223,13 @@ export default function BookingPage({
         : undefined;
 
   return (
-    <Shell title={page.orgName} logoUrl={page.logoUrl} onBack={back} backLabel={t("common.back")}>
+    <Shell
+      title={page.orgName}
+      logoUrl={page.logoUrl}
+      onBack={back}
+      backLabel={t("common.back")}
+      language={pageLanguage}
+    >
       {step === "service" && (
         <section>
           <h2 className="mb-3 text-sm font-semibold">{t("booking.pickService")}</h2>
@@ -472,16 +493,27 @@ function Shell({
   logoUrl,
   onBack,
   backLabel,
+  language,
   children,
 }: {
   title?: string;
   logoUrl?: string | null;
   onBack?: () => void;
   backLabel?: string;
+  language?: Language;
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5">
+    // lang as an ATTRIBUTE, not an effect. LanguageProvider owns <html lang>
+    // and sets it from the viewer's setting; its effect is a PARENT's, so it
+    // runs after this page's and would win any race to write the same
+    // property. A nested lang just overrides for its subtree, which is what
+    // the attribute is for — screen readers and hyphenation read the nearest
+    // one, and German is where a wrong lang starts to show.
+    <main
+      lang={language}
+      className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5"
+    >
       {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
           Padding matches components/Card — p-4 here rather than its p-3 only
           because this card is the whole page rather than one of six stacked in

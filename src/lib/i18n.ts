@@ -932,15 +932,21 @@ const dictionary = {
   // Not "Language": that is what the account menu now calls the interface
   // setting, and the two were indistinguishable while sharing a word. This one
   // reaches customers.
+  // "Message language" until 2026-08-20, which named one of its jobs. It is
+  // the language of everything a CUSTOMER meets — the messages, the booking
+  // page, the page they manage the appointment from — while the owner reads
+  // the app in whatever their account menu says. The old name let the booking
+  // page drift onto the viewer's setting for months without anyone reading
+  // this row and noticing it should have covered that too.
   "settings.language": {
-    tr: "Mesaj dili",
-    en: "Message language",
-    de: "Nachrichtensprache",
+    tr: "Müşteri dili",
+    en: "Customer language",
+    de: "Kundensprache",
   },
   "settings.languageHint": {
-    tr: "Müşterilere gönderilen mesajların dili. Onaylı WhatsApp şablonunu da bu seçer — bu dilde onaylı şablon yoksa gönderim yapılamaz. Uygulamayı kendi dilinizde görmek için hesap menüsündeki dil ayarını kullanın.",
-    en: "The language customers are messaged in. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
-    de: "Die Sprache der Kundennachrichten. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
+    tr: "Müşterilerinizin gördüğü dil: gönderilen mesajlar, randevu sayfanız ve randevu yönetim sayfası. Onaylı WhatsApp şablonunu da bu seçer — bu dilde onaylı şablon yoksa gönderim yapılamaz. Uygulamayı kendi dilinizde görmek için hesap menüsündeki dil ayarını kullanın.",
+    en: "The language your customers see: the messages you send, your booking page, and the page they manage an appointment from. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
+    de: "Die Sprache, die Ihre Kundschaft sieht: gesendete Nachrichten, Ihre Buchungsseite und die Seite zur Terminverwaltung. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
   },
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
