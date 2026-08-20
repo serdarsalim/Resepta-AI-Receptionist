@@ -928,13 +928,22 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       }
                     />
                   </span>
-                  {/* For a GOOD (no duration) this track holds the lead time
-                      instead, in days: the column's question is "what does
-                      time mean for this row", and for a cake the answer is
-                      how much warning the baker needs, not minutes in a
-                      chair. Clearing a duration turns the row into a good;
-                      there is deliberately no inline way back, because a
-                      good's row no longer edits minutes — recreate it. */}
+                  {/* EMPTY for a good, unless one has a lead time set. The
+                      column asks "how long", and a product has no answer — it
+                      is handed over. It used to fall back to a lead-time
+                      editor for every good, so a shampoo advertised "— days
+                      ahead" in the duration column: a unit qualifying nothing,
+                      under a header naming something else, in a cell most
+                      products will never fill.
+
+                      A good that DOES need warning still shows and edits its
+                      days here, because that is a real fact about the row and
+                      hiding it would strand it. Setting one for the first time
+                      belongs to the create form, which already asks.
+
+                      Clearing a duration turns a service into a good; there is
+                      deliberately no inline way back, because a good's row no
+                      longer edits minutes — recreate it. */}
                   <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-1 max-sm:row-start-2">
                     {service.durationMinutes !== undefined ? (
                       <>
@@ -958,17 +967,12 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                           {t("services.minutes")}
                         </span>
                       </>
-                    ) : (
+                    ) : service.leadMinutes !== undefined ? (
                       <>
                         <InlineEditValue
-                          value={
-                            service.leadMinutes !== undefined
-                              ? String(service.leadMinutes / 1440)
-                              : ""
-                          }
+                          value={String(service.leadMinutes / 1440)}
                           type="number"
                           compact
-                          placeholder="—"
                           onSave={(next) => {
                             const days = Number(next);
                             return update({
@@ -984,7 +988,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                           {t("services.leadDays")}
                         </span>
                       </>
-                    )}
+                    ) : null}
                   </span>
                   {/* Same shape as duration — a number with its unit trailing.
                       Blank means unpriced, and clearing the box says so rather
@@ -1002,9 +1006,13 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         })
                       }
                     />
-                    <span className="shrink-0 text-xs text-[var(--muted)]">
-                      {currencySymbol(currency, language)}
-                    </span>
+                    {/* Same rule: a lone "₺" beside an empty box is a price
+                        that failed rather than a price nobody set. */}
+                    {service.price !== undefined && (
+                      <span className="shrink-0 text-xs text-[var(--muted)]">
+                        {currencySymbol(currency, language)}
+                      </span>
+                    )}
                   </span>
                   {/* Last track of the phone line, pinned to its right edge.
                       This used to be an auto margin fighting the flex line for
