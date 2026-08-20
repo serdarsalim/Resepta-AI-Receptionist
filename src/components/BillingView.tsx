@@ -1,17 +1,20 @@
 "use client";
 
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatDateTime } from "@/lib/datetime";
 import { Card } from "./Card";
+import { ROW_GRID, RowLabel } from "./RowLabel";
 
-// The prepaid wallet's own sidebar destination (schema: orgs.billingMode).
-// Owners of prepaid orgs only — everyone else never sees the tab (AppShell
-// footTabs) and the query resolves null anyway. Everything renders in USD
-// for the same reason the voice Usage section does: the meter runs in USD,
-// and the org's display currency is a booking-revenue concern.
+// Billing, every owner's sidebar destination above the profile (schema:
+// orgs.billingMode). Owners only — staff never see the tab (AppShell) and
+// both queries resolve null for them anyway. The view branches on the org's
+// billing mode: prepaid owners get the wallet, top-ups and usage; invoice
+// owners get the meter and the soft budget, with the settling happening
+// outside the product. Everything renders in USD for the same reason the
+// meter runs in USD: the org's display currency is a booking-revenue concern.
 //
 // Top-up is a redirect into Stripe Checkout, not an in-app card form: the
 // card number never touches this product, which is the whole point of
@@ -27,6 +30,7 @@ function fmtDuration(sec: number): string {
 export function BillingView() {
   const { t, language } = useLanguage();
   const data = useQuery(api.wallet.overview, {});
+  const meter = useQuery(api.billing.voiceOverview, {});
   const createSession = useAction(api.wallet.createTopupSession);
   const [starting, setStarting] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -43,14 +47,16 @@ export function BillingView() {
     }
   }, []);
 
-  if (data === undefined) {
+  if (data === undefined || meter === undefined) {
     return (
       <p className="animate-pulse text-sm text-[var(--muted)]">
         {t("common.loading")}
       </p>
     );
   }
-  if (data === null) return null;
+  // No wallet means the invoice lane: the meter and the soft budget, no
+  // money controls, because settling happens outside the product.
+  if (data === null) return <InvoiceBilling meter={meter} />;
 
   const usd = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
   const empty = data.balanceMicroUsd <= 0;
@@ -201,6 +207,116 @@ export function BillingView() {
               </thead>
               <tbody>
                 {data.months.map((m) => (
+                  <tr
+                    key={m.month}
+                    className="border-t border-[var(--table-divider)] tabular-nums"
+                  >
+                    <td className="px-3 py-2">{m.month}</td>
+                    <td className="px-3 py-2">{m.calls}</td>
+                    <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
+                    <td className="px-3 py-2">{usd(m.billedMicroUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// The invoice lane's half of the tab: the meter, the soft budget, and a line
+// saying where the money actually moves. Ported from the voice page's old
+// Usage section — the bill belongs to the business, not to one channel, so
+// it lives here now and the voice strip lost its billing chip.
+function InvoiceBilling({
+  meter,
+}: {
+  meter: {
+    rateMicroUsdPerMinute: number;
+    mode: "invoice" | "prepaid";
+    budgetMicroUsd: number | null;
+    months: {
+      month: string;
+      calls: number;
+      seconds: number;
+      billedMicroUsd: number;
+    }[];
+  } | null;
+}) {
+  const { t } = useLanguage();
+  const setBudget = useMutation(api.billing.setVoiceBudget);
+  if (meter === null) return null;
+
+  const usd = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 page-stack">
+      <Card>
+        <p className="text-sm text-[var(--muted-strong)]">
+          {t("voiceBilling.rateLine").replace(
+            "{rate}",
+            usd(meter.rateMicroUsdPerMinute),
+          )}
+        </p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {t("wallet.invoiceLine")}
+        </p>
+
+        <div className={`mt-4 ${ROW_GRID}`}>
+          <RowLabel
+            label={t("voiceBilling.budget")}
+            hint={t("voiceBilling.budgetHint")}
+          />
+          <input
+            inputMode="decimal"
+            defaultValue={
+              meter.budgetMicroUsd === null
+                ? ""
+                : String(meter.budgetMicroUsd / 1_000_000)
+            }
+            placeholder="50"
+            onBlur={(e) => {
+              const parsed = Number(e.target.value.replace(",", "."));
+              void setBudget({
+                budgetMicroUsd:
+                  !e.target.value.trim() || Number.isNaN(parsed)
+                    ? null
+                    : Math.round(parsed * 1_000_000),
+              });
+            }}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <p className="text-sm font-medium">{t("voiceBilling.title")}</p>
+        {meter.months.length === 0 ? (
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            {t("voiceBilling.empty")}
+          </p>
+        ) : (
+          <div className="thin-scroll mt-2 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-xs">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.month")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.calls")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.talkTime")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.amount")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {meter.months.map((m) => (
                   <tr
                     key={m.month}
                     className="border-t border-[var(--table-divider)] tabular-nums"

@@ -264,17 +264,6 @@ const NAV_TABS: {
 // admin's org page instead: an audit log is a debugging surface whose readers
 // are operators, and a salon owner has no use for a page of "settings changed".
 const FOOT_TABS: typeof NAV_TABS = [
-  // The wallet, above Business where every SaaS keeps money (Vercel, Stripe,
-  // OpenAI all park Billing at the account edge of the sidebar). Prepaid
-  // orgs only, owners only — filtered in AppShell, like Revenue above. It is
-  // NOT a section on the voice page: the wallet belongs to the business, and
-  // any future metered lane draws the same balance.
-  {
-    id: "billing",
-    key: "nav.balance",
-    Icon: WalletCardIcon,
-    color: "var(--foreground)",
-  },
   {
     id: "business",
     key: "nav.business",
@@ -282,6 +271,20 @@ const FOOT_TABS: typeof NAV_TABS = [
     color: "var(--foreground)",
   },
 ];
+
+// Billing sits at the account edge of the sidebar, directly above the
+// signed-in person — where Vercel, Stripe and OpenAI all park money (Serdar,
+// 2026-08-21: "billing right above the profile"). Every OWNER sees it,
+// whatever the org's billing mode: prepaid owners get the wallet, invoice
+// owners get the meter (BillingView branches). Staff never see money. It is
+// NOT a section on the voice page: the bill belongs to the business, and any
+// future metered lane draws the same balance.
+const BILLING_TAB: (typeof NAV_TABS)[number] = {
+  id: "billing",
+  key: "nav.billing",
+  Icon: WalletCardIcon,
+  color: "var(--foreground)",
+};
 
 // Nudge's mark, drawn inline rather than shipped as a file. The square takes
 // --logo, which is red: same glyph as the sibling product, different colour, so
@@ -1298,16 +1301,10 @@ export function AppShell({
     if (entry.id === "campaigns") return Boolean(settings?.whatsapp.connected);
     return true;
   });
-  // Balance is money, so it exists only where there is a wallet to show:
-  // prepaid orgs, owners. Staff and invoice-mode orgs never see the entry.
-  const footTabs = FOOT_TABS.filter((entry) => {
-    if (entry.id === "billing")
-      return (
-        settings?.org.billingMode === "prepaid" &&
-        settings.me.role === "owner"
-      );
-    return true;
-  });
+  const footTabs = FOOT_TABS;
+  // Billing is money, so only owners see the entry — both modes, because the
+  // invoice meter is as much "what do I owe" as the prepaid wallet is.
+  const showBilling = settings?.me.role === "owner";
   // ?tab=revenue on an org that has it switched off would render a tab with
   // no way back to it — the sidebar entry it came from does not exist. Waits
   // for settings to load so the redirect fires on a known answer, not on the
@@ -1318,10 +1315,7 @@ export function AppShell({
       onTab("appointments");
     if (tab === "campaigns" && !settings.whatsapp.connected)
       onTab("appointments");
-    if (
-      tab === "billing" &&
-      (settings.org.billingMode !== "prepaid" || settings.me.role !== "owner")
-    )
+    if (tab === "billing" && settings.me.role !== "owner")
       onTab("appointments");
   }, [tab, settings, onTab]);
   // Same green dot the inbox rows wear, counted. It used to be a red badge
@@ -1575,8 +1569,22 @@ export function AppShell({
               pb-7 lifts it off the edge: flush against it the row reads as cut
               off, and on a Mac the dev-tools bubble lands on top of it. */}
             <div
-              className={`mt-auto pb-7 pt-2 ${showCollapsed ? "flex justify-center" : ""}`}
+              className={`mt-auto pb-7 pt-2 ${showCollapsed ? "flex flex-col items-center" : ""}`}
             >
+              {/* Billing, glued above the profile rather than filed with the
+                foot group: money questions and "who am I signed in as" share
+                the account edge, and this is where every SaaS the owner
+                already uses keeps its bill. */}
+              {showBilling && (
+                <div className="w-full pb-2">
+                  <SidebarButton
+                    entry={BILLING_TAB}
+                    active={tab === "billing"}
+                    collapsed={showCollapsed}
+                    onClick={() => goTo("billing")}
+                  />
+                </div>
+              )}
               <UserMenu
                 variant="row"
                 collapsed={showCollapsed}

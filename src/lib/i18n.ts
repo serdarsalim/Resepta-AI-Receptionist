@@ -1716,7 +1716,7 @@ const dictionary = {
   },
   // The prepaid wallet (BillingView, prepaid orgs only). "Bakiye" over any
   // coined word: it is what every prepaid product in Türkiye calls this.
-  "nav.balance": { tr: "Bakiye", en: "Balance", de: "Guthaben" },
+  "nav.billing": { tr: "Faturalama", en: "Billing", de: "Abrechnung" },
   "wallet.balance": {
     tr: "Mevcut bakiye",
     en: "Current balance",
@@ -1765,6 +1765,11 @@ const dictionary = {
   },
   "wallet.sourceStripe": { tr: "Kart", en: "Card", de: "Karte" },
   "wallet.sourceManual": { tr: "Manuel", en: "Manual", de: "Manuell" },
+  "wallet.invoiceLine": {
+    tr: "Kullanım fatura ile tahsil edilir; ödeme uygulama dışında yapılır.",
+    en: "Usage is billed by invoice and settled outside the app.",
+    de: "Die Nutzung wird per Rechnung abgerechnet und außerhalb der App beglichen.",
+  },
   "wallet.sourceTrial": {
     tr: "Deneme kredisi",
     en: "Trial credit",

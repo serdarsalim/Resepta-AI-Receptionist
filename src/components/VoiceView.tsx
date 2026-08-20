@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -12,8 +12,6 @@ import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { KnowledgeCard } from "./KnowledgeCard";
 import { FieldsCard, ServiceKeysCard } from "./BusinessView";
-import { ROW_GRID, RowLabel } from "./RowLabel";
-import { Card } from "./Card";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -40,7 +38,7 @@ import { Card } from "./Card";
 // customer is a SETUP surface, one of the first things a new business touches,
 // and a setup surface hidden inside a dropdown labelled "Columns" is not
 // findable by the person who needs it most.
-type VoiceSection = "agents" | "calls" | "billing" | "knowledge" | "fields";
+type VoiceSection = "agents" | "calls" | "knowledge" | "fields";
 
 function fmtDuration(sec: number | null): string {
   if (sec === null) return "";
@@ -155,93 +153,6 @@ function CallHistory() {
   );
 }
 
-// The owner's answer to "what is this agent costing me" (convex/billing.ts).
-// Spend is owner-only — staff never see the strip entry, and the query
-// resolves null for them anyway. Everything renders in USD because the meter
-// runs in USD; the org's display currency is a booking-revenue concern, not a
-// platform-bill one.
-function BillingSection() {
-  const { t } = useLanguage();
-  const data = useQuery(api.billing.voiceOverview, {});
-  const setBudget = useMutation(api.billing.setVoiceBudget);
-
-  if (data === undefined) {
-    return <p className="animate-pulse text-sm text-[var(--muted)]">{t("common.loading")}</p>;
-  }
-  if (data === null) return null;
-
-  const usd = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
-
-  // One card, not three loose things on the plane. The rate, the budget that
-  // caps it and the months it was spent over are one subject, and every other
-  // section in this strip already arrives as a card — Usage was the only one
-  // sitting bare on the background.
-  return (
-    <Card>
-      <p className="text-sm text-[var(--muted-strong)]">
-        {t("voiceBilling.rateLine").replace("{rate}", usd(data.rateMicroUsdPerMinute))}
-      </p>
-
-      {/* The soft budget is the invoice lane's alert lever; a prepaid org's
-          alerts come from its wallet, and this row's hint ("calls are never
-          cut off") would be a lie there. The wallet lives on the Balance
-          tab. */}
-      {data.mode !== "prepaid" && (
-        <div className={`mt-4 ${ROW_GRID}`}>
-          <RowLabel label={t("voiceBilling.budget")} hint={t("voiceBilling.budgetHint")} />
-          <input
-            inputMode="decimal"
-            defaultValue={
-              data.budgetMicroUsd === null ? "" : String(data.budgetMicroUsd / 1_000_000)
-            }
-            placeholder="50"
-            onBlur={(e) => {
-              const parsed = Number(e.target.value.replace(",", "."));
-              void setBudget({
-                budgetMicroUsd:
-                  !e.target.value.trim() || Number.isNaN(parsed)
-                    ? null
-                    : Math.round(parsed * 1_000_000),
-              });
-            }}
-          />
-        </div>
-      )}
-
-      {data.months.length === 0 ? (
-        <p className="mt-4 border-t border-[var(--table-divider)] pt-4 text-sm text-[var(--muted)]">
-          {t("voiceBilling.empty")}
-        </p>
-      ) : (
-        // No card of its own any more: it is inside one. A bordered box inside
-        // a bordered box was two frames around one table.
-        <div className="thin-scroll mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="text-left text-xs">
-              <tr>
-                <th className="px-3 py-2 font-semibold">{t("voiceBilling.month")}</th>
-                <th className="px-3 py-2 font-semibold">{t("voiceBilling.calls")}</th>
-                <th className="px-3 py-2 font-semibold">{t("voiceBilling.talkTime")}</th>
-                <th className="px-3 py-2 font-semibold">{t("voiceBilling.amount")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.months.map((m) => (
-                <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
-                  <td className="px-3 py-2">{m.month}</td>
-                  <td className="px-3 py-2">{m.calls}</td>
-                  <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
-                  <td className="px-3 py-2">{usd(m.billedMicroUsd)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
-  );
-}
-
 export function VoiceView() {
   const { t } = useLanguage();
   const [section, setSection] = useState<VoiceSection>("agents");
@@ -295,11 +206,6 @@ export function VoiceView() {
           [
             { id: "agents" as const, label: t("voice.agents") },
             { id: "calls" as const, label: t("settings.voiceCalls") },
-            // Spend is the owner's business — the section hides for staff
-            // rather than rendering a refusal.
-            ...(isOwner
-              ? [{ id: "billing" as const, label: t("voiceBilling.title") }]
-              : []),
             { id: "knowledge" as const, label: t("knowledge.section") },
             { id: "fields" as const, label: t("fields.title") },
           ] as { id: VoiceSection; label: string }[]
@@ -324,7 +230,6 @@ export function VoiceView() {
         <VoiceCard isOwner={isOwner} site={site} onOpenAgent={openAgent} />
       )}
       {section === "calls" && <CallHistory />}
-      {section === "billing" && isOwner && <BillingSection />}
       {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
       {/* Service keys ride under the contact fields: this tab is the agent's
           vocabulary — everything it knows by key — and a service's key is the
