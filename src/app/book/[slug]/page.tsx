@@ -334,8 +334,6 @@ export default function BookingPage({
     <Shell
       title={page.orgName}
       logoUrl={page.logoUrl}
-      onBack={back}
-      backLabel={t("common.back")}
       language={pageLanguage}
       footer={
         /* The basket bar. TWO ROWS, with the action alone on the second: at
@@ -354,17 +352,13 @@ export default function BookingPage({
            design: tapping a slot still advances, so it is only ever seen
            disabled. That is the point; it holds the corner.
 
-           FIXED on a phone, a plain flex row from sm. On a phone the card
-           fills the screen, so a bar across the bottom of the screen is a bar
-           across the bottom of the card. From sm the card is a fixed-height
-           column and this is simply its last row, which is why nothing here
-           is sticky any more.
-
-           --card, not --background: over a plane the raw page colour is the
-           one surface the wash never touches, so the bar read as a strip of a
-           different page. A floating surface keeps its hard edge, so the top
-           border stays. */
-        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur sm:static sm:-mx-5 sm:-mb-5 sm:mt-4 sm:rounded-b-lg">
+           The card's last flex row at every width — no fixed, no sticky, no
+           backdrop blur. All three existed to fake this attachment while the
+           bar was pinned to the viewport instead of to the card; once the card
+           is a fixed-height column the bar simply IS its bottom. It keeps the
+           top border, which is now a rule between two rows of one card rather
+           than the edge of a floating surface. */
+        <div className="-mx-4 -mb-4 mt-3 rounded-b-lg border-t border-[var(--border)] sm:-mx-5 sm:-mb-5 sm:mt-4">
           {/* The lines, ONLY on the steps where they are not already on
               screen. On the service step the ticked rows sit above this bar,
               so a panel repeating them is a copy of the thing it summarises;
@@ -408,7 +402,36 @@ export default function BookingPage({
                 </p>
               )}
             </div>
-            <div className="flex justify-end">
+            {/* Back sits HERE, not in the header. As a chevron beside the logo
+                it pushed the logo and the salon's name to the right on every
+                step that had somewhere to go back to, so the card's identity
+                moved while its content changed. Reserving an empty slot fixed
+                the shift and left a hole; putting it in the action row fixes
+                both, and it belongs here anyway — back and forward are the
+                same kind of thing, and this is the row that holds them. */}
+            <div className="flex items-center justify-between gap-3">
+              {back ? (
+                <button
+                  type="button"
+                  onClick={back}
+                  className="flex items-center gap-1 rounded-lg px-1.5 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path
+                      d="M10 3L5 8l5 5"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {t("common.back")}
+                </button>
+              ) : (
+                // Holds the left end so the primary stays pinned right whether
+                // or not there is a way back.
+                <span />
+              )}
               {step === "details" ? (
                 <button
                   type="submit"
@@ -698,12 +721,17 @@ export default function BookingPage({
         >
           {/* Label left, control right from sm — the shape every settings row
               in the app already has, and here it also buys back the height
-              three stacked labels were spending. The card is 28rem wide, so
-              the label column is 7rem rather than RowLabel's 220px floor:
-              these are two words each, and a wider one would leave the phone
-              picker no room for its country chip. Below sm it stacks, which is
-              what ROW_GRID does too. */}
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-center">
+              three stacked labels were spending. Below sm it stacks, which is
+              what ROW_GRID does too.
+
+              6rem, measured rather than picked. The card's grid is 359px; at
+              7rem the control column came to 231 and the phone row needs 235
+              (an 85px country chip, a 6px gap, and the number field's 144px
+              floor), so the chip wrapped onto its own line by four pixels. A
+              narrower label column is the honest fix — these are two words
+              each — and it leaves the phone row twelve pixels of slack rather
+              than none. */}
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
             <label htmlFor="booking-name" className="text-sm">
               {t("forms.name")}
             </label>
@@ -719,14 +747,19 @@ export default function BookingPage({
                 click to whichever it named. */}
             <span className="text-sm">{t("forms.phone")}</span>
             <PhoneInput required />
+            {/* "Optional" moved into the box, the way Business settings marks
+                an optional price. As part of the LABEL it was the longest
+                string in the column and set its width on its own — a
+                parenthesis deciding how much room the phone field gets. */}
             <label htmlFor="booking-email" className="text-sm">
-              {`${t("forms.email")} (${t("common.optional")})`}
+              {t("forms.email")}
             </label>
             <input
               id="booking-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder={t("common.optional")}
             />
           </div>
           {error && error !== "slot-taken" && (
@@ -794,16 +827,12 @@ function StepperButton({ label, onClick }: { label: string; onClick: () => void 
 function Shell({
   title,
   logoUrl,
-  onBack,
-  backLabel,
   language,
   footer,
   children,
 }: {
   title?: string;
   logoUrl?: string | null;
-  onBack?: () => void;
-  backLabel?: string;
   language?: Language;
   // The basket bar. A separate slot rather than the last child of `children`
   // because from sm the card is a fixed-height flex column and this is the row
@@ -821,49 +850,32 @@ function Shell({
     // one, and German is where a wrong lang starts to show.
     <main
       lang={language}
-      // pb-28 clears the FIXED bar, which only exists below sm — from there the
-      // bar is the card's own footer and the page just needs its normal floor.
-      className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5 sm:pb-10"
+      // h-dvh, not min-h: the card below is a fixed-height column that fills
+      // it, so this is the frame rather than a floor to grow past.
+      className="mx-auto flex h-dvh w-full max-w-md flex-col px-4 py-8 sm:px-5"
     >
       {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
-          Padding matches components/Card — p-4 here rather than its p-3 only
-          because this card is the whole page rather than one of six stacked in
-          a settings column.
 
-          FIXED HEIGHT from sm, and the middle scrolls. Every step of this
-          wizard holds a different amount — six services, a slot grid, three
-          fields — so on a desktop the card resized under the reader at every
-          tap, and the fix per step was another reserved height guessing at
-          content it does not control. One height for the whole wizard costs
-          one guess instead of three and cannot be wrong per step; a salon with
-          thirty services scrolls the list inside the card rather than growing
-          it past the fold.
+          FIXED HEIGHT at every width, with the middle scrolling and the basket
+          as the last row. Every step holds a different amount — six services, a
+          slot grid, three fields — so the card resized under the reader at
+          every tap, and fixing it per step meant another reserved height
+          guessing at content the page does not control. One height for the
+          whole wizard costs one guess instead of three.
 
-          Phone keeps page scroll and a fixed bar. A viewport-height box with
-          its own scroll region is the thing mobile browsers handle worst — the
-          address bar resizes the viewport mid-scroll — and that layout is
-          already the one that works there. */}
-      <div className="card-raised p-4 sm:flex sm:h-[min(46rem,calc(100dvh-5rem))] sm:flex-col sm:p-5">
+          Desktop-only at first, with the phone keeping page scroll and a bar
+          fixed to the viewport. That was wrong in the way only a phone shows:
+          the card ended halfway up the screen and the bar sat at the bottom
+          with a hand's width of plane between them, reading as two unrelated
+          surfaces rather than one card with a footer. The dynamic-viewport
+          unit is what makes the single version safe — 100dvh tracks the
+          address bar instead of fighting it.
+
+          The whole fixed/sticky/static split goes with it: the bar is simply
+          the card's last flex row now, at every width. */}
+      <div className="card-raised flex min-h-0 flex-1 flex-col p-4 sm:max-h-[46rem] sm:p-5">
         {title && (
           <div className="mb-5 flex items-center gap-3">
-            {onBack && (
-              <button
-                type="button"
-                onClick={onBack}
-                aria-label={backLabel}
-                className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path
-                    d="M10 3L5 8l5 5"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            )}
             {logoUrl && (
               /* eslint-disable-next-line @next/next/no-img-element -- a
                  Convex storage URL, not an asset next/image can optimize */
@@ -893,7 +905,7 @@ function Shell({
             the list does not jump sideways the moment it grows past the fold.
             Both are gated to sm+ in globals.css, which is also where this card
             stops being a fixed-height box. */}
-        <div className="thin-scroll stable-gutter -mx-4 px-4 sm:-mx-5 sm:min-h-0 sm:flex-1 sm:overflow-y-auto sm:px-5">
+        <div className="thin-scroll stable-gutter -mx-4 min-h-0 flex-1 overflow-y-auto px-4 sm:-mx-5 sm:px-5">
           {children}
         </div>
         {footer}
