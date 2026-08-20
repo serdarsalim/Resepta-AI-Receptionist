@@ -1,9 +1,11 @@
 import Google from "@auth/core/providers/google";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
 import { convexAuth } from "@convex-dev/auth/server";
-import type { DatabaseWriter } from "./_generated/server";
+import type { DatabaseWriter, MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { seedDefaultRules } from "./messageRules";
+import { platformValue } from "./lib/platformConfig";
 
 // ── Walk-in access to the demo org ──────────────────────────────────────────
 //
@@ -122,12 +124,37 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
 
       // ---- Founding sign-in. ----
       // Unnamed until onboarding — "" renders as the name prompt in the app.
+      //
+      // Billing mode is STAMPED from the platform default rather than
+      // resolved at read time, so changing the default later only reaches
+      // orgs founded after the change — flipping existing tenants to prepaid
+      // with a zero wallet would decline their calls at ring time.
+      const mctx = ctx as unknown as MutationCtx;
+      const billingMode =
+        (await platformValue(mctx, "defaultBillingMode")) === "prepaid"
+          ? ("prepaid" as const)
+          : ("invoice" as const);
       const orgId = await db.insert("orgs", {
         name: "",
         timezone: "Europe/Istanbul",
         language: "tr",
         sendBookingConfirmation: true,
+        billingMode,
       });
+      // The welcome credit a prepaid birth carries. Scheduled rather than
+      // applied inline so it runs through applyWalletCredit — the one credit
+      // path — in a real mutation ctx with the alert lane available.
+      if (billingMode === "prepaid") {
+        const trialUsd =
+          Number(await platformValue(mctx, "trialCreditUsd")) || 0;
+        if (trialUsd > 0) {
+          await mctx.scheduler.runAfter(0, internal.wallet.creditTopup, {
+            orgId,
+            amountMicroUsd: Math.round(trialUsd * 1_000_000),
+            source: "trial",
+          });
+        }
+      }
       // Confirmation + one 24h reminder, and the migrated marker — a new org
       // is born on the messageRules model, never on the legacy fields.
       await seedDefaultRules(db, orgId);

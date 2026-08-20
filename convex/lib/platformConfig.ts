@@ -86,6 +86,17 @@ export const PLATFORM_KEYS = {
   // exists only for exceptions (a market that needs its own price). Table-only:
   // pricing is an operator decision, not a deploy artifact.
   voiceRateMicroUsdPerMinute: null,
+  // The billing mode a NEW org is born with ("invoice" | "prepaid"). Stamped
+  // onto orgs.billingMode at founding sign-in, never resolved at read time —
+  // flipping this must not silently switch existing tenants to prepaid with a
+  // zero wallet, which would decline their calls at ring time. The per-org
+  // toggle on the admin Voice meter stays the override.
+  defaultBillingMode: null,
+  // Welcome credit for orgs born prepaid, whole USD as a string ("10" =
+  // $10.00). Credited once at founding sign-in through applyWalletCredit
+  // (source "trial"), so it shows in the top-ups trail and draws down like
+  // any other balance. Unset or 0 = no trial money.
+  trialCreditUsd: null,
   // The platform's Stripe account for prepaid wallet top-ups — the Resend
   // case again: one deployment-wide account BY INTENT, because the platform
   // sells the credit and Stripe pays the platform, whichever org the money

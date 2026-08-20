@@ -473,6 +473,56 @@ export default function AdminPage() {
                 });
               }}
             />
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="text-sm font-medium">Default billing mode</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(["invoice", "prepaid"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() =>
+                      void setConfig({
+                        key: "defaultBillingMode",
+                        // Invoice is what an absent row already means, so
+                        // picking it clears the row rather than pinning it.
+                        value: option === "prepaid" ? "prepaid" : "",
+                      })
+                    }
+                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                      mail.defaultBillingMode === option
+                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+                <span className="text-xs text-[var(--muted)]">
+                  What a new business is born as. Stamped at sign-up; existing
+                  businesses keep their mode, overridable per business on its
+                  Voice agent tab.
+                </span>
+              </div>
+            </div>
+            <Row
+              label="Trial credit (USD)"
+              hint="Welcome money for businesses born prepaid: credited to the wallet once at sign-up, shown in their top-ups as trial credit. Empty or 0 = none. Invoice-mode sign-ups never receive it."
+              current={
+                mail.trialCreditUsd === null
+                  ? undefined
+                  : String(mail.trialCreditUsd)
+              }
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                return setConfig({
+                  key: "trialCreditUsd",
+                  value:
+                    !value.trim() || Number.isNaN(parsed) || parsed <= 0
+                      ? ""
+                      : String(parsed),
+                });
+              }}
+            />
             <SecretRow
               label="Secret key"
               hint={

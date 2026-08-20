@@ -162,7 +162,9 @@ export function BillingView() {
                     <td className="px-3 py-2 text-xs text-[var(--muted)]">
                       {topup.source === "stripe"
                         ? t("wallet.sourceStripe")
-                        : t("wallet.sourceManual")}
+                        : topup.source === "trial"
+                          ? t("wallet.sourceTrial")
+                          : t("wallet.sourceManual")}
                     </td>
                   </tr>
                 ))}

@@ -71,6 +71,10 @@ export const status = query({
     // token rides (lib/platformConfig resolveWaAccount).
     whatsappAccessToken: v.union(v.string(), v.null()),
     voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
+    // What a new org is born as, and the welcome credit a prepaid birth
+    // carries (lib/platformConfig defaultBillingMode / trialCreditUsd).
+    defaultBillingMode: v.union(v.literal("invoice"), v.literal("prepaid")),
+    trialCreditUsd: v.union(v.number(), v.null()),
     // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
     stripeSecretKey: v.union(v.string(), v.null()),
     stripeWebhookSecret: v.union(v.string(), v.null()),
@@ -125,6 +129,12 @@ export const status = query({
       whatsappAccessToken: waToken ? maskSecret(waToken) : null,
       voiceRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
+      defaultBillingMode:
+        (await platformValue(ctx, "defaultBillingMode")) === "prepaid"
+          ? ("prepaid" as const)
+          : ("invoice" as const),
+      trialCreditUsd:
+        Number(await platformValue(ctx, "trialCreditUsd")) || null,
       stripeSecretKey: stripeKey ? maskSecret(stripeKey) : null,
       stripeWebhookSecret: stripeWebhook ? maskSecret(stripeWebhook) : null,
       fromEnv: {
@@ -168,6 +178,9 @@ const settableKey = v.union(
   // stops resolving instead of blocking the operator from clearing it.
   v.literal("voiceModel"),
   v.literal("voiceRateMicroUsdPerMinute"),
+  // What a new org is born as, and the prepaid welcome credit.
+  v.literal("defaultBillingMode"),
+  v.literal("trialCreditUsd"),
   // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
   v.literal("stripeSecretKey"),
   v.literal("stripeWebhookSecret"),

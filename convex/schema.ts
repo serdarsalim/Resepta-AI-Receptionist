@@ -1787,7 +1787,13 @@ export default defineSchema({
   walletTopups: defineTable({
     orgId: v.id("orgs"),
     amountMicroUsd: v.number(),
-    source: v.union(v.literal("stripe"), v.literal("manual")),
+    // "trial" is the welcome credit stamped at founding sign-in when the
+    // platform's defaultBillingMode is prepaid (lib/platformConfig).
+    source: v.union(
+      v.literal("stripe"),
+      v.literal("manual"),
+      v.literal("trial"),
+    ),
     stripeSessionId: v.optional(v.string()),
     at: v.number(),
     // The operator who keyed a manual row; stripe rows carry none.

@@ -1765,6 +1765,11 @@ const dictionary = {
   },
   "wallet.sourceStripe": { tr: "Kart", en: "Card", de: "Karte" },
   "wallet.sourceManual": { tr: "Manuel", en: "Manual", de: "Manuell" },
+  "wallet.sourceTrial": {
+    tr: "Deneme kredisi",
+    en: "Trial credit",
+    de: "Startguthaben",
+  },
   // Per-call, so "what was collected", not the agent card's "what it collects".
   "calls.collected": {
     tr: "Toplanan bilgiler",

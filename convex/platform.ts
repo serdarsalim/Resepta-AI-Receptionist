@@ -1032,7 +1032,7 @@ export const orgVoiceUsage = query({
         v.object({
           at: v.number(),
           amountMicroUsd: v.number(),
-          source: v.union(v.literal("stripe"), v.literal("manual")),
+          source: v.union(v.literal("stripe"), v.literal("manual"), v.literal("trial")),
         }),
       ),
       months: v.array(

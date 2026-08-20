@@ -42,7 +42,7 @@ export const overview = query({
         v.object({
           at: v.number(),
           amountMicroUsd: v.number(),
-          source: v.union(v.literal("stripe"), v.literal("manual")),
+          source: v.union(v.literal("stripe"), v.literal("manual"), v.literal("trial")),
         }),
       ),
       months: v.array(
@@ -117,7 +117,7 @@ export async function applyWalletCredit(
   args: {
     orgId: Id<"orgs">;
     amountMicroUsd: number;
-    source: "stripe" | "manual";
+    source: "stripe" | "manual" | "trial";
     stripeSessionId?: string;
     by?: Id<"users">;
   },
@@ -185,7 +185,7 @@ export const creditTopup = internalMutation({
   args: {
     orgId: v.id("orgs"),
     amountMicroUsd: v.number(),
-    source: v.union(v.literal("stripe"), v.literal("manual")),
+    source: v.union(v.literal("stripe"), v.literal("manual"), v.literal("trial")),
     stripeSessionId: v.optional(v.string()),
     by: v.optional(v.id("users")),
   },
