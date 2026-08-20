@@ -126,7 +126,7 @@ export function AppointmentModal({
   >(() =>
     (draft.lines ?? []).map((line) => ({
       serviceId: line.serviceId as string,
-      price: moneyInputValue(line.price, currency, language),
+      price: moneyInputValue(line.price, currency, language, priceDecimals),
       quantity: String(line.quantity ?? 1),
     })),
   );
@@ -273,7 +273,7 @@ export function AppointmentModal({
       i === index
         ? {
             serviceId,
-            price: moneyInputValue(picked?.price, currency, language),
+            price: moneyInputValue(picked?.price, currency, language, priceDecimals),
             quantity: "1",
           }
         : line,

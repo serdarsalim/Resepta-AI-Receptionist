@@ -39,6 +39,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
+import { formatMoney } from "./lib/money";
 import {
   cancelBooking,
   createBooking,
@@ -221,6 +222,7 @@ export const loadTurnContext = internalQuery({
         calcomEventTypeId: org.calcomEventTypeId ?? null,
         mode,
         currency: org.currency ?? "TRY",
+        priceDecimals: org.priceDecimals ?? false,
       },
       customer: {
         _id: customer._id,
@@ -512,7 +514,18 @@ export const respond = internalAction({
         price:
           s.price === null
             ? undefined
-            : formatMinorUnits(s.price, context.org.currency),
+            : // The SHARED formatter. This hand-rolled its own for a while,
+              // hardcoding tr-TR and /100 — so a German salon's agent quoted
+              // prices with Turkish separators, and a zero-decimal currency
+              // came out 100× too small. It also decided the decimals itself,
+              // which meant the chat agent could quote "₺350,00" for a salon
+              // whose booking page and reminders both say "₺350".
+              formatMoney(
+                s.price,
+                context.org.currency,
+                context.org.language,
+                context.org.priceDecimals,
+              ),
       })),
       teamNames: context.teamNames,
       knowledge: context.knowledge,
@@ -668,6 +681,7 @@ type TurnContext = {
     timezone: string;
     language: string;
     businessHours: { activeDays?: number[]; startMinute?: number; endMinute?: number } | null;
+    priceDecimals: boolean;
     calcomApiKey: string | null;
     calcomEventTypeId: string | null;
     mode: string;
@@ -911,17 +925,4 @@ function localNow(timezone: string): string {
   }
 }
 
-// Minor units → a readable price for the prompt ("₺400", "45,50 €"). The
-// currencies the product actually serves; anything else falls back to the
-// code, which a model relays fine.
-function formatMinorUnits(minor: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("tr-TR", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: minor % 100 === 0 ? 0 : 2,
-    }).format(minor / 100);
-  } catch {
-    return `${(minor / 100).toFixed(2)} ${currency}`;
-  }
-}
+

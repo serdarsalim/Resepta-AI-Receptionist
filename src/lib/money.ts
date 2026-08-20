@@ -53,12 +53,26 @@ export function moneyInputValue(
   minor: number | undefined,
   currency: string,
   locale: string,
+  // orgs.priceDecimals, same as formatMoney. The BOX has to agree with what
+  // the box produces: a salon reading "₺350" on every screen and then opening
+  // the editor to find "350,00" is being shown two different prices for one
+  // service, and the one they can edit is the one that looks wrong.
+  //
+  // Safe against parseMoney, which already accepts a bare "400" — the pair
+  // only has to agree about the SEPARATOR, and this changes how many zeroes
+  // sit after it.
+  showDecimals = false,
 ): string {
   if (minor === undefined) return "";
   const digits = fractionDigits(currency, locale);
+  // Never rounds, for formatMoney's reason: a price carrying kuruş still shows
+  // them, and here it matters twice over — a rounded value in an editable box
+  // is one Save away from becoming the real price.
+  const whole = digits === 0 || minor % 10 ** digits === 0;
+  const shown = showDecimals || !whole ? digits : 0;
   return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
+    minimumFractionDigits: shown,
+    maximumFractionDigits: shown,
     useGrouping: false,
   }).format(minor / 10 ** digits);
 }

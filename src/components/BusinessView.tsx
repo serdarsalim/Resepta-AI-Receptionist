@@ -855,6 +855,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const { t, language } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
+  const priceDecimals = settings?.org.priceDecimals ?? false;
   const services = useQuery(api.services.list, {});
   const update = useMutation(api.services.update);
   const remove = useMutation(api.services.remove);
@@ -991,7 +992,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       might charge and "I haven't decided" is not it. */}
                   <span className="flex items-center gap-0.5 whitespace-nowrap max-sm:col-start-2 max-sm:row-start-2">
                     <InlineEditValue
-                      value={moneyInputValue(service.price, currency, language)}
+                      value={moneyInputValue(service.price, currency, language, priceDecimals)}
                       type="number"
                       compact
                       onSave={(next) =>
