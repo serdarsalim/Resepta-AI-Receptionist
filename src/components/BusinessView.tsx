@@ -533,16 +533,15 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
           <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
-          {/* Currency and decimals share ONE row, stacked rather than
-              side by side: the control column caps at 24rem and a select plus
-              a switch plus its label does not fit a phone. They belong
+          {/* Currency and decimals on ONE line: they answer the same question
               together — currency picks the symbol, language picks the
-              separators, this picks how much of the number to write — and as
-              a row of its own the decimals switch would have needed a label
-              restating the word "price" three times. */}
-          <div className="space-y-2.5 sm:max-w-72">
+              separators, this picks how much of the number to write. The
+              select is sized to its content (four codes, none longer than
+              "EUR · €") rather than filling the column, which is what leaves
+              room for the switch beside it. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <select
-              className="w-full"
+              className="w-32 shrink-0"
               defaultValue={settings.org.currency}
               onChange={(e) => void update({ currency: e.target.value })}
             >
@@ -552,12 +551,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+            <label className="flex items-center gap-2 text-sm">
+              {t("settings.priceDecimals")}
               <Toggle
                 checked={settings.org.priceDecimals ?? false}
                 onChange={(next) => void update({ priceDecimals: next })}
               />
-              {t("settings.priceDecimals")}
             </label>
           </div>
           {/* Last on purpose: an opt-in extra, below the facts of the
