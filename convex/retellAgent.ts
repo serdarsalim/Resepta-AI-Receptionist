@@ -1434,6 +1434,7 @@ export const syncTemplate = action({
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
         model: template.llm.model,
         model_temperature: template.llm.model_temperature,
+        model_high_priority: template.llm.model_high_priority,
         general_tools: withRuntimeSaveTool([...templateTools, ...kept]),
         mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
       });

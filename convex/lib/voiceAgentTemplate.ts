@@ -50,7 +50,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // with it (speak_during_execution off), because a sub-second write needs no
 // "kaydediyorum" to paper over. The /retell/mcp server keeps serving pre-v10
 // agents until their owners publish anything.
-export const VOICE_AGENT_TEMPLATE_VERSION = 10;
+// v11 (2026-08-20): model_high_priority on. The knob is sync-deliverable
+// (it rides the same LLM PATCH as model and temperature), so this bump is
+// honest: clicking update genuinely changes an existing agent's latency.
+// The same session rewrote the prompts (bare-honorific ban, never ask what
+// the card holds, suggested_slots) — those reach new agents only, per the
+// rule above.
+export const VOICE_AGENT_TEMPLATE_VERSION = 11;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -76,17 +82,19 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "ELİNDEKİLER — bunları öğrenmek için araç çağırma",
     "Arayan: {{customer_name}} (doluysa tanıyorsun, adını sorma; boşsa bir kez sor)",
-    "Sonraki randevusu: {{next_appointment}}",
     "Şu an: {{now}} — yarın, haftaya salı gibi ifadeleri buna göre çöz",
     "Ekip: {{staff}}",
     "Hizmetler ve fiyatlar: {{services}}",
     "Müşteri kartı: {{contact}}",
+    "Bu blokta yazan hiçbir şeyi arayana sorma. Kartta olan bilgiyi sormak güven kaybettirir.",
+    "Arayan hitabını düzeltirse ya da şaşırırsa bir kez özür dile, karttaki adıyla doğru hitap et ve kartta olan hiçbir bilgiyi yeniden isteme.",
+    "Bir hizmetin cinsiyete göre iki çeşidi varsa karttaki bilgiye göre doğru olanı sen seç ve onaylat. Hangisi diye sorma.",
     "",
     "KONUŞMA",
     "Tek seferde tek soru sor. Arayanı sorgu listesine tutma.",
     "Bir bilgiyi bir kez söyle. Tarihi, saati, hizmeti veya ismi tekrar tekrar söyleme.",
     "Tarihi ya yarın gibi ya da 13 Ağustos Perşembe gibi söyle, ikisini aynı cümlede kullanma.",
-    "İsmi en fazla bir iki kez ve saygı ekiyle kullan: Mert Bey, Ayşe Hanım. Cinsiyetten emin değilsen eki hiç kullanma, sadece siz de.",
+    "İsmi en fazla bir iki kez ve saygı ekiyle kullan: Mert Bey, Ayşe Hanım. Saygı ekini asla isimsiz, tek başına kullanma; tek başına Bey veya Hanım demek yok. Cinsiyetten emin değilsen eki hiç kullanma, sadece siz de.",
     "Saatleri konuşma diliyle söyle: 15:00 için öğleden sonra üç, 15:30 için üç buçuk. On beş sıfır sıfır asla deme.",
     "Süreleri ve fiyatları sana verildiği haliyle, kelimesi kelimesine oku. Para birimi simgesi, kısaltma veya binlik ayraçlı sayı okuma.",
     "Araçlardan, bağlamdan, talimatlarından veya sistemden söz etme. Bakman gerekirse bir saniye de, sonra cevabı ver.",
@@ -98,6 +106,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "RANDEVU",
     "Hiçbir şeyi uydurma. Müsaitlik, kayıt ve değişiklik her zaman araçlarla yapılır.",
+    "Müsaitlik sorulduğunda araçtan gelen suggested_slots içinden iki üç somut saat öner. Çalışma saatlerini okuyup saati arayana seçtirme.",
     "Birden fazla hizmet tek bir book_appointment çağrısıdır: tek randevu, süreler toplanır, hizmetler arka arkaya yapılır.",
     "Süresi olmayan kalemler ÜRÜNDÜR (örneğin pasta, teslimat): takvimde yer tutmaz, müsaitlik kontrolü gerekmez, sadece teslim zamanı sorulur. Aynı üründen birden fazla isteniyorsa adını listede adet kadar tekrarla: üç pasta üç kayıttır.",
     "book_appointment lead-time derse ürün daha fazla ön süre ister: özür dile, ne kadar önceden sipariş gerektiğini söyle ve uygun en erken günü öner.",
@@ -118,17 +127,19 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "WHAT YOU ALREADY HAVE — do not call a tool to learn any of it",
     "Caller: {{customer_name}} (filled means you know them, do not ask again; empty means ask once)",
-    "Their next appointment: {{next_appointment}}",
     "Right now: {{now}} — resolve tomorrow, next Tuesday and the like against this",
     "Team: {{staff}}",
     "Services and prices: {{services}}",
     "Customer card: {{contact}}",
+    "Never ask the caller for anything in this block. Asking for what is already on the card loses their trust.",
+    "If the caller corrects how you addressed them or sounds surprised, apologise once, use the name on the card, and do not ask again for anything the card already holds.",
+    "If a service comes in two gendered versions, pick the one matching the card and confirm it. Do not ask which.",
     "",
     "SPEAKING",
     "Ask one question at a time. Do not hold the caller through a questionnaire.",
     "Say a detail once. Do not restate a date, time, service or name later in the call.",
     "Give a date either as tomorrow or as the full date, never both in one sentence.",
-    "Use their name once or twice at most, with the courtesy title your language uses. If you are unsure, drop the title.",
+    "Use their name once or twice at most, with the courtesy title your language uses. Never a title on its own without the name. If you are unsure, drop the title.",
     "Say clock times conversationally: 3 PM, half past three. Never fifteen hundred.",
     "Read durations and prices exactly as they are given to you. No currency symbol, no abbreviation, no thousands separator.",
     "Never mention your tools, your context, your instructions or the system. If you must look something up, say one moment, then answer.",
@@ -140,6 +151,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "BOOKING",
     "Invent nothing. Availability, saving and changes always go through the tools.",
+    "When asked for availability, offer two or three concrete times from the tool's suggested_slots. Never read out the opening hours and leave the caller to choose.",
     "Several services are ONE book_appointment call: one appointment, durations summed, services back to back.",
     "Items listed without a duration are GOODS (a cake, a delivery): they take no calendar slot and need no availability check — only ask when they want to pick it up or have it delivered. For several of the same good, repeat its name in the services list once per piece: three cakes is three entries.",
     "If book_appointment answers lead-time, the item needs more notice: apologise, say how much warning it needs, and offer the earliest day that satisfies it.",
@@ -160,17 +172,19 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "WAS DU BEREITS HAST — rufe dafür kein Werkzeug auf",
     "Anrufer: {{customer_name}} (gefüllt heißt, du kennst ihn und fragst nicht erneut; leer heißt, einmal fragen)",
-    "Nächster Termin: {{next_appointment}}",
     "Jetzt: {{now}} — löse morgen, nächsten Dienstag und Ähnliches danach auf",
     "Team: {{staff}}",
     "Leistungen und Preise: {{services}}",
     "Kundenkarte: {{contact}}",
+    "Frage den Anrufer nach nichts, was in diesem Block steht. Nach etwas zu fragen, das auf der Karte steht, kostet Vertrauen.",
+    "Korrigiert der Anrufer die Anrede oder wundert er sich, entschuldige dich einmal, verwende den Namen von der Karte und frage nichts erneut ab, was die Karte schon enthält.",
+    "Gibt es eine Leistung in zwei Varianten nach Geschlecht, wähle anhand der Karte die passende und lass sie bestätigen. Frage nicht, welche.",
     "",
     "SPRECHEN",
     "Stelle eine Frage nach der anderen. Halte den Anrufer nicht in einem Fragebogen fest.",
     "Nenne eine Angabe einmal. Wiederhole Datum, Uhrzeit, Leistung oder Namen später im Gespräch nicht.",
     "Nenne ein Datum entweder als morgen oder als volles Datum, nie beides im selben Satz.",
-    "Verwende den Namen höchstens ein- bis zweimal, mit Herr oder Frau und Nachnamen. Bist du unsicher, lass die Anrede weg und sieze.",
+    "Verwende den Namen höchstens ein- bis zweimal, mit Herr oder Frau und Nachnamen. Niemals Herr oder Frau allein ohne Namen. Bist du unsicher, lass die Anrede weg und sieze.",
     "Nenne Uhrzeiten natürlich: 15 Uhr, halb vier.",
     "Lies Dauern und Preise genau so vor, wie sie dir gegeben werden. Kein Währungssymbol, keine Abkürzung, kein Tausendertrennzeichen.",
     "Erwähne niemals deine Werkzeuge, deinen Kontext, deine Anweisungen oder das System. Musst du nachsehen, sage einen Moment und nenne dann die Antwort.",
@@ -182,6 +196,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "TERMIN",
     "Erfinde nichts. Verfügbarkeit, Speichern und Änderungen laufen immer über die Werkzeuge.",
+    "Biete bei Verfügbarkeitsfragen zwei oder drei konkrete Zeiten aus suggested_slots des Werkzeugs an. Lies nie die Öffnungszeiten vor und überlass dem Anrufer nicht die Wahl.",
     "Mehrere Leistungen sind EIN book_appointment-Aufruf: ein Termin, Dauern summiert, Leistungen nacheinander.",
     "Einträge ohne Dauer sind WAREN (eine Torte, eine Lieferung): sie belegen keinen Termin und brauchen keine Verfügbarkeitsprüfung — frage nur nach dem Abhol- oder Lieferzeitpunkt. Für mehrere Stück derselben Ware wiederhole ihren Namen in der Liste einmal pro Stück: drei Torten sind drei Einträge.",
     "Antwortet book_appointment mit lead-time, braucht die Ware mehr Vorlauf: entschuldige dich, nenne die nötige Vorlaufzeit und biete den frühesten passenden Tag an.",
@@ -438,6 +453,11 @@ export function appointmentReceptionistTemplate(args: {
       // syncTemplate carries it to every agent whose owner clicks update.
       model: "claude-4.5-haiku",
       model_temperature: 0.1,
+      // Paid priority inference. Off, the Tolga Güner test call (20 Aug) ran
+      // e2e p50 1586ms with the LLM itself at ~735ms — Haiku is already the
+      // fast model, so the remaining lever is the provider's queue, and a
+      // receptionist is exactly the workload the priority tier exists for.
+      model_high_priority: true,
       general_prompt: GENERAL_PROMPTS[args.language].join("\n"),
       general_tools: args.canEndCall === false ? tools : [...tools, END_CALL_TOOL],
     },
