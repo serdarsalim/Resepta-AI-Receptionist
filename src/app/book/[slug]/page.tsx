@@ -211,11 +211,27 @@ export default function BookingPage({
     <Shell title={page.orgName} logoUrl={page.logoUrl} onBack={back} backLabel={t("common.back")}>
       {step === "service" && (
         <section>
-          <h2 className="mb-2 text-sm font-medium">{t("booking.pickService")}</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t("booking.pickService")}</h2>
           {/* Rows with duration and price — the price is often the deciding
               fact. Tapping IS the answer: it advances, no Continue button to
-              find. */}
-          <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+              find.
+
+              A DIVIDED LIST, not a bordered box. An outlined rounded-xl panel
+              inside a shadowed card is two edges for one surface, and xl is
+              the frame tier — the app draws its own lists this way
+              (`divide-y divide-[var(--border)]`, BusinessView).
+
+              FULL-BLEED, and the negative margin sits on this wrapper rather
+              than on the rows. A w-full flex child keeps its parent's width,
+              so -mx on the row only shifted it left and left every divider
+              short of the card's right edge. Bleeding the block is also what
+              the content wants: this card IS the list, and a menu whose rules
+              stop before the edge reads as an unfinished table.
+
+              border-t, not border-y. A closing rule under the last row leaves
+              the card's bottom padding stranded beneath it, which reads as a
+              seventh, empty service. The card's own edge is the closure. */}
+          <div className="-mx-4 divide-y divide-[var(--border)] border-t border-[var(--border)] sm:-mx-5">
             {page.services.map((row) => (
               <button
                 key={row._id}
@@ -225,7 +241,7 @@ export default function BookingPage({
                   setServiceId(row._id);
                   setStep("time");
                 }}
-                className="flex w-full items-baseline justify-between gap-3 border-b border-[var(--border)] px-3.5 py-3 text-left text-sm transition-colors last:border-b-0 hover:bg-[var(--muted-bg)]"
+                className="flex w-full items-baseline justify-between gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] sm:px-5"
               >
                 <span className="min-w-0">{row.name}</span>
                 <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
@@ -246,7 +262,7 @@ export default function BookingPage({
 
       {step === "time" && service && (
         <section>
-          <h2 className="mb-2 text-sm font-medium">{t("booking.pickTime")}</h2>
+          <h2 className="mb-3 text-sm font-semibold">{t("booking.pickTime")}</h2>
           <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {days.map((day) => {
               const picked = day.date === dateValue;
@@ -412,10 +428,15 @@ export default function BookingPage({
 
       {/* The running choice, pinned across steps. On the last step its
           button submits the form above (form attribute — one button, no
-          in-form twin to race it). */}
+          in-form twin to race it).
+
+          --card, not --background: over a plane the raw page colour is the one
+          surface the wash never touches, so the bar read as a strip of a
+          different page. A floating surface keeps its hard edge, so the top
+          border stays. */}
       {service !== null && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--background)]/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-5 py-3">
+        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 sm:px-5">
             <div className="min-w-0 text-sm">
               <p className="truncate font-medium">
                 {summaryName}
@@ -460,8 +481,12 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pb-28 pt-8">
-      <div className="card-raised p-5">
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5">
+      {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
+          Padding matches components/Card — p-4 here rather than its p-3 only
+          because this card is the whole page rather than one of six stacked in
+          a settings column. */}
+      <div className="card-raised p-4 sm:p-5">
         {title && (
           <div className="mb-5 flex items-center gap-3">
             {onBack && (
