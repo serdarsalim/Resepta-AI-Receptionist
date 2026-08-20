@@ -300,6 +300,18 @@ thead {
     scrollbar-gutter: stable;
   }
 
+  /* The shell header is not a scroll container, but its right edge has to
+     land where the pane's content lands: the main below reserves a 9px
+     gutter (.stable-gutter + .thin-scroll's track width), so a search box
+     right-aligned under plain px-4 hung 9px past the card edge beneath it.
+     Same sm+ gate as the gutter it mirrors; below sm the overlay scrollbar
+     takes no width and the header's own px-4 is already correct. Declared
+     after the Tailwind import on purpose — it must outrank px-4's right
+     half at equal specificity. */
+  .gutter-align {
+    padding-right: calc(1rem + 9px);
+  }
+
   /* The DOCUMENT gets the same treatment (Serdar, 2026-08-20). The booking
      page reveals sections as the customer answers, so it crosses the fold
      mid-flow — the vertical scrollbar appearing shrank the viewport and
