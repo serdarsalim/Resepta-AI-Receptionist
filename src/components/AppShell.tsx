@@ -290,6 +290,33 @@ const FOOT_TABS: typeof NAV_TABS = [
 // the two are told apart at a glance in a tab strip. Deliberately NOT --brand,
 // which stays green because it also paints row hover and selection, and red
 // there would read as danger on every hover.
+// The mark the sidebar wears: the SALON'S logo once they upload one, ours
+// until then (2026-08-20). An owner who has put their own logo into Settings
+// has said what this workspace is called and what it looks like; showing them
+// our chevron in their own product answers a question they already answered.
+//
+// The FAVICON stays ours here, and that is not an oversight — lib/brand.ts
+// makes the same split for the title. The owner's problem is finding Resepta
+// among thirty tabs, so the tab strip keeps the constant; the sidebar is
+// already inside the app, where the only useful thing a mark can say is which
+// business you are looking at. The customer-facing pages invert both, since
+// there the salon is what the reader came for (their generateMetadata).
+function OrgMark({ logoUrl, size = 26 }: { logoUrl?: string | null; size?: number }) {
+  if (!logoUrl) return <BrandMark size={size} />;
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element -- a Convex storage
+       URL, not an asset next/image can optimize */
+    <img
+      src={logoUrl}
+      alt=""
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+      className="shrink-0 rounded-[0.22em] object-cover"
+    />
+  );
+}
+
 function BrandMark({ size = 26 }: { size?: number }) {
   return (
     <svg
@@ -1036,9 +1063,11 @@ const WORKSPACE_MENU_WIDTH = 224; // w-56, used for the viewport clamp
 
 function WorkspaceSwitcher({
   fallbackName,
+  logoUrl,
   collapsed = false,
 }: {
   fallbackName?: string;
+  logoUrl?: string | null;
   // Collapsed, the brand mark IS the trigger — otherwise switching org would
   // mean expanding the sidebar first, which for an operator running several
   // client workspaces is the one thing they do most.
@@ -1086,7 +1115,7 @@ function WorkspaceSwitcher({
 
   if (!data || data.workspaces.length < 2) {
     return collapsed ? (
-      <BrandMark size={24} />
+      <OrgMark logoUrl={logoUrl} size={24} />
     ) : (
       // Two lines before the ellipsis, not one: "Bella Güzellik Salo…" is the
       // owner's own name cut off in their own product. The title carries the
@@ -1128,7 +1157,7 @@ function WorkspaceSwitcher({
         }
       >
         {collapsed ? (
-          <BrandMark size={24} />
+          <OrgMark logoUrl={logoUrl} size={24} />
         ) : (
           <>
             {/* Same two-line grace as the single-workspace name above. */}
@@ -1454,12 +1483,19 @@ export function AppShell({
             }`}
           >
             {showCollapsed ? (
-              <WorkspaceSwitcher fallbackName={settings?.org.name} collapsed />
+              <WorkspaceSwitcher
+                fallbackName={settings?.org.name}
+                logoUrl={settings?.org.logoUrl}
+                collapsed
+              />
             ) : (
               <>
-                <BrandMark size={26} />
+                <OrgMark logoUrl={settings?.org.logoUrl} size={26} />
                 <div className="min-w-0 flex-1">
-                  <WorkspaceSwitcher fallbackName={settings?.org.name} />
+                  <WorkspaceSwitcher
+                    fallbackName={settings?.org.name}
+                    logoUrl={settings?.org.logoUrl}
+                  />
                 </div>
               </>
             )}

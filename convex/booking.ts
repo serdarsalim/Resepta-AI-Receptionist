@@ -581,6 +581,11 @@ export const manage = query({
   returns: v.union(
     v.object({
       orgName: v.string(),
+      // The salon's logo, resolved to a URL — null when never uploaded. Not
+      // drawn on this page: it is the FAVICON. A customer reaches here from a
+      // link inside a message, and a browser tab wearing our mark tells them
+      // nothing about whose appointment they are looking at.
+      logoUrl: v.union(v.string(), v.null()),
       timezone: v.string(),
       language: v.string(),
       startAt: v.number(),
@@ -607,6 +612,9 @@ export const manage = query({
     );
     return {
       orgName: org.name,
+      logoUrl: org.logoStorageId
+        ? await ctx.storage.getUrl(org.logoStorageId)
+        : null,
       timezone: org.timezone,
       language: org.language,
       startAt: appointment.startAt,
@@ -720,6 +728,39 @@ export const cancel = mutation({
     await syncAppointmentSchedule(ctx, appointment._id);
     await scheduleLifecycleMessages(ctx, org._id, appointment._id, "cancellation");
     return { ok: true };
+  },
+});
+
+// Just the two facts a browser tab needs. Separate from `page` because it is
+// read by generateMetadata on the SERVER, once per page load, before anything
+// renders — dragging the service list, the prices and the opening hours
+// through that round trip to print a title would put the whole booking
+// payload on the critical path twice.
+//
+// Answers for an org whose booking page is switched OFF, unlike `page`. The
+// tab title is not a booking; refusing to name the salon on the page that
+// tells their customer to call instead is a worse answer than saying nothing.
+export const brand = query({
+  args: { slug: v.string() },
+  returns: v.union(
+    v.object({
+      orgName: v.string(),
+      logoUrl: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const slug = args.slug.trim().toLowerCase();
+    if (!slug) return null;
+    const org = await ctx.db
+      .query("orgs")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
+      .unique();
+    if (!org) return null;
+    return {
+      orgName: org.name,
+      logoUrl: org.logoStorageId ? await ctx.storage.getUrl(org.logoStorageId) : null,
+    };
   },
 });
 
