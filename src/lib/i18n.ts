@@ -670,6 +670,11 @@ const dictionary = {
   // page. Only drawn when it sells both.
   "booking.services": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
   "booking.products": { tr: "Ürünler", en: "Products", de: "Produkte" },
+  // The collapsed basket, for two lines or more — one line just names itself.
+  // "kalem" and "Positionen" are what a receipt calls its lines in Turkish and
+  // German; "items" covers a haircut and a shampoo in one word, which "service"
+  // does not.
+  "booking.itemCount": { tr: "{n} kalem", en: "{n} items", de: "{n} Positionen" },
   // The sticky bar's action on the first step. It exists because that step
   // became multi-select — the other two still advance on the tap.
   "booking.continue": { tr: "Devam", en: "Continue", de: "Weiter" },

@@ -87,6 +87,10 @@ export default function BookingPage({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
+  // The bar's detail panel. Closed by default: on the service step the ticked
+  // rows are already on screen, and it is the two steps after — where the list
+  // is gone — that the customer may want to check what they picked.
+  const [basketOpen, setBasketOpen] = useState(false);
 
   // Resolved against the published list every render rather than stored, so a
   // service the salon retires while someone has the page open drops out of the
@@ -256,17 +260,24 @@ export default function BookingPage({
       rows: page.services.filter((row) => row.durationMinutes === undefined),
     },
   ].filter((group) => group.rows.length > 0);
-  // Every line, joined — the bar truncates rather than counting ("2 services"
-  // makes the customer open the step back up to remember which two). A good's
-  // quantity rides in front of its name, the same shape wa.ts prints in the
-  // confirmation they get afterwards.
-  const summaryName = picked
-    .map((row) =>
-      row.durationMinutes === undefined && row.quantity > 1
-        ? `${row.quantity} × ${row.name}`
-        : row.name,
-    )
-    .join(" + ");
+  // A good's quantity rides in front of its name, the same shape wa.ts prints
+  // in the confirmation they get afterwards.
+  const lineName = (row: (typeof picked)[number]) =>
+    row.durationMinutes === undefined && row.quantity > 1
+      ? `${row.quantity} × ${row.name}`
+      : row.name;
+  // Goods multiply, services do not — the same asymmetry totalPrice applies.
+  const lineWorth = (row: (typeof picked)[number]) =>
+    (row.price ?? 0) * (row.durationMinutes === undefined ? row.quantity : 1);
+  // ONE line names itself; two or more count, and open. Joining them with " + "
+  // read as a formula and then truncated anyway — "Saç kesimi + Sakal tıraşı +
+  // Saç boya…" told the customer neither what the third thing was nor that
+  // there were only three. A count is honest at every length, and the detail
+  // is one tap away rather than one guess.
+  const summaryName =
+    picked.length === 1
+      ? lineName(picked[0])
+      : t("booking.itemCount").replace("{n}", String(picked.length));
   // "1 sa 30 dk" in Turkish, "1 hr 30 min" in English — Intl decides the unit
   // word and the order, which differ by locale and are not ours to guess. A
   // selection of goods alone has no minutes to announce.
@@ -344,21 +355,37 @@ export default function BookingPage({
                 {group.rows.map((row) => {
                   const line = lines.find((l) => l.serviceId === row._id);
                   const isGood = row.durationMinutes === undefined;
+                  // A selected good trades its tick for the stepper: the count
+                  // IS the state readout, and two of them would disagree the
+                  // moment one changed.
+                  const stepping = isGood && Boolean(line);
                   return (
                     <div
                       key={row._id}
-                      className={`flex items-center gap-3 px-4 transition-colors sm:px-5 ${
+                      className={`flex items-center transition-colors ${
                         line ? "bg-[var(--muted-bg)]" : "hover:bg-[var(--row-hover-bg)]"
                       }`}
                     >
-                      {/* The row is the button and the stepper is its SIBLING:
-                          a stepper nested inside a button is invalid markup,
-                          and on a phone it is also a target inside a target. */}
+                      {/* The TICK LIVES INSIDE THE BUTTON. It shipped as a
+                          sibling of it, swept out alongside the stepper, which
+                          made the one thing on the row that looks like the
+                          control the one place a tap did nothing — the row
+                          only answered where the words were. It is a readout,
+                          not a control, so it belongs in the target rather
+                          than beside it.
+
+                          The stepper genuinely cannot: a button inside a
+                          button is invalid markup, and on a phone it is also a
+                          target inside a target. So it stays a sibling, and
+                          the row's padding moves onto the button so everything
+                          that is not the stepper is tappable. */}
                       <button
                         type="button"
                         aria-pressed={Boolean(line)}
                         onClick={() => toggleLine(row._id)}
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3.5 text-left text-sm"
+                        className={`flex min-w-0 flex-1 items-center justify-between gap-3 py-3.5 pl-4 text-left text-sm sm:pl-5 ${
+                          stepping ? "pr-2" : "pr-4 sm:pr-5"
+                        }`}
                       >
                         <span className="min-w-0">
                           <span className="block truncate">{row.name}</span>
@@ -372,31 +399,30 @@ export default function BookingPage({
                             </span>
                           )}
                         </span>
-                        {row.price !== undefined && (
-                          <span className="shrink-0 text-sm font-medium tabular-nums">
-                            {priceLabel(row.price)}
-                          </span>
-                        )}
-                      </button>
-                      <span className="flex shrink-0 items-center">
-                        {isGood && line ? (
-                          <span className="flex items-center gap-1">
-                            <StepperButton
-                              label="−"
-                              onClick={() => setQuantity(row._id, line.quantity - 1)}
-                            />
-                            <span className="w-5 text-center text-sm tabular-nums">
-                              {line.quantity}
+                        <span className="flex shrink-0 items-center gap-3">
+                          {row.price !== undefined && (
+                            <span className="text-sm font-medium tabular-nums">
+                              {priceLabel(row.price)}
                             </span>
-                            <StepperButton
-                              label="+"
-                              onClick={() => setQuantity(row._id, line.quantity + 1)}
-                            />
+                          )}
+                          {!stepping && <Tick on={Boolean(line)} />}
+                        </span>
+                      </button>
+                      {stepping && line && (
+                        <span className="flex shrink-0 items-center gap-1 pr-4 sm:pr-5">
+                          <StepperButton
+                            label="−"
+                            onClick={() => setQuantity(row._id, line.quantity - 1)}
+                          />
+                          <span className="w-5 text-center text-sm tabular-nums">
+                            {line.quantity}
                           </span>
-                        ) : (
-                          <Tick on={Boolean(line)} />
-                        )}
-                      </span>
+                          <StepperButton
+                            label="+"
+                            onClick={() => setQuantity(row._id, line.quantity + 1)}
+                          />
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -574,26 +600,90 @@ export default function BookingPage({
           --card, not --background: over a plane the raw page colour is the one
           surface the wash never touches, so the bar read as a strip of a
           different page. A floating surface keeps its hard edge, so the top
-          border stays. */}
-      {picked.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-3 sm:px-5">
-            <div className="min-w-0 flex-1 text-sm">
-              <p className="truncate font-medium">{summaryName}</p>
-              <p className="truncate text-xs text-[var(--muted)]">
-                {/* Duration belongs here as much as in the rows: it is the
-                    running answer to "how long am I going to be there", and it
-                    is the number that changes as lines go in and out. Once a
-                    time is picked it gives way to the time — that is the more
-                    specific fact, and both would not fit one line.
+          border stays.
 
-                    No "pick a day and time" prompt: on the step where that is
-                    the next move, the Continue button beside it already says
-                    so, and on the step after, the heading above says it again
-                    three inches higher. */}
-                {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
-              </p>
-            </div>
+          FIXED on a phone, STICKY from sm. Viewport-pinning is a thumb-reach
+          answer: the card fills the screen, so a bar across the bottom of the
+          screen is a bar across the bottom of the card. On a desktop the same
+          rule drew a full-width strip under a 448px card floating in the
+          middle of the plane — a piece of furniture belonging to no room. As
+          the card's own sticky footer it is the right width by construction,
+          rides the card's bottom corners, and still holds the viewport floor
+          while a long service list scrolls past it. */}
+      {picked.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur sm:sticky sm:inset-x-auto sm:-mx-5 sm:-mb-5 sm:mt-5 sm:rounded-b-lg">
+          {/* The detail, above the summary that opens it — so the row the
+              customer tapped does not move out from under their finger. */}
+          {basketOpen && picked.length > 1 && (
+            <ul className="mx-auto w-full max-w-md space-y-1.5 border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
+              {picked.map((row) => (
+                <li
+                  key={row._id}
+                  className="flex items-baseline justify-between gap-3 text-sm"
+                >
+                  <span className="min-w-0 truncate">{lineName(row)}</span>
+                  <span className="flex shrink-0 items-baseline gap-3">
+                    {row.durationMinutes !== undefined && (
+                      <span className="text-xs text-[var(--muted)]">
+                        {minutesLabel(row.durationMinutes)}
+                      </span>
+                    )}
+                    {row.price !== undefined && (
+                      <span className="tabular-nums">{priceLabel(lineWorth(row))}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-3 sm:px-5">
+            {/* A button ONLY when there is something to open. One line already
+                says everything the panel would, and a chevron that reveals a
+                copy of the line above it is a control that does nothing. */}
+            {picked.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => setBasketOpen((open) => !open)}
+                aria-expanded={basketOpen}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-sm"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{summaryName}</span>
+                  <span className="block truncate text-xs text-[var(--muted)]">
+                    {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
+                  </span>
+                </span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden
+                  className={`shrink-0 text-[var(--muted)] transition-transform ${
+                    basketOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  <path
+                    d="M4 6l4 4 4-4"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            ) : (
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="truncate font-medium">{summaryName}</p>
+                <p className="truncate text-xs text-[var(--muted)]">
+                  {/* Duration is the running answer to "how long am I going to
+                      be there", and the number that changes as lines go in and
+                      out. Once a time is picked it gives way to the time —
+                      the more specific fact, and both would not fit. */}
+                  {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
+                </p>
+              </div>
+            )}
             {anyPriced && (
               <p className="shrink-0 text-sm font-semibold tabular-nums">
                 {priceLabel(totalPrice)}
@@ -691,7 +781,9 @@ function Shell({
     // one, and German is where a wrong lang starts to show.
     <main
       lang={language}
-      className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5"
+      // pb-28 clears the FIXED bar, which only exists below sm — from there the
+      // bar is the card's own footer and the page just needs its normal floor.
+      className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-28 pt-8 sm:px-5 sm:pb-10"
     >
       {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
           Padding matches components/Card — p-4 here rather than its p-3 only
