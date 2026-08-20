@@ -60,6 +60,18 @@ export const VOICE_AGENT_TEMPLATE_VERSION = 11;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
+// The voice a provisioned agent is born with, per language, in preference
+// order — auto-provisioning takes the first id the workspace's catalogue
+// actually offers and falls back to the catalogue's own first entry.
+// tr-TR is Bella's proven voice (the prod agent Serdar hand-tuned); the
+// others are same-family warm receptionist picks with a dedicated-accent
+// fallback. An owner changes the voice any time in the agent editor.
+export const DEFAULT_VOICE_IDS: Record<VoiceAgentLanguage, string[]> = {
+  "tr-TR": ["minimax-Camille"],
+  "en-US": ["minimax-Ashley", "minimax-Kate", "minimax-Sloane"],
+  "de-DE": ["11labs-Carola", "cartesia-Eva", "minimax-Max"],
+};
+
 // The platform default model — what a new agent is born with and what an
 // agent with no operator override runs after a template sync. Named here so
 // the /admin picker's "Platform default" row and the template can never
@@ -76,6 +88,13 @@ export const VOICE_AGENT_MODEL = "claude-4.5-haiku";
 // Tool names (book_appointment) stay English in every language: they are
 // addresses, not prose, and the tools are registered under those names.
 //
+// 2026-08-21: the Bella port. Two refinements Serdar tuned into the prod
+// Bella agent by hand, brought home so every provisioned agent is born with
+// them: the caller's next appointment in the context block ({{next_appointment}}
+// is a built-in injected on every ring, retell.ts beforeCallContext), and the
+// greet-a-known-caller-by-name-once rule. Prompt text only — no version bump,
+// per the rule at the top of this file.
+//
 // The {{services}} line leans on beforeCallContext, which injects the spoken
 // service list as a built-in dynamic variable on every call. Answering prices
 // from the prompt saves the caller a tool round trip on the most common
@@ -88,6 +107,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "ELİNDEKİLER — bunları öğrenmek için araç çağırma",
     "Arayan: {{customer_name}} (doluysa tanıyorsun, adını sorma; boşsa bir kez sor)",
+    "Arayanı tanıyorsan ilk cevabında adıyla ve saygı ekiyle selamla; sonrasında adını tekrar edip durma.",
+    "Sonraki randevusu: {{next_appointment}}",
     "Şu an: {{now}} — yarın, haftaya salı gibi ifadeleri buna göre çöz",
     "Ekip: {{staff}}",
     "Hizmetler ve fiyatlar: {{services}}",
@@ -133,6 +154,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "WHAT YOU ALREADY HAVE — do not call a tool to learn any of it",
     "Caller: {{customer_name}} (filled means you know them, do not ask again; empty means ask once)",
+    "If you know the caller, greet them by name in your first reply; after that, do not keep repeating it.",
+    "Their next appointment: {{next_appointment}}",
     "Right now: {{now}} — resolve tomorrow, next Tuesday and the like against this",
     "Team: {{staff}}",
     "Services and prices: {{services}}",
@@ -178,6 +201,8 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "WAS DU BEREITS HAST — rufe dafür kein Werkzeug auf",
     "Anrufer: {{customer_name}} (gefüllt heißt, du kennst ihn und fragst nicht erneut; leer heißt, einmal fragen)",
+    "Kennst du den Anrufer, begrüße ihn in deiner ersten Antwort mit Namen und Anrede; danach wiederhole den Namen nicht ständig.",
+    "Sein nächster Termin: {{next_appointment}}",
     "Jetzt: {{now}} — löse morgen, nächsten Dienstag und Ähnliches danach auf",
     "Team: {{staff}}",
     "Leistungen und Preise: {{services}}",

@@ -25,6 +25,7 @@ import {
   appointmentReceptionistTemplate,
   saveCustomerDetailsTool,
   summaryAnalysisField,
+  DEFAULT_VOICE_IDS,
   END_CALL_TOOL_NAME,
   VOICE_AGENT_TEMPLATE_VERSION,
   VOICE_SUMMARY_FIELD,
@@ -1372,7 +1373,13 @@ export const autoProvision = internalAction({
         orgId: args.orgId,
       })) as { id: string }[];
       if (voices.length === 0) return null;
-      voiceId = voices[0].id;
+      // The curated voice for this language when the workspace offers it
+      // (DEFAULT_VOICE_IDS — Bella's own voice for Turkish), any catalogue
+      // voice otherwise.
+      const available = new Set(voices.map((v) => v.id));
+      voiceId =
+        DEFAULT_VOICE_IDS[language].find((id) => available.has(id)) ??
+        voices[0].id;
     } catch (err) {
       // A voice list that will not load is a key problem, and a key problem is
       // platform-wide the day the default was stamped. Nothing to retry here;
