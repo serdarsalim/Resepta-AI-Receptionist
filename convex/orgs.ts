@@ -60,6 +60,8 @@ export const current = query({
       ),
       // Drives the banner that tells a visitor this salon is not real.
       demoMode: v.optional(v.boolean()),
+      // Resolved URL for the uploaded logo (schema: orgs.logoStorageId).
+      logoUrl: v.optional(v.string()),
       // The chat agent's lifecycle state (docs/chat-agent.md §5). Read by the
       // conversation panel for the takeover chip; WRITTEN only from platform
       // admin — the owner sees the agent, the operator owns the switch.
@@ -196,6 +198,9 @@ export const current = query({
         revenueEnabled: org.revenueEnabled,
         billingMode: org.billingMode,
         demoMode: org.demoMode,
+        logoUrl: org.logoStorageId
+          ? ((await ctx.storage.getUrl(org.logoStorageId)) ?? undefined)
+          : undefined,
         chatAgentMode: org.chatAgentMode,
         inboundDomain: mailConfig.domain ?? undefined,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
@@ -458,6 +463,25 @@ export const update = mutation({
     ) {
       await ctx.scheduler.runAfter(0, internal.reminders.backfillOrg, { orgId });
     }
+    return null;
+  },
+});
+
+// The logo the booking page's header wears. The file arrives through
+// media.generateUploadUrl like every other upload; null clears. The replaced
+// file is deleted rather than orphaned — logos get re-uploaded until the crop
+// looks right, and each abandoned attempt would otherwise sit in storage
+// forever with nothing pointing at it.
+export const setLogo = mutation({
+  args: { storageId: v.union(v.id("_storage"), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    if (org?.logoStorageId && org.logoStorageId !== args.storageId) {
+      await ctx.storage.delete(org.logoStorageId);
+    }
+    await ctx.db.patch(orgId, { logoStorageId: args.storageId ?? undefined });
     return null;
   },
 });

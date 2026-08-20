@@ -19,6 +19,7 @@ import {
 } from "./appointments";
 
 import { customerConflict } from "./lib/overlap";
+import { DEFAULT_CURRENCY } from "./lib/money";
 
 // Turkish-folded, lowercased, hyphenated. Lived in forms.ts until the request
 // form was retired (2026-08-19); this file is its only consumer now, and it is
@@ -171,6 +172,10 @@ export const page = query({
       orgName: v.string(),
       timezone: v.string(),
       language: v.string(),
+      // Minor-units prices render in this (lib/money formatMoney).
+      currency: v.string(),
+      // The salon's logo, resolved to a URL — null when never uploaded.
+      logoUrl: v.union(v.string(), v.null()),
       services: v.array(
         v.object({
           _id: v.id("services"),
@@ -179,6 +184,9 @@ export const page = query({
           // offers every in-hours time instead of a scarcity-carved grid.
           durationMinutes: v.optional(v.number()),
           leadMinutes: v.optional(v.number()),
+          // Minor units. Unset = the salon never priced it; the row then
+          // shows duration alone rather than a made-up zero.
+          price: v.optional(v.number()),
         }),
       ),
       // False when the org never set opening hours — the page says "call us"
@@ -198,8 +206,15 @@ export const page = query({
       orgName: org.name,
       timezone: org.timezone,
       language: org.language,
-      // Duration IS published — a customer picking a slot needs to know what
-      // they are blocking. Price is not, per the forms.ts doctrine.
+      currency: org.currency ?? DEFAULT_CURRENCY,
+      logoUrl: org.logoStorageId
+        ? await ctx.storage.getUrl(org.logoStorageId)
+        : null,
+      // Duration AND price are published (Serdar, 2026-08-20, reversing the
+      // old forms.ts-era doctrine): a customer picking a slot needs to know
+      // what they are blocking and what it costs — every salon-booking
+      // product prints the price, and hiding it just moves the question to
+      // the phone.
       services: services
         .filter((service) => service.active)
         .map((service) => ({
@@ -211,6 +226,7 @@ export const page = query({
           ...(service.leadMinutes !== undefined
             ? { leadMinutes: service.leadMinutes }
             : {}),
+          ...(service.price !== undefined ? { price: service.price } : {}),
         })),
       hasHours: hasBusinessHours(org.businessHours ?? {}),
     };

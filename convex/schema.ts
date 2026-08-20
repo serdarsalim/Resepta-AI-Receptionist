@@ -353,6 +353,11 @@ export default defineSchema({
     // provider (env RESEND_API_KEY, see lib/email.ts). The domain has to be
     // verified there or sends are rejected. Unset = email off.
     emailFrom: v.optional(v.string()),
+    // The salon's logo, shown wherever a CUSTOMER meets the business — the
+    // public booking page's header, the manage page. Uploaded from Settings
+    // by the owner (orgs.setLogo); unset renders the name alone, which is
+    // what every org did before this existed.
+    logoStorageId: v.optional(v.id("_storage")),
     // Which channel the appointment rules (confirmation, reminder, winback)
     // send on. Unset = "both", which is what every org did before the choice
     // existed: attempt WhatsApp, and email rides alongside when configured.

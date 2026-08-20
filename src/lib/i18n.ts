@@ -663,6 +663,15 @@ const dictionary = {
     en: "No free times on this day. Try another one.",
     de: "An diesem Tag ist nichts frei. Versuchen Sie einen anderen.",
   },
+  // The slot grid's three shelves. Cut at 12:00 and 17:00 — coarse on
+  // purpose; the labels group, they do not define working hours.
+  "booking.morning": { tr: "Sabah", en: "Morning", de: "Vormittag" },
+  "booking.afternoon": {
+    tr: "Öğleden sonra",
+    en: "Afternoon",
+    de: "Nachmittag",
+  },
+  "booking.evening": { tr: "Akşam", en: "Evening", de: "Abend" },
   "booking.book": {
     tr: "Randevuyu al",
     en: "Book it",
@@ -849,6 +858,18 @@ const dictionary = {
   // screen four times for three different scopes. General is what the rest of
   // the industry calls this card, and it leaves "Business" meaning one thing.
   "settings.general": { tr: "Genel", en: "General", de: "Allgemein" },
+  "settings.logo": { tr: "Logo", en: "Logo", de: "Logo" },
+  "settings.logoHint": {
+    tr: "Randevu sayfanızın başında görünür. Kare ve en az 200×200 piksel bir görsel en iyi sonucu verir.",
+    en: "Shown at the top of your booking page. A square image of at least 200×200 pixels works best.",
+    de: "Erscheint oben auf Ihrer Buchungsseite. Am besten ein quadratisches Bild mit mindestens 200×200 Pixeln.",
+  },
+  "settings.logoUpload": {
+    tr: "Logo yükle",
+    en: "Upload logo",
+    de: "Logo hochladen",
+  },
+  "settings.logoRemove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
   // Services and contact fields under one chip because they are one surface:
   // both are what this business's own vocabulary is, and both hand the voice
   // agent a key it books or writes by. Splitting them would put half of the

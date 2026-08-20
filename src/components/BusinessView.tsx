@@ -78,6 +78,7 @@ import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.general" },
   { card: "general", key: "settings.businessName" },
+  { card: "general", key: "settings.logo" },
   { card: "general", key: "settings.inboundAddress" },
   { card: "general", key: "settings.emailFrom" },
   { card: "general", key: "settings.language" },
@@ -320,6 +321,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
+  const generateUploadUrl = useMutation(api.media.generateUploadUrl);
+  const setLogo = useMutation(api.orgs.setLogo);
+  const [logoBusy, setLogoBusy] = useState(false);
   // The incoming address is the one field here a server can REFUSE — it is a
   // routing key, so another org may already answer to it. Without this the
   // rejection landed in an unhandled promise: nothing on screen, the typed
@@ -349,6 +353,63 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             defaultValue={settings.org.name}
             onBlur={(e) => void update({ name: e.target.value })}
           />
+
+          <RowLabel label={t("settings.logo")} hint={t("settings.logoHint")} />
+          <div className="flex items-center gap-3">
+            {settings.org.logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element -- a
+                 Convex storage URL, not an asset next/image can optimize */
+              <img
+                src={settings.org.logoUrl}
+                alt=""
+                className="h-12 w-12 rounded-xl border border-[var(--border)] object-cover"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-lg font-semibold text-[var(--muted)]">
+                {settings.org.name.trim().charAt(0).toUpperCase() || "·"}
+              </div>
+            )}
+            <label className="cursor-pointer rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted-bg)]">
+              {logoBusy ? t("common.saving") : t("settings.logoUpload")}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                disabled={logoBusy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  setLogoBusy(true);
+                  void (async () => {
+                    try {
+                      const url = await generateUploadUrl();
+                      const res = await fetch(url, {
+                        method: "POST",
+                        headers: { "content-type": file.type },
+                        body: file,
+                      });
+                      const { storageId } = (await res.json()) as {
+                        storageId: Id<"_storage">;
+                      };
+                      await setLogo({ storageId });
+                    } finally {
+                      setLogoBusy(false);
+                    }
+                  })();
+                }}
+              />
+            </label>
+            {settings.org.logoUrl && (
+              <button
+                type="button"
+                onClick={() => void setLogo({ storageId: null })}
+                className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                {t("settings.logoRemove")}
+              </button>
+            )}
+          </div>
           {/* The "number for customers to call" row lived here until
               2026-08-19. It duplicated the voice agent's own inbound-number
               picker — the [phone] token now resolves to that line on the
