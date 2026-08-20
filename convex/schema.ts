@@ -1563,6 +1563,37 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_storage", ["storageId"]),
 
+  // A business asking the platform to provision it a phone number, with the
+  // company registration document regulators require (mandatory in Türkiye,
+  // same flow for DACH and the UK). One live request per org: submitting
+  // again replaces a pending or denied row, and the promise on the tin is
+  // "a number within 24 hours of the document arriving".
+  //
+  // The decision is the OPERATOR's signal to go buy the number at the
+  // provider — the app itself never purchases anything (retellAgent doctrine:
+  // it may assign an already-provisioned line, never buy one). status/note
+  // are salon-visible; decidedBy never is.
+  numberRequests: defineTable({
+    orgId: v.id("orgs"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("denied"),
+    ),
+    // The operator's word to the business — a denial without a reason is a
+    // dead end, and an approval may carry the assigned number's ETA.
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    decidedBy: v.optional(v.id("users")),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_status", ["status"]),
+
   // Who did what. Written for ONE question: a salon shares a login-per-person
   // and an inbox, so "who cancelled Ayşe's appointment?" and "who marked that
   // no-show?" currently have no answer at all — notes carry an author and

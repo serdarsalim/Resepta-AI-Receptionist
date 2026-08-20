@@ -82,6 +82,7 @@ import type * as media from "../media.js";
 import type * as messageRules from "../messageRules.js";
 import type * as messages from "../messages.js";
 import type * as notes from "../notes.js";
+import type * as numberRequests from "../numberRequests.js";
 import type * as onboarding from "../onboarding.js";
 import type * as orgs from "../orgs.js";
 import type * as platform from "../platform.js";
@@ -184,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   messageRules: typeof messageRules;
   messages: typeof messages;
   notes: typeof notes;
+  numberRequests: typeof numberRequests;
   onboarding: typeof onboarding;
   orgs: typeof orgs;
   platform: typeof platform;

@@ -1489,3 +1489,87 @@ export const setOrgStatus = mutation({
     return null;
   },
 });
+
+// ── Number provisioning ─────────────────────────────────────────────────────
+//
+// The operator's half of numberRequests.ts: read one org's request with a
+// download URL for the registration document, and decide it. The decision is
+// the operator's own cue to go provision the number at the provider — the
+// app never buys numbers (retellAgent doctrine); assigning the line stays
+// the existing Phone lines flow on the same admin tab.
+
+export const orgNumberRequests = query({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      requestId: v.id("numberRequests"),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("denied"),
+      ),
+      fileName: v.string(),
+      contentType: v.string(),
+      size: v.number(),
+      note: v.union(v.string(), v.null()),
+      createdAt: v.number(),
+      decidedAt: v.union(v.number(), v.null()),
+      // Convex storage URLs are long-lived and unguessable; handing one to
+      // the operator console is how the document gets read.
+      url: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const rows = await ctx.db
+      .query("numberRequests")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(10);
+    return await Promise.all(
+      rows.map(async (row) => ({
+        requestId: row._id,
+        status: row.status,
+        fileName: row.fileName,
+        contentType: row.contentType,
+        size: row.size,
+        note: row.note ?? null,
+        createdAt: row.createdAt,
+        decidedAt: row.decidedAt ?? null,
+        url: await ctx.storage.getUrl(row.storageId),
+      })),
+    );
+  },
+});
+
+export const decideNumberRequest = mutation({
+  args: {
+    requestId: v.id("numberRequests"),
+    decision: v.union(v.literal("approved"), v.literal("denied")),
+    // Salon-visible. A denial without a reason is a dead end, so the console
+    // should insist on one there; an approval note is optional colour.
+    note: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const userId = await getAuthUserId(ctx);
+    const row = await ctx.db.get(args.requestId);
+    if (!row) throw new Error("not-found");
+    await ctx.db.patch(args.requestId, {
+      status: args.decision,
+      note: args.note?.trim() || undefined,
+      decidedAt: Date.now(),
+      decidedBy: userId ?? undefined,
+    });
+    await recordActivity(ctx, {
+      orgId: row.orgId,
+      kind: "settings_changed",
+      detail:
+        args.decision === "approved"
+          ? "number provisioning approved"
+          : "number provisioning denied",
+    });
+    return null;
+  },
+});
