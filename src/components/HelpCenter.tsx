@@ -58,15 +58,26 @@ const CATEGORIES: Category[] = [
     articles: [
       {
         id: "services-team",
-        title: "Add services and team members",
+        title: "Add services, products and team members",
         summary: "Create the bookable work that appears in appointments and voice-agent conversations.",
         steps: [
-          "Open Services from the sidebar.",
-          "Add each service with a clear name and duration.",
-          "Open Business and add your team, marking the people customers can book.",
+          "Open Business and use Add service. Give each one a clear name and duration.",
+          "For something you sell rather than book time for — a shampoo, a gift box — set Type to Product. It takes no time on the calendar and gets its own card in Business and its own group on your booking page.",
+          "Prices are optional. Leave one blank while you decide; a blank price is different from a price of zero.",
+          "Prices are written without decimals unless you ask for them — the switch sits beside Currency in Business. A price that genuinely has kuruş always shows them.",
+          "Add your team on the same page, marking the people customers can book.",
           "Archive a team member when they should stop appearing in new bookings. Archive before deleting so historic appointments stay understandable.",
         ],
-        keywords: ["service", "duration", "team", "staff", "bookable"],
+        keywords: [
+          "service",
+          "product",
+          "duration",
+          "price",
+          "decimals",
+          "team",
+          "staff",
+          "bookable",
+        ],
       },
       {
         id: "customer-fields",
@@ -169,6 +180,30 @@ const CATEGORIES: Category[] = [
           "Move, resize, complete, cancel, or mark the appointment as a no-show as the day changes.",
         ],
         keywords: ["appointment", "calendar", "walk in", "reschedule", "cancel", "no show"],
+      },
+      {
+        id: "booking-page",
+        title: "Share your online booking page",
+        summary:
+          "One link customers open to pick what they want, choose a time, and book themselves in.",
+        steps: [
+          "Open Business and switch Taking bookings on. The link appears beside the switch with a Copy button — put it in your Instagram bio, your WhatsApp profile, or on a card.",
+          "The address comes from your business name, so renaming the business renames the link. The old one stops opening, so update it wherever you have shared it.",
+          "Customers can choose more than one thing at once. A haircut and a beard trim arrive as one appointment on your calendar, with the times added together.",
+          "Anything you sell without booking time for it — a shampoo, a gift box — appears under Products, with a quantity picker instead of a duration.",
+          "Set your opening hours first. Without them the page tells customers to call you instead of showing times it cannot honestly offer.",
+          "Customers can leave a note when they book. It lands on their customer record, so you read it in the same place as everything else about them.",
+        ],
+        note: "The page shows the times that are genuinely free, using your opening hours and how many people are on the roster. Bookings need at least an hour's notice.",
+        keywords: [
+          "booking page",
+          "online booking",
+          "link",
+          "share",
+          "self service",
+          "products",
+          "note",
+        ],
       },
       {
         id: "customers",

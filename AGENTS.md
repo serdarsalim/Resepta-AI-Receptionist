@@ -453,6 +453,59 @@ rather than after what it does.
   refusal, since an unhandled rejection here is a save that silently did not
   happen.
 
+- **Money: `orgs.priceDecimals`, OFF by default** (Serdar, 2026-08-20). A
+  Türkiye salon prices in whole lira and ".00" on every row was noise on the
+  page a stranger reads to decide whether to book. The switch lives beside the
+  currency select in Business → General, on one line with it, because the three
+  answer together: currency picks the symbol, language picks the separators,
+  this picks how much of the number to write. `lib/money` NEVER ROUNDS — the
+  option only removes zeroes, so a price genuinely carrying kuruş still shows
+  them, which is the only version of it that can be trusted on a public page.
+  The flag defaults to the product default rather than the old behaviour, so a
+  call site that forgets to thread it errs toward one salon seeing a rounded
+  price instead of every salon's every message carrying ".00". It reaches all
+  eight `formatMoney` sites, `moneyInputValue` (the editor has to agree with
+  the display, and it is one Save from becoming the price), `booking.page`,
+  `reports.revenue` and the chat agent. Deliberately NOT the platform's own USD
+  figures — voice minutes, wallet, admin billing are what we charge the salon,
+  not what the salon charges anyone — and not the voice lane, which drops
+  trailing zeroes unconditionally because nobody says "üç bin tam sıfır sıfır".
+
+- **`orgs.language` is the CUSTOMER language, and it drives the public pages**
+  (renamed from "Message language", 2026-08-20). `/book/<slug>` and
+  `/appt/<token>` formatted times and prices through it while taking their
+  WORDS from `useLanguage()` — the viewer's app setting — so a salon's booking
+  page greeted its customers in whatever the owner last picked in their own
+  account menu, and the manage page opened from a Turkish reminder answered in
+  English one tap later. Both bind `t()` to the org's language and fall back to
+  the viewer's only for the states that render before the org is known. `lang`
+  rides as an attribute on each page's own `<main>`: LanguageProvider owns
+  `<html lang>` and a parent's effect runs after a child's, so an effect here
+  loses the race every mount.
+
+- **The customer-facing tabs wear the SALON**: their name as the title, their
+  logo as the favicon, via `generateMetadata` in each route's layout
+  (`booking.brand` for the slug, `manage` for the token). SERVER metadata, not
+  a `document.title` effect — React owns the `<title>` and icon links it
+  renders from metadata, so a client write is reverted the next time the tree
+  reconciles, which on these pages is every query update. It also means a
+  booking link pasted into WhatsApp unfurls as the salon. The signed-in app
+  makes the OPPOSITE call and that split is the point: the owner is hunting
+  Resepta among thirty tabs, so the tab strip keeps our mark, while the sidebar
+  — already inside the app — wears the org's logo.
+
+- **Services and Products are SEPARATE CARDS in Business settings**, mirroring
+  the booking page's split. A product books no time, holds no chair, and
+  answers a different question in every column the table has; mixed in, the
+  only thing marking it out was an empty Duration cell. That cell is now empty
+  for a good — unless it carries a lead time, which is a real fact about the
+  row — and a unit never renders without a value to qualify ("— days ahead" and
+  a lone "₺" both read as fields that failed rather than fields nobody set).
+  The Products card appears only once a product exists. There is deliberately
+  NO "Add product" button: the Add sheet has had a Service/Product Type switch
+  since before the card existed, and a second button would be a second door
+  onto one form.
+
 - **`/book/<slug>` is a THREE-STEP WIZARD, not a growing page** (Serdar,
   2026-08-20, reversing this file's own "each answer reveals the next
   question" doctrine). Service → time → details: the header chevron goes back,
@@ -484,27 +537,56 @@ rather than after what it does.
     (`Intl` unit, "1 hr 30 min" / "1 sa 30 dk"): "30′" was a prime symbol the
     width of a comma, greyed out against the price, carrying the one fact a
     customer needs to know whether they have time today.
-  - **The card is FIXED-HEIGHT from sm and its middle scrolls** (Serdar,
+  - **The card is FIXED-HEIGHT AT EVERY WIDTH and its middle scrolls** (Serdar,
     2026-08-20). Every step holds a different amount — six services, a slot
-    grid, three fields — so on a desktop the card resized under the reader at
-    every tap, and fixing it per step meant another reserved height guessing at
-    content the page does not control. One height for the whole wizard costs
-    one guess instead of three, and a salon with thirty services scrolls the
-    list inside the card rather than growing it past the fold. The scroller
-    wears `thin-scroll stable-gutter`, the pair every in-card scroller in the
-    app already uses. The PHONE keeps page scroll and a fixed bar: a
-    viewport-height box with its own scroll region is what mobile browsers
-    handle worst, and that layout already works there.
-  - **The action button is always in the bar's bottom-right corner, greyed
-    until it can be used.** It used to appear on the service step, vanish on
-    the time step and return on the details step, so the bar's right edge was a
-    different shape on each of three screens. Always-there-and-disabled says
-    "there is a next step, not yet"; absent says nothing. The time step's is a
-    formality — tapping a slot still advances, so it is only ever seen
-    disabled — and that is the point: it holds the corner. It sits on its OWN
-    row under the summary, because at the end of one line it was wedged against
-    the total and the two loudest things on the card were fighting for one
-    corner.
+    grid, four fields — so the card resized under the reader at every tap, and
+    fixing it per step meant another reserved height guessing at content the
+    page does not control. One height for the whole wizard costs one guess
+    instead of three; measured identical on all three steps. A salon with
+    thirty services scrolls the list inside the card rather than growing it
+    past the fold. The scroller wears `thin-scroll stable-gutter`, the pair
+    every in-card scroller in the app already uses.
+
+    It shipped desktop-only for an hour, with the phone keeping page scroll and
+    a viewport-fixed bar. That was wrong in the way only a phone shows: the
+    card ended halfway up the screen and the bar sat at the bottom with a
+    hand's width of plane between them, reading as two unrelated surfaces
+    rather than one card with a footer. `100dvh` is what makes the single
+    version safe — it tracks the address bar instead of fighting it. The
+    fixed/sticky/static split and the backdrop blur went with it; all three
+    existed to fake an attachment the layout now has.
+  - **The bar's action button is always in the bottom-right corner, greyed
+    until it can be used, and BACK sits opposite it.** The button used to
+    appear on the service step, vanish on the time step and return on the
+    details step, so the bar's right edge was a different shape on each of
+    three screens. Always-there-and-disabled says "there is a next step, not
+    yet"; absent says nothing. The time step's is a formality — tapping a slot
+    still advances, so it is only ever seen disabled — and that is the point:
+    it holds the corner. Both sit on their OWN row under the summary, because
+    at the end of one line the primary was wedged against the total and the two
+    loudest things on the card fought for one corner.
+
+    Back is in that row and NOT in the header. As a chevron beside the logo it
+    pushed the logo and the salon's name right on every step that had somewhere
+    to go back to, so the card's identity moved while its content changed;
+    reserving an empty slot fixed the shift and left a hole. Back and forward
+    are the same kind of thing and this is the row that holds them.
+  - **The service list searches behind a magnifier.** The heading row IS the
+    search row: collapsed it is "What would you like?" plus a glyph, open it is
+    the field. No row-count threshold — collapsing to a glyph is itself the
+    answer to a short list. Matching runs BOTH sides through `lib/publicSlug`'s
+    slugger, which folds Turkish to ASCII, so a customer typing "sac" on a
+    phone keyboard finds "Saç kesimi". It closes on blur only when empty: a
+    filter still narrowing the list has to survive the tap that picks a row.
+  - **The details step takes an optional NOTE, and it lands on the customer's
+    record** — not on the appointment. The record is where the salon already
+    reads everything else about them, and a note shows in the conversation feed
+    beside the messages that follow. `notes.authorId` is optional for this, and
+    unset means the CUSTOMER wrote it: a stranger on a public page is not a row
+    in `users`. Nothing else may leave it blank, and `messages.feedForCustomer`
+    resolves an author-less note to the customer's own name rather than to
+    "System". The write is LAST in `booking.book` and never fatal — a note is
+    the least important thing that mutation does and must not cost a slot.
   - **Never import a value from `convex/<name>.ts` in `src/`.** It drags that
     file's whole import graph into the client bundle — booking.ts →
     lib/newCustomer → lib/alerts, which defines an `internalQuery` — and Convex

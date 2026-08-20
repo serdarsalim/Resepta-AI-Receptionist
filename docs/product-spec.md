@@ -117,11 +117,29 @@ The signed-in sidebar is:
    deleted. The connector beside it can read and build all of this, including
    creating a phone agent; see [`phone-agent.md`](phone-agent.md).
 
+The public booking page at `/book/<slug>` is the only surface a customer
+reaches without a link from a message. It is a three-step wizard in one
+fixed-height card — service, time, details — and as of 2026-08-20 the service
+step is MULTI-SELECT: a haircut plus a beard trim is one appointment with two
+lines, one calendar block and one reminder, which is what `appointments.items`
+has modelled since long before the page could express it. Services and products
+are separate groups (a product books no time), quantity is goods-only, the list
+searches behind a magnifier, and the details step takes an optional note that
+lands on the customer's record rather than on the appointment. The page's
+address is `slugify(orgs.name)` and follows the business name, which is why
+business names are unique.
+
 There is no Settings destination. Do not reintroduce it. Configuration belongs
 next to the work it controls, while operator-only credentials live in `/admin`.
 
-The app UI dictionary supports Turkish, English and German. Customer-facing
-message language is a separate per-customer/per-org decision.
+The app UI dictionary supports Turkish, English and German. The CUSTOMER
+language is a separate per-org setting (Business → General, renamed from
+"Message language" on 2026-08-20 because it names more than messages): it
+drives the messages sent, the booking page and the appointment-management page,
+while the owner reads the app in whatever their account menu says. Prices are
+written per-org too — `orgs.priceDecimals`, off by default, beside the currency
+select — and the formatter never rounds, so the option only ever removes
+zeroes.
 
 ## 4. Phone-agent user experience
 
