@@ -641,6 +641,10 @@ const dictionary = {
     en: "{n} completed appointments have no price and are not counted.",
     de: "{n} abgeschlossene Termine haben keinen Preis und zählen nicht mit.",
   },
+  "statusPill.upcoming": { tr: "Yaklaşan", en: "Upcoming", de: "Anstehend" },
+  "statusPill.past": { tr: "Geçti", en: "Past", de: "Vorbei" },
+  "statusPill.product": { tr: "Ürün", en: "Product", de: "Produkt" },
+  "statusPill.paid": { tr: "Ödendi", en: "Paid", de: "Bezahlt" },
   "revenue.noShowHint": {
     tr: "Gelmedi olarak işaretle — tutar cirodan düşer",
     en: "Mark as no-show — removed from the takings",

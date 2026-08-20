@@ -8,7 +8,6 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { Rect } from "@/lib/anchoredSheet";
 import type { ModalDraft } from "./AppointmentModal";
 import { useLanguage } from "@/lib/LanguageProvider";
-import type { TranslationKey } from "@/lib/i18n";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
 import { Toggle } from "./Toggle";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
@@ -21,25 +20,6 @@ import { DEFAULT_DURATION } from "@/lib/calendarDrag";
 import { useBookingSheet } from "./useBookingSheet";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { rememberCustomer } from "@/lib/recentCustomers";
-
-const STATUS_KEY: Record<string, TranslationKey> = {
-  scheduled: "status.scheduled",
-  confirmed: "status.confirmed",
-  cancelled: "status.cancelled",
-  completed: "status.completed",
-  no_show: "status.no_show",
-};
-
-// The life of a booking, in the order it lives it — not the order the record
-// happens to declare them in. A picker is read top to bottom, so the two
-// endings sit at the bottom where somebody closing a visit out will look.
-const STATUS_ORDER = [
-  "scheduled",
-  "confirmed",
-  "completed",
-  "no_show",
-  "cancelled",
-] as const;
 
 type CustomerAppointment = FunctionReturnType<
   typeof api.appointments.listForCustomer
@@ -602,30 +582,82 @@ function CustomerAppointments({
           {formatDateTime(a.startAt, language)}
         </span>
       </div>
-      {/* Labelled, because "Confirmed" on its own is a word with no question
-          attached — on the calendar the column supplies that and this card has
-          no column. Same tier the record rows below use, and no colon, because
-          they have none either. The service name needs no label (it is the
-          card's heading) and neither does the amount, which carries its
-          currency. Nudge's Stage row, exactly. */}
+      {/* Status is two different facts wearing one word, so it is two kinds
+          of pill. WHERE the visit sits in time (upcoming / past — or a product
+          sale, which has no "later") is the machine's to say and is not
+          clickable. What the human knows that the calendar can't — the money
+          was taken, or the visit is off — is the pair of pills they CAN tap.
+          The five stored statuses are unchanged underneath; the tap picks the
+          right one for the moment: İptal on a past visit records a no_show
+          (arming the win-back) rather than firing the cancel machinery at a
+          customer who simply never came. Tapping an active pill undoes it. */}
       <div className="mt-1 flex items-center justify-between gap-3">
-        <span className="flex min-w-0 items-center gap-2">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="shrink-0 text-[11px] text-[var(--muted-strong)]">
             {t("appointments.status")}
           </span>
-          <InlineEditValue
-            compact
-            clearable={false}
-            value={a.status}
-            options={[...STATUS_ORDER]}
-            labelFor={(value) => t(STATUS_KEY[value] ?? "status.scheduled")}
-            onSave={(next) =>
-              setStatus({
-                appointmentId: a._id,
-                status: next as CustomerAppointment["status"],
-              })
-            }
-          />
+          {(() => {
+            const isPast = a.startAt < now;
+            const productOnly =
+              (a.items?.length ?? 0) > 0 &&
+              (a.items ?? []).every((item) => item.durationMinutes === 0);
+            const paid = a.status === "completed";
+            const off = a.status === "cancelled" || a.status === "no_show";
+            const pill = "rounded-full px-2 py-0.5 text-[11px] transition-colors";
+            return (
+              <>
+                <span
+                  className={`${pill} bg-[var(--border)] text-[var(--muted)]`}
+                  title={a.status === "confirmed" ? t("status.confirmed") : undefined}
+                >
+                  {productOnly
+                    ? t("statusPill.product")
+                    : isPast
+                      ? t("statusPill.past")
+                      : t("statusPill.upcoming")}
+                  {a.status === "confirmed" && " ✓"}
+                </span>
+                <button
+                  type="button"
+                  className={`${pill} ${
+                    paid
+                      ? "bg-[var(--brand-soft)] text-emerald-700 dark:text-emerald-400"
+                      : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                  onClick={() =>
+                    setStatus({
+                      appointmentId: a._id,
+                      status: paid ? "scheduled" : "completed",
+                    })
+                  }
+                >
+                  {t("statusPill.paid")}
+                </button>
+                <button
+                  type="button"
+                  className={`${pill} ${
+                    off
+                      ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                      : "border border-[var(--border)] text-[var(--muted)] hover:text-red-600 dark:hover:text-red-400"
+                  }`}
+                  onClick={() =>
+                    setStatus({
+                      appointmentId: a._id,
+                      status: off
+                        ? "scheduled"
+                        : isPast && !productOnly
+                          ? "no_show"
+                          : "cancelled",
+                    })
+                  }
+                >
+                  {off && a.status === "no_show"
+                    ? t("status.no_show")
+                    : t("status.cancelled")}
+                </button>
+              </>
+            );
+          })()}
           {a.staffName && (
             <span className="min-w-0 truncate text-xs text-[var(--muted)]">
               · {a.staffName}
