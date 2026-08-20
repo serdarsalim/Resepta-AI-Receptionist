@@ -239,6 +239,66 @@ const WEEKDAY_NAMES = [
   "Saturday",
 ];
 
+// Concrete times to OFFER, computed here so the choice is deterministic code
+// rather than model judgment. On a live call (Bella, 20 Aug 2026) an empty
+// Friday came back as booked_slots: [] and the agent, handed only the hours,
+// recited "dokuzdan altıya açığız" and asked the caller to pick — the one
+// move a receptionist never makes. The note field only covered the
+// slots-taken case; this covers the other one, for every tenant at once.
+//
+// Returns UTC ms starts, spread across the open window (first free, middle,
+// last) rather than the first three — 09:00/09:30/10:00 is a morning, not a
+// choice. Empty when the org has no clock bounds to suggest from, when the
+// day is a closed day, or when nothing is free: the callers of this keep
+// their existing wording for those cases.
+export function suggestFreeSlots(args: {
+  dayIso: string;
+  tz: string;
+  hours: ActiveWindow | null | undefined;
+  // FULL blocks (capacity exhausted), not merely booked ones — same contract
+  // as retell.bookedBetween.
+  full: { startAt: number; durationMinutes: number | null }[];
+  nowMs: number;
+}): number[] {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.dayIso);
+  const hours = args.hours;
+  if (!match || !hours || hours.startMinute == null || hours.endMinute == null) {
+    return [];
+  }
+  const [, y, m, d] = match;
+  const weekday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).getUTCDay();
+  if (hours.activeDays && hours.activeDays.length > 0 && !hours.activeDays.includes(weekday)) {
+    return [];
+  }
+  const slotMs = 30 * 60_000;
+  // A slot starting in five minutes is not an offer anyone can accept.
+  const earliest = args.nowMs + 15 * 60_000;
+  const free: number[] = [];
+  for (let minute = hours.startMinute; minute + 30 <= hours.endMinute; minute += 30) {
+    let startMs: number;
+    try {
+      startMs = localWallTimeToUtcMs(
+        Number(y),
+        Number(m) - 1,
+        Number(d),
+        Math.floor(minute / 60),
+        minute % 60,
+        args.tz,
+      );
+    } catch {
+      return [];
+    }
+    if (startMs < earliest) continue;
+    const clashes = args.full.some((block) => {
+      const blockEnd = block.startAt + (block.durationMinutes ?? 30) * 60_000;
+      return startMs < blockEnd && startMs + slotMs > block.startAt;
+    });
+    if (!clashes) free.push(startMs);
+  }
+  if (free.length <= 3) return free;
+  return [free[0], free[Math.floor((free.length - 1) / 2)], free[free.length - 1]];
+}
+
 export function openHoursForAgent(
   hours:
     | { activeDays?: number[]; startMinute?: number; endMinute?: number }

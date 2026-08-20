@@ -36,6 +36,7 @@ import {
   localDayRangeUtc,
   openHoursForAgent,
   parseLocalStart,
+  suggestFreeSlots,
   todayInZone,
 } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
@@ -722,6 +723,13 @@ async function executeTool(
           endMs: Date.parse(endIso),
         });
         const openness = openHoursForAgent(org.businessHours);
+        const suggested = suggestFreeSlots({
+          dayIso,
+          tz: org.timezone,
+          hours: org.businessHours,
+          full: booked.full,
+          nowMs: Date.now(),
+        });
         return {
           date: dayIso,
           booked_slots: booked.full.map(
@@ -730,8 +738,15 @@ async function executeTool(
               duration_minutes: slot.durationMinutes ?? 30,
             }),
           ),
+          ...(suggested.length > 0
+            ? { suggested_slots: suggested.map((at) => spokenOf(at)) }
+            : {}),
           ...openness,
           note:
+            (suggested.length > 0
+              ? "Offer two or three of suggested_slots as concrete times." +
+                " Never answer by reciting the opening hours. "
+              : "") +
             "These times are FULL — everything else is free. Offer times that avoid them" +
             (openness.open_hours ? ", stay inside open_hours" : "") +
             (openness.closed_days ? ", never offer a date on closed_days" : "") +

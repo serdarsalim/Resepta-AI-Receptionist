@@ -28,6 +28,7 @@ import {
   isWithinActiveWindow,
   localDayRangeUtc,
   parseLocalStart,
+  suggestFreeSlots,
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
@@ -574,6 +575,13 @@ http.route({
         };
         const hours = org.businessHours ?? null;
         const openness = openHoursForAgent(hours);
+        const suggested = suggestFreeSlots({
+          dayIso,
+          tz: org.timezone,
+          hours,
+          full: booked.full,
+          nowMs: Date.now(),
+        });
         return respond({
           date: dayIso,
           // Speakable ranges, not raw timestamps: this body goes to the LLM
@@ -585,12 +593,23 @@ http.route({
             start: spokenDateTime(slot.startAt, org.timezone, org.language),
             duration_minutes: slot.durationMinutes ?? 30,
           })),
+          ...(suggested.length > 0
+            ? {
+                suggested_slots: suggested.map((at) =>
+                  spokenDateTime(at, org.timezone, org.language),
+                ),
+              }
+            : {}),
           // open_hours says when the doors are open; closed_days says which
           // days they never open at all. The second used to be missing, so an
           // agent that knew "09:00-18:00" would offer 09:00 on a Sunday the
           // salon is shut.
           ...openness,
           note:
+            (suggested.length > 0
+              ? "Offer two or three of suggested_slots as concrete times." +
+                " Never answer by reciting the opening hours. "
+              : "") +
             "These times are FULL — every person is already busy. Everything" +
             " else is free. Offer times that avoid them" +
             (openness.open_hours ? ", stay inside open_hours" : "") +
