@@ -72,6 +72,14 @@ export const PLATFORM_KEYS = {
   // agent before the model runs. Table-only on purpose — flipping it is an
   // operator action from /admin, not a deploy.
   chatAgentDisabled: null,
+  // The fleet-wide default voice agent model — what an agent with no
+  // per-agent override (retellAgents.llmModel) runs after its next publish
+  // or template sync, and what a new agent is born with. Table-only: an
+  // operator decision from /admin, not a deploy artifact. Unset falls back
+  // to VOICE_AGENT_MODEL in lib/voiceAgentTemplate.ts, and a stored id that
+  // has left lib/voiceModels falls back the same way at read time — a
+  // retired model name must never reach a provider PATCH.
+  voiceModel: null,
   // The default price per called minute, micro-USD as a string ("300000" =
   // $0.30/min). Set once here instead of on every org: the meter resolves
   // org.voiceRateMicroUsdPerMinute ?? this ?? 0 at stamp time, so an org row

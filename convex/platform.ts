@@ -44,7 +44,7 @@ import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig, platformValue, type EmailConfig } from "./lib/platformConfig";
 import { recordActivity } from "./lib/activity";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
-import { isVoiceModel } from "./lib/voiceModels";
+import { isVoiceModel, resolvePlatformVoiceModel } from "./lib/voiceModels";
 import { applyAgentModel } from "./retellAgent";
 
 const DAY_MS = 24 * 3600_000;
@@ -429,6 +429,11 @@ export const orgDetail = query({
       calcomApiKey: maskedSecret,
       calcomEventTypeId: v.union(v.string(), v.null()),
       voiceAgentSource: v.union(v.literal("randevu"), v.literal("account")),
+      // The fleet default voice model (validated against the catalogue),
+      // null when unset — the per-agent picker's "Platform default" label
+      // reads this so the two screens cannot disagree about what default
+      // means.
+      platformVoiceModel: v.union(v.string(), v.null()),
       calcomWebhookToken: v.union(v.string(), v.null()),
       evolutionInstance: v.union(v.string(), v.null()),
       evolutionWebhookToken: v.union(v.string(), v.null()),
@@ -554,6 +559,9 @@ export const orgDetail = query({
       calcomApiKey: org.calcomApiKey ? maskSecret(org.calcomApiKey) : null,
       calcomEventTypeId: org.calcomEventTypeId ?? null,
       voiceAgentSource: org.voiceAgentSource ?? "randevu",
+      platformVoiceModel: resolvePlatformVoiceModel(
+        await platformValue(ctx, "voiceModel"),
+      ),
       calcomWebhookToken: org.calcomWebhookToken ?? null,
       evolutionInstance: org.evolutionInstance ?? null,
       evolutionWebhookToken: org.evolutionWebhookToken ?? null,

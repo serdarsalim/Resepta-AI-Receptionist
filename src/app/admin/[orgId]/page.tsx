@@ -431,10 +431,15 @@ export default function TenantPage() {
                   options={[
                     {
                       value: "",
+                      // The resolved fleet default from orgDetail, so this
+                      // label and the /admin dropdown can never disagree.
                       label: `Platform default — ${
                         VOICE_MODEL_CHOICES.find(
-                          (choice) => choice.id === VOICE_AGENT_MODEL,
-                        )?.label ?? VOICE_AGENT_MODEL
+                          (choice) =>
+                            choice.id ===
+                            (detail.platformVoiceModel ?? VOICE_AGENT_MODEL),
+                        )?.label ??
+                        (detail.platformVoiceModel ?? VOICE_AGENT_MODEL)
                       }`,
                     },
                     ...VOICE_MODEL_CHOICES.map((choice) => ({

@@ -25,6 +25,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { monthKey } from "./lib/usage";
 import { platformValue } from "./lib/platformConfig";
+import { resolvePlatformVoiceModel } from "./lib/voiceModels";
 import { queueOrgAlert } from "./lib/alerts";
 import { WALLET_LOW_MICRO_USD } from "./wallet";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
@@ -721,6 +722,7 @@ export const agentEditorContext = internalQuery({
       personaName: agent.personaName ?? null,
       canEndCall: agent.canEndCall ?? true,
       llmModel: agent.llmModel ?? null,
+      platformVoiceModel: resolvePlatformVoiceModel(await platformValue(ctx, "voiceModel")),
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,

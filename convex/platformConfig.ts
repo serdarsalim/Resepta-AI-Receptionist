@@ -63,6 +63,9 @@ export const status = query({
     anthropicModel: v.union(v.string(), v.null()),
     openaiModel: v.union(v.string(), v.null()),
     chatAgentDisabled: v.boolean(),
+    // The stored fleet default for voice agents, plain — a model id is not a
+    // secret, and the picker needs the exact value back to show it selected.
+    voiceModel: v.union(v.string(), v.null()),
     retellApiKey: v.union(v.string(), v.null()),
     // The Meta Cloud API platform token every waAccounts row without its own
     // token rides (lib/platformConfig resolveWaAccount).
@@ -117,6 +120,7 @@ export const status = query({
         row("openaiModel") ??
         (provider === "openai" ? row("chatAgentModel") : null),
       chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
+      voiceModel: row("voiceModel"),
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       whatsappAccessToken: waToken ? maskSecret(waToken) : null,
       voiceRateMicroUsdPerMinute:
@@ -158,6 +162,11 @@ const settableKey = v.union(
   v.literal("retellApiKey"),
   v.literal("whatsappAccessToken"),
   v.literal("chatAgentDisabled"),
+  // The fleet-wide default voice agent model (lib/voiceModels ids). Validated
+  // on READ (resolvePlatformVoiceModel), not here: `set` stays a dumb
+  // key-value write, and a row that outlives its catalogue entry simply
+  // stops resolving instead of blocking the operator from clearing it.
+  v.literal("voiceModel"),
   v.literal("voiceRateMicroUsdPerMinute"),
   // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
   v.literal("stripeSecretKey"),

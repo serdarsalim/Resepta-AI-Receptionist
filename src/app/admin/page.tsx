@@ -30,12 +30,15 @@ import {
   KeyModelRow,
   Plane,
   Row,
+  SearchSelect,
   Section,
   SecretRow,
   Setup,
   TabStrip,
 } from "./parts";
 import { SearchInput } from "@/components/DataTable";
+import { VOICE_MODEL_CHOICES } from "../../../convex/lib/voiceModels";
+import { VOICE_AGENT_MODEL } from "../../../convex/lib/voiceAgentTemplate";
 import { useSearch } from "@/lib/useTableState";
 
 export default function AdminPage() {
@@ -317,6 +320,47 @@ export default function AdminPage() {
               masked={mail.retellApiKey}
               onSave={(value) => setConfig({ key: "retellApiKey", value })}
             />
+            {/* The fleet's default VOICE model — the phone-agent sibling of
+                the chat rows below, and the value the per-agent pickers call
+                "Platform default". It moves agents on their next publish or
+                template sync, never by itself: a published agent keeps the
+                engine it was published with until something republishes it. */}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-start">
+              <div className="text-sm font-medium">Voice agent model</div>
+              <div>
+                <SearchSelect
+                  value={mail.voiceModel ?? ""}
+                  placeholder="Voice model"
+                  searchPlaceholder="Search models"
+                  options={[
+                    {
+                      value: "",
+                      label: `Resepta default — ${
+                        VOICE_MODEL_CHOICES.find(
+                          (choice) => choice.id === VOICE_AGENT_MODEL,
+                        )?.label ?? VOICE_AGENT_MODEL
+                      }`,
+                    },
+                    ...VOICE_MODEL_CHOICES.map((choice) => ({
+                      value: choice.id,
+                      label: choice.label,
+                      hint: `$${choice.usdPerMinute.toFixed(3)}/min`,
+                    })),
+                  ]}
+                  onChange={(next) => {
+                    if ((mail.voiceModel ?? "") === next) return;
+                    void setConfig({ key: "voiceModel", value: next });
+                  }}
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  What every agent without its own Model override runs. Applies
+                  to new agents and to existing ones on their next template
+                  sync or model publish — it does not repoint already-published
+                  agents by itself. Per-agent Model pickers on each business
+                  page always win.
+                </p>
+              </div>
+            </div>
             {/* Which dialect every org's chat agent speaks by default. The
                 key rows below both stay settable — switching provider is one
                 click, not a re-paste. Whether the active provider has a key

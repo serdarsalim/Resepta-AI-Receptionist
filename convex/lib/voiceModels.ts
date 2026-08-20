@@ -66,6 +66,15 @@ export function isVoiceModel(id: string): boolean {
   return VOICE_MODEL_CHOICES.some((choice) => choice.id === id);
 }
 
+// The stored platform default, admitted only while the catalogue still knows
+// it. One place, because three readers (editor context, provisioning, the
+// operator console) each resolve the default and a stale row naming a
+// retired id must fall through to the code constant in all of them, not
+// publish garbage from whichever reader forgot to check.
+export function resolvePlatformVoiceModel(raw: string | null | undefined): string | null {
+  return raw && isVoiceModel(raw) ? raw : null;
+}
+
 // Which provider field a model id belongs in. `model` and `s2s_model` are
 // mutually exclusive on the engine, and BOTH must be sent on every switch:
 // the API clears a field only when it is explicitly nulled (verified live,

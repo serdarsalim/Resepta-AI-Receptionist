@@ -107,6 +107,10 @@ type EditorContext = {
   personaName: string | null;
   canEndCall: boolean;
   llmModel: string | null;
+  // The fleet default, already validated against the catalogue by
+  // agentEditorContext. Sits between the per-agent override and the
+  // template constant in every resolution.
+  platformVoiceModel: string | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -1139,6 +1143,7 @@ async function provisionAgent(
     complete: boolean;
     apiKey: string;
     orgName: string;
+    platformVoiceModel: string | null;
     row: {
       _id: string;
       status: string;
@@ -1176,8 +1181,21 @@ async function provisionAgent(
         leaseToken,
         status: "creating_engine",
       });
+      // A new agent is born on the fleet default when the operator has set
+      // one. engineFieldsFor decides which engine field the default lives
+      // in, and the text-pipeline knobs are dropped when it is realtime —
+      // they belong to the pipeline the agent is not running.
+      const birthEngine = engineFieldsFor(
+        started.platformVoiceModel ?? (template.llm.model as string),
+      );
       const createdLlm = (await (
-        await call(key, "POST", "create-retell-llm", template.llm)
+        await call(key, "POST", "create-retell-llm", {
+          ...template.llm,
+          ...birthEngine,
+          ...(birthEngine.model === null
+            ? { model_temperature: undefined, model_high_priority: undefined }
+            : {}),
+        })
       ).json()) as { llm_id?: string };
       if (!createdLlm.llm_id) throw new Error("provider-returned-no-response-engine");
       llmId = createdLlm.llm_id;
@@ -1458,7 +1476,9 @@ export const syncTemplate = action({
       // override survives a sync and a standard agent never keeps a stale
       // s2s_model. The temperature and priority knobs are text-pipeline
       // settings, so they only ride when the target IS the text pipeline.
-      const syncEngine = engineFieldsFor(context.llmModel ?? template.llm.model);
+      const syncEngine = engineFieldsFor(
+        context.llmModel ?? context.platformVoiceModel ?? template.llm.model,
+      );
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
         ...syncEngine,
@@ -1616,9 +1636,11 @@ export async function applyAgentModel(
   // Both fields, always — engineFieldsFor nulls whichever side the target
   // does not use, because an omitted field survives the PATCH and would
   // leave both engines configured after a standard↔realtime switch.
+  // Clearing the override lands on the FLEET default, not the constant:
+  // "platform default" in the picker means whatever /admin currently says.
   await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-    ...engineFieldsFor(model ?? template.llm.model),
+    ...engineFieldsFor(model ?? context.platformVoiceModel ?? template.llm.model),
   });
   await call(key, "POST", `publish-agent-version/${id}`, {
     version: draft.version,

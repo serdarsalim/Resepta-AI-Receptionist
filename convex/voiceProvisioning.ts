@@ -7,6 +7,7 @@ import {
   VOICE_AGENT_TEMPLATE_KEY,
   VOICE_AGENT_TEMPLATE_VERSION,
 } from "./lib/voiceAgentTemplate";
+import { resolvePlatformVoiceModel } from "./lib/voiceModels";
 
 const language = v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE"));
 const status = v.union(
@@ -97,6 +98,13 @@ export const begin = internalMutation({
     if (!name) throw new Error("agent-name-required");
     if (!voiceId) throw new Error("agent-voice-required");
 
+    // The fleet default a NEW agent is born with — resolved here because the
+    // provisioning action has no ctx.db. Null (unset or stale row) means the
+    // template's own constant.
+    const platformVoiceModel = resolvePlatformVoiceModel(
+      await platformValue(ctx, "voiceModel"),
+    );
+
     const exact = await ctx.db
       .query("voiceAgentProvisioning")
       .withIndex("by_org_request", (q) =>
@@ -111,10 +119,10 @@ export const begin = internalMutation({
     let row = exact ?? (latest?.status !== "complete" ? latest : null);
 
     if (row?.status === "complete") {
-      return { claimed: false, complete: true, apiKey, orgName: org.name, row };
+      return { claimed: false, complete: true, apiKey, orgName: org.name, platformVoiceModel, row };
     }
     if (row && (row.leaseUntil ?? 0) > Date.now()) {
-      return { claimed: false, complete: false, apiKey, orgName: org.name, row };
+      return { claimed: false, complete: false, apiKey, orgName: org.name, platformVoiceModel, row };
     }
 
     const now = Date.now();
@@ -158,7 +166,7 @@ export const begin = internalMutation({
       });
       row = (await ctx.db.get(row._id))!;
     }
-    return { claimed: true, complete: false, apiKey, orgName: org.name, row };
+    return { claimed: true, complete: false, apiKey, orgName: org.name, platformVoiceModel, row };
   },
 });
 
