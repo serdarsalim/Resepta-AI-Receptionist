@@ -539,12 +539,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
           {/* Currency and decimals stay on ONE line: they answer the same
               question together — currency picks the symbol, language picks
-              the separators, this picks how much of the number to write. The
-              decimals switch is a pill that SHOWS its work: ",00" (or ".00",
-              whichever the org's language would print) lit green when prices
-              carry decimals. A labelled toggle needed half a row to say what
-              two characters demonstrate. */}
-          <div className="flex items-center gap-2">
+              the separators, this picks how much of the number to write. A
+              plain checkbox with its words, after a ",00" pill proved too
+              cryptic (Serdar, 2026-08-20) and an option INSIDE the select was
+              rejected outright: a picked "option" that toggles a setting and
+              snaps the select back is a control lying about its value, and a
+              screen reader would offer it as a currency. */}
+          <div className="flex items-center gap-3">
             <select
               className="w-full sm:max-w-56"
               defaultValue={settings.org.currency}
@@ -556,21 +557,14 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              title={t("settings.priceDecimals")}
-              aria-pressed={settings.org.priceDecimals ?? false}
-              onClick={() =>
-                void update({ priceDecimals: !(settings.org.priceDecimals ?? false) })
-              }
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums transition-colors ${
-                settings.org.priceDecimals
-                  ? "bg-[var(--brand-soft)] text-emerald-700 dark:text-emerald-400"
-                  : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {settings.org.language === "en" ? ".00" : ",00"}
-            </button>
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]">
+              <input
+                type="checkbox"
+                checked={settings.org.priceDecimals ?? false}
+                onChange={(e) => void update({ priceDecimals: e.target.checked })}
+              />
+              {t("settings.priceDecimals")}
+            </label>
           </div>
           {/* Last on purpose: an opt-in extra, below the facts of the
               business. It follows currency because that is the unit the tab
