@@ -274,6 +274,128 @@ const dictionary = {
     de: "Diesen Namen nutzt bereits ein anderer Betrieb. Versuchen Sie einen anderen.",
   },
   "onboarding.start": { tr: "Başla", en: "Get started", de: "Loslegen" },
+  "onboarding.langTitle": {
+    tr: "Hangi dilde çalışalım?",
+    en: "Which language should we use?",
+    de: "In welcher Sprache arbeiten wir?",
+  },
+  "onboarding.langHint": {
+    tr: "Uygulamanın, mesajların ve telefon asistanınızın dili. Sonradan değiştirebilirsiniz.",
+    en: "The language of the app, your messages and your phone agent. You can change it later.",
+    de: "Die Sprache der App, Ihrer Nachrichten und Ihres Telefonassistenten. Sie können sie später ändern.",
+  },
+  "onboarding.industryTitle": {
+    tr: "Ne tür bir işletmesiniz?",
+    en: "What kind of business are you?",
+    de: "Was für ein Betrieb sind Sie?",
+  },
+  "onboarding.industryHint": {
+    tr: "Seçiminize göre hizmetlerinizi, müşteri alanlarınızı ve telefon asistanınızı sizin için hazırlarız.",
+    en: "We use this to prepare your services, customer fields and phone agent for you.",
+    de: "Damit bereiten wir Ihre Leistungen, Kundenfelder und Ihren Telefonassistenten für Sie vor.",
+  },
+  "onboarding.prefillYes": {
+    tr: "Hazır şablonla başla",
+    en: "Start with a ready template",
+    de: "Mit fertiger Vorlage starten",
+  },
+  "onboarding.prefillYesHint": {
+    tr: "Sektörünüze uygun hizmetler ve müşteri alanları hazır gelir. Hepsini değiştirebilirsiniz.",
+    en: "Services and customer fields for your industry arrive ready. You can change everything.",
+    de: "Leistungen und Kundenfelder für Ihre Branche kommen fertig an. Alles lässt sich ändern.",
+  },
+  "onboarding.prefillNo": {
+    tr: "Boş başla",
+    en: "Start blank",
+    de: "Leer starten",
+  },
+  "onboarding.prefillNoHint": {
+    tr: "Her şeyi kendiniz eklersiniz. Şablona daha sonra İşletme ayarlarından dönebilirsiniz.",
+    en: "You add everything yourself. You can still apply the template later from Business settings.",
+    de: "Sie fügen alles selbst hinzu. Die Vorlage lässt sich später in den Betriebseinstellungen anwenden.",
+  },
+  "onboarding.infoTitle": {
+    tr: "İşletmenizi tanıtın",
+    en: "Tell us about your business",
+    de: "Stellen Sie Ihren Betrieb vor",
+  },
+  "onboarding.infoHint": {
+    tr: "Telefon asistanınız arayanları bu bilgilerle yanıtlar. Hepsi isteğe bağlı; daha sonra Sesli asistan → Bilgi bölümünden düzenleyebilirsiniz.",
+    en: "Your phone agent answers callers from this. Everything is optional; you can edit it later under Voice agent → Knowledge.",
+    de: "Ihr Telefonassistent beantwortet Anrufe mit diesen Angaben. Alles ist optional; Sie können sie später unter Sprachassistent → Wissen bearbeiten.",
+  },
+  "onboarding.address": { tr: "Adres", en: "Address", de: "Adresse" },
+  "onboarding.website": { tr: "Web sitesi", en: "Website", de: "Website" },
+  "onboarding.about": {
+    tr: "Hakkınızda",
+    en: "About your business",
+    de: "Über Ihren Betrieb",
+  },
+  "onboarding.aboutPlaceholder": {
+    tr: "Çalışma şekliniz, park, ödeme yöntemleri...",
+    en: "How you work, parking, payment methods...",
+    de: "Arbeitsweise, Parken, Zahlungsarten...",
+  },
+  "onboarding.numberTitle": {
+    tr: "Telefon numaranız",
+    en: "Your phone number",
+    de: "Ihre Telefonnummer",
+  },
+  "onboarding.numberPromise": {
+    tr: "Şirket kayıt belgenizi yükledikten sonra 24 saat içinde size bir telefon numarası tahsis ediyoruz. Türkiye'de bu belge zorunludur; Almanya, Avusturya ve Birleşik Krallık için de aynı belgeyle ilerliyoruz.",
+    en: "Upload your company registration document and we provision your phone number within 24 hours. The document is required in Türkiye; Germany, Austria and the UK follow the same step.",
+    de: "Laden Sie Ihren Handelsregisterauszug hoch und wir stellen Ihre Telefonnummer innerhalb von 24 Stunden bereit. In der Türkei ist das Dokument Pflicht; Deutschland, Österreich und das Vereinigte Königreich folgen demselben Schritt.",
+  },
+  "onboarding.uploadDoc": {
+    tr: "Belge yükle",
+    en: "Upload document",
+    de: "Dokument hochladen",
+  },
+  "onboarding.uploadReplace": {
+    tr: "Belgeyi değiştir",
+    en: "Replace document",
+    de: "Dokument ersetzen",
+  },
+  "onboarding.uploadHint": {
+    tr: "PDF veya fotoğraf, en fazla 10 MB.",
+    en: "PDF or photo, up to 10 MB.",
+    de: "PDF oder Foto, maximal 10 MB.",
+  },
+  "onboarding.uploadLater": {
+    tr: "Bu adımı geçebilirsiniz; belgeyi daha sonra Sesli asistan sekmesinden yükleyebilirsiniz.",
+    en: "You can skip this and upload the document later from the Voice agent tab.",
+    de: "Sie können diesen Schritt überspringen und das Dokument später im Tab Sprachassistent hochladen.",
+  },
+  "onboarding.uploaded": {
+    tr: "Belge alındı: {file}",
+    en: "Document received: {file}",
+    de: "Dokument erhalten: {file}",
+  },
+  "onboarding.uploadFailedType": {
+    tr: "Bu dosya türü desteklenmiyor. PDF veya fotoğraf yükleyin.",
+    en: "That file type is not supported. Upload a PDF or a photo.",
+    de: "Dieser Dateityp wird nicht unterstützt. Laden Sie ein PDF oder ein Foto hoch.",
+  },
+  "onboarding.uploadFailedSize": {
+    tr: "Dosya çok büyük. En fazla 10 MB.",
+    en: "That file is too large. 10 MB at most.",
+    de: "Die Datei ist zu groß. Maximal 10 MB.",
+  },
+  "onboarding.back": { tr: "Geri", en: "Back", de: "Zurück" },
+  "onboarding.continue": { tr: "Devam", en: "Continue", de: "Weiter" },
+  "onboarding.finish": { tr: "Bitir", en: "Finish", de: "Fertig" },
+  "onboarding.working": {
+    tr: "Hazırlanıyor...",
+    en: "Setting up...",
+    de: "Wird eingerichtet...",
+  },
+  "onboarding.kbAddress": {
+    tr: "Adres ve ulaşım",
+    en: "Address & directions",
+    de: "Adresse & Anfahrt",
+  },
+  "onboarding.kbWebsite": { tr: "Web sitesi", en: "Website", de: "Website" },
+  "onboarding.kbAbout": { tr: "Hakkımızda", en: "About us", de: "Über uns" },
 
   "appointments.edit": { tr: "Randevuyu düzenle", en: "Edit appointment", de: "Termin bearbeiten" },
   "appointments.duration": { tr: "Süre (dk)", en: "Duration (min)", de: "Dauer (Min.)" },

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
+import { OnboardingWizard } from "./OnboardingWizard";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
@@ -551,72 +552,6 @@ function initialsFrom(name?: string | null, email?: string | null): string {
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return source.slice(0, 2).toUpperCase();
-}
-
-// Google OAuth carries no business name, so a fresh org arrives unnamed —
-// this one-question gate runs before anything else and is the whole
-// onboarding.
-function OnboardingGate() {
-  const { t } = useLanguage();
-  const { signOut } = useAuthActions();
-  const update = useMutation(api.orgs.update);
-  // The name can be REFUSED (2026-08-20): it derives the booking page address,
-  // so it is unique across businesses. Unhandled, that refusal is a submit
-  // button that does nothing forever — the gate is the whole app until it
-  // passes, so there is no other screen for the failure to show up on.
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="flex h-[100dvh] items-center justify-center bg-[var(--pane)] p-6">
-      <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">{t("onboarding.title")}</h2>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <SignOutIcon />
-            {t("nav.signOut")}
-          </button>
-        </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {t("onboarding.prompt")}
-        </p>
-        <form
-          className="mt-4 space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const name = String(
-              new FormData(event.currentTarget).get("name") ?? "",
-            ).trim();
-            if (!name) return;
-            setError(null);
-            void update({ name }).catch((err) => {
-              setError(
-                String(err).includes("name-taken")
-                  ? t("onboarding.nameTaken")
-                  : t("settings.nameRejected"),
-              );
-            });
-          }}
-        >
-          <label className="block text-sm">
-            {t("onboarding.businessName")}
-            <input name="name" required autoFocus className="mt-1" />
-          </label>
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-[var(--accent-fg)]"
-          >
-            {t("onboarding.start")}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
 }
 
 function SunIcon() {
@@ -1414,7 +1349,7 @@ export function AppShell({
           (entry) => entry.id === tab,
         )?.key ?? "app.name");
 
-  if (settings && settings.org.name === "") return <OnboardingGate />;
+  if (settings && settings.org.name === "") return <OnboardingWizard />;
 
   return (
     // Above both the header and the views: the box is rendered up here, the

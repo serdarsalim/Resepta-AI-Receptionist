@@ -8,8 +8,9 @@
 // confirmation in Business settings (resetToIndustryDefaults below).
 
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { requireOwner } from "./lib/orgAuth";
+import { slugify } from "./lib/publicSlug";
 import { recordActivity } from "./lib/activity";
 import { keyFromLabel, uniqueKey, RESERVED_CONTACT_KEYS } from "./lib/keys";
 import {
@@ -83,6 +84,29 @@ async function seedPreset(
   }
   return { services, fields };
 }
+
+// The wizard's name step asks before it commits: the business name is unique
+// across the fleet (it derives the booking page's address), and the name is
+// SAVED last — a taken name discovered only at Finish would bounce the owner
+// three steps back. This is the same cross-org lookup resolvePublicSlug
+// makes on every orgs.update({name}); it answers one bit (free or taken),
+// which is exactly what the name-taken error already discloses, so it is not
+// a new read surface in the platform.ts sense. The definitive check still
+// happens at save.
+export const nameAvailable = query({
+  args: { name: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const slug = slugify(args.name.trim());
+    if (!slug) return true;
+    const taken = await ctx.db
+      .query("orgs")
+      .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
+      .first();
+    return !taken || taken._id === orgId;
+  },
+});
 
 // The wizard's industry step. Records the answer always; seeds only when the
 // owner chose to start prefilled. Safe to repeat — seeding skips existing

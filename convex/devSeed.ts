@@ -354,3 +354,51 @@ export const clearSetupFailures = internalMutation({
     return removed;
   },
 });
+
+// Walk the onboarding wizard again. Blanks the org's name — the gate
+// condition, so the app renders the wizard on next load — and clears the
+// stored industry answer. Internal, so only a deploy key reaches it; meant
+// for dev.
+//
+//   npx convex run devSeed:resetOnboarding '{}'
+//
+// Leaves everything else alone by default. Pass wipe:true to also clear the
+// catalog and knowledge (services, contact fields, knowledge blocks, number
+// requests) so the prefilled path can be watched seeding a clean slate.
+export const resetOnboarding = internalMutation({
+  args: { orgId: v.optional(v.id("orgs")), wipe: v.optional(v.boolean()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = args.orgId
+      ? await ctx.db.get(args.orgId)
+      : await ctx.db.query("orgs").first();
+    if (!org) throw new Error("no-org — sign in once first");
+    await ctx.db.patch(org._id, { name: "", industry: undefined });
+    if (args.wipe) {
+      const services = await ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      for (const row of services) await ctx.db.delete(row._id);
+      const fields = await ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      for (const row of fields) await ctx.db.delete(row._id);
+      const knowledge = await ctx.db
+        .query("knowledge")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      for (const row of knowledge) await ctx.db.delete(row._id);
+      const requests = await ctx.db
+        .query("numberRequests")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .collect();
+      for (const row of requests) {
+        await ctx.storage.delete(row.storageId);
+        await ctx.db.delete(row._id);
+      }
+    }
+    return null;
+  },
+});
