@@ -311,6 +311,77 @@ more than either.
   its own Business tab; Business has no tabs at all. The reasoning that kept
   them apart, and what changed to answer it, is recorded there.
 
+## Onboarding (built 2026-08-21) — the wizard, presets, billing for everyone
+
+Serdar's brief, built overnight: a world-class first-run. What holds now:
+
+- **The one-question gate is a five-step wizard** (`OnboardingWizard.tsx`,
+  still gated on `org.name === ""` in AppShell): language → business name →
+  industry + prefilled-or-blank → business info → phone number. The NAME is
+  saved LAST, deliberately: naming unlocks the shell and schedules voice
+  auto-provisioning, so it is the commit point for everything the wizard
+  collected, and an abandoned wizard simply reopens next visit (every earlier
+  write is idempotent or additive). The language step persists `org.language`
+  immediately so provisioning and every later write happen in it. The name
+  step pre-checks availability (`onboarding.nameAvailable` — same one-bit
+  answer the name-taken error already discloses; the definitive check stays
+  in `orgs.update`). Replay it in dev with
+  `npx convex run devSeed:resetOnboarding '{}'` (`wipe:true` also clears the
+  catalog).
+- **Industry presets are ORG DATA, seeded once** (`lib/industryPresets.ts`, a
+  PURE module the browser may import; applied by `convex/onboarding.ts`).
+  Seven verticals × three languages seed services and voice-sourced contact
+  fields; field KEYS are fixed in the module (language-stable addresses),
+  services dedupe by key so re-applying never doubles a price list. NO PRICES
+  seeded, ever — an invented price is a claim about the business; durations
+  are a guess the owner corrects in seconds. `orgs.industry` remembers the
+  answer; Business → General grows an Industry row whose select only records
+  and whose "Reset to defaults" re-seeds behind a confirmation naming the
+  cost (services deleted — safe, appointments snapshot their lines; fields a
+  voice agent references SURVIVE the reset, deleting them would wedge the
+  next publish).
+- **The Bella port**: the two prompt refinements Serdar hand-tuned into the
+  prod "Bella Randevu Asistanı" (de_autotakt workspace) live in the template
+  now — `{{next_appointment}}` in the context block and greet-a-known-caller-
+  by-name-once — in all three languages, prompt-text only, no version bump.
+  `DEFAULT_VOICE_IDS` gives auto-provisioning a curated voice per language
+  (tr keeps Bella's minimax-Camille) instead of `voices[0]`.
+- **Knowledge reaches the VOICE agent at ring time**: `{{knowledge}}` is a
+  built-in in `beforeCallContext` (capped ~8k chars, cut between blocks) with
+  its prompt line in all three GENERAL_PROMPTS — an edit reaches the very
+  next call with no republish, like services and staff. The Knowledge editor
+  is the rich editor now (`EmailBodyEditor` compact, no token dropdown), on
+  the notes model exactly: no is-it-html flag, `bodyIsHtml` judges the body,
+  and EVERY agent read — `knowledge.forAgent`, chatAgent's own query, the
+  ring-time builtin — flattens through `noteText`, so what reaches a model or
+  provider is words only. Do not let a send path read the raw column.
+- **Billing is every owner's tab, glued above the profile** (BILLING_TAB in
+  AppShell, rendered inside the account-edge container above UserMenu — not
+  a foot tab). Prepaid owners see the wallet (unchanged); invoice owners see
+  the meter + soft budget, ported off the voice strip, WHICH LOST ITS BILLING
+  CHIP — the bill belongs to the business, not to one channel. Staff never
+  see money; the deep-link guard redirects them.
+- **Billing mode has a platform default, STAMPED at founding sign-in**
+  (`defaultBillingMode` in platformConfig, pills on the Platform tab's
+  Billing section). Stamped, never resolved at read time: flipping the
+  default must not silently switch existing tenants to prepaid with a zero
+  wallet, which declines their calls at ring time. `trialCreditUsd` rides
+  beside it: an org born prepaid gets the welcome credit once, through
+  `applyWalletCredit` (the one credit path) with the new source `"trial"`,
+  scheduled from auth.ts so it runs in a real mutation ctx.
+- **Number provisioning is a request with a document**
+  (`convex/numberRequests.ts`, table `numberRequests`): the wizard's last
+  step and the Voice tab's card (`NumberRequestCard`, which also owns the
+  shared upload hook) take the company registration (PDF/photo, 10 MB —
+  required in Türkiye, same flow for DACH/UK) and promise a number within
+  24h. One live request per org; re-uploading replaces anything not yet
+  approved. The operator's half lives in platform.ts (the standing rule):
+  `orgNumberRequests` + `decideNumberRequest`, rendered as a "Number
+  provisioning" card on the admin org page's Voice agent tab — download,
+  approve, or deny with a note the salon reads. The decision is the
+  operator's cue to go buy the line at the provider; the app still never
+  purchases numbers.
+
 ## Operational readiness (audited 2026-08-20) — read before "why didn't it send"
 
 A three-way audit (onboarding path, silent-failure surfaces, config surface)
