@@ -1,6 +1,6 @@
 # Phone agent: architecture and operator runbook
 
-Last reconciled with the implementation: 2 August 2026.
+Last reconciled with the implementation: 20 August 2026.
 
 This is the canonical handoff for Resepta's phone-agent lane. Salon owners use
 one native Resepta surface. The current execution provider is an implementation
@@ -257,13 +257,58 @@ development deployment and steals results from production.
 ## Scheduling dependency
 
 The default receptionist knows how to check, create, cancel and reschedule
-appointments through Resepta. Availability is truthful only when the operator
-has installed that org's cal.com API key and event type in platform admin.
+appointments through Resepta. Two availability lanes exist:
 
-Without those values, a call can still create a Resepta-only appointment, but
-no availability or conflict check runs. Double-booking is therefore possible.
-The agent template is instructed to ask for the caller's preferred exact time
-without claiming that the slot was checked.
+- **cal.com connected**: `check_availability` asks cal.com for the day's real
+  slots and offers up to ten.
+- **No cal.com**: Resepta's own appointments table is the calendar. The tool
+  answers with the day's FULL blocks (capacity-aware), the open hours and
+  closed days, and — since 20 August 2026 — `suggested_slots`: two or three
+  concrete free times computed server-side (`suggestFreeSlots` in
+  `convex/lib/businessHours.ts`, first/middle/last of the free half-hours).
+  Slot picking is deterministic code, not model judgment, because on a live
+  call an empty Friday came back as `booked_slots: []` and the agent recited
+  the opening hours at the caller. The chat agent shares the same helper.
+
+Booking writes re-verify everything server-side (hours, closed days,
+capacity, lead time) regardless of which lane answered the availability
+question.
+
+## Which model an agent runs
+
+Three layers, resolved wherever a model id is written to the provider —
+`agent.llmModel ?? platformConfig "voiceModel" ?? VOICE_AGENT_MODEL`:
+
+1. **Per-agent override** (`retellAgents.llmModel`): the Model picker on the
+   agent's card in `/admin/[orgId]` → Voice agent. Set through
+   `platform.setAgentModel`, which publishes to the provider first and stamps
+   the row only after the provider says yes. Survives template syncs.
+2. **Fleet default** (`platformConfig` key `voiceModel`): the Voice agent
+   model picker in `/admin` → AI & Voice defaults. Moves an agent on its next
+   publish or template sync, never by itself. Table-only, no env fallback.
+3. **The constant** (`VOICE_AGENT_MODEL` in `convex/lib/voiceAgentTemplate.ts`):
+   what everything falls back to, and the only layer that needs a deploy to
+   change.
+
+The pickers are built from `convex/lib/voiceModels.ts` — the catalogue of ids
+the live API actually accepts (each one validated 20 Aug 2026; the API
+rejects unknown ids but the SDK types the field as a bare string, so the
+catalogue is the real guard). Standard-tier per-minute prices ride each
+option. A stored id that later leaves the catalogue stops resolving
+(`resolvePlatformVoiceModel`) instead of reaching a provider PATCH.
+
+**Realtime (s2s) entries** are in the same picker with an `(s2s)` label
+suffix. They live in the provider's `s2s_model` field, not `model`, and the
+two are mutually exclusive: `engineFieldsFor` decides the field and nulls the
+other, and both fields ride every engine PATCH because the provider keeps an
+omitted field (verified live — sending only the new one leaves both engines
+configured). An s2s agent speaks with the model's own voices; the configured
+voice stops applying. Two operational facts from the 20 Aug live test:
+Retell rejects s2s calls on free trial credits (`no_valid_payment` — a
+payment method must be on file), and `gpt-realtime-2.1-mini` on a real
+Turkish booking call was slower than Haiku (p50 1664ms vs 1586, p90 3.1s)
+and collapsed on instruction-following. Haiku remains the default on
+evidence, not inertia; the picker makes re-testing a ten-second flip.
 
 ## Current limits
 
