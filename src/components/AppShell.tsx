@@ -1405,12 +1405,14 @@ export function AppShell({
   }, [workspaceName]);
 
   // "account" has no sidebar entry to borrow a label from, so its title is
-  // resolved directly.
+  // resolved directly; billing lives outside the tab arrays (pinned above the
+  // profile) and borrows its own entry the same way.
   const titleKey: TranslationKey =
     tab === "account"
       ? "account.title"
-      : ([...NAV_TABS, ...FOOT_TABS].find((entry) => entry.id === tab)?.key ??
-        "app.name");
+      : ([...NAV_TABS, ...FOOT_TABS, BILLING_TAB].find(
+          (entry) => entry.id === tab,
+        )?.key ?? "app.name");
 
   if (settings && settings.org.name === "") return <OnboardingGate />;
 
