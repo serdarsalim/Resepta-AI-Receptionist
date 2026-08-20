@@ -165,12 +165,11 @@ const NAV_TABS: {
   // set once rather than work in gives up its slot first.
   drawerOnly?: boolean;
 }[] = [
-  {
-    id: "customers",
-    key: "nav.customers",
-    Icon: CustomersIcon,
-    color: "#8b5cf6",
-  },
+  // Inbox leads the sidebar (2026-08-21). It sat under Customers, and two
+  // adjacent lists of people's names read as two versions of one screen rather
+  // than two jobs: the reply queue and the customer record. The tab you open
+  // every morning goes first, and Customers moves below the messaging pair so
+  // the two never sit shoulder to shoulder again.
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
   // Beside Inbox, not under Business: both are places you send messages from,
   // and a campaign is work rather than configuration.
@@ -179,6 +178,14 @@ const NAV_TABS: {
     key: "campaign.title",
     Icon: CampaignsIcon,
     color: "#ec4899",
+  },
+  // Below the two messaging tabs, not above them. Customers is the record you
+  // look someone up in, not the queue you work through.
+  {
+    id: "customers",
+    key: "nav.customers",
+    Icon: CustomersIcon,
+    color: "#8b5cf6",
   },
   // The bread and butter of this product, so it stays a top-level destination
   // and carries its own tabs (agents, calls, knowledge) rather than being
