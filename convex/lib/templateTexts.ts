@@ -15,10 +15,14 @@
 // Every lifecycle message ends with the ACTION it is trying to cause, on its
 // own line so renderTokens drops it cleanly when the org has no such link.
 // The reminder carries [manage_link] because a reminder that cannot be acted
-// on is how you get a no-show instead of a reschedule, and the follow-up
-// carries [booking_link] because a thank-you that does not invite the next
-// visit spends a send on nothing. Both used to end on "reply to us", which
-// asks the salon to do the work by hand.
+// on is how you get a no-show instead of a reschedule; the follow-up,
+// win-back and cancellation carry [booking_link] because each of those is an
+// invitation to the NEXT visit, and ending on "reply to us" asks the salon to
+// do that work by hand (the win-back and cancellation did until 2026-08-20).
+// Where the link is optional it sits as a bare paragraph after a sentence
+// that stands on its own — never under a "book here:" label line, because
+// renderTokens drops only the empty line itself and a label with nothing
+// under it is a dangling colon.
 
 export type TemplateKind =
   | "confirmation"
@@ -43,16 +47,18 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   tr: {
     // [manage_link] on its own line, like the out_of_hours tokens: an org
     // whose deployment mints no link sends a clean message without it.
+    // "alındı", not "oluşturuldu": a person took your booking, a system
+    // created a record. Same message, different sender.
     confirmation: {
-      body: "Merhaba [name]! [business] randevunuz [date] için oluşturuldu.\n\n[service]\n\nDeğiştirmek veya iptal etmek için:\n[manage_link]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
-      subject: "Randevunuz oluşturuldu",
+      body: "Merhaba [name]! [business] randevunuz [date] için alındı.\n\n[service]\n\nDeğiştirmek veya iptal etmek için:\n[manage_link]\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
+      subject: "Randevunuz alındı",
     },
     reminder: {
       body: "Merhaba [name]! [business] randevunuzu hatırlatırız: [date].\n\n[service]\n\nDeğiştirmek veya iptal etmek için:\n[manage_link]\n\nDilerseniz bu mesajı yanıtlayabilirsiniz.",
       subject: "Randevu hatırlatması",
     },
     winback: {
-      body: "Merhaba [name]! [business] olarak sizi özledik. Yeni bir randevu için bu mesajı yanıtlamanız yeterli.",
+      body: "Merhaba [name]! [business] olarak sizi özledik. Yeni bir randevu ayarlayalım mı?\n\n[booking_link]\n\nBu mesajı yanıtlamanız da yeterli.",
       subject: "Sizi özledik!",
     },
     followup: {
@@ -60,7 +66,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       subject: "Ziyaretiniz için teşekkürler",
     },
     cancellation: {
-      body: "Merhaba [name], [date] tarihli [business] randevunuz iptal edildi. Yeni bir randevu için bu mesajı yanıtlayabilirsiniz.",
+      body: "Merhaba [name], [date] tarihli [business] randevunuz iptal edildi. Yeni bir randevu isterseniz buradayız.\n\n[booking_link]\n\nBu mesajı yanıtlamanız da yeterli.",
       subject: "Randevunuz iptal edildi",
     },
     // The two tokens sit on their own lines on purpose: renderTokens drops a
@@ -81,7 +87,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       subject: "Appointment reminder",
     },
     winback: {
-      body: "Hi [name]! We've missed you at [business]. Just reply to this message to book your next visit.",
+      body: "Hi [name]! We've missed you at [business]. Shall we set up your next visit?\n\n[booking_link]\n\nOr just reply to this message.",
       subject: "We've missed you!",
     },
     followup: {
@@ -89,7 +95,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       subject: "Thanks for your visit",
     },
     cancellation: {
-      body: "Hi [name], your [business] appointment on [date] has been cancelled. Reply to this message to book a new one.",
+      body: "Hi [name], your [business] appointment on [date] has been cancelled. Want to pick a new time?\n\n[booking_link]\n\nOr just reply to this message.",
       subject: "Your appointment was cancelled",
     },
     out_of_hours: {
@@ -107,7 +113,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       subject: "Terminerinnerung",
     },
     winback: {
-      body: "Hallo [name]! Wir haben Sie bei [business] vermisst. Antworten Sie einfach auf diese Nachricht für einen neuen Termin.",
+      body: "Hallo [name]! Wir haben Sie bei [business] vermisst. Wie wäre es mit einem neuen Termin?\n\n[booking_link]\n\nOder antworten Sie einfach auf diese Nachricht.",
       subject: "Wir haben Sie vermisst!",
     },
     followup: {
@@ -115,7 +121,7 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
       subject: "Danke für Ihren Besuch",
     },
     cancellation: {
-      body: "Hallo [name], Ihr Termin bei [business] am [date] wurde storniert. Antworten Sie auf diese Nachricht für einen neuen Termin.",
+      body: "Hallo [name], Ihr Termin bei [business] am [date] wurde storniert. Einen neuen finden wir jederzeit.\n\n[booking_link]\n\nOder antworten Sie einfach auf diese Nachricht.",
       subject: "Ihr Termin wurde storniert",
     },
     out_of_hours: {
