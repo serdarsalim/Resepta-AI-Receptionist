@@ -19,7 +19,6 @@ import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
-import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import {
   DEFAULT_TEMPLATE_TEXTS,
   type TemplateKind,
@@ -845,23 +844,24 @@ function RuleEditor({
   );
 }
 
-// The message hub, as a sheet you open from the button above the card. Two
-// panes: every message type on the left, always all six and never disabled,
-// and what the selected one SAYS on the right. Picking swaps only the right
-// pane — the sheet went through a two-step wizard once (pick, then compose),
-// and the step swap moved the whole dialog under the pointer at the exact
-// moment you were reading it (Serdar, 2026-08-20).
+// The message hub, as a sheet you open from the button above the card. A
+// sidebar of message types on the left — flat rows, the way the app's own nav
+// draws them, never a stack of bordered mini-cards — and on the right the same
+// WYSIWYG editor the rule page uses, with the preview riding its tab strip.
+// The frame is FIXED-HEIGHT from sm up: picking a type swaps what is inside
+// the right pane and nothing else, because a dialog that resizes under the
+// pointer is a dialog you cannot read (Serdar, 2026-08-20, twice).
 //
-// A type that is already added is not a dead end any more: selecting it shows
-// the wording its rule actually sends, editable in place, and Save writes to
-// that rule's template. Only the repeatable kinds (reminder, follow-up) offer
-// Add once an instance exists — a second confirmation is not a thing, but a
+// A type that is already added is not a dead end: selecting it shows the
+// wording its rule actually sends, editable in place, and Save writes to that
+// rule's template. Only the repeatable kinds (reminder, follow-up) offer Add
+// once an instance exists — a second confirmation is not a thing, but a
 // second reminder is. Timing for an existing rule is edited on its row, where
 // it already lives inline; this sheet owns timing only at birth.
 function AddRuleSheet({
   rules,
   templates,
-  orgLanguage,
+  org,
   onAdd,
   onSaveExisting,
   onClose,
@@ -871,16 +871,24 @@ function AddRuleSheet({
   // business will actually get rather than the shipped stock text they may
   // have already rewritten. Same resolution order as ensureTemplate.
   templates: TemplateRow[];
-  orgLanguage: string;
+  // Enough of the org for the preview to resolve the tokens that are true no
+  // matter who reads the message; person and booking tokens stay labelled
+  // slots, the same contactless rule the rule page's preview follows.
+  org: {
+    name: string;
+    language: string;
+    bookingUrl?: string;
+    publicPhone?: string;
+  };
   onAdd: (
     trigger: RuleTrigger,
     offsetHours: number | undefined,
-    text: { body: string; subject: string },
+    text: { body: string; bodyHtml: string; subject: string },
   ) => void;
   // The edit half: writes the wording onto the EXISTING rule for this trigger.
   onSaveExisting: (
     ruleId: Id<"messageRules">,
-    text: { body: string; subject: string },
+    text: { body: string; bodyHtml: string; subject: string },
   ) => void;
   onClose: () => void;
 }) {
@@ -892,9 +900,11 @@ function AddRuleSheet({
   const [unit, setUnit] = useState<"hours" | "days">("hours");
   const [error, setError] = useState<string | null>(null);
   // Edits keyed by trigger, so toggling between types to compare wording never
-  // throws away a sentence you were halfway through on another one.
+  // throws away a sentence you were halfway through on another one. The body
+  // is HTML — the editor's native shape; the plain text the WhatsApp lane
+  // needs is derived once, on submit, the same way the rule page derives it.
   const [drafts, setDrafts] = useState<
-    Partial<Record<RuleTrigger, { body: string; subject: string }>>
+    Partial<Record<RuleTrigger, { html: string; subject: string }>>
   >({});
 
   const selected =
@@ -919,25 +929,28 @@ function AddRuleSheet({
       : undefined;
     const own = rule
       ? templates.find(
-          (tpl) => tpl.ruleId === rule._id && tpl.language === orgLanguage,
+          (tpl) => tpl.ruleId === rule._id && tpl.language === org.language,
         )
       : undefined;
     const fallback = templates.find(
       (tpl) =>
         tpl.ruleId === undefined &&
         tpl.kind === kind &&
-        tpl.language === orgLanguage,
+        tpl.language === org.language,
     );
-    const stock = (DEFAULT_TEMPLATE_TEXTS[orgLanguage] ??
+    const stock = (DEFAULT_TEMPLATE_TEXTS[org.language] ??
       DEFAULT_TEMPLATE_TEXTS.en)[kind as TemplateKind];
+    const source = own ?? fallback;
     return {
-      body: own?.body ?? fallback?.body ?? stock?.body ?? "",
-      subject: own?.subject ?? fallback?.subject ?? stock?.subject ?? "",
+      html: source
+        ? (source.bodyHtml ?? plainToHtml(source.body ?? ""))
+        : plainToHtml(stock?.body ?? ""),
+      subject: source?.subject ?? stock?.subject ?? "",
     };
   };
 
   const draft = drafts[trigger] ?? seedFor(selected);
-  const patchDraft = (patch: Partial<{ body: string; subject: string }>) =>
+  const patchDraft = (patch: Partial<{ html: string; subject: string }>) =>
     setDrafts((prev) => ({
       ...prev,
       [trigger]: { ...(prev[trigger] ?? seedFor(selected)), ...patch },
@@ -965,8 +978,13 @@ function AddRuleSheet({
       : { min: timing.minHours, max: timing.maxHours };
 
   const submit = () => {
+    const text = {
+      body: htmlToText(draft.html),
+      bodyHtml: draft.html,
+      subject: draft.subject,
+    };
     if (editingRule) {
-      onSaveExisting(editingRule._id, draft);
+      onSaveExisting(editingRule._id, text);
       onClose();
       return;
     }
@@ -1001,16 +1019,51 @@ function AddRuleSheet({
         return;
       }
     }
-    onAdd(selected.trigger, offsetHours, draft);
+    onAdd(selected.trigger, offsetHours, text);
     onClose();
   };
 
+  // The contactless preview, exactly the rule page's rule: org facts resolve
+  // for real, everything belonging to a person or a booking previews as its
+  // own labelled slot — never blank, never an invented name or price.
+  const previewValues = {
+    businessName: org.name,
+    phone: org.publicPhone || `⟨${t("vars.phone")}⟩`,
+    bookingLink: org.bookingUrl || `⟨${t("vars.bookingLink")}⟩`,
+    firstName: `⟨${t("vars.firstName")}⟩`,
+    appointmentAt: `⟨${t("vars.date")}⟩`,
+    staffName: `⟨${t("vars.staff")}⟩`,
+    serviceName: `⟨${t("vars.service")}⟩`,
+    servicePriceList: `⟨${t("vars.priceList")}⟩`,
+    price: `⟨${t("vars.price")}⟩`,
+    manageLink: `⟨${t("vars.manageLink")}⟩`,
+  };
+  const previewPane = (
+    // The email as a mail client shows it — same email-paper the rule page
+    // renders, so the sheet's preview and the page's preview can never look
+    // like two different products.
+    <div className="email-paper -m-3 flex flex-col">
+      <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
+        {renderTokens(draft.subject, previewValues) || org.name}
+      </p>
+      <div
+        className="email-body-editor min-h-40 px-3 py-3 text-sm"
+        dangerouslySetInnerHTML={{
+          __html:
+            sanitizeEmailHtml(renderTokens(draft.html, previewValues)) ||
+            `<p style="color:#9ca3af">${t("settings.templateBodyPlaceholder")}</p>`,
+        }}
+      />
+    </div>
+  );
+
   return (
     <Sheet title={t("settings.ruleAdd")} wide onClose={onClose}>
-      <div className="grid gap-4 sm:grid-cols-[15rem_1fr]">
-        {/* The list column never changes shape: every type is a button in
-            every state, and "already added" is a subtitle, not a lock. */}
-        <div className="space-y-1">
+      <div className="flex flex-col gap-4 sm:h-[32rem] sm:flex-row sm:gap-0">
+        {/* A sidebar, drawn like the app's own: flat rows, the open one
+            carries a fill, nothing wears a border. "Already added" is a
+            subtitle, not a lock. */}
+        <nav className="shrink-0 space-y-0.5 sm:w-52 sm:border-r sm:border-[var(--border)] sm:pr-3">
           {ADD_OPTIONS.map((option) => {
             const added = taken(option);
             const on = trigger === option.trigger;
@@ -1020,43 +1073,41 @@ function AddRuleSheet({
                 type="button"
                 onClick={() => pick(option)}
                 aria-pressed={on}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                className={`w-full rounded-md px-2.5 py-2 text-left transition-colors ${
                   on
-                    ? "border-[var(--accent)] bg-[var(--muted-bg)]"
-                    : "border-[var(--border)] hover:bg-[var(--muted-bg)]"
+                    ? "bg-[var(--muted-bg)]"
+                    : "hover:bg-[var(--muted-bg)]"
                 }`}
               >
-                <span className="block text-sm font-medium">
+                <span
+                  className={`block text-sm ${on ? "font-semibold" : "font-medium"}`}
+                >
                   {t(option.nameKey)}
                 </span>
-                <span className="block text-xs text-[var(--muted)]">
+                <span className="block truncate text-xs text-[var(--muted)]">
                   {added ? t("settings.ruleAlreadyAdded") : t(option.whenKey)}
                 </span>
               </button>
             );
           })}
-        </div>
+        </nav>
 
-        {/* min-h so the editor column holds its ground while types with and
-            without a timing row swap through it — the whole reason this sheet
-            is two panes instead of two steps. */}
+        {/* The editor column scrolls INSIDE the fixed frame; the footer stays
+            pinned. Nothing here may change the sheet's outer height. */}
         <form
-          className="flex min-h-[22rem] flex-col gap-3"
+          className="flex min-h-0 flex-1 flex-col sm:pl-4"
           onSubmit={(event) => {
             event.preventDefault();
             submit();
           }}
         >
-          {/* Only the timed triggers get a timing row, and only at birth —
-              an existing rule's timing is edited inline on its row, and two
-              places writing one number is how they disagree. The event
-              triggers fire on the mutation, so a number there would be a
-              promise nothing keeps (messageRules.clampOffset pins them to 0). */}
-          {!editingRule && selected.timing && (
-            <div>
-              <span className="mb-1.5 block text-xs text-[var(--muted)]">
-                {t("settings.ruleAddTiming")}
-              </span>
+          <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+            {/* Only the timed triggers get a timing row, and only at birth —
+                an existing rule's timing is edited inline on its row, and two
+                places writing one number is how they disagree. The event
+                triggers fire on the mutation, so a number there would be a
+                promise nothing keeps (messageRules.clampOffset pins to 0). */}
+            {!editingRule && selected.timing && (
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -1086,41 +1137,33 @@ function AddRuleSheet({
                   {t(selected.whenKey)}
                 </span>
               </div>
-            </div>
-          )}
-
-          {/* The words. For a new rule this is the stock text you agree to
-              before it exists; for an added one it is the sentence its sends
-              carry today, and Save rewrites that rule in place. */}
-          <div className="space-y-1.5">
-            <span className="block text-xs text-[var(--muted)]">
-              {t("settings.ruleAddMessage")}
-            </span>
+            )}
             <input
               value={draft.subject}
               placeholder={t("settings.templateSubject")}
               aria-label={t("settings.templateSubject")}
               onChange={(event) => patchDraft({ subject: event.target.value })}
             />
-            <AutoGrowTextarea
-              value={draft.body}
-              rows={5}
+            {/* The SAME editor the rule page opens, preview tab included —
+                keyed by trigger so tiptap re-seeds when the sidebar picks a
+                different message instead of carrying the old buffer over. */}
+            <EmailBodyEditor
+              key={trigger}
+              value={draft.html}
               placeholder={t("settings.templateBodyPlaceholder")}
-              aria-label={t("settings.templateBody")}
-              onChange={(event) => patchDraft({ body: event.target.value })}
+              previewPane={previewPane}
+              previewLabel={t("settings.rulePreview")}
+              onLiveChange={(html) => patchDraft({ html })}
+              onSave={(html) => patchDraft({ html })}
             />
-            <p className="text-[11px] leading-relaxed text-[var(--muted)]">
-              {t("settings.ruleAddMessageHint")}
-            </p>
           </div>
 
           {/* Reserved whether or not it holds anything, so a rejected number
               does not shove the buttons out from under the pointer. */}
-          <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">
+          <p className="min-h-[1.25rem] pt-2 text-sm text-red-600 dark:text-red-400">
             {error}
           </p>
-
-          <div className="mt-auto flex justify-end gap-2">
+          <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -1436,17 +1479,19 @@ function RulesCard({
   // edited text be written. Saved unconditionally — the sheet's box is what
   // the owner just read and approved, so it is the truth even when they
   // changed nothing.
+  // The sheet authors in the WYSIWYG editor, so the HTML arrives authored —
+  // not lifted from plain text after the fact.
   const doAdd = async (
     trigger: RuleTrigger,
     offsetHours: number | undefined,
-    text: { body: string; subject: string },
+    text: { body: string; bodyHtml: string; subject: string },
   ) => {
     const ruleId = await addRule({ trigger, offsetHours: offsetHours ?? 0 });
     const templateId = await ensureTemplate({ ruleId, language: org.language });
     await updateTemplate({
       templateId,
       body: text.body,
-      bodyHtml: plainToHtml(text.body),
+      bodyHtml: text.bodyHtml,
       subject: text.subject,
     });
   };
@@ -1456,13 +1501,13 @@ function RulesCard({
   // already there — so this writes onto whatever the rule really sends from.
   const doSaveExisting = async (
     ruleId: Id<"messageRules">,
-    text: { body: string; subject: string },
+    text: { body: string; bodyHtml: string; subject: string },
   ) => {
     const templateId = await ensureTemplate({ ruleId, language: org.language });
     await updateTemplate({
       templateId,
       body: text.body,
-      bodyHtml: plainToHtml(text.body),
+      bodyHtml: text.bodyHtml,
       subject: text.subject,
     });
   };
@@ -1843,7 +1888,7 @@ function RulesCard({
         <AddRuleSheet
           rules={rules}
           templates={templates}
-          orgLanguage={org.language}
+          org={org}
           onAdd={(trigger, offsetHours, text) =>
             void doAdd(trigger, offsetHours, text)
           }
