@@ -116,61 +116,60 @@ export function RevenueView() {
       </section>
 
       <section className="card-raised overflow-hidden">
-        <div className="px-4 pt-4 pb-2">
+        {/* Everything lives on the title row: select-all opening the right
+            cluster, the bulk verbs the moment something is picked, and the
+            cancelled filter as a pill. A rail of its own held one checkbox
+            and looked abandoned. */}
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold">{t("revenue.history")}</h2>
+          {visible.length > 0 && (
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => {
+                  setSelected(
+                    allSelected ? new Set() : new Set(visible.map((row) => row._id)),
+                  );
+                  anchor.current = null;
+                }}
+              />
+              {picked.length > 0 && (
+                <>
+                  <span className="text-xs text-[var(--muted)]">
+                    {t("revenue.selected").replace("{n}", String(picked.length))}
+                  </span>
+                  <button
+                    className={`${pill} ${pillOff} hover:text-emerald-600 dark:hover:text-emerald-400`}
+                    onClick={() => applyBulk("completed")}
+                  >
+                    {t("statusPill.paid")}
+                  </button>
+                  {/* Says İptal, writes no_show: on a visit already in the
+                      past that is the status whose machinery fits (win-back
+                      arms, no cancellation message fires), and one word for
+                      "didn't happen" is one fewer concept on the screen. */}
+                  <button
+                    className={`${pill} ${pillOff} hover:text-red-600 dark:hover:text-red-400`}
+                    onClick={() => applyBulk("no_show")}
+                  >
+                    {t("status.cancelled")}
+                  </button>
+                </>
+              )}
+              <button
+                className={`${pill} ${
+                  hideNoShows
+                    ? "bg-[var(--border)] text-[var(--foreground)]"
+                    : pillOff
+                }`}
+                onClick={() => setHideNoShows((current) => !current)}
+              >
+                {t("revenue.hideCancelled")}
+              </button>
+            </span>
+          )}
         </div>
-
-        {/* One rail: select-all on the left where the row checkboxes line up,
-            the bulk verbs the moment something is picked, and the no-show
-            filter as a pill on the right. No instructional copy — the
-            checkbox column explains itself. */}
-        {visible.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-4 py-2">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              onChange={() => {
-                setSelected(
-                  allSelected ? new Set() : new Set(visible.map((row) => row._id)),
-                );
-                anchor.current = null;
-              }}
-            />
-            {picked.length > 0 && (
-              <>
-                <span className="text-xs text-[var(--muted)]">
-                  {t("revenue.selected").replace("{n}", String(picked.length))}
-                </span>
-                <button
-                  className={`${pill} ${pillOff} hover:text-emerald-600 dark:hover:text-emerald-400`}
-                  onClick={() => applyBulk("completed")}
-                >
-                  {t("statusPill.paid")}
-                </button>
-                {/* Says İptal, writes no_show: on a visit already in the past
-                    that is the status whose machinery fits (win-back arms, no
-                    cancellation message fires), and one word for "didn't
-                    happen" is one fewer concept on the screen. */}
-                <button
-                  className={`${pill} ${pillOff} hover:text-red-600 dark:hover:text-red-400`}
-                  onClick={() => applyBulk("no_show")}
-                >
-                  {t("status.cancelled")}
-                </button>
-              </>
-            )}
-            <button
-              className={`${pill} ml-auto ${
-                hideNoShows
-                  ? "bg-[var(--border)] text-[var(--foreground)]"
-                  : pillOff
-              }`}
-              onClick={() => setHideNoShows((current) => !current)}
-            >
-              {t("revenue.hideCancelled")}
-            </button>
-          </div>
-        )}
 
         {visible.length === 0 ? (
           <p className="px-4 py-4 text-sm text-[var(--muted)]">
