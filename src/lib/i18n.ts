@@ -656,11 +656,23 @@ const dictionary = {
   "forms.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
   "forms.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   // The public booking page (/book/<slug>) and the manage page (/appt/<token>).
+  // Singular ("Choose a service") until the step went multi-select, where it
+  // both undercounted and collided with the "Services" group heading directly
+  // beneath it. Phrased as the question the customer is actually answering, so
+  // it covers a shampoo as readily as a haircut and stops naming the thing its
+  // own subheadings name.
   "booking.pickService": {
-    tr: "Hizmet seçin",
-    en: "Choose a service",
-    de: "Leistung wählen",
+    tr: "Ne yaptırmak istersiniz?",
+    en: "What would you like?",
+    de: "Was darf es sein?",
   },
+  // The two kinds of thing a salon sells, as section headings on the booking
+  // page. Only drawn when it sells both.
+  "booking.services": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
+  "booking.products": { tr: "Ürünler", en: "Products", de: "Produkte" },
+  // The sticky bar's action on the first step. It exists because that step
+  // became multi-select — the other two still advance on the tap.
+  "booking.continue": { tr: "Devam", en: "Continue", de: "Weiter" },
   "booking.pickTime": {
     tr: "Gün ve saat seçin",
     en: "Pick a day and time",

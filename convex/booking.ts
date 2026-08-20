@@ -58,6 +58,88 @@ const MAX_UPCOMING_PER_PHONE = 5;
 // read half of the db only — the same narrowing messageRules.rulesForOrg does.
 type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
 
+// One visit can hold SEVERAL lines — appointments.items' own doctrine, written
+// into the schema long before this page could express it: "a haircut plus a
+// beard trim is ONE appointment with two lines — one calendar block, one
+// reminder, one visit — not two bookings stacked on each other." The staff
+// side has always written multiple lines; the public page took a single
+// serviceId and made a customer who wanted both come back and book twice.
+//
+// A brake, not a business rule — the same reasoning as MAX_UPCOMING_PER_PHONE.
+// A real customer picks two or three; nobody real picks eleven.
+const MAX_LINES_PER_BOOKING = 10;
+
+// Resolves what was picked into the numbers every guard downstream needs.
+// Both the slot grid and the write go through here so they cannot disagree
+// about how long the visit is — the grid offering a 30-minute gap for a
+// 105-minute booking is exactly the kind of drift a second implementation
+// buys.
+//
+// Duration SUMS and lead time takes the MAX: three services run back to back
+// in one chair, but a colour needing a day's notice needs it whatever else
+// rides along with it.
+async function resolveLines(
+  ctx: ReadCtx,
+  orgId: Id<"orgs">,
+  picked: { serviceId: Id<"services">; quantity?: number }[],
+): Promise<
+  | {
+      duration: number;
+      leadMs: number;
+      items: {
+        serviceId: Id<"services">;
+        name: string;
+        price?: number;
+        durationMinutes: number;
+        quantity?: number;
+      }[];
+    }
+  | null
+> {
+  if (picked.length === 0 || picked.length > MAX_LINES_PER_BOOKING) return null;
+  // First occurrence wins rather than refusing the whole booking: a double tap
+  // is not an error worth a red message, and a time-bound service twice is not
+  // a thing this page can express anyway (two haircuts is two visits — the
+  // schema says so, and quantity is goods-only for that reason).
+  const seen = new Set<string>();
+  let duration = 0;
+  let leadMs = 0;
+  const items: {
+    serviceId: Id<"services">;
+    name: string;
+    price?: number;
+    durationMinutes: number;
+    quantity?: number;
+  }[] = [];
+  for (const line of picked) {
+    if (seen.has(line.serviceId)) continue;
+    seen.add(line.serviceId);
+    const service = await ctx.db.get(line.serviceId);
+    // One bad id fails the whole booking. A customer who picked three things
+    // and silently got two would find out at the salon.
+    if (!service || service.orgId !== orgId || !service.active) return null;
+    // A good books as duration 0: it holds no chair and no colleague's hour,
+    // so the capacity guards fall through by construction.
+    const minutes = service.durationMinutes ?? 0;
+    duration += minutes;
+    leadMs = Math.max(leadMs, (service.leadMinutes ?? 0) * 60_000);
+    const isGood = service.durationMinutes === undefined;
+    const quantity =
+      isGood && line.quantity !== undefined
+        ? Math.min(99, Math.max(1, Math.round(line.quantity)))
+        : 1;
+    items.push({
+      // Snapshot, never a pointer — appointments.items' own doctrine.
+      serviceId: service._id,
+      name: service.name,
+      ...(service.price !== undefined ? { price: service.price } : {}),
+      durationMinutes: minutes,
+      ...(quantity > 1 ? { quantity } : {}),
+    });
+  }
+  return { duration, leadMs, items };
+}
+
 async function orgBySlug(ctx: ReadCtx, rawSlug: string): Promise<Doc<"orgs"> | null> {
   const slug = rawSlug.trim().toLowerCase();
   if (!slug) return null;
@@ -331,15 +413,27 @@ async function freeStarts(
 // Vienna customer booking an Istanbul salon is choosing among Istanbul wall
 // times, and the label must say what the salon's clock will say.
 export const slots = query({
-  args: { slug: v.string(), date: v.string(), serviceId: v.id("services") },
+  args: {
+    slug: v.string(),
+    date: v.string(),
+    // The WHOLE selection, because the grid has to offer gaps long enough for
+    // all of it. Asking per service and intersecting the answers would be a
+    // different, wrong question: two 30-minute services need one 60-minute
+    // gap, not two 30-minute gaps that happen to both exist.
+    serviceIds: v.array(v.id("services")),
+  },
   returns: v.array(v.number()),
   handler: async (ctx, args) => {
     const org = await orgBySlug(ctx, args.slug);
     if (!org) return [];
-    const service = await ctx.db.get(args.serviceId);
-    if (!service || service.orgId !== org._id || !service.active) return [];
-    return await freeStarts(ctx, org, args.date, service.durationMinutes ?? 0, {
-      leadMs: (service.leadMinutes ?? 0) * 60_000,
+    const picked = await resolveLines(
+      ctx,
+      org._id,
+      args.serviceIds.map((serviceId) => ({ serviceId })),
+    );
+    if (!picked) return [];
+    return await freeStarts(ctx, org, args.date, picked.duration, {
+      leadMs: picked.leadMs,
     });
   },
 });
@@ -410,14 +504,20 @@ async function goodsLeadMs(
 export const book = mutation({
   args: {
     slug: v.string(),
-    serviceId: v.id("services"),
+    // One visit, several lines — see resolveLines. Order is the customer's
+    // selection order, which is what the confirmation reads back to them.
+    lines: v.array(
+      v.object({
+        serviceId: v.id("services"),
+        // Goods only ("3 chocolate cakes"). Ignored for time-bound services —
+        // two haircuts is two visits, not one line with a 2 on it.
+        quantity: v.optional(v.number()),
+      }),
+    ),
     startMs: v.number(),
     name: v.string(),
     phone: v.string(),
     email: v.optional(v.string()),
-    // Goods only ("3 chocolate cakes"). Ignored for time-bound services —
-    // two haircuts is two visits, and this page books one at a time.
-    quantity: v.optional(v.number()),
   },
   returns: v.object({
     ok: v.boolean(),
@@ -428,10 +528,8 @@ export const book = mutation({
   handler: async (ctx, args) => {
     const org = await orgBySlug(ctx, args.slug);
     if (!org) return { ok: false, reason: "not-found" };
-    const service = await ctx.db.get(args.serviceId);
-    if (!service || service.orgId !== org._id || !service.active) {
-      return { ok: false, reason: "not-found" };
-    }
+    const picked = await resolveLines(ctx, org._id, args.lines);
+    if (!picked) return { ok: false, reason: "not-found" };
     const name = args.name.trim();
     if (!name) return { ok: false, reason: "name-required" };
     let phone: string;
@@ -441,17 +539,13 @@ export const book = mutation({
       return { ok: false, reason: "bad-phone" };
     }
 
-    // A good books as duration 0: it holds no chair and no colleague's hour,
-    // so the capacity guards below fall through by construction.
-    const isGood = service.durationMinutes === undefined;
-    const duration = service.durationMinutes ?? 0;
-    const quantity =
-      isGood && args.quantity !== undefined
-        ? Math.min(99, Math.max(1, Math.round(args.quantity)))
-        : 1;
+    // Summed across every line, and a booking of goods alone is duration 0 —
+    // it holds no chair and no colleague's hour, so the capacity guards below
+    // fall through by construction exactly as they did for one good.
+    const duration = picked.duration;
 
     const now = Date.now();
-    const noticeMs = Math.max(MIN_NOTICE_MS, (service.leadMinutes ?? 0) * 60_000);
+    const noticeMs = Math.max(MIN_NOTICE_MS, picked.leadMs);
     if (args.startMs < now + noticeMs - 60_000) {
       // The minute of slack forgives a slot picked just before the boundary
       // crossed it — refusing a booking the page offered seconds ago reads
@@ -538,16 +632,7 @@ export const book = mutation({
       customerId,
       startAt: args.startMs,
       durationMinutes: duration,
-      // Snapshot, never a pointer — appointments.items' own doctrine.
-      items: [
-        {
-          serviceId: service._id,
-          name: service.name,
-          price: service.price,
-          durationMinutes: duration,
-          ...(quantity > 1 ? { quantity } : {}),
-        },
-      ],
+      items: picked.items,
       status: "scheduled",
       source: "booking_page",
       manageToken,

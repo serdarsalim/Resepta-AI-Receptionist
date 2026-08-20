@@ -455,13 +455,35 @@ rather than after what it does.
 
 - **`/book/<slug>` is a THREE-STEP WIZARD, not a growing page** (Serdar,
   2026-08-20, reversing this file's own "each answer reveals the next
-  question" doctrine). Service → time → details: tapping an answer IS the
-  advance (no Continue buttons), the header chevron goes back, and the screen
-  SWAPS so nothing ever reflows. The old reveal-downward design grew the card
+  question" doctrine). Service → time → details: the header chevron goes back,
+  and the screen SWAPS so nothing ever reflows. Tapping an answer IS the
+  advance on the TIME and DETAILS steps, which ask for one answer each — the
+  service step is the amended exception below. The old reveal-downward design grew the card
   on every selection and — because crossing the fold summoned the document
   scrollbar — shoved it sideways too; `html { scrollbar-gutter: stable }` in
   globals.css fixes the second half and must stay. Fresha and Booksy both
   work this way; do not rebuild the accordion.
+  - **The service step is MULTI-SELECT** (2026-08-20, amending the no-Continue
+    rule for this step only). `appointments.items` has modelled a visit as
+    several lines since long before this page could express it — "a haircut
+    plus a beard trim is ONE appointment with two lines" — and the staff sheet
+    always wrote them; the public page took a single `serviceId` and sent a
+    customer who wanted both back round to book twice. A choice you can add to
+    cannot also be the advance, so this step alone ends on the sticky bar's
+    Continue. `booking.slots` takes `serviceIds` and `booking.book` takes
+    `lines`, both resolving through `resolveLines`: duration SUMS and lead time
+    takes the MAX, and both endpoints read the same helper so the grid cannot
+    offer a 30-minute gap for a 105-minute booking. Quantity stays goods-only
+    (two haircuts is two visits) and lives on the row as a stepper, not on the
+    details step two screens after the thing was picked.
+  - **Services and products are separate groups**, headed only when the salon
+    sells both. They are not the same purchase — one books a chair for a length
+    of time, the other is handed over and adds no minutes — and with the
+    duration line as the only tell, a product read as a service someone forgot
+    to time. Duration is its own line under the name, in words
+    (`Intl` unit, "1 hr 30 min" / "1 sa 30 dk"): "30′" was a prime symbol the
+    width of a comma, greyed out against the price, carrying the one fact a
+    customer needs to know whether they have time today.
   - **Prices ARE published** on the public page (same date, reversing the
     forms.ts-era "duration yes, price no" rule): rows carry duration and
     `formatMoney(service.price)`, and a service with no price shows duration
@@ -471,9 +493,14 @@ rather than after what it does.
     group, hours define); the day strip is 14 civil days from the lead-time
     floor, stepped in 24h and deduped so a DST fall-back cannot mint the same
     date twice.
-  - The sticky bottom bar carries the running choice across steps and, on the
-    last one, IS the submit (`form="booking-form"`) — never add an in-form
-    twin button to race it.
+  - The sticky bottom bar carries the running BASKET across steps: the lines
+    joined (not counted — "2 services" makes the customer open the step back up
+    to remember which two), the running duration until a time is picked and the
+    time after, and the summed price held out on the right. Its button is
+    Continue on the service step and, on the last one, IS the submit
+    (`form="booking-form"`) — never add an in-form twin button to race it. It
+    carries no "pick a day and time" prompt: on the step where that is the next
+    move the Continue button says so, and on the next step the heading does.
   - **`orgs.logoStorageId`** is the salon's logo, uploaded by the owner in
     Business → General through `media.generateUploadUrl` → `orgs.setLogo`,
     resolved to a URL by `booking.page` and `orgs.current`. `setLogo` DELETES

@@ -75,33 +75,73 @@ export default function BookingPage({
   const book = useMutation(api.booking.book);
 
   const [step, setStep] = useState<Step>("service");
-  const [serviceId, setServiceId] = useState<Id<"services"> | null>(null);
+  // The whole selection, in the order it was tapped — one visit with several
+  // lines, which is what appointments.items has modelled since long before
+  // this page could express it. quantity is carried for every line and only
+  // ever read for goods; two haircuts is two visits, not a 2 on one line.
+  const [lines, setLines] = useState<{ serviceId: Id<"services">; quantity: number }[]>([]);
   const [date, setDate] = useState<string | null>(null);
   const [startMs, setStartMs] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [quantity, setQuantity] = useState(1);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
 
-  const service = page ? (page.services.find((s) => s._id === serviceId) ?? null) : null;
-  // A good with a lead time cannot be had tomorrow morning; the day strip
-  // starts at the floor instead of letting every too-soon day answer "no
-  // times".
-  const isGood = service !== null && service.durationMinutes === undefined;
-  const minMs =
-    service?.leadMinutes !== undefined
-      ? Date.now() + service.leadMinutes * 60_000
-      : Date.now();
+  // Resolved against the published list every render rather than stored, so a
+  // service the salon retires while someone has the page open drops out of the
+  // selection instead of being booked from a stale copy.
+  const picked = (page?.services ?? []).flatMap((service) => {
+    const line = lines.find((row) => row.serviceId === service._id);
+    return line ? [{ ...service, quantity: line.quantity }] : [];
+  });
+  const totalMinutes = picked.reduce((sum, row) => sum + (row.durationMinutes ?? 0), 0);
+  // Goods multiply, time-bound services do not — the schema's rule, and the
+  // reason quantity is not simply applied to every line.
+  const totalPrice = picked.reduce(
+    (sum, row) =>
+      sum + (row.price ?? 0) * (row.durationMinutes === undefined ? row.quantity : 1),
+    0,
+  );
+  const anyPriced = picked.some((row) => row.price !== undefined);
+  // The MAX lead across the selection, matching resolveLines on the server: a
+  // colour needing a day's notice needs it whatever else rides along. Anything
+  // else and the day strip would offer days the write refuses.
+  const leadMinutes = picked.reduce((max, row) => Math.max(max, row.leadMinutes ?? 0), 0);
+  const minMs = Date.now() + leadMinutes * 60_000;
   const minDate = page ? dayIn(page.timezone, minMs) : "";
-  // A date picked for the previous service may sit before this one's lead
+  // A date picked for a previous selection may sit before this one's lead
   // floor; string-compare works because both are ISO.
   const dateValue = date && date >= minDate ? date : minDate;
   const slots = useQuery(
     api.booking.slots,
-    page && serviceId && step !== "service" ? { slug, date: dateValue, serviceId } : "skip",
+    page && lines.length > 0 && step !== "service"
+      ? { slug, date: dateValue, serviceIds: lines.map((row) => row.serviceId) }
+      : "skip",
   );
+
+  // Any change to WHAT is being booked invalidates WHEN: the grid was drawn
+  // for a different total duration, so a time still held from before is a time
+  // the write will refuse.
+  const toggleLine = (serviceId: Id<"services">) => {
+    setStartMs(null);
+    setError(null);
+    setLines((prev) =>
+      prev.some((row) => row.serviceId === serviceId)
+        ? prev.filter((row) => row.serviceId !== serviceId)
+        : [...prev, { serviceId, quantity: 1 }],
+    );
+  };
+  // Goods only. Down from 1 removes the line, which is what the − button
+  // reads as when there is one left.
+  const setQuantity = (serviceId: Id<"services">, next: number) => {
+    if (next < 1) return toggleLine(serviceId);
+    setLines((prev) =>
+      prev.map((row) =>
+        row.serviceId === serviceId ? { ...row, quantity: Math.min(99, next) } : row,
+      ),
+    );
+  };
 
   // The salon's wall clock, whatever the viewer's — the label must say what
   // the clock on the salon's wall will say. Formatter built per call: a page
@@ -203,12 +243,46 @@ export default function BookingPage({
             slots: slots.filter((ms) => hourIn(ms) >= 17),
           },
         ].filter((shelf) => shelf.slots.length > 0);
-  const summaryName =
-    service === null
-      ? ""
-      : isGood && quantity > 1
-        ? `${quantity} × ${service.name}`
-        : service.name;
+  // Two purchases, not one list. A product is handed over and adds no minutes;
+  // a service books a chair for a length of time. The split is only DRAWN when
+  // the salon actually sells both — a header over the whole list names nothing.
+  const groups = [
+    {
+      key: "booking.services" as const,
+      rows: page.services.filter((row) => row.durationMinutes !== undefined),
+    },
+    {
+      key: "booking.products" as const,
+      rows: page.services.filter((row) => row.durationMinutes === undefined),
+    },
+  ].filter((group) => group.rows.length > 0);
+  // Every line, joined — the bar truncates rather than counting ("2 services"
+  // makes the customer open the step back up to remember which two). A good's
+  // quantity rides in front of its name, the same shape wa.ts prints in the
+  // confirmation they get afterwards.
+  const summaryName = picked
+    .map((row) =>
+      row.durationMinutes === undefined && row.quantity > 1
+        ? `${row.quantity} × ${row.name}`
+        : row.name,
+    )
+    .join(" + ");
+  // "1 sa 30 dk" in Turkish, "1 hr 30 min" in English — Intl decides the unit
+  // word and the order, which differ by locale and are not ours to guess. A
+  // selection of goods alone has no minutes to announce.
+  const minutesLabel = (minutes: number) => {
+    if (minutes <= 0) return "";
+    const unit = (value: number, name: "hour" | "minute") =>
+      new Intl.NumberFormat(pageLanguage, {
+        style: "unit",
+        unit: name,
+        unitDisplay: "short",
+      }).format(value);
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (!hours) return unit(rest, "minute");
+    return rest ? `${unit(hours, "hour")} ${unit(rest, "minute")}` : unit(hours, "hour");
+  };
   const back =
     step === "time"
       ? () => {
@@ -234,55 +308,105 @@ export default function BookingPage({
       {step === "service" && (
         <section>
           <h2 className="mb-3 text-sm font-semibold">{t("booking.pickService")}</h2>
-          {/* Rows with duration and price — the price is often the deciding
-              fact. Tapping IS the answer: it advances, no Continue button to
-              find.
+          {/* MULTI-SELECT since 2026-08-20, reversing this page's own
+              "tapping an answer IS the advance" rule for this step only. A
+              haircut plus a beard trim is one visit — appointments.items has
+              said so since before this page existed — and a page that books
+              one thing sent a customer who wanted both back round to book
+              twice. A choice you can add to cannot also be the advance, so
+              this step alone ends on the sticky bar's Continue. Steps 2 and 3
+              still advance on the tap: they ask for one answer each.
 
-              A DIVIDED LIST, not a bordered box. An outlined rounded-xl panel
-              inside a shadowed card is two edges for one surface, and xl is
-              the frame tier — the app draws its own lists this way
-              (`divide-y divide-[var(--border)]`, BusinessView).
+              SERVICES AND PRODUCTS are separated, because they are not the
+              same purchase. One books a chair for a length of time, the other
+              is handed over and adds no minutes — and with the duration line
+              being the only tell, a product read as a service someone forgot
+              to time. The headings appear only when both kinds exist; a salon
+              that sells nothing would otherwise get a section header over its
+              entire list.
 
-              FULL-BLEED, and the negative margin sits on this wrapper rather
-              than on the rows. A w-full flex child keeps its parent's width,
-              so -mx on the row only shifted it left and left every divider
-              short of the card's right edge. Bleeding the block is also what
-              the content wants: this card IS the list, and a menu whose rules
-              stop before the edge reads as an unfinished table.
-
-              border-t, not border-y. A closing rule under the last row leaves
-              the card's bottom padding stranded beneath it, which reads as a
-              seventh, empty service. The card's own edge is the closure. */}
-          <div className="-mx-4 divide-y divide-[var(--border)] border-t border-[var(--border)] sm:-mx-5">
-            {page.services.map((row) => (
-              <button
-                key={row._id}
-                type="button"
-                onClick={() => {
-                  if (row._id !== serviceId) setStartMs(null);
-                  setServiceId(row._id);
-                  setStep("time");
-                }}
-                className="flex w-full items-baseline justify-between gap-3 px-4 py-3.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] sm:px-5"
-              >
-                <span className="min-w-0">{row.name}</span>
-                <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
-                  {/* A good has no minutes to advertise — the name and the
-                      price are the whole fact. */}
-                  {row.durationMinutes !== undefined && <span>{row.durationMinutes}′</span>}
-                  {row.price !== undefined && (
-                    <span className="ml-2 font-medium text-[var(--foreground)]">
-                      {priceLabel(row.price)}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>
+              A DIVIDED LIST, not a bordered box: an outlined panel inside a
+              shadowed card is two edges for one surface, and xl is the frame
+              tier — the app draws its own lists this way. Full-bleed with the
+              negative margin on the WRAPPER, since a w-full flex child keeps
+              its parent's width and would leave every divider short of the
+              card's right edge. border-t, not border-y, or the card's bottom
+              padding is stranded under a closing rule and reads as one more,
+              empty row. */}
+          {groups.map((group) => (
+            <div key={group.key} className="mt-4 first:mt-0">
+              {groups.length > 1 && (
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
+                  {t(group.key)}
+                </p>
+              )}
+              <div className="-mx-4 divide-y divide-[var(--border)] border-t border-[var(--border)] sm:-mx-5">
+                {group.rows.map((row) => {
+                  const line = lines.find((l) => l.serviceId === row._id);
+                  const isGood = row.durationMinutes === undefined;
+                  return (
+                    <div
+                      key={row._id}
+                      className={`flex items-center gap-3 px-4 transition-colors sm:px-5 ${
+                        line ? "bg-[var(--muted-bg)]" : "hover:bg-[var(--row-hover-bg)]"
+                      }`}
+                    >
+                      {/* The row is the button and the stepper is its SIBLING:
+                          a stepper nested inside a button is invalid markup,
+                          and on a phone it is also a target inside a target. */}
+                      <button
+                        type="button"
+                        aria-pressed={Boolean(line)}
+                        onClick={() => toggleLine(row._id)}
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 py-3.5 text-left text-sm"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate">{row.name}</span>
+                          {/* Its OWN line, in words. "30′" was a prime symbol
+                              the width of a comma, greyed out and pushed
+                              against the price — the one fact a customer
+                              needs to know whether they have time today. */}
+                          {!isGood && (
+                            <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                              {minutesLabel(row.durationMinutes ?? 0)}
+                            </span>
+                          )}
+                        </span>
+                        {row.price !== undefined && (
+                          <span className="shrink-0 text-sm font-medium tabular-nums">
+                            {priceLabel(row.price)}
+                          </span>
+                        )}
+                      </button>
+                      <span className="flex shrink-0 items-center">
+                        {isGood && line ? (
+                          <span className="flex items-center gap-1">
+                            <StepperButton
+                              label="−"
+                              onClick={() => setQuantity(row._id, line.quantity - 1)}
+                            />
+                            <span className="w-5 text-center text-sm tabular-nums">
+                              {line.quantity}
+                            </span>
+                            <StepperButton
+                              label="+"
+                              onClick={() => setQuantity(row._id, line.quantity + 1)}
+                            />
+                          </span>
+                        ) : (
+                          <Tick on={Boolean(line)} />
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 
-      {step === "time" && service && (
+      {step === "time" && picked.length > 0 && (
         <section>
           <h2 className="mb-3 text-sm font-semibold">{t("booking.pickTime")}</h2>
           <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
@@ -357,7 +481,7 @@ export default function BookingPage({
         </section>
       )}
 
-      {step === "details" && service && startMs !== null && (
+      {step === "details" && picked.length > 0 && startMs !== null && (
         <form
           id="booking-form"
           className="space-y-4"
@@ -373,12 +497,18 @@ export default function BookingPage({
             setError(null);
             const result = await book({
               slug,
-              serviceId: service._id,
+              lines: picked.map((row) => ({
+                serviceId: row._id,
+                // Sent for goods only, matching the server: a quantity on a
+                // time-bound line is a booking the calendar cannot hold.
+                ...(row.durationMinutes === undefined && row.quantity > 1
+                  ? { quantity: row.quantity }
+                  : {}),
+              })),
               startMs,
               name,
               phone,
               ...(email.trim() ? { email } : {}),
-              ...(isGood && quantity > 1 ? { quantity } : {}),
             });
             setSending(false);
             if (result.ok) setDone({ token: result.token, startMs });
@@ -391,24 +521,6 @@ export default function BookingPage({
             } else setError(result.reason ?? "error");
           }}
         >
-          {/* How many, goods only: ordering three cakes is one order for a
-              moment, not three bookings. */}
-          {isGood && (
-            <label className="block text-sm">
-              {t("appointments.quantity")}
-              <input
-                type="number"
-                min={1}
-                max={99}
-                step={1}
-                value={quantity}
-                onChange={(e) =>
-                  setQuantity(Math.min(99, Math.max(1, Math.round(Number(e.target.value) || 1))))
-                }
-                className="mt-1 w-24"
-              />
-            </label>
-          )}
           <label className="block text-sm">
             {t("forms.name")}
             <input
@@ -448,30 +560,54 @@ export default function BookingPage({
         </form>
       )}
 
-      {/* The running choice, pinned across steps. On the last step its
-          button submits the form above (form attribute — one button, no
-          in-form twin to race it).
+      {/* The running BASKET, pinned across steps. On the first step its button
+          is Continue — that step became multi-select, so tapping can no longer
+          be the advance. On the last it submits the form above via the form
+          attribute: one button, no in-form twin to race it.
+
+          It used to read as "the total at the bottom or whatever that is",
+          which was fair — it was a total of one thing, restating the row the
+          customer had just tapped. With several lines it has something to
+          total, and the layout now says so: what, then how long and when, with
+          the sum held out on the right where a total belongs.
 
           --card, not --background: over a plane the raw page colour is the one
           surface the wash never touches, so the bar read as a strip of a
           different page. A floating surface keeps its hard edge, so the top
           border stays. */}
-      {service !== null && (
+      {picked.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 sm:px-5">
-            <div className="min-w-0 text-sm">
-              <p className="truncate font-medium">
-                {summaryName}
-                {service.price !== undefined && (
-                  <span className="ml-2 text-[var(--muted)]">
-                    {priceLabel(service.price * (isGood ? quantity : 1))}
-                  </span>
-                )}
-              </p>
+          <div className="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-3 sm:px-5">
+            <div className="min-w-0 flex-1 text-sm">
+              <p className="truncate font-medium">{summaryName}</p>
               <p className="truncate text-xs text-[var(--muted)]">
-                {startMs !== null ? dateTimeLabel(startMs) : t("booking.pickTime")}
+                {/* Duration belongs here as much as in the rows: it is the
+                    running answer to "how long am I going to be there", and it
+                    is the number that changes as lines go in and out. Once a
+                    time is picked it gives way to the time — that is the more
+                    specific fact, and both would not fit one line.
+
+                    No "pick a day and time" prompt: on the step where that is
+                    the next move, the Continue button beside it already says
+                    so, and on the step after, the heading above says it again
+                    three inches higher. */}
+                {startMs !== null ? dateTimeLabel(startMs) : minutesLabel(totalMinutes)}
               </p>
             </div>
+            {anyPriced && (
+              <p className="shrink-0 text-sm font-semibold tabular-nums">
+                {priceLabel(totalPrice)}
+              </p>
+            )}
+            {step === "service" && (
+              <button
+                type="button"
+                onClick={() => setStep("time")}
+                className="shrink-0 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)]"
+              >
+                {t("booking.continue")}
+              </button>
+            )}
             {step === "details" && (
               <button
                 type="submit"
@@ -486,6 +622,48 @@ export default function BookingPage({
         </div>
       )}
     </Shell>
+  );
+}
+
+// The selection mark. A ring rather than a checkbox: the whole row is the
+// target, so this is a state readout, not a second control to aim at.
+function Tick({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex h-5 w-5 items-center justify-center rounded-full border transition-colors ${
+        on
+          ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]"
+          : "border-[var(--border)]"
+      }`}
+    >
+      {on && (
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path
+            d="M2.5 6.5L5 9l4.5-5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+// Goods only. Three shampoos is one handover, so it is a quantity — where
+// three haircuts is three visits and cannot be one line at all (the schema's
+// rule, kept because the calendar is what disagrees otherwise).
+function StepperButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-sm leading-none text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+    >
+      {label}
+    </button>
   );
 }
 
