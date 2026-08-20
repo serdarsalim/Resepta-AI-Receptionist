@@ -54,6 +54,9 @@ export const current = query({
       name: v.string(),
       timezone: v.string(),
       language: v.string(),
+      // The onboarding wizard's industry answer (lib/industryPresets) — what
+      // Business settings' reset-to-defaults re-seeds from.
+      industry: v.optional(v.string()),
       currency: v.string(),
       inboundAddress: v.optional(v.string()),
       publicSlug: v.optional(v.string()),
@@ -198,6 +201,7 @@ export const current = query({
         name: org.name,
         timezone: org.timezone,
         language: org.language,
+        industry: org.industry,
         currency: org.currency ?? DEFAULT_CURRENCY,
         inboundAddress: org.inboundAddress,
         publicSlug: org.publicSlug,

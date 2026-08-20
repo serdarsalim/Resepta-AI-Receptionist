@@ -22,6 +22,11 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
+import {
+  INDUSTRY_KEYS,
+  INDUSTRY_PRESETS,
+  presetLanguage,
+} from "../../convex/lib/industryPresets";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
@@ -82,6 +87,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.inboundAddress" },
   { card: "general", key: "settings.emailFrom" },
   { card: "general", key: "settings.language" },
+  { card: "general", key: "settings.industry" },
   { card: "booking", key: "settings.bookingPage" },
   { card: "booking", key: "settings.bookingMode" },
   { card: "general", key: "settings.currency" },
@@ -320,9 +326,12 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
 }
 
 function DetailsCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
+  const applyIndustry = useMutation(api.onboarding.applyIndustryPreset);
+  const resetIndustry = useMutation(api.onboarding.resetToIndustryDefaults);
+  const [confirm, confirmDialog] = useConfirm();
   const generateUploadUrl = useMutation(api.media.generateUploadUrl);
   const setLogo = useMutation(api.orgs.setLogo);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -344,6 +353,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 
   return (
     <Card title={t("settings.general")} disabled={!isOwner}>
+      {confirmDialog}
       {settings === undefined ? (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       ) : (
@@ -530,6 +540,61 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </option>
             ))}
           </select>
+          {/* The onboarding wizard's industry answer, revisitable. Picking a
+              different industry only records the answer; the reset button is
+              what re-seeds — it deletes the price list and re-applies the
+              template (behind a confirmation that names exactly that), which
+              is the "start blank, change your mind later" path the wizard
+              promises. Fields a voice agent references survive the reset,
+              because deleting them would wedge the agent's next publish. */}
+          <RowLabel
+            label={t("settings.industry")}
+            hint={t("settings.industryHint")}
+          />
+          <div className="flex items-center gap-3">
+            <select
+              className="w-full sm:max-w-56"
+              value={settings.org.industry ?? ""}
+              onChange={(e) => {
+                const industry = e.target.value;
+                if (industry) void applyIndustry({ industry, prefill: false });
+              }}
+            >
+              <option value="" disabled>
+                {t("settings.industryNone")}
+              </option>
+              {INDUSTRY_KEYS.map((key) => (
+                <option key={key} value={key}>
+                  {INDUSTRY_PRESETS[key].name[presetLanguage(language)]}
+                </option>
+              ))}
+            </select>
+            {settings.org.industry && settings.org.industry !== "other" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const industry = settings.org.industry!;
+                  void (async () => {
+                    const ok = await confirm({
+                      title: t("settings.industryResetConfirm").replace(
+                        "{industry}",
+                        INDUSTRY_PRESETS[
+                          industry as keyof typeof INDUSTRY_PRESETS
+                        ]?.name[presetLanguage(language)] ?? industry,
+                      ),
+                      body: t("settings.industryResetBody"),
+                      confirmLabel: t("settings.industryReset"),
+                    });
+                    if (!ok) return;
+                    await resetIndustry({});
+                  })();
+                }}
+                className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                {t("settings.industryReset")}
+              </button>
+            )}
+          </div>
           {/* Sits under language because the two answer together: language
               picks the separators and digit grouping, currency picks the
               symbol. Changing this does NOT convert anything — a price stored

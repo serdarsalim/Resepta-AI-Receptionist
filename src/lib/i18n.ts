@@ -389,6 +389,32 @@ const dictionary = {
     en: "Setting up...",
     de: "Wird eingerichtet...",
   },
+  "settings.industry": { tr: "Sektör", en: "Industry", de: "Branche" },
+  "settings.industryHint": {
+    tr: "İşletme türünüz. Varsayılana sıfırlama, hizmetleri ve müşteri alanlarını bu şablondan yeniden yükler.",
+    en: "What kind of business this is. Reset to defaults re-seeds services and customer fields from this template.",
+    de: "Ihre Branche. Das Zurücksetzen lädt Leistungen und Kundenfelder neu aus dieser Vorlage.",
+  },
+  "settings.industryNone": {
+    tr: "Seçilmedi",
+    en: "Not set",
+    de: "Nicht gewählt",
+  },
+  "settings.industryReset": {
+    tr: "Varsayılanlara sıfırla",
+    en: "Reset to defaults",
+    de: "Auf Standard zurücksetzen",
+  },
+  "settings.industryResetConfirm": {
+    tr: "Hizmetler ve müşteri alanları {industry} şablonuyla değiştirilsin mi?",
+    en: "Replace services and customer fields with the {industry} template?",
+    de: "Leistungen und Kundenfelder durch die Vorlage {industry} ersetzen?",
+  },
+  "settings.industryResetBody": {
+    tr: "Mevcut fiyat listeniz silinir ve şablon yeniden yüklenir. Randevular, müşteriler ve mesajlar etkilenmez; telefon asistanınızın kullandığı alanlar korunur.",
+    en: "Your current price list is deleted and the template is seeded fresh. Appointments, customers and messages are untouched; fields your phone agent uses are kept.",
+    de: "Ihre aktuelle Preisliste wird gelöscht und die Vorlage neu geladen. Termine, Kunden und Nachrichten bleiben unberührt; Felder, die Ihr Telefonassistent nutzt, bleiben erhalten.",
+  },
   "numberReq.pending": {
     tr: "Belgeniz alındı. Numaranız 24 saat içinde tanımlanacak.",
     en: "Your document is in. Your number will be provisioned within 24 hours.",
