@@ -1,8 +1,11 @@
 // Meta webhook signature verification (X-Hub-Signature-256): HMAC-SHA256 of
 // the RAW request body with the Meta app secret, hex-encoded, prefixed
-// "sha256=". Verified before the body is parsed; http.ts fails closed when
-// WA_APP_SECRET is set and fails open (with a warning) when it isn't — prod
-// deployments must set it.
+// "sha256=". Verified before the body is parsed; http.ts fails CLOSED either
+// way — an unset WA_APP_SECRET refuses the webhook with a 503 rather than
+// processing it unsigned. (This header claimed the opposite until 2026-08-20;
+// it was describing behaviour that changed under it, which is worse than no
+// comment.) A deployment without the variable therefore has NO inbound
+// WhatsApp at all, and Meta disables a subscription that keeps failing.
 
 function hexOf(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)]

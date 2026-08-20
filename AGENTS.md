@@ -96,6 +96,18 @@ style issue.
   `enrichedAppointment.customer` is already `v.union(object, v.null())`, so the
   read path would tolerate it. Do not build a parallel blocked-time system
   without revisiting that call with Serdar.
+- **The Cloud lane's token is PLATFORM-level with a per-org override**
+  (2026-08-20, the Meta Tech Provider shape). `waAccounts.accessToken` is
+  optional; `resolveWaAccount` (`lib/platformConfig.ts`) hands every loader
+  query an account whose token is the row's own or the platform
+  `whatsappAccessToken`, and null when neither exists — a row that can
+  authenticate nothing reads as "Cloud off" rather than firing Bearer-less
+  requests at Meta. So provisioning a hosted business is just its
+  `phoneNumberId` + `wabaId` on the admin card. Resolve in the QUERY, never in
+  the action: actions have no `ctx.db`. This is a LIVE fallback, deliberately
+  unlike the Retell key's stamp (below) — a Meta token is pure auth over
+  phone-number ids that never move, and one rotation has to reach every hosted
+  org at once.
 - WhatsApp runs on TWO lanes (`convex/lib/waLane.ts`): the Meta Cloud API
   (`waAccounts`, credentials operator-installed at /admin) and the salon's own
   shop phone on an Evolution instance (operator-provisioned; the salon links
@@ -299,6 +311,60 @@ more than either.
   its own Business tab; Business has no tabs at all. The reasoning that kept
   them apart, and what changed to answer it, is recorded there.
 
+## Operational readiness (audited 2026-08-20) — read before "why didn't it send"
+
+A three-way audit (onboarding path, silent-failure surfaces, config surface)
+against the live prod deployment. Everything here is a KNOWN state, not a
+discovery to re-make. Re-verify before acting — items get fixed.
+
+**Dead in prod at audit time, config not code:**
+- `WA_APP_SECRET` and `WA_WEBHOOK_VERIFY_TOKEN` are UNSET, so the Cloud
+  webhook 503s every POST and Meta cannot even register the callback. No
+  inbound WhatsApp: no replies, no confirm/cancel buttons, no session window.
+  Neither has an admin field by design — they are `convex env set --prod`.
+- No LLM key of either provider ⇒ every chat-agent turn logs a
+  `llm-not-configured` skip. The provider pill says OpenAI.
+- `voiceRateMicroUsdPerMinute` unset ⇒ the meter resolves org ?? platform ??
+  **0**, so every call bills zero and a prepaid wallet never draws down. Run
+  `voiceBackfill:run` BEFORE setting a rate.
+- Platform `whatsappAccessToken` unset (harmless until the first hosted org).
+- Stripe IS wired and endpoint-verified (2026-08-20) — first lane proven end
+  to end. Email is fully configured but has still never sent from prod.
+
+**Silent-failure gaps, in severity order.** These are design holes, not bugs
+to hunt — each was traced to a file:
+1. **No cron heartbeat anywhere.** Seven jobs run the product's promises; a
+   throwing `reminders.tick` sends nothing fleet-wide, forever, with every
+   screen looking normal. Compounding: the tick is ONE mutation across all
+   orgs, so one malformed row rolls back every salon's reminders.
+2. `delivery.reapStuck` dead-letters by patching the row directly, bypassing
+   `messages.applySendResult` — the only caller of `alertFailedSend`. Violates
+   this file's own "never a second dead-lettering site" rule; ~5 lines to fix.
+3. The alert lane is fail-silent about ITSELF: `alertHealth` exists and is
+   wired to no screen, and `deliverOrgAlert` discards `sendEmail`'s result
+   inside a bare catch, so a revoked key produces no log line at all.
+4. `/admin` failed/dead-lettered counts key on `_creationTime`, missing every
+   old row that fails today; the "Stuck" column counts all in-flight sends,
+   so it reds on normal traffic and zeroes once the reaper hides a real one.
+5. Inbound WhatsApp for an unknown `phone_number_id` vanishes with no log. An
+   expired WABA token alert-storms (one email per failed row × every member).
+   Orphaned `voiceEvents` lose the transcript AND the cost meter — unbilled
+   minutes. Org-setup failures alert once ever (last-40-rows window, not time).
+
+**Known product gaps:** staff can still double-book on the app's own grid
+(every customer-facing lane checks overlap; `schedule.create`'s no-key path
+does not — `overlapCount` already exists). Blocked time is still
+unrepresentable and its "wait for cal.com" reasoning died with cal.com; a
+`blocks` table that `freeStarts` subtracts is the shape, and the write must
+be owner-authenticated only — a customer-facing agent that can create
+closures is a prompt-injection hole (Serdar, 2026-08-20: "someone could call
+and say your business is off next week"). Meta template approval remains
+fully manual per org and is the real onboarding bottleneck.
+
+**Doc drift found:** `docs/deploy.md` predates the whole platformConfig
+console and describes env vars as the primary path when they are now the
+fallback. `docs/email-lane-setup.md` is accurate but dated.
+
 ## The IA after 2026-08-14 (inbox, reminders, message variables)
 
 Four moves, each made because a surface was named after its implementation
@@ -363,6 +429,33 @@ rather than after what it does.
   who has none. Do not rebuild a second public page that collects a name and a
   service without writing an appointment — that was the whole shape, and it
   put a stranger's request in a queue for staff to retype.
+
+- **`/book/<slug>` is a THREE-STEP WIZARD, not a growing page** (Serdar,
+  2026-08-20, reversing this file's own "each answer reveals the next
+  question" doctrine). Service → time → details: tapping an answer IS the
+  advance (no Continue buttons), the header chevron goes back, and the screen
+  SWAPS so nothing ever reflows. The old reveal-downward design grew the card
+  on every selection and — because crossing the fold summoned the document
+  scrollbar — shoved it sideways too; `html { scrollbar-gutter: stable }` in
+  globals.css fixes the second half and must stay. Fresha and Booksy both
+  work this way; do not rebuild the accordion.
+  - **Prices ARE published** on the public page (same date, reversing the
+    forms.ts-era "duration yes, price no" rule): rows carry duration and
+    `formatMoney(service.price)`, and a service with no price shows duration
+    alone rather than a made-up zero. Hiding price only moved the question to
+    the phone.
+  - Times shelve into morning/afternoon/evening at 12:00 and 17:00 (labels
+    group, hours define); the day strip is 14 civil days from the lead-time
+    floor, stepped in 24h and deduped so a DST fall-back cannot mint the same
+    date twice.
+  - The sticky bottom bar carries the running choice across steps and, on the
+    last one, IS the submit (`form="booking-form"`) — never add an in-form
+    twin button to race it.
+  - **`orgs.logoStorageId`** is the salon's logo, uploaded by the owner in
+    Business → General through `media.generateUploadUrl` → `orgs.setLogo`,
+    resolved to a URL by `booking.page` and `orgs.current`. `setLogo` DELETES
+    the file it replaces — logos get re-uploaded until the crop looks right,
+    and each abandoned attempt would otherwise sit in storage forever.
 - **Reminders rules open as a PAGE, not an expanding row.** The id lives in
   the URL (`?rule=`) like the app's tab does, so a refresh or a trip to
   another tab and back returns to the rule. A row that navigates must not also
@@ -1200,6 +1293,34 @@ went, and the reasoning to preserve:
   The admin card itself is hidden too (Serdar, 2026-08-19) — the
   `SHOW_CALCOM_CARD` guard in `src/app/admin/[orgId]/page.tsx` keeps its JSX
   compiling while nobody can configure the lane. See "Appointment intake".
+- **`orgs.voiceAgentSource` is DERIVED, not toggled** (2026-08-20). It was a
+  Connectable-agents switch on the admin page that an operator had to
+  remember, and a forgotten flip leaked other clients' agents into a salon's
+  picker. `connections.setFieldInternal` now decides it the moment a Retell
+  key lands: equal to the platform key ⇒ `"randevu"` (shared workspace, the
+  picker scopes to agents tagged for this org), anything else ⇒ `"account"`
+  (the client's own Retell account, whole workspace theirs to see).
+  `stampDefaultRetellKey` sets `"randevu"` on the auto-provision path, which
+  writes the connections row directly. Decided at WRITE time on purpose: a
+  read-time comparison would silently reclassify every stamped org the day the
+  platform key rotates. The odd case — a second key minted for the shared
+  workspace — is set by hand through `platform.setOrgConfig`, which still
+  accepts the field.
+
+**Admin console shape** (2026-08-19/20). Per-business tabs are Setup, **Voice
+agent** (agents, phone lines, and the voice meter + wallet that used to be a
+separate Usage tab), **Chat agent**, Members, Sends, Logs. One Agents card
+lists every agent whatever its origin — created-by-Resepta and
+connected-from-Retell were two cards saying contradictory things — with
+in-flight or failed provisioning jobs below it, never completed ones. Phone
+lines shows only this business's numbers until "Add a phone line…" opens the
+account's inventory. The Email card is GONE: both its fields are the salon's
+own settings. Platform tab order is Email, AI &amp; Voice defaults (Retell key
+first; each LLM provider is one row carrying key + model), WhatsApp,
+Billing (voice rate lives with the Stripe keys), Kill switch alone at the
+bottom, admins as a footer. **Grey text in an admin input is always a fact** —
+either the stored secret's tail or the real default that applies when blank.
+Never an example value; an empty field must mean empty.
 
 Retell facts that keep getting relearned (also encoded in `convex/retellAgent.ts`
 comments): a published agent/LLM refuses PATCH — every publish is
