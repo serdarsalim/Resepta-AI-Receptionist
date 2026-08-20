@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { noteText } from "./lib/noteBody";
 import {
   action,
   internalAction,
@@ -967,7 +968,7 @@ export const beforeCallContext = internalQuery({
           )
           .unique()
       : null;
-    const [variables, fields, appointments, services, staffRows] = await Promise.all([
+    const [variables, fields, appointments, services, staffRows, knowledgeRows] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -990,6 +991,10 @@ export const beforeCallContext = internalQuery({
         .collect(),
       ctx.db
         .query("staff")
+        .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
+        .collect(),
+      ctx.db
+        .query("knowledge")
         .withIndex("by_org", (q) => q.eq("orgId", agent.orgId))
         .collect(),
     ]);
@@ -1159,6 +1164,26 @@ export const beforeCallContext = internalQuery({
             : service.name;
         })
         .join("; "),
+      // What the business wrote about itself (the Knowledge tab), injected at
+      // ring time like everything else here so an edit reaches the very next
+      // call with no republish. PLAIN TEXT by contract: knowledge.forAgent's
+      // rule — whatever the editor renders, the agent reads words. Capped so
+      // a thirty-block org cannot blow the provider's payload; the cut lands
+      // between blocks, never mid-sentence.
+      knowledge: (() => {
+        const blocks = knowledgeRows
+          .filter((row) => noteText(row.body).trim())
+          .sort((a, b) => a.order - b.order);
+        const parts: string[] = [];
+        let budget = 8000;
+        for (const block of blocks) {
+          const text = `${block.title}: ${noteText(block.body).trim()}`;
+          if (text.length > budget) break;
+          budget -= text.length;
+          parts.push(text);
+        }
+        return parts.join("\n");
+      })(),
     };
     for (const [key, value] of Object.entries(builtins)) {
       if (!(key in dynamicVariables)) dynamicVariables[key] = value;

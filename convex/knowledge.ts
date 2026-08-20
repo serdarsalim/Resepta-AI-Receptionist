@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { noteText } from "./lib/noteBody";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 
@@ -118,7 +119,9 @@ export const forAgent = internalQuery({
       .collect();
     return rows
       .sort((a, b) => a.order - b.order)
-      .filter((r) => r.body.trim())
-      .map((r) => ({ title: r.title, body: r.body }));
+      // noteText, not the raw column: the rich editor stores markup and the
+      // agent reads words — text only ever reaches a model or a provider.
+      .filter((r) => noteText(r.body).trim())
+      .map((r) => ({ title: r.title, body: noteText(r.body) }));
   },
 });

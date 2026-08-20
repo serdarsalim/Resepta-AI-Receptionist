@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { noteText } from "./lib/noteBody";
 import {
   internalAction,
   internalMutation,
@@ -252,10 +253,13 @@ export const loadTurnContext = internalQuery({
           price: s.price ?? null,
         })),
       teamNames: staff.filter((s) => s.active).map((s) => s.name),
+      // noteText, not the raw column: a block edited in the rich editor
+      // stores markup, and the model reads words (lib/noteBody doctrine —
+      // what goes to the agent is text only).
       knowledge: knowledge
         .sort((a, b) => a.order - b.order)
-        .filter((k) => k.body.trim())
-        .map((k) => ({ title: k.title, body: k.body })),
+        .filter((k) => noteText(k.body).trim())
+        .map((k) => ({ title: k.title, body: noteText(k.body) })),
       upcoming: upcoming.map((a) => ({
         spoken: formatAppointmentTime(a.startAt, org.timezone, language),
         service: a.items?.map((i) => i.name).join(", ") || undefined,

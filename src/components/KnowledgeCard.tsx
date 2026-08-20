@@ -15,6 +15,8 @@ import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { InlineEditValue } from "./RecordField";
 import { useConfirm } from "./ConfirmDialog";
+import { EmailBodyEditor } from "./EmailBodyEditor";
+import { bodyIsHtml, hasNoteText, plainToHtml } from "../../convex/lib/noteBody";
 
 export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
@@ -63,18 +65,26 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
                 {t("common.delete")}
               </button>
             </div>
-            {/* Uncontrolled with autosave on blur — the app's no-Save-button
-                rule. key on the row id so a reordered list re-seeds cleanly. */}
-            <textarea
+            {/* The rich editor in the composer's compact shape, saving on
+                blur — the no-Save-button rule unchanged. The column stores
+                whatever the editor serialises (the notes model: no is-it-html
+                flag, bodyIsHtml judges the body); every agent read flattens
+                to words through noteText, so what reaches a model or the
+                voice provider is text only. plainToHtml carries a legacy
+                plain block INTO the editor with its line breaks intact;
+                nothing stored is migrated. No token dropdown: knowledge is
+                prose about the business, nothing renders per-customer. */}
+            <EmailBodyEditor
               key={`${row._id}-body`}
-              defaultValue={row.body}
+              value={bodyIsHtml(row.body) ? row.body : plainToHtml(row.body)}
+              disabled={!isOwner}
+              compact
+              showVariables={false}
               placeholder={t("knowledge.bodyPlaceholder")}
-              rows={Math.min(8, Math.max(2, row.body.split("\n").length + 1))}
-              onBlur={(event) => {
-                const next = event.currentTarget.value;
+              onSave={(html) => {
+                const next = hasNoteText(html) ? html : "";
                 if (next !== row.body) void update({ id: row._id, body: next });
               }}
-              className="w-full resize-y text-sm"
             />
           </div>
         ))}

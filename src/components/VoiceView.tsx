@@ -30,8 +30,9 @@ import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 // sit together here. The objection that killed the first attempt still stands
 // on paper (the agent is one consumer among forms, campaigns, email, wa, mcp
 // and the contact record) and it loses force as the chat, WhatsApp and email
-// agents ship: chatAgentTemplate already reads knowledge, and this row goes
-// multi-channel when they land.
+// agents ship: chatAgentTemplate reads knowledge, the voice agent gets it at
+// ring time ({{knowledge}} in beforeCallContext, 2026-08-21), and this row
+// goes multi-channel when the rest land.
 //
 // What it is NOT: buried at the foot of the Customers column picker, which is
 // where it briefly lived. Fields ARE those columns, so the rule about rare
