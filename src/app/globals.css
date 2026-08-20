@@ -115,6 +115,12 @@
      same move. Only the scroll area wears it — the contact header above and
      the composer below stay card-white, which is also how WhatsApp sits. */
   --thread-bg: #f4f4f5;
+  /* Note bubbles sit on the card, not the thread plane, and --muted-bg
+     equals --card in dark mode — the same trap --closed-bg documents, with
+     the same fix: mixed from the foreground, so one definition shades both
+     modes and the bubble can never vanish into its ground. */
+  --note-bubble-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
+  --note-bubble-hover-bg: color-mix(in srgb, var(--foreground) 10%, transparent);
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }

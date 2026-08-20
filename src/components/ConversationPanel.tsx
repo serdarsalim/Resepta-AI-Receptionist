@@ -1643,7 +1643,7 @@ function NoteEntry({
           // box instead of jumping into a form somewhere else on the pane — and
           // in the same FORMAT, rather than becoming plain text the moment you
           // touch it.
-          <div className="w-full min-w-[16rem] rounded-2xl bg-[var(--muted-bg)] px-3 py-2">
+          <div className="w-full min-w-[16rem] rounded-2xl bg-[var(--note-bubble-bg)] px-3 py-2">
             <EmailBodyEditor
               compact
               showVariables={false}
@@ -1684,7 +1684,7 @@ function NoteEntry({
               setEditing(true);
             }}
             title={t("notes.edit")}
-            className="min-w-0 rounded-2xl bg-[var(--muted-bg)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
+            className="min-w-0 rounded-2xl bg-[var(--note-bubble-bg)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--note-bubble-hover-bg)]"
           >
             {/* Judged on the BODY, never on a stored flag — see lib/noteBody.
                 Sanitised even though this markup is ours: a note can be edited
