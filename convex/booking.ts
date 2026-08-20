@@ -4,6 +4,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { assertE164, requireOwner } from "./lib/orgAuth";
 import { splitName } from "./lib/emailInbound";
+import { hasNoteText } from "./lib/noteBody";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import {
@@ -519,6 +520,11 @@ export const book = mutation({
     name: v.string(),
     phone: v.string(),
     email: v.optional(v.string()),
+    // Anything the customer wants the salon to know — an allergy, a parking
+    // question, "my daughter is coming too". Lands as a NOTE on their record,
+    // where the salon already reads everything else about them, rather than as
+    // a field on the appointment that only the booking sheet would show.
+    note: v.optional(v.string()),
   },
   returns: v.object({
     ok: v.boolean(),
@@ -640,6 +646,24 @@ export const book = mutation({
     });
     await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, org._id, appointmentId);
+
+    // Written LAST, and never fatal. A note is the least important thing this
+    // mutation does — the appointment is the point — so nothing about it may
+    // cost the customer their slot. hasNoteText is the same emptiness test
+    // notes.add uses, so a box the customer tabbed through does not become a
+    // blank note on their record.
+    //
+    // No authorId: they are not a user (schema notes.authorId). Capped because
+    // this is a public page and the field is free text; a booking note is a
+    // sentence, and the cap is a brake rather than a rule about length.
+    const note = args.note?.trim().slice(0, 1000) ?? "";
+    if (hasNoteText(note)) {
+      await ctx.db.insert("notes", {
+        orgId: org._id,
+        customerId,
+        body: note,
+      });
+    }
     return { ok: true, token: manageToken };
   },
 });

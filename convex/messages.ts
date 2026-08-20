@@ -415,9 +415,17 @@ export const feedForCustomer = query({
     // owner who left forty notes on a regular is one read, not forty.
     const authors = new Map<string, string | undefined>();
     for (const authorId of new Set(notes.map((n) => n.authorId))) {
+      // Skipped, not looked up: an author-less note is one the CUSTOMER left
+      // through the booking page, and there is no user row to read.
+      if (!authorId) continue;
       const author = await ctx.db.get(authorId);
       authors.set(authorId, author?.name ?? author?.email ?? undefined);
     }
+    // Their own name, not "System". The note is in this customer's feed and
+    // came out of this customer's booking, so naming them is both the honest
+    // attribution and the one that tells a reader why the wording is theirs.
+    const customerName =
+      `${customer.firstName} ${customer.lastName ?? ""}`.trim() || undefined;
 
     // Signed URLs resolved before the map so the loop stays synchronous.
     const mediaUrls = new Map<string, string>();
@@ -463,7 +471,7 @@ export const feedForCustomer = query({
         at: n._creationTime,
         kind: "note",
         body: n.body,
-        authorName: authors.get(n.authorId),
+        authorName: n.authorId ? authors.get(n.authorId) : customerName,
         editedAt: n.editedAt,
       })),
     ];

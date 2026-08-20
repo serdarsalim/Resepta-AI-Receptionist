@@ -85,6 +85,7 @@ export default function BookingPage({
   const [startMs, setStartMs] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
@@ -707,6 +708,7 @@ export default function BookingPage({
               name,
               phone,
               ...(email.trim() ? { email } : {}),
+              ...(note.trim() ? { note } : {}),
             });
             setSending(false);
             if (result.ok) setDone({ token: result.token, startMs });
@@ -760,6 +762,22 @@ export default function BookingPage({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("common.optional")}
+            />
+            {/* Last, and the only row whose control is taller than its label —
+                so it sits items-start against it rather than floating in the
+                middle of three lines of box. It lands as a note on the
+                customer's record (convex/booking.book), which is where the
+                salon already reads everything else about them. */}
+            <label htmlFor="booking-note" className="text-sm sm:self-start sm:pt-2">
+              {t("booking.note")}
+            </label>
+            <textarea
+              id="booking-note"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t("booking.notePlaceholder")}
+              className="resize-none"
             />
           </div>
           {error && error !== "slot-taken" && (

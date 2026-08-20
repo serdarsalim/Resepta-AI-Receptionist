@@ -674,6 +674,16 @@ const dictionary = {
   // "kalem" and "Positionen" are what a receipt calls its lines in Turkish and
   // German; "items" covers a haircut and a shampoo in one word, which "service"
   // does not.
+  // The booking page's note box. Phrased as a question rather than labelled
+  // "Notes": a blank box under a noun gets left blank, and what the salon
+  // actually wants is the allergy, the parking question, the second person
+  // coming along.
+  "booking.note": { tr: "Not", en: "Note", de: "Notiz" },
+  "booking.notePlaceholder": {
+    tr: "Bilmemiz gereken bir şey var mı?",
+    en: "Anything we should know?",
+    de: "Etwas, das wir wissen sollten?",
+  },
   "booking.itemCount": { tr: "{n} kalem", en: "{n} items", de: "{n} Positionen" },
   // Shown once the basket is full, in place of nothing at all. The server caps
   // a booking at MAX_LINES_PER_BOOKING; without this the page let a customer

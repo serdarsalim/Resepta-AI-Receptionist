@@ -1834,7 +1834,14 @@ export default defineSchema({
     // Who wrote it, by reference. The display name is resolved at read time,
     // so someone changing their name doesn't leave stale attribution frozen
     // into every note they ever wrote.
-    authorId: v.id("users"),
+    //
+    // OPTIONAL since 2026-08-20, and unset means the CUSTOMER wrote it — the
+    // booking page lets them leave one, and a stranger on a public page is not
+    // a row in `users`. Nothing else may leave it blank: an unattributed staff
+    // note on a shared record is the thing the byline exists to prevent, and
+    // the feed resolves an author-less note to the customer's own name rather
+    // than to "System".
+    authorId: v.optional(v.id("users")),
     // Set on the first edit. Unset means the note still says what it said when
     // it was written, which is the whole reason anyone trusts a note.
     editedAt: v.optional(v.number()),
