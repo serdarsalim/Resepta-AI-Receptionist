@@ -151,6 +151,18 @@ const dictionary = {
     en: "New booking",
     de: "Neue Buchung",
   },
+  "account.notifyCancelledBooking": {
+    tr: "Randevu iptali",
+    en: "Booking cancelled",
+    de: "Stornierte Buchung",
+  },
+  // The second sentence is the switch's whole personality: your own cancels
+  // never email you, so the toggle only ever carries news.
+  "account.notifyCancelledBookingHint": {
+    tr: "Müşteri randevusunu iptal ettiğinde (WhatsApp, telefon asistanı, randevu bağlantısı veya cal.com üzerinden) e-posta gelir; ekteki dosya kaydı takviminizden kaldırır. Sizin veya ekibinizin uygulama içinden yaptığı iptaller e-posta göndermez.",
+    en: "You get an email when a customer cancels their booking (via WhatsApp, the voice agent, their booking link or cal.com); the attachment removes it from your calendar. Cancellations you or your team make in the app never send one.",
+    de: "Sie bekommen eine E-Mail, wenn ein Kunde seinen Termin absagt (über WhatsApp, den Sprachagenten, den Buchungslink oder cal.com); der Anhang entfernt ihn aus Ihrem Kalender. Absagen, die Sie oder Ihr Team in der App vornehmen, lösen keine E-Mail aus.",
+  },
   // The calendar invite is the point of this switch, so the hint leads with
   // it — without that sentence it reads as one more notification, not as
   // "your Google Calendar fills itself in".

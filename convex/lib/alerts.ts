@@ -51,6 +51,7 @@ export type AlertKind =
   | "failed-send"
   | "new-contact"
   | "new-booking"
+  | "booking-cancelled"
   | "billing";
 
 export const alertKindValidator = v.union(
@@ -58,6 +59,7 @@ export const alertKindValidator = v.union(
   v.literal("failed-send"),
   v.literal("new-contact"),
   v.literal("new-booking"),
+  v.literal("booking-cancelled"),
   v.literal("billing"),
 );
 
@@ -71,6 +73,7 @@ export function alertEnabled(
     notifyFailedSend?: boolean;
     notifyNewContact?: boolean;
     notifyNewBooking?: boolean;
+    notifyCancelledBooking?: boolean;
   },
   kind: AlertKind,
 ): boolean {
@@ -85,7 +88,9 @@ export function alertEnabled(
         ? prefs.notifyFailedSend
         : kind === "new-booking"
           ? prefs.notifyNewBooking
-          : prefs.notifyNewContact;
+          : kind === "booking-cancelled"
+            ? prefs.notifyCancelledBooking
+            : prefs.notifyNewContact;
   return stored ?? true;
 }
 
@@ -276,15 +281,19 @@ const ALERT_COPY: Record<
       de: "Für {who} wurde ein Termin gebucht: {detail}. Die angehängte Einladung trägt ihn in Ihren Kalender ein.",
     },
   },
-  // The retraction half of newBooking, riding the same switch: whoever asked
-  // to have bookings on their calendar needs cancellations to take them off
-  // again. The attached CANCEL shares the invite's UID and outranks it, so
-  // the entry disappears instead of gaining a struck-through twin. A customer
-  // cancelling by WhatsApp reply can also produce inboundCancelled — that one
-  // says a customer WROTE, this one keeps the calendar honest; each has its
-  // own switch.
+  // The retraction half of newBooking, on its OWN switch since 2026-08-20:
+  // hearing about arrivals and hearing about cancellations are different
+  // appetites. The attached CANCEL shares the invite's UID and outranks it,
+  // so the entry disappears instead of gaining a struck-through twin. Fires
+  // only for cancellations the CUSTOMER caused (manage link, WhatsApp İPTAL,
+  // voice, cal.com) — a cancellation somebody typed into the app is their own
+  // act, and mailing them about it teaches them to ignore the alert (see the
+  // suppressOwnerAlert threading in appointments.ts). A customer cancelling
+  // by WhatsApp reply can also produce inboundCancelled — that one says a
+  // customer WROTE, this one keeps the calendar honest; each has its own
+  // switch.
   bookingCancelled: {
-    kind: "new-booking",
+    kind: "booking-cancelled",
     subject: {
       tr: "Randevu iptal edildi: {who}",
       en: "Booking cancelled: {who}",

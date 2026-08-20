@@ -68,6 +68,10 @@ export default defineSchema({
     // system-only rule as notifyNewContact: appointments.source gates it in
     // scheduleLifecycleMessages, so the grid never echoes your own typing.
     notifyNewBooking: v.optional(v.boolean()),
+    // The retraction half rides its own switch — and only fires for
+    // cancellations the customer caused; in-app cancels never email the
+    // person who typed them (lib/alerts.ts bookingCancelled).
+    notifyCancelledBooking: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("by_org", ["orgId"]),

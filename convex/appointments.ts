@@ -304,19 +304,26 @@ export async function scheduleLifecycleMessages(
       await ctx.db.patch(appointmentId, { manageToken: crypto.randomUUID() });
     }
   }
-  // The salon's own side of the event, riding users.notifyNewBooking: an
-  // email whose calendar invite puts the booking on the reader's calendar
-  // (REQUEST), and takes it off again when it dies (CANCEL). Same door-based
-  // rule as notifyNewContact: only bookings nobody in the salon typed —
-  // booking page, voice, chat, cal.com — alert; the grid's own entries are
-  // an echo of the reader's typing. A reschedule passes back through the
-  // booking trigger, so the invite goes again at its bumped icsSequence and
-  // the calendar entry moves.
+  // The salon's own side of the event: an email whose calendar invite puts
+  // the booking on the reader's calendar (REQUEST), and takes it off again
+  // when it dies (CANCEL). newBooking rides users.notifyNewBooking with the
+  // same door-based rule as notifyNewContact: only bookings nobody in the
+  // salon typed — booking page, voice, chat, cal.com — alert; the grid's own
+  // entries are an echo of the reader's typing. A reschedule passes back
+  // through the booking trigger, so the invite goes again at its bumped
+  // icsSequence and the calendar entry moves.
+  //
+  // bookingCancelled rides its own switch, and its gate is WHO CANCELLED,
+  // not who created: every in-app cancel arrives here with suppressOwnerAlert
+  // set, so what remains is customer-caused — including a hand-typed booking
+  // the customer kills through their manage link, which is exactly as much
+  // news as any other cancellation. The source gate stays on the booking
+  // trigger only.
   if (
     appointment &&
-    appointment.source &&
-    appointment.source !== "manual" &&
-    !options?.suppressOwnerAlert
+    !options?.suppressOwnerAlert &&
+    (trigger === "cancellation" ||
+      (appointment.source && appointment.source !== "manual"))
   ) {
     const customer = await ctx.db.get(appointment.customerId);
     await queueOrgAlert(ctx, {
@@ -444,8 +451,13 @@ export const setStatus = mutation({
     await syncAppointmentSchedule(ctx, args.appointmentId);
     // On the TRANSITION only — re-saving an already-cancelled appointment is
     // not a second cancellation and must not message the customer twice.
+    // suppressOwnerAlert: everyone who reaches this mutation is inside the
+    // app cancelling by hand; the customer still hears, the salon does not
+    // get an email about its own tap.
     if (args.status === "cancelled" && appointment.status !== "cancelled") {
-      await scheduleLifecycleMessages(ctx, orgId, args.appointmentId, "cancellation");
+      await scheduleLifecycleMessages(ctx, orgId, args.appointmentId, "cancellation", {
+        suppressOwnerAlert: true,
+      });
     }
     await recordActivity(ctx, {
       orgId,
@@ -518,11 +530,16 @@ export const markCancelled = internalMutation({
     // cal.com can deliver the same cancellation more than once (the push we
     // initiated comes straight back as a webhook); the notice must not.
     if (!wasCancelled) {
+      // actor present = somebody inside the salon started this cancellation
+      // (the cal.com push carries their name back here); their own act must
+      // not email them. Absent means the customer or cal.com did it, and the
+      // booking-cancelled alert is exactly for that.
       await scheduleLifecycleMessages(
         ctx,
         appointment.orgId,
         args.appointmentId,
         "cancellation",
+        { suppressOwnerAlert: args.actor !== undefined },
       );
       if (args.actor !== undefined) {
         await recordActivity(ctx, {
