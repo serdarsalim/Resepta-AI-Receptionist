@@ -205,6 +205,13 @@ export default defineSchema({
     timezone: v.string(),
     // BCP 47-ish short code driving template language + date formatting ("tr").
     language: v.string(),
+    // What kind of business this is (lib/industryPresets IndustryKey),
+    // answered in onboarding. Drives which starter services/fields a preset
+    // application seeds and nothing else at runtime — verticalization stays
+    // org data, and this is only the remembered answer that lets Business
+    // settings offer "reset to industry defaults" later. A plain string so a
+    // retired industry key never wedges the schema.
+    industry: v.optional(v.string()),
     // The org's public handle, used in its request-form URL (/r/<slug>).
     // Generated from the name on first enable rather than asked for: one more
     // thing to invent is one more reason a salon owner stops halfway through
