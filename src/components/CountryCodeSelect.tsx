@@ -131,8 +131,14 @@ export function CountryCodeSelect({
       if (e.key === "Escape") setOpen(false);
     };
     // A fixed panel can't follow a scrolling ancestor, so close instead of
-    // letting it drift away from its trigger. Capture catches inner scrollers.
-    const onScroll = () => setOpen(false);
+    // letting it drift away from its trigger. Capture catches inner scrollers
+    // too, though — including the option list INSIDE the panel — so scrolling
+    // a long country list closed the picker mid-scroll. Panel-internal
+    // scrolls are the one kind that never move the trigger; ignore them.
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
     window.addEventListener("mousedown", onClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);

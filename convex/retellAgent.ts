@@ -20,6 +20,7 @@ import {
   createVoiceRuntimeToken,
   hashVoiceRuntimeToken,
 } from "./lib/voiceRuntime";
+import { engineFieldsFor } from "./lib/voiceModels";
 import {
   appointmentReceptionistTemplate,
   saveCustomerDetailsTool,
@@ -1449,15 +1450,24 @@ export const syncTemplate = action({
           !(context.canEndCall === false && String(tool.name ?? "") === END_CALL_TOOL_NAME),
       );
       const llmVersion = draftAgent.response_engine?.version;
+      // The operator's per-agent override outranks the template: without
+      // this, clicking the update banner silently put every agent back on
+      // the platform default — which is exactly how "I set it in Retell and
+      // it keeps becoming Haiku" happened before the override existed. Both
+      // engine fields ride every PATCH (engineFieldsFor), so a realtime
+      // override survives a sync and a standard agent never keeps a stale
+      // s2s_model. The temperature and priority knobs are text-pipeline
+      // settings, so they only ride when the target IS the text pipeline.
+      const syncEngine = engineFieldsFor(context.llmModel ?? template.llm.model);
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-        // The operator's per-agent override outranks the template: without
-        // this, clicking the update banner silently put every agent back on
-        // the platform default — which is exactly how "I set it in Retell and
-        // it keeps becoming Haiku" happened before the override existed.
-        model: context.llmModel ?? template.llm.model,
-        model_temperature: template.llm.model_temperature,
-        model_high_priority: template.llm.model_high_priority,
+        ...syncEngine,
+        ...(syncEngine.model !== null
+          ? {
+              model_temperature: template.llm.model_temperature,
+              model_high_priority: template.llm.model_high_priority,
+            }
+          : {}),
         general_tools: withRuntimeSaveTool([...templateTools, ...kept]),
         mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
       });
@@ -1603,9 +1613,12 @@ export async function applyAgentModel(
     await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
   ).json()) as AgentDoc;
   const llmVersion = draftAgent.response_engine?.version;
+  // Both fields, always — engineFieldsFor nulls whichever side the target
+  // does not use, because an omitted field survives the PATCH and would
+  // leave both engines configured after a standard↔realtime switch.
   await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-    model: model ?? template.llm.model,
+    ...engineFieldsFor(model ?? template.llm.model),
   });
   await call(key, "POST", `publish-agent-version/${id}`, {
     version: draft.version,

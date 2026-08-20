@@ -820,7 +820,14 @@ export function SearchSelect({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    const onScroll = () => setOpen(false);
+    // Close when the PAGE scrolls (a fixed panel cannot follow its trigger) —
+    // but not when the options list inside the panel scrolls, which the
+    // capture listener also hears. Without the guard, scrolling to the
+    // bottom of a long list closed the picker mid-scroll.
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
     window.addEventListener("mousedown", onClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);

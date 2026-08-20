@@ -23,6 +23,14 @@ export type VoiceModelChoice = {
   id: string;
   label: string;
   usdPerMinute: number;
+  // Speech-to-speech: the id goes in the provider's s2s_model field and
+  // REPLACES the STT→LLM→TTS pipeline — the model listens and speaks itself.
+  // The voice engine fee still applies (billed as "Voice Infra"), and the
+  // model speaks with its own voices, so a realtime pick changes how the
+  // agent sounds. Ids validated against the live API 2026-08-20 like the
+  // rest; the 2.1 pair carries the family price, Retell does not list it
+  // separately.
+  realtime?: true;
 };
 
 export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
@@ -47,8 +55,26 @@ export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
   { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", usdPerMinute: 0.023 },
   { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", usdPerMinute: 0.014 },
   { id: "gemini-3.0-flash", label: "Gemini 3.0 Flash", usdPerMinute: 0.027 },
+  { id: "gpt-realtime-2.1-mini", label: "GPT Realtime 2.1 Mini (s2s)", usdPerMinute: 0.07, realtime: true },
+  { id: "gpt-realtime-2.1", label: "GPT Realtime 2.1 (s2s)", usdPerMinute: 0.345, realtime: true },
+  { id: "gpt-realtime-1.5", label: "GPT Realtime 1.5 (s2s)", usdPerMinute: 0.345, realtime: true },
+  { id: "gpt-realtime-mini", label: "GPT Realtime Mini (s2s)", usdPerMinute: 0.07, realtime: true },
+  { id: "gpt-realtime", label: "GPT Realtime (s2s)", usdPerMinute: 0.345, realtime: true },
 ];
 
 export function isVoiceModel(id: string): boolean {
   return VOICE_MODEL_CHOICES.some((choice) => choice.id === id);
+}
+
+// Which provider field a model id belongs in. `model` and `s2s_model` are
+// mutually exclusive on the engine, and BOTH must be sent on every switch:
+// the API clears a field only when it is explicitly nulled (verified live,
+// 2026-08-20 — an omitted field survives the PATCH), so sending just the new
+// one would leave an agent with both engines configured.
+export function engineFieldsFor(id: string): {
+  model: string | null;
+  s2s_model: string | null;
+} {
+  const realtime = VOICE_MODEL_CHOICES.find((choice) => choice.id === id)?.realtime === true;
+  return realtime ? { model: null, s2s_model: id } : { model: id, s2s_model: null };
 }

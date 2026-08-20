@@ -830,8 +830,12 @@ function UserMenu({
       if (e.key === "Escape") setPos(null);
     };
     // Capture, so a scroll inside any pane closes it rather than leaving the
-    // menu floating away from its trigger.
-    const onScroll = () => setPos(null);
+    // menu floating away from its trigger. The menu's OWN scrollbar is the
+    // exception: scrolling the list is using it, not leaving it.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);
@@ -1098,8 +1102,12 @@ function WorkspaceSwitcher({
       if (e.key === "Escape") setPos(null);
     };
     // Capture, so a scroll inside any pane closes it rather than leaving the
-    // menu floating away from its trigger.
-    const onScroll = () => setPos(null);
+    // menu floating away from its trigger. The menu's OWN scrollbar is the
+    // exception: scrolling the list is using it, not leaving it.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);

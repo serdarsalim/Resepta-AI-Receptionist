@@ -564,7 +564,12 @@ function RowMenu({
         setPos(null);
       }
     };
-    const onScroll = () => setPos(null); // fixed coords go stale on scroll
+    // Fixed coords go stale when the PAGE scrolls — but the menu's own
+    // scrollbar is the exception: scrolling the list is using it.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("scroll", onScroll, true);
     return () => {
@@ -722,7 +727,12 @@ function ViewMenu({
         setPos(null);
       }
     };
-    const onScroll = () => setPos(null); // fixed coords go stale on scroll
+    // Fixed coords go stale when the PAGE scrolls — but the menu's own
+    // scrollbar is the exception: scrolling the list is using it.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPos(null);
     };
