@@ -40,8 +40,21 @@ export function formatMoney(
   minor: number,
   currency: string,
   locale: string,
+  // orgs.priceDecimals. Optional and defaulting to the PRODUCT default rather
+  // than to the old behaviour: a call site that forgets to thread the setting
+  // then lands on what most businesses want instead of on a stale one. Getting
+  // it wrong in this direction shows a salon ₺350 when they asked for ₺350.00;
+  // the other direction puts ".00" on every price in every message of every
+  // salon that never wanted it.
+  showDecimals = false,
 ): string {
   const digits = fractionDigits(currency, locale);
+  // NEVER ROUNDS. "Hide decimals" means a whole price renders whole — a price
+  // that actually carries kuruş still shows them, because ₺34,50 written as
+  // ₺35 is a different price rather than a tidier one. So the option only ever
+  // removes zeroes, which is the only version of it that can be trusted on a
+  // page where a stranger is deciding whether to book.
+  const whole = digits === 0 || minor % 10 ** digits === 0;
   // narrowSymbol, not the default: English renders TRY as the literal code
   // ("TRY 400.00"), which is what you want in a table listing many currencies
   // and wrong here. An org has exactly one currency, so the symbol is never
@@ -50,5 +63,8 @@ export function formatMoney(
     style: "currency",
     currency,
     currencyDisplay: "narrowSymbol",
+    ...(showDecimals || !whole
+      ? {}
+      : { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
   }).format(minor / 10 ** digits);
 }

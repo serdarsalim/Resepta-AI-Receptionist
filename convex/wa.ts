@@ -621,7 +621,7 @@ export const sendAppointmentMessage = internalAction({
     // dashboard was showing ₺400.00 while the reminder about that same
     // appointment said TRY 400.00.
     const formatMoney = (minor: number) =>
-      formatMinorUnits(minor, org.currency ?? "TRY", language);
+      formatMinorUnits(minor, org.currency ?? "TRY", language, org.priceDecimals);
     const price = totalMinor > 0 ? formatMoney(totalMinor) : undefined;
     // [pricelist] — the receipt look. An unpriced item keeps its bullet
     // without a dangling dash.

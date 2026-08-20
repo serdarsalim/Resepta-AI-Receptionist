@@ -948,6 +948,14 @@ const dictionary = {
     en: "The language your customers see: the messages you send, your booking page, and the page they manage an appointment from. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
     de: "Die Sprache, die Ihre Kundschaft sieht: gesendete Nachrichten, Ihre Buchungsseite und die Seite zur Terminverwaltung. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
   },
+  // Reads as an example, not a rule — the shortest way to say what the switch
+  // does is to show both answers. Sits under the currency select, so the
+  // symbol beside it is already the org's own.
+  "settings.priceDecimals": {
+    tr: "Kuruşları göster (₺350 yerine ₺350,00)",
+    en: "Show decimals (₺350.00 rather than ₺350)",
+    de: "Nachkommastellen anzeigen (₺350,00 statt ₺350)",
+  },
   "settings.sendConfirmation": {
     tr: "Randevu alındığında onay mesajı gönder",
     en: "Send a confirmation when a booking is made",

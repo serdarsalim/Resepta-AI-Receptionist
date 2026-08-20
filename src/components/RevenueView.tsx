@@ -38,7 +38,7 @@ export function RevenueView() {
             {/* tabular-nums so three figures of different lengths still line
                 up at the decimal when you scan down them. */}
             <p className="mt-1 text-2xl font-semibold tabular-nums">
-              {formatMoney(figure.value, report.currency, language)}
+              {formatMoney(figure.value, report.currency, language, report.priceDecimals)}
             </p>
           </div>
         ))}
@@ -77,7 +77,7 @@ export function RevenueView() {
                   </span>
                 </span>
                 <span className="shrink-0 tabular-nums">
-                  {formatMoney(row.total, report.currency, language)}
+                  {formatMoney(row.total, report.currency, language, report.priceDecimals)}
                 </span>
               </li>
             ))}

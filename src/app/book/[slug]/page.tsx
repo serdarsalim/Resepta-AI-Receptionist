@@ -182,7 +182,8 @@ export default function BookingPage({
     );
   }
 
-  const priceLabel = (minor: number) => formatMoney(minor, page.currency, page.language);
+  const priceLabel = (minor: number) =>
+    formatMoney(minor, page.currency, page.language, page.priceDecimals);
   const days = dayStrip(page.timezone, minMs);
   // Coarse shelves, cut at 12:00 and 17:00. Labels group; hours define.
   const shelves =

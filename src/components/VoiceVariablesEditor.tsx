@@ -685,7 +685,12 @@ export function VoiceVariablesEditor({
               ? `${service.durationMinutes} min`
               : null,
             service.price !== undefined
-              ? formatMoney(service.price, currency, localeFor(language))
+              ? formatMoney(
+                  service.price,
+                  currency,
+                  localeFor(language),
+                  orgSettings?.org.priceDecimals,
+                )
               : null,
           ]
             .filter(Boolean)

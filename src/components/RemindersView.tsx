@@ -15,6 +15,7 @@ import {
 // it, timezone and all, rather than a second date formatter's opinion.
 import { formatAppointmentTime } from "../../convex/lib/format";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
@@ -303,6 +304,7 @@ function RuleEditor({
   orgName,
   orgLanguage,
   orgCurrency,
+  orgPriceDecimals,
   orgTimezone,
   orgBookingUrl,
   orgPublicPhone,
@@ -318,6 +320,7 @@ function RuleEditor({
   orgName: string;
   orgLanguage: string;
   orgCurrency: string;
+  orgPriceDecimals?: boolean;
   orgTimezone: string;
   orgBookingUrl?: string;
   orgPublicPhone?: string;
@@ -428,11 +431,13 @@ function RuleEditor({
   // settle, so the preview has to read what is in the box right now.
   const liveDefaults = tokenDefaults(defaults);
   const previewValues = useMemo(() => {
+    // The SHARED formatter, not a local Intl call. This preview hand-rolled
+    // its own — without narrowSymbol and with a hardcoded /100 — which is the
+    // exact drift lib/money's header describes: the preview promised "TRY
+    // 400.00" for a message that sends "₺400,00". It now writes money the way
+    // the send path writes it, decimals setting included.
     const formatMoney = (minor: number) =>
-      new Intl.NumberFormat(orgLanguage, {
-        style: "currency",
-        currency: orgCurrency,
-      }).format(minor / 100);
+      formatMinorUnits(minor, orgCurrency, orgLanguage, orgPriceDecimals);
     // A real send collapses a token with nothing behind it, along with the
     // whitespace it leaves — renderTokens does that on purpose, so a message
     // never goes out saying "Merhaba ," or carrying an empty bracket. In a
@@ -516,6 +521,7 @@ function RuleEditor({
     orgName,
     orgLanguage,
     orgCurrency,
+    orgPriceDecimals,
     orgTimezone,
     orgPublicPhone,
     orgBookingUrl,
@@ -1174,6 +1180,7 @@ function RulesCard({
     name: string;
     language: string;
     currency: string;
+    priceDecimals?: boolean;
     timezone: string;
     quietHoursStart: number;
     quietHoursEnd: number;
@@ -1644,6 +1651,7 @@ function RulesCard({
           orgName={org.name}
           orgLanguage={org.language}
           orgCurrency={org.currency}
+          orgPriceDecimals={org.priceDecimals}
           orgTimezone={org.timezone}
           orgBookingUrl={org.bookingUrl}
           orgPublicPhone={org.publicPhone}

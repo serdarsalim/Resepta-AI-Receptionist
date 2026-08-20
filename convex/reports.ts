@@ -33,6 +33,9 @@ export const revenue = query({
   args: {},
   returns: v.object({
     currency: v.string(),
+    // orgs.priceDecimals — the takings tab has to write money the way every
+    // other surface in the app writes it.
+    priceDecimals: v.optional(v.boolean()),
     today: v.number(),
     week: v.number(),
     month: v.number(),
@@ -134,6 +137,7 @@ export const revenue = query({
     recent.sort((a, b) => b.startAt - a.startAt);
     return {
       currency: org.currency ?? "TRY",
+      priceDecimals: org.priceDecimals,
       today: todayTotal,
       week: weekTotal,
       month: monthTotal,

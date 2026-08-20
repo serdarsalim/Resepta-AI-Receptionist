@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { DEMO_ORIGIN, DOCS_ORIGIN } from "@/lib/hosts";
-import { LANGUAGES, isLanguage } from "@/lib/i18n";
+import { LANGUAGES, type Language, isLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { LANDING, type LandingCopy } from "@/lib/landing";
 
 // The page is three beats read top to bottom: the promise, the price of doing
@@ -38,25 +40,7 @@ export function Landing() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1 whitespace-nowrap">
-            {/* The select wears the same ghost treatment as the links beside
-                it; appearance-none strips the OS chrome, the chevron is ours. */}
-            <span className="relative">
-              <select
-                aria-label="Language"
-                className="cursor-pointer appearance-none rounded-lg border-none bg-transparent py-2 pl-3 pr-7 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                value={language}
-                onChange={(event) => {
-                  if (isLanguage(event.target.value)) setLanguage(event.target.value);
-                }}
-              >
-                {LANGUAGES.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon />
-            </span>
+            <LanguageMenu language={language} onSelect={setLanguage} />
             <Link
               href="/signin"
               className="rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -472,10 +456,69 @@ function Mark({ small = false }: { small?: boolean }) {
   );
 }
 
-function ChevronDownIcon() {
+// The language picker is a real dropdown, not a styled <select>: portal to
+// document.body, position: fixed, measured from the trigger — the house
+// popover rule (useAnchoredPanel, see AGENTS.md).
+function LanguageMenu({
+  language,
+  onSelect,
+}: {
+  language: Language;
+  onSelect: (language: Language) => void;
+}) {
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(160, 160, "right");
+  const current = LANGUAGES.find((item) => item.code === language);
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Language"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={toggle}
+        className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+      >
+        {current?.label ?? language}
+        <ChevronDownIcon open={open} />
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="listbox"
+            style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
+            className="z-[100] rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm text-[var(--foreground)] shadow-lg"
+          >
+            {LANGUAGES.map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                role="option"
+                aria-selected={item.code === language}
+                onClick={() => {
+                  if (isLanguage(item.code)) onSelect(item.code);
+                  close();
+                }}
+                className={`block w-full rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
+                  item.code === language ? "bg-[var(--muted-bg)] font-medium" : ""
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function ChevronDownIcon({ open = false }: { open?: boolean }) {
   return (
     <svg
-      className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]"
+      className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${open ? "rotate-180" : ""}`}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

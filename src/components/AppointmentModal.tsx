@@ -62,6 +62,7 @@ export function AppointmentModal({
   draft,
   services,
   currency,
+  priceDecimals,
   staff,
   staffLabel,
   pending,
@@ -83,6 +84,9 @@ export function AppointmentModal({
     price?: number;
   }[];
   currency: string;
+  // orgs.priceDecimals — see lib/money. Threaded rather than queried so the
+  // modal keeps taking its whole money format from one caller.
+  priceDecimals?: boolean;
   staff: { _id: Id<"staff">; name: string; active: boolean }[];
   staffLabel: string;
   pending: boolean;
@@ -784,7 +788,7 @@ export function AppointmentModal({
                   disagree with the lines above it. */}
               {total !== undefined && (
                 <span className="ml-auto text-sm font-medium tabular-nums">
-                  {formatMoney(total, currency, language)}
+                  {formatMoney(total, currency, language, priceDecimals)}
                 </span>
               )}
             </div>

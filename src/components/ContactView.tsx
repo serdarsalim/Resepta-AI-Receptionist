@@ -309,6 +309,7 @@ export function ContactView({
               <CustomerAppointments
                 appointments={appointments}
                 currency={currency}
+                priceDecimals={settings?.org.priceDecimals}
                 onAdd={() =>
                   booking.open({
                     // Next round hour, the same default the calendar's own
@@ -536,11 +537,13 @@ export function ContactView({
 function CustomerAppointments({
   appointments,
   currency,
+  priceDecimals,
   onAdd,
   onOpen,
 }: {
   appointments: CustomerAppointment[] | undefined;
   currency: string;
+  priceDecimals?: boolean;
   onAdd: () => void;
   onOpen: (draft: ModalDraft, anchor: Rect) => void;
 }) {
@@ -633,7 +636,7 @@ function CustomerAppointments({
             slot is easier to skim past than a placeholder. */}
         {a.total !== undefined && (
           <span className="shrink-0 text-sm tabular-nums">
-            {formatMoney(a.total, currency, language)}
+            {formatMoney(a.total, currency, language, priceDecimals)}
           </span>
         )}
       </div>

@@ -131,6 +131,7 @@ export function useBookingSheet({
         draft={sheet}
         services={(services ?? []).filter((service) => service.active)}
         currency={settings?.org.currency ?? DEFAULT_CURRENCY}
+        priceDecimals={settings?.org.priceDecimals}
         staff={staff ?? []}
         staffLabel={t("appointments.staff")}
         pending={pending}

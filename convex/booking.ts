@@ -160,6 +160,10 @@ export const page = query({
       language: v.string(),
       // Minor-units prices render in this (lib/money formatMoney).
       currency: v.string(),
+      // orgs.priceDecimals — whether those prices are written with their
+      // decimal part. Published because it is how the salon writes money and
+      // the page has to agree with the reminder the customer gets next.
+      priceDecimals: v.optional(v.boolean()),
       // The salon's logo, resolved to a URL — null when never uploaded.
       logoUrl: v.union(v.string(), v.null()),
       services: v.array(
@@ -193,6 +197,7 @@ export const page = query({
       timezone: org.timezone,
       language: org.language,
       currency: org.currency ?? DEFAULT_CURRENCY,
+      priceDecimals: org.priceDecimals,
       logoUrl: org.logoStorageId
         ? await ctx.storage.getUrl(org.logoStorageId)
         : null,

@@ -85,6 +85,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "booking", key: "settings.bookingPage" },
   { card: "booking", key: "settings.bookingMode" },
   { card: "general", key: "settings.currency" },
+  { card: "general", key: "settings.priceDecimals" },
   { card: "general", key: "settings.revenueEnabled" },
   { card: "hours", key: "settings.hours" },
   { card: "hours", key: "settings.timezone" },
@@ -532,17 +533,33 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
           <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
-          <select
-            className="sm:max-w-72"
-            defaultValue={settings.org.currency}
-            onChange={(e) => void update({ currency: e.target.value })}
-          >
-            {CURRENCIES.map((code) => (
-              <option key={code} value={code}>
-                {`${code} · ${currencySymbol(code, settings.org.language)}`}
-              </option>
-            ))}
-          </select>
+          {/* Currency and decimals share ONE row, stacked rather than
+              side by side: the control column caps at 24rem and a select plus
+              a switch plus its label does not fit a phone. They belong
+              together — currency picks the symbol, language picks the
+              separators, this picks how much of the number to write — and as
+              a row of its own the decimals switch would have needed a label
+              restating the word "price" three times. */}
+          <div className="space-y-2.5 sm:max-w-72">
+            <select
+              className="w-full"
+              defaultValue={settings.org.currency}
+              onChange={(e) => void update({ currency: e.target.value })}
+            >
+              {CURRENCIES.map((code) => (
+                <option key={code} value={code}>
+                  {`${code} · ${currencySymbol(code, settings.org.language)}`}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <Toggle
+                checked={settings.org.priceDecimals ?? false}
+                onChange={(next) => void update({ priceDecimals: next })}
+              />
+              {t("settings.priceDecimals")}
+            </label>
+          </div>
           {/* Last on purpose: an opt-in extra, below the facts of the
               business. It follows currency because that is the unit the tab
               it unlocks counts in. Off by default: an org that never fills in

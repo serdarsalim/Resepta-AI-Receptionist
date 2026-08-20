@@ -223,6 +223,16 @@ export default defineSchema({
     // switch because publishing "ask us" and publishing "book yourself" are
     // different amounts of trust in the calendar.
     bookingEnabled: v.optional(v.boolean()),
+    // Whether prices are written with their decimal part. Off by default
+    // (2026-08-20): a Türkiye salon prices in whole lira and "₺350,00" is two
+    // characters of noise on every row of a page a stranger is reading to
+    // decide whether to book. It only ever removes ZEROES — lib/money never
+    // rounds, so a price that genuinely carries kuruş still shows them.
+    //
+    // Lives next to currency in Business → General because it is the same
+    // question: currency picks the symbol, language picks the separators,
+    // this picks how much of the number to write.
+    priceDecimals: v.optional(v.boolean()),
     // Whether the takings tab exists at all. Off by default: an org that
     // never fills in prices would otherwise get a nav item leading to three
     // zeroes, which reads as the app being broken rather than unused.

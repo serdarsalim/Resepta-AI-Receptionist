@@ -59,6 +59,7 @@ export const current = query({
       publicSlug: v.optional(v.string()),
       bookingEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
+      priceDecimals: v.optional(v.boolean()),
       // Shows the Balance tab (prepaid only) — the wallet itself is
       // wallet.overview's answer, this is just "does the destination exist".
       billingMode: v.optional(
@@ -202,6 +203,7 @@ export const current = query({
         publicSlug: org.publicSlug,
         bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
+        priceDecimals: org.priceDecimals,
         billingMode: org.billingMode,
         demoMode: org.demoMode,
         logoUrl: org.logoStorageId
@@ -302,6 +304,7 @@ export const update = mutation({
     autoReplyEnabled: v.optional(v.boolean()),
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
+    priceDecimals: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -352,6 +355,7 @@ export const update = mutation({
       patch.currency = args.currency;
     }
     if (args.revenueEnabled !== undefined) patch.revenueEnabled = args.revenueEnabled;
+    if (args.priceDecimals !== undefined) patch.priceDecimals = args.priceDecimals;
     if (args.inboundAddress !== undefined) {
       // Slugging and uniqueness both live in lib/inboundAddress, because the
       // admin console writes this field too and used to do neither.
