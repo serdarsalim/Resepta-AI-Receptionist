@@ -141,7 +141,12 @@ export function FeedFilterPills({
         <FeedIcon type={tab} size={15} />
         {/* Zero renders nothing. A row of noughts is noise, and the dimmed
             pill already says the tab is empty. */}
-        {count > 0 && <span className="tabular-nums">{count}</span>}
+        {/* leading-none, or the count sets the pill's height: text-sm's 20px
+            line box outgrows the 15px glyph, so a pill that gained a digit
+            stood 5px taller than its neighbours and closed the gap to the
+            card under the row. With the line box pinned the glyph governs
+            every pill, counted or not. */}
+        {count > 0 && <span className="leading-none tabular-nums">{count}</span>}
       </button>
     );
   };
