@@ -18,6 +18,7 @@ import { useMutation, useQuery } from "convex/react";
 import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { MAX_LINES_PER_BOOKING } from "../../../../convex/lib/bookingLimits";
+import { slugify } from "../../../../convex/lib/publicSlug";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
@@ -86,6 +87,8 @@ export default function BookingPage({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
@@ -248,16 +251,28 @@ export default function BookingPage({
   // Two purchases, not one list. A product is handed over and adds no minutes;
   // a service books a chair for a length of time. The split is only DRAWN when
   // the salon actually sells both — a header over the whole list names nothing.
+  // Matched through lib/publicSlug's slugger on BOTH sides, which is doing
+  // real work rather than saving a toLowerCase: it folds Turkish to ASCII, so
+  // "sac" finds "Saç kesimi" and "boyama" finds "Saç boyama" without the
+  // customer reaching for a Turkish keyboard. Hyphenation is harmless here —
+  // both sides get it, so "sac k" slugs to "sac-k" and still matches.
+  const needle = slugify(query);
+  const matches = (name: string) => !needle || slugify(name).includes(needle);
   const groups = [
     {
       key: "booking.services" as const,
-      rows: page.services.filter((row) => row.durationMinutes !== undefined),
+      rows: page.services.filter(
+        (row) => row.durationMinutes !== undefined && matches(row.name),
+      ),
     },
     {
       key: "booking.products" as const,
-      rows: page.services.filter((row) => row.durationMinutes === undefined),
+      rows: page.services.filter(
+        (row) => row.durationMinutes === undefined && matches(row.name),
+      ),
     },
   ].filter((group) => group.rows.length > 0);
+
   // A good's quantity rides in front of its name, the same shape wa.ts prints
   // in the confirmation they get afterwards.
   const lineName = (row: (typeof picked)[number]) =>
@@ -459,7 +474,66 @@ export default function BookingPage({
     >
       {step === "service" && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold">{t("booking.pickService")}</h2>
+          {/* The heading row IS the search row. Collapsed it is a heading and
+              a magnifier; open, the field takes the line the heading was
+              using. A search box sitting open on every visit would be the
+              first thing a customer meets on a page whose whole job is a list
+              they can usually just read. */}
+          <div className="mb-3 flex h-8 items-center gap-2">
+            {searchOpen ? (
+              <>
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("common.search")}
+                  // Closes on blur only when it found nothing to keep — a
+                  // filter still narrowing the list has to survive the tap
+                  // that picks a row out of it.
+                  onBlur={() => !query.trim() && setSearchOpen(false)}
+                  className="h-8 min-w-0 flex-1 px-2.5 py-1 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setSearchOpen(false);
+                  }}
+                  aria-label={t("common.cancel")}
+                  className="shrink-0 rounded-lg px-1.5 py-1 text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
+                >
+                  ×
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="min-w-0 flex-1 text-sm font-semibold">
+                  {t("booking.pickService")}
+                </h2>
+                {/* Always offered, no row-count threshold. Collapsing to a
+                    magnifier IS the answer to a short list: it costs one quiet
+                    glyph, where a box open on arrival would be the first thing
+                    a customer meets on a page whose job is a list they can
+                    usually just read. */}
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  aria-label={t("common.search")}
+                  className="-mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.6" />
+                    <path
+                      d="M10.5 10.5L14 14"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
           {basketFull && (
             <p className="mb-3 text-xs text-[var(--muted)]">
               {t("booking.maxLines").replace("{n}", String(MAX_LINES_PER_BOOKING))}
@@ -490,6 +564,11 @@ export default function BookingPage({
               card's right edge. border-t, not border-y, or the card's bottom
               padding is stranded under a closing rule and reads as one more,
               empty row. */}
+          {groups.length === 0 && (
+            <p className="py-6 text-center text-sm text-[var(--muted)]">
+              {t("booking.noMatches")}
+            </p>
+          )}
           {groups.map((group) => (
             <div key={group.key} className="mt-4 first:mt-0">
               {groups.length > 1 && (

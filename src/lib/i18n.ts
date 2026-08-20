@@ -678,6 +678,11 @@ const dictionary = {
   // "Notes": a blank box under a noun gets left blank, and what the salon
   // actually wants is the allergy, the parking question, the second person
   // coming along.
+  "booking.noMatches": {
+    tr: "Bu aramaya uyan bir şey yok.",
+    en: "Nothing matches that search.",
+    de: "Dazu passt nichts.",
+  },
   "booking.note": { tr: "Not", en: "Note", de: "Notiz" },
   "booking.notePlaceholder": {
     tr: "Bilmemiz gereken bir şey var mı?",
