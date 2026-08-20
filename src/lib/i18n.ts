@@ -2984,6 +2984,15 @@ const dictionary = {
   },
 
   "services.title": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
+  // The other half of what a salon sells, as its own card. "Products" rather
+  // than "Goods": it is the word on the shelf, and the one the booking page
+  // already shows the customer.
+  "services.products": { tr: "Ürünler", en: "Products", de: "Produkte" },
+  "services.productsHint": {
+    tr: "Sattığınız, süre almayan şeyler. Takvimde yer kaplamaz ve randevu sayfanızda ayrı listelenir. Yeni bir tane için hizmet ekleyip süreyi boş bırakın.",
+    en: "Things you sell rather than book time for. They take no time on the calendar and list separately on your booking page. To add one, add a service and leave the duration blank.",
+    de: "Was Sie verkaufen, statt Zeit dafür zu buchen. Ohne Dauer im Kalender, auf Ihrer Buchungsseite getrennt gelistet. Für ein neues: Leistung hinzufügen und die Dauer leer lassen.",
+  },
   "services.hint": {
     tr: "İşletmenizin sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",
     en: "What your business offers. Bookings pick from this list, and the duration sets how long the appointment runs on the calendar.",

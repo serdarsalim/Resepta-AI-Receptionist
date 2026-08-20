@@ -863,34 +863,26 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
-  const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  // Two cards, not one list with a quiet gap in its Duration column. A product
+  // is not a short service: it books no time, holds no chair, and answers a
+  // different question in every column this table has. Mixed together, the only
+  // thing marking Shampoo out from a service someone forgot to time was an
+  // empty cell. The booking page already splits them for the customer; this is
+  // the same split for the owner.
+  const timed = sorted.filter((row) => row.durationMinutes !== undefined);
+  const goods = sorted.filter((row) => row.durationMinutes === undefined);
 
   // Staff cannot add a service, so an empty list for them is a heading, an (i)
   // and an empty fieldset. Nothing to read and nothing to do: render nothing.
-  if (!isOwner && services !== undefined && rows.length === 0) return null;
+  if (!isOwner && services !== undefined && sorted.length === 0) return null;
 
-  return (
+  // One list body, rendered by both cards. A closure rather than a component:
+  // it reads a dozen things off this scope (the mutations, the currency, the
+  // confirm dialog) and drilling them through props to say the same thing
+  // twice is how the two copies start to differ.
+  const serviceList = (rows: typeof sorted) => (
     <div className="space-y-2">
-      {/* Above the card and hard right, the same solid button Customers and
-          Reminders use. It was a quiet "+ Add service" at the foot of the
-          list, which put the page's primary action below however many rows
-          the salon happens to sell. */}
-      {isOwner && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("services.add")}
-          </button>
-        </div>
-      )}
-      <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
-        {services === undefined ? (
-          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-        ) : (
-          <div className="space-y-2">
             {rows.length > 0 && (
               // Column headers label their columns. They only exist at sm,
               // where the six columns sit in one line and a header can sit over
@@ -1066,11 +1058,48 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               ))}
             </ul>
 
-            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-            {confirmDialog}
-          </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* Above the card and hard right, the same solid button Customers and
+          Reminders use. It was a quiet "+ Add service" at the foot of the
+          list, which put the page's primary action below however many rows
+          the salon happens to sell. */}
+      {isOwner && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("services.add")}
+          </button>
+        </div>
+      )}
+      <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
+        {services === undefined ? (
+          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+        ) : (
+          serviceList(timed)
         )}
       </Card>
+      {/* Only when the salon actually sells something. An empty Products card
+          is a heading over a sentence saying there is nothing under it, on a
+          page most salons will never put a product on. A first one is made the
+          way it always was — Add service, duration left blank. */}
+      {goods.length > 0 && (
+        <Card
+          title={t("services.products")}
+          tip={t("services.productsHint")}
+          disabled={!isOwner}
+        >
+          {serviceList(goods)}
+        </Card>
+      )}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {confirmDialog}
       {adding && <NewServiceSheet onClose={() => setAdding(false)} />}
     </div>
   );
