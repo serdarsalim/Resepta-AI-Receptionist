@@ -116,23 +116,16 @@ export function RevenueView() {
       </section>
 
       <section className="card-raised overflow-hidden">
-        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-2">
+        <div className="px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold">{t("revenue.history")}</h2>
-          <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={hideNoShows}
-              onChange={(event) => setHideNoShows(event.target.checked)}
-            />
-            {t("revenue.hideNoShows")}
-          </label>
         </div>
 
-        {/* The selection rail: select-all lives here permanently so bulk work
-            has a visible way in; the verbs appear only once something is
-            picked, because a bar full of disabled buttons is furniture. */}
+        {/* One rail: select-all on the left where the row checkboxes line up,
+            the bulk verbs the moment something is picked, and the no-show
+            filter as a pill on the right. No instructional copy — the
+            checkbox column explains itself. */}
         {visible.length > 0 && (
-          <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2">
+          <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-4 py-2">
             <input
               type="checkbox"
               checked={allSelected}
@@ -143,7 +136,7 @@ export function RevenueView() {
                 anchor.current = null;
               }}
             />
-            {picked.length > 0 ? (
+            {picked.length > 0 && (
               <>
                 <span className="text-xs text-[var(--muted)]">
                   {t("revenue.selected").replace("{n}", String(picked.length))}
@@ -154,18 +147,28 @@ export function RevenueView() {
                 >
                   {t("statusPill.paid")}
                 </button>
+                {/* Says İptal, writes no_show: on a visit already in the past
+                    that is the status whose machinery fits (win-back arms, no
+                    cancellation message fires), and one word for "didn't
+                    happen" is one fewer concept on the screen. */}
                 <button
                   className={`${pill} ${pillOff} hover:text-red-600 dark:hover:text-red-400`}
                   onClick={() => applyBulk("no_show")}
                 >
-                  {t("status.no_show")}
+                  {t("status.cancelled")}
                 </button>
               </>
-            ) : (
-              <span className="text-xs text-[var(--muted)]">
-                {t("revenue.selectHint")}
-              </span>
             )}
+            <button
+              className={`${pill} ml-auto ${
+                hideNoShows
+                  ? "bg-[var(--border)] text-[var(--foreground)]"
+                  : pillOff
+              }`}
+              onClick={() => setHideNoShows((current) => !current)}
+            >
+              {t("revenue.hideCancelled")}
+            </button>
           </div>
         )}
 
@@ -219,7 +222,7 @@ export function RevenueView() {
                     className={`${pill} ${row.status === "no_show" ? noShowOn : pillOff}`}
                     onClick={() => flipRow(row, "no_show")}
                   >
-                    {t("status.no_show")}
+                    {t("status.cancelled")}
                   </button>
                 </span>
               </li>

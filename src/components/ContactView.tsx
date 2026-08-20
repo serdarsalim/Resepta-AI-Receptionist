@@ -650,9 +650,10 @@ function CustomerAppointments({
                     })
                   }
                 >
-                  {off && a.status === "no_show"
-                    ? t("status.no_show")
-                    : t("status.cancelled")}
+                  {/* Always İptal, even when the stored status is no_show:
+                      one word for "didn't happen" in every scenario, here and
+                      on the revenue ledger alike. */}
+                  {t("status.cancelled")}
                 </button>
               </>
             );
