@@ -484,6 +484,34 @@ rather than after what it does.
     (`Intl` unit, "1 hr 30 min" / "1 sa 30 dk"): "30′" was a prime symbol the
     width of a comma, greyed out against the price, carrying the one fact a
     customer needs to know whether they have time today.
+  - **The card is FIXED-HEIGHT from sm and its middle scrolls** (Serdar,
+    2026-08-20). Every step holds a different amount — six services, a slot
+    grid, three fields — so on a desktop the card resized under the reader at
+    every tap, and fixing it per step meant another reserved height guessing at
+    content the page does not control. One height for the whole wizard costs
+    one guess instead of three, and a salon with thirty services scrolls the
+    list inside the card rather than growing it past the fold. The scroller
+    wears `thin-scroll stable-gutter`, the pair every in-card scroller in the
+    app already uses. The PHONE keeps page scroll and a fixed bar: a
+    viewport-height box with its own scroll region is what mobile browsers
+    handle worst, and that layout already works there.
+  - **The action button is always in the bar's bottom-right corner, greyed
+    until it can be used.** It used to appear on the service step, vanish on
+    the time step and return on the details step, so the bar's right edge was a
+    different shape on each of three screens. Always-there-and-disabled says
+    "there is a next step, not yet"; absent says nothing. The time step's is a
+    formality — tapping a slot still advances, so it is only ever seen
+    disabled — and that is the point: it holds the corner. It sits on its OWN
+    row under the summary, because at the end of one line it was wedged against
+    the total and the two loudest things on the card were fighting for one
+    corner.
+  - **Never import a value from `convex/<name>.ts` in `src/`.** It drags that
+    file's whole import graph into the client bundle — booking.ts →
+    lib/newCustomer → lib/alerts, which defines an `internalQuery` — and Convex
+    logs "functions should not be imported in the browser". Shared values live
+    in a `convex/lib/*` module with no Convex imports; `lib/bookingLimits.ts`
+    exists for exactly this, holding the cap the page and the server must
+    agree on.
   - **Prices ARE published** on the public page (same date, reversing the
     forms.ts-era "duration yes, price no" rule): rows carry duration and
     `formatMoney(service.price)`, and a service with no price shows duration

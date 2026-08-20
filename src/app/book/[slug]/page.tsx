@@ -17,7 +17,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
-import { MAX_LINES_PER_BOOKING } from "../../../../convex/booking";
+import { MAX_LINES_PER_BOOKING } from "../../../../convex/lib/bookingLimits";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
@@ -289,9 +289,14 @@ export default function BookingPage({
   // told the customer neither what the third thing was nor that there were
   // only three.
   const summaryName =
-    picked.length === 1
-      ? lineName(picked[0])
-      : t("booking.itemCount").replace("{n}", String(picked.length));
+    picked.length === 0
+      ? // Blank, not "0 items". The bar is present from the first paint so the
+        // button never moves, and a bar that opens by announcing it holds
+        // nothing is the third thing on that screen asking for a selection.
+        ""
+      : picked.length === 1
+        ? lineName(picked[0])
+        : t("booking.itemCount").replace("{n}", String(picked.length));
   // Before a time is picked the duration is the whole answer; after, the time
   // leads and the duration stays, because "how long will I be there" does not
   // stop mattering once you know when you are arriving.
@@ -332,6 +337,101 @@ export default function BookingPage({
       onBack={back}
       backLabel={t("common.back")}
       language={pageLanguage}
+      footer={
+        /* The basket bar. TWO ROWS, with the action alone on the second: at
+           the end of one line the button sat wedged against the total, so the
+           two loudest things on the card — what it costs and what happens
+           next — were fighting for the same corner. Given its own row it has
+           the width to be pressed and the total has the width to be read.
+
+           ONE button, always in that corner, greyed until it can do something.
+           It used to appear on the service step, vanish on the time step and
+           come back on the details step, so the bar's right edge was a
+           different shape on each of three screens and the reader had to find
+           the next move again every time. Always there and sometimes disabled
+           says "there is a next step, not yet" — which is true — where an
+           absent one says nothing at all. The time step's is a formality by
+           design: tapping a slot still advances, so it is only ever seen
+           disabled. That is the point; it holds the corner.
+
+           FIXED on a phone, a plain flex row from sm. On a phone the card
+           fills the screen, so a bar across the bottom of the screen is a bar
+           across the bottom of the card. From sm the card is a fixed-height
+           column and this is simply its last row, which is why nothing here
+           is sticky any more.
+
+           --card, not --background: over a plane the raw page colour is the
+           one surface the wash never touches, so the bar read as a strip of a
+           different page. A floating surface keeps its hard edge, so the top
+           border stays. */
+        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur sm:static sm:-mx-5 sm:-mb-5 sm:mt-4 sm:rounded-b-lg">
+          {/* The lines, ONLY on the steps where they are not already on
+              screen. On the service step the ticked rows sit above this bar,
+              so a panel repeating them is a copy of the thing it summarises;
+              from the time step on that list is gone and the customer has
+              nothing else to check a selection against. No chevron either way:
+              it shipped behind one, which was a control whose whole job was to
+              spare the reader a duplicate. Delete the duplicate and the
+              control goes with it. Capped and scrollable only so the largest
+              basket the server takes (ten lines) cannot swallow a phone. */}
+          {showLines && (
+            <ul className="mx-auto max-h-[30vh] w-full max-w-md space-y-1.5 overflow-y-auto border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
+              {picked.map((row) => (
+                <li key={row._id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{lineName(row)}</span>
+                  <span className="flex shrink-0 items-baseline gap-3">
+                    {row.durationMinutes !== undefined && (
+                      <span className="text-xs text-[var(--muted)]">
+                        {minutesLabel(row.durationMinutes)}
+                      </span>
+                    )}
+                    {row.price !== undefined && (
+                      <span className="tabular-nums">{priceLabel(lineWorth(row))}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mx-auto w-full max-w-md space-y-2 px-4 py-3 sm:px-5">
+            {/* Blank until something is picked. The heading above already asks
+                the question, and a bar repeating it would be the third place
+                on one screen saying "choose a service". */}
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1 text-sm">
+                <p className="truncate font-medium">{summaryName}</p>
+                <p className="truncate text-xs text-[var(--muted)]">{barMeta}</p>
+              </div>
+              {anyPriced && (
+                <p className="shrink-0 text-sm font-semibold tabular-nums">
+                  {priceLabel(totalPrice)}
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end">
+              {step === "details" ? (
+                <button
+                  type="submit"
+                  form="booking-form"
+                  disabled={sending || !name.trim()}
+                  className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-45"
+                >
+                  {sending ? t("common.saving") : t("booking.book")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={step === "service" ? picked.length === 0 : startMs === null}
+                  onClick={() => setStep(step === "service" ? "time" : "details")}
+                  className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-45"
+                >
+                  {t("booking.continue")}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      }
     >
       {step === "service" && (
         <section>
@@ -515,9 +615,16 @@ export default function BookingPage({
               that day rather than a jump between two of them. */}
           <div className="min-h-[14rem]">
             {slots === undefined ? (
-              <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+              // Centred in the reserved box rather than sitting on top of it.
+              // The room is held either way; a single line pinned to the top
+              // of 14rem of white reads as a gap where something failed.
+              <p className="flex h-56 items-center justify-center text-sm text-[var(--muted)]">
+                {t("common.loading")}
+              </p>
             ) : slots.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">{t("booking.noSlots")}</p>
+              <p className="flex h-56 items-center justify-center text-center text-sm text-[var(--muted)]">
+                {t("booking.noSlots")}
+              </p>
             ) : (
               <div className="space-y-3">
               {shelves.map((shelf) => (
@@ -589,29 +696,39 @@ export default function BookingPage({
             } else setError(result.reason ?? "error");
           }}
         >
-          <label className="block text-sm">
-            {t("forms.name")}
+          {/* Label left, control right from sm — the shape every settings row
+              in the app already has, and here it also buys back the height
+              three stacked labels were spending. The card is 28rem wide, so
+              the label column is 7rem rather than RowLabel's 220px floor:
+              these are two words each, and a wider one would leave the phone
+              picker no room for its country chip. Below sm it stacks, which is
+              what ROW_GRID does too. */}
+          <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-center">
+            <label htmlFor="booking-name" className="text-sm">
+              {t("forms.name")}
+            </label>
             <input
+              id="booking-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
               autoFocus
-              className="mt-1"
             />
-          </label>
-          <div className="text-sm">
-            {t("forms.phone")}
-            <PhoneInput required className="mt-1" />
-          </div>
-          <label className="block text-sm">
-            {`${t("forms.email")} (${t("common.optional")})`}
+            {/* A span, not a label: PhoneInput is a country select plus a text
+                field, and a label pointing at one of two controls would send a
+                click to whichever it named. */}
+            <span className="text-sm">{t("forms.phone")}</span>
+            <PhoneInput required />
+            <label htmlFor="booking-email" className="text-sm">
+              {`${t("forms.email")} (${t("common.optional")})`}
+            </label>
             <input
+              id="booking-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1"
             />
-          </label>
+          </div>
           {error && error !== "slot-taken" && (
             <p className="text-sm text-red-600 dark:text-red-400">
               {error === "bad-phone"
@@ -628,97 +745,6 @@ export default function BookingPage({
         </form>
       )}
 
-      {/* The running BASKET, pinned across steps. On the first step its button
-          is Continue — that step became multi-select, so tapping can no longer
-          be the advance. On the last it submits the form above via the form
-          attribute: one button, no in-form twin to race it.
-
-          It used to read as "the total at the bottom or whatever that is",
-          which was fair — it was a total of one thing, restating the row the
-          customer had just tapped. With several lines it has something to
-          total, and the layout now says so: what, then how long and when, with
-          the sum held out on the right where a total belongs.
-
-          --card, not --background: over a plane the raw page colour is the one
-          surface the wash never touches, so the bar read as a strip of a
-          different page. A floating surface keeps its hard edge, so the top
-          border stays.
-
-          FIXED on a phone, STICKY from sm. Viewport-pinning is a thumb-reach
-          answer: the card fills the screen, so a bar across the bottom of the
-          screen is a bar across the bottom of the card. On a desktop the same
-          rule drew a full-width strip under a 448px card floating in the
-          middle of the plane — a piece of furniture belonging to no room. As
-          the card's own sticky footer it is the right width by construction,
-          rides the card's bottom corners, and still holds the viewport floor
-          while a long service list scrolls past it. */}
-      {picked.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-[var(--border)] bg-[var(--card)]/95 backdrop-blur sm:sticky sm:inset-x-auto sm:-mx-5 sm:-mb-5 sm:mt-5 sm:rounded-b-lg">
-          {/* The lines, ONLY on the steps where they are not already on screen.
-              On the service step the ticked rows sit six inches above this bar
-              and a panel repeating them is a copy of the thing it summarises;
-              from the time step on, that list is gone and the customer has
-              nothing else to check what they picked against.
-
-              No chevron either way. It shipped behind one for about an hour,
-              which was a control whose whole job was to spare the reader a
-              duplicate — delete the duplicate and the control goes with it.
-              Capped and scrollable only so the largest basket the server will
-              take (resolveLines, ten lines) cannot swallow a phone. */}
-          {showLines && (
-            <ul className="mx-auto max-h-[30vh] w-full max-w-md space-y-1.5 overflow-y-auto border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
-              {picked.map((row) => (
-                <li
-                  key={row._id}
-                  className="flex items-baseline justify-between gap-3 text-sm"
-                >
-                  <span className="min-w-0 truncate">{lineName(row)}</span>
-                  <span className="flex shrink-0 items-baseline gap-3">
-                    {row.durationMinutes !== undefined && (
-                      <span className="text-xs text-[var(--muted)]">
-                        {minutesLabel(row.durationMinutes)}
-                      </span>
-                    )}
-                    {row.price !== undefined && (
-                      <span className="tabular-nums">{priceLabel(lineWorth(row))}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mx-auto flex w-full max-w-md items-center gap-3 px-4 py-3 sm:px-5">
-            <div className="min-w-0 flex-1 text-sm">
-              <p className="truncate font-medium">{summaryName}</p>
-              <p className="truncate text-xs text-[var(--muted)]">{barMeta}</p>
-            </div>
-            {anyPriced && (
-              <p className="shrink-0 text-sm font-semibold tabular-nums">
-                {priceLabel(totalPrice)}
-              </p>
-            )}
-            {step === "service" && (
-              <button
-                type="button"
-                onClick={() => setStep("time")}
-                className="shrink-0 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)]"
-              >
-                {t("booking.continue")}
-              </button>
-            )}
-            {step === "details" && (
-              <button
-                type="submit"
-                form="booking-form"
-                disabled={sending || !name.trim()}
-                className="shrink-0 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
-              >
-                {sending ? t("common.saving") : t("booking.book")}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </Shell>
   );
 }
@@ -771,6 +797,7 @@ function Shell({
   onBack,
   backLabel,
   language,
+  footer,
   children,
 }: {
   title?: string;
@@ -778,6 +805,11 @@ function Shell({
   onBack?: () => void;
   backLabel?: string;
   language?: Language;
+  // The basket bar. A separate slot rather than the last child of `children`
+  // because from sm the card is a fixed-height flex column and this is the row
+  // that must NOT scroll — it has to be a sibling of the scrolling middle, not
+  // inside it.
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -796,8 +828,22 @@ function Shell({
       {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
           Padding matches components/Card — p-4 here rather than its p-3 only
           because this card is the whole page rather than one of six stacked in
-          a settings column. */}
-      <div className="card-raised p-4 sm:p-5">
+          a settings column.
+
+          FIXED HEIGHT from sm, and the middle scrolls. Every step of this
+          wizard holds a different amount — six services, a slot grid, three
+          fields — so on a desktop the card resized under the reader at every
+          tap, and the fix per step was another reserved height guessing at
+          content it does not control. One height for the whole wizard costs
+          one guess instead of three and cannot be wrong per step; a salon with
+          thirty services scrolls the list inside the card rather than growing
+          it past the fold.
+
+          Phone keeps page scroll and a fixed bar. A viewport-height box with
+          its own scroll region is the thing mobile browsers handle worst — the
+          address bar resizes the viewport mid-scroll — and that layout is
+          already the one that works there. */}
+      <div className="card-raised p-4 sm:flex sm:h-[min(46rem,calc(100dvh-5rem))] sm:flex-col sm:p-5">
         {title && (
           <div className="mb-5 flex items-center gap-3">
             {onBack && (
@@ -830,7 +876,27 @@ function Shell({
             <h1 className="text-lg font-semibold">{title}</h1>
           </div>
         )}
-        {children}
+        {/* The scrolling middle. min-h-0 is load-bearing: a flex child's
+            default min-height is its content, so without it flex-1 never
+            shrinks and the box just grows past the card again.
+
+            It spans card edge to card edge and restores the gutter with its
+            own padding, so the full-bleed service list still reaches the
+            card's sides — an overflow container clips at its PADDING box, and
+            a narrower one would have cut the bleed off.
+
+            thin-scroll + stable-gutter, the pair every in-card scroller in the
+            app already wears (ConversationPanel, the shell's main pane). The
+            first replaces the browser's own bar — a 9px track with the rail
+            carved out of it by a transparent border, so there is no line down
+            the card's edge — and the second reserves that track up front, so
+            the list does not jump sideways the moment it grows past the fold.
+            Both are gated to sm+ in globals.css, which is also where this card
+            stops being a fixed-height box. */}
+        <div className="thin-scroll stable-gutter -mx-4 px-4 sm:-mx-5 sm:min-h-0 sm:flex-1 sm:overflow-y-auto sm:px-5">
+          {children}
+        </div>
+        {footer}
       </div>
     </main>
   );

@@ -14,6 +14,7 @@ import {
 } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
+import { MAX_LINES_PER_BOOKING } from "./lib/bookingLimits";
 import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
@@ -65,9 +66,9 @@ type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
 // side has always written multiple lines; the public page took a single
 // serviceId and made a customer who wanted both come back and book twice.
 //
-// A brake, not a business rule — the same reasoning as MAX_UPCOMING_PER_PHONE.
-// A real customer picks two or three; nobody real picks eleven.
-export const MAX_LINES_PER_BOOKING = 10;
+// MAX_LINES_PER_BOOKING lives in lib/bookingLimits, not here: the page enforces
+// the same cap and cannot import a value from a file that defines Convex
+// functions without dragging this module's whole import graph into the browser.
 
 // Resolves what was picked into the numbers every guard downstream needs.
 // Both the slot grid and the write go through here so they cannot disagree

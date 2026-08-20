@@ -33,6 +33,7 @@ import type * as knowledge from "../knowledge.js";
 import type * as lib_activity from "../lib/activity.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
+import type * as lib_bookingLimits from "../lib/bookingLimits.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_chatAgentTemplate from "../lib/chatAgentTemplate.js";
@@ -131,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   "lib/activity": typeof lib_activity;
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;
+  "lib/bookingLimits": typeof lib_bookingLimits;
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
   "lib/chatAgentTemplate": typeof lib_chatAgentTemplate;
