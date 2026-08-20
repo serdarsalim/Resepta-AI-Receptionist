@@ -3004,9 +3004,9 @@ const dictionary = {
   // already shows the customer.
   "services.products": { tr: "Ürünler", en: "Products", de: "Produkte" },
   "services.productsHint": {
-    tr: "Sattığınız, süre almayan şeyler. Takvimde yer kaplamaz ve randevu sayfanızda ayrı listelenir. Yeni bir tane için hizmet ekleyip süreyi boş bırakın.",
-    en: "Things you sell rather than book time for. They take no time on the calendar and list separately on your booking page. To add one, add a service and leave the duration blank.",
-    de: "Was Sie verkaufen, statt Zeit dafür zu buchen. Ohne Dauer im Kalender, auf Ihrer Buchungsseite getrennt gelistet. Für ein neues: Leistung hinzufügen und die Dauer leer lassen.",
+    tr: "Sattığınız, süre almayan şeyler. Takvimde yer kaplamaz ve randevu sayfanızda ayrı listelenir. Eklemek için yukarıdaki butonu kullanıp Tür'ü Ürün seçin.",
+    en: "Things you sell rather than book time for. They take no time on the calendar and list separately on your booking page. To add one, use the button above and set Type to Product.",
+    de: "Was Sie verkaufen, statt Zeit dafür zu buchen. Ohne Dauer im Kalender, auf Ihrer Buchungsseite getrennt gelistet. Zum Hinzufügen die Schaltfläche oben nutzen und Art auf Produkt stellen.",
   },
   "services.hint": {
     tr: "İşletmenizin sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",

@@ -1087,8 +1087,10 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
       </Card>
       {/* Only when the salon actually sells something. An empty Products card
           is a heading over a sentence saying there is nothing under it, on a
-          page most salons will never put a product on. A first one is made the
-          way it always was — Add service, duration left blank. */}
+          page most salons will never put a product on. There is deliberately
+          no second "Add product" button: the sheet has had a Type switch since
+          before this card existed, so a button here would be a second door
+          onto one form. The card's tip points at that switch. */}
       {goods.length > 0 && (
         <Card
           title={t("services.products")}
