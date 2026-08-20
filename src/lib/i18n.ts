@@ -105,15 +105,18 @@ const dictionary = {
     en: "Comes from your Google account and cannot be changed here.",
     de: "Kommt aus Ihrem Google-Konto und lässt sich hier nicht ändern.",
   },
+  // The card title carries "email" ONCE; the row labels are bare events so
+  // four rows don't each re-explain the delivery channel. The hints still
+  // spell out what actually arrives.
   "account.notifications": {
-    tr: "Bildirimler",
-    en: "Notifications",
-    de: "Benachrichtigungen",
+    tr: "E-posta bildirimleri",
+    en: "Email notifications",
+    de: "E-Mail-Benachrichtigungen",
   },
   "account.notifyInbound": {
-    tr: "Müşteri yanıt yazdığında e-posta gönder",
-    en: "Email me when a customer replies",
-    de: "E-Mail schicken, wenn ein Kunde antwortet",
+    tr: "Müşteri yanıtı",
+    en: "Customer replies",
+    de: "Kundenantwort",
   },
   "account.notifyInboundHint": {
     tr: "Bir müşteri WhatsApp'tan yazdığında e-posta adresinize haber verilir. Her mesaj için bir e-posta.",
@@ -121,9 +124,9 @@ const dictionary = {
     de: "Sie bekommen eine E-Mail an Ihre Kontoadresse, sobald ein Kunde über WhatsApp schreibt. Eine E-Mail pro Nachricht.",
   },
   "account.notifyFailed": {
-    tr: "Bir mesaj gönderilemediğinde e-posta gönder",
-    en: "Email me when a message fails to send",
-    de: "E-Mail schicken, wenn eine Nachricht nicht ankommt",
+    tr: "Gönderilemeyen mesaj",
+    en: "Failed message",
+    de: "Fehlgeschlagene Nachricht",
   },
   "account.notifyFailedHint": {
     tr: "Hatırlatma veya onay mesajı gönderilemediğinde haber verilir. İşletmenin sessizce mesajsız kalmaması için açık tutun.",
@@ -131,9 +134,9 @@ const dictionary = {
     de: "Meldet, wenn eine Erinnerung oder Bestätigung nicht zugestellt werden konnte. So merken Sie es, bevor ein Kunde ohne Nachricht dasteht.",
   },
   "account.notifyNewContact": {
-    tr: "Yeni bir kişi eklendiğinde e-posta gönder",
-    en: "Email me when a new contact is added",
-    de: "E-Mail senden, wenn ein neuer Kontakt hinzukommt",
+    tr: "Yeni kişi",
+    en: "New contact",
+    de: "Neuer Kontakt",
   },
   // The second sentence is the one that matters: without it the switch reads
   // as "email me every time I type a customer in", which nobody wants and
@@ -144,9 +147,9 @@ const dictionary = {
     de: "Meldet neue Kontakte über den Sprachagenten, Ihr Anfrageformular, WhatsApp oder cal.com. Von Ihnen oder Ihrem Team selbst angelegte Kontakte lösen keine E-Mail aus.",
   },
   "account.notifyNewBooking": {
-    tr: "Yeni bir randevu alındığında e-posta gönder",
-    en: "Email me when a new booking is made",
-    de: "E-Mail schicken, wenn ein neuer Termin gebucht wird",
+    tr: "Yeni randevu",
+    en: "New booking",
+    de: "Neue Buchung",
   },
   // The calendar invite is the point of this switch, so the hint leads with
   // it — without that sentence it reads as one more notification, not as

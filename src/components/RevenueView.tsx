@@ -120,20 +120,24 @@ export function RevenueView() {
             cluster, the bulk verbs the moment something is picked, and the
             cancelled filter as a pill. A rail of its own held one checkbox
             and looked abandoned. */}
-        <div className="flex flex-wrap items-center gap-2 px-4 pt-4 pb-2">
+        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-2">
+          {/* Select-all sits BEFORE the title, flush with the column of row
+              checkboxes under it — the position is the label. */}
+          {visible.length > 0 && (
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => {
+                setSelected(
+                  allSelected ? new Set() : new Set(visible.map((row) => row._id)),
+                );
+                anchor.current = null;
+              }}
+            />
+          )}
           <h2 className="text-sm font-semibold">{t("revenue.history")}</h2>
           {visible.length > 0 && (
             <span className="ml-auto flex flex-wrap items-center gap-2">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={() => {
-                  setSelected(
-                    allSelected ? new Set() : new Set(visible.map((row) => row._id)),
-                  );
-                  anchor.current = null;
-                }}
-              />
               {picked.length > 0 && (
                 <>
                   <span className="text-xs text-[var(--muted)]">
