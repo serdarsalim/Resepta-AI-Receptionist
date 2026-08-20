@@ -111,13 +111,16 @@ function lineTotal(
   );
 }
 
-// The ledger under the three figures: every completed, priced visit, newest
-// first, pageable back to the org's first day. Search matches the customer's
-// name or the services line, and is applied AFTER the page is read — a page
-// can come back short or empty while the cursor still advances, which the
-// paginated hook on the client absorbs. A salon's history is thousands of
-// rows at most; a search index over a denormalized name column is machinery
-// this screen does not need yet.
+// The ledger under the three figures: every priced visit that reached its
+// day — completed AND no_show, newest first, pageable back to the org's first
+// day. No-shows ride along deliberately: flagging one from this list must not
+// make the row vanish beyond correcting, so the list keeps showing it with
+// its status and the client offers the flip back. Search matches the
+// customer's name or the services line, and is applied AFTER the page is
+// read — a page can come back short or empty while the cursor still advances,
+// which the paginated hook on the client absorbs. A salon's history is
+// thousands of rows at most; a search index over a denormalized name column
+// is machinery this screen does not need yet.
 export const revenueList = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -152,7 +155,7 @@ export const revenueList = query({
     const needle = args.search?.trim().toLocaleLowerCase();
     const page = [];
     for (const row of result.page) {
-      if (row.status !== "completed") continue;
+      if (row.status !== "completed" && row.status !== "no_show") continue;
       const items = row.items ?? [];
       const total = lineTotal(items);
       if (total === undefined) continue;
@@ -172,7 +175,14 @@ export const revenueList = query({
       ) {
         continue;
       }
-      page.push({ _id: row._id, startAt: row.startAt, customerName, services, total });
+      page.push({
+        _id: row._id,
+        startAt: row.startAt,
+        customerName,
+        services,
+        total,
+        status: row.status,
+      });
     }
 
     return { ...result, page };

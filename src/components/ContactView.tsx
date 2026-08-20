@@ -592,10 +592,9 @@ function CustomerAppointments({
           (arming the win-back) rather than firing the cancel machinery at a
           customer who simply never came. Tapping an active pill undoes it. */}
       <div className="mt-1 flex items-center justify-between gap-3">
+        {/* No "Status" label: three pills reading Upcoming/Paid/Cancelled are
+            their own caption, and the label was the widest thing on the row. */}
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="shrink-0 text-[11px] text-[var(--muted-strong)]">
-            {t("appointments.status")}
-          </span>
           {(() => {
             const isPast = a.startAt < now;
             const productOnly =

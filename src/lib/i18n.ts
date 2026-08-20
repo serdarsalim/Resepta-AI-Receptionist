@@ -641,10 +641,20 @@ const dictionary = {
   "statusPill.past": { tr: "Geçti", en: "Past", de: "Vorbei" },
   "statusPill.product": { tr: "Ürün", en: "Product", de: "Produkt" },
   "statusPill.paid": { tr: "Ödendi", en: "Paid", de: "Bezahlt" },
-  "revenue.noShowHint": {
-    tr: "Gelmedi olarak işaretle — tutar cirodan düşer",
-    en: "Mark as no-show — removed from the takings",
-    de: "Als nicht erschienen markieren — zählt nicht mehr zum Umsatz",
+  "revenue.hideNoShows": {
+    tr: "Gelmeyenleri gizle",
+    en: "Hide no-shows",
+    de: "Nicht Erschienene ausblenden",
+  },
+  "revenue.selected": {
+    tr: "{n} seçildi",
+    en: "{n} selected",
+    de: "{n} ausgewählt",
+  },
+  "revenue.selectHint": {
+    tr: "Toplu işaretlemek için seçin — Shift ile aralık seçilir",
+    en: "Select rows to mark in bulk — Shift picks a range",
+    de: "Zeilen für Massenaktion wählen — Shift wählt einen Bereich",
   },
   "settings.revenueEnabled": {
     tr: "Gelir sekmesi",

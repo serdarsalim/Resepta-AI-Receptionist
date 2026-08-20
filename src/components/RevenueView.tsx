@@ -1,8 +1,9 @@
 "use client";
 
 // The takings. Deliberately one screen: three numbers, and under them the
-// ledger of every completed visit — pageable back to the first day, with a
-// search for "when was Şeyma here". Not an analytics section.
+// ledger of every priced visit that reached its day — pageable back to the
+// first day, searched from the header box like every other tab. Not an
+// analytics section.
 //
 // The line this refuses to cross: no charts, no date-range picker, no
 // per-staff split, no export, no comparison to last month. The moment this
@@ -10,27 +11,44 @@
 // product the salon's accountant already has. It exists to close the loop on
 // the prices staff type in, and nothing more.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { formatDateTime } from "@/lib/datetime";
 import { formatMoney } from "@/lib/money";
+
+type Row = {
+  _id: Id<"appointments">;
+  startAt: number;
+  customerName: string;
+  services: string;
+  total: number;
+  status: "completed" | "no_show";
+};
 
 export function RevenueView() {
   const { t, language } = useLanguage();
   const report = useQuery(api.reports.revenue, {});
   const setStatus = useMutation(api.appointments.setStatus);
-  const [search, setSearch] = useState("");
-  // Server-side filtering, so a search reaches rows no page has loaded yet.
-  // Each keystroke restarts the pagination; salon-sized history makes that
-  // cheap enough to skip a debounce.
+  // The header's box, same as Customers — a fixed position is only fixed if
+  // the shell owns it. The query goes to the server, so a search reaches rows
+  // no page has loaded yet.
+  const search = useHeaderSearch(t("common.search"));
   const { results, status, loadMore } = usePaginatedQuery(
     api.reports.revenueList,
-    { search: search.trim() || undefined },
-    { initialNumItems: 25 },
+    { search: search.query.trim() || undefined },
+    { initialNumItems: 50 },
   );
+  const [hideNoShows, setHideNoShows] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<Id<"appointments">>>(
+    new Set(),
+  );
+  // Anchor for shift-click ranges, as an index into the VISIBLE list — the
+  // one the person is looking at when they sweep.
+  const anchor = useRef<number | null>(null);
 
   if (report === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -42,14 +60,45 @@ export function RevenueView() {
     { key: "revenue.month" as const, value: report.month },
   ];
 
-  type Row = {
-    _id: Id<"appointments">;
-    startAt: number;
-    customerName: string;
-    services: string;
-    total: number;
-  };
   const rows = results as Row[];
+  const visible = hideNoShows ? rows.filter((row) => row.status !== "no_show") : rows;
+  const allSelected = visible.length > 0 && visible.every((row) => selected.has(row._id));
+  const picked = visible.filter((row) => selected.has(row._id));
+
+  const toggleRow = (index: number, shift: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const turnOn = !next.has(visible[index]._id);
+      const from = shift && anchor.current !== null ? Math.min(anchor.current, index) : index;
+      const to = shift && anchor.current !== null ? Math.max(anchor.current, index) : index;
+      for (let i = from; i <= to; i++) {
+        if (turnOn) next.add(visible[i]._id);
+        else next.delete(visible[i]._id);
+      }
+      return next;
+    });
+    anchor.current = index;
+  };
+
+  const applyBulk = (nextStatus: "completed" | "no_show") => {
+    const ids = picked.map((row) => row._id);
+    setSelected(new Set());
+    anchor.current = null;
+    for (const id of ids) {
+      void setStatus({ appointmentId: id, status: nextStatus });
+    }
+  };
+
+  const flipRow = (row: Row, nextStatus: "completed" | "no_show") => {
+    if (row.status !== nextStatus) {
+      void setStatus({ appointmentId: row._id, status: nextStatus });
+    }
+  };
+
+  const pill = "rounded-full px-2 py-0.5 text-[11px] transition-colors";
+  const paidOn = "bg-[var(--brand-soft)] text-emerald-700 dark:text-emerald-400";
+  const noShowOn = "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400";
+  const pillOff = "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 page-stack">
@@ -67,27 +116,78 @@ export function RevenueView() {
       </section>
 
       <section className="card-raised overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-2">
+        <div className="flex flex-wrap items-center gap-3 px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold">{t("revenue.history")}</h2>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("common.search")}
-            className="w-40 rounded-md border border-[var(--border)] bg-transparent px-2 py-1 text-xs outline-none transition-colors focus:border-[var(--accent)] sm:w-56"
-          />
+          <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={hideNoShows}
+              onChange={(event) => setHideNoShows(event.target.checked)}
+            />
+            {t("revenue.hideNoShows")}
+          </label>
         </div>
-        {rows.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-[var(--muted)]">
+
+        {/* The selection rail: select-all lives here permanently so bulk work
+            has a visible way in; the verbs appear only once something is
+            picked, because a bar full of disabled buttons is furniture. */}
+        {visible.length > 0 && (
+          <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => {
+                setSelected(
+                  allSelected ? new Set() : new Set(visible.map((row) => row._id)),
+                );
+                anchor.current = null;
+              }}
+            />
+            {picked.length > 0 ? (
+              <>
+                <span className="text-xs text-[var(--muted)]">
+                  {t("revenue.selected").replace("{n}", String(picked.length))}
+                </span>
+                <button
+                  className={`${pill} ${pillOff} hover:text-emerald-600 dark:hover:text-emerald-400`}
+                  onClick={() => applyBulk("completed")}
+                >
+                  {t("statusPill.paid")}
+                </button>
+                <button
+                  className={`${pill} ${pillOff} hover:text-red-600 dark:hover:text-red-400`}
+                  onClick={() => applyBulk("no_show")}
+                >
+                  {t("status.no_show")}
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-[var(--muted)]">
+                {t("revenue.selectHint")}
+              </span>
+            )}
+          </div>
+        )}
+
+        {visible.length === 0 ? (
+          <p className="px-4 py-4 text-sm text-[var(--muted)]">
             {status === "LoadingFirstPage" ? t("common.loading") : t("revenue.none")}
           </p>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
-            {rows.map((row) => (
+            {visible.map((row, index) => (
               <li
                 key={row._id}
                 className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
               >
+                {/* onClick, not onChange: only the MouseEvent knows shift was
+                    held, and a shift-click sweeps from the last checkbox. */}
+                <input
+                  type="checkbox"
+                  checked={selected.has(row._id)}
+                  onClick={(event) => toggleRow(index, event.shiftKey)}
+                  readOnly
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{row.customerName}</span>
                   <span className="block truncate text-xs text-[var(--muted)]">
@@ -96,23 +196,32 @@ export function RevenueView() {
                       .join(" · ")}
                   </span>
                 </span>
-                <span className="shrink-0 tabular-nums">
+                {/* A no-show's amount stays printed but struck: the row must
+                    keep saying what the visit was worth while saying it is
+                    not in the totals. */}
+                <span
+                  className={`shrink-0 tabular-nums ${
+                    row.status === "no_show"
+                      ? "text-[var(--muted)] line-through"
+                      : ""
+                  }`}
+                >
                   {formatMoney(row.total, report.currency, language, report.priceDecimals)}
                 </span>
-                {/* The one correction this list needs: every row here was
-                    auto-completed overnight, so a no-show nobody flagged is
-                    standing in the totals as money. Flipping it to no_show
-                    drops it from the figures reactively and arms the win-back;
-                    a mis-tap is undone from the appointment itself. */}
-                <button
-                  className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:border-red-400 hover:text-red-600 dark:hover:text-red-400"
-                  title={t("revenue.noShowHint")}
-                  onClick={() =>
-                    void setStatus({ appointmentId: row._id, status: "no_show" })
-                  }
-                >
-                  {t("status.no_show")}
-                </button>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    className={`${pill} ${row.status === "completed" ? paidOn : pillOff}`}
+                    onClick={() => flipRow(row, "completed")}
+                  >
+                    {t("statusPill.paid")}
+                  </button>
+                  <button
+                    className={`${pill} ${row.status === "no_show" ? noShowOn : pillOff}`}
+                    onClick={() => flipRow(row, "no_show")}
+                  >
+                    {t("status.no_show")}
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
