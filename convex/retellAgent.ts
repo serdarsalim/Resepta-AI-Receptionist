@@ -871,7 +871,25 @@ async function publishVariableSet(
     // it existed: this list is rewritten in full on every publish, so the
     // field arrives the next time anything here saves.
     summaryAnalysisField(live.language ?? "en-US"),
-    ...next.filter((variable) => variable.afterCall).map(variableForRetell),
+    // The abstention rule is appended HERE, not written into the owner's
+    // description: analysis is an inference pass over the transcript, and
+    // left uninstructed it answers every field it can rationalise — the 20
+    // Aug Bella call filed the SERVICE ("Erkek saç kesimi") under hair type,
+    // and voiceEvents writes these values onto empty contact-card fields.
+    // The during-call extraction keeps its own wording above; a live caller
+    // stating a value is exactly when the field should be filled.
+    ...next
+      .filter((variable) => variable.afterCall)
+      .map((variable) => {
+        const forRetell = variableForRetell(variable);
+        return {
+          ...forRetell,
+          description:
+            `${String(forRetell.description)} Fill this only from something` +
+            " the caller actually said about it. If the call does not mention" +
+            " it, leave it empty rather than inferring a value.",
+        };
+      }),
   ];
 
   if (live.version === undefined) throw new Error("Agent has no version to clone.");
