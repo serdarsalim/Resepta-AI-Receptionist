@@ -360,10 +360,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               chips on one line, the open/close pickers). These values are a
               name, an email local part and two-word selects — a box wider
               than the text it will ever hold reads as an invitation to write
-              an essay. */}
+              an essay. One cap for every box in this card: the email input
+              used to sit visibly shorter than the rest because its @domain
+              suffix ate into the same 18rem, and a card of five widths reads
+              as five decisions. */}
           <input
             key={`name-${nameTick}-${settings.org.name}`}
-            className="sm:max-w-72"
+            className="sm:max-w-56"
             defaultValue={settings.org.name}
             onBlur={(e) => {
               const next = e.target.value;
@@ -457,7 +460,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               the same job, and the booking card next door is the one that
               survived. */}
           <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
-          <span className="flex items-center gap-1 sm:max-w-72">
+          <span className="flex items-center gap-1">
             {/* The salon's OWN name, slugged the way the server will slug it
                 (lib/inboundAddress) — so the placeholder is both an example
                 and a preview of what typing their name would give them. A
@@ -465,6 +468,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 other salon, which reads as someone else's data. */}
             <input
               key={`inbound-${addressTick}`}
+              className="sm:max-w-56"
               defaultValue={settings.org.inboundAddress ?? ""}
               placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
               onBlur={(e) => {
@@ -516,7 +520,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             hint={t("settings.languageHint")}
           />
           <select
-            className="sm:max-w-72"
+            className="sm:max-w-56"
             defaultValue={settings.org.language}
             onChange={(e) => void update({ language: e.target.value })}
           >
@@ -533,15 +537,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
           <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
-          {/* Currency and decimals on ONE line: they answer the same question
-              together — currency picks the symbol, language picks the
-              separators, this picks how much of the number to write. The
-              select is sized to its content (four codes, none longer than
-              "EUR · €") rather than filling the column, which is what leaves
-              room for the switch beside it. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Currency and decimals stay on ONE line: they answer the same
+              question together — currency picks the symbol, language picks
+              the separators, this picks how much of the number to write. The
+              decimals switch is a pill that SHOWS its work: ",00" (or ".00",
+              whichever the org's language would print) lit green when prices
+              carry decimals. A labelled toggle needed half a row to say what
+              two characters demonstrate. */}
+          <div className="flex items-center gap-2">
             <select
-              className="w-32 shrink-0"
+              className="w-full sm:max-w-56"
               defaultValue={settings.org.currency}
               onChange={(e) => void update({ currency: e.target.value })}
             >
@@ -551,13 +556,21 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-sm">
-              {t("settings.priceDecimals")}
-              <Toggle
-                checked={settings.org.priceDecimals ?? false}
-                onChange={(next) => void update({ priceDecimals: next })}
-              />
-            </label>
+            <button
+              type="button"
+              title={t("settings.priceDecimals")}
+              aria-pressed={settings.org.priceDecimals ?? false}
+              onClick={() =>
+                void update({ priceDecimals: !(settings.org.priceDecimals ?? false) })
+              }
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums transition-colors ${
+                settings.org.priceDecimals
+                  ? "bg-[var(--brand-soft)] text-emerald-700 dark:text-emerald-400"
+                  : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {settings.org.language === "en" ? ".00" : ",00"}
+            </button>
           </div>
           {/* Last on purpose: an opt-in extra, below the facts of the
               business. It follows currency because that is the unit the tab
