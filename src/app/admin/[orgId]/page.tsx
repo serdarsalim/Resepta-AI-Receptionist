@@ -19,6 +19,8 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { VOICE_MODEL_CHOICES } from "../../../../convex/lib/voiceModels";
+import { VOICE_AGENT_MODEL } from "../../../../convex/lib/voiceAgentTemplate";
 import {
   Activity,
   AdminSearchProvider,
@@ -134,6 +136,7 @@ export default function TenantPage() {
   const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
   const setField = useMutation(api.connections.setField);
   const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
+  const setAgentModel = useAction(api.platform.setAgentModel);
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
@@ -182,6 +185,11 @@ export default function TenantPage() {
   // to add one — the account list is pick-time inventory, not standing state.
   const [addingLine, setAddingLine] = useState(false);
   const [retryError, setRetryError] = useState<{ agentId: string; message: string } | null>(null);
+  // The model publish is a provider round trip (draft, patch, publish), so
+  // the select disables while it runs and any refusal lands next to the row
+  // it belongs to instead of vanishing into the console.
+  const [settingModel, setSettingModel] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<{ agentId: string; message: string } | null>(null);
   const router = useRouter();
 
   // Every state wears the plane, loading included: bare, the page painted flat
@@ -404,6 +412,53 @@ export default function TenantPage() {
                     {agent.enabled ? "Enabled" : "Disabled"}
                   </Pill>
                 </span>
+              </div>
+              {/* The model behind the agent, with what each choice costs per
+                  conversation minute — the whole point is deciding here
+                  without opening Retell's pricing page. "Platform default"
+                  is unset in the row: the common case stays one string in
+                  the template rather than a fleet of rows pinning today's
+                  default forever. */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[var(--muted)]">Model</span>
+                <select
+                  value={agent.llmModel ?? ""}
+                  disabled={settingModel === agent.retellAgentId}
+                  onChange={(event) => {
+                    const model = event.target.value || null;
+                    setSettingModel(agent.retellAgentId);
+                    setModelError(null);
+                    void setAgentModel({ orgId, retellAgentId: agent.retellAgentId, model })
+                      .catch((error: unknown) =>
+                        setModelError({
+                          agentId: agent.retellAgentId,
+                          message:
+                            error instanceof Error ? error.message : "Model change failed.",
+                        }),
+                      )
+                      .finally(() => setSettingModel(null));
+                  }}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs disabled:opacity-50"
+                >
+                  <option value="">
+                    Platform default —{" "}
+                    {VOICE_MODEL_CHOICES.find((choice) => choice.id === VOICE_AGENT_MODEL)
+                      ?.label ?? VOICE_AGENT_MODEL}
+                  </option>
+                  {VOICE_MODEL_CHOICES.map((choice) => (
+                    <option key={choice.id} value={choice.id}>
+                      {choice.label} · ${choice.usdPerMinute.toFixed(3)}/min
+                    </option>
+                  ))}
+                </select>
+                {settingModel === agent.retellAgentId && (
+                  <span className="text-[var(--muted)]">Publishing…</span>
+                )}
+                {modelError?.agentId === agent.retellAgentId && (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    {modelError.message}
+                  </span>
+                )}
               </div>
               {agent.latestFailure && (
                 <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">

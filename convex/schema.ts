@@ -615,6 +615,14 @@ export default defineSchema({
     // not hand the tool back to a salon that turned it off, but the tool
     // ITSELF lives at the provider — see setEndCallEnabled.
     canEndCall: v.optional(v.boolean()),
+    // Operator's per-agent model override, one of lib/voiceModels. Unset means
+    // the platform default (the template's model), which is what every agent
+    // starts as — so the common case stays one string in code rather than a
+    // thousand rows all saying "haiku". Written by platform.setAgentModel only
+    // after the provider publish succeeds, and read back by syncTemplate so an
+    // operator's choice survives the owner clicking the template-update
+    // banner — same contract as canEndCall above.
+    llmModel: v.optional(v.string()),
     // Which Resepta template generation last touched this agent's voice
     // engineering — stamped at creation and by syncTemplate, compared against
     // VOICE_AGENT_TEMPLATE_VERSION to offer the update. Absent on agents from

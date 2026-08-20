@@ -69,6 +69,7 @@ import type * as lib_templateTexts from "../lib/templateTexts.js";
 import type * as lib_usage from "../lib/usage.js";
 import type * as lib_voiceAgentTemplate from "../lib/voiceAgentTemplate.js";
 import type * as lib_voiceCatalogue from "../lib/voiceCatalogue.js";
+import type * as lib_voiceModels from "../lib/voiceModels.js";
 import type * as lib_voicePayload from "../lib/voicePayload.js";
 import type * as lib_voiceRuntime from "../lib/voiceRuntime.js";
 import type * as lib_voiceVariables from "../lib/voiceVariables.js";
@@ -168,6 +169,7 @@ declare const fullApi: ApiFromModules<{
   "lib/usage": typeof lib_usage;
   "lib/voiceAgentTemplate": typeof lib_voiceAgentTemplate;
   "lib/voiceCatalogue": typeof lib_voiceCatalogue;
+  "lib/voiceModels": typeof lib_voiceModels;
   "lib/voicePayload": typeof lib_voicePayload;
   "lib/voiceRuntime": typeof lib_voiceRuntime;
   "lib/voiceVariables": typeof lib_voiceVariables;

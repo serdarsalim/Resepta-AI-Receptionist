@@ -105,6 +105,7 @@ type EditorContext = {
   templateVersion: number | null;
   personaName: string | null;
   canEndCall: boolean;
+  llmModel: string | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -1450,7 +1451,11 @@ export const syncTemplate = action({
       const llmVersion = draftAgent.response_engine?.version;
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-        model: template.llm.model,
+        // The operator's per-agent override outranks the template: without
+        // this, clicking the update banner silently put every agent back on
+        // the platform default — which is exactly how "I set it in Retell and
+        // it keeps becoming Haiku" happened before the override existed.
+        model: context.llmModel ?? template.llm.model,
         model_temperature: template.llm.model_temperature,
         model_high_priority: template.llm.model_high_priority,
         general_tools: withRuntimeSaveTool([...templateTools, ...kept]),
@@ -1561,6 +1566,57 @@ export const wireWebhook = action({
     return await wireAgent(ctx, agentId, context);
   },
 });
+
+// The provider half of the operator's model override; the gate lives in
+// platform.setAgentModel, which is the only caller. Same publish shape as
+// setEndCallEnabled — clone a draft, patch the engine, publish — because the
+// model, like a tool, lives in the response engine and cannot be injected at
+// ring time. `model` null puts the agent back on the platform default (the
+// template's model). The row is stamped only after the publish succeeds.
+export async function applyAgentModel(
+  ctx: ActionCtx,
+  { agentId, orgId, model }: { agentId: string; orgId: Id<"orgs">; model: string | null },
+): Promise<{ ok: boolean; version: number | null }> {
+  const context = await editorContext(ctx, agentId, orgId);
+  const key = context.apiKey!;
+  const id = encodeURIComponent(agentId);
+  const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+  const llmId = live.response_engine?.llm_id;
+  if (live.response_engine?.type !== "retell-llm" || !llmId) {
+    throw new Error("The model is only configurable on a Retell LLM agent.");
+  }
+  if (live.version === undefined) throw new Error("Agent has no version to clone.");
+
+  const template = appointmentReceptionistTemplate({
+    language: (["tr-TR", "en-US", "de-DE"].includes(live.language ?? "")
+      ? live.language
+      : "en-US") as VoiceAgentLanguage,
+    businessName: context.orgName,
+    site: siteUrl() ?? "",
+    canEndCall: context.canEndCall,
+  });
+  const draft = (await (
+    await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
+  ).json()) as { version?: number };
+  if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+  const draftAgent = (await (
+    await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+  ).json()) as AgentDoc;
+  const llmVersion = draftAgent.response_engine?.version;
+  await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+    ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+    model: model ?? template.llm.model,
+  });
+  await call(key, "POST", `publish-agent-version/${id}`, {
+    version: draft.version,
+    version_title: model ? `Model → ${model}` : "Model → platform default",
+  });
+  await ctx.runMutation(internal.retell.markLlmModel, {
+    retellAgentId: agentId,
+    model,
+  });
+  return { ok: true, version: draft.version };
+}
 
 // The Inbound number dropdown is a routing control, not a note. Assigning a
 // line rebinds it at the provider first; only then does the database adopt

@@ -720,6 +720,7 @@ export const agentEditorContext = internalQuery({
       templateVersion: agent.templateVersion ?? null,
       personaName: agent.personaName ?? null,
       canEndCall: agent.canEndCall ?? true,
+      llmModel: agent.llmModel ?? null,
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
@@ -1667,6 +1668,25 @@ export const markEndCallEnabled = internalMutation({
       .unique();
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, { canEndCall: enabled });
+    return null;
+  },
+});
+
+// Stores the operator's model override only. Same contract as
+// markEndCallEnabled above: the model itself changes at the provider first
+// (platform.setAgentModel publishes it), and this stamp lands afterwards so
+// the row never claims a model the agent is not running. Null clears the
+// override — the agent is back on the platform default.
+export const markLlmModel = internalMutation({
+  args: { retellAgentId: v.string(), model: v.union(v.string(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, model }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { llmModel: model ?? undefined });
     return null;
   },
 });

@@ -60,6 +60,12 @@ export const VOICE_AGENT_TEMPLATE_VERSION = 11;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
+// The platform default model — what a new agent is born with and what an
+// agent with no operator override runs after a template sync. Named here so
+// the /admin picker's "Platform default" row and the template can never
+// disagree about which model that is.
+export const VOICE_AGENT_MODEL = "claude-4.5-haiku";
+
 // The whole prompt in the agent's language, not English-with-a-language-line.
 // Two readers want this. The model drifts toward the language its prompt is
 // written in, so a Turkish prompt is itself pressure toward Turkish output.
@@ -450,8 +456,9 @@ export function appointmentReceptionistTemplate(args: {
       // name its model gets whatever the account defaults to that month, so
       // the same salon can get a different answer speed after a provider
       // change nobody here made. Changing it here is one string, and
-      // syncTemplate carries it to every agent whose owner clicks update.
-      model: "claude-4.5-haiku",
+      // syncTemplate carries it to every agent whose owner clicks update —
+      // unless the operator set a per-agent override in /admin, which wins.
+      model: VOICE_AGENT_MODEL,
       model_temperature: 0.1,
       // Paid priority inference. Off, the Tolga Güner test call (20 Aug) ran
       // e2e p50 1586ms with the LLM itself at ~735ms — Haiku is already the

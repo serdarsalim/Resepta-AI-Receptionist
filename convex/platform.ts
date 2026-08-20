@@ -44,6 +44,8 @@ import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig, platformValue, type EmailConfig } from "./lib/platformConfig";
 import { recordActivity } from "./lib/activity";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
+import { isVoiceModel } from "./lib/voiceModels";
+import { applyAgentModel } from "./retellAgent";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -448,6 +450,9 @@ export const orgDetail = query({
           inboundNumber: v.union(v.string(), v.null()),
           transferNumber: v.union(v.string(), v.null()),
           enabled: v.boolean(),
+          // The operator's model override, null when the agent runs the
+          // platform default. Display + the picker's current value.
+          llmModel: v.union(v.string(), v.null()),
           runtimeConnectedAt: v.union(v.number(), v.null()),
           lastCallEventAt: v.union(v.number(), v.null()),
           lastAnalyzedEventAt: v.union(v.number(), v.null()),
@@ -571,6 +576,7 @@ export const orgDetail = query({
           inboundNumber: a.inboundNumber ?? null,
           transferNumber: a.transferNumber ?? null,
           enabled: a.enabled,
+          llmModel: a.llmModel ?? null,
           runtimeConnectedAt: a.runtimeConnectedAt ?? null,
           lastCallEventAt: a.lastCallEventAt ?? null,
           lastAnalyzedEventAt: a.lastAnalyzedEventAt ?? null,
@@ -1246,6 +1252,46 @@ export const provisionableContext = internalQuery({
         org: names.get(agent.orgId) ?? "another business",
       })),
     };
+  },
+});
+
+// The admin gate for actions in this file. Actions hold no ctx.db, so they
+// cannot call requirePlatformAdmin themselves; the identity propagates into
+// runQuery, and this is the one line they need answered. Returns nothing on
+// purpose — it either passes or throws.
+export const assertOperator = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    return null;
+  },
+});
+
+// The operator's per-agent model override, from /admin. An action because the
+// model lives in the provider's response engine: applyAgentModel clones a
+// draft, patches the engine, publishes, and only then stamps the row — so
+// the database never claims a model the agent is not running. Null clears
+// the override back to the platform default. The dropdown in the console is
+// built from lib/voiceModels, and the id is re-checked here because a
+// validator cannot: the catalogue is data, not a type.
+export const setAgentModel = action({
+  args: {
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    model: v.union(v.string(), v.null()),
+  },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, args): Promise<{ ok: boolean; version: number | null }> => {
+    await ctx.runQuery(internal.platform.assertOperator, {});
+    if (args.model !== null && !isVoiceModel(args.model)) {
+      throw new Error(`Unknown model: ${args.model}`);
+    }
+    return await applyAgentModel(ctx, {
+      agentId: args.retellAgentId,
+      orgId: args.orgId,
+      model: args.model,
+    });
   },
 });
 
