@@ -9,7 +9,7 @@
 // product the salon's accountant already has. It exists to close the loop on
 // the prices staff type in, and nothing more.
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatDateTime } from "@/lib/datetime";
@@ -18,6 +18,7 @@ import { formatMoney } from "@/lib/money";
 export function RevenueView() {
   const { t, language } = useLanguage();
   const report = useQuery(api.reports.revenue, {});
+  const setStatus = useMutation(api.appointments.setStatus);
 
   if (report === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -79,6 +80,20 @@ export function RevenueView() {
                 <span className="shrink-0 tabular-nums">
                   {formatMoney(row.total, report.currency, language, report.priceDecimals)}
                 </span>
+                {/* The one correction this list needs: every row here was
+                    auto-completed overnight, so a no-show nobody flagged is
+                    standing in the totals as money. Flipping it to no_show
+                    drops it from the figures reactively and arms the win-back;
+                    a mis-tap is undone from the appointment itself. */}
+                <button
+                  className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:border-red-400 hover:text-red-600 dark:hover:text-red-400"
+                  title={t("revenue.noShowHint")}
+                  onClick={() =>
+                    void setStatus({ appointmentId: row._id, status: "no_show" })
+                  }
+                >
+                  {t("status.no_show")}
+                </button>
               </li>
             ))}
           </ul>

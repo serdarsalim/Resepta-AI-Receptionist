@@ -641,6 +641,11 @@ const dictionary = {
     en: "{n} completed appointments have no price and are not counted.",
     de: "{n} abgeschlossene Termine haben keinen Preis und zählen nicht mit.",
   },
+  "revenue.noShowHint": {
+    tr: "Gelmedi olarak işaretle — tutar cirodan düşer",
+    en: "Mark as no-show — removed from the takings",
+    de: "Als nicht erschienen markieren — zählt nicht mehr zum Umsatz",
+  },
   "settings.revenueEnabled": {
     tr: "Gelir sekmesi",
     en: "Revenue tab",
