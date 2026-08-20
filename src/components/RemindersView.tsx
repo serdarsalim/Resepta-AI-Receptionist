@@ -845,19 +845,25 @@ function RuleEditor({
   );
 }
 
-// Adding a rule, as a sheet you open from the button above the card. It used
-// to be a row of chips parked under the table — "+ 2 days before", "+ 1 hour
-// before" — which had two problems. It charged the card a permanent strip of
-// buttons for a job done a handful of times, and it could only ever offer the
-// timings somebody guessed in advance: a salon that wanted 36 hours had no way
-// in, and the chips vanished one by one as they were used, so the strip also
-// changed shape under you. Here the message types are always all six, and the
-// timing is a number you type with the unit beside it.
+// The message hub, as a sheet you open from the button above the card. Two
+// panes: every message type on the left, always all six and never disabled,
+// and what the selected one SAYS on the right. Picking swaps only the right
+// pane — the sheet went through a two-step wizard once (pick, then compose),
+// and the step swap moved the whole dialog under the pointer at the exact
+// moment you were reading it (Serdar, 2026-08-20).
+//
+// A type that is already added is not a dead end any more: selecting it shows
+// the wording its rule actually sends, editable in place, and Save writes to
+// that rule's template. Only the repeatable kinds (reminder, follow-up) offer
+// Add once an instance exists — a second confirmation is not a thing, but a
+// second reminder is. Timing for an existing rule is edited on its row, where
+// it already lives inline; this sheet owns timing only at birth.
 function AddRuleSheet({
   rules,
   templates,
   orgLanguage,
   onAdd,
+  onSaveExisting,
   onClose,
 }: {
   rules: RuleRowData[];
@@ -871,35 +877,51 @@ function AddRuleSheet({
     offsetHours: number | undefined,
     text: { body: string; subject: string },
   ) => void;
+  // The edit half: writes the wording onto the EXISTING rule for this trigger.
+  onSaveExisting: (
+    ruleId: Id<"messageRules">,
+    text: { body: string; subject: string },
+  ) => void;
   onClose: () => void;
 }) {
   const { t } = useLanguage();
-  const [trigger, setTrigger] = useState<RuleTrigger | null>(null);
+  // Preselected, not null: the right pane exists from the first frame, so
+  // there is never a moment where picking makes content appear from nothing.
+  const [trigger, setTrigger] = useState<RuleTrigger>("booking");
   const [amount, setAmount] = useState("");
   const [unit, setUnit] = useState<"hours" | "days">("hours");
   const [error, setError] = useState<string | null>(null);
-  // The wording, seeded on pick and editable here. Adding a reminder without
-  // seeing what it says meant discovering the words afterwards, in a second
-  // screen, on a rule that was already live.
-  const [body, setBody] = useState("");
-  const [subject, setSubject] = useState("");
-  // TWO STEPS, not one growing form. Timing and a five-line message unfolding
-  // under the picked option pushed the list, the option you had just clicked
-  // and the Add button all down the page — the dialog moved under the pointer
-  // at the exact moment you were reading it. Picking is one question; what it
-  // says and when is the next.
-  const [step, setStep] = useState<"pick" | "compose">("pick");
+  // Edits keyed by trigger, so toggling between types to compare wording never
+  // throws away a sentence you were halfway through on another one.
+  const [drafts, setDrafts] = useState<
+    Partial<Record<RuleTrigger, { body: string; subject: string }>>
+  >({});
 
   const selected =
-    ADD_OPTIONS.find((option) => option.trigger === trigger) ?? null;
+    ADD_OPTIONS.find((option) => option.trigger === trigger) ?? ADD_OPTIONS[0];
   const taken = (option: AddOption) =>
     !option.repeatable && rules.some((rule) => rule.trigger === option.trigger);
+  // Present exactly when the selected type is a non-repeatable that already
+  // has its rule: the sheet is then editing, not adding.
+  const editingRule = taken(selected)
+    ? rules.find((rule) => rule.trigger === selected.trigger) ?? null
+    : null;
 
-  // ensureTemplate's order, mirrored: this org's own fallback for the kind,
-  // then the stock text for the language, then English. Getting this wrong
-  // would show one message in the sheet and save a different one.
+  // ensureTemplate's order, mirrored — with one extra head for an existing
+  // rule: that rule's OWN template first, because "show me the Confirmation"
+  // must show the sentence its sends actually carry. Then this org's fallback
+  // for the kind, then the stock text for the language, then English. Getting
+  // this wrong would show one message in the sheet and save a different one.
   const seedFor = (option: AddOption) => {
     const kind = KIND_FOR_TRIGGER[option.trigger];
+    const rule = taken(option)
+      ? rules.find((r) => r.trigger === option.trigger)
+      : undefined;
+    const own = rule
+      ? templates.find(
+          (tpl) => tpl.ruleId === rule._id && tpl.language === orgLanguage,
+        )
+      : undefined;
     const fallback = templates.find(
       (tpl) =>
         tpl.ruleId === undefined &&
@@ -909,25 +931,23 @@ function AddRuleSheet({
     const stock = (DEFAULT_TEMPLATE_TEXTS[orgLanguage] ??
       DEFAULT_TEMPLATE_TEXTS.en)[kind as TemplateKind];
     return {
-      body: fallback?.body ?? stock?.body ?? "",
-      subject: fallback?.subject ?? stock?.subject ?? "",
+      body: own?.body ?? fallback?.body ?? stock?.body ?? "",
+      subject: own?.subject ?? fallback?.subject ?? stock?.subject ?? "",
     };
   };
 
+  const draft = drafts[trigger] ?? seedFor(selected);
+  const patchDraft = (patch: Partial<{ body: string; subject: string }>) =>
+    setDrafts((prev) => ({
+      ...prev,
+      [trigger]: { ...(prev[trigger] ?? seedFor(selected)), ...patch },
+    }));
+
   const pick = (option: AddOption) => {
     setError(null);
-    setStep("compose");
-    // Re-seed only when the message type actually changes. Stepping back and
-    // clicking the same option again is how you re-read the list, not how you
-    // ask for your edits to be thrown away.
-    if (option.trigger !== trigger) {
-      const seed = seedFor(option);
-      setBody(seed.body);
-      setSubject(seed.subject);
-      if (option.timing) {
-        setAmount(String(option.timing.defaultAmount));
-        setUnit(option.timing.defaultUnit);
-      }
+    if (option.trigger !== trigger && option.timing) {
+      setAmount(String(option.timing.defaultAmount));
+      setUnit(option.timing.defaultUnit);
     }
     setTrigger(option.trigger);
   };
@@ -945,7 +965,11 @@ function AddRuleSheet({
       : { min: timing.minHours, max: timing.maxHours };
 
   const submit = () => {
-    if (!selected) return;
+    if (editingRule) {
+      onSaveExisting(editingRule._id, draft);
+      onClose();
+      return;
+    }
     let offsetHours: number | undefined;
     if (selected.timing) {
       const bounds = boundsIn(selected.timing);
@@ -977,191 +1001,142 @@ function AddRuleSheet({
         return;
       }
     }
-    onAdd(selected.trigger, offsetHours, { body, subject });
+    onAdd(selected.trigger, offsetHours, draft);
     onClose();
   };
 
   return (
-    <Sheet title={t("settings.ruleAdd")} onClose={onClose}>
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <fieldset className={step === "pick" ? "" : "hidden"}>
-          <legend className="mb-1.5 text-xs text-[var(--muted)]">
-            {t("settings.ruleAddPick")}
-          </legend>
-          <div className="space-y-1">
-            {ADD_OPTIONS.map((option) => {
-              const disabled = taken(option);
-              const on = trigger === option.trigger;
-              return (
-                <label
-                  key={option.trigger}
-                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
-                    disabled
-                      ? "cursor-not-allowed border-[var(--border)] opacity-50"
-                      : on
-                        ? "cursor-pointer border-[var(--accent)] bg-[var(--muted-bg)]"
-                        : "cursor-pointer border-[var(--border)] hover:bg-[var(--muted-bg)]"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="rule-trigger"
-                    className="w-auto"
-                    checked={on}
-                    disabled={disabled}
-                    onChange={() => pick(option)}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">
-                      {t(option.nameKey)}
-                    </span>
-                    <span className="block text-xs text-[var(--muted)]">
-                      {disabled
-                        ? t("settings.ruleAlreadyAdded")
-                        : t(option.whenKey)}
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-
-        {/* Step two: what it says and when. */}
-        {step === "compose" && selected && (
-          <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
-            <button
-              type="button"
-              onClick={() => {
-                setStep("pick");
-                setError(null);
-              }}
-              className="flex h-8 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
+    <Sheet title={t("settings.ruleAdd")} wide onClose={onClose}>
+      <div className="grid gap-4 sm:grid-cols-[15rem_1fr]">
+        {/* The list column never changes shape: every type is a button in
+            every state, and "already added" is a subtitle, not a lock. */}
+        <div className="space-y-1">
+          {ADD_OPTIONS.map((option) => {
+            const added = taken(option);
+            const on = trigger === option.trigger;
+            return (
+              <button
+                key={option.trigger}
+                type="button"
+                onClick={() => pick(option)}
+                aria-pressed={on}
+                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                  on
+                    ? "border-[var(--accent)] bg-[var(--muted-bg)]"
+                    : "border-[var(--border)] hover:bg-[var(--muted-bg)]"
+                }`}
               >
-                <path d="M15 5l-7 7 7 7" />
-              </svg>
-              {t("common.back")}
-            </button>
-            <span className="min-w-0 truncate text-sm font-medium">
-              {t(selected.nameKey)}
-            </span>
-          </div>
-        )}
+                <span className="block text-sm font-medium">
+                  {t(option.nameKey)}
+                </span>
+                <span className="block text-xs text-[var(--muted)]">
+                  {added ? t("settings.ruleAlreadyAdded") : t(option.whenKey)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Only the three triggers that hang off a clock get a timing row. The
-            event ones fire on the mutation, so a number there would be a
-            promise nothing keeps (messageRules.clampOffset pins them to 0). */}
-        {step === "compose" && selected?.timing && (
-          <div>
-            <span className="mb-1.5 block text-xs text-[var(--muted)]">
-              {t("settings.ruleAddTiming")}
-            </span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={boundsIn(selected.timing).min}
-                max={boundsIn(selected.timing).max}
-                value={amount}
-                aria-label={t("settings.ruleAddTiming")}
-                onChange={(event) => {
-                  setAmount(event.target.value);
-                  setError(null);
-                }}
-                className="w-24"
-              />
-              <select
-                value={unit}
-                aria-label={t("settings.ruleAddTiming")}
-                onChange={(event) => {
-                  setUnit(event.target.value as "hours" | "days");
-                  setError(null);
-                }}
-                className="w-32"
-              >
-                <option value="hours">{t("settings.ruleUnitHours")}</option>
-                <option value="days">{t("settings.ruleUnitDays")}</option>
-              </select>
-              <span className="text-sm text-[var(--muted)]">
-                {t(selected.whenKey)}
+        {/* min-h so the editor column holds its ground while types with and
+            without a timing row swap through it — the whole reason this sheet
+            is two panes instead of two steps. */}
+        <form
+          className="flex min-h-[22rem] flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          {/* Only the timed triggers get a timing row, and only at birth —
+              an existing rule's timing is edited inline on its row, and two
+              places writing one number is how they disagree. The event
+              triggers fire on the mutation, so a number there would be a
+              promise nothing keeps (messageRules.clampOffset pins them to 0). */}
+          {!editingRule && selected.timing && (
+            <div>
+              <span className="mb-1.5 block text-xs text-[var(--muted)]">
+                {t("settings.ruleAddTiming")}
               </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={boundsIn(selected.timing).min}
+                  max={boundsIn(selected.timing).max}
+                  value={amount}
+                  aria-label={t("settings.ruleAddTiming")}
+                  onChange={(event) => {
+                    setAmount(event.target.value);
+                    setError(null);
+                  }}
+                  className="w-24"
+                />
+                <select
+                  value={unit}
+                  aria-label={t("settings.ruleAddTiming")}
+                  onChange={(event) => {
+                    setUnit(event.target.value as "hours" | "days");
+                    setError(null);
+                  }}
+                  className="w-32"
+                >
+                  <option value="hours">{t("settings.ruleUnitHours")}</option>
+                  <option value="days">{t("settings.ruleUnitDays")}</option>
+                </select>
+                <span className="text-sm text-[var(--muted)]">
+                  {t(selected.whenKey)}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* The words, before the rule exists. Picking a message type used to
-            add it sight-unseen and leave you to find the wording afterwards
-            on a second screen — so the stock text was something you inherited
-            rather than something you agreed to. Editable here because the
-            moment you read a sentence is the moment you want to change it. */}
-        {step === "compose" && selected && (
+          {/* The words. For a new rule this is the stock text you agree to
+              before it exists; for an added one it is the sentence its sends
+              carry today, and Save rewrites that rule in place. */}
           <div className="space-y-1.5">
             <span className="block text-xs text-[var(--muted)]">
               {t("settings.ruleAddMessage")}
             </span>
             <input
-              value={subject}
+              value={draft.subject}
               placeholder={t("settings.templateSubject")}
               aria-label={t("settings.templateSubject")}
-              onChange={(event) => setSubject(event.target.value)}
+              onChange={(event) => patchDraft({ subject: event.target.value })}
             />
             <AutoGrowTextarea
-              value={body}
+              value={draft.body}
               rows={5}
               placeholder={t("settings.templateBodyPlaceholder")}
               aria-label={t("settings.templateBody")}
-              onChange={(event) => setBody(event.target.value)}
+              onChange={(event) => patchDraft({ body: event.target.value })}
             />
             <p className="text-[11px] leading-relaxed text-[var(--muted)]">
               {t("settings.ruleAddMessageHint")}
             </p>
           </div>
-        )}
 
-        {/* Reserved whether or not it holds anything, so a rejected number does
-            not shove the buttons out from under the pointer. */}
-        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
+          {/* Reserved whether or not it holds anything, so a rejected number
+              does not shove the buttons out from under the pointer. */}
+          <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
-          >
-            {t("common.cancel")}
-          </button>
-          {/* Add belongs to step two only. On step one every option is its own
-              button, so a disabled Add sitting under the list was a control
-              that could never be the next thing you pressed. */}
-          {step === "compose" && (
+          <div className="mt-auto flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)]"
+            >
+              {t("common.cancel")}
+            </button>
             <button
               type="submit"
-              disabled={!selected}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
             >
-              {t("common.add")}
+              {editingRule ? t("common.save") : t("common.add")}
             </button>
-          )}
-        </div>
-      </form>
+          </div>
+        </form>
+      </div>
     </Sheet>
   );
 }
@@ -1467,6 +1442,22 @@ function RulesCard({
     text: { body: string; subject: string },
   ) => {
     const ruleId = await addRule({ trigger, offsetHours: offsetHours ?? 0 });
+    const templateId = await ensureTemplate({ ruleId, language: org.language });
+    await updateTemplate({
+      templateId,
+      body: text.body,
+      bodyHtml: plainToHtml(text.body),
+      subject: text.subject,
+    });
+  };
+
+  // The sheet's edit half: same tail as doAdd, minus the birth. ensureTemplate
+  // is idempotent — it returns the rule's existing template row when one is
+  // already there — so this writes onto whatever the rule really sends from.
+  const doSaveExisting = async (
+    ruleId: Id<"messageRules">,
+    text: { body: string; subject: string },
+  ) => {
     const templateId = await ensureTemplate({ ruleId, language: org.language });
     await updateTemplate({
       templateId,
@@ -1856,6 +1847,7 @@ function RulesCard({
           onAdd={(trigger, offsetHours, text) =>
             void doAdd(trigger, offsetHours, text)
           }
+          onSaveExisting={(ruleId, text) => void doSaveExisting(ruleId, text)}
           onClose={() => setAdding(false)}
         />
       )}
