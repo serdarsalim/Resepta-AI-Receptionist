@@ -8,6 +8,12 @@ import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import { assignInboundAddress, resolveInboundAddress } from "./lib/inboundAddress";
+import {
+  assignPublicSlug,
+  resolvePublicSlug,
+  slugify,
+  slugMatchesName,
+} from "./lib/publicSlug";
 import { resolvePublicPhone } from "./lib/publicPhone";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
@@ -302,7 +308,33 @@ export const update = mutation({
     const { orgId } = await requireOwner(ctx);
     const org0 = await ctx.db.get(orgId);
     const patch: Record<string, unknown> = {};
-    if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
+    if (args.name !== undefined && args.name.trim()) {
+      const name = args.name.trim();
+      patch.name = name;
+      // The booking page FOLLOWS the name (lib/publicSlug): rename the
+      // business and /book/<slug> renames with it, which is the whole reason
+      // the name has to be unique — resolvePublicSlug throws `name-taken`
+      // rather than let two salons own one page. Both client callers (the
+      // Business name field, the onboarding gate) show that refusal; an
+      // unhandled one is a save that silently did not happen.
+      if (org0 && name !== org0.name) {
+        const slug = await resolvePublicSlug(ctx, orgId, name);
+        if (slug && slug !== org0.publicSlug) {
+          patch.publicSlug = slug;
+          // [booking_link] resolves through orgs.bookingUrl, a whole URL
+          // stored when the switch went on. Moved in the SAME patch: a rename
+          // that left it behind would point every reminder, away-reply and
+          // campaign at a page that no longer answers — the same failure the
+          // rename exists to fix, one layer down. Only our own page shape is
+          // rewritten; anything else is left alone.
+          const url = org0.bookingUrl?.trim();
+          if (url) {
+            const moved = url.replace(/\/book\/[^/?#]*$/, `/book/${slug}`);
+            if (moved !== url) patch.bookingUrl = moved;
+          }
+        }
+      }
+    }
     if (args.timezone !== undefined) {
       // Rejected loudly rather than stored and shrugged at. Every dated thing
       // in the product reads through this zone, and getLocalPartsSafe falls
@@ -438,6 +470,42 @@ export const update = mutation({
       const name = (patch.name as string | undefined) ?? org.name;
       const assigned = await assignInboundAddress(ctx, orgId, name);
       if (assigned) patch.inboundAddress = assigned;
+    }
+
+    // The same self-healing shape for the public slug, but a SYNC rather than
+    // a backfill: it fixes a slug that disagrees with the name, not only a
+    // missing one. Both cases are the same legacy — every org named before the
+    // link followed the name is carrying whatever its name was the day the
+    // booking switch went on, which for a business that has since renamed
+    // itself is the stale address this whole change exists to retire. Waiting
+    // for a rename would never reach them; their name is already right.
+    //
+    // It also closes a hole in the uniqueness check above: an org holding no
+    // slug reserves no name.
+    //
+    // Suffixed rather than refused (assignPublicSlug, not resolvePublicSlug) —
+    // this org did not choose this moment and cannot be asked to pick another
+    // name, and slugMatchesName keeps an already-suffixed legacy slug stable
+    // instead of fighting the org that holds the unsuffixed one.
+    if (org && org.name && patch.publicSlug === undefined) {
+      const named = (patch.name as string | undefined) ?? org.name;
+      // A name that slugs to nothing — one written entirely in a script this
+      // slugger folds away — has nothing to sync TO. Such an org gets the
+      // "resepta-N" fallback ONCE, when it has no slug at all; without this
+      // guard slugMatchesName would answer false forever and buy a
+      // whole-table scan on every settings save to arrive at the same string.
+      const drifted =
+        slugify(named) !== "" && !slugMatchesName(org.publicSlug, named);
+      if (!org.publicSlug || drifted) {
+        const slug = await assignPublicSlug(ctx, orgId, named);
+        patch.publicSlug = slug;
+        // Same reason the rename branch moves it: [booking_link] reads this.
+        const url = org.bookingUrl?.trim();
+        if (url && patch.bookingUrl === undefined) {
+          const moved = url.replace(/\/book\/[^/?#]*$/, `/book/${slug}`);
+          if (moved !== url) patch.bookingUrl = moved;
+        }
+      }
     }
 
     await ctx.db.patch(orgId, patch);

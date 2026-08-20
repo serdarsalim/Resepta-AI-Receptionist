@@ -250,6 +250,14 @@ const dictionary = {
     en: "Business name",
     de: "Betriebsname",
   },
+  // Shorter than the settings version on purpose: nobody at this screen has a
+  // booking page yet, so the reason would be an explanation of a thing they
+  // have not met. They just need another name.
+  "onboarding.nameTaken": {
+    tr: "Bu ismi başka bir işletme kullanıyor. Başka bir isim deneyin.",
+    en: "Another business already uses this name. Try a different one.",
+    de: "Diesen Namen nutzt bereits ein anderer Betrieb. Versuchen Sie einen anderen.",
+  },
   "onboarding.start": { tr: "Başla", en: "Get started", de: "Loslegen" },
 
   "appointments.edit": { tr: "Randevuyu düzenle", en: "Edit appointment", de: "Termin bearbeiten" },
@@ -884,6 +892,26 @@ const dictionary = {
     tr: "İşletme adı",
     en: "Business name",
     de: "Betriebsname",
+  },
+  // Says the consequence before the owner discovers it. The link is derived
+  // from this field, so a rename moves the page — and the link is already out
+  // there, in sent messages and on a card.
+  "settings.businessNameHint": {
+    tr: "Online randevu sayfanızın adresi bu isimden türetilir. İsmi değiştirirseniz link de değişir ve eski link artık açılmaz.",
+    en: "Your online booking page address comes from this name. Change the name and the link changes with it — the old one stops opening.",
+    de: "Die Adresse Ihrer Online-Buchungsseite entsteht aus diesem Namen. Ändern Sie den Namen, ändert sich der Link mit — der alte öffnet dann nicht mehr.",
+  },
+  // Names the real reason. "That name is taken" alone reads as petty
+  // gatekeeping; the booking page is why it cannot be shared.
+  "settings.nameTaken": {
+    tr: "Bu ismi başka bir işletme kullanıyor. Randevu sayfanızın adresi isminizden türediği için isimler benzersiz olmalı — ayırt edici bir şey ekleyin.",
+    en: "Another business already uses this name. Booking page addresses come from the name, so names have to be unique — add something that tells yours apart.",
+    de: "Diesen Namen nutzt bereits ein anderer Betrieb. Die Adresse der Buchungsseite entsteht aus dem Namen, deshalb müssen Namen eindeutig sein — ergänzen Sie etwas Unterscheidendes.",
+  },
+  "settings.nameRejected": {
+    tr: "İsim kaydedilemedi. Lütfen tekrar deneyin.",
+    en: "That name could not be saved. Please try again.",
+    de: "Der Name konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
   },
   "settings.timezone": { tr: "Saat dilimi", en: "Timezone", de: "Zeitzone" },
   "settings.timezoneHint": {

@@ -284,9 +284,10 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
             third. */}
         <div className="flex items-center gap-2">
           <Toggle checked={bookingEnabled ?? false} onChange={toggle} />
-          {/* Derived, so it is shown rather than edited. Editing it was never
-              meaningful — the page lives at that address whatever a field
-              says. */}
+          {/* Derived, and it STAYS derived — no field here. The address is
+              the business name (lib/publicSlug); renaming the business is how
+              you rename the page, and a second place to type it would be a
+              second answer to one question. */}
           {bookingEnabled && nativeBookingUrl && (
             <>
               <a
@@ -334,6 +335,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   // Bumped on a refusal to remount the input, so it snaps back to the value
   // that is actually stored instead of showing the rejected one.
   const [addressTick, setAddressTick] = useState(0);
+  // The name can be refused too, since 2026-08-20: the booking page address is
+  // derived from it, so two businesses sharing a name would be two businesses
+  // sharing one public page.
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameTick, setNameTick] = useState(0);
 
   return (
     <Card title={t("settings.general")} disabled={!isOwner}>
@@ -341,7 +347,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       ) : (
         <div className={ROW_GRID}>
-          <RowLabel label={t("settings.businessName")} />
+          {/* The hint is not decoration: this field now moves the public
+              booking link, and an owner tidying up their spelling has no way
+              to guess that from a box labelled "Business name". */}
+          <RowLabel
+            label={t("settings.businessName")}
+            hint={t("settings.businessNameHint")}
+          />
           {/* Capped per input rather than by narrowing ROW_GRID: the shared
               column has to stay 24rem for the rows that need it (seven day
               chips on one line, the open/close pickers). These values are a
@@ -349,10 +361,29 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               than the text it will ever hold reads as an invitation to write
               an essay. */}
           <input
+            key={`name-${nameTick}-${settings.org.name}`}
             className="sm:max-w-72"
             defaultValue={settings.org.name}
-            onBlur={(e) => void update({ name: e.target.value })}
+            onBlur={(e) => {
+              const next = e.target.value;
+              if (next.trim() === settings.org.name) return;
+              setNameError(null);
+              void update({ name: next }).catch((err) => {
+                setNameError(
+                  String(err).includes("name-taken")
+                    ? t("settings.nameTaken")
+                    : t("settings.nameRejected"),
+                );
+                setNameTick((tick) => tick + 1);
+              });
+            }}
           />
+          {nameError && (
+            <>
+              <span />
+              <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
+            </>
+          )}
 
           <RowLabel label={t("settings.logo")} hint={t("settings.logoHint")} />
           <div className="flex items-center gap-3">

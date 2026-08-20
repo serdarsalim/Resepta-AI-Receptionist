@@ -13,6 +13,7 @@ import {
   localWallTimeToUtcMs,
 } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
 import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
@@ -20,21 +21,6 @@ import {
 
 import { customerConflict } from "./lib/overlap";
 import { DEFAULT_CURRENCY } from "./lib/money";
-
-// Turkish-folded, lowercased, hyphenated. Lived in forms.ts until the request
-// form was retired (2026-08-19); this file is its only consumer now, and it is
-// the file that mints `publicSlug` in the first place. Kept separate from
-// lib/inboundAddress's slugger on purpose: that one feeds a mail routing key,
-// this one feeds a URL.
-export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
-    .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
 
 
 // The native booking page: /book/<slug>. The fifth intake, and the first one
@@ -746,18 +732,18 @@ export const enable = mutation({
       await ctx.db.patch(orgId, { bookingEnabled: false });
       return org.publicSlug ?? null;
     }
-    let slug = org.publicSlug;
-    if (!slug) {
-      const base = slugify(org.name) || "resepta";
-      const taken = new Set(
-        (await ctx.db.query("orgs").collect())
-          .filter((other) => other._id !== orgId)
-          .map((other) => other.publicSlug),
-      );
-      slug = base;
-      let n = 2;
-      while (taken.has(slug)) slug = `${base}-${n++}`;
-    }
+    // Normally already settled: orgs.update keeps the slug derived from the
+    // business name, so by the time anyone flips this switch the page has an
+    // address that matches the sign above the door. This is the legacy path —
+    // an org with no slug at all, or one still carrying the name it had the
+    // day the switch first went on. It fills or corrects a blank; it does not
+    // decide anything, which is why it suffixes on a clash rather than
+    // refusing a switch the owner is entitled to flip.
+    const current = org.publicSlug;
+    const slug =
+      current && slugMatchesName(current, org.name)
+        ? current
+        : await assignPublicSlug(ctx, orgId, org.name);
     await ctx.db.patch(orgId, { bookingEnabled: true, publicSlug: slug });
     return slug;
   },

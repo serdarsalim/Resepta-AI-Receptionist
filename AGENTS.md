@@ -421,14 +421,37 @@ rather than after what it does.
   `convex/forms.ts` and `src/app/r/` are deleted, `/r/(.*)` is out of
   `proxy.ts`'s public matcher, and `orgs.formEnabled` is dead-and-commented in
   the schema (Convex cannot drop a field while documents carry values).
-  `publicSlug` is LIVE — the booking page mints and uses the same slug, and
-  `slugify` moved to `convex/booking.ts`, its only remaining consumer. The
-  `"form"` FEED channel stays wired end to end (`messages.channelOfMessage`,
+  `publicSlug` is LIVE — the booking page uses the same slug, and `slugify`
+  moved to `convex/lib/publicSlug.ts`. The `"form"` FEED channel stays wired end to end (`messages.channelOfMessage`,
   `FeedIcon`, `FeedFilterPills`): `form_request` rows are historical data and
   must still render, and the filter pill already hides itself for a customer
   who has none. Do not rebuild a second public page that collects a name and a
   service without writing an appointment — that was the whole shape, and it
   put a stranger's request in a queue for staff to retype.
+
+- **The booking link FOLLOWS the business name, and the name is UNIQUE**
+  (Serdar, 2026-08-20). `/book/<slug>` is `slugify(orgs.name)`, re-derived
+  whenever the name changes — `convex/lib/publicSlug.ts` owns the rule, and
+  `resolvePublicSlug` throws `name-taken` rather than let two businesses land
+  on one page. Do NOT add a field for editing the slug on its own: a second
+  place to type it is a second answer to one question, and the answer is the
+  name. The slug used to be minted once, from whatever the name was the day
+  the booking switch went on, and never re-derived — which left a renamed
+  salon advertising a business that no longer exists in every link it sends.
+  The cost that buys: renaming MOVES the page, so links already sent stop
+  opening. That is stated on the name field's hint and is the accepted trade.
+  Three things must stay wired together or the fix reintroduces its own bug:
+  (1) `orgs.update` patches `publicSlug` and rewrites `orgs.bookingUrl` in the
+  SAME patch, because `[booking_link]` resolves through `bookingUrl` and a
+  rename that missed it points every reminder at a dead page; (2) the sync in
+  `orgs.update` is self-healing, not just a backfill — orgs that renamed
+  before this rule have a correct name and a stale slug, so waiting for a
+  rename would never reach them — and `slugMatchesName` guards it with a
+  string compare so the whole-table scan in `assignPublicSlug` does not run on
+  every settings save; (3) both client callers of `orgs.update({ name })` (the
+  Business name field, `AppShell`'s onboarding gate) render the `name-taken`
+  refusal, since an unhandled rejection here is a save that silently did not
+  happen.
 
 - **`/book/<slug>` is a THREE-STEP WIZARD, not a growing page** (Serdar,
   2026-08-20, reversing this file's own "each answer reveals the next

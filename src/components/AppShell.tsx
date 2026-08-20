@@ -532,6 +532,11 @@ function OnboardingGate() {
   const { t } = useLanguage();
   const { signOut } = useAuthActions();
   const update = useMutation(api.orgs.update);
+  // The name can be REFUSED (2026-08-20): it derives the booking page address,
+  // so it is unique across businesses. Unhandled, that refusal is a submit
+  // button that does nothing forever — the gate is the whole app until it
+  // passes, so there is no other screen for the failure to show up on.
+  const [error, setError] = useState<string | null>(null);
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-[var(--pane)] p-6">
       <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
@@ -556,13 +561,24 @@ function OnboardingGate() {
             const name = String(
               new FormData(event.currentTarget).get("name") ?? "",
             ).trim();
-            if (name) void update({ name });
+            if (!name) return;
+            setError(null);
+            void update({ name }).catch((err) => {
+              setError(
+                String(err).includes("name-taken")
+                  ? t("onboarding.nameTaken")
+                  : t("settings.nameRejected"),
+              );
+            });
           }}
         >
           <label className="block text-sm">
             {t("onboarding.businessName")}
             <input name="name" required autoFocus className="mt-1" />
           </label>
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
           <button
             type="submit"
             className="w-full rounded-lg bg-[var(--accent)] px-4 py-2 font-medium text-[var(--accent-fg)]"
