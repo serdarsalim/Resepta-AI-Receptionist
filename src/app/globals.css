@@ -293,6 +293,26 @@ thead {
   .stable-gutter {
     scrollbar-gutter: stable;
   }
+
+  /* The DOCUMENT gets the same treatment (Serdar, 2026-08-20). The booking
+     page reveals sections as the customer answers, so it crosses the fold
+     mid-flow — the vertical scrollbar appearing shrank the viewport and
+     lurched the centered card sideways on every selection. Reserving the
+     gutter up front is the fix; same sm+ gate as .stable-gutter, because
+     touch scrollbars overlay and take no width. */
+  html {
+    scrollbar-gutter: stable;
+  }
+}
+
+/* Scrolls without showing a bar — for chip strips that read as swipeable
+   rows, not as scroll regions. The day strip on the booking page wears it;
+   a native horizontal bar under a row of chips reads as a broken element. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Widths are Vercel's, measured off its dashboard sidebar rather than guessed:
