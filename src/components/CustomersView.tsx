@@ -464,16 +464,14 @@ export function CustomersView({
   const widthOf = (column: Column) => table.widthFor(column.key, column.width);
   const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
-  return (
-    <div className="space-y-4 page-stack">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Search moved to the header, where it is in the same place on
-            every tab. What is left here belongs to this table specifically. */}
-        <div className="flex w-full items-center gap-2">
-          {/* The picker belongs to the table, and below sm there is no table. */}
-          {hasCustomers && (
-            <div className="hidden sm:block">
-              <ColumnPicker
+  // The table's own controls, lifted out of the return so they can be mounted
+  // in the card header on desktop and left out entirely on a phone, without
+  // the markup existing twice.
+  //
+  // Search is NOT here — it moved to the shell header, where it sits in the
+  // same place on every tab.
+  const columnPicker = hasCustomers ? (
+    <ColumnPicker
                 // Ordered, not the raw list: once a column has been dragged,
                 // a picker still reading left-to-right in the original order
                 // is a second, disagreeing map of the same table.
@@ -514,25 +512,36 @@ export function CustomersView({
                     </MenuItem>
                   </>
                 )}
-              />
-            </div>
-          )}
-          <button
-            className="ml-auto h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-            onClick={() => setAdding(true)}
-          >
-            {t("customers.new")}
-          </button>
-        </div>
-      </div>
+    />
+  ) : null;
+
+  const addButton = (
+    <button
+      className="ml-auto h-9 shrink-0 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+      onClick={() => setAdding(true)}
+    >
+      {t("customers.new")}
+    </button>
+  );
+
+  return (
+    <div className="space-y-4 page-stack">
+      {/* A phone has no table to hang a header on — it gets the card list
+          below — so the one action it needs keeps its own row. Columns is
+          desktop-only either way: below sm there is no table to pick columns
+          for. */}
+      <div className="flex sm:hidden">{addButton}</div>
 
       {adding && <NewCustomerSheet onClose={() => setAdding(false)} />}
 
       {customers === undefined && (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       )}
+      {/* Desktop reads this inside the card, under the header, so the Add
+          customer button is still on screen for a salon with no customers
+          yet. */}
       {customers?.length === 0 && (
-        <p className="text-sm text-[var(--muted)]">{t("customers.none")}</p>
+        <p className="text-sm text-[var(--muted)] sm:hidden">{t("customers.none")}</p>
       )}
       {/* On desktop this line lives in the table body instead, so the header
           and its funnels survive a filter that matches nothing: whatever hid
@@ -577,8 +586,24 @@ export function CustomersView({
         </ul>
       )}
 
-      {hasCustomers && (
+      {/* Gated on LOADED, not on having rows: the header carries Add customer
+          now, and a salon whose first customer has not been added yet still
+          has to be able to add one. */}
+      {customers !== undefined && (
         <div className="hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)] sm:block">
+          {/* The table's controls, in the card they belong to rather than
+              floating on the page gradient above it. Both are h-9 so the
+              bordered picker and the filled button share a baseline; Team's
+              header action is h-8 because it has nothing to line up with.
+
+              px-4 matches the scroller below, so the button's right edge lands
+              on the same line as the table's last column rule, and pt-4/pb-3
+              is Card's own header metric (p-4 with mb-3 under it) rather than
+              a number picked to look right in one screenshot. */}
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-4">
+            {columnPicker}
+            {addButton}
+          </div>
           {/* The table scrolls sideways inside its own card. The page body
               never does.
 
@@ -589,6 +614,7 @@ export function CustomersView({
               than the card, which is what padding on the scroller does. Cell
               padding drops to px-3 in exchange, so the first column's text
               lands about where it did before. */}
+          {hasCustomers ? (
           <div className="thin-scroll overflow-x-auto overscroll-x-contain px-4 py-1">
             <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth }}>
               <colgroup>
@@ -707,6 +733,11 @@ export function CustomersView({
               </tbody>
             </table>
           </div>
+          ) : (
+            <p className="px-4 pb-4 text-sm text-[var(--muted)]">
+              {t("customers.none")}
+            </p>
+          )}
         </div>
       )}
     </div>
