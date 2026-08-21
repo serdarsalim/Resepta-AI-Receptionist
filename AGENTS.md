@@ -378,6 +378,16 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
   by-name-once — in all three languages, prompt-text only, no version bump.
   `DEFAULT_VOICE_IDS` gives auto-provisioning a curated voice per language
   (tr keeps Bella's minimax-Camille) instead of `voices[0]`.
+  - **The voice catalogue is MINIMAX-ONLY** (lib/voiceCatalogue, Serdar,
+    2026-08-21): the old "platform-maintained" filter excluded every minimax
+    voice, so the curated default was never in the tenant's picker and Sun
+    Klinik's Turkish agent was born speaking retell-Alejandro. One engine
+    family, multilingual, the one Bella was tuned on. `keepId` still lets an
+    agent already on an off-list voice show what it actually uses.
+  - **Auto-provisioned agents are named after the BUSINESS** ("Sun Klinik
+    Sesli Asistanı", not "Randevu asistanı" — same day): every new agent
+    sharing one neutral name filled the shared Retell workspace with
+    indistinguishable rows.
 - **Knowledge reaches the VOICE agent at ring time**: `{{knowledge}}` is a
   built-in in `beforeCallContext` (capped ~8k chars, cut between blocks) with
   its prompt line in all three GENERAL_PROMPTS — an edit reaches the very
@@ -1604,7 +1614,16 @@ read the schema from `/retell/mcp`. Webhook signatures are computed with the
 ONE workspace key carrying the "Webhook" badge in Retell's Settings → API
 Keys, not with whichever key an org has installed — a different stored key
 passes every API call yet 401s every webhook, which reads as "no call results"
-with zero rows in `voiceEvents`.
+with zero rows in `voiceEvents`. **The platform `retellApiKey` (the key
+auto-provisioning STAMPS into every new org) must therefore BE the
+webhook-badge key** — learned in prod 2026-08-21 when Sun Klinik onboarded
+through the wizard with a second, non-badge key as the platform default:
+`retellGuard` verifies call-inbound, call-ended AND /retell/functions against
+the org's stored key, so the one wrong stamp produced the whole symptom set
+at once — an agent with no ring-time context, tools that all failed ("no
+access to the calendar"), and no call results. Fixed by promoting the badge
+key to the platform default and re-stamping the affected orgs via
+`connections:setFieldInternal`.
 
 Native phone-agent creation is Resepta-owned. **Add agent** defaults to creating
 an appointment receptionist from the versioned template in

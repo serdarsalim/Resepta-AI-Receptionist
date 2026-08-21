@@ -63,13 +63,14 @@ export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 // The voice a provisioned agent is born with, per language, in preference
 // order — auto-provisioning takes the first id the workspace's catalogue
 // actually offers and falls back to the catalogue's own first entry.
-// tr-TR is Bella's proven voice (the prod agent Serdar hand-tuned); the
-// others are same-family warm receptionist picks with a dedicated-accent
-// fallback. An owner changes the voice any time in the agent editor.
+// tr-TR is Bella's proven voice (the prod agent Serdar hand-tuned). ALL
+// minimax, matching the catalogue's minimax-only rule (lib/voiceCatalogue):
+// a default outside the catalogue is how Sun Klinik was born speaking
+// retell-Alejandro. An owner changes the voice any time in the agent editor.
 export const DEFAULT_VOICE_IDS: Record<VoiceAgentLanguage, string[]> = {
   "tr-TR": ["minimax-Camille"],
   "en-US": ["minimax-Ashley", "minimax-Kate", "minimax-Sloane"],
-  "de-DE": ["11labs-Carola", "cartesia-Eva", "minimax-Max"],
+  "de-DE": ["minimax-Max"],
 };
 
 // The platform default model — what a new agent is born with and what an

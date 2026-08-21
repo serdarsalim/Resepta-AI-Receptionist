@@ -1359,14 +1359,16 @@ export const autoProvision = internalAction({
     }
     const language: VoiceAgentLanguage =
       check.language === "tr" ? "tr-TR" : check.language === "de" ? "de-DE" : "en-US";
-    // The owner sees this name in Phone agent; their own language, their own
-    // industry-neutral word. They can rename it any time.
+    // The BUSINESS's name leads (Serdar, 2026-08-21): every auto-provisioned
+    // agent used to be called "Randevu asistanı", which filled the shared
+    // Retell workspace with identically named agents nobody could tell
+    // apart. The owner can rename it any time.
     const agentName =
       language === "tr-TR"
-        ? "Randevu asistanı"
+        ? `${check.name} Sesli Asistanı`
         : language === "de-DE"
-          ? "Terminassistent"
-          : "Appointment assistant";
+          ? `${check.name} Sprachassistent`
+          : `${check.name} Voice Agent`;
     let voiceId: string;
     try {
       const voices = (await ctx.runAction(internal.retellAgent.voiceOptionsForOrg, {

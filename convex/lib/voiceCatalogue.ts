@@ -21,10 +21,14 @@ export type CatalogueVoice = {
 };
 
 // The raw library contains the same named voice many times from different
-// engines. Resepta offers the provider's own maintained set when present, then
-// removes any remaining human-visible duplicates. The provider name never
-// reaches the browser and the picker stays useful instead of becoming a
-// catalogue of implementation choices.
+// engines. Resepta offers the MINIMAX set only (Serdar, 2026-08-21): it is
+// the engine family Bella was tuned on, its voices are multilingual, and the
+// previous "platform-maintained" filter excluded every minimax voice — so a
+// Turkish clinic's auto-provisioned agent was born speaking retell-Alejandro
+// while the curated default (minimax-Camille) was not even in the tenant's
+// picker. One engine family also means one latency and pricing profile
+// across the fleet. Duplicates are removed after the filter; the provider
+// name never reaches the browser.
 // `keepId` is the voice an existing agent is ALREADY using. It survives both
 // the platform filter and the dedupe, because an agent created before this
 // picker existed (or through Retell directly) can be on a voice the filter
@@ -33,7 +37,7 @@ export type CatalogueVoice = {
 // row.
 export function voiceCatalogue(raw: unknown, keepId?: string | null): CatalogueVoice[] {
   const items = (Array.isArray(raw) ? raw : []) as RawVoice[];
-  const maintained = items.filter((voice) => voice.provider === "platform");
+  const maintained = items.filter((voice) => voice.provider === "minimax");
   const kept =
     keepId && !maintained.some((voice) => voice.voice_id === keepId)
       ? items.filter((voice) => voice.voice_id === keepId)
