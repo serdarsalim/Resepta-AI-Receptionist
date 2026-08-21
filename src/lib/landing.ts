@@ -26,6 +26,10 @@ export type LandingCopy = {
   nav: { cost: string; how: string; pricing: string };
   signIn: string;
   cta: string;
+  // The sign-in dialog the CTAs open (SignInDialog.tsx).
+  signInTitle: string;
+  signInSub: string;
+  signInClose: string;
   headline: string;
   subhead: string;
   seeHow: string;
@@ -80,6 +84,9 @@ export const LANDING: Record<Language, LandingCopy> = {
   tr: {
     nav: { cost: "Maliyet", how: "Nasıl çalışır", pricing: "Fiyatlar" },
     signIn: "Giriş yapın",
+    signInTitle: "Resepta'ya başlayın",
+    signInSub: "Google hesabınızla girin; işletmeniz ilk girişte oluşturulur.",
+    signInClose: "Kapat",
     cta: "Hemen başlayın",
     headline: "Bir daha randevu kaçmasın.",
     subhead:
@@ -189,6 +196,9 @@ export const LANDING: Record<Language, LandingCopy> = {
   en: {
     nav: { cost: "The cost", how: "How it works", pricing: "Pricing" },
     signIn: "Sign in",
+    signInTitle: "Start with Resepta",
+    signInSub: "Sign in with Google; your business is created on first sign-in.",
+    signInClose: "Close",
     cta: "Get started",
     headline: "Never miss another booking.",
     subhead:
@@ -298,6 +308,9 @@ export const LANDING: Record<Language, LandingCopy> = {
   de: {
     nav: { cost: "Die Kosten", how: "So funktioniert es", pricing: "Preise" },
     signIn: "Anmelden",
+    signInTitle: "Mit Resepta starten",
+    signInSub: "Melden Sie sich mit Google an; Ihr Betrieb wird bei der ersten Anmeldung angelegt.",
+    signInClose: "Schließen",
     cta: "Jetzt starten",
     headline: "Kein Termin geht mehr verloren.",
     subhead:

@@ -9,6 +9,8 @@ import { LANGUAGES, type Language, isLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { LANDING, type LandingCopy } from "@/lib/landing";
+import { BrandMark } from "./BrandMark";
+import { SignInDialog } from "./SignInDialog";
 
 // The page is three beats read top to bottom: the promise, the price of doing
 // nothing, the machine. Auth lives on /signin — the landing never names a
@@ -17,6 +19,14 @@ export function Landing() {
   const { language, setLanguage } = useLanguage();
   const { resolvedTheme, setTheme, mounted } = useTheme();
   const copy = LANDING[language];
+  // Sign-in floats over the page instead of shipping the reader off to
+  // /signin (Serdar, 2026-08-21). The hrefs stay real so a middle-click or
+  // long-press still opens the standalone page, which renders the same card.
+  const [signInOpen, setSignInOpen] = useState(false);
+  const openSignIn = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setSignInOpen(true);
+  };
 
   return (
     <div className="min-h-dvh bg-[var(--background)]">
@@ -24,7 +34,7 @@ export function Landing() {
         <nav className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-4 px-6">
           <div className="flex min-w-0 items-center gap-8">
             <a href="#top" className="flex shrink-0 items-center gap-2.5">
-              <Mark />
+              <BrandMark />
               <span className="text-lg font-semibold tracking-tight">Resepta</span>
             </a>
             <div className="hidden items-center gap-6 whitespace-nowrap text-sm text-[var(--muted-strong)] md:flex">
@@ -43,12 +53,14 @@ export function Landing() {
             <LanguageMenu language={language} onSelect={setLanguage} />
             <Link
               href="/signin"
+              onClick={openSignIn}
               className="rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
             >
               {copy.signIn}
             </Link>
             <Link
               href="/signin"
+              onClick={openSignIn}
               className="ml-2 hidden rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 sm:block"
             >
               {copy.cta}
@@ -69,6 +81,7 @@ export function Landing() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signin"
+                onClick={openSignIn}
                 className="rounded-lg bg-[var(--accent)] px-5 py-2.5 font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
               >
                 {copy.cta}
@@ -192,6 +205,7 @@ export function Landing() {
               <p className="text-xl font-semibold tracking-[-0.01em]">{copy.how.closing}</p>
               <Link
                 href="/signin"
+                onClick={openSignIn}
                 className="mt-5 inline-block rounded-lg bg-[var(--accent)] px-5 py-2.5 font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
               >
                 {copy.cta}
@@ -201,10 +215,12 @@ export function Landing() {
         </section>
       </main>
 
+      <SignInDialog open={signInOpen} onClose={() => setSignInOpen(false)} />
+
       <footer>
         <div className="mx-auto max-w-3xl px-6 py-12 text-sm text-[var(--muted)]">
           <div className="flex items-center gap-2.5 text-[var(--foreground)]">
-            <Mark small />
+            <BrandMark small />
             <span className="font-semibold">Resepta</span>
           </div>
           <p className="mt-3 max-w-[30rem] leading-relaxed">{copy.footerLine}</p>
@@ -435,26 +451,6 @@ function FooterNav({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function Mark({ small = false }: { small?: boolean }) {
-  return (
-    <span
-      className={`flex shrink-0 items-center justify-center rounded-lg bg-[var(--logo)] ${
-        small ? "h-7 w-7" : "h-8 w-8"
-      }`}
-    >
-      <svg viewBox="0 0 24 24" className={small ? "h-3.5 w-3.5" : "h-4 w-4"} aria-hidden="true">
-        <path
-          d="M4 6l6 6-6 6M13 6l6 6-6 6"
-          fill="none"
-          stroke="#fff"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
 
 // The language picker is a real dropdown, not a styled <select>: portal to
 // document.body, position: fixed, measured from the trigger — the house
