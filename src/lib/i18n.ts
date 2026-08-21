@@ -253,15 +253,28 @@ const dictionary = {
     de: "Diese Einladung ging an eine andere Adresse. Melden Sie sich mit dieser an.",
   },
 
-  "onboarding.title": {
-    tr: "Hoş geldiniz!",
-    en: "Welcome!",
-    de: "Willkommen!",
+  // The step's QUESTION is the card's heading — "Welcome!" died 2026-08-21:
+  // a greeting that says nothing while the real question sat demoted in the
+  // subtext line.
+  "onboarding.nameTitle": {
+    tr: "İşletmenizin adı ne?",
+    en: "What's your business called?",
+    de: "Wie heißt Ihr Betrieb?",
   },
-  "onboarding.prompt": {
-    tr: "İşletmenizin adı ne? Müşterilerinize giden mesajlarda görünecek.",
-    en: "What's your business called? It appears in messages to your customers.",
-    de: "Wie heißt Ihr Betrieb? Der Name steht in den Nachrichten an Ihre Kunden.",
+  "onboarding.nameHint": {
+    tr: "Müşterilerinize giden mesajlarda görünecek.",
+    en: "It appears in messages to your customers.",
+    de: "Der Name steht in den Nachrichten an Ihre Kunden.",
+  },
+  "onboarding.langTitle": {
+    tr: "Hangi dilde çalışalım?",
+    en: "Which language should we use?",
+    de: "In welcher Sprache arbeiten wir?",
+  },
+  "onboarding.langHint": {
+    tr: "Uygulamanın, mesajların ve telefon asistanınızın dili. Sonradan değiştirebilirsiniz.",
+    en: "The language of the app, your messages and your phone agent. You can change it later.",
+    de: "Die Sprache der App, Ihrer Nachrichten und Ihres Telefonassistenten. Sie können sie später ändern.",
   },
   "onboarding.businessName": {
     tr: "İşletme adı",

@@ -6,6 +6,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useNumberDocumentUpload } from "./NumberRequestCard";
+import { BrandMark } from "./BrandMark";
 import { LANGUAGES, type Language } from "@/lib/i18n";
 import {
   INDUSTRY_KEYS,
@@ -15,8 +16,8 @@ import {
 } from "../../convex/lib/industryPresets";
 
 // First sign-in onboarding: the one-question gate grown into a short wizard.
-// Four screens — name, industry, business info, phone number — in the /book
-// wizard's grammar: the middle SWAPS and scrolls, the bottom bar's action
+// Five screens — language, name, industry, business info, phone number — in
+// the /book wizard's grammar: the middle SWAPS and scrolls, the bottom bar's action
 // button is always in the corner (greyed, never absent) with Back opposite.
 // NOT the /book card's fixed height: that rule was written for steps that
 // hold similar amounts, and these do not (one input vs eight options), so a
@@ -33,8 +34,8 @@ import {
 // agent auto-provisioning (orgs.update), so by then the language and the
 // catalog the agent reads at ring time are already in place.
 
-type Step = "name" | "industry" | "info" | "number";
-const STEPS: Step[] = ["name", "industry", "info", "number"];
+type Step = "language" | "name" | "industry" | "info" | "number";
+const STEPS: Step[] = ["language", "name", "industry", "info", "number"];
 
 function CheckIcon() {
   return (
@@ -119,7 +120,7 @@ export function OnboardingWizard() {
     upload: uploadDocument,
   } = useNumberDocumentUpload();
 
-  const [step, setStep] = useState<Step>("name");
+  const [step, setStep] = useState<Step>("language");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [industry, setIndustry] = useState<IndustryKey | null>(null);
@@ -133,15 +134,18 @@ export function OnboardingWizard() {
   const stepIndex = STEPS.indexOf(step);
   const presetLang = presetLanguage(language);
 
-  // Language is INHERITED, never asked (Serdar, 2026-08-21): the wizard
-  // opens in the landing's language — a first screen asking the question in
-  // the wrong language is exactly the distrust the question was meant to
-  // avoid, and the landing already knows the answer. Stamped onto the org
-  // immediately so it is in place before the name save fires
-  // auto-provisioning; the header pills are the escape hatch for the rare
-  // mismatch, and Business settings holds the real control afterwards.
-  // (AppShell's language sync stands down while the org is unnamed, or the
-  // founding default "tr" would flip this screen to Turkish.)
+  // The language step STAYS a step (Serdar, 2026-08-21, after weighing
+  // drop-it-entirely and a-field-on-the-name-step): the agent and every
+  // customer message are born in this language, which earns it a screen of
+  // its own. What protects the first impression is not the step but two
+  // things around it: the step arrives PRESELECTED with the landing's
+  // language (a German visitor sees Deutsch already checked), and AppShell's
+  // language sync stands down while the org is unnamed — without that, the
+  // founding default "tr" flipped this screen to Turkish for everyone. The
+  // inherited language is stamped onto the org immediately (and re-stamped
+  // on every pick), so it is in place before the name save fires
+  // auto-provisioning. A header-pill version of this control shipped for an
+  // hour and died: three bare two-letter codes explained nothing.
   const stampedLanguage = useRef<string | null>(null);
   useEffect(() => {
     if (stampedLanguage.current === language) return;
@@ -221,56 +225,61 @@ export function OnboardingWizard() {
         : true);
 
   return (
-    <div className="flex h-[100dvh] items-center justify-center bg-[var(--pane)] p-4 sm:p-6">
-      <div className="flex max-h-[92dvh] min-h-[340px] w-full max-w-lg flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
-        <div className="flex items-start justify-between gap-4 px-5 pt-5">
-          <div>
+    // The card holds ONLY the step (Serdar, 2026-08-21: "welcome, three
+    // languages and a sign-out button" on one line was three unrelated
+    // things fighting). Product identity and the way out are PAGE chrome —
+    // brand top-left, sign out top-right — and the card's heading is the
+    // step's own QUESTION, never a greeting with the question demoted to
+    // subtext.
+    <div className="flex h-[100dvh] flex-col bg-[var(--pane)]">
+      <header className="flex shrink-0 items-center justify-between px-5 py-4 sm:px-6">
+        <div className="flex items-center gap-2.5">
+          <BrandMark small />
+          <span className="font-semibold tracking-tight">Resepta</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        >
+          <SignOutIcon />
+          {t("nav.signOut")}
+        </button>
+      </header>
+
+      <div className="flex min-h-0 flex-1 items-center justify-center p-4 pt-0 sm:p-6 sm:pt-0">
+        <div className="flex max-h-full min-h-[340px] w-full max-w-lg flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+          <div className="px-5 pt-5">
             <h2 className="text-lg font-semibold">
-              {step === "name" && t("onboarding.title")}
+              {step === "language" && t("onboarding.langTitle")}
+              {step === "name" && t("onboarding.nameTitle")}
               {step === "industry" && t("onboarding.industryTitle")}
               {step === "info" && t("onboarding.infoTitle")}
               {step === "number" && t("onboarding.numberTitle")}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {step === "name" && t("onboarding.prompt")}
+              {step === "language" && t("onboarding.langHint")}
+              {step === "name" && t("onboarding.nameHint")}
               {step === "industry" && t("onboarding.industryHint")}
               {step === "info" && t("onboarding.infoHint")}
               {step === "number" && t("onboarding.numberPromise")}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* The inherited language, correctable in place — a control, not
-                a question. */}
-            <div className="flex items-center gap-0.5">
+
+          <div className="thin-scroll stable-gutter mt-4 min-h-0 flex-1 overflow-y-auto px-5 pb-2">
+          {step === "language" && (
+            <div className="space-y-2">
               {LANGUAGES.map((entry) => (
-                <button
+                <OptionRow
                   key={entry.code}
-                  type="button"
-                  onClick={() => pickLanguage(entry.code)}
-                  aria-pressed={language === entry.code}
+                  selected={language === entry.code}
                   title={entry.label}
-                  className={`rounded-md px-1.5 py-1 text-xs font-medium uppercase transition-colors ${
-                    language === entry.code
-                      ? "bg-[var(--muted-bg)] text-[var(--foreground)]"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {entry.code}
-                </button>
+                  onClick={() => pickLanguage(entry.code)}
+                />
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            >
-              <SignOutIcon />
-              {t("nav.signOut")}
-            </button>
-          </div>
-        </div>
+          )}
 
-        <div className="thin-scroll stable-gutter mt-4 min-h-0 flex-1 overflow-y-auto px-5 pb-2">
           {step === "name" && (
             <form
               onSubmit={(event) => {
@@ -278,19 +287,17 @@ export function OnboardingWizard() {
                 void next();
               }}
             >
-              <label className="block text-sm">
-                {t("onboarding.businessName")}
-                <input
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setNameError(null);
-                  }}
-                  required
-                  autoFocus
-                  className="mt-1 w-full"
-                />
-              </label>
+              <input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameError(null);
+                }}
+                aria-label={t("onboarding.businessName")}
+                required
+                autoFocus
+                className="w-full"
+              />
               {/* Reserved line: an appearing error must not push the card
                   around under the pointer. */}
               <p className="mt-2 min-h-5 text-sm text-red-600 dark:text-red-400">
@@ -444,6 +451,7 @@ export function OnboardingWizard() {
                 ? t("onboarding.finish")
                 : t("onboarding.continue")}
           </button>
+          </div>
         </div>
       </div>
     </div>

@@ -327,7 +327,39 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
   answer the name-taken error already discloses; the definitive check stays
   in `orgs.update`). Replay it in dev with
   `npx convex run devSeed:resetOnboarding '{}'` (`wipe:true` also clears the
-  catalog).
+  catalog; `devSeed:setOrgName` puts a name back without walking the wizard).
+  - **The language step STAYS a step, PRESELECTED with the landing's
+    language** (Serdar, 2026-08-21, after weighing dropping it entirely and
+    a field-on-the-name-step): the agent and every customer message are born
+    in this language, which earns it a screen. What protects the first
+    impression is around the step, not the step: AppShell's language sync
+    STANDS DOWN while the org is unnamed — new orgs are born `language:
+    "tr"`, and before this a German visitor's wizard flipped to Turkish the
+    moment settings loaded. A header-pills version of the control shipped
+    for an hour and died (three bare two-letter codes explain nothing);
+    a no-step inherit-only version died in review the same day.
+  - **The card holds ONLY the step, and its heading is the step's QUESTION.**
+    "Welcome!" as the title with the real question demoted to subtext, plus
+    language pills and sign-out crammed into the card's title row, was three
+    unrelated things fighting on one line (Serdar, same day, in those
+    words). Brand mark and sign-out are PAGE chrome — top-left / top-right,
+    outside the card. The card sizes to its step between a floor
+    (min-h-[340px]) and the viewport — NOT /book's fixed height: that rule
+    was written for steps that hold similar amounts, and one input vs eight
+    industry options is not that, so a fixed card left the name step crammed
+    at the top of a void.
+- **Sign-in is a DIALOG over the landing** (`SignInDialog.tsx`, same day):
+  every Get-started/Sign-in CTA opens it in place instead of shipping the
+  reader to a bare page. The /signin ROUTE stays alive as the fallback
+  (middle-click, shared links, auth redirects) rendering the same
+  `SignInCard`; the privacy/terms links live INSIDE the card because
+  Google's consent-screen review wants them wherever the OAuth flow starts,
+  and it starts in the dialog now. The Google button wears Google's own G on
+  a bordered button, not an anonymous accent block. The product mark is
+  shared from `BrandMark.tsx` (landing header, dialog, /signin, wizard
+  chrome — one glyph, four surfaces). `app.tagline` says "AI front desk",
+  matching lib/brand's DEFAULT_TITLE; it read "WhatsApp appointment
+  reminders" long after the product outgrew it.
 - **Industry presets are ORG DATA, seeded once** (`lib/industryPresets.ts`, a
   PURE module the browser may import; applied by `convex/onboarding.ts`).
   Seven verticals × three languages seed services and voice-sourced contact
