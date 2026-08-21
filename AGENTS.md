@@ -378,6 +378,21 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
   by-name-once — in all three languages, prompt-text only, no version bump.
   `DEFAULT_VOICE_IDS` gives auto-provisioning a curated voice per language
   (tr keeps Bella's minimax-Camille) instead of `voices[0]`.
+  - **⚠️ The preview clips NAME THE PROVIDER, and that is unfixed** (Serdar,
+    2026-08-21, on hearing the new picker: "all agents say that they're from
+    retellai"). `previewUrl` is Retell's own ~7s marketing sample hosted on
+    their S3, and the voice in it introduces itself as a Retell AI agent —
+    so the one surface that plays audio to a salon owner breaks this file's
+    own rule that Retell is an implementation detail salon-facing UI never
+    names. It cannot be fixed at Retell: their API has list / retrieve /
+    clone / search-community and NO synthesize endpoint, so there is no way
+    to ask them for a different sentence in the same voice. The shape of the
+    real fix, when it is worth doing: these are minimax voices, so generate
+    the clips through MINIMAX's own TTS API with the same voice ids, saying
+    a receptionist line per language, store them in Convex storage and serve
+    `previewUrl` from us. That also upgrades the sample from a vendor ad
+    to the thing the owner is actually buying. Until then the leak stands and
+    is known — do not "discover" it again.
   - **The voice catalogue is MINIMAX-ONLY** (lib/voiceCatalogue, Serdar,
     2026-08-21): the old "platform-maintained" filter excluded every minimax
     voice, so the curated default was never in the tenant's picker and Sun
