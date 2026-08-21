@@ -2421,10 +2421,15 @@ const dictionary = {
     en: "Newer voice tuning is available for this agent.",
     de: "Für diesen Agenten steht eine neuere Abstimmung bereit.",
   },
+  // Names what the CURRENT template version delivers, so it has to be
+  // rewritten with every bump that changes the answer — a banner still
+  // advertising v11's improvements is a promise about a version nobody is
+  // being offered. Its last sentence is the load-bearing one: the sync
+  // replaces tools and knobs and never the owner's prompt.
   "voiceDetail.templateBehindHint": {
-    tr: "Güncelleme ajanın yanıt hızını iyileştirir, takvime bakarken konuşmasını sağlar ve arama özetlerini kendi dilinizde yazdırır. Talimat metnine dokunmaz.",
-    en: "Updating makes the agent answer faster, talk while it checks the calendar, and write call summaries in your language. Your instructions are not touched.",
-    de: "Die Aktualisierung lässt den Agenten schneller antworten, beim Kalenderblick weitersprechen und Anrufzusammenfassungen in Ihrer Sprache schreiben. Ihre Anweisung bleibt unverändert.",
+    tr: "Güncelleme, asistanın yanıt hızını iyileştirir, takvime bakarken konuşmasını sağlar, arama özetlerini kendi dilinizde yazdırır ve görüşmeyi erken kapatmasını önler. Talimat metnine dokunmaz.",
+    en: "Updating makes the agent answer faster, talk while it checks the calendar, write call summaries in your language, and stop it hanging up too early. Your instructions are not touched.",
+    de: "Die Aktualisierung lässt den Agenten schneller antworten, beim Kalenderblick weitersprechen, Anrufzusammenfassungen in Ihrer Sprache schreiben und verhindert, dass er zu früh auflegt. Ihre Anweisung bleibt unverändert.",
   },
   "voiceDetail.templateUpdate": {
     tr: "Güncelle",

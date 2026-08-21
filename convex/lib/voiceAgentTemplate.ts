@@ -56,7 +56,18 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // The same session rewrote the prompts (bare-honorific ban, never ask what
 // the card holds, suggested_slots) — those reach new agents only, per the
 // rule above.
-export const VOICE_AGENT_TEMPLATE_VERSION = 11;
+// v12 (2026-08-21): the end_call tool description gains its two negatives —
+// never in the same turn as the agent's own goodbye, never in reply to a
+// greeting. A tool DESCRIPTION is sync-deliverable (syncTemplate replaces the
+// template's tools and leaves the owner's prompt alone), so this bump is the
+// honest kind: clicking Update genuinely changes how an existing agent
+// decides to hang up, without touching a word the owner wrote.
+//
+// The turn-based CLOSING rule added to the prompts the same day is NOT this —
+// prompt text reaches new agents only, per the rule above. That split is the
+// whole reason the tool carries the negative too: it is the half of the fix
+// that can reach the agents already in the field.
+export const VOICE_AGENT_TEMPLATE_VERSION = 12;
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
