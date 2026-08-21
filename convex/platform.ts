@@ -1452,15 +1452,36 @@ export const setAllowedPhoneNumbers = mutation({
     ];
     const bad = numbers.find((n) => !/^\+[1-9]\d{6,14}$/.test(n));
     if (bad) throw new Error(`not-e164: ${bad}`);
+    // What this edit actually TAKES AWAY, before the patch overwrites it.
+    //
+    // Only meaningful while the list stays non-empty: an empty list means
+    // "not restricted" (see the field's comment), so clearing it widens the
+    // tenant's access rather than revoking a line, and detaching everything
+    // there would be the opposite of what the operator asked for.
+    const previous = org.allowedPhoneNumbers ?? [];
+    const dropped =
+      numbers.length > 0 ? previous.filter((n) => !numbers.includes(n)) : [];
     await ctx.db.patch(args.orgId, {
       allowedPhoneNumbers: numbers.length > 0 ? numbers : undefined,
     });
+    // Revoking at the provider too, or the tenant keeps taking calls on a line
+    // this console says they no longer have (retellAgent.releaseOrgLines).
+    // Scheduled because releasing is an HTTP round trip per agent and this is
+    // a mutation; the allowlist itself is already correct either way.
+    if (dropped.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.retellAgent.releaseOrgLines, {
+        orgId: args.orgId,
+        numbers: dropped,
+      });
+    }
     await recordActivity(ctx, {
       orgId: args.orgId,
       kind: "settings_changed",
       detail:
         numbers.length > 0
-          ? `phone lines set to ${numbers.join(", ")}`
+          ? `phone lines set to ${numbers.join(", ")}${
+              dropped.length > 0 ? ` (released ${dropped.join(", ")})` : ""
+            }`
           : "phone line restriction removed",
     });
     return null;

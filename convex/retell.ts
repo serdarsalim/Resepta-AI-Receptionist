@@ -3063,3 +3063,38 @@ export const recordCall = internalMutation({
     return null;
   },
 });
+
+// The org's agents, for the operator paths that act on all of them at once
+// (retellAgent.releaseOrgLines). Internal and org-passed: the caller is an
+// action with no session, exactly like every other sessionless path here.
+export const agentsForOrg = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(v.object({ retellAgentId: v.string() })),
+  handler: async (ctx, { orgId }) => {
+    const rows = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return rows.map((row) => ({ retellAgentId: row.retellAgentId }));
+  },
+});
+
+// The cached "this agent answers on this line" label, dropped when the line is
+// revoked. Cosmetic next to the provider binding — but a stale number under an
+// agent's name is the same lie the revocation exists to end.
+export const clearAgentInboundNumber = internalMutation({
+  args: { orgId: v.id("orgs"), number: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { orgId, number }) => {
+    const rows = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    for (const row of rows) {
+      if (row.inboundNumber === number) {
+        await ctx.db.patch(row._id, { inboundNumber: undefined });
+      }
+    }
+    return null;
+  },
+});

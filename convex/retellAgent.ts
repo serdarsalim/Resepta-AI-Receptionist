@@ -1915,3 +1915,58 @@ export const testCall = action({
     return { ok: true, callId: res.call_id ?? null, from, to };
   },
 });
+
+// ── Revoking a line from a tenant ────────────────────────────────────────────
+
+// An operator taking a phone line away from a business in /admin used to be an
+// APP-SIDE ALLOWLIST EDIT AND NOTHING ELSE (Serdar, 2026-08-21, after removing
+// an Austrian number from Bella and finding it still attached): the number went
+// out of orgs.allowedPhoneNumbers while Retell happily kept routing it to that
+// tenant's agent. Every inbound call still reached a business the operator
+// believed had been cut off — and the line could not be handed to anyone else,
+// because binding refuses a number another agent still holds.
+//
+// So the allowlist edit now carries the revocation with it: for each number
+// actually dropped, release it at the provider from EVERY agent this org has,
+// in BOTH directions, and clear the app's own record of the binding.
+//
+// Deliberately best-effort per (number, agent): one agent whose release throws
+// must not strand the rest, and the operator's intent — this tenant no longer
+// has this line — is better served partially than not at all. What is left
+// behind shows up on the admin Phone lines card, which reads the provider.
+export const releaseOrgLines = internalAction({
+  args: { orgId: v.id("orgs"), numbers: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, { orgId, numbers }): Promise<null> => {
+    if (numbers.length === 0) return null;
+    const context = (await ctx.runQuery(internal.agentTools.phoneAgentContext, {
+      orgId,
+    })) as { demoMode: boolean; apiKey: string | null };
+    // A demo org holds no credentials and a keyless org can bind nothing, so
+    // there is nothing at the provider to release either way.
+    if (context.demoMode || !context.apiKey) return null;
+    const agents = (await ctx.runQuery(internal.retell.agentsForOrg, {
+      orgId,
+    })) as { retellAgentId: string }[];
+    for (const number of numbers) {
+      for (const agent of agents) {
+        try {
+          await releaseLineIfHeld(context.apiKey, number, agent.retellAgentId);
+        } catch (err) {
+          console.error("releaseOrgLines failed", number, agent.retellAgentId, err);
+        }
+      }
+      await ctx.runMutation(internal.retell.applyLineBinding, {
+        orgId,
+        number,
+        inboundAgentId: null,
+        outboundAgentId: null,
+      });
+      await ctx.runMutation(internal.retell.clearAgentInboundNumber, {
+        orgId,
+        number,
+      });
+    }
+    return null;
+  },
+});

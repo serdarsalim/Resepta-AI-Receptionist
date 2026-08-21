@@ -1649,6 +1649,23 @@ went, and the reasoning to preserve:
   workspace — is set by hand through `platform.setOrgConfig`, which still
   accepts the field.
 
+**An operator revocation must reach the PROVIDER, not just the row**
+(2026-08-21). Taking a phone line off a tenant in /admin edited
+`orgs.allowedPhoneNumbers` and nothing else, so Retell kept routing that
+number to the tenant's agent: every inbound call still reached a business the
+console said had been cut off, and the line could not be given to anybody
+else, because binding refuses a number another agent still holds.
+`setAllowedPhoneNumbers` now schedules `retellAgent.releaseOrgLines` for the
+numbers the edit actually DROPS — released from every agent of that org, both
+directions, app-side `agentLines` and the cached `retellAgents.inboundNumber`
+cleared with it. Two things to keep: the drop set is computed BEFORE the patch
+overwrites it, and it is empty when the new list is empty, because an empty
+allowlist means "not restricted" rather than "no lines" — detaching everything
+there would invert the operator's intent. The general rule this is an instance
+of: **when an admin surface takes something away, ask what still holds it at
+the provider.** A console that only edits our own row is describing a state
+nobody else agreed to.
+
 **Admin console shape** (2026-08-19/20). Per-business tabs are Setup, **Voice
 agent** (agents, phone lines, and the voice meter + wallet that used to be a
 separate Usage tab), **Chat agent**, Members, Sends, Logs. One Agents card
