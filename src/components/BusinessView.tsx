@@ -1520,7 +1520,30 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
     // Titled again: it renders under the Voice agent's Fields chip, and the
     // strip names the SECTION while the card carries the (i) that explains what
     // a field is for. KnowledgeCard beside it works the same way.
-    <Card title={t("fields.title")} tip={t("fields.hint")} disabled={!isOwner}>
+    <Card
+      title={t("fields.title")}
+      tip={t("fields.hint")}
+      disabled={!isOwner}
+      // Top right, filled, same as Team's Add member and Voice agent's Add
+      // agent. It was a ghost button at the FOOT of the table — the card's one
+      // primary action, wearing the treatment this design language reserves
+      // for secondary controls, parked below however many fields the salon has
+      // collected.
+      //
+      // Still hidden while the form is open, which is what it always did. The
+      // Card header carries min-h-8, so it going away moves nothing.
+      action={
+        isOwner && !adding ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("fields.add")}
+          </button>
+        ) : undefined
+      }
+    >
       {/* One sortable table, ported from Nudge's fields admin: system rows
           are pinned and undeletable, org rows drag to reorder, a List type
           expands into its options editor, and Filled by is the column that
@@ -1650,17 +1673,9 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
       )}
       {confirmDialog}
 
-      {/* Adding appears on demand, mirroring "+ Add service" above: a
-          permanently open form charged this card a row of empty inputs on
-          every visit for a task done a few times a year. */}
-      {isOwner && !adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="rounded-md px-2 py-1 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        >
-          + {t("fields.add")}
-        </button>
-      )}
+      {/* Adding appears on demand: a permanently open form charged this card
+          a row of empty inputs on every visit for a task done a few times a
+          year. The trigger is the Card's header action above. */}
       {isOwner && adding && (
         <form
           className="flex flex-wrap items-end gap-2"
@@ -1911,7 +1926,34 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
   return (
     <>
-    <Card title={t("staff.title")} tip={t("roster.hint")} disabled={!isOwner}>
+    <Card
+      title={t("staff.title")}
+      tip={t("roster.hint")}
+      disabled={!isOwner}
+      // A button, not a pair of empty inputs living at the foot of the list
+      // forever. Adding somebody is a twice-a-year job and it should not
+      // charge rent on every visit.
+      //
+      // Top right of the card, which is where Add agent, Add message and Add
+      // customer all sit. This one sat at the FOOT of the roster, so on a
+      // salon with a dozen chairs the page's primary action moved down the
+      // screen as the team grew, and it was the only add button in the
+      // product you had to scroll a list to reach.
+      //
+      // Gated on isOwner here rather than by the fieldset: a Card's action
+      // renders outside it.
+      action={
+        isOwner ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("roster.add")}
+          </button>
+        ) : undefined
+      }
+    >
       <div className="space-y-3">
         {/* No "what do you call these people?" input. It was the most
             prominent control in the card and it set ONE string — the field
@@ -2122,15 +2164,17 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           <p className="text-sm text-[var(--muted)]">{t("staff.none")}</p>
         )}
 
-        {/* Quiet history on the left, the row's one action on the right —
-            the same corner every list in the app keeps its primary button. */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Former members, folded into the card that answers "who works
-              here" — they are its history, not a second population deserving
-              a card of their own. Only when there is somebody in it: an
-              always-present "Deactivated (0)" is a permanent reminder of a
-              state most salons never use. */}
-          {deactivated.length > 0 && (
+        {/* Former members, folded into the card that answers "who works
+            here" — they are its history, not a second population deserving a
+            card of their own. Only when there is somebody in it: an
+            always-present "Deactivated (0)" is a permanent reminder of a state
+            most salons never use.
+
+            Alone on this line now that Add member has gone to the header. It
+            keeps the foot of the card because it is history, and history reads
+            under the list it belongs to. */}
+        {deactivated.length > 0 && (
+          <div className="flex">
             <button
               type="button"
               onClick={() => setShowDeactivated((open) => !open)}
@@ -2141,23 +2185,8 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               {`${t("roster.deactivatedTitle")} (${deactivated.length})`}{" "}
               {showDeactivated ? "▾" : "▸"}
             </button>
-          )}
-          {/* A button, not a pair of empty inputs living at the foot of the
-              list forever. Adding somebody is a twice-a-year job and it
-              should not charge rent on every visit. Filled, and the same
-              shape as VoiceCard's "Add agent": both open a sheet, both are
-              their card's one primary action, so they should not read as two
-              different kinds of control. */}
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="ml-auto h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-            >
-              + {t("roster.add")}
-            </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {showDeactivated && deactivated.length > 0 && (
           <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
