@@ -508,10 +508,33 @@ export function InboxView({
                 // text-base, not text-sm: this is the heading for everything
                 // in the right column, and at text-sm it weighed exactly the
                 // same as a name in the list beside it.
-                className="truncate text-base font-semibold hover:underline"
+                //
+                // The chevron is what says the name goes somewhere. A
+                // hover-underline is only found by people who already
+                // suspected, and this is the only route from a conversation to
+                // the record behind it. It is the same mark the feed rows use
+                // for "open this", at rest in --muted so a heading does not
+                // arrive wearing a control, and it lifts with the name.
+                className="group/name flex min-w-0 shrink items-center gap-1 text-base font-semibold"
                 title={t("inbox.openContact")}
               >
-                {active.name || active.phone}
+                <span className="truncate group-hover/name:underline">
+                  {active.name || active.phone}
+                </span>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                  className="shrink-0 text-[var(--muted)] transition-colors group-hover/name:text-[var(--foreground)]"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
               </button>
               <FeedFilterPills
                 customerId={active.customerId}
