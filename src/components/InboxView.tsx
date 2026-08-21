@@ -188,14 +188,18 @@ export function InboxView({
         <section
           className={`${selected ? "hidden lg:flex" : "flex"} min-h-0 min-w-0 flex-col`}
         >
-          {/* This fixed-height track mirrors the right column's name +
-              channel-pills row so both card borders start on the same
-              horizontal line, which is the whole reason it exists. It spent a
-              while empty holding that alignment alone; now it earns its height
-              with the list filters. ONE LINE ONLY — the track is h-9, so a
-              second row of chips spills out of it rather than pushing the card
-              down. */}
-          <div className="flex h-9 shrink-0 items-center gap-1.5 pb-1">
+          <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* The list's header, inside the card it filters.
+
+              It used to be a bare track ABOVE the card, and its stated job was
+              to mirror the right column's name row so both card tops landed on
+              the same line. Both header rows moved inside their own cards, so
+              the two cards now start at the same y with nothing scaffolding
+              them, and the alignment that track existed to buy is free.
+
+              ONE LINE ONLY — a second row of chips spills rather than pushing
+              the list down. */}
+          <div className="flex h-11 shrink-0 items-center gap-1.5 px-3">
             {(
               [
                 ["all", t("inbox.filterAll"), 0],
@@ -220,7 +224,7 @@ export function InboxView({
               </button>
             ))}
           </div>
-          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto card-raised">
+          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
             {conversations === undefined ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
                 {t("common.loading")}
@@ -427,14 +431,13 @@ export function InboxView({
               </ul>
             )}
           </div>
+          </div>
         </section>
 
         {/* Nothing chosen yet. Below lg the list owns the screen and this never
             shows — there is no second column there to be empty. */}
         {!active && (
           <section className="hidden min-h-0 min-w-0 flex-col lg:flex">
-            {/* Mirrors the h-9 header track so the two card tops align. */}
-            <div className="h-9 shrink-0" />
             <div className="card-raised flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)]">
               <svg
                 width="28"
@@ -460,7 +463,11 @@ export function InboxView({
           <section
             className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col`}
           >
-            <div className="flex h-9 shrink-0 items-center gap-2">
+            <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/* h-11 and px-3, matching the list's header across the gap: two
+                cards side by side whose headers disagree by a few pixels read
+                as a mistake from further away than either one is legible. */}
+            <div className="flex h-11 shrink-0 items-center gap-2 px-3">
               <button
                 type="button"
                 onClick={() => setSelected(null)}
@@ -507,8 +514,9 @@ export function InboxView({
               lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
               filter={filter}
               onFilterChange={setFilter}
-              className="min-h-0 flex-1 overflow-hidden card-raised"
+              className="min-h-0 flex-1 overflow-hidden"
             />
+            </div>
           </section>
         )}
       </div>
