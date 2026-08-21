@@ -137,8 +137,24 @@ export function ConversationPanel({
   filter = "all",
   onFilterChange,
   search,
+  header,
   className,
 }: {
+  // The pane's identity row — who this conversation is with, and the channel
+  // pills. Supplied by the parent because only the parent knows whether the
+  // name is a link somewhere (the Inbox opens the contact record; the contact
+  // page is already there).
+  //
+  // When given, the panel puts it on ONE line with whichever action the open
+  // tab offers, and the tab stops drawing that action itself. The Inbox had
+  // the identity row above the card and the action in a band inside it, so a
+  // conversation opened under two stacked headers, the lower one holding a
+  // single button with the width of the card empty beside it.
+  //
+  // Omitted (the contact page) nothing moves: the pills live in that page's
+  // own header and the card deliberately leads its column, so the tab keeps
+  // drawing its action exactly where it did.
+  header?: React.ReactNode;
   customerId: Id<"customers">;
   // Labels the customer's side of a call transcript. Optional: the panel works
   // without it, the bubbles just say "Caller".
@@ -481,13 +497,64 @@ export function ConversationPanel({
         ? "bg-[var(--thread-bg)]"
         : "";
 
+  // The action the open tab offers while nothing is expanded. Every tab's
+  // resting state is a single right-aligned button, which is what makes one
+  // shared row possible; the EXPANDED states (a composer, an open thread's
+  // back-and-subject) still get the band below, where they earn the height.
+  const tabAction = !header ? null : filter === "email" && !composing ? (
+    <button
+      type="button"
+      onClick={() => {
+        setEmailSubject(
+          openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
+        );
+        setComposing(true);
+      }}
+      className="flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+    >
+      <FeedIcon type="email" size={14} tinted={false} />
+      {openThread ? t("email.reply") : t("email.compose")}
+    </button>
+  ) : filter === "call" && canPlaceCall ? (
+    <button
+      type="button"
+      onClick={startCall}
+      disabled={calling}
+      className="flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
+    >
+      <FeedIcon type="call" size={14} tinted={false} />
+      {calling ? t("calls.placing") : t("calls.place")}
+    </button>
+  ) : filter === "note" && !noteOpen ? (
+    <button
+      type="button"
+      onClick={() => setNoteOpen(true)}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+    >
+      <span aria-hidden className="text-base leading-none">
+        +
+      </span>
+      {t("notes.add")}
+    </button>
+  ) : null;
+
   return (
     <div className={`flex min-h-0 flex-col ${surface} ${className ?? ""}`}>
+      {header && (
+        // h-11 px-3 matches the list card's header across the gap. It sits on
+        // the card's white rather than the thread's tinted plane: this row is
+        // about the CONTACT, not about the tab under it, and it stays put while
+        // the tab below it changes.
+        <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+          {header}
+          {tabAction && <div className="ml-auto flex shrink-0">{tabAction}</div>}
+        </div>
+      )}
       {/* Email tab header. Compose sits top-right, Gmail's convention and
           Nudge's — the old full-width footer bar spent a whole row on one
           action. This is the slot the notes composer occupies below; each
           tab owns what goes here. */}
-      {filter === "email" && (
+      {filter === "email" && (composing || openThread || !header) && (
         // The header wears whatever plane the thing below it wears. Over the
         // INDEX that is the card's white, because the index is flush rows on
         // white. Over an open thread it is the tinted plane — left white it cut
@@ -580,28 +647,28 @@ export function ConversationPanel({
                   </h3>
                 </>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  // Reply prefills the thread's subject so the customer's
-                  // client keeps the exchange together; the server threads on
-                  // the same normalized key, so "Re:" here is for THEIR inbox,
-                  // not ours.
-                  //
-                  // Stripped before prepending, or replying to a reply gives
-                  // "Re: Re: Saç boyası hakkında soru" — the thread's own title
-                  // usually already carries one, because it is the subject of
-                  // whichever mail opened it.
-                  setEmailSubject(
-                    openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
-                  );
-                  setComposing(true);
-                }}
-                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
-              >
-                <FeedIcon type="email" size={14} tinted={false} />
-                {openThread ? t("email.reply") : t("email.compose")}
-              </button>
+              {/* Only when the pane has no header row to carry it. Reply
+                  prefills the thread's subject so the customer's client keeps
+                  the exchange together; the server threads on the same
+                  normalized key, so "Re:" here is for THEIR inbox, not ours.
+                  Stripped before prepending, or replying to a reply gives
+                  "Re: Re: Saç boyası hakkında soru". Kept in step with the
+                  copy in `tabAction` above. */}
+              {!header && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailSubject(
+                      openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
+                    );
+                    setComposing(true);
+                  }}
+                  className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+                >
+                  <FeedIcon type="email" size={14} tinted={false} />
+                  {openThread ? t("email.reply") : t("email.compose")}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -615,7 +682,7 @@ export function ConversationPanel({
           an open call, which put the one control you reach for after reading
           "customer did not answer" one navigation away from the row that said
           so. */}
-      {filter === "call" && (canPlaceCall || openCall) && (
+      {filter === "call" && (openCall || (canPlaceCall && !header)) && (
         <div className={`flex shrink-0 items-center gap-2 pt-3 ${FEED_COL_PAD}`}>
           {openCall && (
           <button
@@ -644,7 +711,7 @@ export function ConversationPanel({
               {formatDateTimeWithWeekday(openCall.at, language)}
             </h3>
           )}
-          {canPlaceCall && (
+          {canPlaceCall && !header && (
             <button
               type="button"
               onClick={startCall}
@@ -657,7 +724,7 @@ export function ConversationPanel({
           )}
         </div>
       )}
-      {filter === "note" && (
+      {filter === "note" && (noteOpen || !header) && (
         <div className={`shrink-0 pt-3 ${FEED_COL_PAD}`}>
           {/* Collapsed until you mean it. Pinned at the top is right — the list
               runs newest-first, so the input sits next to where a fresh note
@@ -670,6 +737,8 @@ export function ConversationPanel({
               here" while doing nothing of the kind, and it still spends the
               whole row to say it. Nudge's shape. */}
           {!noteOpen ? (
+            // Unreachable when a header row is carrying this; the tab is gated
+            // on `noteOpen || !header` above.
             <div className="flex justify-end">
               <button
                 type="button"

@@ -464,10 +464,23 @@ export function InboxView({
             className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col`}
           >
             <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* h-11 and px-3, matching the list's header across the gap: two
-                cards side by side whose headers disagree by a few pixels read
-                as a mistake from further away than either one is legible. */}
-            <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+            <ConversationPanel
+              key={active.customerId}
+              customerId={active.customerId}
+              contactName={active.name}
+              lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
+              filter={filter}
+              onFilterChange={setFilter}
+              className="min-h-0 flex-1 overflow-hidden"
+              // Handed to the panel rather than drawn above it, so the pane's
+              // identity and whatever the open tab offers share ONE line. Drawn
+              // here it sat over a second band holding a single button with the
+              // card's whole width empty beside it. The panel keeps owning the
+              // action because it owns the state behind it (composing, noteOpen,
+              // canPlaceCall); this side only supplies who the conversation is
+              // with and where the name goes when clicked.
+              header={
+                <>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
@@ -504,17 +517,9 @@ export function InboxView({
                 customerId={active.customerId}
                 value={filter}
                 onChange={setFilter}
-                className="ml-auto"
               />
-            </div>
-            <ConversationPanel
-              key={active.customerId}
-              customerId={active.customerId}
-              contactName={active.name}
-              lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
-              filter={filter}
-              onFilterChange={setFilter}
-              className="min-h-0 flex-1 overflow-hidden"
+                </>
+              }
             />
             </div>
           </section>
