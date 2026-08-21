@@ -10,9 +10,11 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
+import { FeedIcon, type FeedIconType } from "./FeedIcon";
 
 // Which slice of the list the chips are showing. Persisted per browser under
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
@@ -27,6 +29,38 @@ function formatAgo(ts: number): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
+}
+
+// What the second line of a row says. Bodies arrive with the sender's own line
+// breaks — a WhatsApp confirmation is three short lines — and a preview is one
+// line by definition, so whitespace collapses before it is ever measured.
+// Email bodies are already plain text by the time they reach here
+// (`email.sendToCustomer` derives `body` from its html with htmlToText for
+// exactly this reason), so nothing has to strip markup.
+function previewOf(
+  c: { lastBody?: string; lastChannel: FeedIconType },
+  t: (k: TranslationKey) => string,
+): string {
+  const body = (c.lastBody ?? "").replace(/\s+/g, " ").trim();
+  if (body) return body;
+  // A call, a form arrival and a bare note can all land with no body. Naming
+  // the KIND beats an empty line: "Arama" tells you what to expect on open,
+  // blank tells you the row is broken.
+  //
+  // A WhatsApp or email row with no body is a different thing — it is a queued
+  // TEMPLATE whose text has not been rendered yet. The thread already says so
+  // (`snippet || t("message.template")` in ConversationPanel), and the row has
+  // to agree with the thread it opens: naming the channel there produced
+  // "Siz: WhatsApp", which reads as a bug rather than a message.
+  return t(
+    c.lastChannel === "form"
+      ? "forms.title"
+      : c.lastChannel === "note"
+        ? "notes.title"
+        : c.lastChannel === "call"
+          ? "channel.call"
+          : "message.template",
+  );
 }
 
 export function InboxView({
@@ -259,12 +293,26 @@ export function InboxView({
                         // into stacked boxes; an inset one reads as a list.
                         // It stays on the row rather than the li so the hover
                         // wash and the selection bar keep the full width.
-                        className={`group relative flex min-h-[2.75rem] w-full cursor-pointer items-center gap-2.5 px-4 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
+                        // TWO LINES, iMessage's shape: who, then what they
+                        // said. The row carried only a name and an age, which
+                        // made the list a directory rather than a triage
+                        // queue — every question you came here with ("who
+                        // still needs an answer", "did that confirmation go
+                        // out") cost a click each. The backend was already
+                        // handing over lastBody, lastChannel, lastDirection
+                        // and hasFailed; search had been reading lastBody the
+                        // whole time, so the row was the only thing on this
+                        // screen that could not see it.
+                        className={`group relative flex min-h-[3.5rem] w-full cursor-pointer flex-col justify-center gap-1 px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
                           isActive
                             ? "bg-[var(--row-hover-bg)] before:bg-[var(--foreground)]"
                             : "hover:bg-[var(--row-hover-bg)]"
                         }`}
                       >
+                        {/* Line one is exactly what it always was — name, the
+                            three-state marker, age — so nothing anybody aims
+                            at has moved. */}
+                        <div className="flex w-full items-center gap-2.5">
                         <span
                           className={`min-w-0 flex-1 truncate text-sm ${
                             c.unseen || c.pinned ? "font-semibold" : "font-medium"
@@ -333,6 +381,45 @@ export function InboxView({
                         <span className="w-8 shrink-0 text-right text-xs tabular-nums text-[var(--muted)]">
                           {formatAgo(c.lastAt)}
                         </span>
+                        </div>
+
+                        {/* Line two: which channel, whose turn, what was
+                            said. The glyph is NOT the channel strip that was
+                            deleted in 49ed336 — that was a row of buttons
+                            offering to start a channel, an action nobody
+                            took. This one is a single un-clickable mark
+                            answering "where did this happen", which is the
+                            question you have when the same person reaches you
+                            on WhatsApp and by mail.
+
+                            "not sent" outranks the preview and wears
+                            --now-line, the one red in this app that already
+                            means a moment rather than a danger state. A
+                            reminder that silently failed is the worst thing
+                            this product can do quietly, and it was visible
+                            only by opening the thread. */}
+                        <div className="flex w-full items-center gap-1.5 text-xs">
+                          <FeedIcon type={c.lastChannel} size={13} />
+                          {c.hasFailed && (
+                            <span className="shrink-0 font-medium text-[var(--now-line)]">
+                              {t("message.failed")}
+                            </span>
+                          )}
+                          <span
+                            className={`min-w-0 flex-1 truncate ${
+                              c.unseen
+                                ? "text-[var(--muted-strong)]"
+                                : "text-[var(--muted)]"
+                            }`}
+                          >
+                            {c.lastDirection === "out" && (
+                              <span className="text-[var(--muted)]">
+                                {t("inbox.youPrefix")}{" "}
+                              </span>
+                            )}
+                            {previewOf(c, t)}
+                          </span>
+                        </div>
                       </div>
                     </li>
                   );

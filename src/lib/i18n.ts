@@ -1744,6 +1744,11 @@ const dictionary = {
   // Row marker, three states in one control. The labels name the STATE for a
   // screen reader; the hints add what a click will do, because the two differ
   // (clicking grey pins it, clicking green unpins).
+  // Preview-line prefix when the newest message in the thread is OURS. The
+  // German column keeps the house Sie rather than WhatsApp's "Du:" — the
+  // label addresses the business owner reading the screen, and this app
+  // never drops into du.
+  "inbox.youPrefix": { tr: "Siz:", en: "You:", de: "Sie:" },
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
   "inbox.unseen": { tr: "Yeni mesaj", en: "New reply", de: "Neue Nachricht" },
   // The list-filter chips. Their own keys rather than reusing the two above:
