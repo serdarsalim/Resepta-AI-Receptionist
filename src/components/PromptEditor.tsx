@@ -83,6 +83,15 @@ type Menu = {
 // around its name. The braces still occupy their exact width — the mirror's
 // metrics have to match the real text underneath it character for character —
 // but render transparent, so inside the tinted pill they read as its padding.
+//
+// NOTHING HERE MAY CHANGE A GLYPH'S ADVANCE WIDTH. The pill carried
+// `font-medium` until 2026-08-21: in the mono prompt that is free (Geist Mono
+// advances identically at 400 and 500), but the opening line is proportional
+// Geist, where it made every pill 2.41px wider in the mirror than the real
+// text underneath — so the caret drifted a pill's worth further left with
+// each token and typing landed beside where the cursor stood. Colour and
+// background are the emphasis; weight, size, letter-spacing and family are
+// the textarea's to decide.
 const TOKEN_RE = /(\{\{\s*[a-z0-9_]+\s*\}\})/gi;
 
 function renderTokens(text: string) {
@@ -92,7 +101,7 @@ function renderTokens(text: string) {
     return (
       <span
         key={i}
-        className="rounded bg-blue-100 font-medium text-blue-700 dark:bg-blue-500/25 dark:text-blue-300"
+        className="rounded bg-blue-100 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300"
       >
         <span className="text-transparent">{match[1]}</span>
         {match[2]}
