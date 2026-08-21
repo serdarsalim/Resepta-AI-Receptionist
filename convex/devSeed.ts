@@ -402,3 +402,15 @@ export const resetOnboarding = internalMutation({
     return null;
   },
 });
+
+// Undo resetOnboarding without walking the wizard: put the name back, and
+// with it the app. Internal, dev tooling.
+//   npx convex run devSeed:setOrgName '{"orgId":"...","name":"Barberio"}'
+export const setOrgName = internalMutation({
+  args: { orgId: v.id("orgs"), name: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.orgId, { name: args.name.trim() });
+    return null;
+  },
+});

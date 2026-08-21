@@ -32,10 +32,13 @@ export const LANGUAGE_STORAGE_KEY = "randevu.lang";
 
 const dictionary = {
   "app.name": { tr: "Resepta", en: "Resepta", de: "Resepta" },
+  // Matches the browser title's positioning (lib/brand.ts DEFAULT_TITLE) —
+  // it read "WhatsApp appointment reminders" long after the product became
+  // the front desk.
   "app.tagline": {
-    tr: "WhatsApp randevu hatırlatmaları",
-    en: "WhatsApp appointment reminders",
-    de: "Terminerinnerungen über WhatsApp",
+    tr: "Randevulu işletmeler için yapay zekâ resepsiyon",
+    en: "The AI front desk for appointment businesses",
+    de: "Der KI-Empfang für Terminbetriebe",
   },
 
   "menu.appearance": { tr: "Görünüm", en: "Appearance", de: "Darstellung" },
@@ -274,16 +277,6 @@ const dictionary = {
     de: "Diesen Namen nutzt bereits ein anderer Betrieb. Versuchen Sie einen anderen.",
   },
   "onboarding.start": { tr: "Başla", en: "Get started", de: "Loslegen" },
-  "onboarding.langTitle": {
-    tr: "Hangi dilde çalışalım?",
-    en: "Which language should we use?",
-    de: "In welcher Sprache arbeiten wir?",
-  },
-  "onboarding.langHint": {
-    tr: "Uygulamanın, mesajların ve telefon asistanınızın dili. Sonradan değiştirebilirsiniz.",
-    en: "The language of the app, your messages and your phone agent. You can change it later.",
-    de: "Die Sprache der App, Ihrer Nachrichten und Ihres Telefonassistenten. Sie können sie später ändern.",
-  },
   "onboarding.industryTitle": {
     tr: "Ne tür bir işletmesiniz?",
     en: "What kind of business are you?",

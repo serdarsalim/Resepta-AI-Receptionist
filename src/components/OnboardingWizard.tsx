@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useConvex } from "convex/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -15,10 +15,14 @@ import {
 } from "../../convex/lib/industryPresets";
 
 // First sign-in onboarding: the one-question gate grown into a short wizard.
-// Five screens — language, name, industry, business info, phone number — in
-// the /book wizard's grammar: a fixed-height card whose middle SWAPS and
-// scrolls, a bottom bar whose action button is always in the corner (greyed,
-// never absent) with Back opposite it.
+// Four screens — name, industry, business info, phone number — in the /book
+// wizard's grammar: the middle SWAPS and scrolls, the bottom bar's action
+// button is always in the corner (greyed, never absent) with Back opposite.
+// NOT the /book card's fixed height: that rule was written for steps that
+// hold similar amounts, and these do not (one input vs eight options), so a
+// fixed card left the name step crammed at the top of a void (Serdar,
+// 2026-08-21). The card sizes to its step between a floor and the viewport
+// cap; centered, so growth expands symmetrically instead of shoving.
 //
 // The org's NAME is saved LAST, deliberately. The gate condition is
 // `org.name === ""`, so the moment a name lands the shell unlocks and this
@@ -29,8 +33,8 @@ import {
 // agent auto-provisioning (orgs.update), so by then the language and the
 // catalog the agent reads at ring time are already in place.
 
-type Step = "language" | "name" | "industry" | "info" | "number";
-const STEPS: Step[] = ["language", "name", "industry", "info", "number"];
+type Step = "name" | "industry" | "info" | "number";
+const STEPS: Step[] = ["name", "industry", "info", "number"];
 
 function CheckIcon() {
   return (
@@ -115,7 +119,7 @@ export function OnboardingWizard() {
     upload: uploadDocument,
   } = useNumberDocumentUpload();
 
-  const [step, setStep] = useState<Step>("language");
+  const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [industry, setIndustry] = useState<IndustryKey | null>(null);
@@ -129,11 +133,24 @@ export function OnboardingWizard() {
   const stepIndex = STEPS.indexOf(step);
   const presetLang = presetLanguage(language);
 
+  // Language is INHERITED, never asked (Serdar, 2026-08-21): the wizard
+  // opens in the landing's language — a first screen asking the question in
+  // the wrong language is exactly the distrust the question was meant to
+  // avoid, and the landing already knows the answer. Stamped onto the org
+  // immediately so it is in place before the name save fires
+  // auto-provisioning; the header pills are the escape hatch for the rare
+  // mismatch, and Business settings holds the real control afterwards.
+  // (AppShell's language sync stands down while the org is unnamed, or the
+  // founding default "tr" would flip this screen to Turkish.)
+  const stampedLanguage = useRef<string | null>(null);
+  useEffect(() => {
+    if (stampedLanguage.current === language) return;
+    stampedLanguage.current = language;
+    void update({ language });
+  }, [language, update]);
+
   const pickLanguage = (lang: Language) => {
     setLanguage(lang);
-    // Persisted immediately: org.language must be in place before the name
-    // save fires auto-provisioning, and every later step writes in it.
-    void update({ language: lang });
   };
 
   // Everything the wizard collected, committed with the name save last (see
@@ -205,48 +222,55 @@ export function OnboardingWizard() {
 
   return (
     <div className="flex h-[100dvh] items-center justify-center bg-[var(--pane)] p-4 sm:p-6">
-      <div className="flex h-[600px] max-h-[92dvh] w-full max-w-lg flex-col rounded-xl border border-[var(--border)] bg-[var(--card)]">
+      <div className="flex max-h-[92dvh] min-h-[340px] w-full max-w-lg flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
         <div className="flex items-start justify-between gap-4 px-5 pt-5">
           <div>
             <h2 className="text-lg font-semibold">
-              {step === "language" && t("onboarding.langTitle")}
               {step === "name" && t("onboarding.title")}
               {step === "industry" && t("onboarding.industryTitle")}
               {step === "info" && t("onboarding.infoTitle")}
               {step === "number" && t("onboarding.numberTitle")}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {step === "language" && t("onboarding.langHint")}
               {step === "name" && t("onboarding.prompt")}
               {step === "industry" && t("onboarding.industryHint")}
               {step === "info" && t("onboarding.infoHint")}
               {step === "number" && t("onboarding.numberPromise")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <SignOutIcon />
-            {t("nav.signOut")}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* The inherited language, correctable in place — a control, not
+                a question. */}
+            <div className="flex items-center gap-0.5">
+              {LANGUAGES.map((entry) => (
+                <button
+                  key={entry.code}
+                  type="button"
+                  onClick={() => pickLanguage(entry.code)}
+                  aria-pressed={language === entry.code}
+                  title={entry.label}
+                  className={`rounded-md px-1.5 py-1 text-xs font-medium uppercase transition-colors ${
+                    language === entry.code
+                      ? "bg-[var(--muted-bg)] text-[var(--foreground)]"
+                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {entry.code}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              <SignOutIcon />
+              {t("nav.signOut")}
+            </button>
+          </div>
         </div>
 
         <div className="thin-scroll stable-gutter mt-4 min-h-0 flex-1 overflow-y-auto px-5 pb-2">
-          {step === "language" && (
-            <div className="space-y-2">
-              {LANGUAGES.map((entry) => (
-                <OptionRow
-                  key={entry.code}
-                  selected={language === entry.code}
-                  title={entry.label}
-                  onClick={() => pickLanguage(entry.code)}
-                />
-              ))}
-            </div>
-          )}
-
           {step === "name" && (
             <form
               onSubmit={(event) => {

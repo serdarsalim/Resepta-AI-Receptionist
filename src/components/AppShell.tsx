@@ -1314,12 +1314,22 @@ export function AppShell({
   // — it selects the approved WhatsApp template, on exact match with no
   // fallback — and it has no business changing because somebody prefers to
   // work in German.
+  // ...and it stands down while the org is still UNNAMED. A fresh org is
+  // born language "tr" (auth.ts needs some value), so syncing during
+  // onboarding flipped a German visitor's wizard to Turkish the moment
+  // settings loaded — the first screen of the product in a language they
+  // never chose (Serdar, 2026-08-21). During onboarding the UI keeps the
+  // landing's language (localStorage → browser) and the wizard persists it
+  // onto the org, so by the time the name lands and this sync wakes up, the
+  // two already agree.
   const preferredLanguage = settings?.me.language ?? settings?.org.language;
+  const onboarding = settings?.org.name === "";
   useEffect(() => {
+    if (onboarding) return;
     if (isLanguage(preferredLanguage) && preferredLanguage !== language) {
       setLanguage(preferredLanguage);
     }
-  }, [preferredLanguage, language, setLanguage]);
+  }, [preferredLanguage, language, setLanguage, onboarding]);
 
   // The browser tab carries the workspace, not the product. A tab strip
   // truncates from the right, so whatever leads is the only part that survives
