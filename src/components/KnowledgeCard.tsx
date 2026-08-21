@@ -32,7 +32,29 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
   if (!isOwner && rows !== undefined && rows.length === 0) return null;
 
   return (
-    <Card title={t("knowledge.title")} tip={t("knowledge.hint")} disabled={!isOwner}>
+    <Card
+      title={t("knowledge.title")}
+      tip={t("knowledge.hint")}
+      disabled={!isOwner}
+      // Top right, like every other add in the app. This one sat at the
+      // BOTTOM LEFT, under however many knowledge blocks the salon has
+      // written — the worst of both, since each block is a full rich-text
+      // editor and three of them push the button clean off the screen.
+      //
+      // Gated on isOwner here rather than by the fieldset: a Card's action
+      // renders outside it.
+      action={
+        isOwner ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+          >
+            {t("knowledge.add")}
+          </button>
+        ) : undefined
+      }
+    >
       {confirmDialog}
       <div className="space-y-4">
         {rows !== undefined && rows.length === 0 && (
@@ -89,15 +111,6 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
           </div>
         ))}
         {error && <p className="text-xs text-red-600">{t("common.error")}</p>}
-        <div>
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("knowledge.add")}
-          </button>
-        </div>
       </div>
       {adding && <AddKnowledgeSheet onClose={() => setAdding(false)} onCreate={create} />}
     </Card>

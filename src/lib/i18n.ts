@@ -3251,6 +3251,14 @@ const dictionary = {
     en: "Service name",
     de: "Name der Leistung",
   },
+  // A product is not a service, and the column header over "Hair gel" said
+  // "Hizmet adı". Same label, one word swapped, in the two places a good is
+  // named: the Products card's header row and the sheet when Type is Product.
+  "services.productName": {
+    tr: "Ürün adı",
+    en: "Product name",
+    de: "Name des Produkts",
+  },
   "services.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
   // Same word the fields table uses for the same idea: the name an integration
   // says, as opposed to the name a person reads.
@@ -3278,6 +3286,14 @@ const dictionary = {
     tr: "Hizmet ekle",
     en: "Add service",
     de: "Leistung hinzufügen",
+  },
+  // Its own key rather than composing "Add" + services.kindGood: German puts
+  // the verb last ("Produkt hinzufügen") and Turkish inflects the noun, so a
+  // concatenated label is wrong in two of the three columns.
+  "services.addProduct": {
+    tr: "Ürün ekle",
+    en: "Add product",
+    de: "Produkt hinzufügen",
   },
   "services.active": { tr: "Kullanımda", en: "Active", de: "Aktiv" },
   "services.minutes": { tr: "dk", en: "min", de: "Min." },

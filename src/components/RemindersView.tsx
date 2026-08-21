@@ -54,8 +54,13 @@ const RULE_COLUMNS =
 // Applied at each row call site because only a row has these three children in
 // this order — the sm-only headers share the grid but not the folding.
 const RULE_WHAT_CELL = "max-sm:col-start-1 max-sm:row-start-2";
+// Channel is the LAST column, so its content hugs the right edge of the card
+// rather than the left edge of its own 1fr track. Left-aligned it sat about a
+// third of the card away from the edge the header rule and the Add message
+// button both end on, and the gap to its right read as a fourth column that
+// was not there. The phone already pinned it right; sm just never did.
 const RULE_CHANNEL_CELL =
-  "max-sm:col-start-2 max-sm:row-start-1 max-sm:row-span-2 max-sm:justify-self-end";
+  "sm:justify-end max-sm:col-start-2 max-sm:row-start-1 max-sm:row-span-2 max-sm:justify-self-end";
 
 type RuleTrigger =
   | "booking"
@@ -1754,21 +1759,26 @@ function RulesCard({
 
   return (
     <div className="space-y-2">
-      {/* Above the card and hard right, the same place and the same solid
-          button Customers puts "Add customer" — this is the page's primary
-          action, not a footnote under the table it adds to. */}
-      {isOwner && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("settings.ruleAdd")}
-          </button>
-        </div>
-      )}
-      <Card disabled={!isOwner}>
+      <Card
+        disabled={!isOwner}
+        // Inside the card, hard right, the same corner Customers and Team
+        // now use. It floated on the page above the card, which read as a
+        // button belonging to the page rather than to the list it adds to.
+        //
+        // Gated on isOwner here rather than by the fieldset: a Card's action
+        // renders outside it.
+        action={
+          isOwner ? (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            >
+              {t("settings.ruleAdd")}
+            </button>
+          ) : undefined
+        }
+      >
         <div className="hidden items-center gap-3 pb-2 sm:flex">
           <div className={RULE_COLUMNS}>
             <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
@@ -1778,7 +1788,8 @@ function RulesCard({
             <span className="text-xs text-[var(--muted)]">
               {t("settings.rulesWhat")}
             </span>
-            <span className="text-xs text-[var(--muted)]">
+            {/* Right, with the pills it labels. */}
+            <span className="text-right text-xs text-[var(--muted)]">
               {t("settings.rulesWhere")}
             </span>
           </div>

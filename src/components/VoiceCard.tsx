@@ -447,10 +447,30 @@ export function VoiceCard({
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
-      <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
+      {/* No agents yet: nothing to frame, so the actions keep a row of their
+          own. This is the ONE case where they sit outside — and it is the
+          case where Add agent matters most, since it is the only way to get
+          the first one. */}
+      {connected.length === 0 && (
+        <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
+      )}
 
       {connected.length > 0 && (
-        <div className="mb-3 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        // overflow-hidden moved here from the scroller so the frame still
+        // clips the table's bottom corners; overflow-x-auto went to the inner
+        // div, which is now the only thing that scrolls. If the header row
+        // scrolled with the table, Add agent would slide out of reach on a
+        // narrow window — the exact thing this frame's min-w-full note warns
+        // about for the Enabled toggle.
+        <div className="mb-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          {/* The frame's own header. Same corner as every Card action, and
+              the reason this table gets one at all despite not being a Card:
+              a control that belongs to a list should sit in the list's frame,
+              not float on the page above it. */}
+          <div className="flex items-center justify-end gap-1 px-3 pb-3 pt-3">
+            {agentActions}
+          </div>
+          <div className="overflow-x-auto">
           {/* min-w-full, not w-full. w-full pins the table to the container and
               the cells overflow it anyway — the Enabled toggle and the
               disconnect button were clipped at the card edge with nothing to
@@ -695,6 +715,7 @@ export function VoiceCard({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

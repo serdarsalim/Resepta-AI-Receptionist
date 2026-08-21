@@ -740,7 +740,16 @@ function ServiceKeyCell({
 // where every other tab's does. The stacked layout also gives the price its
 // currency and the duration its unit room to be labelled properly, which the
 // three-inputs-on-one-line version could not afford.
-function NewServiceSheet({ onClose }: { onClose: () => void }) {
+function NewServiceSheet({
+  initialKind,
+  onClose,
+}: {
+  // Which button opened this. The Type switch stays — a product typed in by
+  // mistake has to be fixable without closing and reopening — but it arrives
+  // already answered, because the gesture that got here said which.
+  initialKind: "service" | "good";
+  onClose: () => void;
+}) {
   const { t, language } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
@@ -751,12 +760,15 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
   // make a product" was a rule you had to be told, and a default of 30 meant
   // the form had already answered the question before the owner did. The
   // kind decides which time field the form even has.
-  const [kind, setKind] = useState<"service" | "good">("service");
+  const [kind, setKind] = useState<"service" | "good">(initialKind);
   const isGood = kind === "good";
   const [duration, setDuration] = useState("30");
 
   return (
-    <Sheet title={t("services.add")} onClose={onClose}>
+    <Sheet
+      title={t(isGood ? "services.addProduct" : "services.add")}
+      onClose={onClose}
+    >
       <form
         className="space-y-3"
         onSubmit={async (event) => {
@@ -830,7 +842,9 @@ function NewServiceSheet({ onClose }: { onClose: () => void }) {
             {isGood ? t("services.goodHint") : ""}
           </p>
 
-          <label htmlFor="service-name">{t("services.name")}</label>
+          <label htmlFor="service-name">
+            {t(isGood ? "services.productName" : "services.name")}
+          </label>
           <input
             id="service-name"
             name="name"
@@ -931,7 +945,10 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const services = useQuery(api.services.list, {});
   const update = useMutation(api.services.update);
   const remove = useMutation(api.services.remove);
-  const [adding, setAdding] = useState(false);
+  // Null when closed, otherwise the kind the button that opened it stands for.
+  // It was a boolean while one shared button sat above both cards and the
+  // sheet asked Type itself.
+  const [adding, setAdding] = useState<"service" | "good" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -953,7 +970,9 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   // it reads a dozen things off this scope (the mutations, the currency, the
   // confirm dialog) and drilling them through props to say the same thing
   // twice is how the two copies start to differ.
-  const serviceList = (rows: typeof sorted) => (
+  // `goods` names the column over "Hair gel" and "Shampoo". The two lists share
+  // every other column, so this is one word, not a second renderer.
+  const serviceList = (rows: typeof sorted, goodsList = false) => (
     <div className="space-y-2">
             {rows.length > 0 && (
               // Column headers label their columns. They only exist at sm,
@@ -966,7 +985,9 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               // are decided by Tailwind's own order rather than by this file.
               // Scoping the hide to the phone leaves nothing to arbitrate.
               <div className={`px-1 text-xs text-[var(--muted)] max-sm:hidden ${SERVICE_ROW_GRID}`}>
-                <span>{t("services.name")}</span>
+                <span>
+                  {t(goodsList ? "services.productName" : "services.name")}
+                </span>
                 <span>{t("services.duration")}</span>
                 <span>{t("services.price")}</span>
                 <span>{t("services.active")}</span>
@@ -1135,22 +1156,22 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
 
   return (
     <div className="space-y-2">
-      {/* Above the card and hard right, the same solid button Customers and
-          Reminders use. It was a quiet "+ Add service" at the foot of the
-          list, which put the page's primary action below however many rows
-          the salon happens to sell. */}
-      {isOwner && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="h-9 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("services.add")}
-          </button>
-        </div>
-      )}
-      <Card title={t("services.title")} tip={t("services.hint")} disabled={!isOwner}>
+      <Card
+        title={t("services.title")}
+        tip={t("services.hint")}
+        disabled={!isOwner}
+        action={
+          isOwner ? (
+            <button
+              type="button"
+              onClick={() => setAdding("service")}
+              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            >
+              {t("services.add")}
+            </button>
+          ) : undefined
+        }
+      >
         {services === undefined ? (
           <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
         ) : (
@@ -1159,22 +1180,40 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
       </Card>
       {/* Only when the salon actually sells something. An empty Products card
           is a heading over a sentence saying there is nothing under it, on a
-          page most salons will never put a product on. There is deliberately
-          no second "Add product" button: the sheet has had a Type switch since
-          before this card existed, so a button here would be a second door
-          onto one form. The card's tip points at that switch. */}
+          page most salons will never put a product on.
+
+          It has its OWN Add product now (Serdar, 2026-08-21). The old note
+          here argued a second button would be "a second door onto one form",
+          which was right while the sheet asked Type as its first question and
+          one shared button sat above both cards. Two buttons in two card
+          headers is a different shape: the gesture answers Type, so the sheet
+          opens already on the right kind instead of asking a question the
+          click just answered. The switch stays for a mistake. */}
       {goods.length > 0 && (
         <Card
           title={t("services.products")}
           tip={t("services.productsHint")}
           disabled={!isOwner}
+          action={
+            isOwner ? (
+              <button
+                type="button"
+                onClick={() => setAdding("good")}
+                className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+              >
+                {t("services.addProduct")}
+              </button>
+            ) : undefined
+          }
         >
-          {serviceList(goods)}
+          {serviceList(goods, true)}
         </Card>
       )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {confirmDialog}
-      {adding && <NewServiceSheet onClose={() => setAdding(false)} />}
+      {adding && (
+        <NewServiceSheet initialKind={adding} onClose={() => setAdding(null)} />
+      )}
     </div>
   );
 }
