@@ -16,7 +16,6 @@ import { connectionField } from "./lib/connections";
 import { requireOrg, requireOwner, assertE164 } from "./lib/orgAuth";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { voiceCatalogue } from "./lib/voiceCatalogue";
-import { unknownCallerAddress } from "./lib/voiceAgentTemplate";
 import {
   nextUpcomingOf,
   retryConfirmationsAwaitingEmail,
@@ -1073,16 +1072,9 @@ export const beforeCallContext = internalQuery({
       // says what empty means, rather than leaving the model to invent a name
       // for itself — see GENERAL_PROMPTS in lib/voiceAgentTemplate.
       agent_name: agent.personaName ?? "",
-      // An unknown caller gets a polite address rather than a hole: the
-      // owner's own opening line may sit the token mid-sentence ("Hi
-      // {{customer_name}}, thanks for calling"), and Retell substitutes
-      // literally without tidying the punctuation around it. Empty is still
-      // a real answer for languages with no vocative filler — see
-      // UNKNOWN_CALLER_ADDRESS.
       customer_name: customer
-        ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
-          unknownCallerAddress(lang)
-        : unknownCallerAddress(lang),
+        ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
+        : "",
       // Kept alongside the two columns: an opening line saying the whole name
       // is the common case, and {{customer_name}} is already written into
       // prompts. It is READ-only context — nothing writes back through it.

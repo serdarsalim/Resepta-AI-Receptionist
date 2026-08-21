@@ -278,30 +278,6 @@ const BEGIN_MESSAGES_NAMED: Record<VoiceAgentLanguage, (name: string) => string>
   "de-DE": (name) => `{{business_name}}, hier ist ${name}. Guten Tag.`,
 };
 
-// What {{customer_name}} becomes when nobody is on the card — an unknown
-// caller (Serdar, 2026-08-21, after "Hi {{customer_name}} for calling…"
-// greeted a stranger as "Hi  for calling"). Retell substitutes the variable
-// literally and tidies nothing, so an empty value leaves a hole with the
-// punctuation still around it; this is the "when empty, say…" answer that
-// waTemplates.variableDefaults already gives the message lane.
-//
-// EDITORIAL, and it does not translate. English needs a vocative filler
-// ("Hi there") because "Hi," alone is abrupt. Turkish has a better one:
-// "efendim" is polite AND gender-neutral, where Bey/Hanım would make the
-// agent guess — and the prompt already forbids a bare honorific. German has
-// no equivalent at all ("Hallo dort" is not a thing), so it stays EMPTY and
-// a German line simply drops the name: "Guten Tag, wie kann ich helfen?".
-// Empty is a real answer here, not a gap waiting to be filled.
-export const UNKNOWN_CALLER_ADDRESS: Record<string, string> = {
-  tr: "efendim",
-  en: "there",
-  de: "",
-};
-
-export function unknownCallerAddress(language: string | undefined | null): string {
-  return UNKNOWN_CALLER_ADDRESS[(language ?? "").toLowerCase().slice(0, 2)] ?? "";
-}
-
 // The summary the owner reads on the call, asked for by name.
 //
 // Retell's built-in call_summary has no language setting and comes back
