@@ -1825,6 +1825,14 @@ columns never become writable through variable configuration.
 ## Conventions carried over from Nudge
 
 - `npx tsc --noEmit` must pass before every commit.
+- **A push to `main` deploys the backend too — do NOT tell Serdar to run
+  `npx convex deploy`** (he has been told twice; it is his one recurring
+  annoyance from this file's absence). The Convex deploy rides Vercel's own
+  BUILD COMMAND, which is configured in the Vercel project settings and is
+  therefore invisible from this repo — `package.json` says only
+  `"build": "next build"` and there is no `vercel.json`, so reading the repo
+  alone gives the wrong answer. Push is the whole ship: frontend and Convex
+  functions, schema and crons together.
 - `convex/_generated/` is CHECKED IN — commit it alongside any backend change
   that adds/renames a function or table (Vercel's typecheck reads the committed
   copy).
