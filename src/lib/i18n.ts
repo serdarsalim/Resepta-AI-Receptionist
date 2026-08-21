@@ -2208,15 +2208,21 @@ const dictionary = {
     en: "Multiple languages",
     de: "Mehrere Sprachen",
   },
+  // "Delete", not "Disconnect" (Serdar, 2026-08-21). Disconnect described the
+  // MECHANISM — the app's row goes, the provider agent survives — which is
+  // an implementation detail the owner has no word for, and Retell is a name
+  // this UI never says. From where they sit the agent is gone, so the button
+  // says so; the confirmation still states exactly what is kept and what is
+  // lost, which is where that honesty belongs.
   "settings.voiceDisconnect": {
-    tr: "Bağlantıyı kes",
-    en: "Disconnect",
-    de: "Trennen",
+    tr: "Sil",
+    en: "Delete",
+    de: "Löschen",
   },
   "settings.voiceDisconnectConfirm": {
-    tr: "{name} bağlantısı kesilsin mi? Arama geçmişi Resepta'da kalır, ancak asistan artık bu işletmede görünmez.",
-    en: "Disconnect {name}? Its call history stays in Resepta, but the agent will no longer appear for this business.",
-    de: "{name} trennen? Der Anrufverlauf bleibt in Resepta, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
+    tr: "{name} silinsin mi? Arama geçmişi Resepta'da kalır, ancak asistan artık bu işletmede görünmez.",
+    en: "Delete {name}? Its call history stays in Resepta, but the agent will no longer appear for this business.",
+    de: "{name} löschen? Der Anrufverlauf bleibt in Resepta, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
   "settings.voiceNotProvisioned": {
     tr: "Sesli asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
