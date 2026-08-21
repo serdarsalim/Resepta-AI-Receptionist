@@ -17,6 +17,7 @@ import { InlineEditValue } from "./RecordField";
 import { useConfirm } from "./ConfirmDialog";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { bodyIsHtml, hasNoteText, plainToHtml } from "../../convex/lib/noteBody";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 
 export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
   const { t } = useLanguage();
@@ -61,59 +62,172 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
           <p className="text-xs text-[var(--muted)]">{t("knowledge.empty")}</p>
         )}
         {(rows ?? []).map((row) => (
-          <div key={row._id} className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="min-w-0 flex-1 text-sm font-medium">
-                <InlineEditValue
-                  value={row.title}
-                  placeholder={t("knowledge.titlePlaceholder")}
-                  onSave={(value) => update({ id: row._id, title: value })}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await confirm({
-                      title: t("knowledge.deleteConfirm").replace("{name}", row.title),
-                    });
-                    if (!ok) return;
-                    setError(null);
-                    await remove({ id: row._id }).catch(() => setError("error"));
-                  })();
-                }}
-                className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              >
-                {t("common.delete")}
-              </button>
-            </div>
-            {/* The rich editor in the composer's compact shape, saving on
-                blur — the no-Save-button rule unchanged. The column stores
-                whatever the editor serialises (the notes model: no is-it-html
-                flag, bodyIsHtml judges the body); every agent read flattens
-                to words through noteText, so what reaches a model or the
-                voice provider is text only. plainToHtml carries a legacy
-                plain block INTO the editor with its line breaks intact;
-                nothing stored is migrated. No token dropdown: knowledge is
-                prose about the business, nothing renders per-customer. */}
-            <EmailBodyEditor
-              key={`${row._id}-body`}
-              value={bodyIsHtml(row.body) ? row.body : plainToHtml(row.body)}
-              disabled={!isOwner}
-              compact
-              showVariables={false}
-              placeholder={t("knowledge.bodyPlaceholder")}
-              onSave={(html) => {
-                const next = hasNoteText(html) ? html : "";
-                if (next !== row.body) void update({ id: row._id, body: next });
-              }}
-            />
-          </div>
+          <KnowledgeBlock
+            key={row._id}
+            row={row}
+            isOwner={isOwner}
+            onSaveTitle={(title) => update({ id: row._id, title })}
+            onSaveBody={(body) => {
+              if (body !== row.body) void update({ id: row._id, body });
+            }}
+            onDelete={() => {
+              void (async () => {
+                const ok = await confirm({
+                  title: t("knowledge.deleteConfirm").replace("{name}", row.title),
+                });
+                if (!ok) return;
+                setError(null);
+                await remove({ id: row._id }).catch(() => setError("error"));
+              })();
+            }}
+          />
         ))}
         {error && <p className="text-xs text-red-600">{t("common.error")}</p>}
       </div>
       {adding && <AddKnowledgeSheet onClose={() => setAdding(false)} onCreate={create} />}
     </Card>
+  );
+}
+
+// One knowledge block: a title you click to correct, and a body that READS as
+// prose and only becomes an editor when you go to write in it.
+//
+// It used to mount a live EmailBodyEditor per block, permanently. Two blocks
+// meant two full rich-text toolbars parked on a card nobody visits to format
+// text — the exact "row of bordered inputs reads as a form somebody has to
+// fill in" this codebase argues against everywhere else. Knowledge is prose
+// about the business, written once and read by the agent for months.
+//
+// Ported from the notes bubble in ConversationPanel, which Serdar named as the
+// reference. Two things came with it and both are load-bearing:
+//
+// The whole bubble is the edit affordance — no pencil that only appears once
+// you have found the block by hovering it.
+//
+// Cancel/Save rather than collapsing on an outside click, and that is NOT a
+// departure from the no-Save-button rule for its own sake. The editor's colour
+// swatch and emoji picker both portal to document.body, so every "did the
+// click land outside" test says yes to picking an emoji and would close the
+// editor out from under the thing you just reached for. Notes hit this first
+// and answered it with an explicit close; a second answer here would be a
+// second pattern for one problem. The body still autosaves on blur underneath
+// — Save exists to leave the editor, not to persist.
+function KnowledgeBlock({
+  row,
+  isOwner,
+  onSaveTitle,
+  onSaveBody,
+  onDelete,
+}: {
+  row: { _id: string; title: string; body: string };
+  isOwner: boolean;
+  onSaveTitle: (title: string) => Promise<unknown>;
+  onSaveBody: (body: string) => void;
+  onDelete: () => void;
+}) {
+  const { t } = useLanguage();
+  const [editing, setEditing] = useState(false);
+  // Plain blocks predate the editor. Converted on the way IN rather than
+  // migrated in storage, so the line breaks somebody typed survive and a block
+  // nobody ever edits is never rewritten.
+  const [draft, setDraft] = useState("");
+  const filled = hasNoteText(row.body);
+
+  return (
+    <div className="group/block space-y-1">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1 text-sm font-medium">
+          <InlineEditValue
+            value={row.title}
+            placeholder={t("knowledge.titlePlaceholder")}
+            onSave={onSaveTitle}
+          />
+        </div>
+        {/* Hover-revealed like the note's, opacity rather than hidden so the
+            row never shifts when it appears. It was a permanent grey button on
+            every block, which is the same clutter as the parked toolbar. */}
+        {isOwner && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] focus-visible:opacity-100 group-hover/block:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            {t("common.delete")}
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        // The editor wears the bubble, so a block reads and edits in the same
+        // box and in the same format, rather than turning into plain text the
+        // moment you touch it.
+        <div className="rounded-xl bg-[var(--note-bubble-bg)] px-3 py-2">
+          <EmailBodyEditor
+            value={draft}
+            compact
+            showVariables={false}
+            placeholder={t("knowledge.bodyPlaceholder")}
+            onSave={setDraft}
+            onLiveChange={setDraft}
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="rounded-md px-2.5 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Empty collapses to "", not to an empty paragraph: tiptap
+                // serialises a blank document as <p></p>, and the agent would
+                // read that as a block with content.
+                onSaveBody(hasNoteText(draft) ? draft : "");
+                setEditing(false);
+              }}
+              className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+            >
+              {t("common.save")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={!isOwner}
+          onClick={() => {
+            setDraft(bodyIsHtml(row.body) ? row.body : plainToHtml(row.body));
+            setEditing(true);
+          }}
+          title={isOwner ? t("notes.edit") : undefined}
+          className="block w-full rounded-xl bg-[var(--note-bubble-bg)] px-3 py-2 text-left text-sm transition-colors enabled:hover:bg-[var(--note-bubble-hover-bg)]"
+        >
+          {/* Sanitised even though this markup is ours: anyone in the org can
+              write it, and "we wrote it" is not a security boundary. */}
+          {!filled ? (
+            // An empty block still has to be a target you can hit, or the only
+            // way to fill one in is to delete it and add it again.
+            <span className="text-[var(--muted)]">
+              {t("knowledge.bodyPlaceholder")}
+            </span>
+          ) : bodyIsHtml(row.body) ? (
+            <div
+              className="break-words [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4"
+              dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(row.body) }}
+            />
+          ) : (
+            // whitespace-pre-wrap, not <br> injection: a legacy plain block
+            // keeps its line breaks without being rewritten into markup it was
+            // never stored as.
+            <span className="block whitespace-pre-wrap break-words">
+              {row.body}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
