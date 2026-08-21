@@ -1850,7 +1850,18 @@ function RulesCard({
                         .map((channel) => (
                           <span
                             key={channel}
-                            className="rounded-full bg-amber-100 px-2.5 py-0.5 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                            // EMERALD, not amber, and the reason is two lines
+                            // up: the unsaved-draft pill on this very row is
+                            // amber. One row was carrying two amber pills of
+                            // the same size saying entirely different things,
+                            // one a warning ("words are waiting") and one a
+                            // steady state ("mail is on").
+                            //
+                            // Emerald is also what this app already says by
+                            // "on" — the expanded editor draws the SAME state
+                            // with the same emerald toggle. Opening a rule
+                            // used to change the colour of its own channels.
+                            className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                           >
                             {channelLabel(channel)}
                           </span>
@@ -1988,9 +1999,22 @@ export function BusinessHoursCard({
                       : [...activeDays, index].sort((a, b) => a - b),
                   })
                 }
+                role="switch"
+                aria-checked={active}
+                // An open day is an ON state, so it wears what every other ON
+                // state in this app wears. Amber here read as a warning about
+                // Monday.
+                //
+                // No check inside, unlike the channel switches: seven chips
+                // have to hold ONE line inside a 24rem value column (the
+                // ROW_GRID note names this row as the reason that column is
+                // 24rem wide), and a 12px glyph plus its gap on every chip
+                // wraps the week onto two rows. Seven weekday names in order
+                // is not a control anyone mistakes for a row of tags, which
+                // is the confusion the check exists to prevent.
                 className={`rounded-full px-3 py-1 text-sm transition-colors ${
                   active
-                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                     : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
                 }`}
               >
