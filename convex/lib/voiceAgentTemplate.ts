@@ -148,7 +148,9 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Bir istek güvenle tamamlanamıyorsa neyin eksik olduğunu söyle ve tek bir net soru sor.",
     "",
     "KAPANIŞ",
-    "Arayan vedalaştığında ya da başka sorusu kalmadığında kısaca veda et ve end_call ile bitir. Arayan konuşurken asla kapatma.",
+    "Arayan vedalaştığında ya da başka sorusu kalmadığında kısaca veda et. Arayan konuşurken asla kapatma.",
+    "Vedanı söylediğin sırada KAPATMA. Önce sadece veda et ve arayana son bir şey söyleme fırsatı bırak; end_call'u ancak bir sonraki sıranda, arayan yeni bir şey söylemediyse çağır.",
+    "Selama, merhabaya ya da hoş beş sözlerine karşılık asla kapatma. Görüşmenin ilk yarım dakikasında konuşma neredeyse hiçbir zaman bitmiş olmaz.",
   ],
   "en-US": [
     "ROLE",
@@ -196,7 +198,9 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "If a request cannot be completed safely, say what is missing and ask one clear question.",
     "",
     "CLOSING",
-    "When the caller says goodbye or has nothing further, say a short goodbye and end with end_call. Never hang up while they are talking.",
+    "When the caller says goodbye or has nothing further, say a short goodbye. Never hang up while they are talking.",
+    "Do NOT hang up in the same turn as your goodbye. Say it and leave the caller room for one last thing; call end_call only on your NEXT turn, once they have added nothing new.",
+    "Never hang up in response to a greeting, a hello or an opening pleasantry. In the first half-minute a conversation is essentially never finished.",
   ],
   "de-DE": [
     "ROLLE",
@@ -244,7 +248,9 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Lässt sich etwas nicht sicher abschließen, sage, was fehlt, und stelle eine klare Rückfrage.",
     "",
     "ABSCHLUSS",
-    "Verabschiedet sich der Anrufer oder hat nichts weiter, verabschiede dich kurz und beende mit end_call. Lege nie auf, während er spricht.",
+    "Verabschiedet sich der Anrufer oder hat nichts weiter, verabschiede dich kurz. Lege nie auf, während er spricht.",
+    "Lege NICHT im selben Zug auf, in dem du dich verabschiedest. Verabschiede dich zuerst und lass dem Anrufer Raum für eine letzte Sache; rufe end_call erst in deinem NÄCHSTEN Zug auf, wenn nichts Neues mehr kam.",
+    "Lege niemals als Antwort auf eine Begrüßung oder eine einleitende Höflichkeit auf. In der ersten halben Minute ist ein Gespräch so gut wie nie beendet.",
   ],
 };
 
@@ -271,6 +277,30 @@ const BEGIN_MESSAGES_NAMED: Record<VoiceAgentLanguage, (name: string) => string>
   "en-US": (name) => `{{business_name}}, this is ${name}. How can I help?`,
   "de-DE": (name) => `{{business_name}}, hier ist ${name}. Guten Tag.`,
 };
+
+// What {{customer_name}} becomes when nobody is on the card — an unknown
+// caller (Serdar, 2026-08-21, after "Hi {{customer_name}} for calling…"
+// greeted a stranger as "Hi  for calling"). Retell substitutes the variable
+// literally and tidies nothing, so an empty value leaves a hole with the
+// punctuation still around it; this is the "when empty, say…" answer that
+// waTemplates.variableDefaults already gives the message lane.
+//
+// EDITORIAL, and it does not translate. English needs a vocative filler
+// ("Hi there") because "Hi," alone is abrupt. Turkish has a better one:
+// "efendim" is polite AND gender-neutral, where Bey/Hanım would make the
+// agent guess — and the prompt already forbids a bare honorific. German has
+// no equivalent at all ("Hallo dort" is not a thing), so it stays EMPTY and
+// a German line simply drops the name: "Guten Tag, wie kann ich helfen?".
+// Empty is a real answer here, not a gap waiting to be filled.
+export const UNKNOWN_CALLER_ADDRESS: Record<string, string> = {
+  tr: "efendim",
+  en: "there",
+  de: "",
+};
+
+export function unknownCallerAddress(language: string | undefined | null): string {
+  return UNKNOWN_CALLER_ADDRESS[(language ?? "").toLowerCase().slice(0, 2)] ?? "";
+}
 
 // The summary the owner reads on the call, asked for by name.
 //
@@ -382,7 +412,7 @@ const END_CALL_TOOL = {
   type: "end_call",
   name: END_CALL_TOOL_NAME,
   description:
-    "Hang up. Use it only after the conversation is genuinely finished and the caller has said goodbye or has nothing left to ask, never to cut someone short.",
+    "Hang up. Use it only after the conversation is genuinely finished and the caller has said goodbye or has nothing left to ask, never to cut someone short. Never call this in the same turn as your own goodbye, and never in response to a greeting or an opening pleasantry.",
 };
 
 export function appointmentReceptionistTemplate(args: {
