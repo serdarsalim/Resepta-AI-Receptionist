@@ -311,6 +311,60 @@ more than either.
   its own Business tab; Business has no tabs at all. The reasoning that kept
   them apart, and what changed to answer it, is recorded there.
 
+## A lesson learned on one agent belongs in the defaults (2026-08-21)
+
+Serdar, after a live tenant hit three problems in a row: *"we keep learning and
+we keep improving the onboarding agents, so the next client that self-enrolls
+starts where we got to — and existing agents get better too, without touching
+the prompts they crafted."* He should never have to ask for this per finding.
+So it is a standing rule, not a request:
+
+**Fixing the tenant in front of you is half the job. The other half is asking
+which lane carries the fix to everyone else, and taking it.** There are three,
+and they differ ONLY in reach — pick the highest one the fix can live in.
+
+1. **Ring-time injection** (`retell.ts beforeCallContext`) — reaches EVERY
+   agent on its very next call. No publish, no click, no version. This is
+   where `{{services}}`, `{{now}}`, `{{contact}}`, `{{knowledge}}` live. The
+   catch: it carries VALUES, not instructions, and only works if the agent's
+   prompt already references the variable. An injected value nobody's prompt
+   mentions reaches everyone and does nothing.
+2. **Sync-deliverable** (the template's TOOLS, model, agent knobs, analysis
+   fields) — reaches existing agents through the update banner: one click,
+   and `syncTemplate` explicitly leaves the owner's prompt alone. **This lane
+   only opens if you bump `VOICE_AGENT_TEMPLATE_VERSION`** — the banner is
+   gated on `templateVersion !== VOICE_AGENT_TEMPLATE_VERSION`, so a
+   sync-deliverable improvement without a bump reaches NOBODY. Bumping also
+   obliges you to rewrite `voiceDetail.templateBehindHint`, which names what
+   the new version does; a banner still advertising the last version's wins
+   is a promise about a version nobody is being offered.
+3. **Prompt text** — NEW AGENTS ONLY, forever. Existing owners get it only by
+   editing their own prompt, which is theirs and which they have tuned.
+
+**The move that makes this work: say the same thing in two lanes.** The
+2026-08-21 early-hangup fix is the worked example — the turn-based closing
+rule went into the prompts (lane 3, for new agents' clarity) AND the same two
+negatives went into the `end_call` tool DESCRIPTION (lane 2, bumped to v12),
+which is the half that rescues the agents already in the field. Ask of every
+lesson: can this be a tool description, a knob, or an injected value as well
+as a sentence in the prompt? Usually it can.
+
+**And the onboarding surfaces are the same duty in a different place.** A
+lesson about what a business needs on day one belongs in
+`lib/industryPresets`, `DEFAULT_VOICE_IDS`, the auto-provision naming, or the
+wizard — not only in the one tenant you repaired by hand. The next self-enrol
+should start where the last support conversation ended.
+
+**When a fix is genuinely prompt-only, SAY SO in the handoff** rather than
+letting it read as shipped. Stranded as of 2026-08-21: the Bella port
+(`{{next_appointment}}`, greet-by-name), the `{{knowledge}}` prompt line, and
+the turn-based closing rule all reach new agents only. The knowledge one is
+the sharpest — every existing agent now HAS the variable injected and no
+prompt line reading it. The shape of the answer, if it is worth building: an
+ADDITIVE, one-click prompt patch that appends the single line and shows the
+owner exactly what it added, which is a different thing from a sync
+overwriting text they wrote.
+
 ## Onboarding (built 2026-08-21) — the wizard, presets, billing for everyone
 
 Serdar's brief, built overnight: a world-class first-run. What holds now:
