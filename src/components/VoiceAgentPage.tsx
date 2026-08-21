@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { VoicePicker } from "./VoicePicker";
 import { InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
 import { PromptEditor } from "./PromptEditor";
@@ -699,44 +700,13 @@ export function VoiceAgentPage({
                     {t("voiceDetail.voice")}
                     <InfoTip text={t("voiceDetail.voiceHint")} />
                   </label>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <select
-                      id="agent-voice"
+                  <div className="min-w-0 flex-1">
+                    <VoicePicker
+                      size="sm"
                       value={voice}
-                      onChange={(e) => setVoice(e.target.value)}
-                      className="w-auto min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
-                    >
-                      {/* An agent whose voice is not in the catalogue still
-                          shows what it is actually using, rather than
-                          silently reading as the first option in the list. */}
-                      {!detail.voices.some((v) => v.id === voice) && (
-                        <option value={voice}>{voice || t("voiceDetail.voicePick")}</option>
-                      )}
-                      {detail.voices.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {[v.name, v.accent, v.gender].filter(Boolean).join(" · ")}
-                        </option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const url = detail.voices.find((v) => v.id === voice)?.previewUrl;
-                      if (!url) return null;
-                      return (
-                        <button
-                          type="button"
-                          title={t("voiceDetail.voicePreview")}
-                          onClick={() => {
-                            previewRef.current?.pause();
-                            const audio = new Audio(url);
-                            previewRef.current = audio;
-                            void audio.play().catch(() => {});
-                          }}
-                          className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
-                        >
-                          ▶
-                        </button>
-                      );
-                    })()}
+                      voices={detail.voices}
+                      onChange={setVoice}
+                    />
                   </div>
 
                   <span className="flex items-center gap-1.5 text-xs font-medium">

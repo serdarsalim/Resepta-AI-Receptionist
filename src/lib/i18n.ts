@@ -2136,6 +2136,16 @@ const dictionary = {
     de: "Terminassistent",
   },
   "voiceCreate.voice": { tr: "Ses", en: "Voice", de: "Stimme" },
+  "voicePicker.search": {
+    tr: "Ses ara (isim, aksan, cinsiyet)",
+    en: "Search voices (name, accent, gender)",
+    de: "Stimmen suchen (Name, Akzent, Geschlecht)",
+  },
+  "voicePicker.none": {
+    tr: "Eşleşen ses yok.",
+    en: "No matching voice.",
+    de: "Keine passende Stimme.",
+  },
   "voiceCreate.savedVoice": {
     tr: "Seçili ses",
     en: "Selected voice",
@@ -2956,10 +2966,13 @@ const dictionary = {
     en: "These edits aren't live yet. The agent keeps running its saved settings until you save.",
     de: "Diese Änderungen sind noch nicht live. Der Assistent läuft mit seinen gespeicherten Einstellungen weiter, bis Sie speichern.",
   },
+  // "Discard" alone answers nothing — discard WHAT (Serdar, 2026-08-21). It
+  // sits beside Publish on the agent editor's header, where the thing being
+  // thrown away is the unsaved draft, so the button says so.
   "voiceDetail.discard": {
-    tr: "Vazgeç",
-    en: "Discard",
-    de: "Verwerfen",
+    tr: "Değişiklikleri geri al",
+    en: "Discard changes",
+    de: "Änderungen verwerfen",
   },
   "voiceDetail.voice": { tr: "Ses", en: "Voice", de: "Stimme" },
   "voiceDetail.voiceHint": {

@@ -1,10 +1,11 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useRef, useState, Fragment } from "react";
+import { useCallback, useEffect, useState, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { VoicePicker } from "./VoicePicker";
 import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { InfoTip } from "./InfoTip";
@@ -253,8 +254,6 @@ export function VoiceCard({
   const [createRequestId, setCreateRequestId] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -274,14 +273,6 @@ export function VoiceCard({
     setCreateVoiceId(activeProvisioning.voiceId);
     setCreateLine(activeProvisioning.inboundNumber ?? "");
   }, [adding, activeProvisioning]);
-
-  useEffect(
-    () => () => {
-      audioRef.current?.pause();
-      audioRef.current = null;
-    },
-    [],
-  );
 
   if (connected === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -320,7 +311,6 @@ export function VoiceCard({
   const canCreate = Boolean((roster?.voices.length ?? 0) > 0 || activeProvisioning);
   const canConnect = available.length + archived.length > 0;
   const provisioningReady = !isOwner || activeProvisioning !== undefined;
-  const selectedVoice = roster?.voices.find((voice) => voice.id === createVoiceId) ?? null;
   const setupWorking = creating || activeProvisioning?.working === true;
   const createFieldsLocked = setupWorking || Boolean(activeProvisioning?.agentId);
   const createMessage = createError
@@ -333,12 +323,7 @@ export function VoiceCard({
         ? t("voiceCreate.creating")
         : null;
 
-  const closeAdd = () => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setPreviewingVoice(null);
-    setAdding(false);
-  };
+  const closeAdd = () => setAdding(false);
 
   const openAdd = () => {
     setCreateError(null);
@@ -364,21 +349,6 @@ export function VoiceCard({
       setCreateLine("");
     }
     setAdding(true);
-  };
-
-  const previewVoice = (voiceId: string, url: string) => {
-    if (previewingVoice === voiceId) {
-      audioRef.current?.pause();
-      audioRef.current = null;
-      setPreviewingVoice(null);
-      return;
-    }
-    audioRef.current?.pause();
-    const audio = new Audio(url);
-    audioRef.current = audio;
-    setPreviewingVoice(voiceId);
-    audio.addEventListener("ended", () => setPreviewingVoice(null), { once: true });
-    void audio.play().catch(() => setPreviewingVoice(null));
   };
 
   const submitCreate = async () => {
@@ -832,45 +802,12 @@ export function VoiceCard({
                       {t("voiceCreate.voice")}
                     </label>
                     <span className="flex items-center gap-1">
-                      <select
-                        id="voice-create-voice"
+                      <VoicePicker
                         value={createVoiceId}
+                        voices={roster?.voices ?? []}
+                        onChange={setCreateVoiceId}
                         disabled={createFieldsLocked}
-                        onChange={(event) => {
-                          audioRef.current?.pause();
-                          setPreviewingVoice(null);
-                          setCreateVoiceId(event.target.value);
-                        }}
-                        className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--accent)] disabled:opacity-60 sm:text-sm"
-                      >
-                        {(roster?.voices ?? []).map((voice) => (
-                          <option key={voice.id} value={voice.id}>
-                            {[voice.name, voice.accent, voice.gender]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </option>
-                        ))}
-                        {createVoiceId &&
-                          !roster?.voices.some((voice) => voice.id === createVoiceId) && (
-                            <option value={createVoiceId}>{t("voiceCreate.savedVoice")}</option>
-                          )}
-                      </select>
-                      {selectedVoice?.previewUrl && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            previewVoice(selectedVoice.id, selectedVoice.previewUrl!)
-                          }
-                          aria-label={
-                            previewingVoice === selectedVoice.id
-                              ? t("voiceCreate.stopPreview")
-                              : t("voiceCreate.preview")
-                          }
-                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                        >
-                          {previewingVoice === selectedVoice.id ? "■" : "▶"}
-                        </button>
-                      )}
+                      />
                     </span>
                   </div>
 
