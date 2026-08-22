@@ -117,7 +117,7 @@ and every row's name cell open the same picker over the org's voice customer
 fields and the built-in context. Selecting an existing field links it and pre-wires the repeat-caller
 path: prefill from the customer card before the call, ask only when the value
 is missing, write the answer back. Typing a new name creates the customer
-field inline (it appears under Business → Services & fields at the same
+field inline (it appears under Voice agent → Fields at the same
 moment) or, as the explicit exception, adds a call-only variable that never
 touches the customer card. There is one field registry; agents reference it,
 they never retype it. Deleting a customer field an agent still references is
@@ -125,7 +125,7 @@ refused for the same reason.
 
 Renaming is label-only and therefore safe: the key is the identity (stored
 values and published agents address it), so editing a field's label in
-Services & fields ripples into every agent's editor instantly with nothing to
+Voice agent → Fields ripples into every agent's editor instantly with nothing to
 republish. The key itself is derived from the label (question scaffolding
 stripped, capped at a word boundary; the one rule is `lib/keys.ts`), can be
 declared explicitly when the field is created, and can be edited in the table

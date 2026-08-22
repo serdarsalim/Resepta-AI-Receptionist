@@ -35,7 +35,7 @@ export type TabId =
   | "voice"
   | "messages"
   | "revenue"
-  | "services"
+  | "knowledge"
   | "billing"
   | "business"
   | "account";
@@ -119,10 +119,13 @@ const RevenueIcon = makeIcon(
 
 // A tag with its hole: a priced thing. Not a list glyph, which would describe
 // the shape of the screen rather than what is on it.
-const ServicesIcon = makeIcon(
+// An open book, not the price tag this tab wore as Services. The tab holds a
+// price list AND the prose the agents recite, and a tag only describes half of
+// that; a book is the thing you look an answer up in, which is both.
+const KnowledgeIcon = makeIcon(
   <>
-    <path d="M20.6 13.4 12.4 21.6a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a2 2 0 0 1 2-2h9a2 2 0 0 1 1.4.6l6.4 6.4a2 2 0 0 1 0 2.8z" />
-    <circle cx="7.5" cy="7.5" r="1.5" />
+    <path d="M12 6.5C10.4 5.2 8.5 4.5 6 4.5H3v13h3c2.5 0 4.4.7 6 2 1.6-1.3 3.5-2 6-2h3v-13h-3c-2.5 0-4.4.7-6 2z" />
+    <path d="M12 6.5v12" />
   </>,
 );
 // A megaphone: one thing said to many people, which is exactly what separates
@@ -190,8 +193,9 @@ const NAV_TABS: {
     color: "#8b5cf6",
   },
   // The bread and butter of this product, so it stays a top-level destination
-  // and carries its own tabs (agents, calls, knowledge) rather than being
-  // tucked inside a group.
+  // and carries its own tabs (agents, calls, fields) rather than being tucked
+  // inside a group. Knowledge left that strip for the Knowledge tab below on
+  // 2026-08-22; what remains is the agent, its calls and its vocabulary.
   {
     id: "voice",
     key: "nav.voice",
@@ -199,16 +203,29 @@ const NAV_TABS: {
     Icon: VoicePhoneIcon,
     color: "#10b981",
   },
-  // Directly under Voice agent: the agent reads the service list at call time
-  // and the public booking page builds its slots from it. That adjacency is the
-  // real relationship, not alphabetical order.
+  // Directly under Voice agent: the agent reads all of this at call time and
+  // the public booking page builds its slots from the service list. That
+  // adjacency is the real relationship, not alphabetical order.
   //
-  // "Services", not "Services & fields". Contact fields live on the Voice
-  // agent's strip; the ampersand was holding two unrelated nouns together.
+  // Called KNOWLEDGE, not Services (2026-08-22). It was the price list alone,
+  // and the prose the agent recites sat one tab over on the Voice strip. The
+  // knowledge card's hint gave the game away — "don't repeat services, prices
+  // or opening hours, the assistant already reads those from the app" — a
+  // sentence that named a place the owner then had to go and find. Both halves
+  // are one job now: everything the business knows, in the order it gets
+  // edited (prices first, address second).
+  //
+  // The name also has to survive the next four channels. Chat, WhatsApp and
+  // email agents all read this same body, so the door is named after the body
+  // rather than after the one table that used to be behind it.
+  //
+  // NOT "Services & knowledge". The ampersand was the tell last time too, when
+  // this was "Services & fields": two nouns held together by punctuation means
+  // the tab has not decided what it is.
   {
-    id: "services",
-    key: "services.title",
-    Icon: ServicesIcon,
+    id: "knowledge",
+    key: "knowledge.section",
+    Icon: KnowledgeIcon,
     color: "#14b8a6",
   },
   {
@@ -251,16 +268,17 @@ const NAV_TABS: {
 
 // Config is not a place you work, so it closes the nav in its own group
 // (Nudge's grammar). Both entries wear --foreground rather than a hue for the
-// same reason. Business is what the business IS (team, services, contact
-// fields); Settings is what it is CONNECTED to.
+// same reason. Business is what the business IS (details, booking page, hours,
+// team) — services and contact fields have since moved to Knowledge and Voice
+// respectively; Settings is what it is CONNECTED to.
 //
 // The tab is "business", not "workspace": Fresha, Booksy, Square and Treatwell
 // all call this Business, and a salon owner does not think of the salon as a
 // workspace. "Workspace" stays only where it means the switcher between
 // several client businesses on one login.
 // Settings is gone — dissolved into the tabs above (voice, messages) and into
-// Business (AI connectors, knowledge moved on to the voice agent since). One
-// config destination remains.
+// Business (AI connectors; knowledge went to the voice agent and then on to
+// its own tab). One config destination remains.
 // Below the divider: "about this workspace", as opposed to today's work above
 // it. Recent activity spent an hour here on 2026-08-12 and went to the platform
 // admin's org page instead: an audit log is a debugging surface whose readers

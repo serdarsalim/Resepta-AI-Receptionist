@@ -10,7 +10,6 @@ import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
-import { KnowledgeCard } from "./KnowledgeCard";
 import { NumberRequestCard } from "./NumberRequestCard";
 import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 
@@ -19,20 +18,20 @@ import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 // stays an implementation detail; hearing yesterday's call never means opening
 // another product.
 
-// Knowledge joins the strip this view already had rather than getting a
-// container of its own. It is what the agent KNOWS beyond the structured
-// tables, so it belongs beside the agent that reads it — it spent its first
-// life under Business, which is a fact-about-the-salon container, and that is
-// the same scavenger hunt the Hours comment in BusinessView describes.
+// KNOWLEDGE LEFT THIS STRIP on 2026-08-22, for the sidebar tab of its own
+// name. It sat here on the argument that prose the agent recites belongs
+// beside the agent that reads it, and that argument expired the moment the
+// agent stopped being the only reader: chatAgentTemplate reads knowledge, the
+// voice agent gets it at ring time ({{knowledge}} in beforeCallContext,
+// 2026-08-21), and WhatsApp and email are queued behind them. Filing a shared
+// body under one of its consumers makes the other three go looking for it.
 //
-// Fields joined the strip on 2026-08-12 after three wrong homes. Contact fields
-// are what the agent COLLECTS the way knowledge is what it KNOWS, so the two
-// sit together here. The objection that killed the first attempt still stands
-// on paper (the agent is one consumer among forms, campaigns, email, wa, mcp
-// and the contact record) and it loses force as the chat, WhatsApp and email
-// agents ship: chatAgentTemplate reads knowledge, the voice agent gets it at
-// ring time ({{knowledge}} in beforeCallContext, 2026-08-21), and this row
-// goes multi-channel when the rest land.
+// Fields joined the strip on 2026-08-12 after three wrong homes, and STAY
+// after knowledge left rather than following it. Knowledge is what the
+// business TELLS a customer; a contact field is what it ASKS one. Opposite
+// directions, and a field is a Customers column besides — its sibling is the
+// customer record, not the price list. What is left here reads as one job:
+// the agent, its calls, and the vocabulary it works in.
 //
 // What it is NOT: buried at the foot of the Customers column picker, which is
 // where it briefly lived. Fields ARE those columns, so the rule about rare
@@ -40,7 +39,7 @@ import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 // customer is a SETUP surface, one of the first things a new business touches,
 // and a setup surface hidden inside a dropdown labelled "Columns" is not
 // findable by the person who needs it most.
-type VoiceSection = "agents" | "calls" | "knowledge" | "fields";
+type VoiceSection = "agents" | "calls" | "fields";
 
 function fmtDuration(sec: number | null): string {
   if (sec === null) return "";
@@ -208,7 +207,6 @@ export function VoiceView() {
           [
             { id: "agents" as const, label: t("voice.agents") },
             { id: "calls" as const, label: t("settings.voiceCalls") },
-            { id: "knowledge" as const, label: t("knowledge.section") },
             { id: "fields" as const, label: t("fields.title") },
           ] as { id: VoiceSection; label: string }[]
         ).map((entry) => (
@@ -238,10 +236,9 @@ export function VoiceView() {
         </div>
       )}
       {section === "calls" && <CallHistory />}
-      {section === "knowledge" && <KnowledgeCard isOwner={isOwner} />}
       {/* Service keys ride under the contact fields: this tab is the agent's
           vocabulary — everything it knows by key — and a service's key is the
-          same species of plumbing as a field's. The Services tab itself shows
+          same species of plumbing as a field's. The Knowledge tab itself shows
           none of this; its reader is deciding prices, not addresses. */}
       {section === "fields" && (
         <div className="space-y-4">

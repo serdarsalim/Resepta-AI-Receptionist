@@ -11,7 +11,7 @@ import { RemindersView } from "@/components/RemindersView";
 import { CampaignsView } from "@/components/CampaignsView";
 import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
-import { ServicesView } from "@/components/ServicesView";
+import { KnowledgeView } from "@/components/KnowledgeView";
 import { AccountView } from "@/components/AccountView";
 import { BillingView } from "@/components/BillingView";
 import { ContactView } from "@/components/ContactView";
@@ -68,9 +68,9 @@ export function AppHome() {
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
     const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
-    const next = [wanted, stored].find(
-      (id): id is TabId => id !== null && TAB_IDS.includes(id as TabId),
-    );
+    const next = [wanted, stored]
+      .map((id) => (id !== null && id in TAB_ALIASES ? TAB_ALIASES[id] : id))
+      .find((id): id is TabId => id !== null && TAB_IDS.includes(id as TabId));
     if (next) setTabState(next);
   }, []);
 
@@ -115,9 +115,10 @@ export function AppHome() {
           {tab === "inbox" && <InboxView onOpenContact={openContact} />}
           {tab === "campaigns" && <CampaignsView />}
           {tab === "voice" && <VoiceView />}
-          {/* Content the business maintains, not configuration: the voice agent
-              and the booking page both read it. */}
-          {tab === "services" && <ServicesView />}
+          {/* Content the business maintains, not configuration: every agent
+              reads it and the booking page builds its slots from the service
+              half. Was the "services" tab until 2026-08-22. */}
+          {tab === "knowledge" && <KnowledgeView />}
           {tab === "revenue" && <RevenueView />}
           {tab === "messages" && <RemindersView />}
           {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
@@ -137,6 +138,13 @@ export function AppHome() {
 
 const TAB_STORAGE_KEY = "randevu.tab";
 
+// Tab ids that have been renamed, kept pointing at their replacement. Both
+// sources this reads outlive a release — localStorage holds whatever tab the
+// browser was last on, and ?tab= links get pasted into WhatsApp — so a rename
+// with no alias silently drops returning owners onto the calendar. One line
+// per rename is cheaper than that, and cheaper than never renaming a tab.
+const TAB_ALIASES: Record<string, TabId> = { services: "knowledge" };
+
 // Every tab that may appear in the URL. Validated rather than cast: ?tab= is
 // user-editable (and localStorage survives releases that rename tabs), and a
 // stale value should land on the calendar rather than render nothing at all.
@@ -148,7 +156,7 @@ const TAB_IDS: TabId[] = [
   "voice",
   "messages",
   "revenue",
-  "services",
+  "knowledge",
   "billing",
   "business",
   "account",

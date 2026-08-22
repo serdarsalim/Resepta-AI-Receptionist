@@ -36,10 +36,13 @@ decisions, not omissions.
 
 **Owner: the business writes down what it knows.**
 
-- A **Knowledge** section in Business: plain text blocks (policies, parking,
-  FAQ answers). Services, prices, hours, and staff are NOT retyped there — the
-  agent reads those from the structured tables, so prose can never contradict
-  the calendar.
+- The **Knowledge** tab: plain text blocks (policies, parking, FAQ answers),
+  sitting directly under the service list they must not duplicate. Services,
+  prices, hours, and staff are NOT retyped there — the agent reads those from
+  the structured tables, so prose can never contradict the calendar. The tab
+  was called Services until 2026-08-22, when the two halves were put in one
+  place; the blocks themselves spent time under Business and then on the voice
+  agent's strip before landing here.
 
 **Operator: nothing changes agent behaviour except a recorded, reversible
 action.** Mode per org (off → shadow → live), full flight recorder per turn,

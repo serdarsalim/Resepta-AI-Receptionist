@@ -3427,9 +3427,15 @@ const dictionary = {
     en: "Delete \"{name}\"? Values already saved stay on customer cards.",
     de: "\"{name}\" löschen? Bereits gespeicherte Werte bleiben auf den Kundenkarten.",
   },
-  // Business → Knowledge (docs/chat-agent.md): the prose the chat agent
-  // knows. The hint carries the one rule that keeps the card honest —
-  // structured facts live in their own tables and are not repeated here.
+  // The Knowledge tab (docs/chat-agent.md): the prose every agent recites,
+  // sitting under the service list in the sidebar destination of the same
+  // name. Doubles as that tab's label.
+  //
+  // The hint carries the one rule that keeps the card honest — structured
+  // facts live in their own tables and are not repeated here — and names
+  // WHERE those tables are now that one of them is directly above. "Don't
+  // repeat prices, the app already reads them" was true and useless while the
+  // price list was a tab away.
   "knowledge.section": { tr: "Bilgi", en: "Knowledge", de: "Wissen" },
   "knowledge.title": {
     tr: "İşletme bilgisi",
@@ -3437,9 +3443,9 @@ const dictionary = {
     de: "Betriebswissen",
   },
   "knowledge.hint": {
-    tr: "Sohbet asistanının işletmeniz hakkında bildikleri. Hizmetleri, fiyatları ve çalışma saatlerini buraya yazmayın — asistan onları zaten uygulamadan okur. Politikalar, otopark, sık sorulan sorular gibi serbest bilgiler buraya girer.",
-    en: "What the chat assistant knows about your business. Don't repeat services, prices or opening hours — the assistant already reads those from the app. This is for policies, parking, frequent questions and anything else customers ask.",
-    de: "Was der Chat-Assistent über Ihren Betrieb weiß. Leistungen, Preise und Öffnungszeiten gehören nicht hierher — die liest der Assistent bereits aus der App. Hier stehen Richtlinien, Parken, häufige Fragen und Ähnliches.",
+    tr: "Asistanlarınızın tablolardaki bilgilerin ötesinde söyleyebilecekleri. Yukarıdaki karttaki hizmet ve fiyatları ya da İşletme'deki çalışma saatlerini buraya tekrar yazmayın — asistanlar onları oradan okuyor. Burası politikalar, otopark, sık sorulan sorular ve müşterilerin arayıp sorduğu diğer her şey için.",
+    en: "What your agents can say beyond what the tables already hold. Don't retype the services and prices from the card above, or the hours from Business — the agents read those there. This is for policies, parking, frequent questions and anything else people ring up to ask.",
+    de: "Was Ihre Assistenten über die Tabellen hinaus sagen können. Leistungen und Preise aus der Karte darüber und Öffnungszeiten aus Betrieb gehören nicht hierher — die lesen die Assistenten dort. Hier stehen Richtlinien, Parken, häufige Fragen und alles andere, wonach Kunden am Telefon fragen.",
   },
   "knowledge.add": {
     tr: "Bilgi ekle",
