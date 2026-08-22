@@ -22,11 +22,7 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { ROW_GRID, RowLabel } from "./RowLabel";
-import {
-  INDUSTRY_KEYS,
-  INDUSTRY_PRESETS,
-  presetLanguage,
-} from "../../convex/lib/industryPresets";
+import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
@@ -331,6 +327,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   const update = useMutation(api.orgs.update);
   const applyIndustry = useMutation(api.onboarding.applyIndustryPreset);
   const resetIndustry = useMutation(api.onboarding.resetToIndustryDefaults);
+  // The verticals on offer, from the deployment (convex/industryPresets) —
+  // `include` carries this org's own answer so a vertical the operator has
+  // since retired still has a name here instead of an empty picker.
+  const industries = useQuery(api.industryPresets.catalogue, {
+    include: settings?.org.industry ?? undefined,
+  });
   const [confirm, confirmDialog] = useConfirm();
   const generateUploadUrl = useMutation(api.media.generateUploadUrl);
   const setLogo = useMutation(api.orgs.setLogo);
@@ -563,9 +565,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               <option value="" disabled>
                 {t("settings.industryNone")}
               </option>
-              {INDUSTRY_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {INDUSTRY_PRESETS[key].name[presetLanguage(language)]}
+              {(industries ?? []).map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {preset.name[presetLanguage(language)]}
                 </option>
               ))}
             </select>
@@ -578,9 +580,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                     const ok = await confirm({
                       title: t("settings.industryResetConfirm").replace(
                         "{industry}",
-                        INDUSTRY_PRESETS[
-                          industry as keyof typeof INDUSTRY_PRESETS
-                        ]?.name[presetLanguage(language)] ?? industry,
+                        industries?.find((preset) => preset.key === industry)
+                          ?.name[presetLanguage(language)] ?? industry,
                       ),
                       body: t("settings.industryResetBody"),
                       confirmLabel: t("settings.industryReset"),

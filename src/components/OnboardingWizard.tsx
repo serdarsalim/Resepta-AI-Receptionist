@@ -8,12 +8,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { useNumberDocumentUpload } from "./NumberRequestCard";
 import { BrandMark } from "./BrandMark";
 import { LANGUAGES, type Language } from "@/lib/i18n";
-import {
-  INDUSTRY_KEYS,
-  INDUSTRY_PRESETS,
-  presetLanguage,
-  type IndustryKey,
-} from "../../convex/lib/industryPresets";
+import { presetLanguage } from "../../convex/lib/industryPresets";
 
 // First sign-in onboarding: the one-question gate grown into a short wizard.
 // Five screens — language, name, industry, business info, phone number — in
@@ -123,7 +118,10 @@ export function OnboardingWizard() {
   const [step, setStep] = useState<Step>("language");
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
-  const [industry, setIndustry] = useState<IndustryKey | null>(null);
+  // A plain string, not IndustryKey: the catalogue is served by a query now
+  // (convex/industryPresets), and an operator can coin a vertical the code
+  // module has never heard of. The server validates the key on apply.
+  const [industry, setIndustry] = useState<string | null>(null);
   const [prefill, setPrefill] = useState(true);
   const [address, setAddress] = useState("");
   const [website, setWebsite] = useState("");
@@ -133,6 +131,11 @@ export function OnboardingWizard() {
 
   const stepIndex = STEPS.indexOf(step);
   const presetLang = presetLanguage(language);
+  // The verticals on offer, from the deployment rather than from this bundle.
+  // They used to be a static import, which meant a vertical retired or added
+  // in /admin reached nobody until the next deploy — and meant a browser
+  // holding an old bundle could still offer one that is gone.
+  const catalogue = useQuery(api.industryPresets.catalogue, {});
 
   // The language step STAYS a step (Serdar, 2026-08-21, after weighing
   // drop-it-entirely and a-field-on-the-name-step): the agent and every
@@ -308,16 +311,25 @@ export function OnboardingWizard() {
 
           {step === "industry" && (
             <div className="space-y-2">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {INDUSTRY_KEYS.map((key) => (
-                  <OptionRow
-                    key={key}
-                    selected={industry === key}
-                    title={INDUSTRY_PRESETS[key].name[presetLang]}
-                    onClick={() => setIndustry(key)}
-                  />
-                ))}
-              </div>
+              {/* One line rather than a skeleton: the card sizes to its step,
+                  so a placeholder the shape of eight options would be a bigger
+                  lie about what is coming than a word. */}
+              {catalogue === undefined ? (
+                <p className="py-2 text-sm text-[var(--muted)]">
+                  {t("common.loading")}
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {catalogue.map((preset) => (
+                    <OptionRow
+                      key={preset.key}
+                      selected={industry === preset.key}
+                      title={preset.name[presetLang]}
+                      onClick={() => setIndustry(preset.key)}
+                    />
+                  ))}
+                </div>
+              )}
               {/* Always rendered so picking an industry does not grow the
                   card; moot for "other", which seeds nothing either way. */}
               <div className="space-y-2 pt-3">

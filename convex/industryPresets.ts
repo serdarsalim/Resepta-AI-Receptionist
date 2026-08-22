@@ -65,9 +65,13 @@ const adminPreset = v.object({
 // query exists for.
 //
 // Inactive verticals are filtered out here rather than in the client, so a
-// retired vertical cannot come back by way of a stale bundle.
+// retired vertical cannot come back by way of a stale bundle. `include` is the
+// one exception and the reason it is an argument rather than a flag on the
+// rows: Business settings has to be able to NAME the vertical the org is
+// already on, and a business sitting on a vertical retired last week would
+// otherwise render an industry picker that looks unset.
 export const catalogue = query({
-  args: {},
+  args: { include: v.optional(v.string()) },
   returns: v.array(
     v.object({
       key: v.string(),
@@ -76,10 +80,10 @@ export const catalogue = query({
       fields: v.array(presetField),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const presets = await resolvePresets(ctx);
     return presets
-      .filter((preset) => preset.active)
+      .filter((preset) => preset.active || preset.key === args.include)
       .map((preset) => ({
         key: preset.key,
         name: preset.name,
