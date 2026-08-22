@@ -667,12 +667,12 @@ function CustomerAppointments({
 
   return (
     <div className="mb-1 border-b border-[var(--border)] pb-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-[var(--muted)]">
-          {t("appointments.title")}
-          {upcoming.length > 0 &&
-            ` · ${upcoming.length} ${t("appointments.upcomingCount")}`}
-        </span>
+      {/* No "Appointments · 1 upcoming" heading. The cards under it are
+          appointments and only the upcoming ones are drawn, so the line spent
+          a row restating what was already on screen — and it was the only
+          section label in this card, since First name / Phone / Contact fields
+          below it get by on the fields themselves. */}
+      <div className="flex items-center justify-end gap-2">
         {/* Outlined, not filled and not a bare link. A fill would make this
             history block compete with the page's real primary, and a blue link
             is indistinguishable from the "show history" toggle directly below
