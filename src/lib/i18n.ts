@@ -696,6 +696,14 @@ const dictionary = {
     en: "Nobody has looked at this yet",
     de: "Noch niemand hat sich das angesehen",
   },
+  // The label column's version, same reason customers.consentShort exists: the
+  // sentence above is what the control says when you ask it, not a heading a
+  // grid can afford to set its `auto` column by.
+  "customers.needsLookShort": {
+    tr: "Bakılmadı",
+    en: "Needs a look",
+    de: "Ungesehen",
+  },
   // The table's dot is a button that only ever clears, so its label says so
   // rather than describing the state the way the record page's toggle does.
   "customers.dismissLook": {

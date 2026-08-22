@@ -408,6 +408,8 @@ function MenuIcon({ size = 18 }: { size?: number }) {
 // search on phones to gain a fixed position would be a bad trade.
 function ShellHeader({
   titleKey,
+  overrideTitle,
+  onOverrideBack,
   onOpenMenu,
   name,
   email,
@@ -415,6 +417,17 @@ function ShellHeader({
   onOpenAccount,
 }: {
   titleKey: TranslationKey;
+  // A record opened ON TOP of a tab, naming itself here instead of letting the
+  // tab keep the title. Opening a contact from the Inbox left this line saying
+  // "Inbox" while the page was a person, so the contact drew its own name and
+  // back arrow in a second title row below — two headings, the higher one
+  // wrong, and a band of gradient between them.
+  //
+  // A string, not a node: the view supplying it lives under this header, and
+  // handing React elements back UP through state is how a render loop starts.
+  // Anything richer than a name belongs on the record itself.
+  overrideTitle?: string;
+  onOverrideBack?: () => void;
   onOpenMenu: () => void;
   name?: string;
   email?: string;
@@ -466,8 +479,23 @@ function ShellHeader({
         >
           <MenuIcon size={18} />
         </button>
+        {overrideTitle !== undefined && onOverrideBack && (
+          // Same drawn arrow the contact page used to carry. A "←" glyph is
+          // whatever the reader's font decides it is.
+          <button
+            type="button"
+            onClick={onOverrideBack}
+            aria-label={t("common.back")}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+          </button>
+        )}
         <h1 className="page-title truncate text-sm font-semibold md:text-base">
-          {t(titleKey)}
+          {overrideTitle ?? t(titleKey)}
         </h1>
       </div>
       <div
@@ -1214,10 +1242,14 @@ function SidebarButton({
 export function AppShell({
   tab,
   onTab,
+  overrideTitle,
+  onOverrideBack,
   children,
 }: {
   tab: TabId;
   onTab: (tab: TabId) => void;
+  overrideTitle?: string;
+  onOverrideBack?: () => void;
   children: React.ReactNode;
 }) {
   const { t, language, setLanguage } = useLanguage();
@@ -1561,6 +1593,8 @@ export function AppShell({
             already a way out, which is all the ✕ ever did. */}
           <ShellHeader
             titleKey={titleKey}
+            overrideTitle={overrideTitle}
+            onOverrideBack={onOverrideBack}
             onOpenMenu={() => setMobileOpen(true)}
             name={settings?.me.name}
             email={settings?.me.email}

@@ -34,6 +34,14 @@ import { ContactView } from "@/components/ContactView";
 export function AppHome() {
   const [tab, setTabState] = useState<TabId>("appointments");
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
+  // The open contact's name, so the SHELL header can carry it instead of the
+  // tab underneath. Reported up by ContactView, which is the only thing that
+  // queries the customer — duplicating that query here to fill in a heading
+  // would be a second read of the same row on every contact opened.
+  //
+  // Held as a string: handing React elements up through state is how a render
+  // loop starts.
+  const [contactName, setContactName] = useState("");
 
   // The tab lives in the URL, so a refresh comes back where you were and a
   // link to Settings opens Settings. A bare URL falls back to the last tab
@@ -64,11 +72,22 @@ export function AppHome() {
   };
 
   return (
-    <AppShell tab={tab} onTab={setTab}>
+    <AppShell
+      tab={tab}
+      onTab={setTab}
+      // Undefined, not "", while nothing is open — the shell falls back to the
+      // tab's own title. An empty string is a title that says nothing.
+      overrideTitle={contactId ? contactName : undefined}
+      onOverrideBack={() => setContactId(null)}
+    >
       {contactId ? (
         <ContactView
+          // Keyed, so opening a second contact from the first one's feed
+          // remounts and re-reports rather than showing the previous name
+          // until the new query lands.
+          key={contactId}
           customerId={contactId}
-          onClose={() => setContactId(null)}
+          onTitle={setContactName}
           onOpenContact={setContactId}
         />
       ) : (

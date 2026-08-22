@@ -75,11 +75,13 @@ function MetaLabel({ label, hint }: { label: string; hint?: string }) {
 // the conversation on the right.
 export function ContactView({
   customerId,
-  onClose,
+  onTitle,
   onOpenContact,
 }: {
   customerId: Id<"customers">;
-  onClose: () => void;
+  // Reported up so the SHELL header can carry this person's name; the tab
+  // underneath is no longer what the page is about.
+  onTitle?: (name: string) => void;
   // The header jump list navigates to OTHER customers from here, so this page
   // needs the same door the list views hand around.
   onOpenContact: (customerId: Id<"customers">) => void;
@@ -125,6 +127,14 @@ export function ContactView({
     rememberCustomer({ id: customerId, name: recentName, phone: recentPhone });
   }, [customerId, recentName, recentPhone]);
 
+  // The shell header carries this person's name, so it has to travel up. Up
+  // here with recentName rather than beside customerName below, because that
+  // one is computed AFTER the loading early-returns and a hook cannot be.
+  useEffect(() => {
+    if (recentName === null) return;
+    onTitle?.(recentName);
+  }, [onTitle, recentName]);
+
   // Two groups, in the order a reader works through the record: what staff
   // typed, then what the calls collected and will keep collecting on their own.
   // Source is unset on every field created before voice existed, so anything
@@ -162,66 +172,12 @@ export function ContactView({
           the overflow reads as "fits" right up until it doesn't. The pills take
           w-full below lg to claim a line outright, and order-last so the break
           lands before them rather than before the pane swap. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {/* The drawn arrow, same one the inbox uses. A "←" glyph is whatever
-            the reader's font decides it is, and next to a row of crisp SVG
-            channel icons it read as a stray character. */}
-        <button
-          onClick={onClose}
-          aria-label={t("common.back")}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M19 12H5" />
-            <path d="m12 19-7-7 7-7" />
-          </svg>
-        </button>
-        {/* Name only. The number is a field on the record card directly below,
-            where it is editable — repeating it here read as a second, stale
-            copy of the same fact. */}
-        <h2 className="min-w-0 truncate text-base font-semibold">
-          {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
-        </h2>
-        {/* The same dot the table and the inbox draw, and here it is a
-            CONTROL. Opening the record clears it, which is right almost
-            always and wrong the once — you look, you cannot deal with it now,
-            and you want it to still be waiting later. Every mail client on
-            earth calls that mark as unread; this is the same button.
-
-            Not in the table: there, clicking a row already means read, so a
-            second affordance would be two ways to do one thing. Here the row
-            is already open and the click has nowhere else to go. */}
-        <button
-          type="button"
-          aria-pressed={customer.needsAttention}
-          aria-label={t("customers.needsLook")}
-          title={t("customers.needsLook")}
-          onClick={() =>
-            void setAttention({
-              customerId,
-              cleared: customer.needsAttention,
-            })
-          }
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--muted-bg)]"
-        >
-          <span
-            className={`h-2.5 w-2.5 rounded-full transition-colors ${
-              customer.needsAttention
-                ? "bg-[var(--brand)]"
-                : "border border-[var(--border)] bg-transparent"
-            }`}
-          />
-        </button>
+      {/* Only the pane switcher is left, and it is phone-only: back arrow and
+          name now live in the SHELL header (AppHome passes them), and the
+          needs-a-look dot moved into the record card's flags, where Consent
+          and Mute already are and where it finally gets a label. On desktop
+          this row does not exist at all. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 lg:hidden">
         {/* The pills moved INTO the conversation card (see the panel's
             `header` below), so this line is now only the page's title: back,
             who, and whether they need a look. */}
@@ -459,6 +415,28 @@ export function ContactView({
                   size="sm"
                   checked={customer.mutedAt !== undefined}
                   onChange={(next) => void setMuted({ customerId, muted: next })}
+                />
+              </span>
+              {/* Was an unlabelled dot beside the name up top, and the only
+                  thing saying what it meant was its own tooltip — the app's
+                  rule is that a data field carries a label. Down here with
+                  Consent and Mute it gets one for free, and the three
+                  per-customer flags read as one set instead of two places.
+
+                  Still a toggle, not the table's dot: there the dot is a
+                  MARKER you clear in passing, here you are looking at the
+                  record and the question is on or off. */}
+              <MetaLabel
+                label={t("customers.needsLookShort")}
+                hint={t("customers.needsLook")}
+              />
+              <span className="flex items-center">
+                <Toggle
+                  size="sm"
+                  checked={customer.needsAttention}
+                  onChange={(next) =>
+                    void setAttention({ customerId, cleared: !next })
+                  }
                 />
               </span>
             </div>
