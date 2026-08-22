@@ -36,6 +36,7 @@ import {
   Setup,
   TabStrip,
 } from "./parts";
+import { OnboardingTab } from "./onboarding";
 import { SearchInput } from "@/components/DataTable";
 import { VOICE_MODEL_CHOICES } from "../../../convex/lib/voiceModels";
 import { VOICE_AGENT_MODEL } from "../../../convex/lib/voiceAgentTemplate";
@@ -58,10 +59,12 @@ export default function AdminPage() {
   // this page FOR, and deployment settings are visited a handful of times
   // ever. Living below the table meant the settings had no address and the
   // table had a basement. Same pill pattern as the org detail page.
-  const [tab, setTab] = useState<"businesses" | "platform">("businesses");
-  // One box, two jobs, decided by the tab under it: on Businesses it narrows
-  // the table, on Platform it narrows the settings rows. The salon app's own
-  // search box, so the console does not invent a second one.
+  const [tab, setTab] = useState<"businesses" | "onboarding" | "platform">(
+    "businesses",
+  );
+  // One box, three jobs, decided by the tab under it: on Businesses it narrows
+  // the table, on Onboarding the vertical list, on Platform the settings rows.
+  // The salon app's own search box, so the console does not invent a second.
   const search = useSearch();
   const router = useRouter();
 
@@ -96,7 +99,13 @@ export default function AdminPage() {
         <SearchInput
           value={search.query}
           onChange={search.setQuery}
-          placeholder={tab === "businesses" ? "Search businesses" : "Search settings"}
+          placeholder={
+            tab === "businesses"
+              ? "Search businesses"
+              : tab === "onboarding"
+                ? "Search verticals"
+                : "Search settings"
+          }
         />
       </header>
 
@@ -104,6 +113,9 @@ export default function AdminPage() {
         <TabStrip
           tabs={[
             { id: "businesses" as const, label: "Businesses" },
+            // Between the fleet and the deployment plumbing, which is where it
+            // belongs: a vertical is neither one business nor a provider key.
+            { id: "onboarding" as const, label: "Onboarding" },
             { id: "platform" as const, label: "Platform" },
           ]}
           active={tab}
@@ -134,6 +146,12 @@ export default function AdminPage() {
         </p>
       )}
 
+
+      {/* The verticals a business can pick during onboarding, and what each
+          one seeds. Not a per-org surface and not deployment plumbing — see
+          the header in ./onboarding for why editing here is an override on
+          top of the code module rather than a move into the database. */}
+      {tab === "onboarding" && <OnboardingTab search={search} />}
 
       {tab === "businesses" && (shownFleet.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
