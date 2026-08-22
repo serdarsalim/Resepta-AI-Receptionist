@@ -326,10 +326,20 @@ export function InboxView({
                         </span>
 
                         {/* THREE states, one hit area, ported from Nudge:
-                            green (I pinned this) beats grey (they wrote since
-                            my last visit) beats hollow (nothing). Rendered on
-                            every row so the slot never changes width — the
-                            hollow state simply fades in on row hover.
+                            violet (I pinned this) beats grey (they wrote
+                            since my last visit) beats hollow (nothing).
+                            Rendered on every row so the slot never changes
+                            width — the hollow state simply fades in on row
+                            hover.
+
+                            VIOLET, not --brand green, since the same pin is
+                            now settable from the contact record too and one
+                            state cannot wear two hues. Green also had a
+                            collision it was losing: the sidebar's inbox dot is
+                            --brand and means "something NEW is in there",
+                            which is not this. Nudge's note is the canonical
+                            argument — a hue with no other job cannot be
+                            misread, and every other one here is taken.
 
                             Only the PIN is a persistent act. Grey clears
                             itself when you leave the tab, so it is never a
@@ -371,7 +381,7 @@ export function InboxView({
                           aria-pressed={c.pinned}
                           className={
                             c.pinned
-                              ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)] transition-transform hover:scale-125"
+                              ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-violet-500 transition-transform hover:scale-125"
                               : c.unseen
                                 ? // --muted already flips per theme, so grey
                                   // needs no dark: variant. Smaller than the

@@ -417,28 +417,6 @@ export function ContactView({
                   onChange={(next) => void setMuted({ customerId, muted: next })}
                 />
               </span>
-              {/* Was an unlabelled dot beside the name up top, and the only
-                  thing saying what it meant was its own tooltip — the app's
-                  rule is that a data field carries a label. Down here with
-                  Consent and Mute it gets one for free, and the three
-                  per-customer flags read as one set instead of two places.
-
-                  Still a toggle, not the table's dot: there the dot is a
-                  MARKER you clear in passing, here you are looking at the
-                  record and the question is on or off. */}
-              <MetaLabel
-                label={t("customers.needsLookShort")}
-                hint={t("customers.needsLook")}
-              />
-              <span className="flex items-center">
-                <Toggle
-                  size="sm"
-                  checked={customer.needsAttention}
-                  onChange={(next) =>
-                    void setAttention({ customerId, cleared: !next })
-                  }
-                />
-              </span>
             </div>
             </div>
           </section>

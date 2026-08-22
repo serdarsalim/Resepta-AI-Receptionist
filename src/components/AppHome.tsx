@@ -79,6 +79,7 @@ export function AppHome() {
       // tab's own title. An empty string is a title that says nothing.
       overrideTitle={contactId ? contactName : undefined}
       onOverrideBack={() => setContactId(null)}
+      overrideContactId={contactId ?? undefined}
     >
       {contactId ? (
         <ContactView

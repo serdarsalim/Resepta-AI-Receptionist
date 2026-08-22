@@ -519,10 +519,20 @@ const dictionary = {
     en: "New customer: \"{name}\"",
     de: "Neuer Kunde: \"{name}\"",
   },
+  // "Sale", not "appointment". One sheet, one row, and what you pick decides
+  // what it is: a timed service, a good, or both together. Naming it after the
+  // timed half hid the other one completely — Serdar read the label and
+  // concluded the product he had just added to the catalog could not be sold
+  // from a customer's record, which it always could.
+  //
+  // Square's word, and Square is the catalog model the goods design followed
+  // (one catalog, two kinds). The rule is the app's own: name the SET, not its
+  // best-known member — the same mistake "Add reminder" made for a sheet that
+  // adds any of six message types.
   "appointments.addForCustomer": {
-    tr: "Randevu ekle",
-    en: "Add appointment",
-    de: "Termin hinzufügen",
+    tr: "Satış ekle",
+    en: "Add sale",
+    de: "Verkauf hinzufügen",
   },
   // The record card's appointments block (Nudge's deal block, in a salon's
   // terms). The count rides the heading, and the visits that are over sit
@@ -690,14 +700,6 @@ const dictionary = {
     tr: "Henüz kimse bakmadı",
     en: "Nobody has looked at this yet",
     de: "Noch niemand hat sich das angesehen",
-  },
-  // The label column's version, same reason customers.consentShort exists: the
-  // sentence above is what the control says when you ask it, not a heading a
-  // grid can afford to set its `auto` column by.
-  "customers.needsLookShort": {
-    tr: "Bakılmadı",
-    en: "Needs a look",
-    de: "Ungesehen",
   },
   // The table's dot is a button that only ever clears, so its label says so
   // rather than describing the state the way the record page's toggle does.

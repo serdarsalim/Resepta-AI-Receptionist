@@ -5,8 +5,9 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { OnboardingWizard } from "./OnboardingWizard";
-import { useLanguage } from "@/lib/LanguageProvider";
+import { useLanguage, useT } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
 import { DEFAULT_TITLE, workspaceTitle } from "@/lib/brand";
@@ -406,10 +407,51 @@ function MenuIcon({ size = 18 }: { size?: number }) {
 // views. Below sm it collapses to a magnifier and expands over the title: the
 // phone header has room for a title or a search field, never both, and losing
 // search on phones to gain a fixed position would be a bad trade.
+// Pin this conversation for later, from the record rather than only from the
+// Inbox list. Ported from Nudge's ContactView, violet and all.
+//
+// VIOLET because every other hue on this screen already has a job and would be
+// read as that job first — Nudge's note is the canonical version and it holds
+// here too: --accent blue means "do something" and a blue dot beside a name
+// that is already a link reads as an affordance rather than a state; red is
+// --now-line; green is --brand, which is what the Inbox's own new-reply marker
+// wears. This app has one more violet than Nudge did (--event, the calendar),
+// but a booking chip and a pin never share a surface.
+//
+// Hollow and dashed until you hover, solid once pinned: an empty slot that is
+// always visible is a control asking to be used on a page you came to read.
+// Same shape as the Inbox row's marker, which is the other place this pin is
+// set — one gesture, two doors, and they agree because both read through the
+// spent rule in messages.inboxPin.
+function PinDot({ customerId }: { customerId: Id<"customers"> }) {
+  const t = useT();
+  const pinned = useQuery(api.messages.inboxPin, { customerId });
+  const setInboxPin = useMutation(api.messages.setInboxPin);
+  // Undefined while the query is in flight. Rendering the hollow state then
+  // would flip a pinned dot from empty to solid in front of the reader, so the
+  // slot holds its width and says nothing until it knows.
+  if (pinned === undefined) return <span className="h-2.5 w-2.5 shrink-0" />;
+  return (
+    <button
+      type="button"
+      onClick={() => void setInboxPin({ customerId, pinned: !pinned })}
+      title={t(pinned ? "inbox.pinnedHint" : "inbox.pinHint")}
+      aria-label={t(pinned ? "inbox.pinned" : "inbox.notPinned")}
+      aria-pressed={pinned}
+      className={
+        pinned
+          ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-violet-500 transition-transform hover:scale-125"
+          : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover/title:opacity-100 [@media(hover:none)]:opacity-100"
+      }
+    />
+  );
+}
+
 function ShellHeader({
   titleKey,
   overrideTitle,
   onOverrideBack,
+  overrideContactId,
   onOpenMenu,
   name,
   email,
@@ -428,6 +470,11 @@ function ShellHeader({
   // Anything richer than a name belongs on the record itself.
   overrideTitle?: string;
   onOverrideBack?: () => void;
+  // The record the override title names, so the pin beside it can read and
+  // write its own state. An ID, not a rendered control or a pair of callbacks
+  // — same reason overrideTitle is a string: nothing about this header should
+  // depend on a child under it handing elements or closures back up.
+  overrideContactId?: Id<"customers">;
   onOpenMenu: () => void;
   name?: string;
   email?: string;
@@ -466,7 +513,7 @@ function ShellHeader({
     // so tabs that have one are unchanged and the rest stop shifting.
     <header className="gutter-align flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3">
       <div
-        className={`flex min-w-0 items-center gap-1 ${
+        className={`group/title flex min-w-0 items-center gap-1.5 ${
           expanded ? "hidden sm:flex" : "flex"
         }`}
       >
@@ -497,6 +544,7 @@ function ShellHeader({
         <h1 className="page-title truncate text-sm font-semibold md:text-base">
           {overrideTitle ?? t(titleKey)}
         </h1>
+        {overrideContactId && <PinDot customerId={overrideContactId} />}
       </div>
       <div
         className={`flex items-center gap-2 ${expanded ? "min-w-0 flex-1 sm:flex-none" : ""}`}
@@ -1224,9 +1272,13 @@ function SidebarButton({
       {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
       {dot && (
         // role="img" so the label actually lands in the accessibility tree and
-        // folds into the button's name: "Gelen Kutusu, İlgi bekliyor". Green
-        // here is the same --brand green as the inbox row dot, on purpose:
-        // one hue, one meaning, wherever it appears.
+        // folds into the button's name: "Gelen Kutusu, İlgi bekliyor".
+        //
+        // This green means "something NEW is in there". It used to claim it
+        // was the same green as the inbox row's dot "one hue, one meaning" —
+        // it never was: that dot marked a PIN, which is a debt you created,
+        // not news. The pin is violet now, on the row and on the record, and
+        // --brand is left saying only this.
         <span
           role="img"
           aria-label={t("inbox.needsAttention")}
@@ -1244,12 +1296,14 @@ export function AppShell({
   onTab,
   overrideTitle,
   onOverrideBack,
+  overrideContactId,
   children,
 }: {
   tab: TabId;
   onTab: (tab: TabId) => void;
   overrideTitle?: string;
   onOverrideBack?: () => void;
+  overrideContactId?: Id<"customers">;
   children: React.ReactNode;
 }) {
   const { t, language, setLanguage } = useLanguage();
@@ -1595,6 +1649,7 @@ export function AppShell({
             titleKey={titleKey}
             overrideTitle={overrideTitle}
             onOverrideBack={onOverrideBack}
+            overrideContactId={overrideContactId}
             onOpenMenu={() => setMobileOpen(true)}
             name={settings?.me.name}
             email={settings?.me.email}

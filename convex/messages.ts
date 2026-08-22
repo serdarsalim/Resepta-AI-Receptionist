@@ -779,6 +779,39 @@ export const markConversationRead = mutation({
   },
 });
 
+// Is this one conversation pinned for me? The inbox list gets this for free
+// inside `conversations`; the contact record needs it for a single customer,
+// because the pin toggle now sits beside that person's name.
+//
+// It pays for the whole org's entries to answer about one row, and that is
+// deliberate: the SPENT rule (a pin older than the newest outbound has been
+// paid) lives in summariseEntries, and a cheaper read that skipped it would
+// let the record page show a pin the inbox had already retired. Two surfaces
+// disagreeing about one pin is worse than a read the record page makes once.
+export const inboxPin = query({
+  args: { customerId: v.id("customers") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return false;
+    const pin = await ctx.db
+      .query("inboxPins")
+      .withIndex("by_org_user_customer", (q) =>
+        q
+          .eq("orgId", orgId)
+          .eq("userId", user._id)
+          .eq("customerId", args.customerId),
+      )
+      .unique();
+    // No row is the common case and it settles without touching the feed.
+    if (!pin) return false;
+    const byCustomer = await conversationEntries(ctx, orgId);
+    const entries = byCustomer.get(args.customerId);
+    return pin.pinnedAt > (entries ? summariseEntries(entries).lastOutboundAt : 0);
+  },
+});
+
 // Pin or unpin, for me. Unpinning deletes; re-pinning an existing pin refreshes
 // the stamp, which is what un-spends a pin that an outbound message has since
 // overtaken.
