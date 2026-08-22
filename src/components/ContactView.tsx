@@ -222,18 +222,9 @@ export function ContactView({
             }`}
           />
         </button>
-        {/* Pills ride the header line so the record card and the conversation
-            card start on the same line below it. On phones they only appear
-            while the conversation pane is showing — filtering a feed you
-            aren't looking at is a control with nothing to control. */}
-        <FeedFilterPills
-          customerId={customerId}
-          value={filter}
-          onChange={setFilter}
-          className={`order-last w-full ${
-            mobilePane === "conversation" ? "flex" : "hidden"
-          } lg:order-none lg:ml-auto lg:w-auto lg:flex`}
-        />
+        {/* The pills moved INTO the conversation card (see the panel's
+            `header` below), so this line is now only the page's title: back,
+            who, and whether they need a look. */}
         {/* Always ml-auto now. It used to give the margin up whenever the pills
             were showing, because the two were sharing one line and fighting for
             it; the pills have their own line below lg, so there is nothing left
@@ -489,6 +480,27 @@ export function ContactView({
             onFilterChange={setFilter}
             search={search}
             className="flex-1"
+            // Pills left, the open tab's action right, one line — the Inbox's
+            // header. They used to ride the page's title line, which put a
+            // control that belongs to this card on the row naming the PERSON,
+            // and left the card's own action alone in a band below with the
+            // width of the card empty beside it.
+            //
+            // No name here, unlike the Inbox: the page title already says who
+            // this is, and you are already on their record so there is nowhere
+            // for it to link.
+            //
+            // The phone conditional went with it. The pills used to carry
+            // `mobilePane === "conversation" ? "flex" : "hidden"` to stop a
+            // filter showing over a feed nobody was looking at; inside the
+            // pane, the pane's own visibility already says that.
+            header={
+              <FeedFilterPills
+                customerId={customerId}
+                value={filter}
+                onChange={setFilter}
+              />
+            }
           />
         </section>
       </div>
