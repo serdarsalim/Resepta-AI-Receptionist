@@ -340,6 +340,25 @@ and they differ ONLY in reach — pick the highest one the fix can live in.
    is a promise about a version nobody is being offered.
 3. **Prompt text** — NEW AGENTS ONLY, forever. Existing owners get it only by
    editing their own prompt, which is theirs and which they have tuned.
+   - **Since 2026-08-22 this lane also has an /admin surface** (Onboarding →
+     "What a new phone agent is born saying"): a `voicePrompts` row per
+     LANGUAGE laid over `GENERAL_PROMPTS` / `BEGIN_MESSAGES`, resolved by
+     `lib/voicePromptStore`. It does not widen the lane one inch, and the
+     enforcement is structural rather than a rule somebody has to remember:
+     `appointmentReceptionistTemplate` takes the override as an optional
+     `prompt` argument, and `provisionAgent` is the ONLY caller that resolves
+     one. `syncTemplate`, `setEndCallEnabled` and the model path all build a
+     template too and none of them sends `general_prompt` or `begin_message`
+     — so there is no code path by which an /admin edit reaches a phone that
+     is already answering. **If you ever add one, you have broken lane 3.**
+   - The named greeting stores its persona as `{name}` (SINGLE brace,
+     substituted at provisioning) precisely because it must not read as a
+     ring-time `{{variable}}` — see `BEGIN_MESSAGES_NAMED` for why the
+     introduction is a clause and cannot be substituted away by an empty one.
+   - Per language, NOT per vertical, and keep it that way: a dentist and a
+     barber get identical prompts on purpose, because what makes an agent
+     sound like its trade is the services and contact fields injected at ring
+     time (lane 1) from what `lib/industryPresets` seeded.
 
 **The move that makes this work: say the same thing in two lanes.** The
 2026-08-21 early-hangup fix is the worked example — the turn-based closing
