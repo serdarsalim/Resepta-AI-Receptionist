@@ -1797,10 +1797,13 @@ const dictionary = {
   },
   // The right pane before anything is picked. Says what to DO, not "no
   // conversation selected" — the reader can see that nothing is selected.
+  // "Open", not "select". Since 2026-08-22 a row does not fill this pane, it
+  // leaves for the contact record — so a line telling the reader to select
+  // something is describing a screen that no longer exists.
   "inbox.selectConversation": {
-    tr: "Okumak ve yanıtlamak için bir konuşma seçin.",
-    en: "Select a conversation to read and reply.",
-    de: "Wählen Sie eine Unterhaltung zum Lesen und Antworten.",
+    tr: "Kaydını açmak ve yanıtlamak için bir konuşmaya tıklayın.",
+    en: "Open a conversation to see the contact and reply.",
+    de: "Öffnen Sie eine Unterhaltung, um den Kontakt zu sehen und zu antworten.",
   },
   "inbox.openContact": {
     tr: "Müşteriyi aç",

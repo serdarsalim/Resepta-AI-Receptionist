@@ -252,17 +252,23 @@ export function InboxView({
               <ul className="[&>li:last-child>div]:after:hidden">
                 {shown.map((c) => {
                   const isActive = c.customerId === selected;
-                  const open = (next?: FeedFilter) => {
-                    setSelected(c.customerId);
-                    setOpened(c.customerId);
-                    setFilter(next ?? c.lastChannel);
-                    // Stamped here as well as in the effect above: the effect
-                    // only covers a new inbound landing on an already-open
-                    // thread, so re-opening a conversation whose timestamp has
-                    // not moved would otherwise never re-stamp.
+                  // TRIAL (2026-08-22): a row opens the CONTACT PAGE instead
+                  // of filling the pane beside it. The inbox and the contact
+                  // page were two master-detail screens sharing a right half,
+                  // and going "deeper" from a conversation showed you that
+                  // same conversation again with a record added, so arriving
+                  // somewhere felt like staying put.
+                  //
+                  // The right pane is left standing on purpose. If this reads
+                  // worse than it sounds, putting the split back is restoring
+                  // three lines, not rebuilding a screen.
+                  const open = () => {
+                    // Read before we leave: nothing is left mounted here to
+                    // stamp it afterwards.
                     void markConversationRead({ customerId: c.customerId }).catch(
                       () => {},
                     );
+                    onOpenContact(c.customerId);
                   };
                   return (
                     <li key={c.customerId}>
