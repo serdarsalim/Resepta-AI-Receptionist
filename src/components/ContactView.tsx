@@ -75,6 +75,7 @@ function MetaLabel({ label, hint }: { label: string; hint?: string }) {
 // the conversation on the right.
 export function ContactView({
   customerId,
+  initialFilter,
   onTitle,
   onOpenContact,
 }: {
@@ -84,7 +85,9 @@ export function ContactView({
   onTitle?: (name: string) => void;
   // The header jump list navigates to OTHER customers from here, so this page
   // needs the same door the list views hand around.
-  onOpenContact: (customerId: Id<"customers">) => void;
+  onOpenContact: (customerId: Id<"customers">, channel?: FeedFilter) => void;
+  // Which channel to open on. See the state below.
+  initialFilter?: FeedFilter;
 }) {
   const { t, language } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
@@ -94,7 +97,6 @@ export function ContactView({
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
-  const setAttention = useMutation(api.messages.setAttention);
   const setMuted = useMutation(api.customers.setMuted);
   // Same sheet the calendar opens, same conflict handling. No onOpenContact:
   // the record it would navigate to is the one you are reading.
@@ -103,7 +105,10 @@ export function ContactView({
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
   const [mobilePane, setMobilePane] = useState<"record" | "conversation">("record");
-  const [filter, setFilter] = useState<FeedFilter>("all");
+  // Opens on whatever channel sent us here, "all" when nobody said. The view
+  // is keyed on customerId in AppHome, so this re-initialises per contact
+  // rather than carrying the last one's channel into the next one.
+  const [filter, setFilter] = useState<FeedFilter>(initialFilter ?? "all");
 
   // The header box, claimed like every list tab claims it — and with the
   // customer-jump slot filled, which is this page's whole difference: the box

@@ -15,6 +15,7 @@ import { ServicesView } from "@/components/ServicesView";
 import { AccountView } from "@/components/AccountView";
 import { BillingView } from "@/components/BillingView";
 import { ContactView } from "@/components/ContactView";
+import type { FeedFilter } from "@/components/ConversationPanel";
 
 // The signed-in application, lifted out of app/page.tsx so it can be pulled in
 // with next/dynamic({ ssr: false }).
@@ -42,6 +43,21 @@ export function AppHome() {
   // Held as a string: handing React elements up through state is how a render
   // loop starts.
   const [contactName, setContactName] = useState("");
+  // Which channel the record should OPEN on, when whoever sent us here knows.
+  // The inbox does: its row already knows the newest message was a WhatsApp,
+  // and landing on the mixed feed makes the reader find that thread again by
+  // hand after clicking the row that was showing it to them.
+  //
+  // Undefined from the customers table and the calendar, which have no such
+  // context — those keep the mixed feed.
+  const [contactFilter, setContactFilter] = useState<FeedFilter | undefined>(
+    undefined,
+  );
+  // One door, so nothing can set an id without settling the channel with it.
+  const openContact = (id: Id<"customers">, channel?: FeedFilter) => {
+    setContactFilter(channel);
+    setContactId(id);
+  };
 
   // The tab lives in the URL, so a refresh comes back where you were and a
   // link to Settings opens Settings. A bare URL falls back to the last tab
@@ -88,14 +104,15 @@ export function AppHome() {
           // until the new query lands.
           key={contactId}
           customerId={contactId}
+          initialFilter={contactFilter}
           onTitle={setContactName}
-          onOpenContact={setContactId}
+          onOpenContact={openContact}
         />
       ) : (
         <>
-          {tab === "appointments" && <AppointmentsView onOpenContact={setContactId} />}
-          {tab === "customers" && <CustomersView onOpenContact={setContactId} />}
-          {tab === "inbox" && <InboxView onOpenContact={setContactId} />}
+          {tab === "appointments" && <AppointmentsView onOpenContact={openContact} />}
+          {tab === "customers" && <CustomersView onOpenContact={openContact} />}
+          {tab === "inbox" && <InboxView onOpenContact={openContact} />}
           {tab === "campaigns" && <CampaignsView />}
           {tab === "voice" && <VoiceView />}
           {/* Content the business maintains, not configuration: the voice agent

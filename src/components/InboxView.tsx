@@ -66,7 +66,7 @@ function previewOf(
 export function InboxView({
   onOpenContact,
 }: {
-  onOpenContact: (id: Id<"customers">) => void;
+  onOpenContact: (id: Id<"customers">, channel?: FeedFilter) => void;
 }) {
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
@@ -74,11 +74,6 @@ export function InboxView({
   const markConversationRead = useMutation(api.messages.markConversationRead);
   const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
-  // The conversation whose read stamps we own. Kept as its own state rather
-  // than folded into `selected` because the two answer different questions:
-  // `selected` is what the right pane shows, `opened` is what a reply landing
-  // right now counts as read against.
-  const [opened, setOpened] = useState<Id<"customers"> | null>(null);
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.
   const [filter, setFilter] = useState<FeedFilter>("all");
@@ -103,18 +98,10 @@ export function InboxView({
     }
   };
 
-  // A reply that lands while you are sitting in that conversation is read, not
-  // new — re-stamping on its lastInboundAt is what stops the dot re-lighting on
-  // a thread you are watching. Only for the conversation opened by hand, and
-  // the mutation is monotonic, so a re-render cannot cost a write.
-  const openedInboundAt =
-    opened && conversations
-      ? (conversations.find((c) => c.customerId === opened)?.lastInboundAt ?? null)
-      : null;
-  useEffect(() => {
-    if (!opened || openedInboundAt === null) return;
-    void markConversationRead({ customerId: opened }).catch(() => {});
-  }, [markConversationRead, opened, openedInboundAt]);
+  // The "a reply landed while you were sitting in this thread" re-stamp lived
+  // here. It cannot happen any more: opening a row LEAVES this view, so no
+  // conversation is ever being watched from the inbox. The row stamps on its
+  // way out and that is the whole of it.
 
   // NOTHING is selected on arrival (Serdar, 2026-08-17, matching Nudge). The
   // inbox used to open the newest conversation for you, which is the app
@@ -268,7 +255,13 @@ export function InboxView({
                     void markConversationRead({ customerId: c.customerId }).catch(
                       () => {},
                     );
-                    onOpenContact(c.customerId);
+                    // The record opens on the channel this row was showing.
+                    // The old split pane did the same thing to its own filter
+                    // (`setFilter(next ?? c.lastChannel)`); losing it when the
+                    // row started navigating meant clicking a WhatsApp row
+                    // landed on the mixed feed, where you had to find that
+                    // same thread again by hand.
+                    onOpenContact(c.customerId, c.lastChannel);
                   };
                   return (
                     <li key={c.customerId}>
