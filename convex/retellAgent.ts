@@ -1169,10 +1169,21 @@ async function provisionAgent(
   try {
     const site = siteUrl();
     if (!site) throw new Error("deployment-site-url-missing");
+    // The operator's prompt override, if one stands (convex/voicePrompts).
+    // Resolved HERE and nowhere else in this file: an agent's birth is the one
+    // moment prompt text is allowed to come from anywhere but the module.
+    // syncTemplate, setEndCallEnabled and the model path all build a template
+    // too, and all three deliberately send no prompt — so an agent that
+    // already exists cannot be changed by an edit in /admin, which is the
+    // rule at the top of lib/voiceAgentTemplate.
+    const prompt = await ctx.runQuery(internal.voicePrompts.forProvisioning, {
+      language: started.row.language,
+    });
     const template = appointmentReceptionistTemplate({
       language: started.row.language,
       businessName: started.orgName,
       site,
+      prompt,
     });
 
     let llmId = started.row.retellLlmId;

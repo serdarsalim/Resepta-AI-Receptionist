@@ -289,6 +289,29 @@ const BEGIN_MESSAGES_NAMED: Record<VoiceAgentLanguage, (name: string) => string>
   "de-DE": (name) => `{{business_name}}, hier ist ${name}. Guten Tag.`,
 };
 
+// The prompt text as the CODE MODULE has it, in the shape the store and the
+// operator console pass around: one string for the whole prompt, and the two
+// greetings with the persona name reduced to a {name} placeholder.
+//
+// {name}, not {{name}}: the double-brace forms are Retell dynamic variables
+// resolved while the phone rings, and this one is substituted at PROVISIONING
+// time — see BEGIN_MESSAGES_NAMED above for why the introduction cannot be a
+// ring-time variable. A single-brace token cannot be mistaken for the other
+// kind, and it never reaches the provider either way.
+export type VoiceAgentPrompt = {
+  general: string;
+  beginMessage: string;
+  beginMessageNamed: string;
+};
+
+export function codePrompt(language: VoiceAgentLanguage): VoiceAgentPrompt {
+  return {
+    general: GENERAL_PROMPTS[language].join("\n"),
+    beginMessage: BEGIN_MESSAGES[language],
+    beginMessageNamed: BEGIN_MESSAGES_NAMED[language]("{name}"),
+  };
+}
+
 // The summary the owner reads on the call, asked for by name.
 //
 // Retell's built-in call_summary has no language setting and comes back
@@ -414,7 +437,15 @@ export function appointmentReceptionistTemplate(args: {
   // call ends by the CALLER hanging up, which is why every transcript so far
   // reads user_hangup and why max_call_duration is the only other backstop.
   canEndCall?: boolean;
+  // The operator's prompt override (convex/lib/voicePromptStore), when one
+  // exists. Passed by the PROVISIONING path and nowhere else, which is the
+  // whole safety story: syncTemplate reads this function too, and it never
+  // sends general_prompt or begin_message, so an override cannot reach an
+  // agent that already exists. Prompt text reaches new agents only — the rule
+  // at the top of this file, now enforced by which caller bothers to resolve.
+  prompt?: VoiceAgentPrompt;
 }) {
+  const prompt = args.prompt ?? codePrompt(args.language);
   const empty = { type: "object" as const, properties: {} };
   const tools = [
     customTool(
@@ -495,8 +526,8 @@ export function appointmentReceptionistTemplate(args: {
     llm: {
       start_speaker: "agent",
       begin_message: args.personaName
-        ? BEGIN_MESSAGES_NAMED[args.language](args.personaName)
-        : BEGIN_MESSAGES[args.language],
+        ? prompt.beginMessageNamed.replaceAll("{name}", args.personaName)
+        : prompt.beginMessage,
       default_dynamic_variables: { business_name: args.businessName },
       // Pinned, not left to the provider's default. A template that does not
       // name its model gets whatever the account defaults to that month, so
@@ -511,7 +542,7 @@ export function appointmentReceptionistTemplate(args: {
       // fast model, so the remaining lever is the provider's queue, and a
       // receptionist is exactly the workload the priority tier exists for.
       model_high_priority: true,
-      general_prompt: GENERAL_PROMPTS[args.language].join("\n"),
+      general_prompt: prompt.general,
       general_tools: args.canEndCall === false ? tools : [...tools, END_CALL_TOOL],
     },
     agent: {

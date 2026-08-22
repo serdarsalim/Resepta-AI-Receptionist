@@ -649,6 +649,41 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
   }).index("by_key", ["key"]),
 
+  // The operator's edits to what a NEW phone agent is born saying
+  // (lib/voiceAgentTemplate GENERAL_PROMPTS / BEGIN_MESSAGES).
+  //
+  // Same override shape as industryPresets above, and the same argument: the
+  // prompt is prose curated in three languages, which wants review and a
+  // revert, so the code module stays the source of truth and a row here lays
+  // over one language until somebody ports it back.
+  //
+  // ⚠️ THIS REACHES NEW AGENTS ONLY, and that is not a limitation of the
+  // implementation — it is the template's standing rule (see the header of
+  // lib/voiceAgentTemplate). An agent that exists owns its prompt: the owner
+  // edits it in their own editor, and retellAgent.syncTemplate deliberately
+  // PATCHes tools and engine settings while never sending general_prompt or
+  // begin_message. Only the provisioning path resolves an override, so there
+  // is no code path by which editing a row here changes a live agent.
+  voicePrompts: defineTable({
+    // One row per agent language. Not per vertical: the prompt is the same for
+    // a dentist and a barber ON PURPOSE — what differs is the services and
+    // contact fields injected at ring time, which is what industryPresets
+    // seeds. A per-vertical prompt would be 24 pieces of prose maintained to
+    // say what the context block already says.
+    language: v.union(v.literal("tr-TR"), v.literal("en-US"), v.literal("de-DE")),
+    // The whole prompt as one string. The module holds it as an array of lines
+    // for readability and joins with newlines; a textarea is the same thing.
+    general: v.string(),
+    // The greeting for an agent with no persona name, and the one for an agent
+    // that has one — the second carrying a {name} placeholder substituted at
+    // provisioning. Two strings rather than one with a conditional, because an
+    // unnamed agent greeting with "ben ." is what the split exists to prevent.
+    beginMessage: v.string(),
+    beginMessageNamed: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_language", ["language"]),
+
   connections: defineTable({
     orgId: v.id("orgs"),
     provider: v.string(),
