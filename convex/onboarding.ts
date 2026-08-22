@@ -1,5 +1,6 @@
 // The onboarding wizard's server side, and the one place an industry preset
-// is applied (lib/industryPresets).
+// is applied (lib/industryPresets, with the operator's overrides laid over it
+// by lib/industryPresetStore).
 //
 // A preset only ever writes the same rows the owner could add by hand —
 // services and contact fields — so applying one is convenience, not a mode.
@@ -13,12 +14,8 @@ import { requireOwner } from "./lib/orgAuth";
 import { slugify } from "./lib/publicSlug";
 import { recordActivity } from "./lib/activity";
 import { keyFromLabel, uniqueKey, RESERVED_CONTACT_KEYS } from "./lib/keys";
-import {
-  INDUSTRY_PRESETS,
-  isIndustryKey,
-  presetLanguage,
-  type IndustryKey,
-} from "./lib/industryPresets";
+import { presetLanguage, type IndustryPreset } from "./lib/industryPresets";
+import { resolvePreset } from "./lib/industryPresetStore";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
@@ -26,13 +23,15 @@ import type { Id } from "./_generated/dataModel";
 // has under the same address. Dedupe is by KEY, not display name: the key is
 // what agents and stored values bind to, and it is language-stable where the
 // label is not.
+// Takes the RESOLVED preset rather than a key: resolving reads the database
+// (an operator override may be laid over the code module), and doing that here
+// would mean every caller resolving once to validate and again to seed.
 async function seedPreset(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
-  industry: IndustryKey,
+  preset: IndustryPreset,
   language: string,
 ): Promise<{ services: number; fields: number }> {
-  const preset = INDUSTRY_PRESETS[industry];
   const lang = presetLanguage(language);
 
   const existingServices = await ctx.db
@@ -119,12 +118,18 @@ export const applyIndustryPreset = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
-    if (!isIndustryKey(args.industry)) throw new Error("unknown-industry");
+    const preset = await resolvePreset(ctx, args.industry);
+    if (!preset) throw new Error("unknown-industry");
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("not-found");
     await ctx.db.patch(orgId, { industry: args.industry });
-    if (args.prefill && args.industry !== "other") {
-      await seedPreset(ctx, orgId, args.industry, org.language);
+    // Emptiness decides, not the key. "other" seeds nothing because it holds
+    // nothing, and so does a vertical an operator has drafted but not filled in
+    // — both should record the answer and leave the catalog alone rather than
+    // claim a preset was applied.
+    const seeds = preset.services.length > 0 || preset.fields.length > 0;
+    if (args.prefill && seeds) {
+      await seedPreset(ctx, orgId, preset, org.language);
       await recordActivity(ctx, {
         orgId,
         kind: "settings_changed",
@@ -154,7 +159,11 @@ export const resetToIndustryDefaults = mutation({
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("not-found");
     const industry = args.industry ?? org.industry ?? "";
-    if (!isIndustryKey(industry)) throw new Error("unknown-industry");
+    // Resolved without regard to `active`: a business already on a vertical the
+    // operator has since retired must keep working, and this is the mutation
+    // that would break first if it did not.
+    const preset = await resolvePreset(ctx, industry);
+    if (!preset) throw new Error("unknown-industry");
 
     const services = await ctx.db
       .query("services")
@@ -185,7 +194,7 @@ export const resetToIndustryDefaults = mutation({
     }
 
     await ctx.db.patch(orgId, { industry });
-    await seedPreset(ctx, orgId, industry, org.language);
+    await seedPreset(ctx, orgId, preset, org.language);
     await recordActivity(ctx, {
       orgId,
       kind: "settings_changed",
