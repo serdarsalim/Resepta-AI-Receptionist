@@ -590,6 +590,65 @@ export default defineSchema({
     updatedBy: v.optional(v.id("users")),
   }).index("by_key", ["key"]),
 
+  // The operator's edits to the onboarding verticals (lib/industryPresets).
+  //
+  // An OVERRIDE table, not the source of truth. A vertical with no row here is
+  // served straight from the code module, so a catalogue improvement shipped in
+  // a commit still reaches every vertical nobody has touched, and "revert to
+  // code" is deleting a row rather than restoring a backup. The point is not to
+  // move the catalogue into the database (Serdar, 2026-08-22: Claude still owns
+  // it) — it is that a vertical can be READ, corrected in a hurry, or drafted
+  // for later without a deploy, and that the drift is visible while it lasts.
+  //
+  // No orgId, and that is not a hole in the one invariant: a preset is
+  // deployment-wide seed data, identical for every business, and it becomes org
+  // data only when onboarding copies it into `services` and `contactFields`
+  // rows. Nothing here is ever read on a per-org path.
+  industryPresets: defineTable({
+    // Matches lib/industryPresets IndustryKey where the vertical exists in
+    // code. A key that does not is an operator-coined vertical, which is why
+    // this is a plain string: adding one must not need a schema change, and a
+    // retired key must not wedge the schema (same reasoning as orgs.industry).
+    key: v.string(),
+    name: v.object({ tr: v.string(), en: v.string(), de: v.string() }),
+    services: v.array(
+      v.object({
+        name: v.object({ tr: v.string(), en: v.string(), de: v.string() }),
+        durationMinutes: v.number(),
+      }),
+    ),
+    // No price, matching the code module: an invented price is a claim about
+    // the business. No `source` either — every preset field is voice-sourced by
+    // definition (the whole reason to seed one is that the agent collects it),
+    // so storing the constant would only let an operator set it wrong.
+    fields: v.array(
+      v.object({
+        key: v.string(),
+        label: v.object({ tr: v.string(), en: v.string(), de: v.string() }),
+        type: v.union(
+          v.literal("text"),
+          v.literal("select"),
+          v.literal("number"),
+          v.literal("date"),
+        ),
+        options: v.optional(
+          v.object({
+            tr: v.array(v.string()),
+            en: v.array(v.string()),
+            de: v.array(v.string()),
+          }),
+        ),
+      }),
+    ),
+    // Off hides the vertical from the onboarding picker without breaking the
+    // businesses already on it: a retired vertical still resolves, so their
+    // "reset to industry defaults" keeps working. It is also where a vertical
+    // drafted for later waits until somebody is ready to offer it.
+    active: v.boolean(),
+    updatedAt: v.number(),
+    updatedBy: v.optional(v.id("users")),
+  }).index("by_key", ["key"]),
+
   connections: defineTable({
     orgId: v.id("orgs"),
     provider: v.string(),
