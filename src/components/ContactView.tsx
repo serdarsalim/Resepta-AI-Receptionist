@@ -104,7 +104,19 @@ export function ContactView({
   // Below lg the two panes swap instead of sharing the row (InboxView does the
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
-  const [mobilePane, setMobilePane] = useState<"record" | "conversation">("record");
+  // Which pane a PHONE opens on. The record, unless whoever sent us here was
+  // pointing at a conversation — and initialFilter is exactly that signal, set
+  // only by an inbox row naming the channel its newest message arrived on.
+  // Tapping a conversation and landing on First name / Last name makes the
+  // reader tap again to reach the thing they tapped.
+  //
+  // Deliberately reading initialFilter rather than taking a second prop: a
+  // caller that knows which channel you meant knows you meant the
+  // conversation, and two flags that can only ever agree are one flag with a
+  // way to be wrong.
+  const [mobilePane, setMobilePane] = useState<"record" | "conversation">(
+    initialFilter ? "conversation" : "record",
+  );
   // Opens on whatever channel sent us here, "all" when nobody said. The view
   // is keyed on customerId in AppHome, so this re-initialises per contact
   // rather than carrying the last one's channel into the next one.
