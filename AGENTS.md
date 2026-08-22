@@ -426,6 +426,33 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
   cost (services deleted — safe, appointments snapshot their lines; fields a
   voice agent references SURVIVE the reset, deleting them would wedge the
   next publish).
+  - **The catalogue stays in CODE; /admin → Onboarding is an OVERRIDE layer**
+    (Serdar, 2026-08-22: "realistically Claude will still own updates to the
+    prompts and verticals, but I should be able to quickly see or do quick
+    edits or add verticals for later"). A vertical with no row in the
+    `industryPresets` table is served straight from `lib/industryPresets.ts`,
+    so a catalogue commit still reaches everything nobody has edited, and
+    Revert-to-code is deleting a row. Resolution lives in
+    `lib/industryPresetStore.ts` (the pure module stays pure); the Convex
+    surface is `convex/industryPresets.ts`, wrapping it the way
+    `platformConfig.ts` wraps `lib/platformConfig.ts` — but with the fallback
+    pointing the OTHER way, because here the code is the artifact people can
+    see, diff and revert.
+    - `edited` compares CONTENT, not row existence, so switching a vertical
+      off does not report drift it does not have. The console shows the
+      Edited chip and an "improvements no longer reach these" banner, and the
+      editor emits the TypeScript literal to paste back into the module —
+      porting is the intended end of an override's life, not an afterthought.
+    - `active: false` hides a vertical from the wizard and keeps it resolving,
+      so a business already on a retired vertical keeps its reset working.
+      Business settings passes its own answer as `catalogue({ include })` so
+      that vertical still has a NAME in the picker.
+    - The wizard and Business settings read the catalogue from the SERVER
+      now. They used to import the module into the bundle, which meant a
+      vertical added or retired in /admin reached nobody until a deploy.
+      `catalogue` is deliberately unauthenticated: it is the same data the
+      browser already downloaded, and it must answer for a user whose org is
+      still unnamed.
 - **The Bella port**: the two prompt refinements Serdar hand-tuned into the
   prod "Bella Randevu Asistanı" (de_autotakt workspace) live in the template
   now — `{{next_appointment}}` in the context block and greet-a-known-caller-
