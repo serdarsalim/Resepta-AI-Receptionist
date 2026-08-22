@@ -159,21 +159,21 @@ export function InboxView({
     // h-full, not flex-1: `main` in the shell is a block, so there's no flex
     // context to grow into — the height comes from the parent's resolved box.
     //
-    // max-w-6xl is Nudge's page cap, and the reason the rows here were wider
-    // than its rows despite an identical 2fr/3fr split: Nudge wraps every view
-    // in `max-w-6xl w-full mx-auto`, Resepta's shell lets content run the full
-    // width of `main`. Measured at a 1680px viewport, that was a 549px list
-    // against Nudge's 462px. Kept local to the Inbox rather than moved into
-    // AppShell because the calendar grid and the customers table are built to
-    // spend whatever width they are given; a master-detail pane is not.
-    // The lg:px-6 is part of the measurement, not decoration: Nudge's cap is
-    // `max-w-6xl px-6`, so its content settles at 1224 - 51 = 1173 and its list
-    // at 462. Capping without the padding left this 20px wide. Gated to lg
-    // because the shell's own p-4 already pads the one-column phone layout, and
-    // stacking both would eat the row.
+    // NO WIDTH CAP, and that is the whole point of this line. It carried
+    // `max-w-6xl lg:px-6` — Nudge's page cap, ported so these rows would
+    // measure the same as Nudge's rather than spending the full width of
+    // `main`. ContactView has never had it, so the two screens ran the same
+    // 2fr/3fr split inside containers of different widths, and their panes
+    // could not line up however the ratio was tuned.
+    //
+    // Now that a row opens the contact record, those two right-hand panes are
+    // the same pane one click apart. Matching them means matching the
+    // container, not the ratio, and ContactView is the one to match: it is
+    // where the reading happens. Keep this in step with ContactView's grid if
+    // either moves.
     <div
       data-fills-pane
-      className="mx-auto flex h-full w-full min-h-0 min-w-0 max-w-6xl flex-col lg:px-6"
+      className="flex h-full w-full min-h-0 min-w-0 flex-col"
     >
       {/* Always two columns from lg, whether or not anything is open. It used
           to collapse to one when nothing was selected, which was invisible back
