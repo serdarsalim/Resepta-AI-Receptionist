@@ -1319,6 +1319,13 @@ deals; we sell services, and an appointment is the thing a customer bought.
 
 ### The inbox arrives with nothing selected (2026-08-17)
 
+> **SUPERSEDED in part by "The inbox stopped being a second conversation
+> screen" (2026-08-22) below.** A row does not fill the right pane any more —
+> it opens the CONTACT RECORD. The pane still stands as a placeholder, so
+> "arrives with nothing selected" is now its permanent state, and the
+> `opened`/`selected` split described here is deleted: nothing is ever watched
+> from the inbox, so the row stamps read on its way out.
+
 Matching Nudge. It used to open the newest conversation for you, which is the
 app deciding what you came here to read — and on a list whose top row moves
 whenever anyone writes, the thing it opens is different every visit. An inbox is
@@ -2211,3 +2218,171 @@ context value's setters must be referentially stable (useCallback): a setter
 minted inside the value memo re-triggers every effect that lists it in deps
 — the header search's claiming effect ran per keystroke and its cleanup
 wiped the query.
+
+
+## An action belongs to the card it acts on (2026-08-21)
+
+`Card` takes an **`action`** node, rendered hard right on the title line. Add
+agent, Add message, Add customer, Add member, Add field, Add sale, Add product
+and Add knowledge all sit there now; before this they floated above their card,
+sat at the foot of a list, or were shared between two cards.
+
+- **Two tiers, and they are different jobs.** A CARD's own primary action is
+  filled accent with no `+` and lives in the card header. A SECTION's action
+  inside a card is outlined and keeps its `+` — the contact record's
+  "+ Add appointment" is the reference. Filling that one would make it the
+  loudest thing on the contact page, competing with the page's real primary,
+  and it sits directly above a blue disclosure link.
+- **The header carries `min-h-8`**, so a card with an action and one without
+  keep the same header height, and an action that hides itself (Contact
+  fields' button, while its form is open) moves nothing.
+- **`action` renders OUTSIDE the fieldset.** `Card`'s `disabled` cannot reach
+  it, so an action on a card that can go read-only must gate itself —
+  every current caller does (`isOwner ? … : undefined`).
+- **A card that is the PAGE keeps its toolbar row instead** (Customers, Voice
+  agent). Same visual corner; the difference is that a page-level table's
+  controls are a toolbar, not a card header — and the Customers table is a
+  `DataTable`, which has no header slot at all. Its row moved INSIDE the
+  card's own padding for the same reason, and that card is now gated on
+  LOADED rather than on having rows: it carries the button a salon needs
+  before it has a single customer.
+- **Never park an add at the foot of a list.** It puts the primary action
+  below however many rows the business happens to have, and it is the branch
+  that loses the button in the EMPTY state — the state where you need it most.
+
+## One state, one hue (2026-08-21)
+
+Amber was doing three jobs at once — unsaved draft, selected day, active
+channel — and one Messages row carried two same-size amber pills meaning a
+warning and a steady state. The app also disagreed with itself: expanding a
+rule drew its channels emerald while the collapsed row drew them amber.
+
+- **Emerald is ON.** Every toggle in the product already said so. Message-rule
+  channels and "Days you're open" both wear it; the day chips also gained
+  `role="switch"` + `aria-checked`, which they never had.
+- **Amber is UNSAVED**, and only that.
+- **Violet is a PIN** — mine, a debt I created and only I can clear. It is the
+  inbox row's marker and the contact record's, and it is violet precisely
+  because every other hue here is taken: `--accent` blue means "do something"
+  (and a blue dot beside a linked name reads as an affordance, not a state),
+  `--now-line` red means "now", `--brand` green means news.
+- **`--brand` green means "something NEW is in there"** — the sidebar's inbox
+  dot, and nothing else. Its comment used to claim it was the same green as
+  the row dot, "one hue, one meaning". It never was: that dot marked a pin.
+- **No check inside the day chips**, unlike the channel switches. Seven of
+  them must hold ONE line inside a 24rem value column (the `ROW_GRID` note
+  names this row as the reason that column is 24rem), and a 12px glyph plus
+  its gap on every chip wraps the week onto two rows. Seven weekday names in
+  order is not a control anyone mistakes for a row of tags.
+
+## An inbox row says what was said (2026-08-21)
+
+The row carried a name and an age, so every question you open the Inbox with —
+who is waiting, what did they want, did that reminder actually go out — cost a
+click each. `messages.conversations` had been returning `lastBody`,
+`lastChannel`, `lastDirection` and `hasFailed` the whole time, and search had
+been reading `lastBody` since it shipped: the row was the only thing on the
+screen that could not see it.
+
+Second line: channel glyph, `not sent` in `--now-line` when the thread holds a
+failed send, `Siz:` when the newest message is ours, then the body collapsed to
+one line. Two lines is iMessage's shape and the reason the density rule
+("a name and an email is ONE line") does not apply — that rule is about a table
+row stacking fields, this is a message preview, which is the content.
+
+- **The glyph is not the channel strip deleted in `49ed336`.** That was a row
+  of buttons offering to START a channel, an action nobody took. This is one
+  un-clickable mark answering where the message happened.
+- **An empty body on WhatsApp or mail previews as "Şablon mesajı"** — what
+  `ConversationPanel` already calls it. A row must agree with the thread it
+  opens; naming the channel there produced "Siz: WhatsApp".
+
+## The inbox stopped being a second conversation screen (2026-08-22)
+
+Serdar's diagnosis, and it is the important half: the Inbox and the contact
+page were two master-detail screens sharing an identical right half, so going
+"deeper" from a conversation showed you that same conversation again with a
+record added. Arriving somewhere felt like staying put, and nobody could tell
+the two screens apart.
+
+**A row now opens the CONTACT RECORD.** The right pane is deliberately left
+standing as a placeholder (Serdar's call), which also makes this three lines to
+reverse rather than a screen to rebuild.
+
+Three things had to travel with the click, and each was a separate bug when it
+did not:
+
+- **The channel.** The old split pane did `setFilter(next ?? c.lastChannel)`;
+  navigating dropped it, because the filter now lives in a component the click
+  unmounts. It rides as an optional 2nd argument on `onOpenContact` and lands
+  as `ContactView`'s `initialFilter`. Every value `lastChannel` can hold is
+  already a `FeedFilter`, calls and notes included, so nothing needs mapping.
+  Undefined from the Customers table and the Calendar — neither knows which
+  channel you meant, so those keep the mixed feed.
+- **The width.** The Inbox carried `max-w-6xl lg:px-6` (Nudge's page cap,
+  ported) and `ContactView` never did, so the same 2fr/3fr split sat in
+  containers of different widths and the panes could not line up however the
+  ratio was tuned. Cap removed; both resolve to 382.195px / 573.305px. **Keep
+  those two grids in step** — they are the same pane one click apart.
+- **The phone's starting pane.** Landing on First name after tapping a
+  conversation makes you tap again. Derived from the same `initialFilter`
+  flag rather than a second prop: a caller that knows which channel you meant
+  knows you meant the conversation, and two flags that can only ever agree are
+  one flag with a way to be wrong.
+
+Read is stamped on the way OUT of the row now. Nothing is ever watched from
+the Inbox, so the `opened` state and its re-stamp effect are deleted.
+
+## A page title names the page, in the bar that names pages (2026-08-22)
+
+Opening a contact left the shell header reading "Inbox" while the page was a
+person, so the contact drew its own name and back arrow in a second title row
+underneath — two headings, the higher one wrong, ~60px between them.
+
+- **`AppShell` takes `overrideTitle` (a STRING) + `onOverrideBack`.** A string,
+  never a node: the view supplying it renders UNDER the header, and handing
+  React elements back up through state is how a render loop starts.
+- **`AppHome` holds the name; `ContactView` reports it** via `onTitle`. That
+  view is the only thing querying the customer — filling the heading anywhere
+  else would be a second read of the same row on every contact opened.
+- **`ContactView` is keyed on the id**, so opening a second contact from the
+  first one's feed remounts and re-reports instead of leaving the previous
+  name in the bar until the new query lands.
+- **`overrideContactId` is an ID**, same discipline: the shell renders the pin
+  itself (`PinDot`) and runs its own query rather than taking a control or a
+  pair of callbacks from below.
+- **The name carries a `›`** — the app's own "open this" mark, borrowed from
+  the feed rows. A hover-underline is only found by people who already
+  suspected, and clicking the name is the only route from a conversation to
+  the record behind it.
+
+## The pin, and reading it the same way twice (2026-08-22)
+
+Ported from Nudge, violet and all. Settable from the contact record now, not
+only from the Inbox list — the page where you actually decide "deal with this
+later" had no way to say so.
+
+**`messages.inboxPin`** reads ONE conversation's pin. It pays for the whole
+org's entries to answer about one row, deliberately: the SPENT rule (a pin
+older than the newest outbound has been paid) lives in `summariseEntries`, and
+a cheaper read that skipped it would let the record show a pin the Inbox had
+already retired. Two surfaces disagreeing about one pin is worse than a read
+the record page makes once.
+
+## Knowledge reads as prose, not as a form (2026-08-21)
+
+Every block mounted a live rich-text editor permanently, so two blocks meant
+two full toolbars parked on a card nobody opens to format text. Ported from
+`ConversationPanel`'s note bubble: the whole bubble is the edit affordance,
+click to edit, and Delete is hover-revealed on opacity so the row never shifts.
+
+**Cancel/Save, not collapse-on-outside-click, and that is not a departure from
+the no-Save-button rule for its own sake.** The editor's colour swatch and its
+emoji picker both `createPortal` to `document.body`, so every "did the click
+land outside" test answers YES to picking an emoji and closes the editor out
+from under the thing you just reached for. Notes hit this first and answered it
+with an explicit close; a second answer here would be a second pattern for one
+problem.
+
+An empty block previews its placeholder — without it, the only way to fill one
+in is to delete it and add it again.

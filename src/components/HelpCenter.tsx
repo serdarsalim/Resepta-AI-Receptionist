@@ -254,7 +254,8 @@ const CATEGORIES: Category[] = [
         title: "Use the Inbox and campaigns",
         summary: "Continue customer conversations and send approved outreach without losing the customer record.",
         steps: [
-          "Open Inbox to work with WhatsApp and email replies in the same customer context.",
+          "Open Inbox to see every conversation, newest first — each row shows the channel, who wrote last, and what they said.",
+          "Click a conversation to open that customer's record, with the thread already on the channel their last message came in on.",
           "Reply from the connected channel and use the attention marker to find conversations that still need someone.",
           "Open Campaigns when a WhatsApp number is connected and choose an approved template for outreach.",
           "Review send outcomes on the customer timeline instead of treating the campaign as a separate list.",

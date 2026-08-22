@@ -84,16 +84,55 @@ the first column lands where it did.
 **Row hover is neutral grey**, not a brand tint. Selection may still be
 branded — selection is a state worth colouring; hovering is not.
 
-### The primary action sits above the card, right-aligned
+### The primary action sits top right of the card it acts on (2026-08-21)
 
-A solid `--accent` button, `h-9 rounded-lg px-3`, in its own row above the card
-it acts on. Not a ghost "+ Add thing" at the foot of the list, which puts the
-page's primary action below however many rows the data happens to have.
+A solid `--accent` button, no `+` in the label. **Inside** the card, hard right
+on its title line — `Card` takes an `action` node for exactly this. Never a
+ghost "+ Add thing" at the foot of the list, which puts the primary action
+below however many rows the data happens to have and loses it entirely in the
+empty state, where you need it most.
+
+Two tiers, and they are different jobs:
+
+- A **card's** own primary action: filled, no `+`, in the card header.
+- A **section's** action inside a card: outlined, keeps its `+`. The contact
+  record's "+ Add appointment" is the reference — filling it would make it the
+  loudest thing on the page, competing with the page's real primary, and it
+  sits directly above a blue disclosure link it must not be confused with.
+
+A card that IS the page keeps a toolbar row instead of a card header
+(Customers, Voice agent) — same visual corner, but a page-level table's
+controls are a toolbar, and a `DataTable` has no header slot to put them in.
+Move that row inside the card's own padding, and gate the card on LOADED
+rather than on having rows, or the button disappears exactly when a new
+workspace needs it.
+
+> This supersedes the original "above the card, right-aligned" rule. Above the
+> card put the action on the page rather than on the thing it acts on, and it
+> read as page chrome; the corner is the same, the ownership is not.
 
 Adding something opens a **sheet**, never an inline form that unfolds at the
 bottom of a list. An empty field parked in a list is a question the page asks
 nobody, and it costs vertical space on every visit to pay for a task done a few
 times a year.
+
+### A section names itself on the page; a card holds content
+
+Where a page stacks several labelled sections, the heading (`h2` + its
+`InfoTip`) sits on the page ground and the card below holds only content.
+A section that keeps its title inside its card reads as a box you have to open
+to identify, while its neighbours announce themselves.
+
+### Colour means one thing at a time
+
+Emerald is ON — every toggle in the app already said so. Amber is UNSAVED, and
+only that. Violet is a PIN: mine, a debt I created and only I can clear.
+`--brand` green means "something new is in there". `--accent` blue means "do
+something", `--now-line` red means "now", `--event` lavender means a booking.
+
+Before reaching for a hue, check what it already says on that surface. Amber
+once meant unsaved, selected-day and active-channel at once, with two
+same-size amber pills on one row meaning a warning and a steady state.
 
 ### The shell header has a floor
 
