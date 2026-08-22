@@ -646,8 +646,10 @@ const BLANK: AdminPreset = {
 
 export function OnboardingTab({ search }: { search: Search }) {
   const presets = useQuery(api.industryPresets.all, {});
+  const prompts = useQuery(api.voicePrompts.all, {});
   const setActive = useMutation(api.industryPresets.setActive);
   const [open, setOpen] = useState<string | null>(null);
+  const [openPrompt, setOpenPrompt] = useState<PromptCode | null>(null);
   const [adding, setAdding] = useState(false);
 
   const shown = useMemo(
@@ -658,8 +660,23 @@ export function OnboardingTab({ search }: { search: Search }) {
     [presets, search],
   );
 
-  if (presets === undefined) {
+  if (presets === undefined || prompts === undefined) {
     return <p className="text-sm text-[var(--muted)]">Loading…</p>;
+  }
+
+  const editingPrompt = prompts.find((prompt) => prompt.language === openPrompt);
+  if (editingPrompt) {
+    return (
+      <PromptEditor
+        key={editingPrompt.language}
+        prompt={editingPrompt}
+        label={
+          PROMPT_LANGUAGES.find((entry) => entry.code === editingPrompt.language)
+            ?.label ?? editingPrompt.language
+        }
+        onClose={() => setOpenPrompt(null)}
+      />
+    );
   }
 
   if (adding) {
@@ -803,6 +820,325 @@ export function OnboardingTab({ search }: { search: Search }) {
           </div>
         </div>
       )}
+
+      {/* Under the verticals, because that is the order the reader needs them
+          in: what a business picks, then what its agent is born saying. Not
+          filtered by the header search — three rows are not a list to narrow,
+          and hiding them behind a query for a vertical would be a surface the
+          operator cannot find. */}
+      <PromptSection prompts={prompts} onOpen={setOpenPrompt} />
     </div>
+  );
+}
+
+// ---- The phone agent prompt ----
+//
+// Same override model as the verticals above, with one rule that has to stay
+// visible in the UI because it is invisible in the data: THIS REACHES NEW
+// AGENTS ONLY. An agent that exists owns its prompt — the owner edits it in
+// their own editor, and retellAgent.syncTemplate deliberately sends tools and
+// engine settings while never sending prompt text. An operator who edits here
+// expecting the fleet to change would be wrong, so the page says so twice.
+//
+// Per LANGUAGE, not per vertical. A dentist and a barber get the same prompt
+// on purpose: what makes an agent sound like its vertical is the services and
+// contact fields injected at ring time, which is what the presets above seed.
+
+const PROMPT_LANGUAGES = [
+  { code: "tr-TR" as const, label: "Türkçe" },
+  { code: "en-US" as const, label: "English" },
+  { code: "de-DE" as const, label: "Deutsch" },
+];
+
+type PromptCode = (typeof PROMPT_LANGUAGES)[number]["code"];
+
+type PromptText = {
+  general: string;
+  beginMessage: string;
+  beginMessageNamed: string;
+};
+
+type AdminPrompt = PromptText & {
+  language: PromptCode;
+  edited: boolean;
+  code: PromptText;
+  updatedAt: number | null;
+  updatedBy: string | null;
+};
+
+const PROMPT_ERRORS: Record<string, string> = {
+  "prompt-empty": "The prompt cannot be empty.",
+  "greeting-empty": "Both greetings are required.",
+  "missing-name-token":
+    "The named greeting must contain {name} — that is where the agent's name goes.",
+  "stray-name-token":
+    "The unnamed greeting must not contain {name}: there is no name to put in it.",
+};
+
+function promptError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const code = Object.keys(PROMPT_ERRORS).find((entry) => raw.includes(entry));
+  return code ? PROMPT_ERRORS[code] : raw;
+}
+
+// The three constants as lib/voiceAgentTemplate.ts holds them, so a fix made
+// here has somewhere to go. GENERAL_PROMPTS is an array of lines in the module
+// and one string here, which is the same thing either side of a join.
+function promptAsTypeScript(language: PromptCode, prompt: PromptText): string {
+  const lines = prompt.general
+    .split("\n")
+    .map((line) => `    ${quote(line)},`)
+    .join("\n");
+  // {name} goes back to the interpolation the module's arrow function uses.
+  // Backticks and ${ in the text itself would break out of the literal, so
+  // both are escaped on the way.
+  const named = prompt.beginMessageNamed
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${")
+    .replace(/\{name\}/g, "${name}");
+  return (
+    `// GENERAL_PROMPTS\n` +
+    `  ${quote(language)}: [\n${lines}\n  ],\n\n` +
+    `// BEGIN_MESSAGES\n` +
+    `  ${quote(language)}: ${quote(prompt.beginMessage)},\n\n` +
+    `// BEGIN_MESSAGES_NAMED\n` +
+    `  ${quote(language)}: (name) => \`${named}\`,\n`
+  );
+}
+
+function PromptEditor({
+  prompt,
+  label,
+  onClose,
+}: {
+  prompt: AdminPrompt;
+  label: string;
+  onClose: () => void;
+}) {
+  const save = useMutation(api.voicePrompts.save);
+  const reset = useMutation(api.voicePrompts.reset);
+  const [confirm, confirmDialog] = useConfirm();
+  const [draft, setDraft] = useState<PromptText>({
+    general: prompt.general,
+    beginMessage: prompt.beginMessage,
+    beginMessageNamed: prompt.beginMessageNamed,
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showCode, setShowCode] = useState(false);
+
+  const patch = (next: Partial<PromptText>) => {
+    setDraft((prev) => ({ ...prev, ...next }));
+    setError(null);
+  };
+
+  const commit = async () => {
+    setSaving(true);
+    try {
+      await save({ language: prompt.language, ...draft });
+      onClose();
+    } catch (caught) {
+      setError(promptError(caught));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revert = async () => {
+    const ok = await confirm({
+      title: `Revert the ${label} prompt to code?`,
+      body: "New agents go back to what convex/lib/voiceAgentTemplate.ts says. Agents provisioned while the override stood keep the prompt they were born with — an agent owns its prompt from the moment it exists.",
+      confirmLabel: "Revert to code",
+    });
+    if (!ok) return;
+    await reset({ language: prompt.language });
+    onClose();
+  };
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(promptAsTypeScript(prompt.language, draft));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="space-y-4">
+      {confirmDialog}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Ghost onClick={onClose}>← Back</Ghost>
+          <span className="text-sm font-medium">{label}</span>
+          <span className="font-mono text-xs text-[var(--muted)]">{prompt.language}</span>
+          {prompt.edited && <Chip tone="edited">Edited</Chip>}
+        </div>
+        <div className="flex items-center gap-1">
+          <Ghost onClick={() => void copy()}>
+            {copied ? "Copied" : "Copy as TypeScript"}
+          </Ghost>
+          {prompt.edited && (
+            <Ghost onClick={() => void revert()} tone="danger">
+              Revert to code
+            </Ghost>
+          )}
+          <button
+            type="button"
+            onClick={() => void commit()}
+            disabled={saving}
+            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-700 ring-1 ring-inset ring-red-500/25 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      {/* Stated where the edit happens, not only on the list behind it. */}
+      <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
+        This changes what the NEXT agent is born saying. Agents that already
+        exist keep their own prompt — their owners edit it in the app, and the
+        template sync never touches prompt text. Nothing you do here reaches a
+        phone that is already answering.
+      </p>
+
+      <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Greeting</h2>
+          <span className="text-xs text-[var(--muted)]">
+            {"{{business_name}}"} is filled in while the phone rings.
+          </span>
+        </div>
+        <div className="mt-3 space-y-2">
+          <label className="block">
+            <div className="text-xs font-medium text-[var(--muted-strong)]">
+              With no persona name
+            </div>
+            <div className="mt-1">
+              <Input
+                value={draft.beginMessage}
+                onChange={(beginMessage) => patch({ beginMessage })}
+              />
+            </div>
+          </label>
+          <label className="block">
+            <div className="text-xs font-medium text-[var(--muted-strong)]">
+              With a persona name — {"{name}"} is substituted when the agent is created
+            </div>
+            <div className="mt-1">
+              <Input
+                value={draft.beginMessageNamed}
+                onChange={(beginMessageNamed) => patch({ beginMessageNamed })}
+              />
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Prompt</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[var(--muted)]">
+              {draft.general.split("\n").length} lines
+            </span>
+            {prompt.edited && (
+              <Ghost onClick={() => setShowCode((prev) => !prev)}>
+                {showCode ? "Hide the code version" : "Show the code version"}
+              </Ghost>
+            )}
+          </div>
+        </div>
+        {/* Monospace and a big box: this is a document, and the line breaks
+            are load-bearing — the module joins its array with newlines and the
+            model reads the result as sections. */}
+        <textarea
+          value={draft.general}
+          onChange={(e) => patch({ general: e.target.value })}
+          spellCheck={false}
+          className="mt-3 h-[28rem] w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1.5 font-mono text-xs leading-relaxed"
+        />
+        {showCode && (
+          <div className="mt-3">
+            <div className="text-xs font-medium text-[var(--muted-strong)]">
+              convex/lib/voiceAgentTemplate.ts
+            </div>
+            <textarea
+              value={prompt.code.general}
+              readOnly
+              spellCheck={false}
+              className="mt-1 h-64 w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1.5 font-mono text-xs leading-relaxed text-[var(--muted)]"
+            />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PromptSection({
+  prompts,
+  onOpen,
+}: {
+  prompts: AdminPrompt[];
+  onOpen: (language: PromptCode) => void;
+}) {
+  const drifted = prompts.filter((prompt) => prompt.edited).length;
+
+  return (
+    <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">What a new phone agent is born saying</h2>
+        <span className="text-xs text-[var(--muted)]">
+          Per language, not per vertical — the services and contact fields above
+          are what make an agent sound like its trade.
+        </span>
+      </div>
+      <div className="mt-3 divide-y divide-[var(--table-divider)]">
+        {PROMPT_LANGUAGES.map(({ code, label }) => {
+          const prompt = prompts.find((entry) => entry.language === code);
+          if (!prompt) return null;
+          return (
+            <button
+              key={code}
+              type="button"
+              onClick={() => onOpen(code)}
+              className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+            >
+              <span className="w-20 shrink-0 text-sm font-medium">{label}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--muted)]">
+                {prompt.beginMessage}
+              </span>
+              <span className="shrink-0 tabular-nums text-xs text-[var(--muted)]">
+                {prompt.general.split("\n").length} lines
+              </span>
+              <span className="w-40 shrink-0 text-right">
+                {prompt.edited ? (
+                  <>
+                    <Chip tone="edited">Edited</Chip>
+                    <span className="ml-1 text-xs text-[var(--muted)]">
+                      {ago(prompt.updatedAt ?? undefined)}
+                    </span>
+                  </>
+                ) : (
+                  <Chip tone="code">In code</Chip>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-xs text-[var(--muted)]">
+        {drifted > 0
+          ? "An edited prompt reaches agents created from now on. Agents that already exist keep theirs — their owners edit it in the app, and the template sync never sends prompt text."
+          : "Editing one changes what the next agent is born saying. It never changes an agent that already exists."}
+      </p>
+    </section>
   );
 }
