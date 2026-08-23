@@ -293,17 +293,53 @@ Three layers, resolved wherever a model id is written to the provider —
 The pickers are built from `convex/lib/voiceModels.ts` — the catalogue of ids
 the live API actually accepts (each one validated 20 Aug 2026; the API
 rejects unknown ids but the SDK types the field as a bare string, so the
-catalogue is the real guard). Standard-tier per-minute prices ride each
-option. A stored id that later leaves the catalogue stops resolving
-(`resolvePlatformVoiceModel`) instead of reaching a provider PATCH.
+catalogue is the real guard). A stored id that later leaves the catalogue
+stops resolving (`resolvePlatformVoiceModel`) instead of reaching a provider
+PATCH.
+
+## Which tier it runs at
+
+Retell sells a second, faster price on the same model — `model_high_priority`,
+labelled **Fast tier** in its dashboard. It is not a model and not a quality
+setting: same model, same voice, same prompt, less time queued.
+
+It resolves through the same three layers as the model, in the same order —
+`agent.llmHighPriority ?? platformConfig "voiceHighPriority" ??
+VOICE_AGENT_HIGH_PRIORITY`. Per-agent is the Fast tier row under the Model
+picker on the agent's card, published by `platform.setAgentHighPriority`;
+the fleet row is Voice fast tier in `/admin` → AI & Voice defaults. Both
+stored layers are **tri-state**: unset means inherited, not off. The constant
+has been `true` since template v11 (20 Aug 2026), so reading an empty row as
+false would silently downgrade the fleet.
+
+**What it costs.** Retell publishes a fast-tier price only for the OpenAI
+line, at exactly double — gpt-5.1 is $0.040/min standard, $0.080 fast. Claude
+and Gemini have no published fast price, and the API accepts the flag on them
+anyway (verified 23 Aug 2026 with a throwaway LLM per family: all five echoed
+`true`). `fastTierPriceFor` returns null there and the console says so rather
+than inventing a number.
+
+Orgs pay one flat `voiceRateMicroUsdPerMinute` per called minute regardless,
+so the tier difference is margin, not invoice. That is the argument for having
+the dial at all: the latency was bought for a live salon line, and it was
+being paid for on every demo agent and idle trial org too.
+
+**Every engine publish carries both values.** `enginePatchFor` is the single
+function all three paths use — birth, `syncTemplate`, and the model/tier
+publish — because an omitted field survives the PATCH. The model publish
+originally sent the engine fields alone, which is how a model change quietly
+inherited whatever tier the engine already had.
 
 **Realtime (s2s) entries** are in the same picker with an `(s2s)` label
 suffix. They live in the provider's `s2s_model` field, not `model`, and the
-two are mutually exclusive: `engineFieldsFor` decides the field and nulls the
+two are mutually exclusive: `enginePatchFor` decides the field and nulls the
 other, and both fields ride every engine PATCH because the provider keeps an
 omitted field (verified live — sending only the new one leaves both engines
 configured). An s2s agent speaks with the model's own voices; the configured
-voice stops applying. Two operational facts from the 20 Aug live test:
+voice stops applying. The fast-tier knob does not apply to them — it belongs
+to the STT→LLM→TTS pipeline an s2s agent replaces, so `enginePatchFor` drops
+it and the per-agent control is not rendered. Two operational facts from the
+20 Aug live test:
 Retell rejects s2s calls on free trial credits (`no_valid_payment` — a
 payment method must be on file), and `gpt-realtime-2.1-mini` on a real
 Turkish booking call was slower than Haiku (p50 1664ms vs 1586, p90 3.1s)

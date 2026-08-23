@@ -338,6 +338,13 @@ and they differ ONLY in reach — pick the highest one the fix can live in.
    obliges you to rewrite `voiceDetail.templateBehindHint`, which names what
    the new version does; a banner still advertising the last version's wins
    is a promise about a version nobody is being offered.
+   - **An operator dial is not this lane, even though it rides the same
+     PATCH.** The voice model and its fast tier both resolve
+     `agent override ?? fleet row ?? template constant` and both reach an
+     existing agent on its next publish — but the banner is a promise to the
+     OWNER about their agent, and "the operator changed a default" is not
+     something to ask an owner to click. Add the dial, leave the version
+     alone. Bump only when the template itself starts saying something new.
 3. **Prompt text** — NEW AGENTS ONLY, forever. Existing owners get it only by
    editing their own prompt, which is theirs and which they have tuned.
    - **Since 2026-08-22 this lane also has an /admin surface** (Onboarding →
