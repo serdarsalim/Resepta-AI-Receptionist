@@ -20,7 +20,7 @@ import {
   createVoiceRuntimeToken,
   hashVoiceRuntimeToken,
 } from "./lib/voiceRuntime";
-import { engineFieldsFor } from "./lib/voiceModels";
+import { enginePatchFor } from "./lib/voiceModels";
 import {
   appointmentReceptionistTemplate,
   saveCustomerDetailsTool,
@@ -1194,19 +1194,21 @@ async function provisionAgent(
         status: "creating_engine",
       });
       // A new agent is born on the fleet default when the operator has set
-      // one. engineFieldsFor decides which engine field the default lives
-      // in, and the text-pipeline knobs are dropped when it is realtime —
-      // they belong to the pipeline the agent is not running.
-      const birthEngine = engineFieldsFor(
+      // one. enginePatchFor decides which engine field the default lives in
+      // and drops the text-pipeline knobs when it is realtime — they belong
+      // to the pipeline the agent is not running. It spreads AFTER the
+      // template so its resolved model wins over the template's constant.
+      const birthEngine = enginePatchFor(
         started.platformVoiceModel ?? (template.llm.model as string),
+        {
+          temperature: template.llm.model_temperature,
+          highPriority: template.llm.model_high_priority,
+        },
       );
       const createdLlm = (await (
         await call(key, "POST", "create-retell-llm", {
           ...template.llm,
           ...birthEngine,
-          ...(birthEngine.model === null
-            ? { model_temperature: undefined, model_high_priority: undefined }
-            : {}),
         })
       ).json()) as { llm_id?: string };
       if (!createdLlm.llm_id) throw new Error("provider-returned-no-response-engine");
@@ -1492,22 +1494,20 @@ export const syncTemplate = action({
       // this, clicking the update banner silently put every agent back on
       // the platform default — which is exactly how "I set it in Retell and
       // it keeps becoming Haiku" happened before the override existed. Both
-      // engine fields ride every PATCH (engineFieldsFor), so a realtime
+      // engine fields ride every PATCH (enginePatchFor), so a realtime
       // override survives a sync and a standard agent never keeps a stale
-      // s2s_model. The temperature and priority knobs are text-pipeline
-      // settings, so they only ride when the target IS the text pipeline.
-      const syncEngine = engineFieldsFor(
+      // s2s_model, and the text-pipeline knobs ride only when the target IS
+      // the text pipeline.
+      const syncEngine = enginePatchFor(
         context.llmModel ?? context.platformVoiceModel ?? template.llm.model,
+        {
+          temperature: template.llm.model_temperature,
+          highPriority: template.llm.model_high_priority,
+        },
       );
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
         ...(llmVersion !== undefined ? { version: llmVersion } : {}),
         ...syncEngine,
-        ...(syncEngine.model !== null
-          ? {
-              model_temperature: template.llm.model_temperature,
-              model_high_priority: template.llm.model_high_priority,
-            }
-          : {}),
         general_tools: withRuntimeSaveTool([...templateTools, ...kept]),
         mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm),
       });
@@ -1653,14 +1653,23 @@ export async function applyAgentModel(
     await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
   ).json()) as AgentDoc;
   const llmVersion = draftAgent.response_engine?.version;
-  // Both fields, always — engineFieldsFor nulls whichever side the target
+  // Both fields, always — enginePatchFor nulls whichever side the target
   // does not use, because an omitted field survives the PATCH and would
   // leave both engines configured after a standard↔realtime switch.
   // Clearing the override lands on the FLEET default, not the constant:
   // "platform default" in the picker means whatever /admin currently says.
+  //
+  // The knobs ride too, which they did not before. This path used to send
+  // the engine fields alone, and because an omitted field survives the
+  // PATCH, a model change inherited whatever temperature and priority tier
+  // the engine happened to be carrying — so switching model was a silent way
+  // to keep a setting the operator thought they had left behind.
   await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-    ...engineFieldsFor(model ?? context.platformVoiceModel ?? template.llm.model),
+    ...enginePatchFor(model ?? context.platformVoiceModel ?? template.llm.model, {
+      temperature: template.llm.model_temperature,
+      highPriority: template.llm.model_high_priority,
+    }),
   });
   await call(key, "POST", `publish-agent-version/${id}`, {
     version: draft.version,

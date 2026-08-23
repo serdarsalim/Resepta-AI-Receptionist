@@ -11,9 +11,9 @@
 // Prices are Retell's STANDARD-tier LLM cost per conversation minute
 // (retellai.com/pricing, read 2026-08-20). They are display data for the
 // operator choosing a model — billing truth stays with the provider. The
-// "fast tier" (model_high_priority, which the template enables) is priced
-// separately and only published for the OpenAI models, at roughly double;
-// Claude and Gemini have no listed fast-tier price.
+// "fast tier" is a SECOND price on the same id, not a model of its own; see
+// fastTierPriceFor below for which ids have one and why the rest must be
+// shown as unknown rather than guessed.
 //
 // The platform default lives in voiceAgentTemplate.ts (llm.model), not here:
 // that file owns what a NEW agent is born with, this one owns what the
@@ -66,6 +66,45 @@ export function isVoiceModel(id: string): boolean {
   return VOICE_MODEL_CHOICES.some((choice) => choice.id === id);
 }
 
+// What the fast tier (model_high_priority) costs on a given id, or null when
+// the provider does not publish one.
+//
+// Retell prices fast inference only for the OpenAI line. gpt-5.1 reads $0.040
+// standard against $0.080 fast on the dashboard — exactly double — and the
+// pricing page applies the same doubling across the rest of that line, so one
+// rule covers it and no per-model number has to be hand-copied (a table of
+// transcribed prices is a table that goes stale silently).
+//
+// Claude and Gemini have NO published fast-tier price, and the API accepts
+// model_high_priority: true on them regardless — verified live 2026-08-23 by
+// creating a throwaway LLM per family (gpt-5.1, claude-4.5-haiku,
+// claude-5-sonnet, gemini-3.5-flash, gpt-5.4-mini) and reading the echo: all
+// five came back true. So the flag on a Claude agent buys an unknown amount
+// of speed for an unknown amount of money. That is precisely why this returns
+// null instead of a guess, and why the console says "price not published"
+// rather than printing usdPerMinute twice.
+//
+// Realtime ids return null too, for a different reason: model_high_priority
+// belongs to the STT→LLM→TTS pipeline a speech-to-speech agent is not
+// running, so there is no tier to price (enginePatchFor drops the knob).
+export function fastTierPriceFor(id: string): number | null {
+  const choice = VOICE_MODEL_CHOICES.find((entry) => entry.id === id);
+  if (!choice || choice.realtime) return null;
+  return id.startsWith("gpt-") ? Number((choice.usdPerMinute * 2).toFixed(3)) : null;
+}
+
+// The stored fleet-wide fast-tier default, as a tri-state. Null (unset, or a
+// row holding anything else) means "no operator opinion" and falls through to
+// the template constant, exactly like resolvePlatformVoiceModel above — the
+// platformConfig row is a dumb string, so the parsing lives here where every
+// reader shares it rather than in each caller's idea of what "true" looks
+// like.
+export function resolvePlatformHighPriority(raw: string | null | undefined): boolean | null {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return null;
+}
+
 // The stored platform default, admitted only while the catalogue still knows
 // it. One place, because three readers (editor context, provisioning, the
 // operator console) each resolve the default and a stale row naming a
@@ -80,10 +119,42 @@ export function resolvePlatformVoiceModel(raw: string | null | undefined): strin
 // the API clears a field only when it is explicitly nulled (verified live,
 // 2026-08-20 — an omitted field survives the PATCH), so sending just the new
 // one would leave an agent with both engines configured.
-export function engineFieldsFor(id: string): {
+function engineFieldsFor(id: string): {
   model: string | null;
   s2s_model: string | null;
 } {
   const realtime = VOICE_MODEL_CHOICES.find((choice) => choice.id === id)?.realtime === true;
   return realtime ? { model: null, s2s_model: id } : { model: id, s2s_model: null };
+}
+
+// The complete engine half of a publish: which field the id goes in, plus the
+// two text-pipeline knobs that ride with it.
+//
+// One function because the three publish paths — birth, syncTemplate and the
+// model publish — each used to assemble this by hand, and the model publish
+// forgot the knobs. That omission was invisible rather than loud: an omitted
+// field SURVIVES the PATCH, so changing an agent's model silently kept
+// whatever tier the engine already had. Every path calls this now, so a knob
+// added here reaches all three or none.
+//
+// The knobs come back undefined for a realtime id on purpose. They belong to
+// the STT→LLM→TTS pipeline that a speech-to-speech agent replaces, and
+// undefined is what JSON.stringify drops — so a realtime publish carries no
+// text-pipeline settings rather than carrying meaningless ones.
+export function enginePatchFor(
+  id: string,
+  knobs: { temperature: number; highPriority: boolean },
+): {
+  model: string | null;
+  s2s_model: string | null;
+  model_temperature: number | undefined;
+  model_high_priority: boolean | undefined;
+} {
+  const fields = engineFieldsFor(id);
+  const text = fields.model !== null;
+  return {
+    ...fields,
+    model_temperature: text ? knobs.temperature : undefined,
+    model_high_priority: text ? knobs.highPriority : undefined,
+  };
 }
