@@ -306,15 +306,50 @@ export function InboxView({
                         // and hasFailed; search had been reading lastBody the
                         // whole time, so the row was the only thing on this
                         // screen that could not see it.
-                        className={`group relative flex min-h-[3.5rem] w-full cursor-pointer flex-col justify-center gap-1 px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
+                        className={`group relative flex min-h-[3.5rem] w-full cursor-pointer items-center gap-2.5 px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
                           isActive
                             ? "bg-[var(--row-hover-bg)] before:bg-[var(--foreground)]"
                             : "hover:bg-[var(--row-hover-bg)]"
                         }`}
                       >
-                        {/* Line one is exactly what it always was — name, the
-                            three-state marker, age — so nothing anybody aims
-                            at has moved. */}
+                        {/* UNREAD, in a gutter down the left edge — WhatsApp's
+                            placement, and the reason for it is scanning: one
+                            vertical sweep answers "what have I not read",
+                            where a marker parked after each name has to be
+                            hunted for at a different x on every row.
+
+                            The gutter is always here and only sometimes
+                            filled. Names then sit on one left edge whatever
+                            their state, which is worth the 10px an empty
+                            gutter costs — a list whose text shifts by row
+                            state is harder to read than one that indents.
+
+                            It spans BOTH lines rather than sitting on line
+                            one, so the dot marks the conversation, not the
+                            name.
+
+                            --brand, which is a change of meaning and not just
+                            of hue. Grey was forced on this dot by the slot it
+                            used to share: it WAS the pin button wearing a
+                            second state, so it had to differ from violet. On
+                            its own it can say what it is — the same fact the
+                            sidebar's brand dot reports, computed by the same
+                            rule (messages.ts inboxUnseenCount: "ONE RULE, TWO
+                            READERS"). One meaning, one colour, at both scales.
+
+                            Not a button. The pin is the ACTION on this row;
+                            unread is a state the row reports, and the way to
+                            clear it is to read the thing. */}
+                        <span className="flex w-2.5 shrink-0 items-center justify-center">
+                          {c.unseen && (
+                            <>
+                              <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
+                              <span className="sr-only">{t("inbox.unseen")}</span>
+                            </>
+                          )}
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                        {/* Line one — name, the pin, age. */}
                         <div className="flex w-full items-center gap-2.5">
                         <span
                           className={`min-w-0 flex-1 truncate text-sm ${
@@ -324,28 +359,23 @@ export function InboxView({
                           {c.name || c.phone}
                         </span>
 
-                        {/* THREE states, one hit area, ported from Nudge:
-                            violet (I pinned this) beats grey (they wrote
-                            since my last visit) beats hollow (nothing).
-                            Rendered on every row so the slot never changes
-                            width — the hollow state simply fades in on row
-                            hover.
+                        {/* TWO states now, not three: violet (I pinned this)
+                            or hollow (I could). Unread moved to the gutter on
+                            the left, which is what this control had been
+                            carrying as a third state — and carrying badly. A
+                            grey dot that meant "they wrote" sat in a slot
+                            whose click meant "pin this", so the marker you
+                            were most likely to aim at was the one that did
+                            something else. Rendered on every row so the slot
+                            never changes width; hollow fades in on hover.
 
                             VIOLET, not --brand green, since the same pin is
                             now settable from the contact record too and one
-                            state cannot wear two hues. Green also had a
-                            collision it was losing: the sidebar's inbox dot is
-                            --brand and means "something NEW is in there",
-                            which is not this. Nudge's note is the canonical
-                            argument — a hue with no other job cannot be
-                            misread, and every other one here is taken.
-
-                            Only the PIN is a persistent act. Grey clears
-                            itself when you leave the tab, so it is never a
-                            backlog to work through by hand and never something
-                            you have to dismiss. Clicking a grey row pins it;
-                            clicking green unpins, and the row falls back to
-                            grey if they wrote during this visit.
+                            state cannot wear two hues. Green belongs to
+                            unread, at both scales — the sidebar dot and now
+                            the row gutter. Nudge's note is the canonical
+                            argument: a hue with no other job cannot be
+                            misread.
 
                             This replaced a channel strip of phone/mail/
                             WhatsApp glyphs. They were an action nobody took:
@@ -363,31 +393,13 @@ export function InboxView({
                               pinned: !c.pinned,
                             });
                           }}
-                          title={
-                            c.pinned
-                              ? t("inbox.pinnedHint")
-                              : c.unseen
-                                ? t("inbox.unseenHint")
-                                : t("inbox.pinHint")
-                          }
-                          aria-label={
-                            c.pinned
-                              ? t("inbox.pinned")
-                              : c.unseen
-                                ? t("inbox.unseen")
-                                : t("inbox.notPinned")
-                          }
+                          title={c.pinned ? t("inbox.pinnedHint") : t("inbox.pinHint")}
+                          aria-label={c.pinned ? t("inbox.pinned") : t("inbox.notPinned")}
                           aria-pressed={c.pinned}
                           className={
                             c.pinned
                               ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-violet-500 transition-transform hover:scale-125"
-                              : c.unseen
-                                ? // --muted already flips per theme, so grey
-                                  // needs no dark: variant. Smaller than the
-                                  // pin inside the same slot, so the two
-                                  // differ by size as well as hue.
-                                  "h-2 w-2 shrink-0 cursor-pointer rounded-full bg-[var(--muted)] transition-transform hover:scale-125"
-                                : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                              : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                           }
                         />
 
@@ -432,6 +444,7 @@ export function InboxView({
                             )}
                             {previewOf(c, t)}
                           </span>
+                        </div>
                         </div>
                       </div>
                     </li>

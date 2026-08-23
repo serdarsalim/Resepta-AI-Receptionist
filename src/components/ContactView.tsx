@@ -98,6 +98,24 @@ export function ContactView({
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setMuted = useMutation(api.customers.setMuted);
+  const markConversationRead = useMutation(api.messages.markConversationRead);
+
+  // Reading a conversation happens HERE now, so this is where it gets marked
+  // read. Since 2026-08-22 an inbox row navigates to this page instead of
+  // filling the pane beside it, and the stamp went with the click — which
+  // covered exactly one of the doors into this page. Every other way in
+  // (Customers, the header jump list, an appointment, a name in someone
+  // else's feed) opened the same conversation and left the dot burning.
+  //
+  // On mount rather than on scroll or on a timer, and that IS the "person
+  // chose to read this" signal the mutation's own comment asks for: nothing
+  // auto-restores a contact page. AppHome starts with contactId null and only
+  // ever sets it from a click, so this component existing means somebody
+  // opened it. The view is keyed on customerId there, so this runs once per
+  // contact rather than once per render.
+  useEffect(() => {
+    void markConversationRead({ customerId }).catch(() => {});
+  }, [customerId, markConversationRead]);
   // Same sheet the calendar opens, same conflict handling. No onOpenContact:
   // the record it would navigate to is the one you are reading.
   const booking = useBookingSheet({});

@@ -1755,6 +1755,11 @@ const dictionary = {
   // never drops into du.
   "inbox.youPrefix": { tr: "Siz:", en: "You:", de: "Sie:" },
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
+  // Announced by the unread dot in the row's left gutter, which is not a
+  // control — so this names a STATE and nothing else. Its old companion
+  // ("New reply. Click to pin it for later") died with the shared slot: the
+  // dot no longer does anything when clicked, and telling a reader otherwise
+  // was the confusion that moved it.
   "inbox.unseen": { tr: "Yeni mesaj", en: "New reply", de: "Neue Nachricht" },
   // The list-filter chips. Their own keys rather than reusing the two above:
   // those name a row's STATE for a screen reader ("Sabitlendi" = this one is
@@ -1784,11 +1789,6 @@ const dictionary = {
     tr: "Yanıtlamanız için sabitlendi. Kaldırmak için tıklayın",
     en: "Pinned for you to answer. Click to unpin",
     de: "Zum Beantworten angeheftet. Zum Lösen klicken",
-  },
-  "inbox.unseenHint": {
-    tr: "Yeni mesaj. Sonrası için sabitlemek üzere tıklayın",
-    en: "New reply. Click to pin it for later",
-    de: "Neue Nachricht. Zum Merken anheften",
   },
   "inbox.pinHint": {
     tr: "Sonrası için sabitlemek üzere tıklayın",
