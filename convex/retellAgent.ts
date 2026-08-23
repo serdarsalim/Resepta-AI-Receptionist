@@ -1633,7 +1633,12 @@ export const wireWebhook = action({
 // let a model change inherit a stale tier for as long as it did.
 type EngineChange =
   | { field: "model"; model: string | null }
-  | { field: "highPriority"; highPriority: boolean | null };
+  | { field: "highPriority"; highPriority: boolean | null }
+  // Both at once, which is what the console sends now that the picker offers
+  // an ENGINE rather than a model and a tier to cross-reference. One variant
+  // rather than two calls, because two would mean two provider round trips
+  // and two published versions for what the operator did once.
+  | { field: "engine"; model: string | null; highPriority: boolean | null };
 
 // The provider half of the operator's engine overrides; the gates live in
 // platform.setAgentModel / setAgentHighPriority, the only callers. Same
@@ -1676,9 +1681,10 @@ async function applyEngineChange(
   // operator already chose. Both then fall through fleet default to template
   // constant, the same three steps syncTemplate uses — so a publish here and
   // a publish from the owner's update banner resolve to the same engine.
-  const modelOverride = change.field === "model" ? change.model : context.llmModel;
+  const modelOverride =
+    change.field === "highPriority" ? context.llmModel : change.model;
   const priorityOverride =
-    change.field === "highPriority" ? change.highPriority : context.llmHighPriority;
+    change.field === "model" ? context.llmHighPriority : change.highPriority;
   // Both fields, always — enginePatchFor nulls whichever side the target
   // does not use, because an omitted field survives the PATCH and would
   // leave both engines configured after a standard↔realtime switch.
@@ -1700,21 +1706,18 @@ async function applyEngineChange(
   });
   await call(key, "POST", `publish-agent-version/${id}`, {
     version: draft.version,
-    version_title:
-      change.field === "model"
-        ? change.model
-          ? `Model → ${change.model}`
-          : "Model → platform default"
-        : change.highPriority === null
-          ? "Fast tier → platform default"
-          : `Fast tier → ${change.highPriority ? "on" : "off"}`,
+    version_title: versionTitleFor(change),
   });
-  if (change.field === "model") {
+  // Both stamps for an engine change, each landing only after the publish it
+  // describes succeeded — the row must never claim a setting the agent is not
+  // running, which is the same contract the single-knob paths keep.
+  if (change.field !== "highPriority") {
     await ctx.runMutation(internal.retell.markLlmModel, {
       retellAgentId: agentId,
       model: change.model,
     });
-  } else {
+  }
+  if (change.field !== "model") {
     await ctx.runMutation(internal.retell.markLlmHighPriority, {
       retellAgentId: agentId,
       highPriority: change.highPriority,
@@ -1723,11 +1726,48 @@ async function applyEngineChange(
   return { ok: true, version: draft.version };
 }
 
+// What the operator will see in Retell's version list. Named after the thing
+// they changed, so a version history reads as a log of decisions rather than
+// of PATCHes.
+function versionTitleFor(change: EngineChange): string {
+  if (change.field === "model") {
+    return change.model ? `Model → ${change.model}` : "Model → platform default";
+  }
+  if (change.field === "highPriority") {
+    return change.highPriority === null
+      ? "Fast tier → platform default"
+      : `Fast tier → ${change.highPriority ? "on" : "off"}`;
+  }
+  if (!change.model) return "Engine → platform default";
+  return `Engine → ${change.model}${change.highPriority ? " (fast)" : ""}`;
+}
+
 export async function applyAgentModel(
   ctx: ActionCtx,
   { agentId, orgId, model }: { agentId: string; orgId: Id<"orgs">; model: string | null },
 ): Promise<{ ok: boolean; version: number | null }> {
   return await applyEngineChange(ctx, { agentId, orgId, change: { field: "model", model } });
+}
+
+export async function applyAgentEngine(
+  ctx: ActionCtx,
+  {
+    agentId,
+    orgId,
+    model,
+    highPriority,
+  }: {
+    agentId: string;
+    orgId: Id<"orgs">;
+    model: string | null;
+    highPriority: boolean | null;
+  },
+): Promise<{ ok: boolean; version: number | null }> {
+  return await applyEngineChange(ctx, {
+    agentId,
+    orgId,
+    change: { field: "engine", model, highPriority },
+  });
 }
 
 export async function applyAgentHighPriority(

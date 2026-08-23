@@ -122,6 +122,84 @@ export function voiceModelPriceHint(id: string, highPriority: boolean): string {
   return fast === null ? `${standard} · fast unpriced` : `$${fast.toFixed(3)}/min fast`;
 }
 
+// ---- The picker's rows: a model and its tier, as one choice ----
+//
+// Retell's own console draws it this way and Serdar asked for the same shape
+// (2026-08-24): you pick an ENGINE, not a model and then a tier. There it is a
+// submenu hanging off the OpenAI rows; here it is two adjacent rows in the
+// existing SearchSelect, because the rule that matters is "reuse the style
+// that already exists" and a bespoke submenu widget to imitate one provider's
+// dashboard would be a lookalike, not a port. Same information, same
+// adjacency, the component this app already has.
+//
+// What it costs, stated where the cost lives: "explicit model, inherited
+// tier" is no longer expressible. Picking a model now pins its tier too, so a
+// fleet tier change stops reaching any agent that pinned one. Inheritance
+// survives exactly where it was always clearest — the "Platform default" row,
+// which follows both.
+
+export type VoiceEngineChoice = {
+  // What the picker stores. See encodeEngine below for the grammar.
+  value: string;
+  id: string;
+  label: string;
+  usdPerMinute: number;
+  fast: boolean;
+};
+
+// "gpt-5.1" or "gpt-5.1:fast". A suffix rather than two fields because the
+// component takes one string, and a suffix on the id keeps the standard row's
+// value byte-identical to what the picker stored before this existed — every
+// row already in the database reads back as the same choice it was.
+export function encodeEngine(id: string, fast: boolean): string {
+  return fast ? `${id}:fast` : id;
+}
+
+export function decodeEngine(value: string): { id: string; fast: boolean } | null {
+  if (!value) return null;
+  const fast = value.endsWith(":fast");
+  const id = fast ? value.slice(0, -":fast".length) : value;
+  return isVoiceModel(id) ? { id, fast } : null;
+}
+
+// Every choice the picker offers, fast variants sitting immediately under
+// their standard row so the two prices for one model read as a pair. A model
+// with no fast tier contributes one row and no gap, which is how Retell's
+// list shows the same fact (no chevron on the Claude and Gemini rows).
+export function voiceEngineChoices(): VoiceEngineChoice[] {
+  const out: VoiceEngineChoice[] = [];
+  for (const choice of VOICE_MODEL_CHOICES) {
+    out.push({
+      value: encodeEngine(choice.id, false),
+      id: choice.id,
+      label: choice.label,
+      usdPerMinute: choice.usdPerMinute,
+      fast: false,
+    });
+    const fast = fastTierPriceFor(choice.id);
+    if (fast !== null) {
+      out.push({
+        value: encodeEngine(choice.id, true),
+        id: choice.id,
+        // The word, not a coloured pill: this list is searchable, and "fast"
+        // typed into the box should find these rows.
+        label: `${choice.label} · Fast`,
+        usdPerMinute: fast,
+        fast: true,
+      });
+    }
+  }
+  return out;
+}
+
+// How a resolved engine reads in one line — the "Platform default — ..." row,
+// and anywhere else a screen has to name what an agent is actually running.
+export function engineLabel(id: string, fast: boolean): string {
+  const choice = VOICE_MODEL_CHOICES.find((entry) => entry.id === id);
+  const label = choice?.label ?? id;
+  return fast && fastTierPriceFor(id) !== null ? `${label} · Fast` : label;
+}
+
 // The stored fleet-wide fast-tier default, as a tri-state. Null (unset, or a
 // row holding anything else) means "no operator opinion" and falls through to
 // the template constant, exactly like resolvePlatformVoiceModel above — the

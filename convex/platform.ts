@@ -55,7 +55,11 @@ import {
   resolvePlatformHighPriority,
   resolvePlatformVoiceModel,
 } from "./lib/voiceModels";
-import { applyAgentHighPriority, applyAgentModel } from "./retellAgent";
+import {
+  applyAgentEngine,
+  applyAgentHighPriority,
+  applyAgentModel,
+} from "./retellAgent";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -1345,6 +1349,39 @@ export const setAgentHighPriority = action({
     return await applyAgentHighPriority(ctx, {
       agentId: args.retellAgentId,
       orgId: args.orgId,
+      highPriority: args.highPriority,
+    });
+  },
+});
+
+// The console's per-agent engine picker: model and tier as one decision, one
+// publish, one version at the provider. setAgentModel and setAgentHighPriority
+// above are still the single-knob doors — the CLI and any operator script that
+// wants to move a fleet's tier without touching which model it runs — but the
+// UI sends this, because a picker that wrote two settings through two actions
+// would leave an agent on the new model at the old tier whenever the second
+// call failed.
+//
+// Both null clears both overrides back to the fleet default. The model id is
+// re-checked here for the same reason setAgentModel checks it: the catalogue
+// is data, and a validator cannot read it.
+export const setAgentEngine = action({
+  args: {
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    model: v.union(v.string(), v.null()),
+    highPriority: v.union(v.boolean(), v.null()),
+  },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, args): Promise<{ ok: boolean; version: number | null }> => {
+    await ctx.runQuery(internal.platform.assertOperator, {});
+    if (args.model !== null && !isVoiceModel(args.model)) {
+      throw new Error(`Unknown model: ${args.model}`);
+    }
+    return await applyAgentEngine(ctx, {
+      agentId: args.retellAgentId,
+      orgId: args.orgId,
+      model: args.model,
       highPriority: args.highPriority,
     });
   },
