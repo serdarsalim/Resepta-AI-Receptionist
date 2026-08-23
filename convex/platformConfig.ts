@@ -23,6 +23,7 @@ import {
   platformValue,
   type PlatformKey,
 } from "./lib/platformConfig";
+import { resolvePlatformHighPriority } from "./lib/voiceModels";
 
 export const emailConfigValidator = v.object({
   apiKey: v.union(v.string(), v.null()),
@@ -66,6 +67,11 @@ export const status = query({
     // The stored fleet default for voice agents, plain — a model id is not a
     // secret, and the picker needs the exact value back to show it selected.
     voiceModel: v.union(v.string(), v.null()),
+    // Tri-state, like the row: null is "unset", which the publish paths read
+    // as the template's own constant. The console has to be able to show
+    // that third state — a plain checkbox would claim the operator had
+    // chosen the tier they merely inherited.
+    voiceHighPriority: v.union(v.boolean(), v.null()),
     retellApiKey: v.union(v.string(), v.null()),
     // The Meta Cloud API platform token every waAccounts row without its own
     // token rides (lib/platformConfig resolveWaAccount).
@@ -125,6 +131,7 @@ export const status = query({
         (provider === "openai" ? row("chatAgentModel") : null),
       chatAgentDisabled: (await platformValue(ctx, "chatAgentDisabled")) === "true",
       voiceModel: row("voiceModel"),
+      voiceHighPriority: resolvePlatformHighPriority(row("voiceHighPriority")),
       retellApiKey: retellKey ? maskSecret(retellKey) : null,
       whatsappAccessToken: waToken ? maskSecret(waToken) : null,
       voiceRateMicroUsdPerMinute:
@@ -177,6 +184,11 @@ const settableKey = v.union(
   // key-value write, and a row that outlives its catalogue entry simply
   // stops resolving instead of blocking the operator from clearing it.
   v.literal("voiceModel"),
+  // The fleet-wide fast-tier default ("true" / "false"). Parsed on READ
+  // (resolvePlatformHighPriority) for the same reason voiceModel is: `set`
+  // stays a dumb key-value write, and anything else in the row reads as
+  // unset rather than blocking the operator from correcting it.
+  v.literal("voiceHighPriority"),
   v.literal("voiceRateMicroUsdPerMinute"),
   // What a new org is born as, and the prepaid welcome credit.
   v.literal("defaultBillingMode"),

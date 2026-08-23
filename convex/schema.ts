@@ -728,6 +728,14 @@ export default defineSchema({
     // operator's choice survives the owner clicking the template-update
     // banner — same contract as canEndCall above.
     llmModel: v.optional(v.string()),
+    // Operator's per-agent fast-tier override (Retell's model_high_priority).
+    // Unset means the fleet default from /admin, and an unset fleet row means
+    // the template constant — same three-step fall-through as llmModel above,
+    // and stored for the same reason: syncTemplate reads it back so clicking
+    // the owner's update banner cannot silently repoint a tier the operator
+    // chose. Only meaningful on a text-pipeline model; a realtime agent has
+    // no such knob and enginePatchFor drops it.
+    llmHighPriority: v.optional(v.boolean()),
     // Which Resepta template generation last touched this agent's voice
     // engineering — stamped at creation and by syncTemplate, compared against
     // VOICE_AGENT_TEMPLATE_VERSION to offer the update. Absent on agents from

@@ -80,6 +80,19 @@ export const PLATFORM_KEYS = {
   // has left lib/voiceModels falls back the same way at read time — a
   // retired model name must never reach a provider PATCH.
   voiceModel: null,
+  // Whether the fleet runs on Retell's fast tier (model_high_priority) —
+  // "true" / "false", unset meaning no operator opinion and falling through
+  // to VOICE_AGENT_MODEL's companion constant in the template. Deliberately
+  // a tri-state rather than a boolean-with-a-default: the template turned
+  // this on for latency in v11, and an unset row has to keep meaning THAT
+  // rather than silently downgrading every agent the first time somebody
+  // reads the row. Table-only, an operator decision from /admin.
+  //
+  // It is the most expensive knob on this page. Fast tier doubles the LLM
+  // minute on the OpenAI models (lib/voiceModels fastTierPriceFor) and the
+  // org pays a flat voiceRateMicroUsdPerMinute either way, so the difference
+  // comes out of margin, not out of the invoice.
+  voiceHighPriority: null,
   // The default price per called minute, micro-USD as a string ("300000" =
   // $0.30/min). Set once here instead of on every org: the meter resolves
   // org.voiceRateMicroUsdPerMinute ?? this ?? 0 at stamp time, so an org row

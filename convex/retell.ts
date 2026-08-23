@@ -26,7 +26,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { monthKey } from "./lib/usage";
 import { platformValue } from "./lib/platformConfig";
-import { resolvePlatformVoiceModel } from "./lib/voiceModels";
+import { resolvePlatformHighPriority, resolvePlatformVoiceModel } from "./lib/voiceModels";
 import { queueOrgAlert } from "./lib/alerts";
 import { WALLET_LOW_MICRO_USD } from "./wallet";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
@@ -723,7 +723,11 @@ export const agentEditorContext = internalQuery({
       personaName: agent.personaName ?? null,
       canEndCall: agent.canEndCall ?? true,
       llmModel: agent.llmModel ?? null,
+      llmHighPriority: agent.llmHighPriority ?? null,
       platformVoiceModel: resolvePlatformVoiceModel(await platformValue(ctx, "voiceModel")),
+      platformHighPriority: resolvePlatformHighPriority(
+        await platformValue(ctx, "voiceHighPriority"),
+      ),
       runtimeConnectedAt: agent.runtimeConnectedAt ?? null,
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
@@ -1714,6 +1718,24 @@ export const markLlmModel = internalMutation({
       .unique();
     if (!agent) throw new Error("no-such-agent");
     await ctx.db.patch(agent._id, { llmModel: model ?? undefined });
+    return null;
+  },
+});
+
+// Stores the operator's fast-tier override only — the tier itself changes at
+// the provider first (platform.setAgentHighPriority publishes it), and this
+// stamp lands afterwards. Same contract as markLlmModel above, and null
+// clears the override back to the fleet default.
+export const markLlmHighPriority = internalMutation({
+  args: { retellAgentId: v.string(), highPriority: v.union(v.boolean(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, highPriority }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { llmHighPriority: highPriority ?? undefined });
     return null;
   },
 });

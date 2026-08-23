@@ -44,8 +44,12 @@ import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig, platformValue, type EmailConfig } from "./lib/platformConfig";
 import { recordActivity } from "./lib/activity";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
-import { isVoiceModel, resolvePlatformVoiceModel } from "./lib/voiceModels";
-import { applyAgentModel } from "./retellAgent";
+import {
+  isVoiceModel,
+  resolvePlatformHighPriority,
+  resolvePlatformVoiceModel,
+} from "./lib/voiceModels";
+import { applyAgentHighPriority, applyAgentModel } from "./retellAgent";
 
 const DAY_MS = 24 * 3600_000;
 
@@ -434,6 +438,11 @@ export const orgDetail = query({
       // reads this so the two screens cannot disagree about what default
       // means.
       platformVoiceModel: v.union(v.string(), v.null()),
+      // The fleet fast-tier default, tri-state: null is "unset", which the
+      // per-agent picker renders as the template's own constant. Read here
+      // for the same reason as the model above — so the business page and
+      // /admin cannot disagree about what "platform default" means.
+      platformHighPriority: v.union(v.boolean(), v.null()),
       calcomWebhookToken: v.union(v.string(), v.null()),
       evolutionInstance: v.union(v.string(), v.null()),
       evolutionWebhookToken: v.union(v.string(), v.null()),
@@ -458,6 +467,7 @@ export const orgDetail = query({
           // The operator's model override, null when the agent runs the
           // platform default. Display + the picker's current value.
           llmModel: v.union(v.string(), v.null()),
+          llmHighPriority: v.union(v.boolean(), v.null()),
           runtimeConnectedAt: v.union(v.number(), v.null()),
           lastCallEventAt: v.union(v.number(), v.null()),
           lastAnalyzedEventAt: v.union(v.number(), v.null()),
@@ -562,6 +572,9 @@ export const orgDetail = query({
       platformVoiceModel: resolvePlatformVoiceModel(
         await platformValue(ctx, "voiceModel"),
       ),
+      platformHighPriority: resolvePlatformHighPriority(
+        await platformValue(ctx, "voiceHighPriority"),
+      ),
       calcomWebhookToken: org.calcomWebhookToken ?? null,
       evolutionInstance: org.evolutionInstance ?? null,
       evolutionWebhookToken: org.evolutionWebhookToken ?? null,
@@ -585,6 +598,7 @@ export const orgDetail = query({
           transferNumber: a.transferNumber ?? null,
           enabled: a.enabled,
           llmModel: a.llmModel ?? null,
+          llmHighPriority: a.llmHighPriority ?? null,
           runtimeConnectedAt: a.runtimeConnectedAt ?? null,
           lastCallEventAt: a.lastCallEventAt ?? null,
           lastAnalyzedEventAt: a.lastAnalyzedEventAt ?? null,
@@ -1299,6 +1313,33 @@ export const setAgentModel = action({
       agentId: args.retellAgentId,
       orgId: args.orgId,
       model: args.model,
+    });
+  },
+});
+
+// The operator's per-agent fast-tier override, from /admin. An action for the
+// same reason setAgentModel is one: the tier lives in the provider's response
+// engine, so applyAgentHighPriority clones a draft, patches the engine,
+// publishes, and only then stamps the row. Null clears the override back to
+// the fleet default.
+//
+// Unlike the model there is no catalogue to re-check against — a boolean is
+// its own validator. What the console owes the operator instead is the price
+// (lib/voiceModels fastTierPriceFor), because this is the one agent setting
+// that changes the bill without changing anything the caller hears.
+export const setAgentHighPriority = action({
+  args: {
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    highPriority: v.union(v.boolean(), v.null()),
+  },
+  returns: v.object({ ok: v.boolean(), version: v.union(v.number(), v.null()) }),
+  handler: async (ctx, args): Promise<{ ok: boolean; version: number | null }> => {
+    await ctx.runQuery(internal.platform.assertOperator, {});
+    return await applyAgentHighPriority(ctx, {
+      agentId: args.retellAgentId,
+      orgId: args.orgId,
+      highPriority: args.highPriority,
     });
   },
 });

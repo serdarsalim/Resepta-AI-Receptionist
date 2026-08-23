@@ -108,10 +108,13 @@ type EditorContext = {
   personaName: string | null;
   canEndCall: boolean;
   llmModel: string | null;
-  // The fleet default, already validated against the catalogue by
-  // agentEditorContext. Sits between the per-agent override and the
-  // template constant in every resolution.
+  llmHighPriority: boolean | null;
+  // The fleet defaults, already validated by agentEditorContext. Each sits
+  // between the per-agent override and the template constant in every
+  // resolution: agent ?? fleet ?? template, three steps, same order for the
+  // model and for the tier.
   platformVoiceModel: string | null;
+  platformHighPriority: boolean | null;
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
@@ -1145,6 +1148,7 @@ async function provisionAgent(
     apiKey: string;
     orgName: string;
     platformVoiceModel: string | null;
+    platformHighPriority: boolean | null;
     row: {
       _id: string;
       status: string;
@@ -1202,7 +1206,9 @@ async function provisionAgent(
         started.platformVoiceModel ?? (template.llm.model as string),
         {
           temperature: template.llm.model_temperature,
-          highPriority: template.llm.model_high_priority,
+          // A new agent has no per-agent override yet, so this is the fleet
+          // row or the template constant — two steps of the usual three.
+          highPriority: started.platformHighPriority ?? template.llm.model_high_priority,
         },
       );
       const createdLlm = (await (
@@ -1502,7 +1508,10 @@ export const syncTemplate = action({
         context.llmModel ?? context.platformVoiceModel ?? template.llm.model,
         {
           temperature: template.llm.model_temperature,
-          highPriority: template.llm.model_high_priority,
+          highPriority:
+            context.llmHighPriority ??
+            context.platformHighPriority ??
+            template.llm.model_high_priority,
         },
       );
       await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
@@ -1617,15 +1626,25 @@ export const wireWebhook = action({
   },
 });
 
-// The provider half of the operator's model override; the gate lives in
-// platform.setAgentModel, which is the only caller. Same publish shape as
-// setEndCallEnabled — clone a draft, patch the engine, publish — because the
-// model, like a tool, lives in the response engine and cannot be injected at
-// ring time. `model` null puts the agent back on the platform default (the
-// template's model). The row is stamped only after the publish succeeds.
-export async function applyAgentModel(
+// What the operator changed. One shape per knob, because the two share every
+// line of the publish below and differ only in which override they replace,
+// what the version is titled, and which row gets stamped — and because the
+// engine PATCH must carry BOTH values every time. Sending one alone is what
+// let a model change inherit a stale tier for as long as it did.
+type EngineChange =
+  | { field: "model"; model: string | null }
+  | { field: "highPriority"; highPriority: boolean | null };
+
+// The provider half of the operator's engine overrides; the gates live in
+// platform.setAgentModel / setAgentHighPriority, the only callers. Same
+// publish shape as setEndCallEnabled — clone a draft, patch the engine,
+// publish — because the model and its tier, like a tool, live in the response
+// engine and cannot be injected at ring time. A null override puts the agent
+// back on the fleet default. The row is stamped only after the publish
+// succeeds, so it can never claim a setting the agent is not running.
+async function applyEngineChange(
   ctx: ActionCtx,
-  { agentId, orgId, model }: { agentId: string; orgId: Id<"orgs">; model: string | null },
+  { agentId, orgId, change }: { agentId: string; orgId: Id<"orgs">; change: EngineChange },
 ): Promise<{ ok: boolean; version: number | null }> {
   const context = await editorContext(ctx, agentId, orgId);
   const key = context.apiKey!;
@@ -1633,7 +1652,7 @@ export async function applyAgentModel(
   const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
   const llmId = live.response_engine?.llm_id;
   if (live.response_engine?.type !== "retell-llm" || !llmId) {
-    throw new Error("The model is only configurable on a Retell LLM agent.");
+    throw new Error("Engine settings are only configurable on a Retell LLM agent.");
   }
   if (live.version === undefined) throw new Error("Agent has no version to clone.");
 
@@ -1653,10 +1672,17 @@ export async function applyAgentModel(
     await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
   ).json()) as AgentDoc;
   const llmVersion = draftAgent.response_engine?.version;
+  // The knob being changed takes the new value; the other keeps whatever the
+  // operator already chose. Both then fall through fleet default to template
+  // constant, the same three steps syncTemplate uses — so a publish here and
+  // a publish from the owner's update banner resolve to the same engine.
+  const modelOverride = change.field === "model" ? change.model : context.llmModel;
+  const priorityOverride =
+    change.field === "highPriority" ? change.highPriority : context.llmHighPriority;
   // Both fields, always — enginePatchFor nulls whichever side the target
   // does not use, because an omitted field survives the PATCH and would
   // leave both engines configured after a standard↔realtime switch.
-  // Clearing the override lands on the FLEET default, not the constant:
+  // Clearing an override lands on the FLEET default, not the constant:
   // "platform default" in the picker means whatever /admin currently says.
   //
   // The knobs ride too, which they did not before. This path used to send
@@ -1666,20 +1692,57 @@ export async function applyAgentModel(
   // to keep a setting the operator thought they had left behind.
   await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-    ...enginePatchFor(model ?? context.platformVoiceModel ?? template.llm.model, {
+    ...enginePatchFor(modelOverride ?? context.platformVoiceModel ?? template.llm.model, {
       temperature: template.llm.model_temperature,
-      highPriority: template.llm.model_high_priority,
+      highPriority:
+        priorityOverride ?? context.platformHighPriority ?? template.llm.model_high_priority,
     }),
   });
   await call(key, "POST", `publish-agent-version/${id}`, {
     version: draft.version,
-    version_title: model ? `Model → ${model}` : "Model → platform default",
+    version_title:
+      change.field === "model"
+        ? change.model
+          ? `Model → ${change.model}`
+          : "Model → platform default"
+        : change.highPriority === null
+          ? "Fast tier → platform default"
+          : `Fast tier → ${change.highPriority ? "on" : "off"}`,
   });
-  await ctx.runMutation(internal.retell.markLlmModel, {
-    retellAgentId: agentId,
-    model,
-  });
+  if (change.field === "model") {
+    await ctx.runMutation(internal.retell.markLlmModel, {
+      retellAgentId: agentId,
+      model: change.model,
+    });
+  } else {
+    await ctx.runMutation(internal.retell.markLlmHighPriority, {
+      retellAgentId: agentId,
+      highPriority: change.highPriority,
+    });
+  }
   return { ok: true, version: draft.version };
+}
+
+export async function applyAgentModel(
+  ctx: ActionCtx,
+  { agentId, orgId, model }: { agentId: string; orgId: Id<"orgs">; model: string | null },
+): Promise<{ ok: boolean; version: number | null }> {
+  return await applyEngineChange(ctx, { agentId, orgId, change: { field: "model", model } });
+}
+
+export async function applyAgentHighPriority(
+  ctx: ActionCtx,
+  {
+    agentId,
+    orgId,
+    highPriority,
+  }: { agentId: string; orgId: Id<"orgs">; highPriority: boolean | null },
+): Promise<{ ok: boolean; version: number | null }> {
+  return await applyEngineChange(ctx, {
+    agentId,
+    orgId,
+    change: { field: "highPriority", highPriority },
+  });
 }
 
 // The Inbound number dropdown is a routing control, not a note. Assigning a
