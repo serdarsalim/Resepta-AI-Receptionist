@@ -31,6 +31,22 @@ export type VoiceModelChoice = {
   // rest; the 2.1 pair carries the family price, Retell does not list it
   // separately.
   realtime?: true;
+  // Retell's fast-tier price for THIS id, absent when the provider offers no
+  // fast tier on it. Read off Retell's own model picker (24 Aug 2026), where
+  // a row with a chevron opens a Default/Fast submenu and a row without has
+  // no tier to choose at all.
+  //
+  // Per-model data, never a rule, and the picker is exactly why: gpt-4.1-nano
+  // has a fast tier and gpt-5-nano does not. A prefix heuristic over "gpt-"
+  // shipped here first and invented two tiers that do not exist. Membership
+  // follows neither the family, nor the generation, nor the size.
+  //
+  // The NUMBER is still doubling, which is the honest state of it. gpt-5.1
+  // reads $0.040 against $0.080 in its submenu, exactly 2x, and the pricing
+  // page describes the OpenAI fast tier that way for the line; only 5.1 has
+  // been read directly. Correct one of these the day a submenu says otherwise.
+  // It is a number to edit, not logic to unpick.
+  fastUsdPerMinute?: number;
 };
 
 export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
@@ -38,18 +54,18 @@ export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
   { id: "claude-4.5-sonnet", label: "Claude 4.5 Sonnet", usdPerMinute: 0.08 },
   { id: "claude-4.6-sonnet", label: "Claude 4.6 Sonnet", usdPerMinute: 0.08 },
   { id: "claude-5-sonnet", label: "Claude 5 Sonnet", usdPerMinute: 0.08 },
-  { id: "gpt-5.5", label: "GPT 5.5", usdPerMinute: 0.16 },
-  { id: "gpt-5.4", label: "GPT 5.4", usdPerMinute: 0.08 },
-  { id: "gpt-5.4-mini", label: "GPT 5.4 Mini", usdPerMinute: 0.036 },
+  { id: "gpt-5.5", label: "GPT 5.5", usdPerMinute: 0.16, fastUsdPerMinute: 0.32 },
+  { id: "gpt-5.4", label: "GPT 5.4", usdPerMinute: 0.08, fastUsdPerMinute: 0.16 },
+  { id: "gpt-5.4-mini", label: "GPT 5.4 Mini", usdPerMinute: 0.036, fastUsdPerMinute: 0.072 },
   { id: "gpt-5.4-nano", label: "GPT 5.4 Nano", usdPerMinute: 0.01 },
-  { id: "gpt-5.2", label: "GPT 5.2", usdPerMinute: 0.056 },
-  { id: "gpt-5.1", label: "GPT 5.1", usdPerMinute: 0.04 },
-  { id: "gpt-5", label: "GPT 5", usdPerMinute: 0.04 },
-  { id: "gpt-5-mini", label: "GPT 5 Mini", usdPerMinute: 0.012 },
+  { id: "gpt-5.2", label: "GPT 5.2", usdPerMinute: 0.056, fastUsdPerMinute: 0.112 },
+  { id: "gpt-5.1", label: "GPT 5.1", usdPerMinute: 0.04, fastUsdPerMinute: 0.08 },
+  { id: "gpt-5", label: "GPT 5", usdPerMinute: 0.04, fastUsdPerMinute: 0.08 },
+  { id: "gpt-5-mini", label: "GPT 5 Mini", usdPerMinute: 0.012, fastUsdPerMinute: 0.024 },
   { id: "gpt-5-nano", label: "GPT 5 Nano", usdPerMinute: 0.003 },
-  { id: "gpt-4.1", label: "GPT 4.1", usdPerMinute: 0.045 },
-  { id: "gpt-4.1-mini", label: "GPT 4.1 Mini", usdPerMinute: 0.016 },
-  { id: "gpt-4.1-nano", label: "GPT 4.1 Nano", usdPerMinute: 0.004 },
+  { id: "gpt-4.1", label: "GPT 4.1", usdPerMinute: 0.045, fastUsdPerMinute: 0.09 },
+  { id: "gpt-4.1-mini", label: "GPT 4.1 Mini", usdPerMinute: 0.016, fastUsdPerMinute: 0.032 },
+  { id: "gpt-4.1-nano", label: "GPT 4.1 Nano", usdPerMinute: 0.004, fastUsdPerMinute: 0.008 },
   { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", usdPerMinute: 0.069 },
   { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", usdPerMinute: 0.081 },
   { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", usdPerMinute: 0.023 },
@@ -67,32 +83,26 @@ export function isVoiceModel(id: string): boolean {
 }
 
 // What the fast tier (model_high_priority) costs on a given id, or null when
-// the provider does not publish one.
+// there is no fast tier to buy. A lookup now, not a rule — see
+// fastUsdPerMinute above for what the rule got wrong.
 //
-// Retell prices fast inference only for the OpenAI line. gpt-5.1 reads $0.040
-// standard against $0.080 fast on the dashboard — exactly double — and the
-// pricing page applies the same doubling across the rest of that line, so one
-// rule covers it and no per-model number has to be hand-copied (a table of
-// transcribed prices is a table that goes stale silently).
+// Null covers three different facts and treats them alike on purpose: no such
+// model, a model Retell sells no tier on, and a realtime id whose engine has
+// no LLM step to queue (model_high_priority belongs to the STT→LLM→TTS
+// pipeline a speech-to-speech agent replaces, and enginePatchFor drops it).
+// In every one of them there is nothing to choose, which is the only thing
+// the console needs to know.
 //
-// Claude and Gemini have NO fast tier. Retell's own model picker is the
-// evidence: the OpenAI rows carry a chevron into a Default/Fast submenu and
-// the Claude and Gemini rows carry none (read 2026-08-24). Its API takes
-// model_high_priority: true on those families anyway — verified 2026-08-23 by
-// creating a throwaway LLM per family (gpt-5.1, claude-4.5-haiku,
-// claude-5-sonnet, gemini-3.5-flash, gpt-5.4-mini) and reading the echo back:
-// all five returned true. An unvalidated field is not a feature. A provider
-// that will not sell you a tier in its own console is not running one, so
-// null here means "there is nothing to choose", and the console hides the
-// control rather than offering a switch wired to nothing.
-//
-// Realtime ids return null too, for a different reason: model_high_priority
-// belongs to the STT→LLM→TTS pipeline a speech-to-speech agent is not
-// running, so there is no tier to price (enginePatchFor drops the knob).
+// Retell's API takes model_high_priority: true on ids with no tier anyway —
+// verified 2026-08-23 by creating a throwaway LLM per family (gpt-5.1,
+// claude-4.5-haiku, claude-5-sonnet, gemini-3.5-flash, gpt-5.4-mini) and
+// reading the echo back: all five returned true. An unvalidated field is not
+// a feature. A provider that will not sell you a tier in its own console is
+// not running one.
 export function fastTierPriceFor(id: string): number | null {
   const choice = VOICE_MODEL_CHOICES.find((entry) => entry.id === id);
   if (!choice || choice.realtime) return null;
-  return id.startsWith("gpt-") ? Number((choice.usdPerMinute * 2).toFixed(3)) : null;
+  return choice.fastUsdPerMinute ?? null;
 }
 
 // ---- The picker's rows: a model and its tier, as one choice ----

@@ -326,19 +326,27 @@ tier change stops reaching any agent that pinned one. Inheritance survives on
 the "Platform default" row, which follows both. `setAgentModel` and
 `setAgentHighPriority` remain as single-knob doors for the CLI.
 
-**Which models have one.** Only the OpenAI line, at exactly double — gpt-5.1
-is $0.040/min standard, $0.080 fast. Retell's own picker is the evidence: the
-OpenAI rows carry a chevron into a Default/Fast submenu, the Claude and Gemini
-rows carry none (24 Aug 2026). Its API takes `model_high_priority: true` on
-those families regardless (verified 23 Aug 2026 with a throwaway LLM per
-family: all five echoed `true`), but an unvalidated field is not a feature.
-`fastTierPriceFor` returns null for them, and the per-agent control is HIDDEN
-rather than shown-and-warned — a switch wired to nothing invites a support
-question and bills nothing either way.
+**Which models have one is DATA, not a rule** (`fastUsdPerMinute` in
+`lib/voiceModels`). Membership is read off Retell's own picker, where a row
+with a chevron opens a Default/Fast submenu and a row without has no tier to
+choose. Ten ids have one as of 24 Aug 2026: gpt-5.5, gpt-5.4, gpt-5.4-mini,
+gpt-5.2, gpt-5.1, gpt-5, gpt-5-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano.
 
-The fleet control stays visible whatever the fleet model is, because it is a
-policy that outlives the model it was set under: turn it off on Claude today
-and the answer is already recorded when somebody moves the fleet to GPT.
+Do not turn this back into a heuristic. A `gpt-` prefix rule shipped here
+first and invented two tiers that do not exist: **gpt-4.1-nano has a fast tier
+and gpt-5-nano does not.** Membership follows neither family nor generation
+nor size, so only the picker knows.
+
+The prices are doubling, and only gpt-5.1 has been read directly ($0.040
+against $0.080 in its submenu). The pricing page describes the OpenAI fast
+tier that way for the line. Each is one number to correct the day a submenu
+says otherwise.
+
+Claude and Gemini have no fast tier at all. Retell's API takes
+`model_high_priority: true` on them regardless (verified 23 Aug 2026 with a
+throwaway LLM per family: all five echoed `true`), but an unvalidated field is
+not a feature. Those ids simply contribute no second row to the picker, which
+is how Retell shows the same fact.
 
 Orgs pay one flat `voiceRateMicroUsdPerMinute` per called minute regardless,
 so the tier difference is margin, not invoice. That is the argument for having
