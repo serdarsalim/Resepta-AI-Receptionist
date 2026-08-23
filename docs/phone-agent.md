@@ -305,12 +305,26 @@ setting: same model, same voice, same prompt, less time queued.
 
 It resolves through the same three layers as the model, in the same order —
 `agent.llmHighPriority ?? platformConfig "voiceHighPriority" ??
-VOICE_AGENT_HIGH_PRIORITY`. Per-agent is the Fast tier row under the Model
-picker on the agent's card, published by `platform.setAgentHighPriority`;
-the fleet row is Voice fast tier in `/admin` → AI & Voice defaults. Both
-stored layers are **tri-state**: unset means inherited, not off. The constant
-has been `true` since template v11 (20 Aug 2026), so reading an empty row as
-false would silently downgrade the fleet.
+VOICE_AGENT_HIGH_PRIORITY`. Both stored layers are **tri-state**: unset means
+inherited, not off. The constant has been `true` since template v11 (20 Aug
+2026), so reading an empty row as false would silently downgrade the fleet.
+
+**One picker, not two** (24 Aug 2026, Serdar). The console offers an ENGINE —
+a model and the tier it runs at, as one choice — because that is one decision
+and splitting it let an operator read a model's price without the tier that
+doubles it. `voiceEngineChoices` expands the catalogue into rows, each fast
+variant sitting immediately under its standard row; the value grammar is a
+suffix (`gpt-5.1:fast`), chosen so every standard row's value stays
+byte-identical to what the picker stored before the tier existed. Per-agent is
+`platform.setAgentEngine`, one provider round trip and one published version
+for both settings. The fleet control writes the two config rows in sequence,
+model first.
+
+The cost of this shape, since it is a real one: **"explicit model, inherited
+tier" is no longer expressible.** Picking a model pins its tier too, so a fleet
+tier change stops reaching any agent that pinned one. Inheritance survives on
+the "Platform default" row, which follows both. `setAgentModel` and
+`setAgentHighPriority` remain as single-knob doors for the CLI.
 
 **Which models have one.** Only the OpenAI line, at exactly double — gpt-5.1
 is $0.040/min standard, $0.080 fast. Retell's own picker is the evidence: the

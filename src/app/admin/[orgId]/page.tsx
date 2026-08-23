@@ -20,9 +20,10 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
-  fastTierPriceFor,
-  VOICE_MODEL_CHOICES,
-  voiceModelPriceHint,
+  decodeEngine,
+  encodeEngine,
+  engineLabel,
+  voiceEngineChoices,
 } from "../../../../convex/lib/voiceModels";
 import {
   VOICE_AGENT_HIGH_PRIORITY,
@@ -144,8 +145,7 @@ export default function TenantPage() {
   const conns = useQuery(api.connections.orgStatus, allowed ? { orgId } : "skip");
   const setField = useMutation(api.connections.setField);
   const retryVoiceEvents = useMutation(api.platform.retryVoiceEvents);
-  const setAgentModel = useAction(api.platform.setAgentModel);
-  const setAgentHighPriority = useAction(api.platform.setAgentHighPriority);
+  const setAgentEngine = useAction(api.platform.setAgentEngine);
   const assistant = useQuery(api.platform.orgAssistant, allowed ? { orgId } : "skip");
   const voice = useQuery(api.platform.orgVoiceUsage, allowed ? { orgId } : "skip");
   const numberReqs = useQuery(
@@ -205,12 +205,7 @@ export default function TenantPage() {
   // it belongs to instead of vanishing into the console.
   const [settingModel, setSettingModel] = useState<string | null>(null);
   const [modelError, setModelError] = useState<{ agentId: string; message: string } | null>(null);
-  // The tier publishes exactly like the model does, so it gets its own copy of
-  // the same two pieces of state rather than sharing them: both controls sit
-  // on the same row, and one spinner covering both would leave the operator
-  // unable to tell which publish they are waiting on.
-  const [settingTier, setSettingTier] = useState<string | null>(null);
-  const [tierError, setTierError] = useState<{ agentId: string; message: string } | null>(null);
+
   const router = useRouter();
 
   // Every state wears the plane, loading included: bare, the page painted flat
@@ -434,58 +429,74 @@ export default function TenantPage() {
                   </Pill>
                 </span>
               </div>
-              {/* The model behind the agent, with what each choice costs per
-                  conversation minute — the whole point is deciding here
-                  without opening Retell's pricing page. "Platform default"
-                  is unset in the row: the common case stays one string in
-                  the template rather than a fleet of rows pinning today's
-                  default forever. */}
+              {/* The ENGINE behind the agent: which model, at which tier,
+                  priced per conversation minute — the whole point is deciding
+                  here without opening Retell's pricing page. One picker
+                  because they are one decision; a model whose cost you cannot
+                  read without checking a second control beside it is how an
+                  agent came to bill double for months.
+
+                  "Platform default" is unset in the row, and it follows BOTH:
+                  the common case stays one string in the template rather than
+                  a fleet of rows pinning today's default forever. Picking
+                  anything else pins both, which is the trade this shape makes
+                  — a fleet tier change stops reaching an agent that chose. */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-[var(--muted)]">Model</span>
+                <span className="text-[var(--muted)]">Engine</span>
                 <SearchSelect
                   className="w-72"
-                  value={agent.llmModel ?? ""}
+                  value={
+                    agent.llmModel
+                      ? encodeEngine(
+                          agent.llmModel,
+                          agent.llmHighPriority ??
+                            detail.platformHighPriority ??
+                            VOICE_AGENT_HIGH_PRIORITY,
+                        )
+                      : ""
+                  }
                   disabled={settingModel === agent.retellAgentId}
-                  placeholder="Model"
+                  placeholder="Engine"
                   searchPlaceholder="Search models"
                   options={[
                     {
                       value: "",
                       // The resolved fleet default from orgDetail, so this
                       // label and the /admin dropdown can never disagree.
-                      label: `Platform default — ${
-                        VOICE_MODEL_CHOICES.find(
-                          (choice) =>
-                            choice.id ===
-                            (detail.platformVoiceModel ?? VOICE_AGENT_MODEL),
-                        )?.label ??
-                        (detail.platformVoiceModel ?? VOICE_AGENT_MODEL)
-                      }`,
+                      label: `Platform default — ${engineLabel(
+                        detail.platformVoiceModel ?? VOICE_AGENT_MODEL,
+                        detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY,
+                      )}`,
                     },
-                    ...VOICE_MODEL_CHOICES.map((choice) => ({
-                      value: choice.id,
+                    ...voiceEngineChoices().map((choice) => ({
+                      value: choice.value,
                       label: choice.label,
-                      // Priced at THIS agent's resolved tier, so the number
-                      // beside a model is the number its calls will bill at.
-                      hint: voiceModelPriceHint(
-                        choice.id,
-                        agent.llmHighPriority ??
-                          detail.platformHighPriority ??
-                          VOICE_AGENT_HIGH_PRIORITY,
-                      ),
+                      hint: `$${choice.usdPerMinute.toFixed(3)}/min`,
                     })),
                   ]}
                   onChange={(next) => {
-                    const model = next || null;
-                    if ((agent.llmModel ?? null) === model) return;
+                    const picked = decodeEngine(next);
+                    const model = picked?.id ?? null;
+                    const highPriority = picked ? picked.fast : null;
+                    if (
+                      (agent.llmModel ?? null) === model &&
+                      (agent.llmHighPriority ?? null) === highPriority
+                    ) {
+                      return;
+                    }
                     setSettingModel(agent.retellAgentId);
                     setModelError(null);
-                    void setAgentModel({ orgId, retellAgentId: agent.retellAgentId, model })
+                    void setAgentEngine({
+                      orgId,
+                      retellAgentId: agent.retellAgentId,
+                      model,
+                      highPriority,
+                    })
                       .catch((error: unknown) =>
                         setModelError({
                           agentId: agent.retellAgentId,
                           message:
-                            error instanceof Error ? error.message : "Model change failed.",
+                            error instanceof Error ? error.message : "Engine change failed.",
                         }),
                       )
                       .finally(() => setSettingModel(null));
@@ -500,92 +511,6 @@ export default function TenantPage() {
                   </span>
                 )}
               </div>
-              {/* The second price on the model above. Same row shape, right
-                  under it, because reading the model's cost without knowing
-                  the tier is how an agent came to bill double for months.
-
-                  Shown only for models that HAVE a tier to choose, absent
-                  rather than disabled for the rest. Retell's own picker draws
-                  it this way: the OpenAI rows carry a chevron into a
-                  Default/Fast submenu and the Claude and Gemini rows carry
-                  none. Its API takes model_high_priority on those families
-                  regardless, which is what made the flag look real there, but
-                  a provider that will not sell you a tier in its own console
-                  is not running one. A switch wired to nothing is worse than
-                  no switch: it invites a support question and bills nothing
-                  either way. */}
-              {(() => {
-                const model =
-                  agent.llmModel ?? detail.platformVoiceModel ?? VOICE_AGENT_MODEL;
-                // One lookup, because a per-agent override can name an id
-                // the catalogue has since retired — validated on write, but
-                // the catalogue is data and moves underneath old rows.
-                const choice = VOICE_MODEL_CHOICES.find((c) => c.id === model);
-                const fast = choice ? fastTierPriceFor(model) : null;
-                if (fast === null || !choice) return null;
-                const inherited = detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY;
-                const label = choice.label;
-                return (
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="text-[var(--muted)]">Fast tier</span>
-                    {(
-                      [
-                        {
-                          key: "default",
-                          label: `Platform default — ${inherited ? "on" : "off"}`,
-                          state: null,
-                        },
-                        { key: "on", label: "On", state: true },
-                        { key: "off", label: "Off", state: false },
-                      ] as const
-                    ).map((option) => (
-                      <button
-                        key={option.key}
-                        type="button"
-                        disabled={settingTier === agent.retellAgentId}
-                        onClick={() => {
-                          if ((agent.llmHighPriority ?? null) === option.state) return;
-                          setSettingTier(agent.retellAgentId);
-                          setTierError(null);
-                          void setAgentHighPriority({
-                            orgId,
-                            retellAgentId: agent.retellAgentId,
-                            highPriority: option.state,
-                          })
-                            .catch((error: unknown) =>
-                              setTierError({
-                                agentId: agent.retellAgentId,
-                                message:
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Fast tier change failed.",
-                              }),
-                            )
-                            .finally(() => setSettingTier(null));
-                        }}
-                        className={`rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-50 ${
-                          (agent.llmHighPriority ?? null) === option.state
-                            ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                            : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                    <span className="text-[var(--muted)]">
-                      {`$${fast.toFixed(3)}/min vs $${choice.usdPerMinute.toFixed(3)} on ${label}`}
-                    </span>
-                    {settingTier === agent.retellAgentId && (
-                      <span className="text-[var(--muted)]">Publishing…</span>
-                    )}
-                    {tierError?.agentId === agent.retellAgentId && (
-                      <span className="text-amber-700 dark:text-amber-400">
-                        {tierError.message}
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
               {agent.latestFailure && (
                 <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <div className="flex flex-wrap items-center justify-between gap-2">
