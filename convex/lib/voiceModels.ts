@@ -75,14 +75,16 @@ export function isVoiceModel(id: string): boolean {
 // rule covers it and no per-model number has to be hand-copied (a table of
 // transcribed prices is a table that goes stale silently).
 //
-// Claude and Gemini have NO published fast-tier price, and the API accepts
-// model_high_priority: true on them regardless — verified live 2026-08-23 by
+// Claude and Gemini have NO fast tier. Retell's own model picker is the
+// evidence: the OpenAI rows carry a chevron into a Default/Fast submenu and
+// the Claude and Gemini rows carry none (read 2026-08-24). Its API takes
+// model_high_priority: true on those families anyway — verified 2026-08-23 by
 // creating a throwaway LLM per family (gpt-5.1, claude-4.5-haiku,
-// claude-5-sonnet, gemini-3.5-flash, gpt-5.4-mini) and reading the echo: all
-// five came back true. So the flag on a Claude agent buys an unknown amount
-// of speed for an unknown amount of money. That is precisely why this returns
-// null instead of a guess, and why the console says "price not published"
-// rather than printing usdPerMinute twice.
+// claude-5-sonnet, gemini-3.5-flash, gpt-5.4-mini) and reading the echo back:
+// all five returned true. An unvalidated field is not a feature. A provider
+// that will not sell you a tier in its own console is not running one, so
+// null here means "there is nothing to choose", and the console hides the
+// control rather than offering a switch wired to nothing.
 //
 // Realtime ids return null too, for a different reason: model_high_priority
 // belongs to the STT→LLM→TTS pipeline a speech-to-speech agent is not

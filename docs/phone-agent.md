@@ -312,12 +312,19 @@ stored layers are **tri-state**: unset means inherited, not off. The constant
 has been `true` since template v11 (20 Aug 2026), so reading an empty row as
 false would silently downgrade the fleet.
 
-**What it costs.** Retell publishes a fast-tier price only for the OpenAI
-line, at exactly double — gpt-5.1 is $0.040/min standard, $0.080 fast. Claude
-and Gemini have no published fast price, and the API accepts the flag on them
-anyway (verified 23 Aug 2026 with a throwaway LLM per family: all five echoed
-`true`). `fastTierPriceFor` returns null there and the console says so rather
-than inventing a number.
+**Which models have one.** Only the OpenAI line, at exactly double — gpt-5.1
+is $0.040/min standard, $0.080 fast. Retell's own picker is the evidence: the
+OpenAI rows carry a chevron into a Default/Fast submenu, the Claude and Gemini
+rows carry none (24 Aug 2026). Its API takes `model_high_priority: true` on
+those families regardless (verified 23 Aug 2026 with a throwaway LLM per
+family: all five echoed `true`), but an unvalidated field is not a feature.
+`fastTierPriceFor` returns null for them, and the per-agent control is HIDDEN
+rather than shown-and-warned — a switch wired to nothing invites a support
+question and bills nothing either way.
+
+The fleet control stays visible whatever the fleet model is, because it is a
+policy that outlives the model it was set under: turn it off on Claude today
+and the answer is already recorded when somebody moves the fleet to GPT.
 
 Orgs pay one flat `voiceRateMicroUsdPerMinute` per called minute regardless,
 so the tier difference is margin, not invoice. That is the argument for having

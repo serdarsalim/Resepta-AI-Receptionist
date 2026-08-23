@@ -21,7 +21,6 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import {
   fastTierPriceFor,
-  isRealtimeVoiceModel,
   VOICE_MODEL_CHOICES,
   voiceModelPriceHint,
 } from "../../../../convex/lib/voiceModels";
@@ -503,21 +502,29 @@ export default function TenantPage() {
               </div>
               {/* The second price on the model above. Same row shape, right
                   under it, because reading the model's cost without knowing
-                  the tier is how an agent came to bill double for months. A
-                  speech-to-speech model has no such queue, so the control is
-                  absent rather than disabled — a greyed switch invites a
-                  support question, a missing one does not. */}
+                  the tier is how an agent came to bill double for months.
+
+                  Shown only for models that HAVE a tier to choose, absent
+                  rather than disabled for the rest. Retell's own picker draws
+                  it this way: the OpenAI rows carry a chevron into a
+                  Default/Fast submenu and the Claude and Gemini rows carry
+                  none. Its API takes model_high_priority on those families
+                  regardless, which is what made the flag look real there, but
+                  a provider that will not sell you a tier in its own console
+                  is not running one. A switch wired to nothing is worse than
+                  no switch: it invites a support question and bills nothing
+                  either way. */}
               {(() => {
                 const model =
                   agent.llmModel ?? detail.platformVoiceModel ?? VOICE_AGENT_MODEL;
-                if (isRealtimeVoiceModel(model)) return null;
-                const inherited = detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY;
                 // One lookup, because a per-agent override can name an id
                 // the catalogue has since retired — validated on write, but
                 // the catalogue is data and moves underneath old rows.
                 const choice = VOICE_MODEL_CHOICES.find((c) => c.id === model);
                 const fast = choice ? fastTierPriceFor(model) : null;
-                const label = choice?.label ?? model;
+                if (fast === null || !choice) return null;
+                const inherited = detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY;
+                const label = choice.label;
                 return (
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-[var(--muted)]">Fast tier</span>
@@ -566,9 +573,7 @@ export default function TenantPage() {
                       </button>
                     ))}
                     <span className="text-[var(--muted)]">
-                      {fast === null || !choice
-                        ? `no published fast price on ${label}`
-                        : `$${fast.toFixed(3)}/min vs $${choice.usdPerMinute.toFixed(3)} on ${label}`}
+                      {`$${fast.toFixed(3)}/min vs $${choice.usdPerMinute.toFixed(3)} on ${label}`}
                     </span>
                     {settingTier === agent.retellAgentId && (
                       <span className="text-[var(--muted)]">Publishing…</span>
