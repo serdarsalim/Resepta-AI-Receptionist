@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireUser } from "./lib/orgAuth";
+import { foundOrg } from "./lib/foundOrg";
 import { alertEnabled } from "./lib/alerts";
 
 // The account panel's own data. Role comes from the caller's membership in the
@@ -111,6 +112,10 @@ export const myWorkspaces = query({
   args: {},
   returns: v.object({
     activeOrgId: v.id("orgs"),
+    // Whether this login may found another business (foundWorkspace below).
+    // False only for the anonymous demo walk-in — the switcher uses it to
+    // decide whether to render the "Add business" row at all.
+    canFound: v.boolean(),
     workspaces: v.array(
       v.object({
         orgId: v.id("orgs"),
@@ -130,7 +135,7 @@ export const myWorkspaces = query({
       const org = await ctx.db.get(row.orgId);
       if (org) workspaces.push({ orgId: row.orgId, name: org.name, role: row.role });
     }
-    return { activeOrgId: orgId, workspaces };
+    return { activeOrgId: orgId, canFound: !user.isAnonymous, workspaces };
   },
 });
 
@@ -184,6 +189,34 @@ export const markWorkspaceSeen = mutation({
     if (membership.seenAt === undefined) {
       await ctx.db.patch(membership._id, { seenAt: Date.now() });
     }
+    return null;
+  },
+});
+
+// "Add business" — an existing login founding another workspace, Retell
+// style. Births an org identical to the founding sign-in's EXCEPT the trial
+// credit, which only a login's first org carries (see lib/foundOrg). The
+// caller becomes its owner and is switched into it; the org is unnamed, so
+// the onboarding wizard opens on the very next render.
+export const foundWorkspace = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    // The demo walk-in browses one salon; it does not get to mint real orgs
+    // on the deployment. Real logins all may — a staff-only login founding
+    // their own business is exactly the invited-hairdresser-goes-solo story.
+    if (user.isAnonymous) throw new Error("anonymous-cannot-found");
+    const orgId = await foundOrg(ctx, { grantTrialCredit: false });
+    // Stamped, because nobody needs telling about the business they just
+    // founded (same reasoning as the founding sign-in's membership).
+    await ctx.db.insert("memberships", {
+      userId: user._id,
+      orgId,
+      role: "owner",
+      seenAt: Date.now(),
+    });
+    await ctx.db.patch(user._id, { orgId });
     return null;
   },
 });

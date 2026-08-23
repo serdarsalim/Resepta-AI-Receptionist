@@ -3530,6 +3530,11 @@ const dictionary = {
     en: "Switch business",
     de: "Betrieb wechseln",
   },
+  "workspace.add": {
+    tr: "İşletme ekle",
+    en: "Add business",
+    de: "Betrieb hinzufügen",
+  },
 
   // Shown when somebody else added this login to a workspace. The business name
   // is rendered beside these rather than interpolated, so no string here has to

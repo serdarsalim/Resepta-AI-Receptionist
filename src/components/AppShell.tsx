@@ -696,6 +696,22 @@ function AutoIcon() {
     </svg>
   );
 }
+function PlusIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
 function CheckIcon() {
   return (
     <svg
@@ -1073,8 +1089,9 @@ function UserMenu({
   );
 }
 
-// Workspace switcher (Retell-style): one login, many client businesses.
-// Collapses to a plain label when the user belongs to exactly one.
+// Workspace switcher (Retell-style): one login, many client businesses, plus
+// the "Add business" row that founds a new one. Collapses to a plain label
+// only for the anonymous demo walk-in, who can neither switch nor found.
 const WORKSPACE_MENU_WIDTH = 224; // w-56, used for the viewport clamp
 
 function WorkspaceSwitcher({
@@ -1092,6 +1109,7 @@ function WorkspaceSwitcher({
   const { t } = useLanguage();
   const data = useQuery(api.users.myWorkspaces, {});
   const setActiveOrg = useMutation(api.users.setActiveOrg);
+  const foundWorkspace = useMutation(api.users.foundWorkspace);
   // Menu position, measured from the trigger at open time. Null = closed.
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -1133,7 +1151,11 @@ function WorkspaceSwitcher({
   const active = data?.workspaces.find((w) => w.orgId === data.activeOrgId);
   const label = active?.name || fallbackName || t("app.name");
 
-  if (!data || data.workspaces.length < 2) {
+  // Plain label only while loading and for the anonymous demo walk-in. A
+  // real login always gets the menu, even with a single business: the "Add
+  // business" row at its foot is the only door to founding a second one, and
+  // a door only multi-business operators can see is a door nobody finds.
+  if (!data || (data.workspaces.length < 2 && !data.canFound)) {
     return collapsed ? (
       <OrgMark logoUrl={logoUrl} size={24} />
     ) : (
@@ -1227,6 +1249,26 @@ function WorkspaceSwitcher({
                 )}
               </button>
             ))}
+            {data.canFound && (
+              <div className="border-t border-[var(--border)]">
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setPos(null);
+                    // The mutation switches the active org server-side; the
+                    // new org is unnamed, so the onboarding wizard takes over
+                    // on the next render — no navigation needed here.
+                    void foundWorkspace({});
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                >
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
+                    <PlusIcon />
+                  </span>
+                  {t("workspace.add")}
+                </button>
+              </div>
+            )}
           </div>,
           document.body,
         )}
