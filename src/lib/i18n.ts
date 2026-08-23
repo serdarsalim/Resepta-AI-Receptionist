@@ -1904,10 +1904,22 @@ const dictionary = {
     en: "Current balance",
     de: "Aktuelles Guthaben",
   },
-  "wallet.topUpLine": {
-    tr: "Ödeme Stripe'ın güvenli sayfasında kartla yapılır; bakiyeniz ödemeden hemen sonra güncellenir.",
-    en: "Payment is by card on Stripe's secure page; your balance updates right after.",
-    de: "Die Zahlung erfolgt per Karte auf der sicheren Stripe-Seite; Ihr Guthaben wird direkt danach aktualisiert.",
+  // Everything the balance card used to say out loud, now one hover away: the
+  // rate, how it is counted, and where the card details go. A returning owner
+  // reads none of it twice, and the number they came for is the only thing
+  // left on the card.
+  "wallet.balanceHint": {
+    tr: "Dakika başı {rate}, saniye bazında ücretlendirilir. Ödeme Stripe'ın güvenli sayfasında kartla yapılır; bakiyeniz ödemeden hemen sonra güncellenir.",
+    en: "{rate} per minute, billed per second. Payment is by card on Stripe's secure page; your balance updates right after.",
+    de: "{rate} pro Minute, sekundengenau abgerechnet. Die Zahlung erfolgt per Karte auf der sicheren Stripe-Seite; Ihr Guthaben wird direkt danach aktualisiert.",
+  },
+  // What the balance BUYS, which is the question the balance was standing in
+  // for. Minutes, because that is the unit the rate is quoted in and the unit
+  // a call is billed in.
+  "wallet.runway": {
+    tr: "Yaklaşık {minutes} dakika görüşme",
+    en: "About {minutes} minutes of talk time",
+    de: "Etwa {minutes} Gesprächsminuten",
   },
   "wallet.topUpWith": {
     tr: "{amount} yükle",

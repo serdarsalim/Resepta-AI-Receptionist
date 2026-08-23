@@ -4,8 +4,10 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, localeFor } from "@/lib/datetime";
+import type { Language } from "@/lib/i18n";
 import { Card } from "./Card";
+import { InfoTip } from "./InfoTip";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 
 // Billing, every owner's sidebar destination above the profile (schema:
@@ -25,6 +27,19 @@ function fmtDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// "2026-08" is the sort key the usage rows are stored under, not something to
+// show a salon owner. Built from the parts rather than handed to Date("2026-08"),
+// which parses as UTC midnight and therefore renders as the PREVIOUS month
+// everywhere west of London.
+function monthLabel(month: string, language: Language): string {
+  const [year, index] = month.split("-").map(Number);
+  if (!year || !index) return month;
+  return new Intl.DateTimeFormat(localeFor(language), {
+    year: "numeric",
+    month: "long",
+  }).format(new Date(year, index - 1, 1));
 }
 
 export function BillingView() {
@@ -99,7 +114,18 @@ export function BillingView() {
       )}
 
       <Card>
-        <p className="text-sm text-[var(--muted-strong)]">{t("wallet.balance")}</p>
+        {/* The rate line and the Stripe paragraph both moved into this (i).
+            They were explanation sitting permanently on the one card an owner
+            opens to read a number, and explanation belongs one hover away. */}
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-[var(--muted-strong)]">{t("wallet.balance")}</p>
+          <InfoTip
+            text={t("wallet.balanceHint").replace(
+              "{rate}",
+              usd(data.rateMicroUsdPerMinute),
+            )}
+          />
+        </div>
         <p
           className={`mt-1 text-3xl font-semibold tabular-nums ${
             empty ? "text-red-600 dark:text-red-400" : ""
@@ -107,16 +133,24 @@ export function BillingView() {
         >
           {usd(data.balanceMicroUsd)}
         </p>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          {t("voiceBilling.rateLine").replace(
-            "{rate}",
-            usd(data.rateMicroUsdPerMinute),
-          )}
-        </p>
+        {/* What the balance BUYS. The dollars were standing in for this and
+            answering it badly: nobody holds $0.11 a minute in their head while
+            reading $6.45. Absent rather than zeroed when there is no rate or
+            no money, since a runway of "0 minutes" is the paused banner's job
+            and this would only repeat it. */}
+        {!empty && data.rateMicroUsdPerMinute > 0 && (
+          <p className="mt-1 text-sm text-[var(--muted)] tabular-nums">
+            {t("wallet.runway").replace(
+              "{minutes}",
+              String(
+                Math.floor(data.balanceMicroUsd / data.rateMicroUsdPerMinute),
+              ),
+            )}
+          </p>
+        )}
 
         <div className="mt-4 border-t border-[var(--table-divider)] pt-4">
-          <p className="text-sm text-[var(--muted)]">{t("wallet.topUpLine")}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {data.topupAmountsUsd.map((amount) => (
               <button
                 key={amount}
@@ -139,6 +173,56 @@ export function BillingView() {
         </div>
       </Card>
 
+      {/* Usage sits ABOVE top-ups, which is the order the questions arrive
+          in. An owner opens this tab to ask what the agent is costing them
+          this month and how that compares with what is left upstairs; the
+          receipts for money they already paid are a trail they consult when
+          something looks wrong, not a thing they read. Directly under the
+          balance, so "left" and "spent" are one glance apart. */}
+      <Card>
+        <p className="text-sm font-medium">{t("voiceBilling.title")}</p>
+        {data.months.length === 0 ? (
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            {t("voiceBilling.empty")}
+          </p>
+        ) : (
+          <div className="thin-scroll mt-2 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-left text-xs">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.month")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.calls")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.talkTime")}
+                  </th>
+                  <th className="px-3 py-2 font-semibold">
+                    {t("voiceBilling.amount")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.months.map((m) => (
+                  <tr
+                    key={m.month}
+                    className="border-t border-[var(--table-divider)] tabular-nums"
+                  >
+                    <td className="px-3 py-2">{monthLabel(m.month, language)}</td>
+                    <td className="px-3 py-2">{m.calls}</td>
+                    <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
+                    <td className="px-3 py-2">{usd(m.billedMicroUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      {/* The receipt trail. Demoted, not dropped: when a payment does not
+          land this is the only place an owner can see whether it ever did. */}
       <Card>
         <p className="text-sm font-medium">{t("wallet.topups")}</p>
         {data.topups.length === 0 ? (
@@ -180,48 +264,6 @@ export function BillingView() {
         )}
       </Card>
 
-      <Card>
-        <p className="text-sm font-medium">{t("voiceBilling.title")}</p>
-        {data.months.length === 0 ? (
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            {t("voiceBilling.empty")}
-          </p>
-        ) : (
-          <div className="thin-scroll mt-2 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="text-left text-xs">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">
-                    {t("voiceBilling.month")}
-                  </th>
-                  <th className="px-3 py-2 font-semibold">
-                    {t("voiceBilling.calls")}
-                  </th>
-                  <th className="px-3 py-2 font-semibold">
-                    {t("voiceBilling.talkTime")}
-                  </th>
-                  <th className="px-3 py-2 font-semibold">
-                    {t("voiceBilling.amount")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.months.map((m) => (
-                  <tr
-                    key={m.month}
-                    className="border-t border-[var(--table-divider)] tabular-nums"
-                  >
-                    <td className="px-3 py-2">{m.month}</td>
-                    <td className="px-3 py-2">{m.calls}</td>
-                    <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
-                    <td className="px-3 py-2">{usd(m.billedMicroUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
     </div>
   );
 }
@@ -245,7 +287,7 @@ function InvoiceBilling({
     }[];
   } | null;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const setBudget = useMutation(api.billing.setVoiceBudget);
   if (meter === null) return null;
 
@@ -321,7 +363,7 @@ function InvoiceBilling({
                     key={m.month}
                     className="border-t border-[var(--table-divider)] tabular-nums"
                   >
-                    <td className="px-3 py-2">{m.month}</td>
+                    <td className="px-3 py-2">{monthLabel(m.month, language)}</td>
                     <td className="px-3 py-2">{m.calls}</td>
                     <td className="px-3 py-2">{fmtDuration(m.seconds)}</td>
                     <td className="px-3 py-2">{usd(m.billedMicroUsd)}</td>
