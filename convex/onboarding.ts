@@ -26,7 +26,7 @@ import type { Id } from "./_generated/dataModel";
 // Takes the RESOLVED preset rather than a key: resolving reads the database
 // (an operator override may be laid over the code module), and doing that here
 // would mean every caller resolving once to validate and again to seed.
-async function seedPreset(
+export async function seedPreset(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
   preset: IndustryPreset,

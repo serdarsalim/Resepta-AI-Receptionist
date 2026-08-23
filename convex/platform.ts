@@ -21,6 +21,7 @@ import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import {
   action,
+  internalMutation,
   internalQuery,
   mutation,
   query,
@@ -38,6 +39,11 @@ import { enrichActivity } from "./activity";
 import { applyWalletCredit } from "./wallet";
 import { monthKey } from "./lib/usage";
 import { maskSecret } from "./lib/connections";
+import { foundOrg } from "./lib/foundOrg";
+import { resolvePreset } from "./lib/industryPresetStore";
+import { seedPreset } from "./onboarding";
+import { resolvePublicSlug } from "./lib/publicSlug";
+import { assignInboundAddress } from "./lib/inboundAddress";
 import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
@@ -1633,5 +1639,80 @@ export const decideNumberRequest = mutation({
           : "number provisioning denied",
     });
     return null;
+  },
+});
+
+// Seed a finished workspace for a login, from the CLI:
+//
+//   npx convex run --prod platform:seedWorkspace \
+//     '{"email":"owner@example.com","name":"Mery Spor","industry":"other"}'
+//
+// The operator's counterpart to the wizard, for walking into a sales visit
+// with the prospect's business already standing. It does exactly what
+// founding plus finishing onboarding would have done — foundOrg, preset,
+// slug, inbound address, voice-agent auto-provisioning — so a seeded org is
+// indistinguishable from one the owner built by hand. internalMutation, so
+// no client can reach it; the admin key behind `npx convex run` is the gate,
+// which is also why this does not take the requirePlatformAdmin path — there
+// is no session here to check.
+//
+// seenAt is left unset on the membership ON PURPOSE: the operator put the
+// person here, so the app should announce it (see schema.memberships).
+// Trial credit is the operator's call per seed — these orgs skip the
+// founding sign-in that normally grants it, and a demo business whose calls
+// decline at ring time (prepaid, zero wallet) defeats the visit.
+export const seedWorkspace = internalMutation({
+  args: {
+    email: v.string(),
+    name: v.string(),
+    industry: v.optional(v.string()),
+    language: v.optional(v.string()),
+    withTrialCredit: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    orgId: v.id("orgs"),
+    slug: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .first();
+    if (!user) throw new Error(`no user signed in as ${email}`);
+    const name = args.name.trim();
+    if (!name) throw new Error("name is required");
+    const language = args.language?.trim() || "tr";
+    const preset = args.industry
+      ? await resolvePreset(ctx, args.industry)
+      : null;
+    if (args.industry && !preset) {
+      throw new Error(`unknown industry: ${args.industry}`);
+    }
+
+    const orgId = await foundOrg(ctx, {
+      grantTrialCredit: args.withTrialCredit ?? false,
+    });
+    await ctx.db.insert("memberships", {
+      userId: user._id,
+      orgId,
+      role: "owner",
+    });
+    // Naming is the commit, same as the wizard's final save: slug first so a
+    // taken name throws before anything is half-done.
+    const slug = await resolvePublicSlug(ctx, orgId, name);
+    await ctx.db.patch(orgId, {
+      name,
+      language,
+      ...(args.industry ? { industry: args.industry } : {}),
+      ...(slug ? { publicSlug: slug } : {}),
+    });
+    const inbound = await assignInboundAddress(ctx, orgId, name);
+    if (inbound) await ctx.db.patch(orgId, { inboundAddress: inbound });
+    if (preset) await seedPreset(ctx, orgId, preset, language);
+    await ctx.scheduler.runAfter(0, internal.retellAgent.autoProvision, {
+      orgId,
+    });
+    return { orgId, slug: slug ?? null };
   },
 });
