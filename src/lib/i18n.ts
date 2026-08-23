@@ -993,10 +993,12 @@ const dictionary = {
     en: "To change this appointment, please call us:",
     de: "Um diesen Termin zu ändern, rufen Sie uns bitte an:",
   },
+  // Worn by /book and /appt when the link resolves to nothing — a stale link,
+  // or a page the business switched off. Neither surface is a "form".
   "forms.notFound": {
-    tr: "Bu form bulunamadı.",
-    en: "This form isn't available.",
-    de: "Dieses Formular ist nicht verfügbar.",
+    tr: "Bu sayfa şu anda kullanılamıyor.",
+    en: "This page isn't available.",
+    de: "Diese Seite ist nicht verfügbar.",
   },
   "forms.badPhone": {
     tr: "Telefon numarası geçerli görünmüyor.",
