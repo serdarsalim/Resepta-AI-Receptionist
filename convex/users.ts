@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireUser } from "./lib/orgAuth";
 import { foundOrg } from "./lib/foundOrg";
+import { discardDraftOrg } from "./lib/discardOrg";
 import { alertEnabled } from "./lib/alerts";
 
 // The account panel's own data. Role comes from the caller's membership in the
@@ -217,6 +218,40 @@ export const foundWorkspace = mutation({
       seenAt: Date.now(),
     });
     await ctx.db.patch(user._id, { orgId });
+    return null;
+  },
+});
+
+// The wizard's Cancel: erase the active workspace as if "Add business" was
+// never clicked, and land back in another one. Only drafts (unnamed orgs) can
+// die this way — see lib/discardOrg — and only when there IS somewhere to
+// land: a person whose only workspace is the draft must finish onboarding or
+// sign out, because an account with no org cannot render the app.
+export const discardWorkspace = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const { user, orgId, role } = await requireOrg(ctx);
+    if (role !== "owner") throw new Error("owner-only");
+    // Sole member, checked against the org rather than assumed: a draft
+    // cannot normally gain teammates (invites live behind onboarding), but
+    // deleting a workspace out from under a colleague is the one mistake
+    // this mutation must be structurally unable to make.
+    const members = await ctx.db
+      .query("memberships")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    if (members.some((m) => m.userId !== user._id)) {
+      throw new Error("not-sole-member");
+    }
+    const mine = await ctx.db
+      .query("memberships")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const fallback = mine.find((m) => m.orgId !== orgId);
+    if (!fallback) throw new Error("only-workspace");
+    await discardDraftOrg(ctx, orgId);
+    await ctx.db.patch(user._id, { orgId: fallback.orgId });
     return null;
   },
 });

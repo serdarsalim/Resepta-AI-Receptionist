@@ -109,6 +109,10 @@ export function OnboardingWizard() {
   const applyPreset = useMutation(api.onboarding.applyIndustryPreset);
   const createKnowledge = useMutation(api.knowledge.create);
   const numberRequest = useQuery(api.numberRequests.mine, {});
+  // Cancel needs somewhere to land, so it exists only for a second business.
+  const workspaces = useQuery(api.users.myWorkspaces, {});
+  const discardWorkspace = useMutation(api.users.discardWorkspace);
+  const canCancel = (workspaces?.workspaces.length ?? 0) >= 2;
   const {
     uploading,
     error: uploadError,
@@ -428,16 +432,34 @@ export function OnboardingWizard() {
         </div>
 
         <div className="flex items-center gap-3 border-t border-[var(--border)] px-5 py-4">
-          <button
-            type="button"
-            onClick={() => setStep(STEPS[stepIndex - 1])}
-            disabled={stepIndex === 0 || busy}
-            className={`rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
-              stepIndex === 0 ? "invisible" : ""
-            }`}
-          >
-            {t("onboarding.back")}
-          </button>
+          {/* The first step's back slot holds Cancel instead of an invisible
+              button — but only when there is another workspace to land in. A
+              workspace stays a DRAFT until the final save names it (see the
+              header comment), so cancelling here erases it as if "Add
+              business" was never clicked. A first-ever business shows nothing:
+              with no workspace to fall back to, the only exits are finishing
+              or signing out. */}
+          {stepIndex === 0 && canCancel ? (
+            <button
+              type="button"
+              onClick={() => void discardWorkspace({})}
+              disabled={busy}
+              className="rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {t("workspace.discard")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStep(STEPS[stepIndex - 1])}
+              disabled={stepIndex === 0 || busy}
+              className={`rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+                stepIndex === 0 ? "invisible" : ""
+              }`}
+            >
+              {t("onboarding.back")}
+            </button>
+          )}
           <div className="flex flex-1 items-center justify-center gap-1.5">
             {STEPS.map((s, i) => (
               <span

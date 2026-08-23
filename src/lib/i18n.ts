@@ -3535,6 +3535,14 @@ const dictionary = {
     en: "Add business",
     de: "Betrieb hinzufügen",
   },
+  // The wizard's exit for a SECOND business: discards the draft workspace and
+  // lands back in the previous one. Phrased as plain cancel because to the
+  // owner nothing was created yet — the draft org is an implementation detail.
+  "workspace.discard": {
+    tr: "Vazgeç",
+    en: "Cancel",
+    de: "Abbrechen",
+  },
 
   // Shown when somebody else added this login to a workspace. The business name
   // is rendered beside these rather than interpolated, so no string here has to

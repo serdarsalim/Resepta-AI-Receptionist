@@ -6,6 +6,7 @@ import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { requireUser } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
+import { discardDraftOrg, draftIsUntouched } from "./lib/discardOrg";
 
 // inv_<48 hex>, 192 bits from the Web Crypto CSPRNG — same shape and same
 // reasoning as mcpKeys.mintKey. This string is the ONLY thing that admits
@@ -489,6 +490,45 @@ export const acceptInvite = mutation({
     // active, which for a first-time account is the empty org they founded on
     // the way in.
     await ctx.db.patch(user._id, { orgId: invite.orgId, role: invite.role });
+    // A first-time account arriving through an invite came to JOIN a business,
+    // not to found one — but the founding sign-in already minted them an empty
+    // org (and its trial credit) on the way in, because auth.ts cannot know an
+    // invite is about to be accepted. Erase that org now, so an invited person
+    // ends up owning exactly what they came for and the credit dies with the
+    // draft rather than waiting to be farmed.
+    //
+    // Three conditions, each load-bearing. Sole other membership: an
+    // established user accepting an invite has real workspaces, and this
+    // cleanup must not reason about them. Their own (owner): never someone
+    // else's. Untouched draft: unnamed AND no wizard progress — a draft with
+    // preset services or a knowledge block is something a person BUILT, and
+    // silently deleting built things is worse than the wart this fixes; that
+    // draft keeps the wizard's own Cancel as its exit.
+    const remaining = (
+      await ctx.db
+        .query("memberships")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect()
+    ).filter((m) => m.orgId !== invite.orgId);
+    if (remaining.length === 1 && remaining[0].role === "owner") {
+      const draftId = remaining[0].orgId;
+      const draft = await ctx.db.get(draftId);
+      const soleMember =
+        (
+          await ctx.db
+            .query("memberships")
+            .withIndex("by_org", (q) => q.eq("orgId", draftId))
+            .collect()
+        ).length === 1;
+      if (
+        draft &&
+        draft.name === "" &&
+        soleMember &&
+        (await draftIsUntouched(ctx, draftId))
+      ) {
+        await discardDraftOrg(ctx, draftId);
+      }
+    }
     await recordActivity(ctx, {
       orgId: invite.orgId,
       kind: "member_invited",
