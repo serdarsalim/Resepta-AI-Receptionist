@@ -1,10 +1,19 @@
 // The models an operator may put behind a voice agent, with what each costs.
 //
-// Every id here was validated against the live Retell API on 2026-08-20 by
-// creating a throwaway LLM with it and reading the echo back — the API does
-// enforce an allowlist (a made-up id 400s), but the SDK types the field as a
-// bare string, so OUR dropdown is the only thing standing between the admin
-// console and a typo. gemini-2.5-flash-lite is deliberately absent: the API
+// Every id here was validated against the live Retell API by creating a
+// throwaway LLM with it and reading the echo back — the SDK types the field
+// as a bare string, so OUR dropdown is the only thing standing between the
+// admin console and a typo.
+//
+// The API's own allowlist is readable, which is faster than probing one id at
+// a time: POST a made-up model and the 400 names every allowed value. Read in
+// full on 2026-08-24 and every text id below is on it.
+//
+// What that list has and this one deliberately does not: gpt-4o, gpt-4o-mini,
+// claude-4.0-sonnet, gemini-2.0-flash, gemini-2.0-flash-lite, gemini-2.5-flash.
+// Superseded generations, left out so the picker offers what a business
+// should actually be running rather than everything the provider still
+// answers to. gemini-2.5-flash-lite is absent for a sharper reason: the API
 // accepts it and silently answers gemini-3.1-flash-lite, and a picker that
 // stores one id while the provider runs another is a lie in both directions.
 //
@@ -54,6 +63,11 @@ export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
   { id: "claude-4.5-sonnet", label: "Claude 4.5 Sonnet", usdPerMinute: 0.08 },
   { id: "claude-4.6-sonnet", label: "Claude 4.6 Sonnet", usdPerMinute: 0.08 },
   { id: "claude-5-sonnet", label: "Claude 5 Sonnet", usdPerMinute: 0.08 },
+  // The 5.6 pair, added 2026-08-24. Two variants and no plain "gpt-5.6" —
+  // the API rejects that and "gpt-5.6-mini" both. Neither carries a chevron
+  // in Retell's picker, so neither has a fast tier.
+  { id: "gpt-5.6-terra", label: "GPT 5.6 Terra", usdPerMinute: 0.064 },
+  { id: "gpt-5.6-luna", label: "GPT 5.6 Luna", usdPerMinute: 0.0064 },
   { id: "gpt-5.5", label: "GPT 5.5", usdPerMinute: 0.16, fastUsdPerMinute: 0.32 },
   { id: "gpt-5.4", label: "GPT 5.4", usdPerMinute: 0.08, fastUsdPerMinute: 0.16 },
   { id: "gpt-5.4-mini", label: "GPT 5.4 Mini", usdPerMinute: 0.036, fastUsdPerMinute: 0.072 },
@@ -77,6 +91,14 @@ export const VOICE_MODEL_CHOICES: VoiceModelChoice[] = [
   { id: "gpt-realtime-mini", label: "GPT Realtime Mini (s2s)", usdPerMinute: 0.07, realtime: true },
   { id: "gpt-realtime", label: "GPT Realtime (s2s)", usdPerMinute: 0.345, realtime: true },
 ];
+
+// Prices, for a dropdown hint. Three decimals normally, FOUR below a cent:
+// gpt-5.6-luna is $0.0064/min and three decimals round it to $0.006, which is
+// 6% light on a model whose whole pitch is the price. The band, rather than
+// trimming zeros per value, so every sub-cent row shares one shape.
+export function formatVoicePrice(usdPerMinute: number): string {
+  return `$${usdPerMinute.toFixed(usdPerMinute < 0.01 ? 4 : 3)}/min`;
+}
 
 export function isVoiceModel(id: string): boolean {
   return VOICE_MODEL_CHOICES.some((choice) => choice.id === id);

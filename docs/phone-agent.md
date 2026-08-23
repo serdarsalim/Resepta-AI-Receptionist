@@ -291,11 +291,21 @@ Three layers, resolved wherever a model id is written to the provider —
    change.
 
 The pickers are built from `convex/lib/voiceModels.ts` — the catalogue of ids
-the live API actually accepts (each one validated 20 Aug 2026; the API
-rejects unknown ids but the SDK types the field as a bare string, so the
-catalogue is the real guard). A stored id that later leaves the catalogue
-stops resolving (`resolvePlatformVoiceModel`) instead of reaching a provider
-PATCH.
+the live API actually accepts. The API rejects unknown ids but the SDK types
+the field as a bare string, so the catalogue is the real guard. A stored id
+that later leaves it stops resolving (`resolvePlatformVoiceModel`) instead of
+reaching a provider PATCH.
+
+**Reading the provider's allowlist beats probing it.** POST a made-up model id
+and the 400 names every allowed value in one line. Done 24 Aug 2026: all 21
+text ids in the catalogue are on it. The catalogue deliberately omits the
+superseded generations that list still carries (gpt-4o, gpt-4o-mini,
+claude-4.0-sonnet, the gemini-2.x line), so the picker offers what a business
+should be running rather than everything the provider still answers to.
+
+Prices render through `formatVoicePrice`: three decimals, four below a cent.
+gpt-5.6-luna is $0.0064/min and three decimals round that to $0.006, which is
+6% light on a model whose whole pitch is the price.
 
 ## Which tier it runs at
 

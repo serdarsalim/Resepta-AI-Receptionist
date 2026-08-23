@@ -42,6 +42,7 @@ import {
   decodeEngine,
   encodeEngine,
   engineLabel,
+  formatVoicePrice,
   voiceEngineChoices,
 } from "../../../convex/lib/voiceModels";
 import {
@@ -382,7 +383,7 @@ export default function AdminPage() {
                     ...voiceEngineChoices().map((choice) => ({
                       value: choice.value,
                       label: choice.label,
-                      hint: `$${choice.usdPerMinute.toFixed(3)}/min`,
+                      hint: formatVoicePrice(choice.usdPerMinute),
                     })),
                   ]}
                   onChange={(next) => {
