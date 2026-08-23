@@ -27,7 +27,7 @@ import {
   type ToolDef as ProtocolToolDef,
 } from "./lib/mcpProtocol";
 
-const SERVER_INFO = { name: "randevu", version: "1.1.0" };
+const SERVER_INFO = { name: "randevu", version: "1.2.0" };
 
 // Which lines went and which arrived. A whole-prompt dump makes a human scroll
 // two screens to find the sentence that changed, and approve it without having
@@ -911,6 +911,27 @@ const TOOLS: ToolDef[] = [
         key: res.key,
         actionId: res.actionId,
         undoWith: `undo(actionId: "${res.actionId}")`,
+      };
+    },
+  },
+  {
+    name: "create_workspace",
+    title: "Found another business",
+    description:
+      "Create a brand-new, SEPARATE business under the person behind this connection — the same thing as the app's \"Add business\". The new business is born empty and unnamed; its owner completes onboarding (name, language, setup) by picking it in the app's workspace switcher. This connection stays pinned to the CURRENT business and cannot read or set up the new one — a new connector minted inside that workspace is how Claude gets there. Confirm with the owner before calling: a whole business is not a row, and there is no undo.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    annotations: {},
+    handler: async (ctx, _args, who) => {
+      const res = await ctx.runMutation(internal.agentTools.createWorkspace, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+      });
+      return {
+        ok: true,
+        orgId: res.orgId,
+        note: "Founded. Tell the owner: open the app, pick the new business in the workspace switcher (top left), and complete onboarding there. To let Claude manage the new business too, mint a key inside it (Account panel, AI card) and add it as a new connector.",
+        actionId: res.actionId,
       };
     },
   },

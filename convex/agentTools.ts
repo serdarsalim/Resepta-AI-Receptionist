@@ -18,6 +18,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
+import { foundOrg } from "./lib/foundOrg";
 import { connectionField } from "./lib/connections";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
@@ -817,6 +818,58 @@ export const createService = internalMutation({
       agent: { actorId: userId, connectionId, agentActionId: actionId },
     });
     return { serviceId, key, name: label, actionId };
+  },
+});
+
+// "Add business" through the MCP door — the same birth as users.foundWorkspace
+// (lib/foundOrg, no trial credit, owner membership for the human behind the
+// key), with two deliberate differences. The active org is NOT switched: the
+// key's owner may be working inside the app right now, and yanking their web
+// session into a fresh onboarding wizard because Claude finished a tool call
+// is not a switch they made. And the journal row lands in the PINNED org's
+// feed even though the target is the new org — this connection did it, and the
+// pinned org's feed is where this connection's actions are read.
+export const createWorkspace = internalMutation({
+  args: { ...scope },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId }) => {
+    const user = await ctx.db.get(userId);
+    // The demo walk-in browses one salon; it does not get to mint real orgs
+    // on the deployment (same guard as users.foundWorkspace).
+    if (!user || user.isAnonymous) {
+      throw new Error("This connection cannot found a workspace.");
+    }
+    const newOrgId = await foundOrg(ctx, { grantTrialCredit: false });
+    // Stamped: they asked for this business by name, through their own
+    // connector. There is nothing to announce.
+    await ctx.db.insert("memberships", {
+      userId,
+      orgId: newOrgId,
+      role: "owner",
+      seenAt: Date.now(),
+    });
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_workspace",
+      args: {},
+      targetTable: "orgs",
+      targetId: newOrgId,
+      before: null,
+      after: { orgId: newOrgId },
+      // No org deletion exists, and building one to make this undoable would
+      // be the tail wagging the dog. The journal still answers "what did this
+      // connection do"; undo refuses rather than pretending.
+      reversible: false,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "settings_changed",
+      detail: "Founded a new workspace",
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { orgId: newOrgId, actionId };
   },
 });
 
