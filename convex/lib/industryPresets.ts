@@ -27,6 +27,10 @@ export type IndustryKey =
   | "beauty_salon"
   | "dentist"
   | "clinic"
+  | "psychology"
+  | "fitness"
+  | "technical_service"
+  | "consulting"
   | "law_firm"
   | "auto_service"
   | "restaurant"
@@ -39,6 +43,10 @@ export const INDUSTRY_KEYS: IndustryKey[] = [
   "beauty_salon",
   "dentist",
   "clinic",
+  "psychology",
+  "fitness",
+  "technical_service",
+  "consulting",
   "law_firm",
   "auto_service",
   "restaurant",
@@ -66,6 +74,18 @@ export type IndustryPreset = {
   name: Localised;
   services: PresetService[];
   fields: PresetField[];
+};
+
+const MEETING_FORMAT: PresetField = {
+  key: "meeting_format",
+  label: { tr: "Görüşme şekli", en: "Meeting format", de: "Terminform" },
+  type: "select",
+  options: {
+    tr: ["Yüz yüze", "Online"],
+    en: ["In person", "Online"],
+    de: ["Vor Ort", "Online"],
+  },
+  source: "voice",
 };
 
 const ALLERGIES: PresetField = {
@@ -169,6 +189,117 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
         source: "voice",
       },
       ALLERGIES,
+    ],
+  },
+  psychology: {
+    name: { tr: "Psikolog / Terapi", en: "Psychology / Therapy", de: "Psychologie / Therapie" },
+    services: [
+      { name: { tr: "Ön görüşme", en: "Initial consultation", de: "Erstgespräch" }, durationMinutes: 30 },
+      { name: { tr: "Bireysel terapi seansı", en: "Individual therapy session", de: "Einzeltherapie" }, durationMinutes: 50 },
+      { name: { tr: "Çift terapisi", en: "Couples therapy", de: "Paartherapie" }, durationMinutes: 60 },
+      { name: { tr: "Online seans", en: "Online session", de: "Online-Sitzung" }, durationMinutes: 50 },
+    ],
+    // Deliberately the lightest field set of any vertical: what someone wants
+    // to talk about in therapy is theirs to bring up in the room, not for a
+    // phone agent to collect and file. Format is logistics, nothing more.
+    fields: [MEETING_FORMAT],
+  },
+  fitness: {
+    name: { tr: "Spor / Fitness", en: "Fitness / Gym", de: "Fitness / Sport" },
+    services: [
+      { name: { tr: "Deneme dersi", en: "Trial class", de: "Probetraining" }, durationMinutes: 60 },
+      { name: { tr: "Birebir antrenman", en: "Personal training", de: "Personal Training" }, durationMinutes: 60 },
+      { name: { tr: "Grup dersi", en: "Group class", de: "Gruppenkurs" }, durationMinutes: 60 },
+      { name: { tr: "Üyelik görüşmesi", en: "Membership consultation", de: "Mitgliedschaftsberatung" }, durationMinutes: 30 },
+      { name: { tr: "Vücut analizi", en: "Body analysis", de: "Körperanalyse" }, durationMinutes: 30 },
+    ],
+    fields: [
+      {
+        key: "fitness_goal",
+        label: { tr: "Hedef", en: "Goal", de: "Ziel" },
+        type: "select",
+        options: {
+          tr: ["Kilo verme", "Kas kazanımı", "Kondisyon", "Genel sağlık"],
+          en: ["Weight loss", "Muscle gain", "Endurance", "General health"],
+          de: ["Abnehmen", "Muskelaufbau", "Ausdauer", "Allgemeine Gesundheit"],
+        },
+        source: "voice",
+      },
+      {
+        key: "experience_level",
+        label: { tr: "Deneyim seviyesi", en: "Experience level", de: "Erfahrungslevel" },
+        type: "select",
+        options: {
+          tr: ["Başlangıç", "Orta", "İleri"],
+          en: ["Beginner", "Intermediate", "Advanced"],
+          de: ["Anfänger", "Fortgeschritten", "Profi"],
+        },
+        source: "voice",
+      },
+      {
+        key: "health_notes",
+        label: { tr: "Sağlık notları", en: "Health notes", de: "Gesundheitshinweise" },
+        type: "text",
+        source: "voice",
+      },
+    ],
+  },
+  technical_service: {
+    name: { tr: "Teknik servis", en: "Technical service", de: "Technischer Service" },
+    services: [
+      { name: { tr: "Arıza kaydı", en: "Repair drop-off", de: "Reparaturannahme" }, durationMinutes: 30 },
+      { name: { tr: "Yerinde servis", en: "On-site service", de: "Vor-Ort-Service" }, durationMinutes: 60 },
+      { name: { tr: "Keşif ve fiyat teklifi", en: "Diagnosis and quote", de: "Diagnose und Kostenvoranschlag" }, durationMinutes: 30 },
+      { name: { tr: "Cihaz teslim randevusu", en: "Device pick-up", de: "Geräteabholung" }, durationMinutes: 15 },
+    ],
+    fields: [
+      {
+        key: "device_type",
+        label: { tr: "Cihaz türü", en: "Device type", de: "Gerätetyp" },
+        type: "text",
+        source: "voice",
+      },
+      {
+        key: "brand_model",
+        label: { tr: "Marka ve model", en: "Brand and model", de: "Marke und Modell" },
+        type: "text",
+        source: "voice",
+      },
+      {
+        key: "warranty_status",
+        label: { tr: "Garanti durumu", en: "Warranty status", de: "Garantiestatus" },
+        type: "select",
+        options: {
+          tr: ["Garantili", "Garanti dışı", "Emin değilim"],
+          en: ["Under warranty", "Out of warranty", "Not sure"],
+          de: ["Mit Garantie", "Ohne Garantie", "Unsicher"],
+        },
+        source: "voice",
+      },
+      {
+        key: "issue_description",
+        label: { tr: "Arıza açıklaması", en: "Issue description", de: "Fehlerbeschreibung" },
+        type: "text",
+        source: "voice",
+      },
+    ],
+  },
+  consulting: {
+    name: { tr: "Danışmanlık / Koçluk", en: "Consulting / Coaching", de: "Beratung / Coaching" },
+    services: [
+      { name: { tr: "Tanışma görüşmesi", en: "Intro call", de: "Kennenlerngespräch" }, durationMinutes: 30 },
+      { name: { tr: "Birebir seans", en: "One-on-one session", de: "Einzelsitzung" }, durationMinutes: 60 },
+      { name: { tr: "Takip seansı", en: "Follow-up session", de: "Folgesitzung" }, durationMinutes: 45 },
+      { name: { tr: "Grup atölyesi", en: "Group workshop", de: "Gruppenworkshop" }, durationMinutes: 90 },
+    ],
+    fields: [
+      {
+        key: "topic",
+        label: { tr: "Görüşme konusu", en: "Topic", de: "Thema" },
+        type: "text",
+        source: "voice",
+      },
+      MEETING_FORMAT,
     ],
   },
   law_firm: {

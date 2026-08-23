@@ -1716,3 +1716,50 @@ export const seedWorkspace = internalMutation({
     return { orgId, slug: slug ?? null };
   },
 });
+
+// seedWorkspace's sibling for an org that already exists: stamp a vertical
+// and seed its preset, from the CLI. `reset: true` mirrors the settings
+// page's reset-to-preset — services are wiped, contact fields are wiped
+// except ones a voice-agent variable references — for when a seeded demo org
+// was born on the wrong vertical. Additive (no reset) otherwise, exactly
+// like the wizard: seedPreset skips keys the org already has.
+export const applySeedPreset = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    industry: v.string(),
+    reset: v.optional(v.boolean()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { orgId, industry, reset }) => {
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no such org");
+    const preset = await resolvePreset(ctx, industry);
+    if (!preset) throw new Error(`unknown industry: ${industry}`);
+    if (reset) {
+      const services = await ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      for (const row of services) await ctx.db.delete(row._id);
+      const variables = await ctx.db
+        .query("voiceAgentVariables")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      const referenced = new Set(
+        variables.flatMap((row) =>
+          [row.contactFieldId, row.beforeFieldId].filter(Boolean),
+        ),
+      );
+      const fields = await ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect();
+      for (const row of fields) {
+        if (!referenced.has(row._id)) await ctx.db.delete(row._id);
+      }
+    }
+    await ctx.db.patch(orgId, { industry });
+    await seedPreset(ctx, orgId, preset, org.language);
+    return null;
+  },
+});
