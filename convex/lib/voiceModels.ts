@@ -93,6 +93,33 @@ export function fastTierPriceFor(id: string): number | null {
   return id.startsWith("gpt-") ? Number((choice.usdPerMinute * 2).toFixed(3)) : null;
 }
 
+// Whether an id runs speech-to-speech. The console needs this to know when
+// NOT to offer the fast-tier control: the knob belongs to the text pipeline a
+// realtime agent replaces, so a picker offering it there would be a switch
+// wired to nothing.
+export function isRealtimeVoiceModel(id: string): boolean {
+  return VOICE_MODEL_CHOICES.find((choice) => choice.id === id)?.realtime === true;
+}
+
+// What one conversation minute of a given id costs at a given tier, phrased
+// for a dropdown. It prices the tier the agent will ACTUALLY run at rather
+// than the standard rate every time, because the console spent its first
+// months telling operators gpt-5.1 cost $0.040 while every agent it published
+// billed $0.080 — the number was real, it just belonged to a tier nothing was
+// using.
+//
+// The unpriced case says so out loud. Fast tier on a Claude or Gemini id is a
+// real setting the API accepts and Retell publishes no price for, and "we do
+// not know" is the only honest hint for it.
+export function voiceModelPriceHint(id: string, highPriority: boolean): string {
+  const choice = VOICE_MODEL_CHOICES.find((entry) => entry.id === id);
+  if (!choice) return "";
+  const standard = `$${choice.usdPerMinute.toFixed(3)}/min`;
+  if (!highPriority || choice.realtime) return standard;
+  const fast = fastTierPriceFor(id);
+  return fast === null ? `${standard} · fast unpriced` : `$${fast.toFixed(3)}/min fast`;
+}
+
 // The stored fleet-wide fast-tier default, as a tri-state. Null (unset, or a
 // row holding anything else) means "no operator opinion" and falls through to
 // the template constant, exactly like resolvePlatformVoiceModel above — the

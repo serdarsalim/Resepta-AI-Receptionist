@@ -38,8 +38,16 @@ import {
 } from "./parts";
 import { OnboardingTab } from "./onboarding";
 import { SearchInput } from "@/components/DataTable";
-import { VOICE_MODEL_CHOICES } from "../../../convex/lib/voiceModels";
-import { VOICE_AGENT_MODEL } from "../../../convex/lib/voiceAgentTemplate";
+import {
+  fastTierPriceFor,
+  isRealtimeVoiceModel,
+  VOICE_MODEL_CHOICES,
+  voiceModelPriceHint,
+} from "../../../convex/lib/voiceModels";
+import {
+  VOICE_AGENT_HIGH_PRIORITY,
+  VOICE_AGENT_MODEL,
+} from "../../../convex/lib/voiceAgentTemplate";
 import { useSearch } from "@/lib/useTableState";
 
 export default function AdminPage() {
@@ -362,7 +370,13 @@ export default function AdminPage() {
                     ...VOICE_MODEL_CHOICES.map((choice) => ({
                       value: choice.id,
                       label: choice.label,
-                      hint: `$${choice.usdPerMinute.toFixed(3)}/min`,
+                      // Priced at the tier the fleet actually runs, not at
+                      // the standard rate regardless — see the Fast tier row
+                      // below, which is the other half of this number.
+                      hint: voiceModelPriceHint(
+                        choice.id,
+                        mail.voiceHighPriority ?? VOICE_AGENT_HIGH_PRIORITY,
+                      ),
                     })),
                   ]}
                   onChange={(next) => {
@@ -376,6 +390,62 @@ export default function AdminPage() {
                   sync or model publish — it does not repoint already-published
                   agents by itself. Per-agent Model pickers on each business
                   page always win.
+                </p>
+              </div>
+            </div>
+            {/* The tier the prices above are quoted at. It sits under the
+                model rather than beside it because it is not a property of
+                the model — it is a second price on whatever model is chosen,
+                and the one setting on this page that moves the bill without
+                changing a word the caller hears. */}
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-start">
+              <div className="text-sm font-medium">Voice fast tier</div>
+              <div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(
+                    [
+                      { value: "", label: `Resepta default — ${VOICE_AGENT_HIGH_PRIORITY ? "on" : "off"}`, state: null },
+                      { value: "true", label: "On", state: true },
+                      { value: "false", label: "Off", state: false },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => {
+                        if ((mail.voiceHighPriority ?? null) === option.state) return;
+                        void setConfig({ key: "voiceHighPriority", value: option.value });
+                      }}
+                      className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                        (mail.voiceHighPriority ?? null) === option.state
+                          ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Retell&rsquo;s paid priority queue. It buys queue time on the
+                  provider&rsquo;s side, nothing else — same model, same voice,
+                  same prompt.{" "}
+                  {(() => {
+                    const model = mail.voiceModel ?? VOICE_AGENT_MODEL;
+                    const choice = VOICE_MODEL_CHOICES.find((c) => c.id === model);
+                    const fast = fastTierPriceFor(model);
+                    const label = choice?.label ?? model;
+                    if (isRealtimeVoiceModel(model)) {
+                      return `${label} is speech-to-speech and has no such tier, so this setting does nothing while it is the fleet model.`;
+                    }
+                    if (fast === null) {
+                      return `Retell publishes no fast-tier price for ${label} — the API accepts the setting anyway, so leaving it on there is an unknown amount of money for an unknown amount of speed.`;
+                    }
+                    if (!choice) return "";
+                    return `On ${label} it is $${fast.toFixed(3)}/min against $${choice.usdPerMinute.toFixed(3)} standard. Orgs pay one flat rate per called minute either way, so the difference is margin.`;
+                  })()}{" "}
+                  Reaches agents on their next publish or template sync, like
+                  the model above; per-agent overrides always win.
                 </p>
               </div>
             </div>

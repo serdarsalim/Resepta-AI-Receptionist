@@ -90,6 +90,16 @@ export const DEFAULT_VOICE_IDS: Record<VoiceAgentLanguage, string[]> = {
 // disagree about which model that is.
 export const VOICE_AGENT_MODEL = "claude-4.5-haiku";
 
+// The platform default TIER — Retell's paid priority queue. Named beside the
+// model for the same reason: two /admin pickers and a per-agent picker all
+// render the words "platform default", and the only way they can agree about
+// what that means is by reading the constant rather than restating it.
+//
+// True since template v11 (see the version log above). Everything downstream
+// treats an unset operator row as "this" rather than as false, so turning the
+// fleet off is a decision somebody makes, not a default that drifts in.
+export const VOICE_AGENT_HIGH_PRIORITY = true;
+
 // The whole prompt in the agent's language, not English-with-a-language-line.
 // Two readers want this. The model drifts toward the language its prompt is
 // written in, so a Turkish prompt is itself pressure toward Turkish output.
@@ -541,7 +551,7 @@ export function appointmentReceptionistTemplate(args: {
       // e2e p50 1586ms with the LLM itself at ~735ms — Haiku is already the
       // fast model, so the remaining lever is the provider's queue, and a
       // receptionist is exactly the workload the priority tier exists for.
-      model_high_priority: true,
+      model_high_priority: VOICE_AGENT_HIGH_PRIORITY,
       general_prompt: prompt.general,
       general_tools: args.canEndCall === false ? tools : [...tools, END_CALL_TOOL],
     },
