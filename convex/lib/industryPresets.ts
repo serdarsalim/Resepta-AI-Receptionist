@@ -27,7 +27,9 @@ export type IndustryKey =
   | "beauty_salon"
   | "dentist"
   | "clinic"
+  | "physiotherapy"
   | "psychology"
+  | "veterinary"
   | "fitness"
   | "technical_service"
   | "consulting"
@@ -43,7 +45,9 @@ export const INDUSTRY_KEYS: IndustryKey[] = [
   "beauty_salon",
   "dentist",
   "clinic",
+  "physiotherapy",
   "psychology",
+  "veterinary",
   "fitness",
   "technical_service",
   "consulting",
@@ -108,6 +112,7 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
       { name: { tr: "Saç boyama", en: "Hair colour", de: "Haare färben" }, durationMinutes: 120 },
       { name: { tr: "Röfle", en: "Highlights", de: "Strähnchen" }, durationMinutes: 150 },
       { name: { tr: "Sakal tıraşı", en: "Beard trim", de: "Bartschnitt" }, durationMinutes: 20 },
+      { name: { tr: "Çocuk tıraşı", en: "Kids' haircut", de: "Kinderhaarschnitt" }, durationMinutes: 30 },
     ],
     fields: [
       {
@@ -132,6 +137,8 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
       { name: { tr: "Cilt bakımı", en: "Facial", de: "Gesichtsbehandlung" }, durationMinutes: 60 },
       { name: { tr: "Kaş alımı", en: "Eyebrow shaping", de: "Augenbrauen zupfen" }, durationMinutes: 15 },
       { name: { tr: "Ağda", en: "Waxing", de: "Waxing" }, durationMinutes: 30 },
+      { name: { tr: "Kalıcı oje", en: "Gel polish", de: "Gel-Maniküre" }, durationMinutes: 60 },
+      { name: { tr: "Kirpik lifting", en: "Lash lift", de: "Wimpernlifting" }, durationMinutes: 45 },
     ],
     fields: [
       {
@@ -156,6 +163,7 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
       { name: { tr: "Dolgu", en: "Filling", de: "Füllung" }, durationMinutes: 60 },
       { name: { tr: "Diş beyazlatma", en: "Whitening", de: "Bleaching" }, durationMinutes: 90 },
       { name: { tr: "Kanal tedavisi", en: "Root canal", de: "Wurzelbehandlung" }, durationMinutes: 90 },
+      { name: { tr: "Diş çekimi", en: "Extraction", de: "Zahnentfernung" }, durationMinutes: 45 },
     ],
     fields: [
       {
@@ -191,6 +199,38 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
       ALLERGIES,
     ],
   },
+  physiotherapy: {
+    name: { tr: "Fizyoterapi / Masaj", en: "Physiotherapy / Massage", de: "Physiotherapie / Massage" },
+    services: [
+      { name: { tr: "İlk değerlendirme", en: "Initial assessment", de: "Erstbefund" }, durationMinutes: 45 },
+      { name: { tr: "Fizyoterapi seansı", en: "Physiotherapy session", de: "Physiotherapie-Einheit" }, durationMinutes: 30 },
+      { name: { tr: "Klasik masaj", en: "Classic massage", de: "Klassische Massage" }, durationMinutes: 50 },
+      { name: { tr: "Spor masajı", en: "Sports massage", de: "Sportmassage" }, durationMinutes: 50 },
+      { name: { tr: "Lenf drenajı", en: "Lymphatic drainage", de: "Lymphdrainage" }, durationMinutes: 45 },
+    ],
+    fields: [
+      // In DACH a physio visit is often insurance-covered only WITH a doctor's
+      // prescription, so whether the caller holds one decides what the visit
+      // costs and is worth the agent asking on the phone.
+      {
+        key: "prescription",
+        label: { tr: "Doktor sevki", en: "Doctor's referral", de: "Ärztliche Verordnung" },
+        type: "select",
+        options: {
+          tr: ["Var", "Yok"],
+          en: ["Yes", "No"],
+          de: ["Ja", "Nein"],
+        },
+        source: "voice",
+      },
+      {
+        key: "health_notes",
+        label: { tr: "Sağlık notları", en: "Health notes", de: "Gesundheitshinweise" },
+        type: "text",
+        source: "voice",
+      },
+    ],
+  },
   psychology: {
     name: { tr: "Psikolog / Terapi", en: "Psychology / Therapy", de: "Psychologie / Therapie" },
     services: [
@@ -203,6 +243,37 @@ export const INDUSTRY_PRESETS: Record<IndustryKey, IndustryPreset> = {
     // to talk about in therapy is theirs to bring up in the room, not for a
     // phone agent to collect and file. Format is logistics, nothing more.
     fields: [MEETING_FORMAT],
+  },
+  veterinary: {
+    name: { tr: "Veteriner kliniği", en: "Veterinary clinic", de: "Tierarztpraxis" },
+    services: [
+      { name: { tr: "Muayene", en: "Check-up", de: "Untersuchung" }, durationMinutes: 30 },
+      { name: { tr: "Aşı", en: "Vaccination", de: "Impfung" }, durationMinutes: 15 },
+      { name: { tr: "Kontrol", en: "Follow-up", de: "Kontrolltermin" }, durationMinutes: 20 },
+      { name: { tr: "Tıraş ve bakım", en: "Grooming", de: "Fellpflege" }, durationMinutes: 60 },
+      { name: { tr: "Diş temizliği", en: "Dental cleaning", de: "Zahnreinigung" }, durationMinutes: 45 },
+    ],
+    fields: [
+      // The patient is the animal, so the record needs its name and kind — the
+      // owner's own name and phone are already the customer row.
+      {
+        key: "pet_name",
+        label: { tr: "Evcil hayvan adı", en: "Pet name", de: "Name des Tieres" },
+        type: "text",
+        source: "voice",
+      },
+      {
+        key: "pet_species",
+        label: { tr: "Tür", en: "Species", de: "Tierart" },
+        type: "select",
+        options: {
+          tr: ["Kedi", "Köpek", "Kuş", "Diğer"],
+          en: ["Cat", "Dog", "Bird", "Other"],
+          de: ["Katze", "Hund", "Vogel", "Andere"],
+        },
+        source: "voice",
+      },
+    ],
   },
   fitness: {
     name: { tr: "Spor / Fitness", en: "Fitness / Gym", de: "Fitness / Sport" },
