@@ -1763,3 +1763,38 @@ export const applySeedPreset = internalMutation({
     return null;
   },
 });
+
+// Price a seeded org's services by name, from the CLI — the last step of
+// prepping a demo business, because presets deliberately carry no prices
+// (lib/industryPresets: a seeded price is a claim about the business) and a
+// booking page of blank prices reads as unfinished in a sales visit. Prices
+// are MINOR units of the org's currency (150000 = 1.500,00). Matching is by
+// case-folded exact name; anything unmatched is returned rather than
+// guessed at.
+export const setServicePrices = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    prices: v.array(v.object({ name: v.string(), price: v.number() })),
+  },
+  returns: v.object({ updated: v.number(), missed: v.array(v.string()) }),
+  handler: async (ctx, { orgId, prices }) => {
+    const rows = await ctx.db
+      .query("services")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    let updated = 0;
+    const missed: string[] = [];
+    for (const entry of prices) {
+      const row = rows.find(
+        (r) => r.name.trim().toLowerCase() === entry.name.trim().toLowerCase(),
+      );
+      if (!row) {
+        missed.push(entry.name);
+        continue;
+      }
+      await ctx.db.patch(row._id, { price: Math.max(0, Math.round(entry.price)) });
+      updated += 1;
+    }
+    return { updated, missed };
+  },
+});
