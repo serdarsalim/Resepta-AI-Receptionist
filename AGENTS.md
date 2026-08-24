@@ -203,6 +203,19 @@ protecting: the confinement that matters is cross-org READS, and those stay in
 Do not widen it further without the same argument: name the surface, show it is
 operator-only, and show it reads one org or none.
 
+**Widened once, on 2026-08-24, and this is the whole of it.** The sharing block
+at the foot of [`convex/team.ts`](convex/team.ts) (`sharedAccess`,
+`setAccessElsewhere`, `shareCandidates`, `shareIntoThisBusiness`) reads and
+writes MEMBERSHIPS across orgs, so an owner of several businesses can staff them
+from one screen. It is not operator-gated and does not need to be: the gate is
+ownership of BOTH ENDS, read from `memberships` rows the caller cannot mint, and
+only a person who is already a member of an org the caller owns can be moved.
+The reads give up the least that answers the question — `sharedAccess` returns
+ids and roles, never names, so the card can only draw people this org's own Team
+query already gave it. No customer, message, appointment or setting crosses a
+boundary, which is the confinement this rule protects. Anything beyond
+memberships still belongs in `platform.ts`.
+
 ## Two kinds of template, never conflate them
 
 - **Meta template messages** are business-initiated, registered with Meta and
@@ -2439,3 +2452,45 @@ problem.
 
 An empty block previews its placeholder — without it, the only way to fill one
 in is to delete it and add it again.
+
+## One person, several businesses (2026-08-24)
+
+An owner with more than one business staffs them from one screen. Two surfaces,
+one write:
+
+- **Business → the card under Team.** Lists the OTHER businesses this owner
+  owns, each with the people from this team who already hold a membership there,
+  by name rather than as a count. Expanding one gives every colleague the same
+  three-value control the roster uses — admin, member, no access. Owners only,
+  and rendered only when there IS another business.
+- **The add-business wizard's team step.** Conditional: it exists only for a
+  founder whose other businesses have other people in them. One control per
+  person, three values, and NOBODY is picked by default — every grant mails the
+  person and puts a business in their switcher, so a step somebody clicks past
+  must not have told three colleagues they now work somewhere. The grants commit
+  after the name save, in one transaction, so the mail carries the business name
+  and a rejected name sends the wizard back with nothing sent.
+
+A grant leaves `memberships.seenAt` unset, which is what
+`users.unseenWorkspaces` and the banner already exist for, and sends the same
+"you have been added" mail `team.invite` sends an existing account. The
+last-admin guard runs against the org being WRITTEN TO. People with no login
+never appear on either surface: there is nothing to grant them elsewhere, and
+copying a rota (with its hours and its services) is a different feature.
+
+### Impersonation beats users.orgId, and two mutations forgot (2026-08-24)
+
+`requireOrg` resolves `actingAsOrgId` FIRST and ignores `users.orgId` while it
+is set. So any mutation whose whole effect is to write `users.orgId` does
+nothing visible while an operator is inside a tenant. `foundWorkspace` and
+`setActiveOrg` both did exactly that: Add business minted a real draft org and
+kept rendering the client, so the click read as a no-op and produced one more
+unnamed org per attempt (seven, in production). Both now clear
+`actingAsOrgId` — founding and switching are acts of the PERSON, not of the
+business they are standing in. If you add a third mutation that changes which
+workspace somebody is in, it belongs in that list.
+
+A login also owns at most one draft now: `foundWorkspace` reuses the newest
+draft that has work in it and discards every other empty solo one through
+`lib/discardOrg`. Drafts read "Yeni işletme (tamamlanmadı)" in the switcher
+rather than borrowing the product name.
