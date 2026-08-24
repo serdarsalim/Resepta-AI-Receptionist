@@ -1820,6 +1820,81 @@ export const deleteOrg = action({
   },
 });
 
+// The fleet's ghost rows: orgs that were founded and never named.
+//
+// They are the residue of the Add-business bug (users.foundWorkspace, fixed
+// 2026-08-24): every click while an operator was acting inside a tenant minted
+// a real org that the app then refused to show the wizard for, so the fleet
+// filled with "(unnamed) · 1 member · never". Founding now reuses and sweeps
+// drafts, but that only heals the account doing the founding — the ones
+// already on the deployment need a broom.
+//
+// INTERNAL, and run from the CLI (`npx convex run platform:purgeUnnamedDrafts
+// --prod`), because it is an operator's chore rather than a screen: there is
+// nothing to look at, and a button that deletes many businesses at once is a
+// worse idea than a command somebody has to type.
+//
+// It refuses anything that is not provably empty. A draft cannot normally hold
+// a customer or an agent — naming the org is what runs provisioning — so a row
+// that does hold one is not the residue this is for, and it goes through the
+// operator's own delete, which tears down the provider side in front of them.
+export const purgeUnnamedDrafts = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({
+    marked: v.number(),
+    skipped: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const orgs = await ctx.db.query("orgs").take(500);
+    const skipped: string[] = [];
+    let marked = 0;
+    for (const org of orgs) {
+      if (marked >= (args.limit ?? 25)) break;
+      if (org.name.trim() !== "" || org.demoMode) continue;
+      if (org.deletingAt !== undefined) continue;
+      const customer = await ctx.db
+        .query("customers")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .first();
+      const message = await ctx.db
+        .query("messages")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .first();
+      const call = await ctx.db
+        .query("calls")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .first();
+      if (customer || message || call) {
+        skipped.push(`${org._id}: has history`);
+        continue;
+      }
+      // An agent means somebody has a resource at the provider, and tearing
+      // that down is an HTTP call this mutation cannot make. Racing the purge
+      // against a teardown action is worse than leaving one row for a human.
+      const agent = await ctx.db
+        .query("retellAgents")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .first();
+      const job = (
+        await ctx.db
+          .query("voiceAgentProvisioning")
+          .withIndex("by_org_updated", (q) => q.eq("orgId", org._id))
+          .collect()
+      ).find((row) => row.retellAgentId);
+      if (agent || job) {
+        skipped.push(`${org._id}: has a Retell agent — delete it from /admin`);
+        continue;
+      }
+      await ctx.db.patch(org._id, { status: "suspended", deletingAt: Date.now() });
+      await ctx.scheduler.runAfter(0, internal.platform.purgeOrgStep, {
+        orgId: org._id,
+      });
+      marked += 1;
+    }
+    return { marked, skipped };
+  },
+});
+
 // ── Number provisioning ─────────────────────────────────────────────────────
 //
 // The operator's half of numberRequests.ts: read one org's request with a
