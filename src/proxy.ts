@@ -29,12 +29,16 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // consent screen and Meta's app review both fetch these URLs anonymously, and a
 // redirect to /signin reads to them as a missing policy.
 //
-// `/` joins them because it is now the landing page for anyone signed out. It
-// clears the bar differently from the others: the route is public but the APP
-// still is not. src/app/page.tsx renders marketing copy under <Unauthenticated>
-// and the real thing under <Authenticated>, and every Convex function behind
-// the app half still goes through requireOrg. Letting the request past this
-// redirect exposes a page, not a tenant.
+// `/` was on this list while it was the landing page for anyone signed out. It
+// came off on 2026-08-24, when marketing moved to its own repo at the apex and
+// this deployment became app.resepta.xyz: `/` is the app and nothing else, so
+// it is exactly as public as /inbox is, which is to say not. The redirect at
+// the foot of this file is now the ONLY thing deciding what a stranger sees
+// there, which is one rule in one place rather than a route excused here and
+// re-checked in the page.
+//
+// The demo host is unaffected: demo.resepta.xyz/ is REWRITTEN to /demo above,
+// and a rewrite returns before this matcher is consulted.
 // /book/<slug> and /appt/<token> both shipped without being added here — which
 // meant the booking page an owner shares and the manage link we send over
 // WhatsApp (convex/wa.ts) both bounced the customer to a Google sign-in
@@ -55,7 +59,6 @@ const isPublicPage = createRouteMatcher([
   "/help",
   "/help/(.*)",
   "/demo",
-  "/",
 ]);
 
 // Keep this as Next 16's named proxy export. Its Node-runtime loader has a
