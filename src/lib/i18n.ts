@@ -3698,6 +3698,34 @@ const dictionary = {
   // role wore the same word, the Business page ran two cards both titled
   // "Ekip", one labelling its rows Personel and one whose people were called
   // Personel. Personel now means the bookable person and nothing else.
+  // The card under Team, for an owner who runs more than one business. It
+  // shares the roster's vocabulary on purpose — the two roles are the same two
+  // roles — so only the sentences around it are new.
+  "share.title": {
+    tr: "Diğer işletmeleriniz",
+    en: "Your other businesses",
+    de: "Ihre anderen Betriebe",
+  },
+  // Says all three things somebody needs before touching a row: who can be
+  // shared, what happens to the person, and that it is not silent.
+  "share.hint": {
+    tr: "Bu ekipteki kişilere, yönettiğiniz diğer işletmelerde de erişim verin. Yalnızca girişi olan kişiler paylaşılabilir. Eklenen kişiye bilgilendirme e-postası gider ve işletmeyi kendi hesabında görür.",
+    en: "Give people on this team access to the other businesses you run. Only people with a login can be shared. Whoever you add gets an email and sees the business in their own account.",
+    de: "Geben Sie Personen aus diesem Team Zugriff auf Ihre anderen Betriebe. Teilen können Sie nur Personen mit Zugang. Wer hinzugefügt wird, erhält eine E-Mail und sieht den Betrieb in seinem eigenen Konto.",
+  },
+  // The summary line on a business nobody from HERE can get into. Says "from
+  // this team" rather than "nobody", because that business has its own people
+  // and this card never claims otherwise.
+  "share.nobody": {
+    tr: "Bu ekipten kimse yok",
+    en: "Nobody from this team",
+    de: "Niemand aus diesem Team",
+  },
+  "share.noTeam": {
+    tr: "Bu işletmede sizden başka girişi olan kimse yok.",
+    en: "Nobody here but you has a login.",
+    de: "Außer Ihnen hat hier niemand einen Zugang.",
+  },
   "role.owner": { tr: "Yönetici", en: "Admin", de: "Administrator" },
   "role.staff": { tr: "Üye", en: "Member", de: "Mitglied" },
   // Follows role.owner: the gate is the tier, not the person who owns the

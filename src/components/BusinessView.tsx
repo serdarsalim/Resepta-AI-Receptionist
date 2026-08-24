@@ -94,15 +94,17 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "hours", key: "settings.businessHours" },
   { card: "team", key: "staff.title" },
   { card: "team", key: "roster.bookable" },
+  { card: "businesses", key: "share.title" },
 ];
 
-type BusinessCard = "general" | "booking" | "hours" | "team";
+type BusinessCard = "general" | "booking" | "hours" | "team" | "businesses";
 
 const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
   general: "settings.general",
   booking: "settings.bookingPage",
   hours: "settings.hours",
   team: "staff.title",
+  businesses: "share.title",
 };
 
 
@@ -130,6 +132,7 @@ export function BusinessView() {
     booking: null,
     hours: null,
     team: null,
+    businesses: null,
   });
   // Held in state and consumed by an effect rather than scrolled on the click.
   // Clearing the query remounts the cards, so at click time every ref is null,
@@ -223,6 +226,12 @@ export function BusinessView() {
       </div>
       <div ref={(node) => void (cardRefs.current.team = node)}>
         <PeopleCard isOwner={isOwner} />
+      </div>
+      {/* Under Team, and renders only for an owner who has a second business.
+          It reads as a footnote to the roster above it — the same people, seen
+          from the other businesses they could be working in. */}
+      <div ref={(node) => void (cardRefs.current.businesses = node)}>
+        <OtherBusinessesCard isOwner={isOwner} />
       </div>
     </div>
   );
@@ -1866,6 +1875,12 @@ const ROSTER_ROW =
 
 const ACCESS_REMOVE = "remove";
 
+// The OTHER card's third value. ACCESS_REMOVE above is an ACTION on somebody
+// who is here ("remove access"); this is a STATE somebody can be in ("no
+// login"), because a person can sit in another business's list having never
+// been given anything. Two words, two strings.
+const ACCESS_NONE = "none";
+
 // ONE list of people, the way Fresha, Booksy and Square all show it. Two cards
 // used to split this: who can log in, and who can be booked. They describe the
 // same humans from two angles, so they are two COLUMNS here, not two lists.
@@ -2296,6 +2311,151 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
     {confirmDialog}
     </>
+  );
+}
+
+// The OTHER businesses this owner runs, and which of this team can get into
+// them. The Team card above answers "who works here"; this one answers the
+// question a two-shop owner asks straight after it — "and who can get into the
+// other one" — which until now could only be answered by switching workspaces
+// and reading a second Team card.
+//
+// It lists BUSINESSES and not people, because the change you come here to make
+// is per business ("Merve now covers the second shop"), and because a card
+// listing people would duplicate the one directly above it.
+//
+// Only for owners, and only when there IS another business: one salon has
+// nothing to share with, and a card that renders empty for the majority of
+// accounts is a permanent reminder of a feature they do not use. It sits at
+// the foot of the page for the same reason — it is the rarest thing on it.
+//
+// People with no login are absent by construction. A bookable name with no
+// account is a row on this org's rota; there is nothing to grant them
+// elsewhere, and copying the rota into another business is a different feature
+// (that one wants their hours and their services too).
+function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
+  const { t } = useLanguage();
+  // Skipped rather than rendered-and-ignored for staff: both queries are
+  // owner-only on the server, so a staff session would spend two failing
+  // subscriptions to draw nothing.
+  const others = useQuery(api.team.sharedAccess, isOwner ? {} : "skip");
+  const team = useQuery(api.team.overview, isOwner ? {} : "skip");
+  const setAccess = useMutation(api.team.setAccessElsewhere);
+  const [open, setOpen] = useState<Id<"orgs"> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOwner || others === undefined || team === undefined) return null;
+  if (others.length === 0) return null;
+
+  // Myself excluded: I am an owner of every business in this list — that is
+  // what put it in the list — so my row would read "Yönetici" on every one of
+  // them and its only working state would be resigning from a shop I run.
+  // Leaving is a decision, not a checkbox in a sharing card.
+  const people = team.members.filter((member) => !member.isMe);
+  const nameOf = (member: (typeof team.members)[number]) =>
+    member.name?.trim() || member.email || "";
+
+  const accessLabel = (value: string) =>
+    value === "owner"
+      ? t("role.owner")
+      : value === "staff"
+        ? t("role.staff")
+        : t("roster.noAccess");
+
+  return (
+    <Card title={t("share.title")} tip={t("share.hint")} disabled={!isOwner}>
+      <div className="space-y-1">
+        {others.map((business) => {
+          const roles = new Map(
+            business.shared.map((row) => [row.userId as string, row.role]),
+          );
+          const shared = people.filter((member) => roles.has(member._id as string));
+          const expanded = open === business.orgId;
+          return (
+            <div key={business.orgId}>
+              <button
+                type="button"
+                onClick={() => setOpen(expanded ? null : business.orgId)}
+                aria-expanded={expanded}
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+              >
+                <span className="min-w-0 shrink-0 truncate text-sm font-medium">
+                  {business.name}
+                </span>
+                {/* Who is already in there, by NAME rather than as a count.
+                    "2 kişi" sends you into the list to find out which two,
+                    which is the click this line exists to save. */}
+                <span className="min-w-0 flex-1 truncate text-right text-xs text-[var(--muted)]">
+                  {shared.length > 0
+                    ? shared.map(nameOf).join(", ")
+                    : t("share.nobody")}
+                </span>
+                <span className="shrink-0 text-sm text-[var(--muted)]">
+                  {expanded ? "▾" : "▸"}
+                </span>
+              </button>
+
+              {expanded && (
+                <div className="space-y-0.5 pb-2 pl-2">
+                  {people.length === 0 ? (
+                    <p className="px-2 text-xs text-[var(--muted)]">
+                      {t("share.noTeam")}
+                    </p>
+                  ) : (
+                    people.map((member) => (
+                      <div
+                        key={member._id}
+                        className="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)] items-center gap-3"
+                      >
+                        <span className="min-w-0 truncate px-2 text-sm">
+                          {nameOf(member)}
+                        </span>
+                        {/* The same inline picklist the Team card uses, with
+                            the same three values, so one control means one
+                            thing on both. clearable={false} because "no
+                            access" is already one of the three — a blank row
+                            here would be a fourth option meaning nothing. */}
+                        <InlineEditValue
+                          compact
+                          clearable={false}
+                          value={roles.get(member._id as string) ?? ACCESS_NONE}
+                          options={["owner", "staff", ACCESS_NONE]}
+                          labelFor={accessLabel}
+                          onSave={async (next) => {
+                            setError(null);
+                            try {
+                              await setAccess({
+                                orgId: business.orgId,
+                                userId: member._id,
+                                role:
+                                  next === "owner"
+                                    ? "owner"
+                                    : next === "staff"
+                                      ? "staff"
+                                      : null,
+                              });
+                            } catch (err) {
+                              const reason =
+                                err instanceof Error ? err.message : "error";
+                              setError(
+                                reason.includes("last-admin")
+                                  ? t("roster.lastAdmin")
+                                  : reason,
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {error && <p className="pt-2 text-xs text-[var(--now-line)]">{error}</p>}
+    </Card>
   );
 }
 
