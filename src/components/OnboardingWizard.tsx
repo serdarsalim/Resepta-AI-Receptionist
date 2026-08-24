@@ -4,6 +4,7 @@ import { useMutation, useQuery, useConvex } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useNumberDocumentUpload } from "./NumberRequestCard";
 import { BrandMark } from "./BrandMark";
@@ -29,8 +30,21 @@ import { presetLanguage } from "../../convex/lib/industryPresets";
 // agent auto-provisioning (orgs.update), so by then the language and the
 // catalog the agent reads at ring time are already in place.
 
-type Step = "language" | "name" | "industry" | "info" | "number";
+type Step = "language" | "name" | "industry" | "info" | "number" | "team";
+// The team step is CONDITIONAL and lives between setup and the closing
+// promise: it only exists for somebody who already runs a business with other
+// people in it, which is a minority of the accounts that see this wizard and
+// exactly the accounts that need it. A step that renders "nobody to bring
+// along" would be a screen whose only content is that it does not apply.
 const STEPS: Step[] = ["language", "name", "industry", "info", "number"];
+const STEPS_WITH_TEAM: Step[] = [
+  "language",
+  "name",
+  "industry",
+  "info",
+  "team",
+  "number",
+];
 
 function CheckIcon() {
   return (
@@ -132,8 +146,18 @@ export function OnboardingWizard() {
   const [about, setAbout] = useState("");
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Everyone in the founder's OTHER businesses, minus themselves. Empty for
+  // the account founding its first one, which is what drops the step.
+  const candidates = useQuery(api.team.shareCandidates, {});
+  const shareInto = useMutation(api.team.shareIntoThisBusiness);
+  // userId → the role they arrive with. Absent means not coming, and that is
+  // the DEFAULT for every row: each grant mails the person and puts a business
+  // in their switcher, so a step somebody clicks straight past must not have
+  // told three colleagues they now work somewhere.
+  const [bringing, setBringing] = useState<Record<string, "owner" | "staff">>({});
 
-  const stepIndex = STEPS.indexOf(step);
+  const steps = candidates && candidates.length > 0 ? STEPS_WITH_TEAM : STEPS;
+  const stepIndex = steps.indexOf(step);
   const presetLang = presetLanguage(language);
   // The verticals on offer, from the deployment rather than from this bundle.
   // They used to be a static import, which meant a vertical retired or added
@@ -188,6 +212,17 @@ export function OnboardingWizard() {
         knowledgeSent.current = true;
       }
       await update({ name: name.trim() });
+      // AFTER the name, deliberately. The mail each grant sends carries the
+      // business name, so granting first would tell three people they had been
+      // added to a nameless workspace — and a name that fails validation sends
+      // the wizard back to that step, where nothing should have been mailed
+      // yet. One mutation, so a founder who picked three colleagues gets three
+      // memberships or none.
+      const grants = Object.entries(bringing).map(([userId, role]) => ({
+        userId: userId as Id<"users">,
+        role,
+      }));
+      if (grants.length > 0) await shareInto({ grants });
       // The shell unlocks by itself: org.name is no longer "", and the gate
       // in AppShell stops rendering this component.
     } catch (err) {
@@ -219,7 +254,7 @@ export function OnboardingWizard() {
       await finish();
       return;
     }
-    setStep(STEPS[stepIndex + 1]);
+    setStep(steps[stepIndex + 1]);
   };
 
   const canContinue =
@@ -262,6 +297,7 @@ export function OnboardingWizard() {
               {step === "name" && t("onboarding.nameTitle")}
               {step === "industry" && t("onboarding.industryTitle")}
               {step === "info" && t("onboarding.infoTitle")}
+              {step === "team" && t("onboarding.teamTitle")}
               {step === "number" && t("onboarding.numberTitle")}
             </h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
@@ -269,6 +305,7 @@ export function OnboardingWizard() {
               {step === "name" && t("onboarding.nameHint")}
               {step === "industry" && t("onboarding.industryHint")}
               {step === "info" && t("onboarding.infoHint")}
+              {step === "team" && t("onboarding.teamHint")}
               {step === "number" && t("onboarding.numberPromise")}
             </p>
           </div>
@@ -386,6 +423,61 @@ export function OnboardingWizard() {
             </div>
           )}
 
+          {/* ONE control per person, three values, the same three the Business
+              page's sharing card offers — admin, member, or not coming. A tick
+              box plus a role picker would be two controls answering one
+              question, and the tick box would be the one people miss.
+
+              Each row says which business the name is from: a founder opening
+              their fourth shop may not recognise a colleague by name alone,
+              and "from Bella" is the fact that makes the row readable. */}
+          {step === "team" && (
+            <div className="space-y-2">
+              {(candidates ?? []).map((person) => {
+                const role = bringing[person.userId];
+                return (
+                  <div
+                    key={person.userId}
+                    className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-colors ${
+                      role
+                        ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                        : "border-[var(--border)]"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {person.name}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
+                        {person.from}
+                      </span>
+                    </span>
+                    <select
+                      value={role ?? "none"}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setBringing((current) => {
+                          const copy = { ...current };
+                          if (next === "owner" || next === "staff") {
+                            copy[person.userId] = next;
+                          } else {
+                            delete copy[person.userId];
+                          }
+                          return copy;
+                        });
+                      }}
+                      className="w-auto shrink-0"
+                    >
+                      <option value="none">{t("share.notComing")}</option>
+                      <option value="staff">{t("role.staff")}</option>
+                      <option value="owner">{t("role.owner")}</option>
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {step === "number" && (
             <div className="space-y-3">
               <input
@@ -451,7 +543,7 @@ export function OnboardingWizard() {
           ) : (
             <button
               type="button"
-              onClick={() => setStep(STEPS[stepIndex - 1])}
+              onClick={() => setStep(steps[stepIndex - 1])}
               disabled={stepIndex === 0 || busy}
               className={`rounded-lg px-3 py-2 text-sm text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
                 stepIndex === 0 ? "invisible" : ""
@@ -461,7 +553,7 @@ export function OnboardingWizard() {
             </button>
           )}
           <div className="flex flex-1 items-center justify-center gap-1.5">
-            {STEPS.map((s, i) => (
+            {steps.map((s, i) => (
               <span
                 key={s}
                 aria-hidden

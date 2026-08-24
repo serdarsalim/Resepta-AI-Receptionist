@@ -3716,6 +3716,27 @@ const dictionary = {
   // The summary line on a business nobody from HERE can get into. Says "from
   // this team" rather than "nobody", because that business has its own people
   // and this card never claims otherwise.
+  // The wizard's team step. Its own strings rather than the card's: the card
+  // acts on a business that exists, this one asks a question about one being
+  // founded, and "not coming" is a sentence you can only say before the fact.
+  "onboarding.teamTitle": {
+    tr: "Ekibinizi getirin",
+    en: "Bring your team",
+    de: "Ihr Team mitnehmen",
+  },
+  "onboarding.teamHint": {
+    tr: "Diğer işletmelerinizdeki kişiler. Seçtikleriniz bu işletmeye de girebilir ve bilgilendirme e-postası alır. Sonra Diğer işletmeleriniz kartından da ekleyebilirsiniz.",
+    en: "The people in your other businesses. Whoever you pick can sign in here too and gets an email. You can also add them later from the Other businesses card.",
+    de: "Die Personen in Ihren anderen Betrieben. Wen Sie auswählen, kann sich auch hier anmelden und erhält eine E-Mail. Sie können später ebenso über die Karte „Ihre anderen Betriebe“ ergänzen.",
+  },
+  // The third value of the step's role control, and its default. Names the
+  // OUTCOME rather than the click ("kimseyi ekleme"), because it is also the
+  // state every row starts in.
+  "share.notComing": {
+    tr: "Gelmiyor",
+    en: "Not coming",
+    de: "Nicht dabei",
+  },
   "share.nobody": {
     tr: "Bu ekipten kimse yok",
     en: "Nobody from this team",
