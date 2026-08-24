@@ -2117,19 +2117,28 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               {row.userId ? (
                 <InlineEditValue
                   compact
+                  // The picklist's blank row is for CLEARING a value, and
+                  // access is never blank — everybody with a login holds one
+                  // of these three. It shipped on by default, and the empty
+                  // row read as a fourth choice whose meaning you could only
+                  // learn by picking it: it fell through the ternary below and
+                  // silently demoted an admin to member.
+                  clearable={false}
                   value={row.role ?? "staff"}
                   options={["owner", "staff", ACCESS_REMOVE]}
                   labelFor={accessLabel}
-                  onSave={(next) =>
-                    guard(() =>
-                      next === ACCESS_REMOVE
-                        ? removeMember({ userId: row.userId! })
-                        : setRole({
-                            userId: row.userId!,
-                            role: next === "owner" ? "owner" : "staff",
-                          }),
-                    )
-                  }
+                  // Explicit about all three rather than "owner or else
+                  // staff". A value this control cannot produce should do
+                  // NOTHING; the fallback turned every such value into a
+                  // demotion, which is why the blank row was able to cost
+                  // somebody their access.
+                  onSave={(next) => {
+                    if (next === ACCESS_REMOVE) {
+                      return guard(() => removeMember({ userId: row.userId! }));
+                    }
+                    if (next !== "owner" && next !== "staff") return;
+                    return guard(() => setRole({ userId: row.userId!, role: next }));
+                  }}
                 />
               ) : (
                 // "No login" is a state you can change, so it is a control and

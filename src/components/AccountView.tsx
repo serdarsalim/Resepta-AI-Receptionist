@@ -183,6 +183,11 @@ export function AccountView() {
             hint={t("account.languageHint")}
           />
           <InlineEditValue
+            // Same reason as the Team card's access row: a reader always has
+            // a language, so the blank option was a menu entry that meant
+            // nothing. Here it was merely inert (the guard below drops it)
+            // rather than harmful.
+            clearable={false}
             value={profile.language}
             options={LANGUAGES.map((entry) => entry.code)}
             labelFor={(code) =>
