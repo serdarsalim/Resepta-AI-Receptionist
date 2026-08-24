@@ -1239,8 +1239,12 @@ function WorkspaceSwitcher({
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
               >
-                <span className="min-w-0 flex-1 truncate">
-                  {workspace.name || t("app.name")}
+                <span
+                  className={`min-w-0 flex-1 truncate ${
+                    workspace.name ? "" : "text-[var(--muted)]"
+                  }`}
+                >
+                  {workspace.name || t("workspace.draft")}
                 </span>
                 {workspace.orgId === data.activeOrgId && (
                   <span className="text-[var(--brand)]">

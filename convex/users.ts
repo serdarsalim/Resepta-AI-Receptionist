@@ -1,8 +1,9 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireUser } from "./lib/orgAuth";
 import { foundOrg } from "./lib/foundOrg";
-import { discardDraftOrg } from "./lib/discardOrg";
+import { discardDraftOrg, draftIsUntouched } from "./lib/discardOrg";
 import { alertEnabled } from "./lib/alerts";
 
 // The account panel's own data. Role comes from the caller's membership in the
@@ -208,16 +209,67 @@ export const foundWorkspace = mutation({
     // on the deployment. Real logins all may — a staff-only login founding
     // their own business is exactly the invited-hairdresser-goes-solo story.
     if (user.isAnonymous) throw new Error("anonymous-cannot-found");
-    const orgId = await foundOrg(ctx, { grantTrialCredit: false });
-    // Stamped, because nobody needs telling about the business they just
-    // founded (same reasoning as the founding sign-in's membership).
-    await ctx.db.insert("memberships", {
-      userId: user._id,
-      orgId,
-      role: "owner",
-      seenAt: Date.now(),
-    });
-    await ctx.db.patch(user._id, { orgId });
+
+    // Drafts this login already owns and nobody else is in. An unnamed org is
+    // a business somebody started and did not finish (see lib/discardOrg), and
+    // there is never a reason to hold two: the wizard restores no state from
+    // the row, so a second draft is a second empty shell wearing the same
+    // fallback name in the switcher.
+    const memberships = await ctx.db
+      .query("memberships")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const drafts: { orgId: Id<"orgs">; at: number; untouched: boolean }[] = [];
+    for (const row of memberships) {
+      if (row.role !== "owner") continue;
+      const org = await ctx.db.get(row.orgId);
+      if (!org || org.name !== "" || org.demoMode) continue;
+      // Solo only. A draft cannot normally gain teammates, and deleting a
+      // workspace out from under somebody is the one mistake this must be
+      // structurally unable to make — the same rule discardWorkspace holds.
+      const members = await ctx.db
+        .query("memberships")
+        .withIndex("by_org", (q) => q.eq("orgId", row.orgId))
+        .collect();
+      if (members.length !== 1) continue;
+      drafts.push({
+        orgId: row.orgId,
+        at: org._creationTime,
+        untouched: await draftIsUntouched(ctx, row.orgId),
+      });
+    }
+    drafts.sort((a, b) => b.at - a.at);
+    // Newest with WORK in it first, else the newest empty one: a person who
+    // got three steps in and closed the tab comes back to those three steps.
+    const keep = drafts.find((d) => !d.untouched) ?? drafts[0];
+    for (const draft of drafts) {
+      if (draft.orgId === keep?.orgId || !draft.untouched) continue;
+      await discardDraftOrg(ctx, draft.orgId);
+    }
+
+    const orgId = keep?.orgId ?? (await foundOrg(ctx, { grantTrialCredit: false }));
+    if (!keep) {
+      // Stamped, because nobody needs telling about the business they just
+      // founded (same reasoning as the founding sign-in's membership).
+      await ctx.db.insert("memberships", {
+        userId: user._id,
+        orgId,
+        role: "owner",
+        seenAt: Date.now(),
+      });
+    }
+    // actingAsOrgId cleared, and this is the whole bug this mutation had.
+    // requireOrg resolves the ACTING org first and deliberately ignores
+    // users.orgId while it is set (lib/orgAuth), so an operator who clicked
+    // "Add business" from inside a client got a real draft org, a real
+    // membership, a patched users.orgId — and a screen that carried on
+    // showing the client. The wizard never opened, because orgs.current still
+    // resolved a NAMED org, so the click read as doing nothing and the next
+    // one minted another draft. Seven of them, in Serdar's account.
+    //
+    // Founding is an act of the PERSON, not of the business they are standing
+    // in, so it ends the impersonation rather than refusing while it is on.
+    await ctx.db.patch(user._id, { orgId, actingAsOrgId: undefined });
     return null;
   },
 });
@@ -268,7 +320,12 @@ export const setActiveOrg = mutation({
       )
       .unique();
     if (!membership) throw new Error("not-a-member");
-    await ctx.db.patch(user._id, { orgId: args.orgId });
+    // Leaves any impersonation for the same reason foundWorkspace does: the
+    // acting org beats users.orgId in requireOrg, so an operator picking a
+    // workspace from their own switcher used to write the choice and keep
+    // rendering the client. A picker that silently does nothing is worse than
+    // one that refuses.
+    await ctx.db.patch(user._id, { orgId: args.orgId, actingAsOrgId: undefined });
     return null;
   },
 });

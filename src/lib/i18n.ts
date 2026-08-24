@@ -3558,6 +3558,15 @@ const dictionary = {
   // The wizard's exit for a SECOND business: discards the draft workspace and
   // lands back in the previous one. Phrased as plain cancel because to the
   // owner nothing was created yet — the draft org is an implementation detail.
+  // An unnamed org in the switcher. It used to fall back to the product name,
+  // so a draft somebody abandoned mid-wizard read as a business called
+  // "Resepta" — and a list of them read as the app having invented seven
+  // businesses. The row still works: opening it resumes the wizard.
+  "workspace.draft": {
+    tr: "Yeni işletme (tamamlanmadı)",
+    en: "New business (unfinished)",
+    de: "Neuer Betrieb (unfertig)",
+  },
   "workspace.discard": {
     tr: "Vazgeç",
     en: "Cancel",
