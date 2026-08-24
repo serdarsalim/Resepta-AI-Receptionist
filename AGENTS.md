@@ -2494,3 +2494,39 @@ A login also owns at most one draft now: `foundWorkspace` reuses the newest
 draft that has work in it and discards every other empty solo one through
 `lib/discardOrg`. Drafts read "Yeni işletme (tamamlanmadı)" in the switcher
 rather than borrowing the product name.
+
+## Deleting a business (2026-08-24)
+
+`platform.deleteOrg` is the operator's destructive door, next to suspension in
+Account status. Read it before adding a table.
+
+**It is an action, and the order is the design.** The Retell teardown
+(`retellAgent.teardownForOrg`) runs BEFORE anything is destroyed, because the
+agent id lives in the rows about to be deleted — and it runs in front of the
+operator, whose confirmation is the only record that survives. Provider
+failures REFUSE the delete unless the operator presses again for `force`. Per
+agent: unbind the number while the agent still exists, read the agent to find
+its response engine, delete the agent, delete the engine. The number is
+unbound, never released — releasing is the irreversible half, and an unbound
+number is immediately reusable by the next business.
+
+**`ORG_TABLES` in `convex/platform.ts` is hand-maintained.** One arrow per
+org-scoped table, each reading through the index that starts with `orgId`. Add
+a line when you add a table; forgetting leaves rows (and storage blobs) that
+outlive their business and that nothing can find, because the org row they were
+keyed by is gone. It is written as literal arrows rather than a loop over table
+names on purpose: the literal is what types each row, so `storageId` narrows
+and the compiler notices the day a table gains a blob.
+
+**The purge is a scheduled job, not a transaction.** `PURGE_BUDGET` rows per
+step, then it reschedules; the org row goes last. `orgs.deletingAt` marks the
+row, drops it from the fleet list, and gates `purgeOrgStep` — a step that finds
+no mark returns without touching anything, which is what stops a stray schedule
+from eating a live salon. Suspension is set at the same moment, because that is
+the switch every send path already respects.
+
+Nothing writes an activity row for the delete: every table that could hold one
+is org-scoped and is being emptied. Deleted memberships are also how the people
+who worked there stop resolving into it — `lib/orgAuth` falls back to their
+remaining membership, and a stale `actingAsOrgId` pointing at the deleted org
+already falls through there.
