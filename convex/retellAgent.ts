@@ -1327,6 +1327,116 @@ export const voiceOptionsForOrg = internalAction({
 // The signed-in door. It deliberately does NOT accept an orgId: adding one
 // here would let a client provision into another salon's workspace, since
 // `begin` trusts the field when it is present.
+// ── Teardown ────────────────────────────────────────────────────────────────
+//
+// Deleting a business here has to delete its agents THERE. Retell is a paid
+// account the operator owns: an agent left behind after the org is gone is a
+// row nobody can trace back to a customer, sitting in a list that is supposed
+// to be one-agent-per-business, and its number keeps ringing a webhook for a
+// workspace that no longer exists.
+//
+// Order per agent, and none of it is arbitrary:
+//   1. Unbind the number FIRST, while the agent still exists. A number whose
+//      inbound agent was deleted underneath it is the state that makes Retell
+//      refuse a later reassignment, and the number is the expensive half — it
+//      took provisioning and paperwork to get, and the operator will want to
+//      hand it to the next business.
+//   2. Read the agent to find its response engine, because deleting the agent
+//      is what makes the engine unreachable — after that the llm_id is only in
+//      our own row, and only if provisioning got that far.
+//   3. Delete the agent, then the engine.
+//
+// The number is UNBOUND, never released. Releasing is irreversible in the way
+// that matters (you do not get that number back), and an unbound number is
+// immediately reusable — which is the outcome the operator actually wants.
+//
+// Best effort per resource, and the caller decides what a failure means: this
+// returns what it did and what it could not do rather than throwing, so one
+// dead agent id from a half-finished provisioning run cannot stop the rest of
+// the teardown.
+export const teardownForOrg = internalAction({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    deleted: v.array(v.string()),
+    freedNumbers: v.array(v.string()),
+    failures: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const resources = (await ctx.runQuery(internal.retell.orgVoiceResources, {
+      orgId: args.orgId,
+    })) as {
+      apiKey: string | null;
+      demoMode: boolean;
+      agents: { retellAgentId: string; inboundNumber: string | null }[];
+    };
+    const deleted: string[] = [];
+    const freedNumbers: string[] = [];
+    const failures: string[] = [];
+    if (resources.agents.length === 0) return { deleted, freedNumbers, failures };
+    // No key, no teardown — and that IS a failure to report rather than a
+    // quiet skip, because the agents are real and somebody has to go and
+    // remove them by hand. The demo org is the one exception: it holds no
+    // credentials by design and never provisioned anything.
+    if (resources.demoMode) return { deleted, freedNumbers, failures };
+    if (!resources.apiKey) {
+      failures.push(
+        `no Retell key for this workspace, so ${resources.agents.length} agent(s) were left in place`,
+      );
+      return { deleted, freedNumbers, failures };
+    }
+    const key = resources.apiKey;
+
+    for (const agent of resources.agents) {
+      if (agent.inboundNumber) {
+        try {
+          await call(
+            key,
+            "PATCH",
+            `update-phone-number/${encodeURIComponent(agent.inboundNumber)}`,
+            { inbound_agents: [] },
+          );
+          freedNumbers.push(agent.inboundNumber);
+        } catch (err) {
+          failures.push(`number ${agent.inboundNumber}: ${String(err)}`);
+        }
+      }
+      let engineId: string | null = null;
+      try {
+        const doc = (await (
+          await call(key, "GET", `get-agent/${encodeURIComponent(agent.retellAgentId)}`)
+        ).json()) as AgentDoc;
+        engineId = doc.response_engine?.llm_id ?? null;
+      } catch {
+        // An agent that cannot be read is usually one that is already gone.
+        // Not a failure on its own; the delete below decides.
+      }
+      try {
+        await call(
+          key,
+          "DELETE",
+          `delete-agent/${encodeURIComponent(agent.retellAgentId)}`,
+        );
+        deleted.push(agent.retellAgentId);
+      } catch (err) {
+        // 404 means somebody deleted it in the Retell dashboard already, which
+        // is the outcome this function wants.
+        if (String(err).includes("retell-404")) deleted.push(agent.retellAgentId);
+        else failures.push(`agent ${agent.retellAgentId}: ${String(err)}`);
+      }
+      if (engineId) {
+        try {
+          await call(key, "DELETE", `delete-retell-llm/${encodeURIComponent(engineId)}`);
+        } catch (err) {
+          if (!String(err).includes("retell-404")) {
+            failures.push(`engine ${engineId}: ${String(err)}`);
+          }
+        }
+      }
+    }
+    return { deleted, freedNumbers, failures };
+  },
+});
+
 export const createAgent = action({
   args: createAgentArgs,
   returns: createAgentResult,

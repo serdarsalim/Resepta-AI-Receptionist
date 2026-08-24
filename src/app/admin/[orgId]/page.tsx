@@ -165,11 +165,23 @@ export default function TenantPage() {
   const setChatAgentMode = useMutation(api.platform.setChatAgentMode);
   const setChatAgentBudget = useMutation(api.platform.setChatAgentBudget);
   const setOrgStatus = useMutation(api.platform.setOrgStatus);
+  const deleteOrg = useAction(api.platform.deleteOrg);
   const setPlatformFlag = useMutation(api.platformConfig.set);
   // Suspend is two clicks, not a dialog: the admin shell has no confirm
   // provider, and a state that arms and disarms itself is the same protection
   // with less machinery.
   const [armedSuspend, setArmedSuspend] = useState(false);
+  // Delete is a THIRD state of this card, not a second armed button. Two
+  // click-again controls side by side is how somebody suspends when they meant
+  // to delete and, worse, the reverse — so this one asks for the name.
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteName, setDeleteName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  // Set when the provider teardown reported something it could not do. Holds
+  // the message AND the fact that a second press means "go anyway", because
+  // the alternative — deleting quietly and printing a warning — is exactly how
+  // an orphan agent ends up in the Retell account.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // The Retell account's real numbers, for the Phone lines checklist. An
   // action, not a query — the provider is the truth and nothing mirrors the
   // full account. null = loading, "error" = the fetch failed visibly.
@@ -933,6 +945,7 @@ export default function TenantPage() {
               </div>
             ))}
           </div>
+
         </Section>
       )}
 
@@ -1314,6 +1327,91 @@ export default function TenantPage() {
                   </span>
                 )}
               </>
+            )}
+          </div>
+
+          {/* Below suspension, and deliberately not beside it: this is the end
+              of the business, not a heavier version of stopping its sends.
+              Everything about it is one step slower than the control above —
+              a disclosure, then the name, then a button that stays dead until
+              the two match. */}
+          <div className="border-t border-[var(--border)] pt-3">
+            {!deleteOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteOpen(true);
+                  setDeleteName("");
+                  setDeleteError(null);
+                }}
+                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+              >
+                Delete account…
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-[var(--muted-strong)]">
+                  Deletes every customer, message, call, appointment and file
+                  this business has, and removes its Retell agent. Its phone
+                  number is unbound, not released, so you can hand it to
+                  somebody else. There is no undo. Type{" "}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {detail.name || "the business name"}
+                  </span>{" "}
+                  to confirm.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={deleteName}
+                    onChange={(e) => setDeleteName(e.target.value)}
+                    placeholder={detail.name}
+                    className="w-56 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1.5 text-xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={deleting || deleteName.trim() !== detail.name.trim()}
+                    onClick={() => {
+                      setDeleting(true);
+                      // force only on the SECOND press, and only after the
+                      // first one came back with provider failures — that is
+                      // what deleteError holds.
+                      void deleteOrg({
+                        orgId,
+                        confirmName: deleteName.trim(),
+                        ...(deleteError ? { force: true } : {}),
+                      })
+                        .then(() => router.push("/admin"))
+                        .catch((err: unknown) => {
+                          setDeleting(false);
+                          setDeleteError(
+                            err instanceof Error ? err.message : String(err),
+                          );
+                        });
+                    }}
+                    className="rounded-lg border border-red-500/40 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:pointer-events-none disabled:opacity-40 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+                  >
+                    {deleting
+                      ? "Deleting…"
+                      : deleteError
+                        ? "Delete anyway"
+                        : "Delete account"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteOpen(false)}
+                    className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {deleteError && (
+                  <p className="text-xs text-red-700 dark:text-red-400">
+                    {deleteError.includes("retell-teardown-failed")
+                      ? `Retell teardown did not finish: ${deleteError.replace(/^.*retell-teardown-failed:\s*/, "")} — deleting now leaves that behind.`
+                      : deleteError}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </Section>

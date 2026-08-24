@@ -454,6 +454,19 @@ export default defineSchema({
     // losing a customer's messages during a billing dispute is how a late
     // payer becomes an ex-customer. Operator-set from /admin only.
     status: v.optional(v.union(v.literal("active"), v.literal("suspended"))),
+    // Set the moment an operator confirms a deletion, and the row is on its
+    // way out from then on: it leaves the fleet list, and a scheduled job is
+    // walking every org-scoped table in batches behind it (platform.deleteOrg).
+    //
+    // A column rather than deleting the org row first, because every one of
+    // those tables is keyed BY this row — remove it up front and the purge has
+    // nothing to find the leftovers with. It also makes the in-between state
+    // legible instead of a fleet that mysteriously still lists a business
+    // whose data is half gone.
+    //
+    // Nothing reads this to gate access: the same mutation suspends the org,
+    // and suspension is the switch every send path already respects.
+    deletingAt: v.optional(v.number()),
     // Chat agent lifecycle (docs/chat-agent.md §5). Unset = off. "shadow"
     // runs the full agent on real inbound and records the turn WITHOUT
     // sending — the pre-launch QA state, the owner trust ramp and the canary

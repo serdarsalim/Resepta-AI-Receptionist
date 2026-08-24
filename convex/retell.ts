@@ -672,6 +672,62 @@ export const backfillAgentTags = internalAction({
 // One owner-scoped read for the agent editor. The Retell key never reaches the
 // browser: actions use it server-side, while the client receives only the
 // variable rows and the org's possible contact-field destinations.
+// Everything the provider teardown needs about one org, read in one go: the
+// key that authenticates the deletes, and every resource this deployment ever
+// made at Retell for this business.
+//
+// Its own query rather than a reuse of agentEditorContext below, because that
+// one is keyed by AGENT and refuses an org with none — and an org being
+// deleted is exactly as likely to have a half-provisioned agent as a finished
+// one. A teardown that throws on the messy cases is a teardown that leaves
+// orphans in the account the operator is paying for.
+export const orgVoiceResources = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.object({
+    apiKey: v.union(v.string(), v.null()),
+    demoMode: v.boolean(),
+    agents: v.array(
+      v.object({
+        retellAgentId: v.string(),
+        inboundNumber: v.union(v.string(), v.null()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    const rows = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    // Provisioning rows carry an agent id from the moment the provider made
+    // one, which is BEFORE the retellAgents row exists. A run that died
+    // between those two writes is the single most likely way to own an agent
+    // nobody can see, so the teardown reads both and dedupes.
+    const jobs = await ctx.db
+      .query("voiceAgentProvisioning")
+      .withIndex("by_org_updated", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    const seen = new Map<string, string | null>();
+    for (const row of rows) {
+      seen.set(row.retellAgentId, row.inboundNumber ?? null);
+    }
+    for (const job of jobs) {
+      if (!job.retellAgentId) continue;
+      if (!seen.has(job.retellAgentId)) {
+        seen.set(job.retellAgentId, job.inboundNumber ?? null);
+      }
+    }
+    return {
+      apiKey: await connectionField(ctx, args.orgId, "retell", "apiKey"),
+      demoMode: org?.demoMode === true,
+      agents: [...seen].map(([retellAgentId, inboundNumber]) => ({
+        retellAgentId,
+        inboundNumber,
+      })),
+    };
+  },
+});
+
 export const agentEditorContext = internalQuery({
   args: {
     retellAgentId: v.string(),

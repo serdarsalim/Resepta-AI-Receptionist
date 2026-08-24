@@ -25,9 +25,10 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { connectionField } from "./lib/connections";
 import {
@@ -160,7 +161,13 @@ export const fleet = query({
       stuckByOrg.set(row.orgId, (stuckByOrg.get(row.orgId) ?? 0) + 1);
     }
 
-    const orgs = await ctx.db.query("orgs").take(200);
+    // A business being purged leaves the list the moment it is confirmed. Its
+    // rows are disappearing underneath every health figure on this page, so
+    // the honest thing is not to draw it rather than to draw a salon whose
+    // numbers fall every time the screen refreshes.
+    const orgs = (await ctx.db.query("orgs").take(200)).filter(
+      (org) => org.deletingAt === undefined,
+    );
     // Read ONCE and passed down. emailConfig is deployment-global and was the
     // first statement of healthFor, so it ran a full platformConfig collect per
     // org — 200 redundant scans per invocation of this query.
@@ -1592,6 +1599,224 @@ export const setOrgStatus = mutation({
       detail: args.status === "suspended" ? "account suspended" : "account reactivated",
     });
     return null;
+  },
+});
+
+// ── Deleting a business ─────────────────────────────────────────────────────
+//
+// Suspension above is the reversible answer and the one to reach for; this is
+// the other one. It exists because the fleet accumulates the businesses that
+// never were — a test account, a duplicate somebody founded twice, a trial
+// that ended — and a list you cannot take rows out of stops being a list you
+// read.
+//
+// Three properties it has to have, and they shape everything below:
+//
+//   NOTHING IS LEFT AT THE PROVIDER. A Retell agent outliving its business is
+//   an unattributable row in a paid account, still answering a number that
+//   webhooks into a workspace that no longer exists. The provider teardown
+//   runs FIRST, in front of the operator, and a failure stops the delete
+//   rather than being swallowed (retellAgent.teardownForOrg).
+//
+//   IT WORKS ON A BUSY ORG. A salon with a year of messages has more rows
+//   than one Convex transaction may touch, so the purge is a scheduled job
+//   that takes a bounded bite and reschedules itself until there is nothing
+//   left. The org row goes last, because every leftover is found through it.
+//
+//   IT CANNOT HAPPEN BY MISCLICK. The operator types the business name, and
+//   the demo org refuses outright.
+const PURGE_BUDGET = 400;
+
+// Every table that carries an orgId, each read through the index that starts
+// with one. Hand-maintained, like the search index on the Business page — add
+// a line when you add a table, and the cost of forgetting is rows that outlive
+// their business.
+//
+// Written as one arrow per table rather than a loop over table names, because
+// the literal is what gives each row its REAL type: `storageId` narrows, and
+// the day a table gains a blob the compiler is the thing that notices. A
+// generic version needs a cast, and a cast here is a silent leak of files
+// nobody can see any more.
+type OrgRowReader = (
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  limit: number,
+) => Promise<Doc<TableNames>[]>;
+
+const ORG_TABLES: { table: string; read: OrgRowReader }[] = [
+  { table: "messages", read: (ctx, orgId, n) => ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "calls", read: (ctx, orgId, n) => ctx.db.query("calls").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "voiceEvents", read: (ctx, orgId, n) => ctx.db.query("voiceEvents").withIndex("by_org_event_key", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "chatAgentTurns", read: (ctx, orgId, n) => ctx.db.query("chatAgentTurns").withIndex("by_org_at", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "activityLog", read: (ctx, orgId, n) => ctx.db.query("activityLog").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "agentActions", read: (ctx, orgId, n) => ctx.db.query("agentActions").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "appointments", read: (ctx, orgId, n) => ctx.db.query("appointments").withIndex("by_org_start", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "customers", read: (ctx, orgId, n) => ctx.db.query("customers").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "notes", read: (ctx, orgId, n) => ctx.db.query("notes").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "inboxReads", read: (ctx, orgId, n) => ctx.db.query("inboxReads").withIndex("by_org_user_customer", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "inboxPins", read: (ctx, orgId, n) => ctx.db.query("inboxPins").withIndex("by_org_user", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "inboxVisits", read: (ctx, orgId, n) => ctx.db.query("inboxVisits").withIndex("by_org_user", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "campaigns", read: (ctx, orgId, n) => ctx.db.query("campaigns").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "mediaAssets", read: (ctx, orgId, n) => ctx.db.query("mediaAssets").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "numberRequests", read: (ctx, orgId, n) => ctx.db.query("numberRequests").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "knowledge", read: (ctx, orgId, n) => ctx.db.query("knowledge").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "services", read: (ctx, orgId, n) => ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "contactFields", read: (ctx, orgId, n) => ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "staff", read: (ctx, orgId, n) => ctx.db.query("staff").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "messageRules", read: (ctx, orgId, n) => ctx.db.query("messageRules").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "waTemplates", read: (ctx, orgId, n) => ctx.db.query("waTemplates").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "waAccounts", read: (ctx, orgId, n) => ctx.db.query("waAccounts").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "retellAgents", read: (ctx, orgId, n) => ctx.db.query("retellAgents").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "agentLines", read: (ctx, orgId, n) => ctx.db.query("agentLines").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "voiceAgentVariables", read: (ctx, orgId, n) => ctx.db.query("voiceAgentVariables").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "voiceAgentProvisioning", read: (ctx, orgId, n) => ctx.db.query("voiceAgentProvisioning").withIndex("by_org_updated", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "mcpConnections", read: (ctx, orgId, n) => ctx.db.query("mcpConnections").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "connections", read: (ctx, orgId, n) => ctx.db.query("connections").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "walletTopups", read: (ctx, orgId, n) => ctx.db.query("walletTopups").withIndex("by_org_at", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "usageMonthly", read: (ctx, orgId, n) => ctx.db.query("usageMonthly").withIndex("by_org_month", (q) => q.eq("orgId", orgId)).take(n) },
+  { table: "invites", read: (ctx, orgId, n) => ctx.db.query("invites").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+  // LAST of the org-scoped tables. While a membership survives, the people who
+  // worked here still resolve into this org (lib/orgAuth), so the app keeps
+  // rendering a business whose data is being carried out of the room.
+  { table: "memberships", read: (ctx, orgId, n) => ctx.db.query("memberships").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+];
+
+// What the operator is about to destroy, and the refusals, in one read. A
+// query rather than the first half of the mutation: the provider teardown runs
+// between this and the write, and it is allowed to stop the whole thing.
+export const orgDeletePreview = internalQuery({
+  args: { orgId: v.id("orgs"), confirmName: v.string() },
+  returns: v.object({ name: v.string() }),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    // The demo is a public surface, not a customer. Deleting it takes the
+    // "look around" door off the sign-in screen and there is no way back
+    // except reseeding it by hand.
+    if (org.demoMode) throw new Error("demo-org");
+    // An unnamed draft confirms with an empty string, which is exactly what
+    // its row shows the operator.
+    if (args.confirmName.trim() !== org.name.trim()) throw new Error("name-mismatch");
+    return { name: org.name };
+  },
+});
+
+// Marks the row and starts the job. Separate from the action so the write is
+// one transaction and the browser cannot leave a business half-deleted by
+// navigating away.
+export const beginOrgPurge = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org || org.demoMode) throw new Error("no-such-org");
+    // Suspended as well as marked: suspension is the switch every send path
+    // already respects, so nothing new has to learn what deletingAt means to
+    // stop spending money on a business that is going away.
+    await ctx.db.patch(args.orgId, { status: "suspended", deletingAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.platform.purgeOrgStep, {
+      orgId: args.orgId,
+    });
+    return null;
+  },
+});
+
+// One bite. Reschedules itself while anything is left, and deletes the org row
+// on the pass that finds nothing.
+export const purgeOrgStep = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return null;
+    // Refuses to run on a row that was never marked. The only way in is
+    // beginOrgPurge, and this is what stops a stray scheduled call — or a
+    // future caller that skipped the confirmation — from eating a live salon.
+    if (org.deletingAt === undefined) return null;
+
+    let budget = PURGE_BUDGET;
+    for (const entry of ORG_TABLES) {
+      if (budget <= 0) break;
+      const rows = await entry.read(ctx, args.orgId, budget);
+      for (const row of rows) {
+        // The blob columns, narrowed by the union rather than looked up by
+        // name: a file left in storage is invisible from every screen and
+        // still counts against the deployment.
+        if ("storageId" in row) {
+          await ctx.storage.delete(row.storageId).catch(() => {});
+        }
+        if ("mediaStorageId" in row && row.mediaStorageId) {
+          await ctx.storage.delete(row.mediaStorageId).catch(() => {});
+        }
+        await ctx.db.delete(row._id);
+      }
+      budget -= rows.length;
+    }
+
+    if (budget < PURGE_BUDGET) {
+      // Something was deleted, so there may be more. Straight back in — the
+      // job is the only writer left on these tables.
+      await ctx.scheduler.runAfter(0, internal.platform.purgeOrgStep, {
+        orgId: args.orgId,
+      });
+      return null;
+    }
+
+    // Nothing left anywhere. The logo is the org's own blob, and this row is
+    // the last thing that knows about it.
+    if (org.logoStorageId) await ctx.storage.delete(org.logoStorageId).catch(() => {});
+    await ctx.db.delete(args.orgId);
+    // Deliberately no activity row and no stamp anywhere else: every table
+    // that could hold one is org-scoped, and the whole point of this pass is
+    // that none of them still has a row for this business. The record the
+    // operator keeps is the confirmation they typed and the summary the action
+    // handed back.
+    return null;
+  },
+});
+
+// The operator's door. An ACTION because the provider teardown is HTTP and has
+// to happen before anything is destroyed here: the id of the agent to delete
+// lives in the rows the purge is about to remove.
+//
+// Returns what it did at Retell so the operator sees it at the moment they act
+// — there is no activity feed left to read it in afterwards.
+export const deleteOrg = action({
+  args: {
+    orgId: v.id("orgs"),
+    // The business name, typed. Compared server-side, so a UI that forgets the
+    // confirmation still cannot delete anything by accident.
+    confirmName: v.string(),
+    // Proceed even though the provider teardown reported failures. The default
+    // is to refuse, because the whole reason this runs first is that an orphan
+    // agent is exactly what nobody notices.
+    force: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    name: v.string(),
+    agentsDeleted: v.array(v.string()),
+    numbersFreed: v.array(v.string()),
+    failures: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const { name } = (await ctx.runQuery(internal.platform.orgDeletePreview, {
+      orgId: args.orgId,
+      confirmName: args.confirmName,
+    })) as { name: string };
+    const teardown = (await ctx.runAction(internal.retellAgent.teardownForOrg, {
+      orgId: args.orgId,
+    })) as { deleted: string[]; freedNumbers: string[]; failures: string[] };
+    if (teardown.failures.length > 0 && args.force !== true) {
+      throw new Error(`retell-teardown-failed: ${teardown.failures.join("; ")}`);
+    }
+    await ctx.runMutation(internal.platform.beginOrgPurge, { orgId: args.orgId });
+    return {
+      name,
+      agentsDeleted: teardown.deleted,
+      numbersFreed: teardown.freedNumbers,
+      failures: teardown.failures,
+    };
   },
 });
 
