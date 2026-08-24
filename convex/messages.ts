@@ -488,6 +488,10 @@ export const feedForCustomer = query({
 // customers table on top.
 
 export type ConversationEntry = {
+  // The messages or calls row this entry came from, stringified — the same id
+  // feedForCustomer hands the contact feed, which is what lets the inbox open
+  // the exact mail or call a row is previewing instead of the channel's list.
+  id: string;
   // The inbox list's own strip, which answers "how can I reach this person" —
   // so a form intake counts as one more thing that happened, not as a way
   // back to them. Narrowed at the push below.
@@ -542,6 +546,7 @@ export async function conversationEntries(
   for (const m of messages) {
     if (neverLeftSilently(m)) continue;
     push(m.customerId, {
+      id: m._id,
       channel: channelOfMessage(m.kind),
       at: m.occurredAt ?? m._creationTime,
       direction: m.direction,
@@ -551,6 +556,7 @@ export async function conversationEntries(
   }
   for (const c of calls) {
     push(c.customerId, {
+      id: c._id,
       channel: "call",
       at: c.startedAt,
       direction: c.direction === "inbound" ? "in" : "out",
@@ -869,6 +875,11 @@ export const conversations = query({
       // from awaitingChannels below, which is only ever real channels because
       // it answers "where do I reply".
       lastChannel: feedChannel,
+      // Which mail or call the preview above is quoting. The row opens the
+      // contact ON it — see InboxView — so that clicking a line of an email
+      // lands in that email rather than in a list of six the reader now has to
+      // recognise it in.
+      lastId: v.string(),
       hasFailed: v.boolean(),
       awaitingReply: v.boolean(),
       // Newest inbound, 0 when they have never written. The row does not draw
@@ -927,6 +938,7 @@ export const conversations = query({
         lastBody: summary.last.body,
         lastDirection: summary.last.direction,
         lastChannel: summary.last.channel,
+        lastId: summary.last.id,
         hasFailed: summary.hasFailed,
         awaitingReply: summary.awaitingChannels.length > 0,
         lastInboundAt: summary.lastInboundAt,

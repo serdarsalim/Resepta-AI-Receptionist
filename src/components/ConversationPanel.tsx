@@ -135,6 +135,7 @@ export function ConversationPanel({
   contactName,
   lastInboundAt,
   filter = "all",
+  initialItemId,
   onFilterChange,
   search,
   header,
@@ -161,6 +162,12 @@ export function ConversationPanel({
   contactName?: string | null;
   lastInboundAt?: number;
   filter?: FeedFilter;
+  // "Open ON this one." The inbox knows which mail or call its row was
+  // previewing, and email and calls are the two tabs that show a LIST before
+  // they show anything — so without this, clicking a row quoting one line of a
+  // six-mail history lands on the six subjects and asks the reader to spot it
+  // again. Applied ONCE, when the feed first arrives; see the effect below.
+  initialItemId?: string;
   // The index ROUTES: an email or call row moves the whole pane to that
   // channel's tab. The parent owns the filter (its header renders the pills),
   // so the panel asks rather than sets. Without this the index can only
@@ -351,6 +358,33 @@ export function ConversationPanel({
     if (filter !== "call") setOpenCallId(null);
     setOpenRows(new Set());
   }, [filter]);
+
+  // The deep link, applied once and never again: the reader's back arrow sets
+  // openCallId to null, and an effect that kept re-deriving from the prop
+  // would shove them straight back into the call they just left. Declared
+  // AFTER the tab-change reset above so a mount carrying both runs in the
+  // order that ends with the item open.
+  //
+  // WhatsApp and notes are deliberately absent. Those tabs are a thread with
+  // the newest message already at the bottom, so there is nothing to open —
+  // arriving IS arriving at the message.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || !initialItemId || !feed) return;
+    const item = feed.find((row) => row.id === initialItemId);
+    if (!item) return;
+    deepLinked.current = true;
+    if (item.channel === "call") {
+      setOpenCallId(item.id);
+      return;
+    }
+    if (item.channel === "email") {
+      setOpenThread({
+        key: normalizeSubject(item.emailSubject ?? ""),
+        subject: item.emailSubject?.trim() || t("email.noSubject"),
+      });
+    }
+  }, [initialItemId, feed, t]);
 
   useEffect(() => {
     const el = composerRef.current;

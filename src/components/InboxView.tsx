@@ -66,7 +66,11 @@ function previewOf(
 export function InboxView({
   onOpenContact,
 }: {
-  onOpenContact: (id: Id<"customers">, channel?: FeedFilter) => void;
+  onOpenContact: (
+    id: Id<"customers">,
+    channel?: FeedFilter,
+    itemId?: string,
+  ) => void;
 }) {
   const { t } = useLanguage();
   const conversations = useQuery(api.messages.conversations, {});
@@ -261,7 +265,12 @@ export function InboxView({
                     // row started navigating meant clicking a WhatsApp row
                     // landed on the mixed feed, where you had to find that
                     // same thread again by hand.
-                    onOpenContact(c.customerId, c.lastChannel);
+                    // ...and ON the mail or call the row was previewing. The
+                    // channel alone lands on an index for email and calls, so
+                    // a row quoting one line of six put the reader back in
+                    // front of the recognition problem their click was meant
+                    // to solve.
+                    onOpenContact(c.customerId, c.lastChannel, c.lastId);
                   };
                   return (
                     <li key={c.customerId}>

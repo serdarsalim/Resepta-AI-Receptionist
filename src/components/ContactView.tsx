@@ -76,6 +76,7 @@ function MetaLabel({ label, hint }: { label: string; hint?: string }) {
 export function ContactView({
   customerId,
   initialFilter,
+  initialItemId,
   onTitle,
   onOpenContact,
 }: {
@@ -85,9 +86,17 @@ export function ContactView({
   onTitle?: (name: string) => void;
   // The header jump list navigates to OTHER customers from here, so this page
   // needs the same door the list views hand around.
-  onOpenContact: (customerId: Id<"customers">, channel?: FeedFilter) => void;
+  onOpenContact: (
+    customerId: Id<"customers">,
+    channel?: FeedFilter,
+    itemId?: string,
+  ) => void;
   // Which channel to open on. See the state below.
   initialFilter?: FeedFilter;
+  // WHICH mail or call on that channel, when the caller was looking at one.
+  // Passed straight through to the feed — see ConversationPanel, which is
+  // where a channel that lists before it reads gets opened on a row.
+  initialItemId?: string;
 }) {
   const { t, language } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
@@ -468,6 +477,7 @@ export function ContactView({
             contactName={`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
             lastInboundAt={customer.lastInboundAt}
             filter={filter}
+            initialItemId={initialItemId}
             onFilterChange={setFilter}
             search={search}
             className="flex-1"

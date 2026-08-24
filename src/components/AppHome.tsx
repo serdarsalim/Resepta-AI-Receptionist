@@ -53,9 +53,21 @@ export function AppHome() {
   const [contactFilter, setContactFilter] = useState<FeedFilter | undefined>(
     undefined,
   );
+  // WHICH mail or call the sender was looking at, when it knows. Email and
+  // calls are the two channels the record shows as a LIST first — six subjects
+  // or twenty-five calls — so a row that previews one of them and then lands
+  // on the index has handed the reader back the recognition problem their
+  // click was meant to solve. WhatsApp and notes need nothing: those channels
+  // open as a thread with the newest message already at the bottom.
+  const [contactItem, setContactItem] = useState<string | undefined>(undefined);
   // One door, so nothing can set an id without settling the channel with it.
-  const openContact = (id: Id<"customers">, channel?: FeedFilter) => {
+  const openContact = (
+    id: Id<"customers">,
+    channel?: FeedFilter,
+    itemId?: string,
+  ) => {
     setContactFilter(channel);
+    setContactItem(itemId);
     setContactId(id);
   };
 
@@ -105,6 +117,7 @@ export function AppHome() {
           key={contactId}
           customerId={contactId}
           initialFilter={contactFilter}
+          initialItemId={contactItem}
           onTitle={setContactName}
           onOpenContact={openContact}
         />
