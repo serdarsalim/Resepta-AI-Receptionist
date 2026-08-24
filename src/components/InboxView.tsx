@@ -312,78 +312,42 @@ export function InboxView({
                             : "hover:bg-[var(--row-hover-bg)]"
                         }`}
                       >
-                        {/* UNREAD, in a gutter down the left edge — WhatsApp's
-                            placement, and the reason for it is scanning: one
-                            vertical sweep answers "what have I not read",
-                            where a marker parked after each name has to be
-                            hunted for at a different x on every row.
+                        {/* THE ROW'S ONE DOT, in a gutter down the left edge —
+                            WhatsApp's placement, and the reason for it is
+                            scanning: one vertical sweep answers "what needs
+                            me", where a marker parked after each name has to
+                            be hunted for at a different x on every row.
 
-                            The gutter is always here and only sometimes
-                            filled. Names then sit on one left edge whatever
-                            their state, which is worth the 10px an empty
-                            gutter costs — a list whose text shifts by row
-                            state is harder to read than one that indents.
+                            THREE states, one hit area: violet (I pinned this)
+                            beats brand green (they wrote and I haven't opened
+                            it) beats hollow (I could pin this). The pin wins
+                            because it is a decision and green is a fact that
+                            clears itself the moment you open the row — if
+                            green won, pinning a new conversation would look
+                            like it did nothing. Clicking a green row pins it;
+                            unpinning falls back to green while the thread is
+                            still unopened.
 
-                            It spans BOTH lines rather than sitting on line
-                            one, so the dot marks the conversation, not the
-                            name.
+                            The two lit states differ by HUE at one size:
+                            violet has no other job in this app, and green is
+                            the same unread fact the sidebar's dot reports off
+                            the same rule (messages.ts inboxUnseenCount: "ONE
+                            RULE, TWO READERS").
 
-                            --brand, which is a change of meaning and not just
-                            of hue. Grey was forced on this dot by the slot it
-                            used to share: it WAS the pin button wearing a
-                            second state, so it had to differ from violet. On
-                            its own it can say what it is — the same fact the
-                            sidebar's brand dot reports, computed by the same
-                            rule (messages.ts inboxUnseenCount: "ONE RULE, TWO
-                            READERS"). One meaning, one colour, at both scales.
+                            The slot is always rendered and only sometimes lit,
+                            so names sit on one left edge whatever their state
+                            and the row never re-indents; the hollow ring fades
+                            in on hover. It spans BOTH lines rather than
+                            sitting on line one, so the dot marks the
+                            conversation, not the name.
 
-                            Not a button. The pin is the ACTION on this row;
-                            unread is a state the row reports, and the way to
-                            clear it is to read the thing. */}
-                        <span className="flex w-2.5 shrink-0 items-center justify-center">
-                          {c.unseen && (
-                            <>
-                              <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
-                              <span className="sr-only">{t("inbox.unseen")}</span>
-                            </>
-                          )}
-                        </span>
-                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-                        {/* Line one — name, the pin, age. */}
-                        <div className="flex w-full items-center gap-2.5">
-                        <span
-                          className={`min-w-0 flex-1 truncate text-sm ${
-                            c.unseen || c.pinned ? "font-semibold" : "font-medium"
-                          }`}
-                        >
-                          {c.name || c.phone}
-                        </span>
-
-                        {/* TWO states now, not three: violet (I pinned this)
-                            or hollow (I could). Unread moved to the gutter on
-                            the left, which is what this control had been
-                            carrying as a third state — and carrying badly. A
-                            grey dot that meant "they wrote" sat in a slot
-                            whose click meant "pin this", so the marker you
-                            were most likely to aim at was the one that did
-                            something else. Rendered on every row so the slot
-                            never changes width; hollow fades in on hover.
-
-                            VIOLET, not --brand green, since the same pin is
-                            now settable from the contact record too and one
-                            state cannot wear two hues. Green belongs to
-                            unread, at both scales — the sidebar dot and now
-                            the row gutter. Nudge's note is the canonical
-                            argument: a hue with no other job cannot be
-                            misread.
-
-                            This replaced a channel strip of phone/mail/
-                            WhatsApp glyphs. They were an action nobody took:
-                            the row already opens on whichever channel the
-                            newest message is on, so clicking a specific glyph
-                            only mattered for STARTING a channel with no
-                            history — rare enough to belong on the contact
-                            page, not on every row of a triage list. */}
+                            This merges what were two markers — an unread dot
+                            here and a pin dot after the name. Splitting them
+                            put the row's status on the left and its one action
+                            on the right, so the eye crossed the name twice to
+                            read one conversation, and the pin sat in the
+                            column where the age lives. Nudge's inbox has run
+                            the merged control long enough to trust it. */}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -393,15 +357,40 @@ export function InboxView({
                               pinned: !c.pinned,
                             });
                           }}
-                          title={c.pinned ? t("inbox.pinnedHint") : t("inbox.pinHint")}
-                          aria-label={c.pinned ? t("inbox.pinned") : t("inbox.notPinned")}
+                          title={
+                            c.pinned
+                              ? t("inbox.pinnedHint")
+                              : c.unseen
+                                ? t("inbox.unseenPinHint")
+                                : t("inbox.pinHint")
+                          }
+                          aria-label={
+                            c.pinned
+                              ? t("inbox.pinned")
+                              : c.unseen
+                                ? t("inbox.unseen")
+                                : t("inbox.notPinned")
+                          }
                           aria-pressed={c.pinned}
                           className={
                             c.pinned
                               ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-violet-500 transition-transform hover:scale-125"
-                              : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                              : c.unseen
+                                ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)] transition-transform hover:scale-125"
+                                : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                           }
                         />
+                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                        {/* Line one — name and age. The pin used to sit
+                            between them; it is the gutter dot now. */}
+                        <div className="flex w-full items-center gap-2.5">
+                        <span
+                          className={`min-w-0 flex-1 truncate text-sm ${
+                            c.unseen || c.pinned ? "font-semibold" : "font-medium"
+                          }`}
+                        >
+                          {c.name || c.phone}
+                        </span>
 
                         <span className="w-8 shrink-0 text-right text-xs tabular-nums text-[var(--muted)]">
                           {formatAgo(c.lastAt)}

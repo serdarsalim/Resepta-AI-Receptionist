@@ -1749,19 +1749,16 @@ const dictionary = {
     de: "Unterhaltungen durchsuchen",
   },
   // Row marker, three states in one control. The labels name the STATE for a
-  // screen reader; the hints add what a click will do, because the two differ
-  // (clicking grey pins it, clicking green unpins).
+  // screen reader; the hints add what a click will do, because that differs by
+  // state — a lit pin unpins, and everything else pins.
   // Preview-line prefix when the newest message in the thread is OURS. The
   // German column keeps the house Sie rather than WhatsApp's "Du:" — the
   // label addresses the business owner reading the screen, and this app
   // never drops into du.
   "inbox.youPrefix": { tr: "Siz:", en: "You:", de: "Sie:" },
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
-  // Announced by the unread dot in the row's left gutter, which is not a
-  // control — so this names a STATE and nothing else. Its old companion
-  // ("New reply. Click to pin it for later") died with the shared slot: the
-  // dot no longer does anything when clicked, and telling a reader otherwise
-  // was the confusion that moved it.
+  // The green state of the row's gutter dot. It names the STATE; the hint
+  // below it says what clicking does, since the same dot is the pin control.
   "inbox.unseen": { tr: "Yeni mesaj", en: "New reply", de: "Neue Nachricht" },
   // The list-filter chips. Their own keys rather than reusing the two above:
   // those name a row's STATE for a screen reader ("Sabitlendi" = this one is
@@ -1796,6 +1793,15 @@ const dictionary = {
     tr: "Sonrası için sabitlemek üzere tıklayın",
     en: "Click to pin this for later",
     de: "Zum Merken anheften",
+  },
+  // Green rows get their own hint rather than reusing the one above: the state
+  // the reader is hovering already says something ("they wrote"), so the hint
+  // has to name it before it offers the click, or it reads as a description of
+  // the green.
+  "inbox.unseenPinHint": {
+    tr: "Yeni mesaj. Sonrası için sabitlemek üzere tıklayın",
+    en: "New reply. Click to pin it for later",
+    de: "Neue Nachricht. Zum Merken anheften",
   },
   // The right pane before anything is picked. Says what to DO, not "no
   // conversation selected" — the reader can see that nothing is selected.
