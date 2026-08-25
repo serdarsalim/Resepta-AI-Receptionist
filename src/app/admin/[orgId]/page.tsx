@@ -454,7 +454,7 @@ export default function TenantPage() {
               >
                 {agent.name && <span className="text-sm font-medium">{agent.name}</span>}
                 <span onClick={(e) => e.stopPropagation()}>
-                  <CopyId value={agent.retellAgentId} />
+                  <CopyId value={agent.retellAgentId} label="copy agent id" />
                 </span>
                 <span className="text-xs text-[var(--muted)]">
                   {agent.inboundNumber ?? "No line"}

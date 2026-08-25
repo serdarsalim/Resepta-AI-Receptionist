@@ -153,7 +153,7 @@ export function Errors({
 // An id or an address you came here to paste somewhere else. Shared rather
 // than living on one page: the tenant detail and the Members card both draw
 // it, and a second copy is a second set of paddings to keep in step.
-export function CopyId({ value }: { value: string }) {
+export function CopyId({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -164,13 +164,28 @@ export function CopyId({ value }: { value: string }) {
           setTimeout(() => setCopied(false), 1200);
         });
       }}
-      title="Copy"
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-[11px] hover:opacity-80"
+      // With a label, the id itself never prints: the value is the thing you
+      // paste elsewhere, not the thing you read here, and a 40-character
+      // provider id sitting in a row costs a third of its width to say
+      // nothing (Serdar, 2026-08-25). The full id still rides the tooltip for
+      // anyone eyeballing which agent this is.
+      title={label ? value : "Copy"}
+      className={`inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--muted-bg)] px-1.5 py-0.5 text-[11px] hover:opacity-80 ${
+        label ? "" : "font-mono"
+      }`}
     >
-      <span className="truncate">{value}</span>
-      <span className="w-8 shrink-0 text-left text-[var(--muted)]">
-        {copied ? "copied" : "copy"}
-      </span>
+      {label ? (
+        <span className="whitespace-nowrap text-[var(--muted)]">
+          {copied ? "copied" : label}
+        </span>
+      ) : (
+        <>
+          <span className="truncate">{value}</span>
+          <span className="w-8 shrink-0 text-left text-[var(--muted)]">
+            {copied ? "copied" : "copy"}
+          </span>
+        </>
+      )}
     </button>
   );
 }
