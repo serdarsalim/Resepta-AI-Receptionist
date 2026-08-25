@@ -2607,6 +2607,15 @@ extensive manual". Three moves got there, in one day, in order:
    fills section's rows write the field through the same mutations the
    Contact fields table uses. Flipping `source` to manual no longer throws
    `field-in-use` — it IS the unlink, and the next publish stops deriving.
+4. **The fills section lists EVERY field with a switch** ("like we list all
+   fields and then select from there what the agent should fill in" —
+   Serdar, same day). Identity rows are the lock inverted; org rows are the
+   Voice column; an OFF row is a muted label and a Toggle, and description +
+   confirm-first appear only ON. The sees section stopped offering fields
+   entirely — a fills field already injects its stored value, so offering it
+   as context too was the same field in two sections. Sees adds static
+   values only; fills adds by creating a field. During-vs-post is never
+   asked: ask-when-missing during, transcript recovery after, always.
 
 What did not change: runtime ring-time context (`contact`/`information`) was
 already field-driven; mid-call and post-call writes still go through

@@ -12,6 +12,7 @@ import { localeFor } from "@/lib/datetime";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
+import { Toggle } from "./Toggle";
 import { Sheet } from "./Sheet";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
@@ -32,6 +33,9 @@ const CELL_CLASS =
 // its neighbours aligned to its first line.
 const VAR_GRID =
   "group grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_1.75rem] items-start gap-x-2";
+// The fills rows swap the ✕ track for one wide enough to hold the sm Toggle.
+const FILL_GRID =
+  "grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_2.5rem] items-start gap-x-2";
 
 function RemoveX() {
   return (
@@ -444,58 +448,6 @@ export function VoiceVariablesEditor({
   const lockIdentity = (lock: "firstname" | "lastname" | "email") => {
     void setIdentityLock({ key: lock, locked: true });
     touchFields();
-  };
-
-  const adoptField = (field: VoiceContactField) => {
-    const base: VoiceVariable = {
-      ...blankVariable(),
-      key: field.key,
-      label: field.label,
-      type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
-      choices: field.type === "select" ? field.options : undefined,
-      destination: "contact",
-      contactFieldId: field.id,
-    };
-    // Context only: read the stored value into the call, capture nothing.
-    // (Capture is not a row anymore — it is the field's Voice switch, and
-    // publish derives it.)
-    const row: VoiceVariable = {
-      ...base,
-      duringMode: "none",
-      afterCall: false,
-      beforeSource: "contact_field",
-      beforeFieldId: field.id,
-      destination: "call",
-      contactFieldId: undefined,
-    };
-    setDraft((rows) => [...rows, row]);
-    setFocusLast(true);
-  };
-
-  // The picker's "create" action: the field lands in Business → Services &
-  // fields at the same moment it becomes a row here, so the two registries
-  // cannot drift apart. If the label folds to a key an unclaimed voice field
-  // already owns, adopt that field instead of failing on the collision.
-  const createFieldAndAdopt = async (label: string) => {
-    const key = keyFromLabel(label);
-    if (!key) return;
-    const existing = voiceFields.find((field) => field.key === key);
-    if (existing) {
-      adoptField(existing);
-      return;
-    }
-    try {
-      const id = (await createContactField({
-        label,
-        type: "text",
-        source: "voice",
-      })) as string;
-      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false };
-      setCreatedFields((rows) => [...rows, field]);
-      adoptField(field);
-    } catch {
-      setStatus(t("voiceVariables.fieldExists"));
-    }
   };
 
   // Call-scoped variable: named in the picker, saved with the call only.
@@ -942,49 +894,51 @@ export function VoiceVariablesEditor({
                 {section.id === "fills" && (
                   <>
                     {/* Identity first: the questions every receptionist asks
-                        before any custom field. ✕ locks the column, the same
-                        write the Contact fields table's Locked control makes,
-                        and a locked one reappears in the picker below. */}
-                    {IDENTITY_CAPTURE.filter(
-                      (column) => !identityLocks.includes(column.lock),
-                    ).map((column) => (
-                      <div key={column.lock} className={`${VAR_GRID} group`}>
-                        <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
-                          {t(column.labelKey)}
-                        </span>
-                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
-                          {t("voiceVariables.text")}
-                        </span>
-                        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-                          {t(column.descKey)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => lockIdentity(column.lock)}
-                          aria-label={t("voiceVariables.remove").replace(
-                            "{name}",
-                            t(column.labelKey),
-                          )}
-                          className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                        >
-                          <RemoveX />
-                        </button>
-                      </div>
+                        before any custom field. The switch is the identity
+                        lock, inverted — same write the Contact fields table
+                        makes. */}
+                    {IDENTITY_CAPTURE.map((column) => (
+                      <FieldCaptureRow
+                        key={column.lock}
+                        enabled={!identityLocks.includes(column.lock)}
+                        label={t(column.labelKey)}
+                        typeLabel={t("voiceVariables.text")}
+                        description={t(column.descKey)}
+                        onToggle={(next) =>
+                          next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
+                        }
+                      />
                     ))}
-                    {voiceFields.map((field) => (
+                    {/* EVERY org field, on or off — "list all fields and
+                        select from there what the agent should fill in"
+                        (Serdar). The switch IS the Voice column in
+                        Customers → Contact fields, one mutation, two
+                        renderings. */}
+                    {allFields.map((field) => (
                       <FieldCaptureRow
                         key={field.id}
-                        field={field}
-                        typeLabel={t(
-                          field.type === "select"
-                            ? "fields.type.select"
-                            : field.type === "number"
-                              ? "fields.type.number"
-                              : field.type === "date"
-                                ? "fields.type.date"
-                                : "fields.type.text",
-                        )}
+                        enabled={field.voice}
+                        label={field.label}
+                        typeLabel={
+                          t(
+                            field.type === "select"
+                              ? "fields.type.select"
+                              : field.type === "number"
+                                ? "fields.type.number"
+                                : field.type === "date"
+                                  ? "fields.type.date"
+                                  : "fields.type.text",
+                          ) +
+                          (field.type === "select" && field.options.length > 0
+                            ? ` · ${field.options.length}`
+                            : "")
+                        }
+                        description={field.voiceDescription}
                         confirmLabel={t("voiceVariables.confirm")}
+                        confirmOn={field.voiceConfirm}
+                        onToggle={(next) =>
+                          next ? enableFieldVoice(field) : disableFieldVoice(field)
+                        }
                         onDescription={(text) => {
                           void updateContactField({
                             fieldId: field.id as Id<"contactFields">,
@@ -1009,50 +963,34 @@ export function VoiceVariablesEditor({
                           );
                           touchFields();
                         }}
-                        onRemove={() => disableFieldVoice(field)}
-                        removeLabel={t("voiceVariables.remove").replace("{name}", field.label)}
                       />
                     ))}
                   </>
                 )}
+                {/* Sees adds STATIC VALUES only. It used to offer the org's
+                    fields for adoption as injected context, and the full
+                    merge made that a duplicate: every fills field already
+                    injects its stored value before the call, so offering it
+                    here again was the same field in two sections (Serdar:
+                    "now we're duplicating what agent sees and fills in").
+                    Fills adds by CREATING a field, since every existing one
+                    is already on the list with a switch. */}
                 <VariablePicker
                   addLabel={
-                    section.id === "sees" ? t("voiceVariables.addDefault") : undefined
-                  }
-                  fields={
                     section.id === "sees"
-                      ? availableFields
-                      : allFields.filter((field) => !field.voice)
+                      ? t("voiceVariables.addDefault")
+                      : t("fields.add")
                   }
-                  builtins={
-                    section.id === "sees"
-                      ? []
-                      : // Locked identity columns, offered back. Picking one
-                        // unlocks it — the same write, reversed.
-                        IDENTITY_CAPTURE.filter((column) =>
-                          identityLocks.includes(column.lock),
-                        ).map((column) => ({
-                          key: column.lock,
-                          label: t(column.labelKey),
-                          source: "none" as PickerBuiltin["source"],
-                        }))
-                  }
-                  onField={(field) =>
-                    section.id === "sees" ? adoptField(field) : enableFieldVoice(field)
-                  }
-                  onBuiltin={(builtin) =>
-                    unlockIdentity(builtin.key as "firstname" | "lastname" | "email")
-                  }
+                  fields={[]}
+                  builtins={[]}
+                  onField={() => undefined}
+                  onBuiltin={() => undefined}
                   onCreate={(label) =>
                     section.id === "sees"
-                      ? void createFieldAndAdopt(label)
+                      ? addCallOnly(label)
                       : void createVoiceField(label)
                   }
                   onCallOnly={(label) => addCallOnly(label)}
-                  // "Just for this call" only where a row is context, not an
-                  // answer. A capture variable's value must land somewhere, and
-                  // a captured value with no destination is the
-                  // invisible-orphan case this editor no longer permits.
                   allowCallOnly={section.id === "sees"}
                 />
               </div>
@@ -1130,80 +1068,88 @@ type PickerBuiltin = {
 // silent free text. That is the CRM-property-picker contract: one registry,
 // referenced everywhere, created inline, and a row can always be re-pointed
 // by clicking its name.
-// One voice-enabled contact field as a fills row: label · type · the
-// extractor's instruction · ✕. Every control writes the FIELD — this row has
-// no draft, no publish of its own, and no way to disagree with the Contact
-// fields table, because it is that table's row in the agent's clothes.
+// One contact field as a fills row — EVERY field, not just the enabled ones.
+// "List all fields and select from there what the agent should fill in"
+// (Serdar) is the whole design: the switch is the Contact fields table's
+// Voice column, rendered where the agent is configured, through the same
+// mutation. An OFF row is a muted label and a switch; description and
+// confirm-first appear only once the agent actually fills the field, because
+// config for a thing that is not happening is noise.
 //
 // The description drafts locally and commits on blur, the same discipline as
 // every autosaving text input here: typing must not fight the round-trip.
 function FieldCaptureRow({
-  field,
+  enabled,
+  label,
   typeLabel,
+  description,
   confirmLabel,
+  confirmOn,
+  onToggle,
   onDescription,
   onToggleConfirm,
-  onRemove,
-  removeLabel,
 }: {
-  field: VoiceContactField;
+  enabled: boolean;
+  label: string;
   typeLabel: string;
-  confirmLabel: string;
-  onDescription: (text: string) => void;
-  onToggleConfirm: () => void;
-  onRemove: () => void;
-  removeLabel: string;
+  // Null on identity rows: their instruction is fixed, shown muted.
+  description: string | null;
+  confirmLabel?: string;
+  confirmOn?: boolean;
+  onToggle: (next: boolean) => void;
+  onDescription?: (text: string) => void;
+  onToggleConfirm?: () => void;
 }) {
   const { t } = useLanguage();
-  const [text, setText] = useState(field.voiceDescription);
-  useEffect(() => setText(field.voiceDescription), [field.voiceDescription]);
+  const [text, setText] = useState(description ?? "");
+  useEffect(() => setText(description ?? ""), [description]);
   return (
-    <div className={`${VAR_GRID} group`}>
-      <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
-        {field.label}
+    <div className={`${FILL_GRID} group`}>
+      <span
+        className={`block min-w-0 truncate px-2 py-1 text-xs ${
+          enabled ? "text-[var(--foreground)]" : "text-[var(--muted)]"
+        }`}
+      >
+        {label}
       </span>
       <span className="flex flex-col items-start px-2 py-1">
-        <span className="text-xs text-[var(--muted)]">
-          {typeLabel}
-          {field.type === "select" && field.options.length > 0
-            ? ` · ${field.options.length}`
-            : ""}
-        </span>
-        {/* Confirm-first, as a quiet toggle under the type. ON reads darker,
-            not accent: it is a state of this row, not an action. */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={field.voiceConfirm}
-          onClick={onToggleConfirm}
-          className={`mt-0.5 rounded px-1 py-0.5 text-[10px] transition-colors ${
-            field.voiceConfirm
-              ? "bg-[var(--muted-bg)] font-medium text-[var(--foreground)]"
-              : "text-[var(--muted)] hover:text-[var(--foreground)]"
-          }`}
-        >
-          {field.voiceConfirm ? "✓ " : ""}
-          {confirmLabel}
-        </button>
+        <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
+        {enabled && onToggleConfirm && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={confirmOn}
+            onClick={onToggleConfirm}
+            className={`mt-0.5 rounded px-1 py-0.5 text-[10px] transition-colors ${
+              confirmOn
+                ? "bg-[var(--muted-bg)] font-medium text-[var(--foreground)]"
+                : "text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {confirmOn ? "✓ " : ""}
+            {confirmLabel}
+          </button>
+        )}
       </span>
-      <AutoGrowTextarea
-        value={text}
-        rows={1}
-        placeholder={t("voiceVariables.description")}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() => {
-          if (text.trim() !== field.voiceDescription) onDescription(text.trim());
-        }}
-        className={CELL_CLASS}
-      />
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={removeLabel}
-        className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      >
-        <RemoveX />
-      </button>
+      {enabled && onDescription ? (
+        <AutoGrowTextarea
+          value={text}
+          rows={1}
+          placeholder={t("voiceVariables.description")}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={() => {
+            if (text.trim() !== (description ?? "")) onDescription(text.trim());
+          }}
+          className={CELL_CLASS}
+        />
+      ) : (
+        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
+          {enabled ? description : ""}
+        </span>
+      )}
+      <span className="flex justify-end pt-0.5">
+        <Toggle size="sm" checked={enabled} onChange={onToggle} label={label} />
+      </span>
     </div>
   );
 }
