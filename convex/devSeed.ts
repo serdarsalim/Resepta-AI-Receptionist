@@ -352,7 +352,9 @@ export const seed = internalMutation({
           // Newest thing this customer did, for one in three — so the inbox
           // has email rows to draw and not only WhatsApp.
           occurredAt:
-            i % 3 === 0 ? now - (i % 4) * 20 * 60_000 : now - (i + 6) * HOUR,
+            i % 3 === 0
+              ? now - ((i % 4) * 20 + 30) * 60_000
+              : now - (i + 6) * HOUR,
           status: "received",
         });
         messageCount++;
@@ -380,6 +382,13 @@ export const seed = internalMutation({
       // Every fifth customer also rang. Enough to populate the call tab for a
       // handful of records without making voice look like the main channel,
       // which it isn't.
+      //
+      // Placed in the last half hour, and NEWER than that customer's messages,
+      // because the inbox row draws only the newest entry — an hours-old call
+      // behind a minutes-old email is invisible there, so the call lane could
+      // be seeded and still leave the list with nothing to show for it. Which
+      // of the pair is newer alternates, so the list carries both an inbound
+      // and an outbound call rather than four of the same arrow.
       if (i % 5 === 0) {
         for (const [index, call] of CALLS.entries()) {
           await ctx.db.insert("calls", {
@@ -387,7 +396,8 @@ export const seed = internalMutation({
             customerId,
             direction: index === 0 ? "inbound" : "outbound",
             fromNumber: phone,
-            startedAt: now - (i + index + 1) * HOUR,
+            startedAt:
+              now - ((i % 10 === 0 ? index : 1 - index) * 7 + 7 + i) * 60_000,
             durationSec: call.durationSec,
             outcome: call.outcome,
             summary: call.summary,
