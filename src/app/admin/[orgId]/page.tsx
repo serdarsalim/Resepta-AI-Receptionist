@@ -264,8 +264,23 @@ export default function TenantPage() {
     <Plane narrow className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/admin" className="text-xs text-[var(--muted)] hover:underline">
-            ← Fleet
+          {/* A real button now, and a drawn arrow (Serdar, 2026-08-26). The
+              old "← Fleet" was twelve-pixel muted text with a glyph whose
+              shape is whatever the reader's font decides — the one control
+              that leaves this page, styled quieter than any control on it.
+              Same SVG the app shell draws for its own back arrow. "Back"
+              rather than the destination's name: this page has exactly one
+              place to go back to, so naming it bought nothing the arrow does
+              not already say. */}
+          <Link
+            href="/admin"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+            Back
           </Link>
           <h1 className="page-title mt-1 text-lg font-semibold">
             {detail.name}
