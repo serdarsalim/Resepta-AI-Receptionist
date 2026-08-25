@@ -144,21 +144,24 @@ const VoicePhoneIcon = makeIcon(
   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
 );
 
-// A receipt, not a bank card (Serdar, 2026-08-25). The card said "a payment
-// method is stored"; this tab is about what was CHARGED and what is left, and
-// a torn-off receipt is the object people already associate with that answer.
-// Prepaid orgs only, so it is a receipt for money already spent rather than a
-// bill arriving.
+// A banknote with a dollar on it. It was a bank card, briefly a receipt
+// (Serdar, 2026-08-25: the receipt "looks weird"). The card said "a payment
+// method is stored"; this tab is about what was charged and what is left, and
+// a note is the plainest drawing of money there is.
 //
-// It carries the same $ strokes as RevenueIcon above, deliberately: money is
-// one idea in this sidebar and it should be drawn one way. The frame is what
-// separates them — Revenue is the money coming IN, bare; Billing is money on
-// a slip, which is the one that has a piece of paper behind it.
-const BillingReceiptIcon = makeIcon(
+// The $ is drawn at 1.75 while the note stays at the house 2, and that is the
+// one deliberate weight exception in this file. A $ has two counters — the
+// holes in the S — and inside a 14-unit note at full stroke they close up into
+// a blob; every earlier attempt failed there rather than on the shape. A
+// quarter-unit thinner opens them and is invisible at the 18px this is seen
+// at, which is the size the whole thing was judged at.
+const BillingNoteIcon = makeIcon(
   <>
-    <path d="M4 2.5v19l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1v-19l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
-    <path d="M14.5 9.5H11a1.75 1.75 0 0 0 0 3.5h2a1.75 1.75 0 0 1 0 3.5H9.5" />
-    <path d="M12 7.5v11" />
+    <rect x="1.5" y="5" width="21" height="14" rx="2.5" />
+    <g strokeWidth="1.75">
+      <path d="M14 9.4h-2.9a1.6 1.6 0 0 0 0 3.2h1.8a1.6 1.6 0 0 1 0 3.2H10" />
+      <path d="M12 7.8v9.4" />
+    </g>
   </>,
 );
 
@@ -312,7 +315,7 @@ const FOOT_TABS: typeof NAV_TABS = [
 const BILLING_TAB: (typeof NAV_TABS)[number] = {
   id: "billing",
   key: "nav.billing",
-  Icon: BillingReceiptIcon,
+  Icon: BillingNoteIcon,
   color: "var(--foreground)",
 };
 
