@@ -53,6 +53,7 @@ const ADMIN_TABS = [
   "setup",
   "agents",
   "assistant",
+  "billing",
   "members",
   "sends",
   "activity",
@@ -321,6 +322,17 @@ export default function TenantPage() {
           { id: "setup" as const, label: "Setup" },
           { id: "agents" as const, label: "Voice agent" },
           { id: "assistant" as const, label: "Chat agent" },
+          // Money got its own room (Serdar, 2026-08-26), reversing the
+          // 2026-08-20 call that put the meter under Agents. That call was
+          // right for what the card was then and stopped being right as it
+          // grew: rate, billing mode, wallet, top-ups and a margin table is
+          // not a fact ABOUT an agent, it is the invoice conversation, and it
+          // was sitting in the middle of the page an operator opens to wire a
+          // phone line. What makes the tab earn itself rather than just move
+          // one card is that it takes BOTH channels' money — the chat agent's
+          // spend and budget came with it, so "what does this client cost"
+          // stopped being a question spread across two tabs.
+          { id: "billing" as const, label: "Billing" },
           { id: "members" as const, label: "Members" },
           { id: "sends" as const, label: "Sends" },
           { id: "activity" as const, label: "Logs" },
@@ -405,6 +417,28 @@ export default function TenantPage() {
           from is not a card boundary. Provisioning jobs still in flight or
           failed render below the agents; a COMPLETE job's outcome IS the
           agent row, so it is not repeated as history. */}
+      {/* The one fact that could not move with the wallet. A prepaid balance
+          at zero DECLINES THE RING (retell.ts, prepaid gate) — the line
+          sounds busy and the agent never answers. That is not a billing
+          detail, it is the first answer to "why is nobody getting through",
+          and it is asked on this tab. So the balance stays on Billing and the
+          OUTAGE comes here, only when it is real. */}
+      {voice &&
+        voice.billingMode === "prepaid" &&
+        voice.walletBalanceMicroUsd <= 0 && (
+          <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
+            Wallet is empty and this business is prepaid, so every incoming
+            call is declined at ring time — callers hear a busy line, not an
+            agent.{" "}
+            <button
+              type="button"
+              onClick={() => setTab("billing")}
+              className="font-medium underline hover:no-underline"
+            >
+              Top up on Billing →
+            </button>
+          </p>
+        )}
       <Section
         title="Agents"
         description="Every agent answering for this business — created by Resepta or connected from the Retell workspace — with whether Resepta's private runtime is published to it and whether call results are arriving. A failed provisioning job keeps its provider ids, so a retry repairs rather than duplicating."
@@ -978,7 +1012,10 @@ export default function TenantPage() {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5 sm:grid-cols-4">
+        {/* Two facts, not four: cost and turns moved to Billing with the
+            budget that caps them (Serdar, 2026-08-26). What is left is what
+            the agent IS, not what it spent. */}
+        <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5">
           <Fact label="Model">
             {assistant.llmKeyConfigured ? (
               <Pill tone="ok">
@@ -997,36 +1034,7 @@ export default function TenantPage() {
               <span className="text-[var(--muted)]">Off</span>
             )}
           </Fact>
-          <Fact label={`Cost (${assistant.month})`}>
-            ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
-            {" of "}
-            ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)}
-          </Fact>
-          <Fact label="Turns this month">
-            {assistant.usage?.llmTurns ?? 0} · {(((assistant.usage?.llmInputTokens ?? 0) + (assistant.usage?.llmOutputTokens ?? 0)) / 1000).toFixed(1)}k tok
-          </Fact>
         </div>
-        <Row
-          label="Monthly budget"
-          money
-          hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible below."
-          current={
-            assistant.budgetMicroUsd === null
-              ? undefined
-              : String(assistant.budgetMicroUsd / 1_000_000)
-          }
-          placeholder={String(assistant.defaultBudgetMicroUsd / 1_000_000)}
-          onSave={(value) => {
-            const parsed = Number(value.replace(",", "."));
-            return setChatAgentBudget({
-              orgId,
-              budgetMicroUsd:
-                !value.trim() || Number.isNaN(parsed)
-                  ? null
-                  : Math.round(parsed * 1_000_000),
-            });
-          }}
-        />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
           <div className="text-sm font-medium">Platform kill switch</div>
           <div>
@@ -1108,12 +1116,7 @@ export default function TenantPage() {
       )}
 
 
-      {/* Under Agents rather than a tab of its own (Serdar, 2026-08-20): the
-          meter and the wallet are facts ABOUT the phone agents, and Assistant
-          already keeps its cost card on the same page as the thing it
-          meters. A seventh tab for two cards was navigation, not
-          organization. */}
-      {(tab === "agents" || search.active) && voice && (
+      {(tab === "billing" || search.active) && voice && (
       <>
       <Section
         title="Voice meter"
@@ -1276,6 +1279,48 @@ export default function TenantPage() {
           </div>
         )}
       </Section>
+      {/* The other half of what this business costs. It used to live on the
+          Chat agent tab beside the mode switch, which meant answering "what
+          are we spending on this client" took two tabs and a subtraction.
+          Its budget is here too, next to the number it caps. */}
+      {assistant && (
+        <Section
+          title="Chat agent spend"
+          description="What the WhatsApp assistant's LLM costs this business. The budget is a hard cap: the turn that would cross it is skipped rather than sent, and the Flight recorder on the Chat agent tab shows every one that was."
+        >
+          <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5">
+            <Fact label={`Cost (${assistant.month})`}>
+              ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
+              {" of "}
+              ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)}
+            </Fact>
+            <Fact label="Turns this month">
+              {assistant.usage?.llmTurns ?? 0} · {(((assistant.usage?.llmInputTokens ?? 0) + (assistant.usage?.llmOutputTokens ?? 0)) / 1000).toFixed(1)}k tok
+            </Fact>
+          </div>
+          <Row
+            label="Monthly budget"
+            money
+            hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible in the Flight recorder."
+            current={
+              assistant.budgetMicroUsd === null
+                ? undefined
+                : String(assistant.budgetMicroUsd / 1_000_000)
+            }
+            placeholder={String(assistant.defaultBudgetMicroUsd / 1_000_000)}
+            onSave={(value) => {
+              const parsed = Number(value.replace(",", "."));
+              return setChatAgentBudget({
+                orgId,
+                budgetMicroUsd:
+                  !value.trim() || Number.isNaN(parsed)
+                    ? null
+                    : Math.round(parsed * 1_000_000),
+              });
+            }}
+          />
+        </Section>
+      )}
       </>
       )}
 
