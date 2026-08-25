@@ -1127,11 +1127,196 @@ export default function TenantPage() {
       )}
 
 
-      {(tab === "billing" || search.active) && voice && (
+      {/* Rebuilt Stripe-shaped (Serdar, 2026-08-26: "this looks a bit all
+          over the place"). The Voice meter card was four different jobs in
+          one box: config (rate, mode), state (balance), action (add credit)
+          and history (two tables), stacked in the order they were written.
+          A billing page has a standard shape and this now follows it:
+          numbers first, money in, money out, terms last. The summary strip
+          is the app's own Revenue-page idiom, cells divided, one figure
+          each, so the operator's first glance answers "is this client fine"
+          before any table is read. */}
+      {(tab === "billing" || search.active) && voice && (() => {
+        const monthNow = new Date().toISOString().slice(0, 7);
+        const thisMonth = voice.months.find((m) => m.month === monthNow);
+        const billed = thisMonth?.billedMicroUsd ?? 0;
+        const cost = thisMonth?.costMicroUsd ?? 0;
+        const prepaid = voice.billingMode === "prepaid";
+        const tiles = 2 + (prepaid ? 1 : 0) + (assistant ? 1 : 0);
+        return (
       <>
+      <section
+        className={`grid grid-cols-1 divide-y divide-[var(--border)] overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)] sm:divide-x sm:divide-y-0 ${
+          tiles === 4 ? "sm:grid-cols-4" : tiles === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"
+        }`}
+      >
+        {prepaid && (
+          <div className="px-4 py-3.5">
+            <p className="text-xs text-[var(--muted)]">Wallet balance</p>
+            <p
+              className={`mt-1 text-2xl font-semibold tabular-nums ${
+                voice.walletBalanceMicroUsd <= 0 ? "text-red-600 dark:text-red-400" : ""
+              }`}
+            >
+              {usd(voice.walletBalanceMicroUsd)}
+            </p>
+            {/* The tile carries the consequence, not just the number: an
+                empty wallet is an outage, and "0.00" alone does not say so. */}
+            <p
+              className={`mt-0.5 text-xs ${
+                voice.walletBalanceMicroUsd <= 0
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-[var(--muted)]"
+              }`}
+            >
+              {voice.walletBalanceMicroUsd <= 0
+                ? "Empty: new calls are declined"
+                : "Stripe and manual top-ups"}
+            </p>
+          </div>
+        )}
+        <div className="px-4 py-3.5">
+          <p className="text-xs text-[var(--muted)]">Billed this month</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{usd(billed)}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            {thisMonth ? `${thisMonth.calls} calls · ${minSec(thisMonth.seconds)}` : "No metered calls"}
+          </p>
+        </div>
+        <div className="px-4 py-3.5">
+          <p className="text-xs text-[var(--muted)]">Margin this month</p>
+          <p
+            className={`mt-1 text-2xl font-semibold tabular-nums ${
+              billed - cost < 0 ? "text-red-600 dark:text-red-400" : ""
+            }`}
+          >
+            {usd(billed - cost)}
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Retell cost {usd(cost)}</p>
+        </div>
+        {assistant && (
+          <div className="px-4 py-3.5">
+            <p className="text-xs text-[var(--muted)]">Chat agent this month</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
+              ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
+            </p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">
+              of ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)} budget · {assistant.usage?.llmTurns ?? 0} turns
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Money in. Only a prepaid business has a wallet; invoice mode settles
+          outside the product and would render this card empty. */}
+      {prepaid && (
+        <Section
+          title="Wallet"
+          description="Manual credit applies immediately: goodwill, a correction, or a negative amount to claw one back. Stripe top-ups land here on their own. An empty balance declines new calls at ring time."
+        >
+          <Row
+            label="Add credit"
+            money
+            hint="On top of Stripe top-ups. Applies immediately."
+            onSave={(value) => {
+              const parsed = Number(value.replace(",", "."));
+              if (!value.trim() || Number.isNaN(parsed) || parsed === 0) {
+                return Promise.resolve();
+              }
+              return addWalletCredit({
+                orgId,
+                amountMicroUsd: Math.round(parsed * 1_000_000),
+              });
+            }}
+          />
+          {voice.topups.length === 0 ? (
+            <p className="py-2.5 text-xs text-[var(--muted)]">No top-ups yet.</p>
+          ) : (
+            <div className="overflow-x-auto py-2">
+              <table className="w-full text-sm">
+                {/* No colour override on thead. The global rule paints it
+                    --table-header-fg and draws the one rule under it; a
+                    per-table --muted-strong here fought that and made this
+                    the only header in the app reading as a caption. */}
+                <thead className="text-left text-xs">
+                  <tr>
+                    <th className="pb-2 pr-3 pt-1 font-semibold">Top-up</th>
+                    <th className="pb-2 pr-3 pt-1 font-semibold">Amount</th>
+                    <th className="pb-2 pt-1 font-semibold">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {voice.topups.map((t) => (
+                    <tr
+                      key={`${t.at}-${t.amountMicroUsd}`}
+                      className="border-t border-[var(--table-divider)] tabular-nums"
+                    >
+                      <td className="py-1.5 pr-3">
+                        {new Date(t.at).toLocaleString("en-GB")}
+                      </td>
+                      <td className="py-1.5 pr-3">{usd(t.amountMicroUsd)}</td>
+                      <td className="py-1.5">{t.source}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Money out: the metered history, one row per month. */}
       <Section
-        title="Voice meter"
-        description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands, so changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
+        title="Voice usage"
+        description="Every call is billed per second at the rate below, frozen onto the call the moment its duration lands, so a rate change only prices calls from now on. Retell cost is what Retell charges us for the same calls; margin is the difference."
+      >
+        {voice.months.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">No metered calls yet.</p>
+        ) : (
+          <div className="overflow-x-auto py-2">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs">
+                <tr>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Month</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Calls</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Talk time</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Billed</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Retell cost</th>
+                  <th className="pb-2 pt-1 font-semibold">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {voice.months.map((m) => {
+                  const margin = m.billedMicroUsd - m.costMicroUsd;
+                  return (
+                    <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
+                      <td className="py-1.5 pr-3">{m.month}</td>
+                      <td className="py-1.5 pr-3">{m.calls}</td>
+                      <td className="py-1.5 pr-3">{minSec(m.seconds)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.billedMicroUsd)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.costMicroUsd)}</td>
+                      <td
+                        className={`py-1.5 ${
+                          margin < 0 ? "text-red-600 dark:text-red-400" : ""
+                        }`}
+                      >
+                        {usd(margin)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      {/* Terms last, because they are set once and read rarely: the rate, the
+          mode, and the chat agent's cap. The chat budget lives here rather
+          than in a card of its own, since a lone Row was the whole card once
+          its cost figure moved into the summary strip. */}
+      <Section
+        title="Billing settings"
+        description="The rate this business pays, how it settles, and the chat agent's monthly cap."
       >
         <Row
           label="Rate per minute"
@@ -1187,132 +1372,11 @@ export default function TenantPage() {
             ))}
           </div>
         </div>
-        {voice.billingMode === "prepaid" && (
-          <>
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-              <div className="text-sm font-medium">Wallet balance</div>
-              <div
-                className={`text-sm tabular-nums ${
-                  voice.walletBalanceMicroUsd <= 0
-                    ? "text-red-600 dark:text-red-400"
-                    : ""
-                }`}
-              >
-                {usd(voice.walletBalanceMicroUsd)}
-                {voice.walletBalanceMicroUsd <= 0 && ", declining new calls"}
-              </div>
-            </div>
-            <Row
-              label="Add credit"
-              money
-              hint="Manual credit on top of Stripe top-ups: goodwill, a correction, or negative to claw one back. Applies immediately."
-              onSave={(value) => {
-                const parsed = Number(value.replace(",", "."));
-                if (!value.trim() || Number.isNaN(parsed) || parsed === 0) {
-                  return Promise.resolve();
-                }
-                return addWalletCredit({
-                  orgId,
-                  amountMicroUsd: Math.round(parsed * 1_000_000),
-                });
-              }}
-            />
-            {voice.topups.length > 0 && (
-              <div className="overflow-x-auto py-2">
-                <table className="w-full text-sm">
-                  {/* No colour override on thead. The global rule paints it
-                      --table-header-fg and draws the one rule under it; a
-                      per-table --muted-strong here fought that and made this
-                      the only header in the app reading as a caption. */}
-                  <thead className="text-left text-xs">
-                    <tr>
-                      <th className="pb-2 pr-3 pt-1 font-semibold">Top-up</th>
-                      <th className="pb-2 pr-3 pt-1 font-semibold">Amount</th>
-                      <th className="pb-2 pt-1 font-semibold">Source</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {voice.topups.map((t) => (
-                      <tr
-                        key={`${t.at}-${t.amountMicroUsd}`}
-                        className="border-t border-[var(--table-divider)] tabular-nums"
-                      >
-                        <td className="py-1.5 pr-3">
-                          {new Date(t.at).toLocaleString("en-GB")}
-                        </td>
-                        <td className="py-1.5 pr-3">{usd(t.amountMicroUsd)}</td>
-                        <td className="py-1.5">{t.source}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-        {voice.months.length === 0 ? (
-          <p className="py-2.5 text-xs text-[var(--muted)]">No metered calls yet.</p>
-        ) : (
-          <div className="overflow-x-auto py-2">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs">
-                <tr>
-                  <th className="pb-2 pr-3 pt-1 font-semibold">Month</th>
-                  <th className="pb-2 pr-3 pt-1 font-semibold">Calls</th>
-                  <th className="pb-2 pr-3 pt-1 font-semibold">Talk time</th>
-                  <th className="pb-2 pr-3 pt-1 font-semibold">Billed</th>
-                  <th className="pb-2 pr-3 pt-1 font-semibold">Retell cost</th>
-                  <th className="pb-2 pt-1 font-semibold">Margin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {voice.months.map((m) => {
-                  const margin = m.billedMicroUsd - m.costMicroUsd;
-                  return (
-                    <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
-                      <td className="py-1.5 pr-3">{m.month}</td>
-                      <td className="py-1.5 pr-3">{m.calls}</td>
-                      <td className="py-1.5 pr-3">{minSec(m.seconds)}</td>
-                      <td className="py-1.5 pr-3">{usd(m.billedMicroUsd)}</td>
-                      <td className="py-1.5 pr-3">{usd(m.costMicroUsd)}</td>
-                      <td
-                        className={`py-1.5 ${
-                          margin < 0 ? "text-red-600 dark:text-red-400" : ""
-                        }`}
-                      >
-                        {usd(margin)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-      {/* The other half of what this business costs. It used to live on the
-          Chat agent tab beside the mode switch, which meant answering "what
-          are we spending on this client" took two tabs and a subtraction.
-          Its budget is here too, next to the number it caps. */}
-      {assistant && (
-        <Section
-          title="Chat agent spend"
-          description="What the WhatsApp assistant's LLM costs this business. The budget is a hard cap: the turn that would cross it is skipped rather than sent, and the Flight recorder on the Chat agent tab shows every one that was."
-        >
-          <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5">
-            <Fact label={`Cost (${assistant.month})`}>
-              ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
-              {" of "}
-              ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)}
-            </Fact>
-            <Fact label="Turns this month">
-              {assistant.usage?.llmTurns ?? 0} · {(((assistant.usage?.llmInputTokens ?? 0) + (assistant.usage?.llmOutputTokens ?? 0)) / 1000).toFixed(1)}k tok
-            </Fact>
-          </div>
+        {assistant && (
           <Row
-            label="Monthly budget"
+            label="Chat agent budget"
             money
-            hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible in the Flight recorder."
+            hint="Hard cap for this org's LLM spend per month. Empty = the platform default. The turn that would cross it is skipped and visible in the Flight recorder on the Chat agent tab."
             current={
               assistant.budgetMicroUsd === null
                 ? undefined
@@ -1330,10 +1394,11 @@ export default function TenantPage() {
               });
             }}
           />
-        </Section>
-      )}
+        )}
+      </Section>
       </>
-      )}
+        );
+      })()}
 
       {(tab === "members" || search.active) && (
         <MembersCard
