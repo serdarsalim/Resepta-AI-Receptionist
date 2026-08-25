@@ -1152,10 +1152,16 @@ function CheckSwitch({
     </svg>
   );
   if (locked) {
+    // Implied, not operable — and it must LOOK inert. It wore the same
+    // emerald pill as the live switch and Serdar clicked it expecting a
+    // toggle ("those are not toggleable rn why"): a bare muted check with no
+    // wash is a fact; the pill is a control. aria-hidden plus a title, since
+    // a screen reader should not be offered a switch either.
     return (
       <span
         title={label}
-        className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+        aria-hidden
+        className="flex h-6 w-6 items-center justify-center text-[var(--muted)]"
       >
         {check}
       </span>
