@@ -10,7 +10,6 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
-import { Toggle } from "./Toggle";
 import { Sheet } from "./Sheet";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
@@ -655,8 +654,12 @@ export function VoiceVariablesEditor({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
           <h4 className="text-sm font-semibold">{t("voiceVariables.title")}</h4>
+          {/* The "handed automatically" sentence rides here, not as a
+              standalone paragraph over the table — explanatory copy hides
+              behind the (i) (Serdar: "this should be behind (i) ... not
+              standalone text again"). */}
           <InfoTip
-            text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.builtinHint")}`}
+            text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.seesHint")} ${t("voiceVariables.builtinHint")}`}
           />
         </div>
         {status && <span className="text-xs text-[var(--muted)]">{status}</span>}
@@ -705,9 +708,6 @@ export function VoiceVariablesEditor({
             During-vs-post is deliberately NOT a third column. Post-call
             extraction only fills what the mid-call ask missed — one
             behaviour with a retry, not two decisions. */}
-        <p className="mb-2 px-2 text-xs text-[var(--muted)]">
-          {t("voiceVariables.seesHint")}
-        </p>
         <div className={`${MATRIX_GRID} mb-1 px-0 text-[10px] font-medium text-[var(--muted)]`}>
           <span className="px-2">{t("voiceVariables.label")}</span>
           <span className="px-2">{t("voiceVariables.type")}</span>
@@ -753,6 +753,21 @@ export function VoiceVariablesEditor({
               editableDescription={field.voice}
               confirmLabel={t("voiceVariables.confirm")}
               confirmOn={field.voice ? field.voiceConfirm : undefined}
+              options={field.type === "select" ? field.options : null}
+              onOptions={(next) => {
+                void updateContactField({
+                  fieldId: field.id as Id<"contactFields">,
+                  options: next,
+                });
+                setCreatedFields((rows) =>
+                  rows.map((row) =>
+                    row.id === field.id ? { ...row, options: next } : row,
+                  ),
+                );
+                // The published enum rebuilds from the field's options, so a
+                // changed list is a publish away from Retell.
+                touchFields();
+              }}
               sees={field.voice || field.voiceVisible}
               seesLocked={field.voice}
               fills={field.voice}
@@ -810,15 +825,17 @@ export function VoiceVariablesEditor({
           />
         </div>
 
-        {/* Static defaults: the one per-agent thing left — a value injected
-            into every call ("Add default", Nudge's word). Legacy context rows
-            render here too, removable. Below the matrix because it is the
-            rare case, not the model. */}
-        {(draft.filter((row) => isContext(row)).length > 0 || true) && (
+        {/* Legacy static/context rows, HEADINGLESS and with no add link. The
+            block wore a "What the agent sees" heading plus "+ Add default"
+            and Serdar flagged it on sight ("why do i have this additional
+            field below again"). A static default is a fixed value injected
+            into the prompt — which is just prompt text with extra steps, so
+            the way to add one is to write it in the prompt. Existing rows
+            keep rendering so nothing published disappears silently, and the
+            ✕ retires them. When the org has none, nothing renders — no empty
+            frame. */}
+        {draft.filter((row) => isContext(row)).length > 0 && (
           <div className="mt-4">
-            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
-              {t("voiceVariables.sees")}
-            </div>
             <div className="space-y-1.5">
               {draft
                 .map((row, index) => ({ row, index }))
@@ -893,16 +910,6 @@ export function VoiceVariablesEditor({
                     />
                   );
                 })}
-              <VariablePicker
-                addLabel={t("voiceVariables.addDefault")}
-                fields={[]}
-                builtins={[]}
-                onField={() => undefined}
-                onBuiltin={() => undefined}
-                onCreate={(label) => addCallOnly(label)}
-                onCallOnly={(label) => addCallOnly(label)}
-                allowCallOnly
-              />
             </div>
           </div>
         )}
@@ -977,6 +984,150 @@ type PickerBuiltin = {
 // silent free text. That is the CRM-property-picker contract: one registry,
 // referenced everywhere, created inline, and a row can always be re-pointed
 // by clicking its name.
+// A select's type cell: reads "Select · n", opens its options in place. The
+// same one-registry rule as everything else on the matrix — these are the
+// FIELD's options, shared with the Business price list's editor and with the
+// booking page, and the published enum rebuilds from them on the next
+// publish.
+function SelectOptionsCell({
+  typeLabel,
+  options,
+  onSave,
+}: {
+  typeLabel: string;
+  options: string[];
+  onSave: (next: string[]) => void;
+}) {
+  const { t } = useLanguage();
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(240, 300, "left");
+  const [rows, setRows] = useState<string[]>(options);
+  useEffect(() => setRows(options), [options]);
+  const commit = () => {
+    const next = [...new Set(rows.map((row) => row.trim()).filter(Boolean))];
+    if (JSON.stringify(next) !== JSON.stringify(options)) onSave(next);
+    close();
+  };
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? commit() : toggle())}
+        className="rounded text-xs text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+      >
+        {typeLabel} ▾
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
+            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
+          >
+            <div className="space-y-1">
+              {rows.map((choice, index) => (
+                <div key={index} className="flex items-center gap-1">
+                  <input
+                    value={choice}
+                    autoFocus={choice === "" && index === rows.length - 1}
+                    onChange={(e) =>
+                      setRows(rows.map((c, j) => (j === index ? e.target.value : c)))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commit();
+                      }
+                    }}
+                    className="w-full rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRows(rows.filter((_, j) => j !== index))}
+                    aria-label={t("common.delete")}
+                    className="shrink-0 rounded p-1 text-[var(--muted)] hover:text-[var(--foreground)]"
+                  >
+                    <RemoveX />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setRows([...rows, ""])}
+              className="mt-1 w-full rounded-md px-2 py-1 text-left text-xs text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+            >
+              + {t("voiceVariables.choice")}
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+// The matrix's switch: the message-rule channel toggle (RemindersView) with
+// the word removed — emerald wash and a check when on, a hollow ring when
+// off. Ported, not invented: that control is this app's ON, and Serdar
+// rejected the iOS Toggle here ("apple switches don't look good"). The
+// off-state border is sanctioned by the same reference. A LOCKED cell (sees
+// implied by fills) renders as a static check, display-only: it is a fact
+// about the row, not a control, and a disabled switch is what read wrong.
+function CheckSwitch({
+  on,
+  locked,
+  label,
+  onChange,
+}: {
+  on: boolean;
+  locked?: boolean;
+  label: string;
+  onChange?: (next: boolean) => void;
+}) {
+  const check = (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+  if (locked) {
+    return (
+      <span
+        title={label}
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+      >
+        {check}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => onChange?.(!on)}
+      className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+        on
+          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+          : "border border-[var(--border)] text-transparent hover:text-[var(--muted)]"
+      }`}
+    >
+      {check}
+    </button>
+  );
+}
+
 // One row of the matrix. Identity columns and org fields share it: label,
 // type, the extractor's instruction, then the two switches. Every control
 // writes the FIELD (or the identity lock) — no draft, no publish of its own,
@@ -988,6 +1139,8 @@ function MatrixRow({
   label,
   typeLabel,
   description,
+  options,
+  onOptions,
   editableDescription,
   confirmLabel,
   confirmOn,
@@ -1007,6 +1160,11 @@ function MatrixRow({
   editableDescription: boolean;
   confirmLabel?: string;
   confirmOn?: boolean;
+  // A select's options, editable in place — the type cell is the trigger
+  // (Serdar: "what should be captured and type should be inline edit no?").
+  // Null on everything that is not a select.
+  options?: string[] | null;
+  onOptions?: (next: string[]) => void;
   sees: boolean;
   // True while sees is implied (identity, or fills on): the switch renders
   // checked and disabled, because turning it off is not a thing — fills
@@ -1032,7 +1190,11 @@ function MatrixRow({
         {label}
       </span>
       <span className="flex flex-col items-start px-2 py-1">
-        <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
+        {options && onOptions ? (
+          <SelectOptionsCell typeLabel={typeLabel} options={options} onSave={onOptions} />
+        ) : (
+          <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
+        )}
         {fills && onToggleConfirm && (
           <button
             type="button"
@@ -1067,18 +1229,16 @@ function MatrixRow({
         </span>
       )}
       <span className="flex justify-end pt-0.5">
-        <Toggle
-          size="sm"
-          checked={sees}
-          disabled={seesLocked}
-          onChange={(next) => onSees?.(next)}
+        <CheckSwitch
+          on={sees}
+          locked={seesLocked}
+          onChange={onSees}
           label={`${label} · ${t("voiceVariables.colSees")}`}
         />
       </span>
       <span className="flex justify-end pt-0.5">
-        <Toggle
-          size="sm"
-          checked={fills}
+        <CheckSwitch
+          on={fills}
           onChange={onFills}
           label={`${label} · ${t("voiceVariables.colFills")}`}
         />
