@@ -259,9 +259,23 @@ async function reapWalkIns(ctx: MutationCtx, orgId: Id<"orgs">): Promise<void> {
     .query("memberships")
     .withIndex("by_org", (q) => q.eq("orgId", orgId))
     .take(WALK_IN_BUDGET);
-  for (const membership of memberships) {
-    const user = await ctx.db.get(membership.userId);
-    if (!user?.isAnonymous) continue;
+  const membershipByUser = new Map(
+    memberships.map((membership) => [membership.userId as string, membership._id]),
+  );
+  // Driven off USERS, not memberships. The first version of this walked the
+  // memberships and it left nine accounts standing on the dev fleet: a walk-in
+  // carries its org on the user row too (users.orgId, users.role), and some
+  // have no membership at all — from before the membership write existed, or
+  // from an arrival that died between the two inserts. Those are invisible to
+  // the Members card and still real rows, which is the definition of the leak
+  // this function exists to close. The membership goes with the user when
+  // there is one.
+  const users = await ctx.db
+    .query("users")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .take(WALK_IN_BUDGET);
+  for (const user of users) {
+    if (!user.isAnonymous) continue;
     // The auth rows first, so a failure part-way leaves an account that can
     // still be reaped next time rather than session rows pointing at a user
     // that no longer exists.
@@ -282,7 +296,8 @@ async function reapWalkIns(ctx: MutationCtx, orgId: Id<"orgs">): Promise<void> {
       .withIndex("userIdAndProvider", (q) => q.eq("userId", user._id))
       .collect();
     for (const account of accounts) await ctx.db.delete(account._id);
-    await ctx.db.delete(membership._id);
+    const membershipId = membershipByUser.get(user._id as string);
+    if (membershipId) await ctx.db.delete(membershipId);
     await ctx.db.delete(user._id);
   }
 }
