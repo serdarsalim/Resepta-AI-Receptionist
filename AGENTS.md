@@ -2610,6 +2610,17 @@ later moved far enough out that a stamped reminder would fall in the future
 again keeps it suppressed, exactly as a reminder that really fired before a
 reschedule does not fire twice.
 
+**Verified against a live rule set** (dev Barberio, which carries the same
+unpaused 336h no_show winback prod does), 2026-08-25. Seeding a past no-show
+plus a future booking in one call produced: the past row with all three
+overdue rule ids in `sentRuleIds` — the winback among them — and
+`nextMessageAt` unset, so the cron's index range excludes it and no winback
+can fire; the future row with `sentRuleIds` empty and `nextMessageAt` exactly
+24h before its start, so the reminder is still armed. `confirmationSentAt` and
+`externalUid` unset on both. Istanbul wall time parsed to the right instant,
+service snapshotted with its price, three bad rows reported by number, and
+undo removed both. Re-run that shape before touching this path.
+
 Two more deliberate omissions: it never calls
 `scheduleConfirmationIfConfigured` (these appointments exist already and the
 customer knows), and it never touches cal.com (300 rows are not 300 provider
