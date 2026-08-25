@@ -17,7 +17,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { CopyId, Section } from "../parts";
+import { ago, CopyId, Section } from "../parts";
 
 type Role = "owner" | "staff";
 
@@ -61,6 +61,7 @@ export function MembersCard({
     email: string | null;
     role: string;
     seenAt: number | null;
+    walkIn: boolean;
   }[];
   pendingInvites: {
     _id: Id<"invites">;
@@ -100,6 +101,13 @@ export function MembersCard({
     api.platform.orgMemberCandidates,
     adding ? { orgId, query } : "skip",
   );
+
+  // Two lists, because they are two different things. A seat belongs to
+  // somebody the operator or the owner put there and is worth a row; a walk-in
+  // is an anonymous visitor the showroom minted on arrival and is worth a
+  // count. See the walk-in row below and demo.reapWalkIns.
+  const seated = members.filter((member) => !member.walkIn);
+  const walkIns = members.filter((member) => member.walkIn);
 
   const typed = query.trim().toLowerCase();
   const people = candidates?.people ?? [];
@@ -246,33 +254,75 @@ export function MembersCard({
         </p>
       )}
 
-      {members.length === 0 ? (
+      {/* A TABLE with headers (Serdar, 2026-08-25). The flex row put name and
+          address hard left and everything else hard right, so a card this wide
+          ran a corridor of empty space down the middle and "Never signed in"
+          arrived wrapped into three lines against the role picker. Columns
+          give the date somewhere to be. */}
+      {seated.length === 0 && walkIns.length === 0 ? (
         <p className="py-2.5 text-xs text-[var(--muted)]">Nobody has signed in yet.</p>
       ) : (
-        members.map((member) => {
+        <div className="thin-scroll overflow-x-auto py-1">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs">
+            <tr>
+              <th className="pb-2 pr-3 pt-1 font-semibold">Name</th>
+              <th className="pb-2 pr-3 pt-1 font-semibold">Last sign in</th>
+              <th className="pb-2 pr-3 pt-1 font-semibold">Role</th>
+              <th className="w-px pb-2 pt-1" />
+            </tr>
+          </thead>
+          <tbody>
+        {seated.map((member) => {
           const key = member.userId as string;
           return (
-            <div
-              key={key}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
-            >
-              <span className="text-sm font-medium">
-                {member.name ?? <span className="text-[var(--muted)]">No name</span>}
-              </span>
-              {member.email ? (
-                <CopyId value={member.email} />
-              ) : (
-                <span className="text-xs text-[var(--muted)]">No address</span>
-              )}
-              <span className="ml-auto flex items-center gap-2">
-                {/* Unset seenAt means somebody else added them and they have
-                    not signed in to find out — a seat, not yet a user. */}
-                {member.seenAt === null && (
-                  <span className="text-xs text-[var(--muted)]">Never signed in</span>
-                )}
+            <tr key={key} className="border-t border-[var(--table-divider)]">
+              <td className="py-2 pr-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">
+                    {member.name ?? <span className="text-[var(--muted)]">No name</span>}
+                  </span>
+                  {member.email ? (
+                    <CopyId value={member.email} />
+                  ) : (
+                    <span className="text-xs text-[var(--muted)]">No address</span>
+                  )}
+                </div>
+              </td>
+              {/* Unset seenAt means somebody else added them and they have
+                  not signed in to find out — a seat, not yet a user. */}
+              <td className="whitespace-nowrap py-2 pr-3 text-xs text-[var(--muted)]">
+                {member.seenAt === null ? "Never" : ago(member.seenAt)}
+              </td>
+              <td className="py-2 pr-3">
                 {confirming === key ? (
-                  <>
-                    <span className="text-xs text-[var(--muted)]">Remove access?</span>
+                  <span className="text-xs text-[var(--muted)]">Remove access?</span>
+                ) : (
+                  <select
+                    value={member.role}
+                    onChange={(event) => {
+                      setNotice(null);
+                      void setOrgMemberRole({
+                        orgId,
+                        userId: member.userId,
+                        role: event.target.value as Role,
+                      }).catch((err: unknown) =>
+                        setNotice({
+                          ok: false,
+                          text: errorText(err, "Could not change their tier."),
+                        }),
+                      );
+                    }}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="owner">{ROLE_LABEL.owner}</option>
+                    <option value="staff">{ROLE_LABEL.staff}</option>
+                  </select>
+                )}
+              </td>
+              <td className="whitespace-nowrap py-2">
+                {confirming === key ? (
+                  <span className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -297,43 +347,46 @@ export function MembersCard({
                     >
                       Cancel
                     </button>
-                  </>
+                  </span>
                 ) : (
-                  <>
-                    <select
-                      value={member.role}
-                      onChange={(event) => {
-                        setNotice(null);
-                        void setOrgMemberRole({
-                          orgId,
-                          userId: member.userId,
-                          role: event.target.value as Role,
-                        }).catch((err: unknown) =>
-                          setNotice({
-                            ok: false,
-                            text: errorText(err, "Could not change their tier."),
-                          }),
-                        );
-                      }}
-                      className={SELECT_CLASS}
-                    >
-                      <option value="owner">{ROLE_LABEL.owner}</option>
-                      <option value="staff">{ROLE_LABEL.staff}</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setConfirming(key)}
-                      title="Remove access"
-                      className="rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--row-hover-bg)] hover:text-red-600 dark:hover:text-red-400"
-                    >
-                      ✕
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(key)}
+                    title="Remove access"
+                    className="rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--row-hover-bg)] hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    ✕
+                  </button>
                 )}
-              </span>
-            </div>
+              </td>
+            </tr>
           );
-        })
+        })}
+        {/* ONE row for every walk-in, not one row per walk-in. The showroom
+            mints an anonymous account per visitor (auth.ts) and until now the
+            card printed each as an identical "Demo / No address" line — 17 of
+            them when Serdar found it, and unbounded, since nothing ever
+            removed them. demo.nightlyReset reaps them now; this keeps the list
+            readable in between, and the count is the more useful fact anyway:
+            it is how many people walked through the demo today. */}
+        {walkIns.length > 0 && (
+          <tr className="border-t border-[var(--table-divider)]">
+            <td className="py-2 pr-3">
+              <span className="font-medium">
+                {walkIns.length} demo {walkIns.length === 1 ? "visitor" : "visitors"}
+              </span>
+            </td>
+            <td
+              className="whitespace-nowrap py-2 pr-3 text-xs text-[var(--muted)]"
+              colSpan={3}
+            >
+              Anonymous walk-ins, cleared with the nightly demo reset
+            </td>
+          </tr>
+        )}
+          </tbody>
+        </table>
+        </div>
       )}
 
       {/* Not members, and not drawn as one: nobody holds these seats until the

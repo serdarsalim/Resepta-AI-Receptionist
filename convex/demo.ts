@@ -222,6 +222,7 @@ export const nightlyReset = internalMutation({
       // Notes and activity are not part of the seed's own force-wipe, so they
       // are cleared here; everything else devSeed already replaces wholesale.
       await clearExtras(ctx, org._id);
+      await reapWalkIns(ctx, org._id);
       await ctx.scheduler.runAfter(0, internal.devSeed.seed, {
         orgId: org._id,
         force: true,
@@ -230,6 +231,61 @@ export const nightlyReset = internalMutation({
     return null;
   },
 });
+
+// Every walk-in visitor to the showroom leaves an account behind.
+//
+// auth.ts mints a `users` row and a `memberships` row for each anonymous
+// arrival — that is what lets them in, and there is nothing wrong with it. What
+// was wrong is that NOTHING ever removed them: the nightly reset rebuilt the
+// salon's data and left the visitors, so the demo org's Members list grew by
+// one row per person who ever clicked through, unbounded, forever. Serdar found
+// it at 17 identical "Demo / No address" rows, which is the same number as
+// visitors and would have been the same number as visitors in a year.
+//
+// The wipe is safe precisely BECAUSE these are anonymous: there is no address
+// to sign back in with, so an account here is worth nothing to the person who
+// held it — the next visit mints a new one. A demo session open across 02:00
+// UTC is signed out and walks in again, which is also what the data reset does
+// to them anyway.
+//
+// Guarded three ways, because this deletes users: the org must be a demo, the
+// membership must belong to it, and the user must carry isAnonymous. A real
+// person invited to the showroom (there should be none, but the Members card
+// can do it) has an email and survives all three.
+const WALK_IN_BUDGET = 500;
+
+async function reapWalkIns(ctx: MutationCtx, orgId: Id<"orgs">): Promise<void> {
+  const memberships = await ctx.db
+    .query("memberships")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .take(WALK_IN_BUDGET);
+  for (const membership of memberships) {
+    const user = await ctx.db.get(membership.userId);
+    if (!user?.isAnonymous) continue;
+    // The auth rows first, so a failure part-way leaves an account that can
+    // still be reaped next time rather than session rows pointing at a user
+    // that no longer exists.
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const session of sessions) {
+      const refreshTokens = await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
+        .collect();
+      for (const token of refreshTokens) await ctx.db.delete(token._id);
+      await ctx.db.delete(session._id);
+    }
+    const accounts = await ctx.db
+      .query("authAccounts")
+      .withIndex("userIdAndProvider", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const account of accounts) await ctx.db.delete(account._id);
+    await ctx.db.delete(membership._id);
+    await ctx.db.delete(user._id);
+  }
+}
 
 // Deliberately NOT a loop over table names: Convex types each index per table,
 // so a loop loses the type and would accept a table that has no by_org at all.

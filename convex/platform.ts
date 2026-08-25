@@ -567,6 +567,11 @@ export const orgDetail = query({
           // Unset means somebody else added them and they have not signed in
           // to see it yet — the difference between a real user and a seat.
           seenAt: v.union(v.number(), v.null()),
+          // A walk-in to the showroom (auth.ts mints one per anonymous
+          // arrival). Marked rather than filtered out here: they ARE members
+          // and the count should say so, but the card collapses them into one
+          // line instead of printing an identical row per visitor.
+          walkIn: v.boolean(),
         }),
       ),
       // Addresses with an open invite and no account yet. They are not members
@@ -627,6 +632,7 @@ export const orgDetail = query({
             email: user?.email ?? null,
             role: membership.role,
             seenAt: membership.seenAt ?? null,
+            walkIn: user?.isAnonymous === true,
           };
         }),
       )
