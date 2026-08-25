@@ -189,13 +189,20 @@ export default function AdminPage() {
                 name flush against the card's top edge reads as clipped. */}
             <thead className="text-left text-xs">
               <tr>
-                {/* ONE flexible column, and it is this one. Without it the
-                    table's spare width is spread across all nine, so the
-                    counts drift apart into a field of em dashes and the last
-                    column ends up an inch from the one before it. Everything
-                    else is priced at its own content — the same rule the
-                    Voice agents table already runs on. */}
-                <th className="w-full px-3 pb-2 pt-3.5 font-semibold">Business</th>
+                {/* No w-full here, and that is a correction rather than an
+                    omission. Handing this column the slack is the rule for a
+                    table that OUTGROWS its card — one flexible column plus
+                    nowrap everywhere else is what stops a horizontal
+                    scrollbar. This table has never outgrown anything; nine
+                    narrow columns fit with room to spare. So the rule bought
+                    nothing and cost the obvious thing: the spare width all
+                    landed in one place, and a fleet of one business drew
+                    "Barberio" across half the card with the counts huddled at
+                    the far edge. Auto layout spreads it instead, which is what
+                    this table always did and what nobody complained about. The
+                    button that made it look crowded is a w-px cell now, which
+                    was the actual fault. */}
+                <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
                 <th
                   className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="People who can sign in"

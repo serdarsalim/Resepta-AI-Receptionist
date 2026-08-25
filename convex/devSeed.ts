@@ -210,6 +210,12 @@ export const seed = internalMutation({
         firstName,
         lastName,
         phone,
+        // RFC 2606 reserves example.com, so nothing here can reach a real
+        // inbox even if a seeded row somehow reached a send path. Two of the
+        // twenty stay without one: an email lane with no address is a state
+        // the contact card has to draw, and a seed where everybody is
+        // reachable never shows it.
+        ...(i % 10 === 9 ? {} : { email: `${firstName}.${lastName}@example.com`.toLowerCase() }),
         consentAt: consented ? now - (i + 1) * DAY : undefined,
         lastInboundAt: i % 3 === 0 ? now - (i % 5) * HOUR : undefined,
       });
@@ -262,6 +268,12 @@ export const seed = internalMutation({
             kind: "confirmation",
             templateName: "appointment_confirmation",
             body: `Hello ${firstName}! Your appointment at ${org.name || "the salon"} is booked.`,
+            // WITHOUT this every seeded row shares one _creationTime — the
+            // whole seed lands in a single transaction — so the inbox had no
+            // order to sort by and drew twenty conversations all stamped the
+            // same minute. Clamped below `now` because an appointment two
+            // weeks out would otherwise stamp its confirmation in the future.
+            occurredAt: Math.min(startAt - 2 * DAY, now - (i + 3) * HOUR),
             status: i % 6 === 5 ? "failed" : i % 2 === 0 ? "read" : "delivered",
             error: i % 6 === 5 ? "wa-not-configured" : undefined,
             wamid: `wamid.seed.${i}.${r}.conf`,
@@ -276,6 +288,7 @@ export const seed = internalMutation({
               kind: "reminder_24h",
               templateName: "appointment_reminder",
               body: `Hello ${firstName}! Just a reminder about your appointment tomorrow.`,
+              occurredAt: Math.min(startAt - DAY, now - (i + 2) * HOUR),
               status: "delivered",
               wamid: `wamid.seed.${i}.${r}.rem`,
             });
@@ -288,11 +301,79 @@ export const seed = internalMutation({
               direction: "in",
               kind: "reply",
               body: "Yes, I’ll be there 👍",
+              occurredAt: Math.min(startAt - DAY + HOUR, now - (i + 1) * HOUR),
               status: "received",
               wamid: `wamid.seed.${i}.${r}.in`,
             });
             messageCount++;
           }
+        }
+      }
+
+      // Email, both ways. The seed had none, so the whole email lane — the
+      // thread view, the inbox row, the subject line, the reply attribution —
+      // could only ever be looked at against an empty state. `email_` IS the
+      // channel marker (messages.channelOfMessage); rename the kind and these
+      // rows move to WhatsApp.
+      //
+      // The TIMES are the point, not the volume. Which channel spoke last is
+      // what the inbox row draws, so they are placed to give the list a mix
+      // rather than twenty identical WhatsApp lines: one customer in three has
+      // email as their newest entry, and a couple carry a failed send as the
+      // newest thing of all, which is the one case that draws the red ✕.
+      if (i % 10 !== 9) {
+        const address = `${firstName}.${lastName}@example.com`.toLowerCase();
+        await ctx.db.insert("messages", {
+          orgId: org._id,
+          customerId,
+          direction: "out",
+          kind: "email_confirmation",
+          body: `Hello ${firstName},\n\nYour appointment at ${org.name || "the salon"} is confirmed. Reply to this email if you need to move it.\n\nSee you soon.`,
+          emailSubject: "Your appointment is confirmed",
+          emailFrom: `hello@${(org.publicSlug || "salon")}.example.com`,
+          emailId: `seed-email-${i}-out`,
+          occurredAt: now - (i + 8) * HOUR,
+          status: i % 4 === 0 ? "read" : "delivered",
+        });
+        messageCount++;
+
+        await ctx.db.insert("messages", {
+          orgId: org._id,
+          customerId,
+          direction: "in",
+          kind: "email_reply",
+          body:
+            i % 2 === 0
+              ? "Thanks — could I move it to Friday afternoon instead?"
+              : "Perfect, see you then.",
+          emailSubject: "Re: Your appointment is confirmed",
+          emailFrom: address,
+          emailId: `seed-email-${i}-in`,
+          // Newest thing this customer did, for one in three — so the inbox
+          // has email rows to draw and not only WhatsApp.
+          occurredAt:
+            i % 3 === 0 ? now - (i % 4) * 20 * 60_000 : now - (i + 6) * HOUR,
+          status: "received",
+        });
+        messageCount++;
+
+        // A send that did not go out, as the NEWEST entry. This is the only
+        // shape that renders the row's red ✕, and without one in the seed that
+        // marker has nothing to appear on.
+        if (i % 6 === 3) {
+          await ctx.db.insert("messages", {
+            orgId: org._id,
+            customerId,
+            direction: "out",
+            kind: "email_reminder_24h",
+            body: `Hello ${firstName}, a reminder about your appointment tomorrow.`,
+            emailSubject: "Reminder: your appointment tomorrow",
+            emailFrom: `hello@${(org.publicSlug || "salon")}.example.com`,
+            occurredAt: now - ((i % 5) * 15 + 5) * 60_000,
+            status: "failed",
+            error: "smtp-bounce",
+          });
+          messageCount++;
         }
       }
 
