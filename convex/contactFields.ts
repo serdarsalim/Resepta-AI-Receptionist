@@ -29,6 +29,7 @@ const fieldDoc = v.object({
   source: v.optional(fieldSource),
   voiceDescription: v.optional(v.string()),
   voiceConfirm: v.optional(v.boolean()),
+  voiceVisible: v.optional(v.boolean()),
 });
 
 export const list = query({
@@ -149,6 +150,7 @@ export const update = mutation({
     // than holding a default nobody chose.
     voiceDescription: v.optional(v.string()),
     voiceConfirm: v.optional(v.boolean()),
+    voiceVisible: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -208,6 +210,9 @@ export const update = mutation({
     }
     if (args.voiceConfirm !== undefined) {
       patch.voiceConfirm = args.voiceConfirm || undefined;
+    }
+    if (args.voiceVisible !== undefined) {
+      patch.voiceVisible = args.voiceVisible || undefined;
     }
     if (Object.keys(patch).length > 0) await ctx.db.patch(args.fieldId, patch);
     return null;

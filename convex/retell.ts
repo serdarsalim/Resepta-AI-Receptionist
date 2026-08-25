@@ -1187,7 +1187,13 @@ export const beforeCallContext = internalQuery({
           `${labels.lastname}: ${customer?.lastName || "-"}`,
           `${labels.email}: ${customer?.email || "-"}`,
           ...fields
-            .filter((field) => field.source === "voice")
+            // Seen ≠ written. The card carries every field the agent may
+            // KNOW: the ones it fills, plus staff-curated fields flagged
+            // voiceVisible ("agent sees" without "agent fills") — a VIP note
+            // it can read back but never asks about. `information` below
+            // stays voice-only, because that list is the WRITE gate's public
+            // face and a visible-only field must never appear writable.
+            .filter((field) => field.source === "voice" || field.voiceVisible === true)
             .map((field) => `${field.label}: ${String(customer?.custom?.[field.key] ?? "") || "-"}`),
         ];
         return parts.join(", ");

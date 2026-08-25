@@ -1102,6 +1102,13 @@ export default defineSchema({
     // Confirm-first: the agent may only store this after the caller
     // explicitly confirms it, rather than the moment it is heard.
     voiceConfirm: v.optional(v.boolean()),
+    // "Agent sees" without "agent fills": the value rides in the ring-time
+    // contact card so the agent can read it back, but the field is never
+    // asked about and never written. A voice-source field is always seen —
+    // this flag exists for staff-curated fields (VIP notes, a warning) the
+    // agent should know and must not touch. Read at call time, so flipping
+    // it needs no republish.
+    voiceVisible: v.optional(v.boolean()),
   }).index("by_org", ["orgId"]),
 
   services: defineTable({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -8,8 +8,6 @@ import { api } from "../../convex/_generated/api";
 import { keyFromLabel } from "../../convex/lib/keys";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
-import { localeFor } from "@/lib/datetime";
-import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { Toggle } from "./Toggle";
@@ -33,9 +31,9 @@ const CELL_CLASS =
 // its neighbours aligned to its first line.
 const VAR_GRID =
   "group grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_1.75rem] items-start gap-x-2";
-// The fills rows swap the ✕ track for one wide enough to hold the sm Toggle.
-const FILL_GRID =
-  "grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_2.5rem] items-start gap-x-2";
+// The matrix: name · type · description · two switch tracks.
+const MATRIX_GRID =
+  "grid grid-cols-[11rem_8.5rem_minmax(12rem,1fr)_3.5rem_3.5rem] items-start gap-x-2";
 
 function RemoveX() {
   return (
@@ -112,6 +110,7 @@ export type VoiceContactField = {
   // say the same thing.
   voiceDescription: string;
   voiceConfirm: boolean;
+  voiceVisible: boolean;
 };
 
 // Context rows inject and capture nothing; they are all a caller may still
@@ -312,15 +311,8 @@ export function VoiceVariablesEditor({
   // work is how it gets abandoned.
   onSaveStateChange?: (state: VoiceEditorSaveState) => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const publishVariables = useAction(api.retellAgent.publishVariables);
-  // What the List rows actually contain for THIS org — the same sources
-  // beforeCallContext reads when it builds the injected strings, so clicking
-  // "List · 12" shows the truth, not a paraphrase. Cheap reactive reads on an
-  // owner settings page; orgs.current is open app-wide already.
-  const providedServices = useQuery(api.services.list, {});
-  const providedStaff = useQuery(api.staff.list, {});
-  const orgSettings = useQuery(api.orgs.current, {});
   const createContactField = useMutation(api.contactFields.create);
   const updateContactField = useMutation(api.contactFields.update);
   const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
@@ -392,7 +384,7 @@ export function VoiceVariablesEditor({
       })) as string;
       setCreatedFields((rows) => [
         ...rows,
-        { id, key: row.key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false },
+        { id, key: row.key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false, voiceVisible: false },
       ]);
       patch(index, { destination: "contact", contactFieldId: id });
     } catch {
@@ -434,7 +426,7 @@ export function VoiceVariablesEditor({
       const id = (await createContactField({ label, type: "text", source: "voice" })) as string;
       setCreatedFields((rows) => [
         ...rows,
-        { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false },
+        { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false, voiceVisible: false },
       ]);
       touchFields();
     } catch {
@@ -547,7 +539,7 @@ export function VoiceVariablesEditor({
         type: "text",
         source: "voice",
       })) as string;
-      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false };
+      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false, voiceVisible: false };
       setCreatedFields((rows) => [...rows, field]);
       relinkRow(index, field);
     } catch {
@@ -615,16 +607,6 @@ export function VoiceVariablesEditor({
     setDraft((rows) => rows.filter((_, i) => i !== index));
   };
 
-  const sections: { id: "sees" | "fills"; title: string; tip: string }[] = [
-    { id: "sees", title: t("voiceVariables.sees"), tip: t("voiceVariables.seesHint") },
-    { id: "fills", title: t("voiceVariables.fills"), tip: t("voiceVariables.fillsHint") },
-  ];
-
-  // Built-ins the runtime always injects, and the voice fields the sees
-  // section has not adopted as explicit context rows yet.
-  const availableBuiltins = builtinVoiceVariables(t).filter(
-    (builtin) => !draft.some((row) => row.key === builtin.key),
-  );
   const availableFields = voiceFields.filter(
     (field) => !draft.some((row) => row.contactFieldId === field.id || row.key === field.key),
   );
@@ -653,44 +635,11 @@ export function VoiceVariablesEditor({
     const field = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
     return field?.type === "select" ? field : undefined;
   };
-  // The clickable List rows' content, one string per item, matching what
-  // the injected variable carries: active services with duration and price,
-  // active staff by name, the voice-writable fields by label.
-  const currency = orgSettings?.org.currency ?? DEFAULT_CURRENCY;
   // Every runtime-provided variable by key, for spotting draft rows that
   // merely restate one.
   const providedByKey = new Map(
     [...builtinVoiceVariables(t), ...injectedVoiceContext(t)].map((v) => [v.key, v]),
   );
-  const providedListLines = (key: string): string[] => {
-    if (key === "services")
-      return (providedServices ?? [])
-        .filter((service) => service.active)
-        .map((service) =>
-          [
-            service.name,
-            service.durationMinutes !== undefined
-              ? `${service.durationMinutes} min`
-              : null,
-            service.price !== undefined
-              ? formatMoney(
-                  service.price,
-                  currency,
-                  localeFor(language),
-                  orgSettings?.org.priceDecimals,
-                )
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" \u00b7 "),
-        );
-    if (key === "staff")
-      return (providedStaff ?? [])
-        .filter((person) => person.active)
-        .map((person) => person.name);
-    if (key === "information") return voiceFields.map((field) => field.label);
-    return [];
-  };
 
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
     const own = builtinVoiceVariables(t).find(
@@ -739,54 +688,146 @@ export function VoiceVariablesEditor({
           so the overflow container cannot clip them. */}
       <div className="overflow-x-auto">
       <div className="min-w-[38rem] space-y-4">
-        {sections.map((section) => {
-          // The sees section edits DRAFT rows (all context now). The fills
-          // section renders no draft at all: its rows are the org's identity
-          // columns and voice-enabled fields, and every control on them
-          // writes the field. One registry, two renderings — this one and
-          // Customers → Contact fields — that cannot disagree because they
-          // are the same rows.
-          const rows =
-            section.id === "sees"
-              ? draft.map((row, index) => ({ row, index })).filter(({ row }) => isContext(row))
-              : [];
-          return (
-            <div key={section.id}>
-              {/* Foreground and semibold, not muted: these headings are the
-                  capture phases themselves — the one structural fact each
-                  row no longer repeats — so they carry the table. */}
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
-                {section.title}
-                <InfoTip text={section.tip} />
-              </div>
-              <div className="space-y-1.5">
-                {rows.map(({ row, index }) => {
-                  // A builtin-keyed row in Before is a leftover clone of an
-                  // always-sent fact: nothing about it is this agent's to
-                  // edit — the key, its content and its meaning are set
-                  // elsewhere. It renders like its injected twin and keeps
-                  // only the ✕, which clears the redundant registry entry.
-                  const provided =
-                    section.id === "sees" ? providedByKey.get(row.key) : undefined;
+        {/* ONE MATRIX (Serdar's sketch: "name | type | description | agent
+            can see | agent fills in"). The two sections it replaces had
+            already collapsed three phase headings into two questions; this
+            collapses the two questions into two switch columns on one row
+            per field, which is where it was always heading — the config IS
+            the Contact fields table, so it should read as a table.
+
+            Sees and fills are not independent: fills implies sees (the
+            stored value is injected so a repeat caller is not re-asked), so
+            the sees switch renders checked and disabled while fills is on.
+            Sees WITHOUT fills is the one new state: a staff-curated field
+            the agent can read back but never asks about (voiceVisible; read
+            at ring time, so it needs no publish).
+
+            During-vs-post is deliberately NOT a third column. Post-call
+            extraction only fills what the mid-call ask missed — one
+            behaviour with a retry, not two decisions. */}
+        <p className="mb-2 px-2 text-xs text-[var(--muted)]">
+          {t("voiceVariables.seesHint")}
+        </p>
+        <div className={`${MATRIX_GRID} mb-1 px-0 text-[10px] font-medium text-[var(--muted)]`}>
+          <span className="px-2">{t("voiceVariables.label")}</span>
+          <span className="px-2">{t("voiceVariables.type")}</span>
+          <span className="px-2">{t("voiceVariables.description")}</span>
+          <span className="text-right">{t("voiceVariables.colSees")}</span>
+          <span className="text-right">{t("voiceVariables.colFills")}</span>
+        </div>
+        <div className="space-y-1.5">
+          {IDENTITY_CAPTURE.map((column) => (
+            <MatrixRow
+              key={column.lock}
+              label={t(column.labelKey)}
+              typeLabel={t("voiceVariables.text")}
+              description={t(column.descKey)}
+              editableDescription={false}
+              sees={true}
+              seesLocked
+              fills={!identityLocks.includes(column.lock)}
+              onFills={(next) =>
+                next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
+              }
+            />
+          ))}
+          {allFields.map((field) => (
+            <MatrixRow
+              key={field.id}
+              label={field.label}
+              typeLabel={
+                t(
+                  field.type === "select"
+                    ? "fields.type.select"
+                    : field.type === "number"
+                      ? "fields.type.number"
+                      : field.type === "date"
+                        ? "fields.type.date"
+                        : "fields.type.text",
+                ) +
+                (field.type === "select" && field.options.length > 0
+                  ? ` · ${field.options.length}`
+                  : "")
+              }
+              description={field.voiceDescription}
+              editableDescription={field.voice}
+              confirmLabel={t("voiceVariables.confirm")}
+              confirmOn={field.voice ? field.voiceConfirm : undefined}
+              sees={field.voice || field.voiceVisible}
+              seesLocked={field.voice}
+              fills={field.voice}
+              onSees={(next) => {
+                void updateContactField({
+                  fieldId: field.id as Id<"contactFields">,
+                  voiceVisible: next,
+                });
+                setCreatedFields((rows) =>
+                  rows.map((row) =>
+                    row.id === field.id ? { ...row, voiceVisible: next } : row,
+                  ),
+                );
+                // No touchFields: the card is built at ring time, so this is
+                // live on the very next call without a publish.
+              }}
+              onFills={(next) =>
+                next ? enableFieldVoice(field) : disableFieldVoice(field)
+              }
+              onDescription={(text) => {
+                void updateContactField({
+                  fieldId: field.id as Id<"contactFields">,
+                  voiceDescription: text,
+                });
+                setCreatedFields((rows) =>
+                  rows.map((row) =>
+                    row.id === field.id ? { ...row, voiceDescription: text } : row,
+                  ),
+                );
+                touchFields();
+              }}
+              onToggleConfirm={() => {
+                void updateContactField({
+                  fieldId: field.id as Id<"contactFields">,
+                  voiceConfirm: !field.voiceConfirm,
+                });
+                setCreatedFields((rows) =>
+                  rows.map((row) =>
+                    row.id === field.id ? { ...row, voiceConfirm: !field.voiceConfirm } : row,
+                  ),
+                );
+                touchFields();
+              }}
+            />
+          ))}
+          <VariablePicker
+            addLabel={t("fields.add")}
+            fields={[]}
+            builtins={[]}
+            onField={() => undefined}
+            onBuiltin={() => undefined}
+            onCreate={(label) => void createVoiceField(label)}
+            onCallOnly={(label) => addCallOnly(label)}
+            allowCallOnly={false}
+          />
+        </div>
+
+        {/* Static defaults: the one per-agent thing left — a value injected
+            into every call ("Add default", Nudge's word). Legacy context rows
+            render here too, removable. Below the matrix because it is the
+            rare case, not the model. */}
+        {(draft.filter((row) => isContext(row)).length > 0 || true) && (
+          <div className="mt-4">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
+              {t("voiceVariables.sees")}
+            </div>
+            <div className="space-y-1.5">
+              {draft
+                .map((row, index) => ({ row, index }))
+                .filter(({ row }) => isContext(row))
+                .map(({ row, index }) => {
+                  const provided = providedByKey.get(row.key);
                   if (provided) {
                     return (
                       <div key={index} className={VAR_GRID}>
-                        {/* Label first, key under it. The label was here all
-                            along as a `title`, which is a hover tooltip: the
-                            human name for the thing was the part you could
-                            only reach with a mouse, on a table whose whole
-                            left column was slugs (Serdar, on seeing it: "why
-                            do we show the variable names here, we should show
-                            the label").
-
-                            The key is gone entirely as of the same day. It
-                            survived one revision on the grounds that it was
-                            what you type into the prompt, and then the prompt
-                            editor learned to speak labels too, which left the
-                            key as a second name for a thing already named
-                            ("why do we need to see both key and label??").
-                            It is wire format between us and Retell now, and
-                            appears in no human-facing surface. */}
                         <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
                           {provided.label}
                         </span>
@@ -815,188 +856,56 @@ export function VoiceVariablesEditor({
                     );
                   }
                   return (
-                  <VariableRow
-                    key={index}
-                    row={row}
-                    // A linked row shows the field's CURRENT label: renaming
-                    // the field in Business renames it here without touching
-                    // the stored row, because the key is the identity.
-                    displayLabel={
-                      (row.contactFieldId
-                        ? fieldById.get(row.contactFieldId)?.label
-                        : undefined) ?? row.label
-                    }
-                    fields={voiceFields}
-                    pickerFields={rowPickerFields(row)}
-                    pickerBuiltins={rowPickerBuiltins(row)}
-                    linkedSelect={linkedSelectFor(row)}
-                    onSetFieldOptions={(options) => {
-                      if (row.contactFieldId)
-                        void updateContactField({
-                          fieldId: row.contactFieldId as Id<"contactFields">,
-                          options,
-                        });
-                    }}
-                    supportsLive={supportsLive}
-                    autoFocus={focusLast && index === draft.length - 1}
-                    canLinkCustomer={
-                      row.key === keyFromLabel(row.label) &&
-                      !voiceFields.some((field) => field.key === row.key)
-                    }
-                    onLinkCustomer={() => void linkToCustomer(index)}
-                    onPickField={(field) => relinkRow(index, field)}
-                    onPickBuiltin={(builtin) => relinkRowToBuiltin(index, builtin)}
-                    onCreateField={(label) => void createFieldForRow(index, label)}
-                    onRename={(label) => renameRowCallOnly(index, label)}
-                    allowCallOnly={row.duringMode === "none" && !row.afterCall}
-                    onFocused={() => setFocusLast(false)}
-                    onChange={(next) => patch(index, next)}
-                    onRemove={() => removeAt(index)}
-                  />
+                    <VariableRow
+                      key={index}
+                      row={row}
+                      displayLabel={
+                        (row.contactFieldId
+                          ? fieldById.get(row.contactFieldId)?.label
+                          : undefined) ?? row.label
+                      }
+                      fields={voiceFields}
+                      pickerFields={rowPickerFields(row)}
+                      pickerBuiltins={rowPickerBuiltins(row)}
+                      linkedSelect={linkedSelectFor(row)}
+                      onSetFieldOptions={(options) => {
+                        if (row.contactFieldId)
+                          void updateContactField({
+                            fieldId: row.contactFieldId as Id<"contactFields">,
+                            options,
+                          });
+                      }}
+                      supportsLive={supportsLive}
+                      autoFocus={focusLast && index === draft.length - 1}
+                      canLinkCustomer={
+                        row.key === keyFromLabel(row.label) &&
+                        !voiceFields.some((field) => field.key === row.key)
+                      }
+                      onLinkCustomer={() => void linkToCustomer(index)}
+                      onPickField={(field) => relinkRow(index, field)}
+                      onPickBuiltin={(builtin) => relinkRowToBuiltin(index, builtin)}
+                      onCreateField={(label) => void createFieldForRow(index, label)}
+                      onRename={(label) => renameRowCallOnly(index, label)}
+                      allowCallOnly={row.duringMode === "none" && !row.afterCall}
+                      onFocused={() => setFocusLast(false)}
+                      onChange={(next) => patch(index, next)}
+                      onRemove={() => removeAt(index)}
+                    />
                   );
                 })}
-                {/* The context the runtime sends whether or not anybody
-                    configured it, AS ROWS in the phase it belongs to — the
-                    answer to "why are the variables we send not showing in
-                    Before". Read-only and muted: these are facts about every
-                    agent, not choices about this one, and a control that
-                    could only break the agent is not offered. */}
-                {/* The same three columns as every other row — key, type,
-                    description — no heading, no tag: the group's own (i)
-                    already says before-call context goes with every call,
-                    and rows without controls say the rest by being muted.
-                    This list mirrors beforeCallContext's dynamicVariables
-                    key for key; if the runtime gains a variable, it appears
-                    here or the table is lying. */}
-                {section.id === "sees" &&
-                  [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
-                    <div key={item.key} className={VAR_GRID}>
-                      {/* Label only, same as the row above. */}
-                      <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
-                        {item.label}
-                      </span>
-                      {item.kind === "list" ? (
-                        <ProvidedListPeek
-                          label={`${t("voiceVariables.list")} \u00b7 ${providedListLines(item.key).length}`}
-                          lines={providedListLines(item.key)}
-                        />
-                      ) : (
-                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
-                          {t("voiceVariables.text")}
-                        </span>
-                      )}
-                      <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-                        {item.description}
-                      </span>
-                      <span />
-                    </div>
-                  ))}
-                {section.id === "fills" && (
-                  <>
-                    {/* Identity first: the questions every receptionist asks
-                        before any custom field. The switch is the identity
-                        lock, inverted — same write the Contact fields table
-                        makes. */}
-                    {IDENTITY_CAPTURE.map((column) => (
-                      <FieldCaptureRow
-                        key={column.lock}
-                        enabled={!identityLocks.includes(column.lock)}
-                        label={t(column.labelKey)}
-                        typeLabel={t("voiceVariables.text")}
-                        description={t(column.descKey)}
-                        onToggle={(next) =>
-                          next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
-                        }
-                      />
-                    ))}
-                    {/* EVERY org field, on or off — "list all fields and
-                        select from there what the agent should fill in"
-                        (Serdar). The switch IS the Voice column in
-                        Customers → Contact fields, one mutation, two
-                        renderings. */}
-                    {allFields.map((field) => (
-                      <FieldCaptureRow
-                        key={field.id}
-                        enabled={field.voice}
-                        label={field.label}
-                        typeLabel={
-                          t(
-                            field.type === "select"
-                              ? "fields.type.select"
-                              : field.type === "number"
-                                ? "fields.type.number"
-                                : field.type === "date"
-                                  ? "fields.type.date"
-                                  : "fields.type.text",
-                          ) +
-                          (field.type === "select" && field.options.length > 0
-                            ? ` · ${field.options.length}`
-                            : "")
-                        }
-                        description={field.voiceDescription}
-                        confirmLabel={t("voiceVariables.confirm")}
-                        confirmOn={field.voiceConfirm}
-                        onToggle={(next) =>
-                          next ? enableFieldVoice(field) : disableFieldVoice(field)
-                        }
-                        onDescription={(text) => {
-                          void updateContactField({
-                            fieldId: field.id as Id<"contactFields">,
-                            voiceDescription: text,
-                          });
-                          setCreatedFields((rows) =>
-                            rows.map((row) =>
-                              row.id === field.id ? { ...row, voiceDescription: text } : row,
-                            ),
-                          );
-                          touchFields();
-                        }}
-                        onToggleConfirm={() => {
-                          void updateContactField({
-                            fieldId: field.id as Id<"contactFields">,
-                            voiceConfirm: !field.voiceConfirm,
-                          });
-                          setCreatedFields((rows) =>
-                            rows.map((row) =>
-                              row.id === field.id ? { ...row, voiceConfirm: !field.voiceConfirm } : row,
-                            ),
-                          );
-                          touchFields();
-                        }}
-                      />
-                    ))}
-                  </>
-                )}
-                {/* Sees adds STATIC VALUES only. It used to offer the org's
-                    fields for adoption as injected context, and the full
-                    merge made that a duplicate: every fills field already
-                    injects its stored value before the call, so offering it
-                    here again was the same field in two sections (Serdar:
-                    "now we're duplicating what agent sees and fills in").
-                    Fills adds by CREATING a field, since every existing one
-                    is already on the list with a switch. */}
-                <VariablePicker
-                  addLabel={
-                    section.id === "sees"
-                      ? t("voiceVariables.addDefault")
-                      : t("fields.add")
-                  }
-                  fields={[]}
-                  builtins={[]}
-                  onField={() => undefined}
-                  onBuiltin={() => undefined}
-                  onCreate={(label) =>
-                    section.id === "sees"
-                      ? addCallOnly(label)
-                      : void createVoiceField(label)
-                  }
-                  onCallOnly={(label) => addCallOnly(label)}
-                  allowCallOnly={section.id === "sees"}
-                />
-              </div>
+              <VariablePicker
+                addLabel={t("voiceVariables.addDefault")}
+                fields={[]}
+                builtins={[]}
+                onField={() => undefined}
+                onBuiltin={() => undefined}
+                onCreate={(label) => addCallOnly(label)}
+                onCallOnly={(label) => addCallOnly(label)}
+                allowCallOnly
+              />
             </div>
-          );
-        })}
+          </div>
+        )}
 
         {/* No foot row. Nudge pins its analysis presets here (call_summary,
             call_successful), and the port kept them — but the owner's read
@@ -1068,53 +977,63 @@ type PickerBuiltin = {
 // silent free text. That is the CRM-property-picker contract: one registry,
 // referenced everywhere, created inline, and a row can always be re-pointed
 // by clicking its name.
-// One contact field as a fills row — EVERY field, not just the enabled ones.
-// "List all fields and select from there what the agent should fill in"
-// (Serdar) is the whole design: the switch is the Contact fields table's
-// Voice column, rendered where the agent is configured, through the same
-// mutation. An OFF row is a muted label and a switch; description and
-// confirm-first appear only once the agent actually fills the field, because
-// config for a thing that is not happening is noise.
+// One row of the matrix. Identity columns and org fields share it: label,
+// type, the extractor's instruction, then the two switches. Every control
+// writes the FIELD (or the identity lock) — no draft, no publish of its own,
+// no way to disagree with the Contact fields table.
 //
 // The description drafts locally and commits on blur, the same discipline as
 // every autosaving text input here: typing must not fight the round-trip.
-function FieldCaptureRow({
-  enabled,
+function MatrixRow({
   label,
   typeLabel,
   description,
+  editableDescription,
   confirmLabel,
   confirmOn,
-  onToggle,
+  sees,
+  seesLocked,
+  fills,
+  onSees,
+  onFills,
   onDescription,
   onToggleConfirm,
 }: {
-  enabled: boolean;
   label: string;
   typeLabel: string;
-  // Null on identity rows: their instruction is fixed, shown muted.
-  description: string | null;
+  description: string;
+  // Fields the agent fills edit their instruction; identity rows and
+  // fields it only sees show theirs muted (or nothing).
+  editableDescription: boolean;
   confirmLabel?: string;
   confirmOn?: boolean;
-  onToggle: (next: boolean) => void;
+  sees: boolean;
+  // True while sees is implied (identity, or fills on): the switch renders
+  // checked and disabled, because turning it off is not a thing — fills
+  // injects the stored value by design.
+  seesLocked?: boolean;
+  fills: boolean;
+  onSees?: (next: boolean) => void;
+  onFills: (next: boolean) => void;
   onDescription?: (text: string) => void;
   onToggleConfirm?: () => void;
 }) {
   const { t } = useLanguage();
-  const [text, setText] = useState(description ?? "");
-  useEffect(() => setText(description ?? ""), [description]);
+  const [text, setText] = useState(description);
+  useEffect(() => setText(description), [description]);
+  const active = sees || fills;
   return (
-    <div className={`${FILL_GRID} group`}>
+    <div className={`${MATRIX_GRID} group`}>
       <span
         className={`block min-w-0 truncate px-2 py-1 text-xs ${
-          enabled ? "text-[var(--foreground)]" : "text-[var(--muted)]"
+          active ? "text-[var(--foreground)]" : "text-[var(--muted)]"
         }`}
       >
         {label}
       </span>
       <span className="flex flex-col items-start px-2 py-1">
         <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
-        {enabled && onToggleConfirm && (
+        {fills && onToggleConfirm && (
           <button
             type="button"
             role="switch"
@@ -1131,24 +1050,38 @@ function FieldCaptureRow({
           </button>
         )}
       </span>
-      {enabled && onDescription ? (
+      {fills && editableDescription && onDescription ? (
         <AutoGrowTextarea
           value={text}
           rows={1}
           placeholder={t("voiceVariables.description")}
           onChange={(event) => setText(event.target.value)}
           onBlur={() => {
-            if (text.trim() !== (description ?? "")) onDescription(text.trim());
+            if (text.trim() !== description) onDescription(text.trim());
           }}
           className={CELL_CLASS}
         />
       ) : (
         <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-          {enabled ? description : ""}
+          {fills ? description : ""}
         </span>
       )}
       <span className="flex justify-end pt-0.5">
-        <Toggle size="sm" checked={enabled} onChange={onToggle} label={label} />
+        <Toggle
+          size="sm"
+          checked={sees}
+          disabled={seesLocked}
+          onChange={(next) => onSees?.(next)}
+          label={`${label} · ${t("voiceVariables.colSees")}`}
+        />
+      </span>
+      <span className="flex justify-end pt-0.5">
+        <Toggle
+          size="sm"
+          checked={fills}
+          onChange={onFills}
+          label={`${label} · ${t("voiceVariables.colFills")}`}
+        />
       </span>
     </div>
   );
@@ -1341,45 +1274,6 @@ function VariablePicker({
   );
 }
 
-// A List row's window onto its actual content — the same click that shows a
-// capture row's choices shows what the runtime will send: the real services
-// with prices, the real staff, the real fields. Read-only; the places to
-// change them are Services, Business and Contact fields.
-function ProvidedListPeek({ label, lines }: { label: string; lines: string[] }) {
-  const { triggerRef, panelRef, pos, open, toggle } = useAnchoredPanel(248, 300);
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          toggle();
-        }}
-        className="flex w-full items-center justify-between gap-1 rounded-md border border-transparent px-2 py-1 text-left text-xs text-[var(--muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
-      >
-        <span className="truncate">{label}</span>
-        <span aria-hidden className="text-[10px]">▾</span>
-      </button>
-      {pos &&
-        createPortal(
-          <div
-            ref={panelRef}
-            style={{ position: "fixed", maxHeight: 300, ...pos }}
-            className="thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-xs shadow-lg"
-          >
-            {lines.map((line, index) => (
-              <div key={index} className="truncate rounded px-2 py-1">
-                {line}
-              </div>
-            ))}
-          </div>,
-          document.body,
-        )}
-    </>
-  );
-}
 
 // One variable, editable where it sits. Label and description are plain
 // inputs; everything with a fixed set of answers — type, choices, which phases

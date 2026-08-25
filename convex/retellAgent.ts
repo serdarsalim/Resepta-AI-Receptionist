@@ -127,6 +127,7 @@ type EditorContext = {
     options?: string[];
     voiceDescription?: string;
     voiceConfirm?: boolean;
+    voiceVisible?: boolean;
     source?: "manual" | "voice";
   }>;
 };
@@ -513,6 +514,7 @@ export const read = action({
         voice: field.source === "voice",
         voiceDescription: field.voiceDescription ?? "",
         voiceConfirm: field.voiceConfirm === true,
+        voiceVisible: field.voiceVisible === true,
       })),
       // The editor renders identity capture rows from this rather than a
       // second query: derive and display must read the same lock list.

@@ -2607,15 +2607,19 @@ extensive manual". Three moves got there, in one day, in order:
    fills section's rows write the field through the same mutations the
    Contact fields table uses. Flipping `source` to manual no longer throws
    `field-in-use` — it IS the unlink, and the next publish stops deriving.
-4. **The fills section lists EVERY field with a switch** ("like we list all
-   fields and then select from there what the agent should fill in" —
-   Serdar, same day). Identity rows are the lock inverted; org rows are the
-   Voice column; an OFF row is a muted label and a Toggle, and description +
-   confirm-first appear only ON. The sees section stopped offering fields
-   entirely — a fills field already injects its stored value, so offering it
-   as context too was the same field in two sections. Sees adds static
-   values only; fills adds by creating a field. During-vs-post is never
-   asked: ask-when-missing during, transcript recovery after, always.
+4. **It is ONE MATRIX now** (Serdar's sketch, same day: "name | type |
+   description | agent can see | agent fills in"): every field one row, two
+   switch columns. Fills implies sees, so the sees switch is checked+disabled
+   while fills is on. Sees WITHOUT fills is `contactFields.voiceVisible` — a
+   staff-curated field the agent reads back but never asks about; it widens
+   the ring-time contact card only (NOT `information`, which is the write
+   gate's public face) and needs no publish. The read-only runtime listing
+   that used to sit above ("Customer card", "Collectable fields"…) is one
+   muted sentence now — what can be referenced lives in the prompt's @
+   picker. Static defaults keep a small block below the matrix.
+   During-vs-post was proposed as a third column and rejected:
+   ask-when-missing during, transcript recovery after, always — one
+   behaviour with a retry, not two decisions.
 
 What did not change: runtime ring-time context (`contact`/`information`) was
 already field-driven; mid-call and post-call writes still go through
