@@ -67,6 +67,15 @@ type AgentDoc = {
     version?: number;
   };
   post_call_analysis_data?: Record<string, unknown>[];
+  // Voicemail handling. The FIELD'S PRESENCE arms detection and an explicit
+  // null disarms it — there is no boolean (lib/voiceAgentTemplate
+  // VOICEMAIL_ACTION). Read here for one reason: detection_prompt is a
+  // definition of what COUNTS as voicemail that an owner can only write in
+  // the provider's dashboard, and a PATCH that omits the key drops it.
+  voicemail_option?: {
+    action?: { type?: string; text?: string };
+    detection_prompt?: string;
+  } | null;
 };
 
 type LlmDoc = {
@@ -1765,14 +1774,29 @@ export const syncTemplate = action({
     const {
       language: _templateLanguage,
       post_call_analysis_data: _templateAnalysis,
+      voicemail_option: templateVoicemail,
       ...engineering
     } = template.agent;
     const liveAnalysis = (live.post_call_analysis_data ?? []).filter(
       (item) => String(item.name ?? "") !== VOICE_SUMMARY_FIELD,
     );
+    // Voicemail is the template's, EXCEPT for detection_prompt. That field
+    // says what counts as an answering machine, it can only be written in the
+    // provider's dashboard, and a PATCH that leaves the key out deletes it —
+    // so a sync that shipped the template's object bare would silently erase
+    // a definition somebody wrote by hand, with nothing to report the loss.
+    // Same bargain as the analysis merge directly above: ours replaces ours,
+    // theirs survives.
+    const voicemail = live.voicemail_option?.detection_prompt
+      ? {
+          ...templateVoicemail,
+          detection_prompt: live.voicemail_option.detection_prompt,
+        }
+      : templateVoicemail;
     await call(key, "PATCH", `update-agent/${id}`, {
       version: draft.version,
       ...engineering,
+      voicemail_option: voicemail,
       post_call_analysis_data: [...liveAnalysis, summaryAnalysisField(language)],
     });
     await call(key, "POST", `publish-agent-version/${id}`, {

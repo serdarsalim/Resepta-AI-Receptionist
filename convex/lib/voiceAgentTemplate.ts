@@ -67,7 +67,33 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // prompt text reaches new agents only, per the rule above. That split is the
 // whole reason the tool carries the negative too: it is the half of the fix
 // that can reach the agents already in the field.
-export const VOICE_AGENT_TEMPLATE_VERSION = 12;
+// v13 (2026-08-25): voicemail detection, armed and set to hang up. Until now
+// an outbound call that reached an answering machine talked to it until the
+// provider's ceiling — nothing detected the machine, so the salon paid for
+// three minutes of a receptionist reading availability to a beep. An
+// agent-doc field, so it rides the same PATCH syncTemplate already sends and
+// reaches existing agents when their owner clicks update.
+export const VOICE_AGENT_TEMPLATE_VERSION = 13;
+
+// Voicemail handling, learned from Nudge's implementation rather than from the
+// provider's docs (its AGENTS.md, 2026-08-25 session 2, where every claim
+// below was verified against the live API).
+//
+// THERE IS NO BOOLEAN. The PRESENCE of voicemail_option is what arms
+// detection, and an explicit null is what disarms it — so a template that
+// wanted detection off would have to SEND null, not omit the key. Omitting
+// patches nothing.
+//
+// Hang up rather than leave a message, deliberately. A message is one shot at
+// a real person and its words are a decision per business and per language —
+// what the salon is called, whether it offers to call back, which number it
+// names. A message this file guessed would be worse than the silence it
+// replaced, and an EMPTY message is worse still: the agent answers the
+// machine, says nothing, and the salon has paid to record a beep. Hanging up
+// is the honest floor, and it is the whole of the saving. Leaving a message
+// wants a control on the business's own agent page (Nudge's `setVoicemail`
+// is the shape to copy) — not a value invented here.
+export const VOICEMAIL_ACTION = "hangup";
 
 export type VoiceAgentLanguage = "tr-TR" | "en-US" | "de-DE";
 
@@ -583,6 +609,11 @@ export function appointmentReceptionistTemplate(args: {
       // "hello?" — which is most of what slow feels like on a phone.
       enable_backchannel: true,
       normalize_for_speech: true,
+      // See VOICEMAIL_ACTION above: the field's presence is the switch, and
+      // hanging up is what it does. syncTemplate re-attaches any
+      // detection_prompt the live agent carries — a PATCH that omits that key
+      // DROPS it, which is Nudge's scar and not a thing to rediscover.
+      voicemail_option: { action: { type: VOICEMAIL_ACTION } },
       post_call_analysis_data: [summaryAnalysisField(args.language)],
     },
   };

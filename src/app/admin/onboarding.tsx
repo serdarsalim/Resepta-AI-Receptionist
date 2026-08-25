@@ -1161,7 +1161,7 @@ function PromptSection({
             ],
             [
               "Voicemail",
-              "Not handled. Nothing detects an answering machine, so an agent that reaches one talks to it until the call ends.",
+              "Detected on an outbound call, and hung up on. It leaves no message — the words are a decision per business, so that wants a control on the agent's own page.",
             ],
             [
               "Call length",
