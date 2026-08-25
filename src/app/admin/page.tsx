@@ -476,8 +476,11 @@ export default function AdminPage() {
                 and always have been read together; splitting the control was
                 what let an operator read a model's price without the tier
                 that doubles it. */}
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-start">
-              <div className="text-sm font-medium">Voice agent engine</div>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium">Voice agent engine</div>
+                <InfoTip text="What every agent without its own Engine override runs. Applies to new agents and to existing ones on their next template sync or engine publish; it does not repoint already-published agents by itself. Per-agent pickers on each business page always win." />
+              </div>
               <div>
                 <SearchSelect
                   value={
@@ -525,13 +528,6 @@ export default function AdminPage() {
                     })();
                   }}
                 />
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  What every agent without its own Engine override runs.
-                  Applies to new agents and to existing ones on their next
-                  template sync or engine publish; it does not repoint
-                  already-published agents by itself. Per-agent pickers on
-                  each business page always win.
-                </p>
               </div>
             </div>
             {/* Which dialect every org's chat agent speaks by default. The

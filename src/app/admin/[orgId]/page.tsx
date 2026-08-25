@@ -13,7 +13,7 @@
 // Secrets are shown masked and re-pasted to change. Nothing here reads a
 // credential back to the browser; see convex/connections.ts for why.
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -43,6 +43,7 @@ import {
   UserActivity,
 } from "../parts";
 import { CheckMark, SearchInput } from "@/components/DataTable";
+import { InfoTip } from "@/components/InfoTip";
 import { useSearch } from "@/lib/useTableState";
 import { MembersCard } from "./members";
 
@@ -422,23 +423,48 @@ export default function TenantPage() {
               only when something is stuck, and the enabled pill. Actual
               failures keep their amber block below.
 
-              ONE line now means one line (Serdar, 2026-08-25): the engine
-              picker sat on its own row under every agent, doubling each entry
-              for a control touched once a quarter. Inline, the list reads as
-              a table again.
+              A REAL TABLE now, with headers (Serdar, 2026-08-25). The flex
+              row wrapped: an agent with a long name and a number pushed the
+              engine picker onto a second line, so the list alternated between
+              one-line and two-line entries and nothing lined up down the
+              page. A table cannot wrap — every agent is exactly one row, and
+              the columns say what each cell is, which is what let the inline
+              "Engine" label go.
 
-              The row itself is the drill-in: clicking it opens this agent's
-              edit page in the business's own app, signed in as them, because
-              the path here used to be "Open their app" → Voice agents → find
-              the same agent again. Same synchronous-blank-tab dance as the
-              fleet glyph — window.open after an await has lost the user
-              gesture and is what popup blockers exist for. The id chip and
-              the engine picker stop the click: copying an id must not also
-              open a tab. The picker's dropdown needs no guard — it portals to
-              body, outside this row. */}
-          {detail.agents.map((agent) => (
-            <div key={agent.retellAgentId} className="py-1">
-              <div
+              The row is the drill-in: clicking it opens this agent's edit
+              page in the business's own app, signed in as them, because the
+              path here used to be "Open their app" → Voice agents → find the
+              same agent again. Same synchronous-blank-tab dance as the fleet
+              glyph — window.open after an await has lost the user gesture and
+              is what popup blockers exist for. The id chip and the engine
+              picker stop the click: copying an id must not also open a tab.
+              The picker's dropdown needs no guard — it portals to body,
+              outside this row. */}
+          <div className="thin-scroll overflow-x-auto py-1">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs">
+              <tr>
+                <th className="pb-2 pr-3 pt-1 font-semibold">Agent</th>
+                <th className="pb-2 pr-3 pt-1 font-semibold">Line</th>
+                {/* Was "runtime <date>", which named an internal — the private
+                    MCP runtime an agent must be published to before its tools
+                    answer (Serdar: "what's runtime? get rid of that word").
+                    What the operator needs is whether its tools work, so the
+                    column asks that and the date rides the title. */}
+                <th
+                  className="pb-2 pr-3 pt-1 font-semibold"
+                  title="Whether Resepta's booking tools are published to this agent. Without them it can talk but cannot check a calendar, book, or save anything."
+                >
+                  Tools
+                </th>
+                <th className="pb-2 pr-3 pt-1 font-semibold">Engine</th>
+                <th className="pb-2 pt-1 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+            {detail.agents.map((agent) => (
+            <Fragment key={agent.retellAgentId}>
+              <tr
                 onClick={() => {
                   const editorTab = window.open("", "_blank");
                   const dest = `/?tab=voice&agent=${encodeURIComponent(agent.retellAgentId)}`;
@@ -450,25 +476,30 @@ export default function TenantPage() {
                     .catch(() => editorTab?.close());
                 }}
                 title="Open this agent's edit page in the business's own app, signed in as them. Only one business at a time — opening another repoints it."
-                className="-mx-2 flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--muted-bg)]"
+                className="cursor-pointer border-t border-[var(--table-divider)] transition-colors hover:bg-[var(--row-hover-bg)]"
               >
-                {agent.name && <span className="text-sm font-medium">{agent.name}</span>}
-                <span onClick={(e) => e.stopPropagation()}>
-                  <CopyId value={agent.retellAgentId} label="copy agent id" />
-                </span>
-                <span className="text-xs text-[var(--muted)]">
+                <td className="py-2 pr-3">
+                  <div className="flex items-center gap-2">
+                    {agent.name && (
+                      <span className="font-medium">{agent.name}</span>
+                    )}
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <CopyId value={agent.retellAgentId} label="copy agent id" />
+                    </span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap py-2 pr-3 text-xs text-[var(--muted)]">
                   {agent.inboundNumber ?? "No line"}
-                </span>
-                {agent.runtimeConnectedAt ? (
-                  <Pill tone="ok">runtime {shortDate(agent.runtimeConnectedAt)}</Pill>
-                ) : (
-                  <Pill tone="warn">No runtime</Pill>
-                )}
-                {(agent.pendingEvents > 0 || agent.failedEvents > 0) && (
-                  <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
-                    {agent.pendingEvents} pending · {agent.failedEvents} failed
-                  </Pill>
-                )}
+                </td>
+                <td className="whitespace-nowrap py-2 pr-3">
+                  {agent.runtimeConnectedAt ? (
+                    <Pill tone="ok">
+                      <span title={shortDate(agent.runtimeConnectedAt)}>Connected</span>
+                    </Pill>
+                  ) : (
+                    <Pill tone="warn">Not connected</Pill>
+                  )}
+                </td>
               {/* The ENGINE behind the agent: which model, at which tier,
                   priced per conversation minute — the whole point is deciding
                   here without opening Retell's pricing page. One picker
@@ -476,18 +507,18 @@ export default function TenantPage() {
                   read without checking a second control beside it is how an
                   agent came to bill double for months.
 
-                  "Platform default" is unset in the row, and it follows BOTH:
-                  the common case stays one string in the template rather than
-                  a fleet of rows pinning today's default forever. Picking
-                  anything else pins both, which is the trade this shape makes
-                  — a fleet tier change stops reaching an agent that chose. */}
-                <span
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-auto flex items-center gap-2 text-xs"
-                >
-                <span className="text-[var(--muted)]">Engine</span>
+                  Unset in the row means FOLLOW THE FLEET, and it follows
+                  both: the common case stays one string in the template
+                  rather than a fleet of rows pinning today's default forever.
+                  Picking anything else pins both, which is the trade this
+                  shape makes — a fleet tier change stops reaching an agent
+                  that chose. The option reads just "Default" plus the model
+                  it resolves to; "Platform default" spent two words on a
+                  distinction the row cannot make anyway. */}
+                <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2 text-xs">
                 <SearchSelect
-                  className="w-72"
+                  className="w-52"
                   value={
                     agent.llmModel
                       ? encodeEngine(
@@ -506,7 +537,7 @@ export default function TenantPage() {
                       value: "",
                       // The resolved fleet default from orgDetail, so this
                       // label and the /admin dropdown can never disagree.
-                      label: `Platform default — ${engineLabel(
+                      label: `Default — ${engineLabel(
                         detail.platformVoiceModel ?? VOICE_AGENT_MODEL,
                         detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY,
                       )}`,
@@ -546,20 +577,39 @@ export default function TenantPage() {
                   }}
                 />
                 {settingModel === agent.retellAgentId && (
-                  <span className="text-[var(--muted)]">Publishing…</span>
+                  <span className="whitespace-nowrap text-[var(--muted)]">Publishing…</span>
                 )}
-                {modelError?.agentId === agent.retellAgentId && (
-                  <span className="text-amber-700 dark:text-amber-400">
+                  </div>
+                </td>
+                <td className="whitespace-nowrap py-2">
+                  <div className="flex items-center gap-2">
+                    <Pill tone={agent.enabled ? "ok" : "warn"}>
+                      {agent.enabled ? "Enabled" : "Disabled"}
+                    </Pill>
+                    {(agent.pendingEvents > 0 || agent.failedEvents > 0) && (
+                      <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
+                        {agent.pendingEvents} pending · {agent.failedEvents} failed
+                      </Pill>
+                    )}
+                  </div>
+                </td>
+              </tr>
+              {/* Trouble gets a row of its own, spanning the table. Both of
+                  these are rare and neither is a fact about a column: an
+                  engine change that the provider refused, and the last
+                  webhook that would not process. Squeezing either into a cell
+                  is what made the flex version wrap. */}
+              {modelError?.agentId === agent.retellAgentId && (
+                <tr className="border-t border-[var(--table-divider)]">
+                  <td colSpan={5} className="py-1.5 text-xs text-amber-700 dark:text-amber-400">
                     {modelError.message}
-                  </span>
-                )}
-                </span>
-                <Pill tone={agent.enabled ? "ok" : "warn"}>
-                  {agent.enabled ? "Enabled" : "Disabled"}
-                </Pill>
-              </div>
+                  </td>
+                </tr>
+              )}
               {agent.latestFailure && (
-                <div className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                <tr className="border-t border-[var(--table-divider)]">
+                  <td colSpan={5} className="py-1.5">
+                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
                       {agent.latestFailure.eventType} · {shortDate(agent.latestFailure.receivedAt)} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
@@ -596,9 +646,14 @@ export default function TenantPage() {
                     <div className="mt-1">{retryError.message}</div>
                   )}
                 </div>
+                  </td>
+                </tr>
               )}
-            </div>
+            </Fragment>
           ))}
+            </tbody>
+          </table>
+          </div>
           {detail.voiceProvisioning.some((job) => job.status !== "complete") && (
             <div className="py-2.5">
               <div className="space-y-2">
@@ -1027,7 +1082,10 @@ export default function TenantPage() {
           }}
         />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-          <div className="text-sm font-medium">Billing mode</div>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium">Billing mode</div>
+            <InfoTip text="Invoice: meter only, settle outside the product. Prepaid: Stripe wallet, an empty balance declines new calls at ring time." />
+          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {(["invoice", "prepaid"] as const).map((option) => (
               <button
@@ -1043,10 +1101,6 @@ export default function TenantPage() {
                 {option}
               </button>
             ))}
-            <span className="text-xs text-[var(--muted)]">
-              Invoice: meter only, settle outside the product. Prepaid: Stripe
-              wallet, an empty balance declines new calls at ring time.
-            </span>
           </div>
         </div>
         {voice.billingMode === "prepaid" && (
