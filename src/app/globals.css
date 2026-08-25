@@ -46,21 +46,33 @@
   --table-header-fg: #1c2b33;
   --table-divider: #e4e6eb;
   --row-hover-bg: #f5f6f7;
-  /* A card is lifted, not outlined: the reference draws no border at all, and
-     dropping the 1px line is what softens the corners — a line makes a curve
-     explicit in a way a shadow never does.
+  /* A card is neither lifted nor outlined. It is white paper on a tinted
+     plane, and the fill difference is the whole edge (2026-08-25, Serdar:
+     "maybe it's better when they're flat").
 
-     Two layers doing different jobs. The tight one seats the card on the
-     plane; the wide one is the halo that makes the edge read as lifted rather
-     than cut. An earlier pass had only tight layers, so the top and left
-     corners — where a downward drop puts nothing — met the gradient at a hard
-     line, which is the opposite of the reference's soft edge.
+     This was a two-layer drop shadow, tuned across several passes: a tight
+     layer seating the card and a wide halo softening the top and left corners
+     where a downward drop puts nothing. The tuning was real and the result was
+     still a lift nobody asked for. --card is #ffffff against --pane #f1f1f3,
+     fourteen units apart, which draws the edge on its own.
 
-     A three-layer version with a 3% spread ring was tried and backed out: the
-     ring gave the edge more definition, which is the thing the reference does
-     NOT do. Both layers then came down again — the halo is meant to be felt
-     before it is seen, and at 8% it was announcing itself. */
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px rgba(0, 0, 0, 0.05);
+     Kept as a token set to none rather than deleted, because every card in the
+     app reads it (Card.tsx, .card-raised, the admin sections, the calendar,
+     the shell's own content pane). One line here is how the decision stays
+     reversible and how the two themes stay in step. */
+  --card-shadow: none;
+  /* A control sitting ON the sidebar pane — today just the workspace switcher.
+     It is NOT a --foreground wash: the nav rows hover at 4.5% black and go
+     active at 8% foreground, so a wash in that range on the same pane reads as
+     a row somebody is already touching, which is exactly what Serdar saw
+     ("rn it looks like i am hovering or clicking it"). White is not a hover
+     state anywhere in this app, so it cannot be mistaken for one.
+
+     At rest it is LIGHTER than the pane and on hover DARKER than it. That flip
+     is deliberate: on a surface already at white there is no lighter left to
+     go, so the hover has to press in rather than lift. */
+  --pane-field: #ffffff;
+  --pane-field-hover: #f2f2f4;
   /* The plane the view's cards float on. The reference washes its page from a
      cool tint into a warm one, corner to corner, so the white cards read as
      paper on something rather than white on white. Theirs runs lavender to
@@ -143,9 +155,18 @@
   --table-header-fg: #ededed;
   --table-divider: #2e2e2e;
   --row-hover-bg: #202020;
-  /* A shadow is invisible on #0a0a0a, so the same job falls to a hairline
-     ring. Same property, so nothing at the call site has to know. */
-  --card-shadow: 0 0 0 1px var(--border);
+  /* Flat here too. This was a hairline ring, because a drop shadow is
+     invisible on near-black and the ring did the same job — but the job is
+     gone: --card #171717 on --pane #0c0c0c is eleven units, close enough to
+     the light theme's fourteen that the edge reads the same way. Leaving the
+     ring while light went flat would have made dark the only theme still
+     outlining its cards. */
+  --card-shadow: none;
+  /* Lighter than the pane rather than white, same idea inverted: --card is
+     #171717 against a pane whose top stop is #141414, three units, which is
+     the dark-mode trap where a --card pill on a --muted-bg track vanishes. */
+  --pane-field: #232323;
+  --pane-field-hover: #2c2c2c;
   /* Halved: the same mix that reads as a tint on white reads as a colour cast
      on near-black. */
   --content-bg: linear-gradient(
@@ -416,11 +437,16 @@ thead {
 /* In @layer components on purpose, same reasoning as the base block below: a
    utility class in the markup must still win over this. */
 @layer components {
-  /* The inbox's two panels. Same treatment as every other card now — no
-     border, --card-shadow, 0.5rem radius — so the inbox stops being the one
-     surface still wearing its own edge. Kept as a class rather than folded
-     into the Card component because these panels manage their own scrolling
-     and never take Card's padding. */
+  /* The inbox's two panels. Same treatment as every other card: no border,
+     --card-shadow, 0.5rem radius, so the inbox stops being the one surface
+     wearing its own edge. Kept as a class rather than folded into the Card
+     component because these panels manage their own scrolling and never take
+     Card's padding.
+
+     The NAME is now a small lie, and deliberately kept: --card-shadow resolves
+     to none since cards went flat, so nothing here is raised. Renaming it
+     touches every call site for no behaviour, and the class still means what
+     it meant, which is "a card that is not Card". */
   .card-raised {
     background: var(--card);
     border-radius: 0.5rem;

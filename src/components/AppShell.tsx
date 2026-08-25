@@ -1281,18 +1281,18 @@ function WorkspaceSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         title={collapsed ? label : undefined}
-        // A RESTING wash, not just a hover one. The old trigger was bare text
-        // with a 10px caret parked at the far end of a flex-1 span, so at rest
-        // it read as the page's title and the only thing that said "control"
-        // appeared once the pointer was already on it. Serdar's note: it is
-        // not obvious you can switch. The container is what makes it obvious,
-        // and it is a wash rather than a border because a border on a button
-        // is out of the design language (AGENTS.md, "Borders only when
-        // absolutely necessary").
+        // A resting SURFACE, not a wash. The old trigger was bare text with a
+        // 10px caret parked at the far end of a flex-1 span, so at rest it read
+        // as the page's title and the only thing saying "control" arrived once
+        // the pointer was already on it. The first fix overcorrected into a
+        // --foreground wash, which put it in the same range as the nav rows'
+        // own hover and active states and read as permanently pressed. See
+        // --pane-field in globals.css for why white is the material that
+        // cannot be mistaken for a state.
         className={
           collapsed
             ? "rounded-lg transition-opacity hover:opacity-80"
-            : "flex w-full items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] px-1.5 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)]"
+            : "flex w-full items-center gap-2 rounded-lg bg-[var(--pane-field)] px-1.5 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--pane-field-hover)]"
         }
       >
         {collapsed ? (
@@ -1666,8 +1666,12 @@ export function AppShell({
             looked like editing a title. Splitting them is what makes the
             switcher legible as a control, and it costs one line of height. */}
           <div
+            // The gap between the two rows is doing the separating, so it is
+            // wider than the app's usual stack step. At 1.5 the product name
+            // and the business under it read as one block with a line break in
+            // it, which is the thing this layout exists to stop.
             className={`flex flex-col pt-3 ${
-              showCollapsed ? "items-center gap-1 px-1 pb-1" : "gap-1.5 px-2 pb-2"
+              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-3 px-2 pb-2"
             }`}
           >
             <div
