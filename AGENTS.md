@@ -2607,19 +2607,36 @@ extensive manual". Three moves got there, in one day, in order:
    fills section's rows write the field through the same mutations the
    Contact fields table uses. Flipping `source` to manual no longer throws
    `field-in-use` — it IS the unlink, and the next publish stops deriving.
-4. **It is ONE MATRIX now** (Serdar's sketch, same day: "name | type |
-   description | agent can see | agent fills in"): every field one row, two
-   switch columns. Fills implies sees, so the sees switch is checked+disabled
-   while fills is on. Sees WITHOUT fills is `contactFields.voiceVisible` — a
-   staff-curated field the agent reads back but never asks about; it widens
-   the ring-time contact card only (NOT `information`, which is the write
-   gate's public face) and needs no publish. The read-only runtime listing
-   that used to sit above ("Customer card", "Collectable fields"…) is one
-   muted sentence now — what can be referenced lives in the prompt's @
-   picker. Static defaults keep a small block below the matrix.
+4. **It ended as ONE MATRIX with ONE switch** (through three rounds of
+   Serdar simplifying on contact): `name · type · description · Asistan`.
+   Green check = the agent knows the field and fills it (org rows toggle
+   `source`, identity rows toggle the lock). The intermediate two-column
+   version (sees / fills) died the same day it was built — the implied-sees
+   check read as "not seen" to a human scanning for green, and then the
+   premise fell: "if we can see something we can fill in too". Confirm-first
+   died with it, on the third complaint: extraction policy leaking into an
+   owner surface. `deriveCaptureRows` always asks-when-missing; stored
+   `voiceConfirm` flags are ignored, dead config. `voiceVisible` (sees
+   without fills) still injects into the ring-time card for rows that hold
+   it, but no UI sets it anymore. The switch control is `CheckSwitch`
+   (shared component, ported from the message-rule channel toggle): boolean
+   cell inside a table row; the iOS Toggle remains for labelled settings
+   rows. The Knowledge tab's Active columns use it too.
+   Also gone: the read-only runtime listing (one (i) sentence now — what can
+   be referenced lives in the prompt's @ picker), the "+ Add default"
+   statics block (a static default is prompt text with extra steps; legacy
+   rows render headingless until retired), clones of provided keys (filtered
+   on load against a set derived from the builtin lists), the type popover
+   (selects edit options inline from the type cell), and the key column
+   everywhere — the prompt editor speaks labels and translates at the
+   boundary (PromptEditor's "two faces" note).
    During-vs-post was proposed as a third column and rejected:
    ask-when-missing during, transcript recovery after, always — one
    behaviour with a retry, not two decisions.
+   THE REACTIVITY RULE this page taught: the matrix renders from live
+   queries (`contactFields.list`, `contactFields.identityVoiceConfig`),
+   never from the agent `read` action's snapshot — rendering switches from
+   a snapshot is how a click "did nothing" until reload.
 
 What did not change: runtime ring-time context (`contact`/`information`) was
 already field-driven; mid-call and post-call writes still go through

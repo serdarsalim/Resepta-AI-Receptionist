@@ -95,55 +95,55 @@ Archive and disconnect are deliberately non-destructive. Archive only hides an
 unconnected provider agent from the normal picker. Disconnect removes the
 Resepta mapping; neither action deletes the underlying provider resource.
 
-## Variables have one lifecycle
+## Variables are derived from the Contact fields table (2026-08-25)
 
-`voiceAgentVariables` is the registry. One row describes one value across the
-whole call instead of asking the owner to maintain separate before, during and
-after lists:
+The capture registry is gone as an authored thing. What the agent collects is
+DERIVED at publish time (`retellAgent.deriveCaptureRows`) from the org's
+contact fields: every field whose switch is on becomes prefill-for-repeat-
+callers + ask-when-missing + post-call transcript recovery, landing on its own
+field; the unlocked identity columns (first name, last name, email) ride along
+as questions landing on the customer's own columns. Phone is never derived —
+the caller is matched by it. `voiceAgentVariables` still exists as storage,
+but publish overwrites it with derived rows plus any legacy static context;
+hand-authored capture rows are filtered out and cannot come back through any
+door, the MCP tool included.
 
-| Concern | Stored meaning |
-|---|---|
-| Before the call | No context, static value, business/customer fact, next appointment or a configured customer field |
-| During the call | Do not ask, ask only if missing, or confirm the current value |
-| After the call | Whether transcript analysis may recover a missing value |
-| Destination | Keep on the call or write to an allowed customer field |
+The owner surface is the Variables matrix on the agent page: one row per
+field, `name · type · description · Asistan`, one green check. The description
+is the extractor's instruction and lives ON the field
+(`contactFields.voiceDescription`; identity's three live on the org as
+`voiceIdentityDescriptions`). Select options edit inline from the type cell
+and the published enum rebuilds from them. The same switch is the Contact
+fields table's Voice column — one mutation, two renderings, and the matrix
+reads LIVE queries, so a flip repaints instantly and needs no publish to be
+stored (Retell learns about it on the agent's next publish).
 
-Publishing Variables compiles this registry into provider defaults, live
-extraction tools and post-call analysis fields. Resepta remains the editable
-schema; the provider configuration is generated output.
+Publishing compiles the derived set into provider defaults, the live
+extraction tool and post-call analysis fields. Resepta remains the editable
+schema; the provider configuration is generated output — the analysis list in
+the Retell console is rebuilt IN FULL on every publish, so console edits there
+are overwritten.
 
-A variable's name is always a selection, never free text: "+ Add variable"
-and every row's name cell open the same picker over the org's voice customer
-fields and the built-in context. Selecting an existing field links it and pre-wires the repeat-caller
-path: prefill from the customer card before the call, ask only when the value
-is missing, write the answer back. Typing a new name creates the customer
-field inline (it appears under Voice agent → Fields at the same
-moment) or, as the explicit exception, adds a call-only variable that never
-touches the customer card. There is one field registry; agents reference it,
-they never retype it. Deleting a customer field an agent still references is
-refused for the same reason.
+Confirm-first no longer exists as configuration: extraction always
+asks-when-missing during the call, and the transcript pass fills only what
+was missed. Stored `voiceConfirm` flags are ignored.
 
 Renaming is label-only and therefore safe: the key is the identity (stored
-values and published agents address it), so editing a field's label in
-Voice agent → Fields ripples into every agent's editor instantly with nothing to
-republish. The key itself is derived from the label (question scaffolding
-stripped, capped at a word boundary; the one rule is `lib/keys.ts`), can be
-declared explicitly when the field is created, and can be edited in the table
-only while no agent references the field, never colliding with another key or
-a reserved system key.
+values and published agents address it), so editing a field's label —
+Customers → Contact fields, or the matrix — ripples everywhere instantly with
+nothing to republish. The key itself is derived from the label (the one rule
+is `lib/keys.ts`), can be declared explicitly when the field is created, and
+can move only while nothing addresses it. Handing a field back to staff is
+NOT guarded anymore: switching its check off IS the unlink, and the next
+publish stops deriving it.
 
-The Contact fields card is one sortable table, ported from Nudge's fields
-admin: system rows pinned and undeletable, org rows drag to reorder, and a
-Filled by column (Staff / Voice agent) instead of separate groups. A select's
-type cell reads "Select (n)" and expands into its options editor (removable
-pills plus "Add an option"); the same editor appears in the agent popover, and
-for a linked select both edit the field itself, which publish reads as the
-live truth. A field an agent references can be neither deleted nor handed
-back to staff until the agent unlinks it.
+The Contact fields table lives under Customers (its own tab since
+2026-08-25): system rows pinned, org rows drag to reorder, and a Voice agent
+column that is the same switch the matrix renders.
 
 The precedence rule is fixed:
 
-1. a value explicitly confirmed during the live call wins;
+1. a value the caller gives during the live call wins;
 2. post-call transcript extraction only fills a missing customer value; and
 3. before-call context is recorded with the call but never writes back by
    itself.
