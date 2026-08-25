@@ -33,6 +33,7 @@ import {
 import {
   Activity,
   AdminSearchProvider,
+  CopyId,
   Plane,
   Row,
   SearchSelect,
@@ -43,6 +44,7 @@ import {
 } from "../parts";
 import { CheckMark, SearchInput } from "@/components/DataTable";
 import { useSearch } from "@/lib/useTableState";
+import { MembersCard } from "./members";
 
 // The cal.com card is parked, not deleted — see the guard at its Section.
 const SHOW_CALCOM_CARD = false;
@@ -82,28 +84,6 @@ function Pill({
 // Provider ids are reference data the operator pastes into dashboards and
 // support tickets, so every id is one click to copy. The confirmation
 // replaces the text inside a fixed-width slot: nothing shifts.
-function CopyId({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1200);
-        });
-      }}
-      title="Copy"
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-[11px] hover:opacity-80"
-    >
-      <span className="truncate">{value}</span>
-      <span className="w-8 shrink-0 text-left text-[var(--muted)]">
-        {copied ? "copied" : "copy"}
-      </span>
-    </button>
-  );
-}
-
 // A labeled data value. Every fact carries its label — a timestamp or a
 // count with no name is the exact mess this page had before.
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -350,6 +330,781 @@ export default function TenantPage() {
         >
           <Activity orgId={orgId} />
         </Section>
+      )}
+
+      {(tab === "setup" || search.active) && (
+      <>
+      {/* One card where there were two (Serdar, 2026-08-20): "Voice" held
+          the key and "Voice agents" held a Connectable-agents toggle whose
+          value is a fact about the key — the platform key means the shared
+          workspace (picker scoped to this business's own agents), any other
+          key means the client's own account (whole workspace visible). That
+          scope now derives when the key is saved (connections.setFieldInternal),
+          so the toggle had nothing left to decide. The odd case — a second
+          key for the shared workspace — is set by hand via
+          platform.setOrgConfig, which still accepts voiceAgentSource. */}
+      <Section
+        title="Voice agents"
+        description="The Retell key this business runs on — it must be the workspace's webhook signing key. Which agents the business may connect follows from the key by itself: the platform key scopes the picker to its own agents, its own key opens its whole workspace."
+      >
+        {(conns ?? []).filter((row) => row.provider === "retell").map((row) => (
+          <SecretRow
+            key={`${row.provider}.${row.field}`}
+            label={`${row.providerLabel} ${row.fieldLabel}`}
+            hint={[row.fieldHint, row.label].filter(Boolean).join(" ") || undefined}
+            masked={row.masked}
+            onSave={(value) =>
+              setField({ orgId, provider: row.provider, field: row.field, value })
+            }
+          />
+        ))}
+
+      </Section>
+      </>
+      )}
+
+      {/* Agents live behind their own tab. Setup is credentials you install
+          once; this is running state that changes every call, and reading one
+          while looking for the other is why the Voice card had grown to hold
+          both. */}
+      {(tab === "agents" || search.active) && (
+      <>
+      {/* ONE list (Serdar, 2026-08-20). This was two cards — "Agent setup",
+          the auto-provisioning job log, above "Connected agents" — and for a
+          business whose agent was born in the Retell dashboard and then
+          connected, the pair read as a contradiction: "no agent has been
+          created yet" printed over a live, enabled agent. Where an agent came
+          from is not a card boundary. Provisioning jobs still in flight or
+          failed render below the agents; a COMPLETE job's outcome IS the
+          agent row, so it is not repeated as history. */}
+      <Section
+        title="Agents"
+        description="Every agent answering for this business — created by Resepta or connected from the Retell workspace — with whether Resepta's private runtime is published to it and whether call results are arriving. A failed provisioning job keeps its provider ids, so a retry repairs rather than duplicating."
+      >
+        {detail.agents.length === 0 &&
+        !detail.voiceProvisioning.some((job) => job.status !== "complete") ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">
+            No agent yet. Resepta provisions one at onboarding, or the business
+            connects an existing Retell agent from its Phone page once the key
+            is in.
+          </p>
+        ) : (
+          <>
+          {/* One line per agent (Serdar, 2026-08-20). The four-fact grid —
+              last call result, last analysis, "Clear" inbox — printed the
+              healthy answer to diagnostic questions nobody had asked, four
+              cells of "fine" under every agent. What survives is the name an
+              operator actually recognises, plus what can be WRONG: the
+              runtime (an agent without it answers with nothing), the inbox
+              only when something is stuck, and the enabled pill. Actual
+              failures keep their amber block below. */}
+          {detail.agents.map((agent) => (
+            <div key={agent.retellAgentId} className="space-y-2 py-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {agent.name && <span className="text-sm font-medium">{agent.name}</span>}
+                <CopyId value={agent.retellAgentId} />
+                <span className="text-xs text-[var(--muted)]">
+                  {agent.inboundNumber ?? "No line"}
+                </span>
+                {agent.runtimeConnectedAt ? (
+                  <Pill tone="ok">runtime {shortDate(agent.runtimeConnectedAt)}</Pill>
+                ) : (
+                  <Pill tone="warn">No runtime</Pill>
+                )}
+                {(agent.pendingEvents > 0 || agent.failedEvents > 0) && (
+                  <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
+                    {agent.pendingEvents} pending · {agent.failedEvents} failed
+                  </Pill>
+                )}
+                <span className="ml-auto">
+                  <Pill tone={agent.enabled ? "ok" : "warn"}>
+                    {agent.enabled ? "Enabled" : "Disabled"}
+                  </Pill>
+                </span>
+              </div>
+              {/* The ENGINE behind the agent: which model, at which tier,
+                  priced per conversation minute — the whole point is deciding
+                  here without opening Retell's pricing page. One picker
+                  because they are one decision; a model whose cost you cannot
+                  read without checking a second control beside it is how an
+                  agent came to bill double for months.
+
+                  "Platform default" is unset in the row, and it follows BOTH:
+                  the common case stays one string in the template rather than
+                  a fleet of rows pinning today's default forever. Picking
+                  anything else pins both, which is the trade this shape makes
+                  — a fleet tier change stops reaching an agent that chose. */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-[var(--muted)]">Engine</span>
+                <SearchSelect
+                  className="w-72"
+                  value={
+                    agent.llmModel
+                      ? encodeEngine(
+                          agent.llmModel,
+                          agent.llmHighPriority ??
+                            detail.platformHighPriority ??
+                            VOICE_AGENT_HIGH_PRIORITY,
+                        )
+                      : ""
+                  }
+                  disabled={settingModel === agent.retellAgentId}
+                  placeholder="Engine"
+                  searchPlaceholder="Search models"
+                  options={[
+                    {
+                      value: "",
+                      // The resolved fleet default from orgDetail, so this
+                      // label and the /admin dropdown can never disagree.
+                      label: `Platform default — ${engineLabel(
+                        detail.platformVoiceModel ?? VOICE_AGENT_MODEL,
+                        detail.platformHighPriority ?? VOICE_AGENT_HIGH_PRIORITY,
+                      )}`,
+                    },
+                    ...voiceEngineChoices().map((choice) => ({
+                      value: choice.value,
+                      label: choice.label,
+                      hint: formatVoicePrice(choice.usdPerMinute),
+                    })),
+                  ]}
+                  onChange={(next) => {
+                    const picked = decodeEngine(next);
+                    const model = picked?.id ?? null;
+                    const highPriority = picked ? picked.fast : null;
+                    if (
+                      (agent.llmModel ?? null) === model &&
+                      (agent.llmHighPriority ?? null) === highPriority
+                    ) {
+                      return;
+                    }
+                    setSettingModel(agent.retellAgentId);
+                    setModelError(null);
+                    void setAgentEngine({
+                      orgId,
+                      retellAgentId: agent.retellAgentId,
+                      model,
+                      highPriority,
+                    })
+                      .catch((error: unknown) =>
+                        setModelError({
+                          agentId: agent.retellAgentId,
+                          message:
+                            error instanceof Error ? error.message : "Engine change failed.",
+                        }),
+                      )
+                      .finally(() => setSettingModel(null));
+                  }}
+                />
+                {settingModel === agent.retellAgentId && (
+                  <span className="text-[var(--muted)]">Publishing…</span>
+                )}
+                {modelError?.agentId === agent.retellAgentId && (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    {modelError.message}
+                  </span>
+                )}
+              </div>
+              {agent.latestFailure && (
+                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {agent.latestFailure.eventType} · {shortDate(agent.latestFailure.receivedAt)} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
+                    </span>
+                    <button
+                      type="button"
+                      disabled={retryingAgent === agent.retellAgentId}
+                      onClick={() => {
+                        setRetryingAgent(agent.retellAgentId);
+                        setRetryError(null);
+                        void retryVoiceEvents({
+                          orgId,
+                          retellAgentId: agent.retellAgentId,
+                        })
+                          .catch((error: unknown) =>
+                            setRetryError({
+                              agentId: agent.retellAgentId,
+                              message: error instanceof Error ? error.message : "Retry failed.",
+                            }),
+                          )
+                          .finally(() => setRetryingAgent(null));
+                      }}
+                      className="rounded-lg px-2 py-1 font-medium hover:bg-amber-100 disabled:opacity-50 dark:hover:bg-amber-950/60"
+                    >
+                      {retryingAgent === agent.retellAgentId ? "Retrying…" : "Retry failed updates"}
+                    </button>
+                  </div>
+                  {agent.latestFailure.error && (
+                    <div className="mt-1 break-words font-mono">
+                      {agent.latestFailure.error}
+                    </div>
+                  )}
+                  {retryError?.agentId === agent.retellAgentId && (
+                    <div className="mt-1">{retryError.message}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {detail.voiceProvisioning.some((job) => job.status !== "complete") && (
+            <div className="py-2.5">
+              <div className="space-y-2">
+                {detail.voiceProvisioning
+                  .filter((job) => job.status !== "complete")
+                  .map((job, index) => (
+                    <div key={`${job.updatedAt}-${index}`} className="text-xs">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <Pill tone={job.status === "failed" ? "warn" : "muted"}>
+                          {job.status}
+                        </Pill>
+                        <span className="font-medium">{job.name}</span>
+                        <span className="text-[var(--muted)]">{job.template}</span>
+                        <span className="ml-auto text-[var(--muted)]">{shortDate(job.updatedAt)}</span>
+                      </div>
+                      {(job.retellAgentId || job.retellLlmId) && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {job.retellAgentId && <CopyId value={job.retellAgentId} />}
+                          {job.retellLlmId && <CopyId value={job.retellLlmId} />}
+                        </div>
+                      )}
+                      {job.error && (
+                        <div className="mt-1 break-words rounded-lg bg-amber-50 px-2 py-1.5 font-mono text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                          {job.error}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          </>
+        )}
+      </Section>
+      {/* Provisioning numbers lives with the agents that answer on them, not
+          under Usage where it sat unfindable — the flow is buy → operator
+          provisions the line here → the tenant's pickers offer it
+          (retell.orgNumberPolicy). */}
+      {voice && (
+        <Section
+          title="Phone lines"
+          description="The numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and no lines means NO numbers for them until you provision one here. Add a phone line offers the Retell account's real numbers, so provisioning is a click, never retyped E.164."
+        >
+          {provisionable === null ? (
+            <p className="py-2.5 text-xs text-[var(--muted)]">
+              Loading the account&apos;s numbers…
+            </p>
+          ) : provisionable === "error" ? (
+            <p className="py-2.5 text-xs text-amber-700 dark:text-amber-400">
+              Could not list the Retell account&apos;s numbers. Check the Voice key on Setup.
+            </p>
+          ) : provisionable.length === 0 ? (
+            <p className="py-2.5 text-xs text-[var(--muted)]">
+              The Retell account has no phone numbers (or no Voice key is set).
+            </p>
+          ) : (
+            <div className="py-1.5">
+              {/* This business's lines only, until "Add a phone line" opens
+                  the whole account (Serdar, 2026-08-20): the full inventory —
+                  every other client's number, each with its holder — is
+                  pick-time information, and as the standing view it read as
+                  a page of other people's lines under a business that has
+                  one. Stale allowlist entries (missing) always show, since
+                  unticking one here is how they get cleaned up. */}
+              {provisionable
+                .filter(
+                  (line) =>
+                    addingLine ||
+                    voice.allowedPhoneNumbers.includes(line.number) ||
+                    line.missing,
+                )
+                .map((line) => {
+                const on = voice.allowedPhoneNumbers.includes(line.number);
+                // A line another business holds cannot be ticked ON from
+                // here — one number, one business. It can still be ticked
+                // OFF if this org has it, whoever else claims it.
+                const blocked = !on && line.heldBy !== null;
+                return (
+                  <button
+                    key={line.number}
+                    type="button"
+                    disabled={blocked}
+                    onClick={() =>
+                      setAllowedPhoneNumbers({
+                        orgId,
+                        numbers: on
+                          ? voice.allowedPhoneNumbers.filter((n) => n !== line.number)
+                          : [...voice.allowedPhoneNumbers, line.number],
+                      })
+                    }
+                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckMark on={on} />
+                    <span className="font-mono text-xs">{line.number}</span>
+                    {line.nickname && (
+                      <span className="truncate text-xs text-[var(--muted)]">
+                        {line.nickname}
+                      </span>
+                    )}
+                    {line.missing && (
+                      <span className="text-xs text-amber-700 dark:text-amber-400">
+                        not on the Retell account — untick to clean up
+                      </span>
+                    )}
+                    {line.heldBy && (
+                      <span className="ml-auto shrink-0 text-xs text-[var(--muted)]">
+                        (held by {line.heldBy})
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {!addingLine &&
+                !provisionable.some(
+                  (line) =>
+                    voice.allowedPhoneNumbers.includes(line.number) ||
+                    line.missing,
+                ) && (
+                  <p className="px-2 py-1.5 text-xs text-[var(--muted)]">
+                    No line provisioned yet.
+                  </p>
+                )}
+              <div className="px-2 pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setAddingLine((open) => !open)}
+                  className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  {addingLine ? "Done" : "Add a phone line…"}
+                </button>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+      </>
+      )}
+
+      {(tab === "assistant" || search.active) && assistant && (
+      <>
+      <Section
+        title="Chat agent"
+        description="The WhatsApp assistant's lifecycle (docs/chat-agent.md). Shadow runs the full agent on real inbound and records every would-be reply without sending. Read a week of it before going live."
+      >
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Mode</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["off", "shadow", "live"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => void setChatAgentMode({ orgId, mode: option })}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  assistant.mode === option
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5 sm:grid-cols-4">
+          <Fact label="Model">
+            {assistant.llmKeyConfigured ? (
+              <Pill tone="ok">
+                {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} · {assistant.llmModel}
+              </Pill>
+            ) : (
+              <Pill tone="warn">
+                No {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} key, so the agent skips every turn
+              </Pill>
+            )}
+          </Fact>
+          <Fact label="Platform kill switch">
+            {assistant.killSwitch ? (
+              <Pill tone="warn">On, every org stopped</Pill>
+            ) : (
+              <span className="text-[var(--muted)]">Off</span>
+            )}
+          </Fact>
+          <Fact label={`Cost (${assistant.month})`}>
+            ${((assistant.usage?.llmCostMicroUsd ?? 0) / 1_000_000).toFixed(3)}
+            {" of "}
+            ${((assistant.budgetMicroUsd ?? assistant.defaultBudgetMicroUsd) / 1_000_000).toFixed(0)}
+          </Fact>
+          <Fact label="Turns this month">
+            {assistant.usage?.llmTurns ?? 0} · {(((assistant.usage?.llmInputTokens ?? 0) + (assistant.usage?.llmOutputTokens ?? 0)) / 1000).toFixed(1)}k tok
+          </Fact>
+        </div>
+        <Row
+          label="Monthly budget (USD)"
+          hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible below."
+          current={
+            assistant.budgetMicroUsd === null
+              ? undefined
+              : String(assistant.budgetMicroUsd / 1_000_000)
+          }
+          placeholder={String(assistant.defaultBudgetMicroUsd / 1_000_000)}
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setChatAgentBudget({
+              orgId,
+              budgetMicroUsd:
+                !value.trim() || Number.isNaN(parsed)
+                  ? null
+                  : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Platform kill switch</div>
+          <div>
+            <button
+              type="button"
+              onClick={() =>
+                void setPlatformFlag({
+                  key: "chatAgentDisabled",
+                  value: assistant.killSwitch ? "" : "true",
+                })
+              }
+              className={`rounded-lg px-2 py-1 text-xs ${
+                assistant.killSwitch
+                  ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
+              }`}
+            >
+              {assistant.killSwitch
+                ? "Every agent is stopped. Click to re-enable"
+                : "Stop every org's agent"}
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Flight recorder"
+        description="The last 25 turns, newest first: sent, shadowed, skipped and failed alike. Expand one to read the reply and every tool call with its arguments and result."
+      >
+        {assistant.turns.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">No turns yet.</p>
+        ) : (
+          <div className="space-y-1 py-2">
+            {assistant.turns.map((turn, index) => (
+              <details key={`${turn.at}-${index}`} className="text-xs">
+                <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 py-1 [&::-webkit-details-marker]:hidden">
+                  <Pill
+                    tone={
+                      turn.status === "sent"
+                        ? "ok"
+                        : turn.status === "error"
+                          ? "warn"
+                          : "muted"
+                    }
+                  >
+                    {turn.status}
+                  </Pill>
+                  <span className="font-medium">{turn.customerName}</span>
+                  {turn.error && (
+                    <span className="text-amber-700 dark:text-amber-400">{turn.error}</span>
+                  )}
+                  <span className="ml-auto text-[var(--muted)]">
+                    {(turn.inputTokens + turn.outputTokens).toLocaleString()} tok ·
+                    ${(turn.costMicroUsd / 1_000_000).toFixed(4)} · v{turn.templateVersion} ·{" "}
+                    {shortDate(turn.at)}
+                  </span>
+                </summary>
+                {/* Indent alone, no left bar. A 2px rule down the side of an
+                    expander is the accent-bar habit the house rules ban, and
+                    the summary directly above already says what this belongs
+                    to. Spacing carries the nesting. */}
+                <div className="space-y-1.5 py-1 pl-4">
+                  {turn.reply && <p className="whitespace-pre-wrap">{turn.reply}</p>}
+                  {turn.toolCalls && (
+                    <pre className="overflow-x-auto rounded-lg bg-[var(--muted-bg)] p-2 font-mono text-[11px]">
+                      {JSON.stringify(JSON.parse(turn.toolCalls), null, 2)}
+                    </pre>
+                  )}
+                  {turn.latencyMs !== undefined && (
+                    <p className="text-[var(--muted)]">{turn.latencyMs} ms · {turn.model}</p>
+                  )}
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </Section>
+      </>
+      )}
+
+      {/* The tenant's number request (numberRequests.ts): the registration
+          document regulators want before a number can be provisioned. The
+          decision here is the operator's own cue to go buy the line at the
+          provider and assign it above — the app never purchases numbers. */}
+      {(tab === "agents" || search.active) && numberReqs && numberReqs.length > 0 && (
+        <Section
+          title="Number provisioning"
+          description="The business uploaded its company registration to request a phone number. Download it, verify it, then approve (and go provision the line at the provider) or deny with a reason the business will read."
+        >
+          <div className="space-y-3 py-2">
+            {numberReqs.map((req) => (
+              <div
+                key={req.requestId}
+                className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  {req.url ? (
+                    <a
+                      href={req.url}
+                      target="_blank"
+                      rel="noopener"
+                      className="font-medium text-[var(--accent)] hover:underline"
+                    >
+                      {req.fileName}
+                    </a>
+                  ) : (
+                    <span className="font-medium">{req.fileName}</span>
+                  )}
+                  <span className="text-xs text-[var(--muted)]">
+                    {Math.max(1, Math.round(req.size / 1024))} KB ·{" "}
+                    {new Date(req.createdAt).toLocaleString("en-GB")}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      req.status === "pending"
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                        : req.status === "approved"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                    }`}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+                {req.note && (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Note to the business: {req.note}
+                  </p>
+                )}
+                {req.status === "pending" && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      value={numberNote}
+                      onChange={(e) => setNumberNote(e.target.value)}
+                      placeholder="Note to the business (required to deny)"
+                      className="min-w-64 flex-1 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void decideNumberRequest({
+                          requestId: req.requestId,
+                          decision: "approved",
+                          note: numberNote.trim() || undefined,
+                        }).then(() => setNumberNote(""));
+                      }}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!numberNote.trim()}
+                      onClick={() => {
+                        void decideNumberRequest({
+                          requestId: req.requestId,
+                          decision: "denied",
+                          note: numberNote.trim(),
+                        }).then(() => setNumberNote(""));
+                      }}
+                      className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+        </Section>
+      )}
+
+      {/* Under Agents rather than a tab of its own (Serdar, 2026-08-20): the
+          meter and the wallet are facts ABOUT the phone agents, and Assistant
+          already keeps its cost card on the same page as the thing it
+          meters. A seventh tab for two cards was navigation, not
+          organization. */}
+      {(tab === "agents" || search.active) && voice && (
+      <>
+      <Section
+        title="Voice meter"
+        description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands, so changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
+      >
+        <Row
+          label="Rate (USD per minute)"
+          hint={
+            voice.defaultRateMicroUsdPerMinute === null
+              ? "Override for this business only. Empty = the platform default, which is not set yet; calls bill at $0 until one exists (Platform tab on the fleet page)."
+              : `Override for this business only. Empty = the platform default, currently $${(voice.defaultRateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min. History keeps the rate it was stamped with.`
+          }
+          current={
+            voice.rateMicroUsdPerMinute === null
+              ? undefined
+              : String(voice.rateMicroUsdPerMinute / 1_000_000)
+          }
+          // The real resolution is org ?? platform ?? 0, so with no platform
+          // rate the truthful "what applies when empty" is nothing at all —
+          // the old "0.30" here promised a price nobody would be charged.
+          placeholder={
+            voice.defaultRateMicroUsdPerMinute === null
+              ? undefined
+              : String(voice.defaultRateMicroUsdPerMinute / 1_000_000)
+          }
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setVoiceRate({
+              orgId,
+              rateMicroUsdPerMinute:
+                !value.trim() || Number.isNaN(parsed)
+                  ? null
+                  : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+          <div className="text-sm font-medium">Billing mode</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["invoice", "prepaid"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => void setBillingMode({ orgId, mode: option })}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  voice.billingMode === option
+                    ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+            <span className="text-xs text-[var(--muted)]">
+              Invoice: meter only, settle outside the product. Prepaid: Stripe
+              wallet, an empty balance declines new calls at ring time.
+            </span>
+          </div>
+        </div>
+        {voice.billingMode === "prepaid" && (
+          <>
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+              <div className="text-sm font-medium">Wallet balance</div>
+              <div
+                className={`text-sm tabular-nums ${
+                  voice.walletBalanceMicroUsd <= 0
+                    ? "text-red-600 dark:text-red-400"
+                    : ""
+                }`}
+              >
+                {usd(voice.walletBalanceMicroUsd)}
+                {voice.walletBalanceMicroUsd <= 0 && ", declining new calls"}
+              </div>
+            </div>
+            <Row
+              label="Add credit (USD)"
+              hint="Manual credit on top of Stripe top-ups: goodwill, a correction, or negative to claw one back. Applies immediately."
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                if (!value.trim() || Number.isNaN(parsed) || parsed === 0) {
+                  return Promise.resolve();
+                }
+                return addWalletCredit({
+                  orgId,
+                  amountMicroUsd: Math.round(parsed * 1_000_000),
+                });
+              }}
+            />
+            {voice.topups.length > 0 && (
+              <div className="overflow-x-auto py-2">
+                <table className="w-full text-sm">
+                  {/* No colour override on thead. The global rule paints it
+                      --table-header-fg and draws the one rule under it; a
+                      per-table --muted-strong here fought that and made this
+                      the only header in the app reading as a caption. */}
+                  <thead className="text-left text-xs">
+                    <tr>
+                      <th className="pb-2 pr-3 pt-1 font-semibold">Top-up</th>
+                      <th className="pb-2 pr-3 pt-1 font-semibold">Amount</th>
+                      <th className="pb-2 pt-1 font-semibold">Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voice.topups.map((t) => (
+                      <tr
+                        key={`${t.at}-${t.amountMicroUsd}`}
+                        className="border-t border-[var(--table-divider)] tabular-nums"
+                      >
+                        <td className="py-1.5 pr-3">
+                          {new Date(t.at).toLocaleString("en-GB")}
+                        </td>
+                        <td className="py-1.5 pr-3">{usd(t.amountMicroUsd)}</td>
+                        <td className="py-1.5">{t.source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+        {voice.months.length === 0 ? (
+          <p className="py-2.5 text-xs text-[var(--muted)]">No metered calls yet.</p>
+        ) : (
+          <div className="overflow-x-auto py-2">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs">
+                <tr>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Month</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Calls</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Talk time</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Billed</th>
+                  <th className="pb-2 pr-3 pt-1 font-semibold">Retell cost</th>
+                  <th className="pb-2 pt-1 font-semibold">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {voice.months.map((m) => {
+                  const margin = m.billedMicroUsd - m.costMicroUsd;
+                  return (
+                    <tr key={m.month} className="border-t border-[var(--table-divider)] tabular-nums">
+                      <td className="py-1.5 pr-3">{m.month}</td>
+                      <td className="py-1.5 pr-3">{m.calls}</td>
+                      <td className="py-1.5 pr-3">{minSec(m.seconds)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.billedMicroUsd)}</td>
+                      <td className="py-1.5 pr-3">{usd(m.costMicroUsd)}</td>
+                      <td
+                        className={`py-1.5 ${
+                          margin < 0 ? "text-red-600 dark:text-red-400" : ""
+                        }`}
+                      >
+                        {usd(margin)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+      </>
+      )}
+
+      {(tab === "members" || search.active) && (
+        <MembersCard
+          orgId={orgId}
+          members={detail.members}
+          pendingInvites={detail.pendingInvites}
+        />
       )}
 
       {(tab === "setup" || search.active) && (

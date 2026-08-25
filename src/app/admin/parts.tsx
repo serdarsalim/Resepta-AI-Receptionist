@@ -96,6 +96,32 @@ export function Count({
   );
 }
 
+// An id or an address you came here to paste somewhere else. Shared rather
+// than living on one page: the tenant detail and the Members card both draw
+// it, and a second copy is a second set of paddings to keep in step.
+export function CopyId({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+      title="Copy"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md bg-[var(--muted-bg)] px-1.5 py-0.5 font-mono text-[11px] hover:opacity-80"
+    >
+      <span className="truncate">{value}</span>
+      <span className="w-8 shrink-0 text-left text-[var(--muted)]">
+        {copied ? "copied" : "copy"}
+      </span>
+    </button>
+  );
+}
+
+
 // Delivery outcome as a dot and a word. Failed is the loud one; queued is a
 // normal in-flight state, not an alarm.
 function StatusPill({ status, deadLettered }: { status: string; deadLettered: boolean }) {
@@ -922,10 +948,15 @@ export function SearchSelect({
 export function Section({
   title,
   description,
+  action,
   children,
 }: {
   title: string;
   description?: string;
+  // The card's own creating action, top right — inside the card it acts on,
+  // never floating on the page above it. Optional because most sections on
+  // this page are read-and-edit-in-place and have nothing to create.
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const search = useAdminSearch();
@@ -964,6 +995,7 @@ export function Section({
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold">{title}</h2>
         {description && <InfoTip text={description} />}
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <div className="mt-2">{children}</div>
     </section>
