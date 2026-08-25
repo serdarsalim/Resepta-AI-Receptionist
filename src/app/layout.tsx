@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Nunito } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import { LanguageProvider } from "@/lib/LanguageProvider";
@@ -14,6 +14,22 @@ import "./globals.css";
 import "flag-icons/css/flag-icons.min.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+
+// The wordmark's face, and ONLY the wordmark's. resepta.xyz sets Nunito on
+// <html> and runs the entire marketing site in it; here it is scoped to the
+// six letters of the signature, because the product's reading face is Geist
+// and swapping every table, form and message thread to a rounded display sans
+// is a different decision from making the brand mark match its own website.
+//
+// One weight, 800, which is what the marketing lockup wears
+// (`text-xl font-extrabold tracking-tight`). Naming the weight rather than
+// omitting it ships the static cut instead of the whole variable range, so the
+// signature costs one small file rather than an axis nothing here animates.
+const nunito = Nunito({
+  variable: "--font-nunito",
+  subsets: ["latin"],
+  weight: ["800"],
+});
 
 // Next's default viewport is width=device-width,initial-scale=1 and nothing
 // else, which is fine until you ask for a safe-area inset: env(safe-area-inset-*)
@@ -69,7 +85,7 @@ export default function RootLayout({
       <html
         lang={DEFAULT_LANGUAGE}
         suppressHydrationWarning
-        className={`${geistSans.variable} h-full`}
+        className={`${geistSans.variable} ${nunito.variable} h-full`}
       >
         <body className="min-h-full antialiased">
           {/* Correct .dark class before hydration — no theme flash. */}

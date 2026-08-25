@@ -452,6 +452,25 @@ thead {
     border-radius: 0.5rem;
     box-shadow: var(--card-shadow);
   }
+
+  /* The Resepta signature, taken from resepta.xyz rather than approximated:
+     that site sets Nunito on <html> and draws the lockup as
+     `text-xl font-extrabold tracking-tight`, so the weight and the tracking
+     here are its two, and only the size is left to the call site.
+
+     A class rather than three utilities copied twice. The wordmark appears in
+     the sidebar and on the sign-in page, and those are the two places a brand
+     drifts apart when each is styled by hand.
+
+     Geist is named as the fallback rather than left to system-ui, because the
+     wordmark is six letters that must not reflow into a different face while
+     one font file loads. */
+  .wordmark {
+    font-family: var(--font-nunito), var(--font-geist-sans), system-ui,
+      sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
 }
 
 /* Email bodies render as white "paper" whatever the app theme is. Real mail

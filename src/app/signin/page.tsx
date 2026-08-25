@@ -35,9 +35,7 @@ export default function SignInPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandMark />
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-            {t("app.name")}
-          </h1>
+          <h1 className="wordmark mt-3 text-2xl">{t("app.name")}</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">{t("app.tagline")}</p>
         </div>
 

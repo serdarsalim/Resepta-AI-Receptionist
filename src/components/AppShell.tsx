@@ -1681,7 +1681,7 @@ export function AppShell({
             >
               <BrandMark size={showCollapsed ? 24 : 20} />
               {!showCollapsed && (
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+                <span className="wordmark min-w-0 flex-1 truncate text-[15px]">
                   {t("app.name")}
                 </span>
               )}
