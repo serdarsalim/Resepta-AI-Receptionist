@@ -93,9 +93,6 @@ export type VoiceEditorSaveState = {
   discard: () => void;
 };
 
-// Where in the call a variable is captured. A row is grouped by its most
-// active phase; the popover's picker is what moves it.
-type Phase = "before" | "during" | "after";
 
 export type VoiceContactField = {
   id: string;
@@ -360,7 +357,7 @@ export function VoiceVariablesEditor({
   // value is injected before the call and the agent only asks when it is
   // missing. Without the prefill, every adopted field re-interrogated people
   // the business already knew.
-  const adoptField = (field: VoiceContactField, phase: Phase = "during") => {
+  const adoptField = (field: VoiceContactField, section: "sees" | "fills" = "fills") => {
     const base: VoiceVariable = {
       ...blankVariable(),
       key: field.key,
@@ -370,8 +367,13 @@ export function VoiceVariablesEditor({
       destination: "contact",
       contactFieldId: field.id,
     };
+    // A fills row gets the whole lifecycle at once — injected so a repeat
+    // caller is not re-interrogated, asked mid-call when missing, recovered
+    // from the transcript when the ask was missed. These used to be three
+    // separately-chosen phases; they are one behaviour now, because there is
+    // no honest reason to want a field asked-for but not recovered.
     const row: VoiceVariable =
-      phase === "before"
+      section === "sees"
         ? // Context only: read the stored value into the call, capture nothing.
           {
             ...base,
@@ -382,13 +384,12 @@ export function VoiceVariablesEditor({
             destination: "call",
             contactFieldId: undefined,
           }
-        : phase === "after"
-          ? { ...base, duringMode: "none", afterCall: true }
-          : {
-              ...base,
-              beforeSource: "contact_field",
-              beforeFieldId: field.id,
-            };
+        : {
+            ...base,
+            beforeSource: "contact_field",
+            beforeFieldId: field.id,
+            afterCall: true,
+          };
     setDraft((rows) => [...rows, row]);
     setFocusLast(true);
   };
@@ -397,12 +398,12 @@ export function VoiceVariablesEditor({
   // fields at the same moment it becomes a row here, so the two registries
   // cannot drift apart. If the label folds to a key an unclaimed voice field
   // already owns, adopt that field instead of failing on the collision.
-  const createFieldAndAdopt = async (label: string, phase: Phase) => {
+  const createFieldAndAdopt = async (label: string, section: "sees" | "fills") => {
     const key = keyFromLabel(label);
     if (!key) return;
     const existing = voiceFields.find((field) => field.key === key);
     if (existing) {
-      adoptField(existing, phase);
+      adoptField(existing, section);
       return;
     }
     try {
@@ -413,7 +414,7 @@ export function VoiceVariablesEditor({
       })) as string;
       const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true };
       setCreatedFields((rows) => [...rows, field]);
-      adoptField(field, phase);
+      adoptField(field, section);
     } catch {
       setStatus(t("voiceVariables.fieldExists"));
     }
@@ -422,16 +423,19 @@ export function VoiceVariablesEditor({
   // Call-scoped variable: named in the picker, saved with the call only.
   // Deliberately NOT a customer field — per-call answers ("reason for
   // calling") on the customer card is how a field registry rots.
-  const addCallOnly = (label: string, phase: Phase) => {
+  // Only the sees section offers this: a static value injected into every
+  // call. (A capture row must land somewhere, so "just for this call" is not
+  // offered where answers are collected.)
+  const addCallOnly = (label: string) => {
     setDraft((rows) => [
       ...rows,
       {
         ...blankVariable(),
         label,
         key: keyFromLabel(label),
-        duringMode: phase === "during" ? "if_missing" : "none",
-        afterCall: phase !== "before",
-        beforeSource: phase === "before" ? "static" : "none",
+        duringMode: "none",
+        afterCall: false,
+        beforeSource: "static",
       },
     ]);
     setFocusLast(true);
@@ -444,9 +448,9 @@ export function VoiceVariablesEditor({
   // column, because there is no other honest reading of "ask the caller their
   // name". It used to default to call-only, which is how a first-time caller
   // ended up as a record with a phone number and no name on it.
-  const adoptBuiltin = (builtin: PickerBuiltin, phase: Phase) => {
+  const adoptBuiltin = (builtin: PickerBuiltin) => {
     const customerField = customerFieldOf(builtin.key);
-    const captures = phase !== "before";
+    const captures = true;
     setDraft((rows) => [
       ...rows,
       {
@@ -454,8 +458,8 @@ export function VoiceVariablesEditor({
         label: builtin.label,
         key: builtin.key,
         beforeSource: builtin.source,
-        duringMode: phase === "during" ? "if_missing" : "none",
-        afterCall: phase === "after",
+        duringMode: "if_missing",
+        afterCall: true,
         ...(customerField && captures
           ? { destination: "customer" as const, customerField }
           : {}),
@@ -585,11 +589,16 @@ export function VoiceVariablesEditor({
   // Which group a row lives in. A Resepta variable is a LIFECYCLE, not a
   // single moment — one row can be seeded before the call, asked during it and
   // recovered from the analysis after. So the group is its most active phase,
-  // and the phase picker in the Type popover is what moves it between groups.
-  // The other phases stay visible on the row as small tags rather than as
-  // three extra columns nobody could edit inline at this width.
-  const phaseOf = (row: VoiceVariable): Phase =>
-    row.duringMode !== "none" ? "during" : row.afterCall ? "after" : "before";
+  // Context rows are injected and capture nothing; everything else is a
+  // capture row. This is the ONLY distinction the editor draws now. It used
+  // to project rows onto three phase headings (Knows / Asks / Learns) by
+  // priority — during beats after beats before — which meant two rows under
+  // one heading could behave differently and a row moved headings when a
+  // switch changed. The runtime's before/during/after timeline is real and
+  // still stored; it stopped being a filing system (Serdar: "knows asks
+  // learns is still getting me super confused").
+  const isContext = (row: VoiceVariable): boolean =>
+    row.duringMode === "none" && !row.afterCall;
 
   const patch = (index: number, next: Partial<VoiceVariable>) =>
     setDraft((rows) => rows.map((row, i) => (i === index ? { ...row, ...next } : row)));
@@ -604,18 +613,9 @@ export function VoiceVariablesEditor({
     setDraft((rows) => rows.filter((_, i) => i !== index));
   };
 
-  const groups: { id: Phase; title: string; tip: string }[] = [
-    {
-      id: "before",
-      title: t("voiceDetail.before"),
-      tip: t("voiceDetail.beforeHint"),
-    },
-    {
-      id: "during",
-      title: t("voiceDetail.during"),
-      tip: t("voiceDetail.duringHint"),
-    },
-    { id: "after", title: t("voiceDetail.after"), tip: t("voiceDetail.afterHint") },
+  const sections: { id: "sees" | "fills"; title: string; tip: string }[] = [
+    { id: "sees", title: t("voiceVariables.sees"), tip: t("voiceVariables.seesHint") },
+    { id: "fills", title: t("voiceVariables.fills"), tip: t("voiceVariables.fillsHint") },
   ];
 
   // Built-ins and the org's voice-enabled customer fields that no row captures
@@ -631,21 +631,17 @@ export function VoiceVariablesEditor({
   // What the pickers offer. "Service list" stays out: it is injected context
   // with no before-source, not a value a row can hold.
   //
-  // Phase matters: a during/after row CAPTURES, and a captured value must
-  // land somewhere. Phone, language and business name have no writable
-  // column — phone identifies the caller, language and business name belong
-  // to the org — so they are offered as before-call context only. Offering
-  // "Customer phone" as a question was how a row got created that could
-  // never say where its answer went.
-  // Built-ins are NEVER offered to the before group: everything they carry is
-  // already on the always-sent rows, so adopting one there minted an editable
-  // clone of a fact set elsewhere (Serdar, seeing "+ Add default" list rows
-  // he could read right above it). Capture groups keep the ones that land on
-  // a customer column — asking for a first name is a real question.
-  const pickerBuiltinsFor = (phase: Phase): PickerBuiltin[] =>
-    phase === "before"
-      ? []
-      : availableBuiltins
+  // A capture row's value must land somewhere. Phone, language and business
+  // name have no writable column — phone identifies the caller, language and
+  // business name belong to the org — so they are never offered as questions;
+  // offering "Customer phone" was how a row got created that could never say
+  // where its answer went. What is offered is the built-ins that land on a
+  // customer column, since asking for a first name is a real question. The
+  // sees section offers no built-ins at all: everything they carry is already
+  // on the always-sent rows, and adopting one there minted an editable clone
+  // of a fact set elsewhere.
+  const pickerBuiltins = (): PickerBuiltin[] =>
+    availableBuiltins
           .filter((builtin) => builtin.key !== "services")
           .filter((builtin) => customerFieldOf(builtin.key))
           .map((builtin) => ({
@@ -705,7 +701,7 @@ export function VoiceVariablesEditor({
   };
 
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
-    const phased = pickerBuiltinsFor(phaseOf(row));
+    const phased = isContext(row) ? [] : pickerBuiltins();
     const own = builtinVoiceVariables(t).find(
       (builtin) => builtin.key === row.key && builtin.key !== "services",
     );
@@ -752,18 +748,20 @@ export function VoiceVariablesEditor({
           so the overflow container cannot clip them. */}
       <div className="overflow-x-auto">
       <div className="min-w-[38rem] space-y-4">
-        {groups.map((group) => {
+        {sections.map((section) => {
           const rows = draft
             .map((row, index) => ({ row, index }))
-            .filter(({ row }) => phaseOf(row) === group.id);
+            .filter(({ row }) =>
+              section.id === "sees" ? isContext(row) : !isContext(row),
+            );
           return (
-            <div key={group.id}>
+            <div key={section.id}>
               {/* Foreground and semibold, not muted: these headings are the
                   capture phases themselves — the one structural fact each
                   row no longer repeats — so they carry the table. */}
               <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold">
-                {group.title}
-                <InfoTip text={group.tip} />
+                {section.title}
+                <InfoTip text={section.tip} />
               </div>
               <div className="space-y-1.5">
                 {rows.map(({ row, index }) => {
@@ -773,7 +771,7 @@ export function VoiceVariablesEditor({
                   // elsewhere. It renders like its injected twin and keeps
                   // only the ✕, which clears the redundant registry entry.
                   const provided =
-                    group.id === "before" ? providedByKey.get(row.key) : undefined;
+                    section.id === "sees" ? providedByKey.get(row.key) : undefined;
                   if (provided) {
                     return (
                       <div key={index} className={VAR_GRID}>
@@ -874,7 +872,7 @@ export function VoiceVariablesEditor({
                     This list mirrors beforeCallContext's dynamicVariables
                     key for key; if the runtime gains a variable, it appears
                     here or the table is lying. */}
-                {group.id === "before" &&
+                {section.id === "sees" &&
                   [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
                     <div key={item.key} className={VAR_GRID}>
                       {/* Label only, same as the row above. */}
@@ -899,19 +897,19 @@ export function VoiceVariablesEditor({
                   ))}
                 <VariablePicker
                   addLabel={
-                    group.id === "before" ? t("voiceVariables.addDefault") : undefined
+                    section.id === "sees" ? t("voiceVariables.addDefault") : undefined
                   }
                   fields={availableFields}
-                  builtins={pickerBuiltinsFor(group.id)}
-                  onField={(field) => adoptField(field, group.id)}
-                  onBuiltin={(builtin) => adoptBuiltin(builtin, group.id)}
-                  onCreate={(label) => void createFieldAndAdopt(label, group.id)}
-                  onCallOnly={(label) => addCallOnly(label, group.id)}
+                  builtins={section.id === "sees" ? [] : pickerBuiltins()}
+                  onField={(field) => adoptField(field, section.id)}
+                  onBuiltin={(builtin) => adoptBuiltin(builtin)}
+                  onCreate={(label) => void createFieldAndAdopt(label, section.id)}
+                  onCallOnly={(label) => addCallOnly(label)}
                   // "Just for this call" only where a row is context, not an
-                  // answer. A during/after variable captures something the
-                  // caller said, and a captured value with no destination is
-                  // the invisible-orphan case this editor no longer permits.
-                  allowCallOnly={group.id === "before"}
+                  // answer. A capture variable's value must land somewhere, and
+                  // a captured value with no destination is the
+                  // invisible-orphan case this editor no longer permits.
+                  allowCallOnly={section.id === "sees"}
                 />
               </div>
             </div>

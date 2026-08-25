@@ -2555,45 +2555,41 @@ const dictionary = {
   // in the call's timeline (that lives in each group's InfoTip). The
   // sequence also tells the product's whole loop: knows, asks, learns,
   // knows more next time.
-  "voiceDetail.before": {
-    tr: "Bilir",
-    en: "Knows",
-    de: "Weiß",
+  // The variables editor's two sections since 2026-08-25. Two, not the three
+  // capture phases (Knows / Asks / Learns) they replace: before/during/after
+  // is the RUNTIME's timeline, and reading it back as a taxonomy confused the
+  // one person it was for (Serdar: "knows asks learns is still getting me
+  // super confused, do we need those distinctions at all?!"). The owner's two
+  // real questions are what the agent is told and what it may write down.
+  "voiceVariables.sees": {
+    tr: "Asistanın gördükleri",
+    en: "What the agent sees",
+    de: "Was der Assistent sieht",
   },
-  "voiceDetail.beforeHint": {
-    tr: "Arama başlarken asistana verilen bilgiler; kimi aradığını böylece önceden bilir.",
-    en: "Values handed to the agent when the call is placed, so it already knows who it is calling.",
-    de: "Angaben, die der Assistent beim Start des Anrufs erhält, damit er schon weiß, wen er anruft.",
+  "voiceVariables.seesHint": {
+    tr: "Her aramada asistana otomatik verilir: arayanın kartı, randevuları, hizmetleriniz, ekip ve işletme bilgileri. Kurulum gerektirmez.",
+    en: "Handed to the agent automatically on every call: the caller's card, their appointments, your services, staff and business knowledge. Nothing to set up.",
+    de: "Wird dem Assistenten bei jedem Anruf automatisch mitgegeben: die Karte des Anrufers, seine Termine, Ihre Leistungen, das Team und die Betriebsinfos. Keine Einrichtung nötig.",
+  },
+  "voiceVariables.fills": {
+    tr: "Asistanın doldurdukları",
+    en: "What the agent fills in",
+    de: "Was der Assistent ausfüllt",
+  },
+  "voiceVariables.fillsHint": {
+    tr: "Asistanın sorup kaydettiği alanlar. Cevap eksikse konuşma sırasında sorar; gözden kaçanı arama bittiğinde konuşmadan tamamlar.",
+    en: "Fields the agent asks about and writes down. It asks during the call when the answer is missing; anything it misses is recovered from the conversation once the call ends.",
+    de: "Felder, die der Assistent erfragt und einträgt. Fehlt die Antwort, fragt er im Gespräch; Übersehenes wird nach dem Anruf aus dem Gespräch ergänzt.",
   },
   "voiceDetail.beforeEmpty": {
     tr: "Bilgi verilmiyor.",
     en: "Nothing injected.",
     de: "Keine Angaben.",
   },
-  "voiceDetail.during": {
-    tr: "Sorar",
-    en: "Asks",
-    de: "Fragt",
-  },
-  "voiceDetail.duringHint": {
-    tr: "Asistanın konuşma sırasında çağırabildiği fonksiyonlar. Takvime bakıp randevu almasını bunlar sağlar.",
-    en: "Functions the agent can call mid-conversation. This is how it checks the diary and books.",
-    de: "Funktionen, die der Assistent im Gespräch aufrufen kann. Damit prüft er den Kalender und vergibt Termine.",
-  },
   "voiceDetail.duringEmpty": {
     tr: "Fonksiyon yok. Konuşabilir ama randevu alamaz.",
     en: "No functions. It can talk, but not book.",
     de: "Keine Funktionen. Er kann sprechen, aber keine Termine vergeben.",
-  },
-  "voiceDetail.after": {
-    tr: "Öğrenir",
-    en: "Learns",
-    de: "Lernt",
-  },
-  "voiceDetail.afterHint": {
-    tr: "Arama bittiğinde konuşmadan tamamlanan bilgiler.",
-    en: "Information recovered from the conversation once the call ends.",
-    de: "Angaben, die nach dem Anruf aus dem Gespräch ergänzt werden.",
   },
   "voiceDetail.afterEmpty": {
     tr: "Bilgi çıkarılmıyor.",
