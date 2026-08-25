@@ -611,6 +611,11 @@ const dictionary = {
   "status.no_show": { tr: "Gelmedi", en: "No-show", de: "Nicht erschienen" },
 
   "customers.title": { tr: "Müşteriler", en: "Customers", de: "Kunden" },
+  // The first tab on the Customers strip. NOT "Müşteriler" — the sidebar row
+  // and the header already say that, and a strip must not re-name the page it
+  // sits on. Same reason VoiceView's first tab is "Agents" and not
+  // "Voice agent".
+  "customers.tabList": { tr: "Liste", en: "List", de: "Liste" },
   "customers.new": {
     tr: "Müşteri ekle",
     en: "Add customer",

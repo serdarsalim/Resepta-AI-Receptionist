@@ -1566,9 +1566,13 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   if (!isOwner && fields !== undefined && rows.length === 0) return null;
 
   return (
-    // Titled again: it renders under the Voice agent's Fields chip, and the
-    // strip names the SECTION while the card carries the (i) that explains what
-    // a field is for. KnowledgeCard beside it works the same way.
+    // Titled, under a tab of the same name — which is the one case the "a strip
+    // naming a section means the page must not name it again" rule forbids, and
+    // it is kept deliberately for the reason that rule itself names: deleting
+    // the heading deletes the (i), and this (i) is the only place the product
+    // explains what a contact field IS. That sentence is worth more to a salon
+    // owner than the repetition costs. Moved from the Voice agent's strip to
+    // the Customers strip on 2026-08-25; see CustomersView's header for why.
     <Card
       title={t("fields.title")}
       tip={t("fields.hint")}

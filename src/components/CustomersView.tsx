@@ -17,6 +17,26 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
+import { FieldsCard } from "./BusinessView";
+
+// The list, and the definition of what the list HOLDS. Contact fields moved
+// here from the voice agent's strip on 2026-08-25 (Serdar: the app is for
+// people who are not technically versatile, and nobody looks under Voice to
+// find out what they record about a customer).
+//
+// The argument that kept them on that strip is in VoiceView's header and it
+// half made this case itself: a field's sibling is the customer record, not
+// the price list. What it weighed against that was the cohesion of the voice
+// tab — the agent, its calls, and the vocabulary it works in — and cohesion
+// for the person building the agent lost to findability for the person who
+// owns the salon. The Locked / Can edit column stays, because the agent IS a
+// consumer of these fields; it is one column now instead of the landlord.
+//
+// NOT the foot of the Columns picker, where it also briefly lived. Fields are
+// those columns, so the rule about rare actions fit the letter and missed the
+// point: this is a setup surface, and a setup surface inside a dropdown is not
+// findable by the person who needs it most.
+type CustomersSection = "list" | "fields";
 
 type Customer = FunctionReturnType<typeof api.customers.list>[number];
 type ContactField = Doc<"contactFields">;
@@ -185,6 +205,13 @@ export function CustomersView({
   const contactFields = useQuery(api.contactFields.list, {});
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
+  const [section, setSection] = useState<CustomersSection>("list");
+  // Read here rather than taken as a prop, the same way VoiceView does it:
+  // FieldsCard needs it, this is the only other caller, and threading a
+  // permission down through AppShell for one card puts the answer somewhere
+  // that does not own the question. Staff see the fields read-only.
+  const me = useQuery(api.orgs.current, {});
+  const isOwner = me ? me.me.role !== "staff" : false;
 
   // Opening the record IS reading it, so the dot goes out on the way in — the
   // same stamp the inbox writes when somebody dismisses a row by hand, because
@@ -524,8 +551,8 @@ export function CustomersView({
     </button>
   );
 
-  return (
-    <div className="space-y-4 page-stack">
+  const list = (
+    <>
       {/* A phone has no table to hang a header on — it gets the card list
           below — so the one action it needs keeps its own row. Columns is
           desktop-only either way: below sm there is no table to pick columns
@@ -740,6 +767,39 @@ export function CustomersView({
           )}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="space-y-4 page-stack">
+      {/* Ported from VoiceView, which is this app's reference tab strip: the
+          hairline belongs to the STRIP and each tab overlaps it with -mb-px,
+          so the active underline replaces that segment of the rule rather than
+          sitting under it, and the weight never changes between states. */}
+      <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
+        {(
+          [
+            { id: "list" as const, label: t("customers.tabList") },
+            { id: "fields" as const, label: t("fields.title") },
+          ] as { id: CustomersSection; label: string }[]
+        ).map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setSection(entry.id)}
+            aria-current={section === entry.id ? "page" : undefined}
+            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+              section === entry.id
+                ? "border-[var(--foreground)] text-[var(--foreground)]"
+                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {section === "list" ? list : <FieldsCard isOwner={isOwner} />}
     </div>
   );
 }

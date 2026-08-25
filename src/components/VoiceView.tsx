@@ -11,7 +11,7 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { NumberRequestCard } from "./NumberRequestCard";
-import { FieldsCard, ServiceKeysCard } from "./BusinessView";
+import { ServiceKeysCard } from "./BusinessView";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -26,20 +26,25 @@ import { FieldsCard, ServiceKeysCard } from "./BusinessView";
 // 2026-08-21), and WhatsApp and email are queued behind them. Filing a shared
 // body under one of its consumers makes the other three go looking for it.
 //
-// Fields joined the strip on 2026-08-12 after three wrong homes, and STAY
-// after knowledge left rather than following it. Knowledge is what the
-// business TELLS a customer; a contact field is what it ASKS one. Opposite
-// directions, and a field is a Customers column besides — its sibling is the
-// customer record, not the price list. What is left here reads as one job:
-// the agent, its calls, and the vocabulary it works in.
+// CONTACT FIELDS LEFT THIS STRIP on 2026-08-25, for a tab on Customers.
+// They joined it on 2026-08-12 after three wrong homes and stayed when
+// knowledge left, on the argument that what remained here read as one job:
+// the agent, its calls, and the vocabulary it works in. That argument was
+// about cohesion for whoever is building the agent, and it lost to
+// findability for whoever owns the salon (Serdar: the app is for people who
+// are not technically versatile, and nobody opens Voice to decide what they
+// record about a customer). The same note already conceded the half that
+// settles it — a field is a Customers column, and its sibling is the customer
+// record, not the price list.
 //
-// What it is NOT: buried at the foot of the Customers column picker, which is
-// where it briefly lived. Fields ARE those columns, so the rule about rare
-// actions fit the letter and missed the point. Defining what you store about a
-// customer is a SETUP surface, one of the first things a new business touches,
-// and a setup surface hidden inside a dropdown labelled "Columns" is not
-// findable by the person who needs it most.
-type VoiceSection = "agents" | "calls" | "fields";
+// The Locked / Can edit column went with it. The agent reads these fields and
+// should say so wherever they live; what it must not do is look like it owns
+// them, which is what a tab on its own strip said.
+//
+// Service keys did NOT follow. A service's key is the price list's vocabulary
+// and has nothing to do with what the salon asks a customer, so it sits under
+// Agents now rather than holding a tab of its own for one read-only card.
+type VoiceSection = "agents" | "calls";
 
 function fmtDuration(sec: number | null): string {
   if (sec === null) return "";
@@ -207,7 +212,6 @@ export function VoiceView() {
           [
             { id: "agents" as const, label: t("voice.agents") },
             { id: "calls" as const, label: t("settings.voiceCalls") },
-            { id: "fields" as const, label: t("fields.title") },
           ] as { id: VoiceSection; label: string }[]
         ).map((entry) => (
           <button
@@ -233,19 +237,16 @@ export function VoiceView() {
               the registration document and the request stand. Owner-only —
               the query resolves null for staff and the card handles it. */}
           {isOwner && <NumberRequestCard />}
-        </div>
-      )}
-      {section === "calls" && <CallHistory />}
-      {/* Service keys ride under the contact fields: this tab is the agent's
-          vocabulary — everything it knows by key — and a service's key is the
-          same species of plumbing as a field's. The Knowledge tab itself shows
-          none of this; its reader is deciding prices, not addresses. */}
-      {section === "fields" && (
-        <div className="space-y-4">
-          <FieldsCard isOwner={isOwner} />
+          {/* The name the agent books a service by, beside the agent that
+              books it. It rode under contact fields while that tab was here
+              and was the weaker half of that pairing even then: a field is
+              what the salon ASKS a customer, a service key is what the price
+              list is CALLED on a call. Last card because it is reference, not
+              a control — you read it while writing a prompt. */}
           <ServiceKeysCard isOwner={isOwner} />
         </div>
       )}
+      {section === "calls" && <CallHistory />}
     </div>
   );
 }
