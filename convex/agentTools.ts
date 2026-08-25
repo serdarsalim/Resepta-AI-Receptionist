@@ -22,6 +22,8 @@ import { foundOrg } from "./lib/foundOrg";
 import { connectionField } from "./lib/connections";
 import { RESERVED_CONTACT_KEYS, keyFromLabel, normaliseKey, uniqueKey } from "./lib/keys";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
+import { parseLocalStart } from "./lib/businessHours";
+import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { clampOffset, sortRules } from "./messageRules";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
@@ -519,6 +521,286 @@ export const createCustomers = internalMutation({
     }
 
     return { created, updated, skippedBadPhone, actionId };
+  },
+});
+
+// Seed the calendar: appointments a business already has, brought in from
+// whatever it kept the book in before.
+//
+// THE HAZARD THIS TOOL IS BUILT AROUND. An appointment is not an inert row —
+// it is an anchor the reminder cron reads. lib/reminderSchedule computes a due
+// time on write and the cron treats "due in the past" as "DUE NOW", which is
+// correct for a booking taken two hours before it starts and catastrophic for
+// an import: seed six months of history and every no-show in it is a winback
+// that goes out tonight, to real customers, about appointments they missed in
+// March. The no_show trigger deliberately has no backward guard (switching
+// winback on has always meant "including recent no-shows"), so nothing
+// upstream stops this.
+//
+// The rule here, and it generalises to any future bulk writer: A SEED MUST NOT
+// CAUSE A SEND THAT WAS DUE BEFORE THE SEED EXISTED. Every rule whose due time
+// for a row has already passed is stamped into sentRuleIds at insert, which is
+// the same double-send guard the cron itself stamps. Rules that fall genuinely
+// in the future stay armed, because a salon seeding next week's book DOES want
+// tomorrow's reminders. It is the same reasoning after_end already encodes
+// with its `at < rule._creationTime` check; this applies it to every trigger.
+//
+// Two more things it deliberately does not do. It never fires the booking
+// confirmation (scheduleConfirmationIfConfigured) — these appointments already
+// exist and the customer already knows. And it never touches cal.com: seeding
+// is Resepta's own book, three hundred rows are not three hundred provider
+// calls, and externalUid stays unset, which every downstream reader already
+// treats as "we hold this one alone".
+export const createAppointments = internalMutation({
+  args: {
+    ...scope,
+    appointments: v.array(
+      v.object({
+        customerId: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        start: v.string(),
+        serviceKeys: v.optional(v.array(v.string())),
+        durationMinutes: v.optional(v.number()),
+        status: v.optional(v.string()),
+        staffName: v.optional(v.string()),
+        notes: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.any(),
+  handler: async (ctx, { orgId, userId, connectionId, appointments }) => {
+    if (appointments.length === 0) throw new Error("appointments is empty");
+    // Lower than create_customers' 100: each row costs a customer lookup, a
+    // service match, an insert, a schedule recompute (which re-reads the org
+    // and its rules) and an activity row. Chunking is the caller's job and the
+    // message says so, rather than the mutation dying halfway.
+    if (appointments.length > 50) {
+      throw new Error(
+        `max 50 appointments per call (got ${appointments.length}) — send them in batches of 50`,
+      );
+    }
+
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    const dialCode = dialCodeForTimezone(org.timezone);
+    // Read once, outside the loop: none of these change underneath fifty
+    // inserts, and per-row reads would multiply the whole table scan.
+    const [services, staffRows, rules] = await Promise.all([
+      ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+      ctx.db
+        .query("staff")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+      loadOrgRules(ctx, orgId),
+    ]);
+    // Services match on the KEY the agent books by, falling back to the folded
+    // name for rows that predate keys — the same two-way match list_services
+    // documents, so a seeding client can use either.
+    const serviceByKey = new Map<string, Doc<"services">>();
+    for (const service of services) {
+      // serviceKey() already falls back to the folded name for rows that
+      // predate keys, so this is the one address list_services publishes.
+      const key = serviceKey(service);
+      if (key && !serviceByKey.has(key)) serviceByKey.set(key, service);
+      const folded = keyFromLabel(service.name);
+      if (folded && !serviceByKey.has(folded)) serviceByKey.set(folded, service);
+    }
+    const staffByName = new Map(
+      staffRows.map((row) => [row.name.trim().toLocaleLowerCase(), row]),
+    );
+
+    const now = Date.now();
+    const HOUR_MS = 3600_000;
+    const STATUSES = new Set([
+      "scheduled",
+      "confirmed",
+      "cancelled",
+      "completed",
+      "no_show",
+    ]);
+
+    const created: { id: string; when: number; customer: string }[] = [];
+    const skipped: { row: number; why: string }[] = [];
+
+    for (const [index, row] of appointments.entries()) {
+      // ── Who ──────────────────────────────────────────────────────────────
+      let customer: Doc<"customers"> | null = null;
+      if (row.customerId) {
+        customer = await ctx.db.get(row.customerId as Id<"customers">).catch(() => null);
+        if (!customer || customer.orgId !== orgId) customer = null;
+      } else if (row.phone) {
+        const phone = normalisePhone(row.phone, dialCode);
+        if (phone) {
+          customer = await ctx.db
+            .query("customers")
+            .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
+            .unique();
+        }
+      }
+      // Deliberately NOT created here. create_customers is the door for that,
+      // and it is the one that asks about KVKK consent; minting a nameless row
+      // from a phone number to hang an appointment on is how a customer list
+      // rots. Reported, never dropped silently — the same contract
+      // create_customers makes about a number it cannot read.
+      if (!customer) {
+        skipped.push({
+          row: index + 1,
+          why: row.customerId
+            ? "no customer with that id in this business"
+            : "no customer on file with that number — run create_customers first",
+        });
+        continue;
+      }
+
+      // ── When ─────────────────────────────────────────────────────────────
+      // Wall time AT THE BUSINESS unless the string carries a zone, which is
+      // the same reading the voice and chat agents take (lib/businessHours).
+      // A spreadsheet says "14:30" and means half past two in the salon.
+      const startAt = parseLocalStart(row.start, org.timezone);
+      if (!Number.isFinite(startAt)) {
+        skipped.push({
+          row: index + 1,
+          why: `could not read "${row.start}" as a date and time — use 2026-03-14 14:30`,
+        });
+        continue;
+      }
+
+      // ── What ─────────────────────────────────────────────────────────────
+      const items: {
+        serviceId: Id<"services">;
+        name: string;
+        price?: number;
+        durationMinutes: number;
+        quantity?: number;
+      }[] = [];
+      let unknownService: string | null = null;
+      for (const raw of row.serviceKeys ?? []) {
+        // Matched on the key, or on what the raw string folds to, so
+        // "Saç kesimi" and "sac_kesimi" both land.
+        const service =
+          serviceByKey.get(raw.trim()) ?? serviceByKey.get(keyFromLabel(raw));
+        if (!service) {
+          unknownService = raw;
+          break;
+        }
+        // Snapshotted, exactly as the booking sheet does it: what March
+        // charged must not be rewritten by September's price list.
+        items.push({
+          serviceId: service._id,
+          name: service.name,
+          ...(service.price !== undefined ? { price: service.price } : {}),
+          durationMinutes: service.durationMinutes ?? 0,
+        });
+      }
+      if (unknownService !== null) {
+        skipped.push({
+          row: index + 1,
+          why: `no service keyed "${unknownService}" — list_services shows the keys`,
+        });
+        continue;
+      }
+
+      const summed = items.reduce((total, item) => total + item.durationMinutes, 0);
+      const durationMinutes =
+        row.durationMinutes !== undefined
+          ? Math.max(0, Math.round(row.durationMinutes))
+          : items.length > 0
+            ? summed
+            : undefined;
+
+      // Unsaid status reads off the clock: a past visit happened, a future one
+      // is booked. Guessing "completed" for the future would put revenue on
+      // the books for work nobody has done.
+      const status = row.status?.trim() || (startAt < now ? "completed" : "scheduled");
+      if (!STATUSES.has(status)) {
+        skipped.push({
+          row: index + 1,
+          why: `"${status}" is not a status — use scheduled, confirmed, completed, cancelled or no_show`,
+        });
+        continue;
+      }
+
+      const staff = row.staffName
+        ? staffByName.get(row.staffName.trim().toLocaleLowerCase())
+        : undefined;
+      if (row.staffName && !staff) {
+        skipped.push({ row: index + 1, why: `nobody on the team is called "${row.staffName}"` });
+        continue;
+      }
+
+      // ── The guard ────────────────────────────────────────────────────────
+      // Every rule already overdue for this row, stamped as sent. See the
+      // header: a seed must not cause a send that was due before it existed.
+      //
+      // Stamped regardless of status, which is broader than the cron's own
+      // reading (a cancelled row wants no reminder anyway, a follow-up needs
+      // completed) and deliberately so: an extra id in here can only ever
+      // suppress. The one cost, worth knowing: if the salon later MOVES a
+      // seeded appointment far enough out that a stamped reminder would fall
+      // in the future again, it stays suppressed — the same way a reminder
+      // that genuinely fired before a reschedule does not fire twice.
+      const endsAt = startAt + (durationMinutes ?? 0) * 60_000;
+      const alreadyDue: Id<"messageRules">[] = [];
+      for (const rule of rules) {
+        if (rule.paused) continue;
+        let due: number | null = null;
+        if (rule.trigger === "before_start") due = startAt - rule.offsetHours * HOUR_MS;
+        else if (rule.trigger === "after_end") due = endsAt + rule.offsetHours * HOUR_MS;
+        else if (rule.trigger === "no_show") due = startAt + rule.offsetHours * HOUR_MS;
+        if (due !== null && due <= now) alreadyDue.push(rule._id);
+      }
+
+      const appointmentId = await ctx.db.insert("appointments", {
+        orgId,
+        customerId: customer._id,
+        items,
+        ...(staff ? { staffId: staff._id } : {}),
+        startAt,
+        durationMinutes,
+        status: status as Doc<"appointments">["status"],
+        notes: row.notes?.trim() || undefined,
+        // "manual" is honest: a person is importing their own book. The absent
+        // externalUid is what says cal.com does not hold this one.
+        source: "manual",
+        ...(alreadyDue.length > 0 ? { sentRuleIds: alreadyDue } : {}),
+      });
+      // Arms whatever is genuinely still ahead. Idempotent and cheap, and the
+      // house rule is that every write which moves startAt or status calls it.
+      await syncAppointmentSchedule(ctx, appointmentId);
+      await recordActivity(ctx, {
+        orgId,
+        kind: "appointment_created",
+        customerId: customer._id,
+        appointmentId,
+        agent: { actorId: userId, connectionId, agentActionId: undefined },
+      });
+      created.push({ id: appointmentId, when: startAt, customer: fullName(customer) });
+    }
+
+    if (created.length === 0) {
+      return { created, skipped, actionId: null };
+    }
+
+    // One journal row for the call, like create_customers: the undoable unit
+    // is the import, and a fifty-row seed leaving fifty entries buries every
+    // other action in recent_actions.
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "create_appointments",
+      args: { count: appointments.length },
+      targetTable: "appointments",
+      targetId: created[0]?.id ?? "",
+      before: null,
+      after: { createdIds: created.map((row) => row.id) },
+      reversible: true,
+    });
+
+    return { created, skipped, actionId };
   },
 });
 
@@ -1684,6 +1966,37 @@ export const undo = internalMutation({
         (kept.length > 0
           ? ` Kept ${kept.length} who already have appointments or messages: ${kept.join(", ")}.`
           : "");
+    } else if (action.tool === "create_appointments") {
+      // Only what this call inserted. An appointment the salon has since
+      // MOVED, cancelled or marked no-show is theirs now, not the import's —
+      // deleting it would take a real decision with it, and the drift rule
+      // everywhere else in this file says undo takes back its own change and
+      // does not win races. Anything with a message hanging off it stays too:
+      // a customer who has been told about this appointment has an
+      // appointmentId in their thread that every read path dereferences.
+      const ids = ((after as unknown as { createdIds?: string[] }).createdIds ?? []);
+      let removed = 0;
+      const kept: string[] = [];
+      for (const id of ids) {
+        const appointment = await ctx.db
+          .get(id as Id<"appointments">)
+          .catch(() => null);
+        if (!appointment || appointment.orgId !== orgId) continue;
+        const message = await ctx.db
+          .query("messages")
+          .withIndex("by_customer", (q) => q.eq("customerId", appointment.customerId))
+          .filter((q) => q.eq(q.field("appointmentId"), appointment._id))
+          .first();
+        if (message) {
+          kept.push("one the customer has already been messaged about");
+          continue;
+        }
+        await ctx.db.delete(appointment._id);
+        removed += 1;
+      }
+      summary =
+        `Removed ${removed} seeded appointment${removed === 1 ? "" : "s"}.` +
+        (kept.length > 0 ? ` Kept ${kept.length}: ${kept[0]}.` : "");
     } else if (action.tool === "log_activity") {
       const callIds = ((after as unknown as { callIds?: string[] }).callIds ?? []);
       const messageIds = ((after as unknown as { messageIds?: string[] }).messageIds ?? []);

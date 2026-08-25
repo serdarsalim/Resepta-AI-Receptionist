@@ -2582,6 +2582,43 @@ here:
   are describing somebody else's site now. Fix them when you next touch that
   area.
 
+## Seeding the calendar, and the rule every bulk writer inherits (2026-08-25)
+
+`create_appointments` (MCP) brings an existing book in: up to 50 rows a call,
+customer resolved by id or by the phone they are filed under, `start` read as
+wall time AT THE BUSINESS (`lib/businessHours.parseLocalStart`, same reading
+the voice and chat agents take), services given by the key `list_services`
+publishes and SNAPSHOTTED onto the row, status defaulting off the clock.
+
+**A SEED MUST NOT CAUSE A SEND THAT WAS DUE BEFORE THE SEED EXISTED.** This is
+the rule to carry into any future bulk writer, and it exists because an
+appointment is not an inert row — it is the anchor the reminder cron reads.
+`lib/reminderSchedule` computes a due time on write and the cron treats "due in
+the past" as DUE NOW, which is right for a booking taken two hours before it
+starts and catastrophic for an import: seed six months of history and every
+no-show in it is a winback going out tonight, to real customers, about
+appointments they missed in March. The `no_show` trigger deliberately has NO
+backward guard (switching winback on has always meant "including recent
+no-shows"), so nothing upstream stops it.
+
+So every rule whose due time for a row has already passed is stamped into
+`sentRuleIds` at insert — the same double-send guard the cron itself stamps.
+Rules genuinely in the future stay armed, because next week's seeded book
+should still remind next week. It generalises what `after_end` already encodes
+with its `at < rule._creationTime` check. Known cost: a seeded appointment
+later moved far enough out that a stamped reminder would fall in the future
+again keeps it suppressed, exactly as a reminder that really fired before a
+reschedule does not fire twice.
+
+Two more deliberate omissions: it never calls
+`scheduleConfirmationIfConfigured` (these appointments exist already and the
+customer knows), and it never touches cal.com (300 rows are not 300 provider
+calls; the absent `externalUid` is what every reader already treats as "ours
+alone"). Customers are never minted here — `create_customers` is the door that
+asks about KVKK consent. Unplaceable rows are reported with their number and
+the reason, never dropped. Undo deletes what it created, keeping anything the
+customer has since been messaged about.
+
 ## The agent's capture config IS the Contact fields table (2026-08-25)
 
 Serdar's spec, in his words: the agent should know the caller and what we

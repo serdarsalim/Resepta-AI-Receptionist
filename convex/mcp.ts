@@ -27,7 +27,7 @@ import {
   type ToolDef as ProtocolToolDef,
 } from "./lib/mcpProtocol";
 
-const SERVER_INFO = { name: "randevu", version: "1.2.0" };
+const SERVER_INFO = { name: "randevu", version: "1.3.0" };
 
 // Which lines went and which arrived. A whole-prompt dump makes a human scroll
 // two screens to find the sentence that changed, and approve it without having
@@ -348,6 +348,89 @@ const TOOLS: ToolDef[] = [
         created: res.created,
         updated: res.updated,
         skippedBadPhone: res.skippedBadPhone,
+        actionId: res.actionId,
+        ...(res.actionId ? { undoWith: `undo(actionId: "${res.actionId}")` } : {}),
+      };
+    },
+  },
+  {
+    name: "create_appointments",
+    title: "Seed the calendar",
+    description:
+      "Bring an existing book in: appointments this business already has, past or future, up to 50 a call. The customer must ALREADY be on file — pass customerId, or the phone number they are filed under (search_customers and create_customers are the doors for that) — because a nameless row minted to hang an appointment on is how a customer list rots. `start` is read as wall time AT THE BUSINESS ('2026-03-14 14:30'); a string carrying a zone is taken as the instant it names. Services are given by the key list_services publishes, and each one SNAPSHOTS its name, price and duration, so a later price rise never rewrites what March charged. Status is optional and reads off the clock when omitted: a past visit is completed, a future one is scheduled. NOTHING IS SENT — no booking confirmation, and any reminder, follow-up or winback that was already due before you seeded is stamped as sent rather than fired, so importing six months of no-shows does not message six months of customers tonight. Reminders that fall genuinely in the future stay armed, because next week's book should still remind next week. These do not go to cal.com; they are Resepta's own rows. A row that cannot be placed is REPORTED BACK with its number and the reason, never dropped silently. Reversible: undo deletes the ones it created, keeping any the salon has since been messaged about.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appointments: {
+          type: "array",
+          maxItems: 50,
+          description: "The appointments to bring in.",
+          items: {
+            type: "object",
+            properties: {
+              customerId: {
+                type: "string",
+                description: "From search_customers or create_customers. Use this or phone.",
+              },
+              phone: {
+                type: "string",
+                description:
+                  "The number the customer is filed under. Local form is read against the business's own country.",
+              },
+              start: {
+                type: "string",
+                description:
+                  "When it starts, as the business says it: '2026-03-14 14:30'. Read as local time at the business unless the string carries a zone.",
+              },
+              serviceKeys: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "What was booked, by the key from list_services. Several make ONE appointment with several lines, which is what a cut plus a beard trim is.",
+              },
+              durationMinutes: {
+                type: "number",
+                description:
+                  "Only when it differs from what the services add up to. Omit and the services decide.",
+              },
+              status: {
+                type: "string",
+                description:
+                  "scheduled, confirmed, completed, cancelled or no_show. Omit and a past appointment is completed, a future one scheduled.",
+              },
+              staffName: {
+                type: "string",
+                description: "Who did it, exactly as the team member is named. Omit if it does not matter.",
+              },
+              notes: { type: "string" },
+            },
+            required: ["start"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["appointments"],
+      additionalProperties: false,
+    },
+    annotations: {},
+    handler: async (ctx, args, who) => {
+      const raw = args.appointments;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        throw new Error("appointments must be a non-empty array");
+      }
+      const res = await ctx.runMutation(internal.agentTools.createAppointments, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        appointments: raw as never,
+      });
+      const parts = [`Added ${res.created.length} to the calendar`];
+      if (res.skipped.length > 0) parts.push(`could not place ${res.skipped.length}`);
+      return {
+        ok: true,
+        note: `${parts.join(", ")}. Nothing was sent to anybody.`,
+        created: res.created,
+        skipped: res.skipped,
         actionId: res.actionId,
         ...(res.actionId ? { undoWith: `undo(actionId: "${res.actionId}")` } : {}),
       };
