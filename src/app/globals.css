@@ -464,9 +464,23 @@ thead {
      as the page's actual primary. One loud thing per screen is the budget, and
      these had all been spending it.
 
-     Accent TEXT with an accent-tinted hover wash. It stays findable, stops
-     competing, and carries no border, which is the standing rule for anything
-     that is not a container. The wash is the affordance.
+     OUTLINED: the border stays, the fill goes (Serdar: "i said remove bg from
+     secondary buttons not the border line"). A first pass read "no bg" as
+     accent text alone and dropped both, which is the wrong half — the outline
+     is what keeps it reading as a button at rest, and the fill is the only
+     part that was shouting.
+
+     Ported from the outlined secondary this app already had, on
+     NumberRequestCard's upload button, rather than invented next to it. The
+     one thing not carried over is its `hover:bg-[var(--muted-bg)]`: these sit
+     on a --card surface, and in dark --muted-bg and --card are both #171717,
+     so that hover is invisible on exactly the surface this class is for. A
+     --foreground wash reads in both themes.
+
+     This is the standing "never a border on a button" rule bending for the
+     tier it was written about. That rule's own text allows an outlined
+     SECTION action inside a card, which is what these became the moment they
+     stopped being primaries.
 
      What did NOT change: a filled button still means the one action a screen
      is FOR. The sheet that opens from these keeps its filled confirm, the
@@ -474,15 +488,16 @@ thead {
      Add customer, because that page IS the list it adds to. */
   .card-action {
     height: 2rem;
+    border: 1px solid var(--border);
     border-radius: 0.5rem;
     padding-inline: 0.625rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--accent);
+    color: var(--foreground);
     transition: background-color 120ms;
   }
   .card-action:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    background: color-mix(in srgb, var(--foreground) 6%, transparent);
   }
   .card-action:disabled {
     opacity: 0.4;

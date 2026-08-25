@@ -105,6 +105,14 @@ export const mine = query({
       note: v.union(v.string(), v.null()),
       createdAt: v.number(),
       decidedAt: v.union(v.number(), v.null()),
+      // The owner's own document, readable back. platform.orgNumberRequests
+      // has handed the operator this URL since the feature shipped and this
+      // query returned only the file's NAME, so the one party who cannot open
+      // the registration document was the business that uploaded it — with no
+      // way to check which file they sent, or to re-read it while a request
+      // sat pending. requireOwner already gates this query, and the row is
+      // resolved from the caller's own org.
+      url: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx) => {
@@ -123,6 +131,7 @@ export const mine = query({
       note: row.note ?? null,
       createdAt: row.createdAt,
       decidedAt: row.decidedAt ?? null,
+      url: await ctx.storage.getUrl(row.storageId),
     };
   },
 });

@@ -124,8 +124,29 @@ export function NumberRequestCard() {
               </span>
             )}
           </div>
+          {/* The filename is the link, not a separate "Download" beside it:
+              the thing on screen IS the document, and a second control would
+              be a button whose label repeats the noun next to it.
+
+              New tab, because this card is a request in flight — a PDF that
+              replaced the page would make the reader navigate back to the
+              state they were checking. Falls back to plain text if the URL
+              is null, which happens only if the blob went missing under a row
+              that outlived it. */}
           <p className="mt-2 text-xs text-[var(--muted)]">
-            {request.fileName} · {formatDateTime(request.createdAt, language)}
+            {request.url ? (
+              <a
+                href={request.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--accent)] transition-colors hover:underline"
+              >
+                {request.fileName}
+              </a>
+            ) : (
+              request.fileName
+            )}{" "}
+            · {formatDateTime(request.createdAt, language)}
           </p>
           {request.status !== "approved" && (
             <div className="mt-3">

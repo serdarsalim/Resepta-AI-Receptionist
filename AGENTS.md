@@ -2293,11 +2293,10 @@ agent, Add message, Add customer, Add member, Add field, Add sale, Add product
 and Add knowledge all sit there now; before this they floated above their card,
 sat at the foot of a list, or were shared between two cards.
 
-- **Two tiers, and they are different jobs.** A CARD's own primary action
-  lives in the card header, with no `+`, and wears `.card-action` — accent
-  TEXT on an accent-tinted hover wash. A SECTION's action inside a card is
-  outlined and keeps its `+`; the contact record's "+ Add appointment" is the
-  reference.
+- **Two tiers, and they are different jobs.** A CARD's own action lives in the
+  card header, with no `+`, and wears `.card-action` — OUTLINED, no fill. A
+  SECTION's action inside a card is outlined and keeps its `+`; the contact
+  record's "+ Add appointment" is the reference.
   **AMENDED 2026-08-25.** The card action was filled accent until Serdar said
   it was too strong ("should we do sort of secondary button that's sort of no
   bg for these type of cards"). The original reasoning below still holds and
@@ -2308,6 +2307,11 @@ sat at the foot of a list, or were shared between two cards.
   on more. One loud thing per screen is the budget. A filled button now means
   the single action a screen is FOR: the sheet's confirm, the composer's Send,
   the Customers toolbar's Add customer (that page IS the list it adds to).
+  **"No bg" means the FILL, not the outline** — a first pass dropped both and
+  Serdar corrected it ("i said remove bg from secondary buttons not the border
+  line"). The border is what keeps it reading as a button at rest; the fill
+  was the only part shouting. So the two tiers now differ by the `+` and by
+  where they sit, not by weight.
 - **The header carries `min-h-8`**, so a card with an action and one without
   keep the same header height, and an action that hides itself (Contact
   fields' button, while its form is open) moves nothing.
