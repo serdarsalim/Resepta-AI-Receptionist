@@ -1270,11 +1270,13 @@ const dictionary = {
     de: "Eine einzige Nachricht an Kundinnen und Kunden, die nicht erschienen sind. Eine bereits gesendete Rückgewinnung wird nicht wiederholt.",
   },
   // "Add reminder" until 2026-08-19, and wrong for the same reason the tab
-  // was: five of the six things this sheet adds are not reminders.
+  // was: five of the six things this sheet adds are not reminders. "Add
+  // message" until 2026-08-26, when the tab became Automations — the button
+  // and the sheet it opens follow the tab's vocabulary.
   "settings.ruleAdd": {
-    tr: "Mesaj ekle",
-    en: "Add message",
-    de: "Nachricht hinzufügen",
+    tr: "Otomasyon ekle",
+    en: "Add automation",
+    de: "Automatisierung hinzufügen",
   },
   // The add sheet. It replaced a row of preset chips ("+ 2 days before",
   // "+ 1 hour before"), which could only ever offer the handful of timings
