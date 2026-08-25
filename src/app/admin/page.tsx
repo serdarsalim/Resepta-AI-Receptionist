@@ -37,6 +37,7 @@ import {
   TabStrip,
 } from "./parts";
 import { OnboardingTab } from "./onboarding";
+import { InfoTip } from "@/components/InfoTip";
 import { SearchInput } from "@/components/DataTable";
 import {
   decodeEngine,
@@ -646,7 +647,13 @@ export default function AdminPage() {
               }}
             />
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-              <div className="text-sm font-medium">Default billing mode</div>
+              {/* The explanation rides the (i), the Row affordance exactly —
+                  it sat inline after the pills and was the longest thing in
+                  the row (Serdar, 2026-08-25). */}
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium">Default billing mode</div>
+                <InfoTip text="What a new business is born as. Stamped at sign-up; existing businesses keep their mode, overridable per business on its Voice agent tab." />
+              </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {(["invoice", "prepaid"] as const).map((option) => (
                   <button
@@ -669,11 +676,6 @@ export default function AdminPage() {
                     {option}
                   </button>
                 ))}
-                <span className="text-xs text-[var(--muted)]">
-                  What a new business is born as. Stamped at sign-up; existing
-                  businesses keep their mode, overridable per business on its
-                  Voice agent tab.
-                </span>
               </div>
             </div>
             <Row
