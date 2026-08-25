@@ -38,7 +38,7 @@ function formatAgo(ts: number): string {
 // (`email.sendToCustomer` derives `body` from its html with htmlToText for
 // exactly this reason), so nothing has to strip markup.
 function previewOf(
-  c: { lastBody?: string; lastChannel: FeedIconType },
+  c: { lastBody?: string; lastChannel: FeedIconType; lastDirection: "in" | "out" },
   t: (k: TranslationKey) => string,
 ): string {
   const body = (c.lastBody ?? "").replace(/\s+/g, " ").trim();
@@ -47,6 +47,15 @@ function previewOf(
   // the KIND beats an empty line: "Arama" tells you what to expect on open,
   // blank tells you the row is broken.
   //
+  // A CALL says who rang whom, because that is the one row where the preview
+  // cannot imply it. Every other line carries words somebody wrote, and you
+  // can tell the salon's own reminder from a customer's reply by reading it;
+  // a bare "Arama" is the same four letters in both directions. This replaces
+  // a blanket "Siz:" prefix on every outbound row, which spent the front of
+  // the line restating what the line already said.
+  if (c.lastChannel === "call") {
+    return t(c.lastDirection === "out" ? "inbox.calledOut" : "inbox.calledIn");
+  }
   // A WhatsApp or email row with no body is a different thing — it is a queued
   // TEMPLATE whose text has not been rendered yet. The thread already says so
   // (`snippet || t("message.template")` in ConversationPanel), and the row has
@@ -57,9 +66,7 @@ function previewOf(
       ? "forms.title"
       : c.lastChannel === "note"
         ? "notes.title"
-        : c.lastChannel === "call"
-          ? "channel.call"
-          : "message.template",
+        : "message.template",
   );
 }
 
@@ -312,7 +319,7 @@ export function InboxView({
                         // still needs an answer", "did that confirmation go
                         // out") cost a click each. The backend was already
                         // handing over lastBody, lastChannel, lastDirection
-                        // and hasFailed; search had been reading lastBody the
+                        // and lastFailed; search had been reading lastBody the
                         // whole time, so the row was the only thing on this
                         // screen that could not see it.
                         className={`group relative flex min-h-[3.5rem] w-full cursor-pointer items-center gap-2.5 px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
@@ -415,12 +422,20 @@ export function InboxView({
                             question you have when the same person reaches you
                             on WhatsApp and by mail.
 
-                            "not sent" outranks the preview and wears
-                            --now-line, the one red in this app that already
-                            means a moment rather than a danger state. A
-                            reminder that silently failed is the worst thing
-                            this product can do quietly, and it was visible
-                            only by opening the thread. */}
+                            A failed send is a red ✕ on the channel mark, not
+                            the words "not sent" in front of the preview. Two
+                            reasons, and the second is the real one. It was
+                            SPELLED OUT, so four failures in eleven rows read
+                            as a column of red prose with the actual messages
+                            behind it. And it was attributed to the
+                            conversation rather than to the line being quoted,
+                            so it sat in front of inbound text the customer
+                            had written — "not sent: I decided not to come" —
+                            describing some older send that is nowhere on the
+                            row. A reminder that silently failed is still the
+                            worst thing this product can do quietly; a mark
+                            next to the message that failed says it without
+                            claiming it about the one that did not. */}
                         <div className="flex w-full items-center gap-1.5 text-xs">
                           {/* 12, not 13. The glyph answers WHERE a message happened, which is
                               the smallest question on a row that also carries a
@@ -429,9 +444,13 @@ export function InboxView({
                               sits in front of (Serdar: "they look too big in
                               inbox"). */}
                           <FeedIcon type={c.lastChannel} size={12} />
-                          {c.hasFailed && (
-                            <span className="shrink-0 font-medium text-[var(--now-line)]">
-                              {t("message.failed")}
+                          {c.lastFailed && (
+                            <span
+                              className="shrink-0 font-semibold leading-none text-[var(--now-line)]"
+                              title={t("message.failed")}
+                              aria-label={t("message.failed")}
+                            >
+                              ✕
                             </span>
                           )}
                           <span
@@ -441,11 +460,6 @@ export function InboxView({
                                 : "text-[var(--muted)]"
                             }`}
                           >
-                            {c.lastDirection === "out" && (
-                              <span className="text-[var(--muted)]">
-                                {t("inbox.youPrefix")}{" "}
-                              </span>
-                            )}
                             {previewOf(c, t)}
                           </span>
                         </div>

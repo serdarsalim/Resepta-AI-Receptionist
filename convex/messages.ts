@@ -886,7 +886,13 @@ export const conversations = query({
       // lands in that email rather than in a list of six the reader now has to
       // recognise it in.
       lastId: v.string(),
-      hasFailed: v.boolean(),
+      // Did the message the preview is QUOTING fail. Not "did anything in this
+      // conversation ever fail", which is what the row used to draw and which
+      // put a red "not sent" next to inbound lines the customer had written —
+      // the failure it described was some older send, invisible on the row.
+      // The conversation-wide answer still exists as summary.hasFailed and
+      // still feeds attentionAt; it is just not a thing to label one line with.
+      lastFailed: v.boolean(),
       awaitingReply: v.boolean(),
       // Newest inbound, 0 when they have never written. The row does not draw
       // it; the view watches it so that mail landing while the Inbox is open
@@ -945,7 +951,7 @@ export const conversations = query({
         lastDirection: summary.last.direction,
         lastChannel: summary.last.channel,
         lastId: summary.last.id,
-        hasFailed: summary.hasFailed,
+        lastFailed: summary.last.failed,
         awaitingReply: summary.awaitingChannels.length > 0,
         lastInboundAt: summary.lastInboundAt,
         unseen,

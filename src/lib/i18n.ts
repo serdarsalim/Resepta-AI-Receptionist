@@ -1763,7 +1763,12 @@ const dictionary = {
   // German column keeps the house Sie rather than WhatsApp's "Du:" — the
   // label addresses the business owner reading the screen, and this app
   // never drops into du.
-  "inbox.youPrefix": { tr: "Siz:", en: "You:", de: "Sie:" },
+  // A call is the one row whose preview cannot imply its own direction —
+  // "Arama" is the same word whoever dialled. Every other line carries
+  // words somebody wrote, which is why the blanket "Siz:" prefix these
+  // replaced was restating what the line already said.
+  "inbox.calledOut": { tr: "Aradınız", en: "You called", de: "Sie haben angerufen" },
+  "inbox.calledIn": { tr: "Aradı", en: "They called", de: "Hat angerufen" },
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },
   // The green state of the row's gutter dot. It names the STATE; the hint
   // below it says what clicking does, since the same dot is the pin control.
