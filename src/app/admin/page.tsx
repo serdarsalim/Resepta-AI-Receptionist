@@ -61,6 +61,7 @@ export default function AdminPage() {
   const deployment = useQuery(api.platform.deploymentHealth, allowed ? {} : "skip");
   const mail = useQuery(api.platformConfig.status, allowed ? {} : "skip");
   const setConfig = useMutation(api.platformConfig.set);
+  const actAs = useMutation(api.platform.actAs);
   // The model pickers' option source: each provider's own /v1/models, read
   // with the platform key, fetched lazily on first focus (see ModelRow).
   const listModels = useAction(api.platformConfig.listModels);
@@ -235,6 +236,10 @@ export default function AdminPage() {
                   Errors
                 </th>
                 <th className="px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
+                {/* No header word. The column is one button wide and the
+                    button says what it does; a title over it would be the
+                    third time in eight characters. */}
+                <th className="px-3 pb-2 pt-3.5" />
               </tr>
             </thead>
             <tbody>
@@ -311,6 +316,43 @@ export default function AdminPage() {
                   </td>
                   <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                     {ago(org.lastActivityAt)}
+                  </td>
+                  {/* Into the client's OWN app, from the list. This existed
+                      only on the business's page, so seeing a salon meant
+                      opening its admin record first and then leaving it —
+                      two navigations to look at a thing you could already
+                      see the name of.
+
+                      A new tab because the fleet list is where you were and
+                      where you are going back to. The blank tab is opened
+                      SYNCHRONOUSLY, inside the click, and pointed at "/"
+                      once the mutation lands: window.open after an await has
+                      lost the user gesture and is a popup blocker's exact
+                      definition of a popup. */}
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const tab = window.open("", "_blank");
+                        void actAs({ orgId: org.orgId })
+                          .then(() => {
+                            if (tab) tab.location.href = "/";
+                            else router.push("/");
+                          })
+                          .catch(() => tab?.close());
+                      }}
+                      // Acting-as is a column on the OPERATOR's user row, not
+                      // a per-tab thing, so opening a second business repoints
+                      // the first tab too. Said here rather than engineered
+                      // around: scoping it per tab means a second way to
+                      // resolve which org a request belongs to, and this app
+                      // has exactly one.
+                      title="Open this business's own app in a new tab. Only one at a time — opening another repoints it."
+                      className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors hover:bg-[var(--muted-bg)]"
+                    >
+                      Open app ↗
+                    </button>
                   </td>
                 </tr>
               ))}
