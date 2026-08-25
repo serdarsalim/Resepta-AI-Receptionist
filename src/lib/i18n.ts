@@ -457,6 +457,9 @@ const dictionary = {
     en: "Blocks no calendar time (e.g. a cake)",
     de: "Belegt keinen Termin (z. B. Torte)",
   },
+  // Also the PRODUCTS list's second column header, where "Duration" was a
+  // question a good cannot answer: it is handed over, not performed, and the
+  // cell holds this when it holds anything.
   "services.leadTime": {
     tr: "Ön sipariş süresi",
     en: "Lead time",

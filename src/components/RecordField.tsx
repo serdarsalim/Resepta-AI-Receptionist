@@ -44,37 +44,11 @@ export function FieldRow({
   );
 }
 
-// `hint` is where a group earns an explanation without spending a paragraph on
-// it: the (i) sits inside the heading's own gap-2 row, so the copy is one hover
-// away and the visible line stays a heading.
-// `action` sits after the rule, at the right edge, for the one control that
-// belongs to a whole group rather than to any row in it. It goes there rather
-// than under the list because a group you can add to should say so before you
-// have read to the bottom of it, and an empty group has no bottom to read to.
-export function FieldGroup({
-  label,
-  hint,
-  action,
-}: {
-  label: string;
-  hint?: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2 pt-2">
-      {/* One tier above its rows in weight, the same tier in size. A heading
-          that also grows reads as a new card starting, and these are groups
-          inside one record. */}
-      <span className="text-[11px] font-medium text-[var(--muted-strong)]">{label}</span>
-      {hint && <InfoTip text={hint} />}
-      {/* No rule across the row: the heading and the group's own spacing
-          carry the separation. Serdar's design language — lines and borders
-          belong to containers, not decoration. */}
-      <span className="flex-1" aria-hidden />
-      {action}
-    </div>
-  );
-}
+// FieldGroup lived here and is gone (2026-08-25). It drew a labelled divider
+// between groups of fields on the contact record, and the record stopped
+// having groups: "From calls" split them by which door a value arrived
+// through, and "Contact fields" named a category every row on the page already
+// belonged to. One continuous list needs no heading, so nothing calls this.
 
 function PencilIcon() {
   return (

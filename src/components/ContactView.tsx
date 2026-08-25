@@ -13,7 +13,7 @@ import { Toggle } from "./Toggle";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
-import { FieldGroup, FieldRow, InlineEditValue } from "./RecordField";
+import { FieldRow, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
 import { DEFAULT_DURATION } from "@/lib/calendarDrag";
@@ -184,8 +184,6 @@ export function ContactView({
   // Source is unset on every field created before voice existed, so anything
   // that isn't explicitly "voice" is staff-filled.
   const orgFields: Doc<"contactFields">[] = fields ?? [];
-  const staffFields = orgFields.filter((field) => field.source !== "voice");
-  const voiceFields = orgFields.filter((field) => field.source === "voice");
 
   if (customer === null) {
     return <p className="text-sm text-[var(--muted)]">{t("customers.none")}</p>;
@@ -324,26 +322,29 @@ export function ContactView({
                   onSave={(next) => updateCustomer({ customerId, email: next })}
                 />
               </FieldRow>
-              {/* An empty group renders nothing, heading included: a lone
-                  divider over blank space is a frame around no content. */}
-              {staffFields.length > 0 && <FieldGroup label={t("fields.title")} />}
-              {staffFields.map((field) => (
-                <CustomFieldRow
-                  key={field._id}
-                  field={field}
-                  value={customer.custom?.[field.key] ?? ""}
-                  onSave={(next) =>
-                    setCustomValue({ customerId, key: field.key, value: next })
-                  }
-                />
-              ))}
+              {/* NO HEADINGS. The record is one continuous list of fields, in
+                  the org's own display order, and it ends here rather than
+                  starting a new section.
 
-              {/* Where these values came from is the (i)'s job, not a
-                  paragraph's, and not a badge repeated on every row. */}
-              {voiceFields.length > 0 && (
-                <FieldGroup label={t("fields.voiceGroup")} hint={t("fields.voiceRecordHint")} />
-              )}
-              {voiceFields.map((field) => (
+                  It carried two headings within an hour of each other and both
+                  came out. "From calls" split the same fields by field.source,
+                  which is a fact about which door a value came in through —
+                  true of Resepta, irrelevant to the person on the card, and
+                  loud enough to break the record in half ("that's totally
+                  irrelevant"). Then "Contact fields" itself: First name, Phone
+                  and Email are contact fields too, and the Contact fields
+                  table lists them alongside these ones, so a heading here drew
+                  a line the surface that DEFINES them does not draw
+                  ("everything here is a contact field anyway").
+
+                  The source still matters where it is a DECISION — that
+                  table's Locked / Can edit column, where you choose what the
+                  agent may write. Nowhere else.
+
+                  Same `fields` query the Contact fields table reads, so the two
+                  are one list, and its drag-reorder is the single answer to
+                  what sits where on both. */}
+              {orgFields.map((field) => (
                 <CustomFieldRow
                   key={field._id}
                   field={field}

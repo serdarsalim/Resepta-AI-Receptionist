@@ -27,6 +27,17 @@
      below the body text under it. */
   --page-title: var(--foreground);
   --brand: #10b981;
+  /* ON. Its own token rather than --brand, which the switch used to borrow,
+     because the two say different things: --brand green means "something NEW
+     is in there" (the sidebar's inbox dot, per AGENTS.md "One state, one
+     hue"), while a switch means "this is turned on". Sharing one value made
+     every settings page a column of the loudest green in the product.
+
+     Emerald at ~55% saturation instead of 84%, same hue and roughly the same
+     lightness. ON still reads as the green it always was, at a fifth of the
+     shout. Serdar: "should probably be a bit muted green the turned on
+     buttons". */
+  --switch-on: #30a67f;
   /* Identity only: the logo tile and the favicon. Separate from --brand on
      purpose. --brand drives row hover, selection wash and table headers, and
      red there would read as danger on every hover. This is what tells Resepta
@@ -147,6 +158,10 @@
   --muted-bg: #171717;
   --page-title: var(--foreground);
   --brand: #10b981;
+  /* Muted less than the light theme's. The same desaturation that calms a
+     switch on white leaves it muddy on near-black, so dark keeps more
+     saturation and a little more lightness to hold the same read. */
+  --switch-on: #2fbc8d;
   /* Lifted a little for dark backgrounds; #e11d48 goes muddy on #0a0a0a. */
   --logo: #f43f5e;
   /* Same relationships inverted: header text brighter than the body, divider

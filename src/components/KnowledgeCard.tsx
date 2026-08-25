@@ -240,6 +240,15 @@ function AddKnowledgeSheet({
 }) {
   const { t } = useLanguage();
   const [error, setError] = useState<string | null>(null);
+  // The body is the same EmailBodyEditor a block edits in, not the plain
+  // textarea this used to be. A block was WRITTEN in a bare box and then
+  // EDITED as rich prose one click later, so the surface changed shape between
+  // creating a thing and correcting it, and anyone who typed a list here
+  // watched their formatting appear only after saving and reopening.
+  //
+  // Held in state rather than read off FormData on submit: the editor is a
+  // contenteditable, so there is no form field for FormData to find.
+  const [body, setBody] = useState("");
   return (
     <Sheet title={t("knowledge.add")} hint={t("knowledge.addHint")} onClose={onClose}>
       <form
@@ -248,11 +257,15 @@ function AddKnowledgeSheet({
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           const title = String(form.get("title") ?? "").trim();
-          const body = String(form.get("body") ?? "").trim();
           if (!title) return;
           setError(null);
           try {
-            await onCreate({ title, body });
+            // hasNoteText, not body.trim(): an untouched editor serialises to
+            // "<p></p>" and a paragraph of non-breaking spaces is emptier
+            // still, so a non-empty string is not the question. Empty stays
+            // empty, since a block with a title and no body is legal and
+            // previews its placeholder.
+            await onCreate({ title, body: hasNoteText(body) ? body : "" });
             onClose();
           } catch (err) {
             setError(err instanceof Error ? err.message : "error");
@@ -265,12 +278,19 @@ function AddKnowledgeSheet({
           data-sheet-autofocus
           placeholder={t("knowledge.titlePlaceholder")}
         />
-        <textarea
-          name="body"
-          rows={5}
-          placeholder={t("knowledge.bodyPlaceholder")}
-          className="w-full resize-y text-sm"
-        />
+        {/* Wearing the note bubble, the same box the block reads and edits in,
+            so the thing you are writing already looks like the thing you will
+            have written. */}
+        <div className="rounded-xl bg-[var(--note-bubble-bg)] px-3 py-2">
+          <EmailBodyEditor
+            value={body}
+            compact
+            showVariables={false}
+            placeholder={t("knowledge.bodyPlaceholder")}
+            onSave={setBody}
+            onLiveChange={setBody}
+          />
+        </div>
         {error && <p className="text-xs text-red-600">{t("common.error")}</p>}
         <div className="flex justify-end">
           <button

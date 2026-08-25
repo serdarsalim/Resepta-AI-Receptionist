@@ -422,7 +422,13 @@ export function InboxView({
                             this product can do quietly, and it was visible
                             only by opening the thread. */}
                         <div className="flex w-full items-center gap-1.5 text-xs">
-                          <FeedIcon type={c.lastChannel} size={13} />
+                          {/* 12, not 13. The glyph answers WHERE a message happened, which is
+                              the smallest question on a row that also carries a
+                              name, an age and a line of the message itself —
+                              and at 13 it was reading as loud as the text it
+                              sits in front of (Serdar: "they look too big in
+                              inbox"). */}
+                          <FeedIcon type={c.lastChannel} size={12} />
                           {c.hasFailed && (
                             <span className="shrink-0 font-medium text-[var(--now-line)]">
                               {t("message.failed")}

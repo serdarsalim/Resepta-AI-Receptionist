@@ -84,8 +84,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.emailFrom" },
   { card: "general", key: "settings.language" },
   { card: "general", key: "settings.industry" },
-  { card: "booking", key: "settings.bookingPage" },
-  { card: "booking", key: "settings.bookingMode" },
+  { card: "general", key: "settings.bookingPage" },
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
   { card: "general", key: "settings.revenueEnabled" },
@@ -97,11 +96,10 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "businesses", key: "share.title" },
 ];
 
-type BusinessCard = "general" | "booking" | "hours" | "team" | "businesses";
+type BusinessCard = "general" | "hours" | "team" | "businesses";
 
 const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
   general: "settings.general",
-  booking: "settings.bookingPage",
   hours: "settings.hours",
   team: "staff.title",
   businesses: "share.title",
@@ -129,7 +127,6 @@ export function BusinessView() {
   const search = useHeaderSearch(t("common.search"));
   const cardRefs = useRef<Record<BusinessCard, HTMLDivElement | null>>({
     general: null,
-    booking: null,
     hours: null,
     team: null,
     businesses: null,
@@ -211,11 +208,6 @@ export function BusinessView() {
       <div ref={(node) => void (cardRefs.current.general = node)}>
         <DetailsCard isOwner={isOwner} />
       </div>
-      {/* Beside the request form conceptually — both are public doors into the
-          business — and above Hours, which is what a booking page reads. */}
-      <div ref={(node) => void (cardRefs.current.booking = node)}>
-        <BookingCard isOwner={isOwner} />
-      </div>
       {/* Hours and Team are adjacent because they are the two inputs to one
           calculation: getAvailableSlots reads the business hours AND
           orgCapacity, the count of active staff. A chip boundary between them
@@ -241,16 +233,16 @@ export function BusinessView() {
 // AccountView import: the three surfaces must line up when you flip between
 // them, which they stop doing the moment the string exists in three places.
 
-// Online booking, as its own card rather than a row inside "Message
-// variables". It is a CHANNEL — a public page customers land on — which is
-// what every appointment product treats it as.
+// Online booking: the VALUE half of a row in the General card, which is where
+// this lives since 2026-08-25. It was a card of its own until then; the note on
+// its RowLabel up there says why it stopped being one.
 //
 // A plain switch. It was three chips for a while (our page / your own link /
 // off), but "my own link" meant switching OUR page off while still printing a
 // URL in messages — a state that read as off here and as on in a customer's
 // inbox. One page, on or off; [booking_link] resolves to the page when it is
 // on and to nothing when it is not.
-function BookingCard({ isOwner }: { isOwner: boolean }) {
+function BookingRow() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
@@ -279,13 +271,7 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
     })();
 
   return (
-    <Card
-      title={t("settings.bookingPage")}
-      tip={t("settings.bookingPageHint")}
-      disabled={!isOwner}
-    >
-      <div className={ROW_GRID}>
-        <RowLabel label={t("settings.bookingMode")} />
+    <>
         {/* One line: switch, address, Copy — the same shape the request-form
             row had. The toggle stays leftmost so it lines up with every other
             toggle in this column rather than floating behind a URL.
@@ -325,8 +311,7 @@ function BookingCard({ isOwner }: { isOwner: boolean }) {
             </>
           )}
         </div>
-      </div>
-    </Card>
+    </>
   );
 }
 
@@ -653,6 +638,26 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               onChange={(next) => void update({ revenueEnabled: next })}
             />
           </span>
+          {/* Online booking, one row under Revenue tab, and it used to be a
+              CARD of its own (Serdar: "shouldn't be a separate card just put
+              it below the revenue tab header as a new row in general").
+
+              The card's argument was that a public page customers land on is
+              a CHANNEL and every appointment product treats it as one. True
+              about the thing, wrong about the surface: the card held exactly
+              one switch, so it was a title, a tip and a frame around a control
+              that already had a label. Two more toggles sit directly above it
+              in this column and neither needed a card to be found.
+
+              It keeps its own (i) on the label, which is where the channel
+              argument survives — the sentence explaining what the page IS was
+              the only thing the card's header carried that the row does
+              not. */}
+          <RowLabel
+            label={t("settings.bookingPage")}
+            hint={t("settings.bookingPageHint")}
+          />
+          <BookingRow />
         </div>
       )}
     </Card>
@@ -965,7 +970,16 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                 <span>
                   {t(goodsList ? "services.productName" : "services.name")}
                 </span>
-                <span>{t("services.duration")}</span>
+                {/* "Duration" is a question a product cannot answer — it is
+                    handed over, not performed — and the cell under it holds a
+                    LEAD TIME when it holds anything (how much warning an order
+                    needs, "order a day ahead"). So the header names that on the
+                    goods list. It stays mostly empty, which is correct: most
+                    goods need no warning, and the column is the only place an
+                    existing one can be read or corrected. */}
+                <span>
+                  {t(goodsList ? "services.leadTime" : "services.duration")}
+                </span>
                 <span>{t("services.price")}</span>
                 <span>{t("services.active")}</span>
                 <span />

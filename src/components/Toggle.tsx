@@ -32,8 +32,12 @@ export function Toggle({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      style={{ backgroundColor: checked ? "var(--brand)" : undefined }}
-      className={`relative inline-flex ${dims.track} shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+      // --switch-on, not --brand. The switch borrowed the brand green until
+      // 2026-08-25, which made a settings page a column of the loudest colour
+      // in the product; see the token's note in globals.css for why ON now
+      // owns its own hue.
+      style={{ backgroundColor: checked ? "var(--switch-on)" : undefined }}
+      className={`relative inline-flex ${dims.track} shrink-0 items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--switch-on)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
         checked ? "" : "bg-zinc-300 dark:bg-zinc-600"
       }`}
     >
