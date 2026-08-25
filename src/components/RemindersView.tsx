@@ -1,7 +1,14 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 // Pure TS shared with the backend on purpose: the preview must be the SAME
@@ -41,26 +48,90 @@ import { Sheet } from "./Sheet";
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
 // explanations behind InfoTips.
 
-// The three columns left of the toggle. A three-column table from sm up; on a
-// phone the same three cells fold into two columns — when over what on the
-// left, channel pinned right — rather than stacking flush left down one edge
-// and leaving half the row empty. The header uses the same inner grid so the
-// columns line up without a real <table>, which would need its own mobile
-// story; it is sm-only, so the phone placement below never reaches it.
-const RULE_COLUMNS =
-  "grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3";
+// ── Flow strip ──────────────────────────────────────────────────────────────
+// A rule drawn as the automation it is: trigger → wait → message → channel,
+// nodes joined by arrows, instead of the three-column table this used to be.
+// Same rows, same click-through into the editor — only the reading changed.
+// The strip stacks vertically on a phone, where a horizontal chain would
+// scroll or wrap mid-arrow.
 
-// Phone placement for the two cells that are not already in the top-left slot.
-// Applied at each row call site because only a row has these three children in
-// this order — the sm-only headers share the grid but not the folding.
-const RULE_WHAT_CELL = "max-sm:col-start-1 max-sm:row-start-2";
-// Channel is the LAST column, so its content hugs the right edge of the card
-// rather than the left edge of its own 1fr track. Left-aligned it sat about a
-// third of the card away from the edge the header rule and the Add message
-// button both end on, and the gap to its right read as a fourth column that
-// was not there. The phone already pinned it right; sm just never did.
-const RULE_CHANNEL_CELL =
-  "sm:justify-end max-sm:col-start-2 max-sm:row-start-1 max-sm:row-span-2 max-sm:justify-self-end";
+function FlowNode({
+  icon,
+  dashed,
+  children,
+}: {
+  icon: "zap" | "clock" | "message";
+  dashed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--card)] px-2.5 py-1.5 text-xs ${
+        dashed
+          ? "border-dashed border-[var(--border)] text-[var(--muted)]"
+          : "border-[var(--border)]"
+      }`}
+    >
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+        // One accent per strip: the trigger's bolt. Everything after it is an
+        // effect, and a chain of coloured icons is a chain with no start.
+        className={
+          icon === "zap"
+            ? "shrink-0 text-[var(--accent)]"
+            : "shrink-0 text-[var(--muted)]"
+        }
+      >
+        {icon === "zap" && (
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        )}
+        {icon === "clock" && (
+          <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </>
+        )}
+        {icon === "message" && (
+          <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3a8.5 8.5 0 0 1 8.5 8.5z" />
+        )}
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+// The joint between nodes: an arrow from sm up, and on a phone — where the
+// strip stacks — a short vertical stem indented under the node's icon, which
+// is enough to say "then" without an arrowhead's ceremony.
+function FlowArrow() {
+  return (
+    <span aria-hidden className="flex shrink-0 sm:items-center">
+      <span className="ml-6 h-3 w-px bg-[var(--border)] sm:hidden" />
+      <svg
+        width="20"
+        height="12"
+        viewBox="0 0 20 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="mx-0.5 hidden shrink-0 text-[var(--muted)] opacity-60 sm:block"
+      >
+        <path d="M2 6h13" />
+        <path d="M12 2.5 15.5 6 12 9.5" />
+      </svg>
+    </span>
+  );
+}
 
 type RuleTrigger =
   | "booking"
@@ -1400,25 +1471,35 @@ function RulesCard({
     org.quietHoursStart,
   )}:00–${pad(org.quietHoursEnd)}:00`;
 
-  // The row's version: the same sentence with the number as TEXT. A row that
-  // opens a page must not also hold controls — clicking the "24" to retype it
-  // and clicking two millimetres away to navigate are different intentions,
-  // and one of them was going to be a surprise. Everything editable now lives
-  // inside the page the row opens.
-  const ruleWhenStatic = (rule: RuleRowData) => {
+  // The strip's segments, as TEXT — a row that opens a page must not also
+  // hold controls; everything editable lives inside the page the row opens.
+  // Three of the six triggers carry a wait between the event and the message.
+  // The old table folded event and wait into one sentence ("24 saat önce"),
+  // which read fine as a cell and reads wrong between arrows, so those three
+  // name their event here and hand the timing to a wait node of its own.
+  const ruleFlow = (rule: RuleRowData): { trigger: string; delay?: string } => {
     switch (rule.trigger) {
       case "booking":
-        return t("settings.ruleWhenBooked");
+        return { trigger: t("settings.ruleWhenBooked") };
       case "cancellation":
-        return t("settings.ruleWhenCancelled");
+        return { trigger: t("settings.ruleWhenCancelled") };
       case "out_of_hours":
-        return t("settings.ruleWhenClosed");
+        return { trigger: t("settings.ruleWhenClosed") };
       case "before_start":
-        return `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`;
+        return {
+          trigger: t("settings.flowAppointment"),
+          delay: `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`,
+        };
       case "after_end":
-        return `${rule.offsetHours} ${t("settings.ruleHoursAfterEnd")}`;
+        return {
+          trigger: t("settings.flowCompleted"),
+          delay: `${rule.offsetHours} ${t("settings.flowHoursAfter")}`,
+        };
       case "no_show":
-        return `${Math.round(rule.offsetHours / 24)} ${t("settings.ruleDaysAfterNoShow")}`;
+        return {
+          trigger: t("settings.flowNoShow"),
+          delay: `${Math.round(rule.offsetHours / 24)} ${t("settings.flowDaysAfter")}`,
+        };
     }
   };
 
@@ -1779,25 +1860,12 @@ function RulesCard({
           ) : undefined
         }
       >
-        <div className="hidden items-center gap-3 pb-2 sm:flex">
-          <div className={RULE_COLUMNS}>
-            <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-              {t("settings.rulesWhen")}
-              <InfoTip text={t("settings.rulesHint")} />
-            </span>
-            <span className="text-xs text-[var(--muted)]">
-              {t("settings.rulesWhat")}
-            </span>
-            {/* Right, with the pills it labels. */}
-            <span className="text-right text-xs text-[var(--muted)]">
-              {t("settings.rulesWhere")}
-            </span>
-          </div>
-        </div>
-
         <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {rules.map((rule) => {
-            const rowChannels = wiredFor(rule);
+            const flow = ruleFlow(rule);
+            const liveChannels = wiredFor(rule).filter((channel) =>
+              activeChannels(rule).has(channel),
+            );
             return (
               <div key={rule._id}>
                 {/* The whole row opens the rule. It used to unfold in place,
@@ -1815,11 +1883,17 @@ function RulesCard({
                       open(rule);
                     }
                   }}
-                  className="-mx-3 flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
+                  className="-mx-3 cursor-pointer rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
                 >
-                  <div className={RULE_COLUMNS}>
-                    <span className="flex items-center gap-1.5 text-sm">
-                      {ruleWhenStatic(rule)}
+                  {/* A rule sending nowhere dims its whole strip: "off" is a
+                      fact about the chain, not about one cell at its end. */}
+                  <div
+                    className={`flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-y-2 ${
+                      liveChannels.length === 0 ? "opacity-60" : ""
+                    }`}
+                  >
+                    <FlowNode icon="zap">
+                      {flow.trigger}
                       {rule.trigger === "no_show" && (
                         <InfoTip text={winbackHint} />
                       )}
@@ -1829,11 +1903,20 @@ function RulesCard({
                       {rule.trigger === "out_of_hours" && (
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
-                    </span>
-                    <span
-                      className={`flex min-w-0 items-center gap-2 text-sm text-[var(--muted)] ${RULE_WHAT_CELL}`}
-                    >
-                      <span className="truncate">{ruleName(rule.trigger)}</span>
+                    </FlowNode>
+                    {flow.delay && (
+                      <>
+                        <FlowArrow />
+                        <FlowNode icon="clock" dashed>
+                          {flow.delay}
+                        </FlowNode>
+                      </>
+                    )}
+                    <FlowArrow />
+                    <FlowNode icon="message">
+                      <span className="max-w-56 truncate font-medium">
+                        {ruleName(rule.trigger)}
+                      </span>
                       {/* A pending draft is visible without opening anything —
                           otherwise the only way to learn that words are
                           waiting to go live is to remember. */}
@@ -1850,41 +1933,34 @@ function RulesCard({
                           {t("settings.templateUnsaved")}
                         </span>
                       )}
-                    </span>
-                    {/* Which lanes this rule is ON, stated. The switches moved
-                        inside with everything else editable. */}
-                    <span
-                      className={`flex flex-wrap items-center gap-1.5 text-xs ${RULE_CHANNEL_CELL}`}
-                    >
-                      {rowChannels
-                        .filter((channel) => activeChannels(rule).has(channel))
-                        .map((channel) => (
+                    </FlowNode>
+                    <FlowArrow />
+                    {/* The chain's terminal: which lanes this rule is ON,
+                        stated. The switches moved inside with everything else
+                        editable. Bare pills, not a bordered node — a pill in
+                        a box is chrome on chrome. */}
+                    {liveChannels.length > 0 ? (
+                      <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {liveChannels.map((channel) => (
                           <span
                             key={channel}
-                            // EMERALD, not amber, and the reason is two lines
-                            // up: the unsaved-draft pill on this very row is
-                            // amber. One row was carrying two amber pills of
-                            // the same size saying entirely different things,
-                            // one a warning ("words are waiting") and one a
-                            // steady state ("mail is on").
-                            //
-                            // Emerald is also what this app already says by
-                            // "on" — the expanded editor draws the SAME state
-                            // with the same emerald toggle. Opening a rule
-                            // used to change the colour of its own channels.
+                            // EMERALD, not amber: the unsaved-draft pill on
+                            // this very strip is amber, and one row carrying
+                            // two amber pills said entirely different things
+                            // in the same voice. Emerald is also what this
+                            // app already says by "on" — the editor draws the
+                            // SAME state with the same emerald toggle.
                             className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                           >
                             {channelLabel(channel)}
                           </span>
                         ))}
-                      {rowChannels.every(
-                        (channel) => !activeChannels(rule).has(channel),
-                      ) && (
-                        <span className="text-[var(--muted)]">
-                          {t("settings.ruleOff")}
-                        </span>
-                      )}
-                    </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">
+                        {t("settings.ruleOff")}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

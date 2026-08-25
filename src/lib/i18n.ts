@@ -1367,6 +1367,38 @@ const dictionary = {
     en: "hours before",
     de: "Stunden vorher",
   },
+  // Flow-strip labels. The list draws each rule as trigger → wait → message,
+  // so the three triggers whose old sentence folded event and delay into one
+  // phrase ("24 saat önce") need the event named on its own, and the wait
+  // chips need bare phrases to follow the number.
+  "settings.flowAppointment": {
+    tr: "Randevu",
+    en: "Appointment",
+    de: "Termin",
+  },
+  // "Completed", not "ended": the follow-up counts from the completed mark
+  // (see ruleFollowupHint), and the trigger node should not promise a clock
+  // the send path does not run.
+  "settings.flowCompleted": {
+    tr: "Randevu tamamlandı",
+    en: "Appointment completed",
+    de: "Termin abgeschlossen",
+  },
+  "settings.flowNoShow": {
+    tr: "Müşteri gelmedi",
+    en: "Customer no-show",
+    de: "Kunde nicht erschienen",
+  },
+  "settings.flowHoursAfter": {
+    tr: "saat sonra",
+    en: "hours after",
+    de: "Stunden danach",
+  },
+  "settings.flowDaysAfter": {
+    tr: "gün sonra",
+    en: "days after",
+    de: "Tage danach",
+  },
   // The follow-up needs the visit marked done before it can count from the
   // end — the hourly sweep does that the next day, a same-day nudge needs the
   // owner to complete the appointment themselves.
