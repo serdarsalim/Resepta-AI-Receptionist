@@ -1830,6 +1830,88 @@ export const setAllowedPhoneNumbers = mutation({
   },
 });
 
+// Take a line off whoever holds it and give it to this business, in one act.
+//
+// One number, one business is the invariant the checklist enforces by refusing
+// to tick a line another org holds. That refusal was correct and the remedy
+// was not: the operator had to open the OTHER business, untick the number
+// there, come back, and tick it here — a four-step trip through a page they
+// did not want to visit, with the line half-assigned in between. The invariant
+// never needed the operator to be the transaction.
+//
+// This is exactly what the two manual edits did, done together. The release at
+// the provider is the same scheduled releaseOrgLines that setAllowedPhoneNumbers
+// already runs when a number leaves a list — without it the loser's agent keeps
+// answering on a line this console has given away, which is the failure mode
+// that makes a half-done handover worse than none.
+//
+// Both businesses get an activity row. The one LOSING the line is the reason:
+// a number vanishing from a tenant with no record of who took it is the kind of
+// thing that gets discovered during a support call about missed calls.
+export const claimPhoneNumber = mutation({
+  args: { orgId: v.id("orgs"), number: v.string() },
+  returns: v.object({ takenFrom: v.union(v.string(), v.null()) }),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const number = args.number.replace(/[\s().\-/]/g, "");
+    if (!/^\+[1-9]\d{6,14}$/.test(number)) throw new Error(`not-e164: ${number}`);
+
+    // Whoever lists it, minus us. Allowlists are the same source the checklist
+    // reads for "held by", so the two can never disagree about who has it.
+    const orgs = await ctx.db.query("orgs").collect();
+    const holders = orgs.filter(
+      (other) =>
+        other._id !== args.orgId &&
+        (other.allowedPhoneNumbers ?? []).includes(number),
+    );
+
+    for (const holder of holders) {
+      const kept = (holder.allowedPhoneNumbers ?? []).filter((n) => n !== number);
+      // undefined when the list empties, exactly as setAllowedPhoneNumbers
+      // writes it. [] and undefined are the SAME to every reader of this
+      // field — retell.orgNumberPolicy and retell.lineUsable both do
+      // `allowedPhoneNumbers ?? []` and then test .length — so the two forms
+      // must not both exist in the table pretending to differ.
+      //
+      // Empty does NOT hand the loser the whole shared account, which is the
+      // thing worth checking before taking a business's last line: lineUsable
+      // refuses every number to an empty-list org unless it is on its OWN
+      // Retell account ("account" source), where the numbers are its own
+      // property anyway.
+      await ctx.db.patch(holder._id, {
+        allowedPhoneNumbers: kept.length > 0 ? kept : undefined,
+      });
+      await ctx.scheduler.runAfter(0, internal.retellAgent.releaseOrgLines, {
+        orgId: holder._id,
+        numbers: [number],
+      });
+      await recordActivity(ctx, {
+        orgId: holder._id,
+        kind: "settings_changed",
+        detail: `phone line ${number} reassigned to ${org.name}`,
+      });
+    }
+
+    const mine = org.allowedPhoneNumbers ?? [];
+    if (!mine.includes(number)) {
+      await ctx.db.patch(args.orgId, {
+        allowedPhoneNumbers: [...mine, number],
+      });
+    }
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail:
+        holders.length > 0
+          ? `phone line ${number} claimed from ${holders.map((h) => h.name).join(", ")}`
+          : `phone line ${number} added`,
+    });
+    return { takenFrom: holders.length > 0 ? holders.map((h) => h.name).join(", ") : null };
+  },
+});
+
 // Suspension (docs/chat-agent.md §8): outbound stops at the send chokepoints,
 // inbound keeps recording. The activity row is the record a billing dispute
 // reads back later, so it names the state, not just "settings changed".

@@ -150,6 +150,10 @@ export default function TenantPage() {
   const [numberNote, setNumberNote] = useState("");
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
   const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
+  const claimPhoneNumber = useMutation(api.platform.claimPhoneNumber);
+  // Which held line is armed, and what went wrong if a claim was refused.
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const rotateEvolutionToken = useMutation(
     api.platform.rotateEvolutionWebhookToken,
   );
@@ -749,27 +753,56 @@ export default function TenantPage() {
                 )
                 .map((line) => {
                 const on = voice.allowedPhoneNumbers.includes(line.number);
-                // A line another business holds cannot be ticked ON from
-                // here — one number, one business. It can still be ticked
-                // OFF if this org has it, whoever else claims it.
-                const blocked = !on && line.heldBy !== null;
+                // A line another business holds is CLAIMABLE, not dead
+                // (Serdar, 2026-08-26). It used to be a disabled row, which
+                // stated the invariant — one number, one business — and left
+                // the operator to be the transaction: open the other
+                // business, untick it there, come back, tick it here, with
+                // the line half-assigned in between. Clicking asks first,
+                // then platform.claimPhoneNumber does both edits at once and
+                // releases the loser's binding at the provider.
+                const held = !on && line.heldBy !== null;
+                const arming = claiming === line.number;
                 return (
                   <button
                     key={line.number}
                     type="button"
-                    disabled={blocked}
-                    onClick={() =>
-                      setAllowedPhoneNumbers({
+                    onClick={() => {
+                      if (held && !arming) {
+                        setClaiming(line.number);
+                        setClaimError(null);
+                        // Disarms itself, like Suspend on this page: an armed
+                        // control left sitting is one stray click from taking
+                        // somebody's phone line.
+                        setTimeout(
+                          () => setClaiming((c) => (c === line.number ? null : c)),
+                          4000,
+                        );
+                        return;
+                      }
+                      if (held && arming) {
+                        setClaiming(null);
+                        void claimPhoneNumber({ orgId, number: line.number }).catch(
+                          (err: unknown) =>
+                            setClaimError(
+                              err instanceof Error ? err.message : "Could not claim it.",
+                            ),
+                        );
+                        return;
+                      }
+                      void setAllowedPhoneNumbers({
                         orgId,
                         numbers: on
                           ? voice.allowedPhoneNumbers.filter((n) => n !== line.number)
                           : [...voice.allowedPhoneNumbers, line.number],
-                      })
-                    }
-                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                      });
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)]"
                   >
                     <CheckMark on={on} />
-                    <span className="font-mono text-xs">{line.number}</span>
+                    <span className={`font-mono text-xs ${held ? "text-[var(--muted)]" : ""}`}>
+                      {line.number}
+                    </span>
                     {line.nickname && (
                       <span className="truncate text-xs text-[var(--muted)]">
                         {line.nickname}
@@ -781,8 +814,16 @@ export default function TenantPage() {
                       </span>
                     )}
                     {line.heldBy && (
-                      <span className="ml-auto shrink-0 text-xs text-[var(--muted)]">
-                        (held by {line.heldBy})
+                      <span
+                        className={`ml-auto shrink-0 text-xs ${
+                          arming
+                            ? "font-medium text-red-700 dark:text-red-400"
+                            : "text-[var(--muted)]"
+                        }`}
+                      >
+                        {arming
+                          ? `Click again to take it from ${line.heldBy}`
+                          : `(held by ${line.heldBy})`}
                       </span>
                     )}
                   </button>
@@ -798,6 +839,11 @@ export default function TenantPage() {
                     No line provisioned yet.
                   </p>
                 )}
+              {claimError && (
+                <p className="px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  {claimError}
+                </p>
+              )}
               <div className="px-2 pt-1.5">
                 <button
                   type="button"
