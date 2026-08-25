@@ -96,6 +96,57 @@ export function Count({
   );
 }
 
+// Everything that is wrong with a business's sending, in one cell.
+//
+// These were four columns — Failed, Gave up, Retrying, Stuck — and on a healthy
+// fleet every one of them is an em dash, so a third of the table was spent
+// saying nothing. Worse, none of the four names its own meaning: "Stuck" is a
+// word you have to be told. Folded, the cell is BLANK when there is nothing to
+// say and names the kind when there is, which is the thing a bare number under
+// a one-word header could never do.
+//
+// The tone is the worst thing present, not a colour per phrase: a row is
+// something you glance at, and three colours inside one cell is a legend.
+export function Problems({
+  org,
+}: {
+  org: {
+    failed24h: number;
+    deadLettered24h: number;
+    retrying: number;
+    stuck: number;
+    capped: boolean;
+  };
+}) {
+  const parts: string[] = [];
+  // Loudest first. Dead letters outrank plain failures because they mean the
+  // retry queue gave up, which nothing else recovers from — the same order the
+  // fleet query sorts by.
+  if (org.deadLettered24h > 0) parts.push(`${org.deadLettered24h} gave up`);
+  if (org.failed24h > 0) {
+    parts.push(`${org.failed24h}${org.capped ? "+" : ""} failed`);
+  }
+  if (org.stuck > 0) parts.push(`${org.stuck} stuck`);
+  if (org.retrying > 0) parts.push(`${org.retrying} retrying`);
+  if (parts.length === 0) return <span className="text-[var(--muted)]">—</span>;
+
+  const bad = org.deadLettered24h > 0 || org.stuck > 0;
+  const warn = org.failed24h > 0;
+  const color = bad
+    ? "text-red-600 dark:text-red-400"
+    : warn
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-[var(--muted-strong)]";
+  return (
+    <span
+      className={`text-xs font-medium tabular-nums ${color}`}
+      title="Failed: a send the provider refused in the last 24h. Gave up: retries exhausted, nothing will pick it up. Stuck: claimed for sending and never reported back. Retrying: waiting on another attempt."
+    >
+      {parts.join(" · ")}
+    </span>
+  );
+}
+
 // An id or an address you came here to paste somewhere else. Shared rather
 // than living on one page: the tenant detail and the Members card both draw
 // it, and a second copy is a second set of paddings to keep in step.

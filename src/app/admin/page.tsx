@@ -29,6 +29,7 @@ import {
   Count,
   KeyModelRow,
   Plane,
+  Problems,
   Row,
   SearchSelect,
   Section,
@@ -188,30 +189,51 @@ export default function AdminPage() {
             <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Failed sends, last 24h">
-                  Failed
+                <th className="px-3 pb-2 pt-3.5 font-semibold" title="People who can sign in">
+                  Members
+                </th>
+                {/* The three usage columns carry their period in the header
+                    rather than in a tooltip. A number in a table is read
+                    before anything you have to hover for, and "Email 412"
+                    with no period on it is a number nobody can act on. */}
+                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Emails sent this month">
+                  Email
+                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="Retries exhausted, so nothing will pick these up"
+                  title="WhatsApp messages sent this month"
                 >
-                  Gave up
-                </th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Waiting on a retry">
-                  Retrying
+                  WhatsApp
+                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="Claimed for sending and never reported back"
+                  title="Voice calls this month: what we bill them, and what Retell charges us"
                 >
-                  Stuck
+                  Calls
+                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold">Upcoming</th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="This month's metered voice usage: what we bill them, and what Retell charges us"
+                  title="Appointments in the book from now on"
                 >
-                  Calls MTD
+                  Booked
+                  <div className="font-normal text-[var(--muted)]">ahead</div>
+                </th>
+                {/* Four columns collapsed into one. They were four flavours of
+                    "a message broke" — failed, gave up, retrying, stuck — and
+                    across a healthy fleet all four are empty, so they spent a
+                    third of the table saying nothing. The cell stays blank
+                    unless something is actually wrong, and then says which
+                    kind, which is more than a bare number in a column headed
+                    "Stuck" ever did. Sorting is unchanged: the query still
+                    orders by dead letters, then failures, then stuck. */}
+                <th
+                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  title="Sends that broke: failed in the last 24h, gave up after retries, waiting on a retry, or claimed for sending and never reported back"
+                >
+                  Problems
                 </th>
                 <th className="px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
               </tr>
@@ -237,37 +259,56 @@ export default function AdminPage() {
                       {org.name}
                     </Link>
                     <div className="text-xs text-[var(--muted)]">
-                      {org.members} {org.members === 1 ? "member" : "members"} · {org.timezone}
+                      {org.timezone}
                       {org.calcomConnected ? " · cal.com" : ""}
                     </div>
                   </td>
+                  {/* Members leaves the subtitle and becomes a column you can
+                      read DOWN — the whole point of asking who uses this most.
+                      It goes to the tab that can change it rather than the
+                      business's front page. */}
                   <td className="px-3 py-2">
-                    <Count value={org.failed24h} tone="warn" capped={org.capped} />
+                    <Link
+                      href={`/admin/${org.orgId}?tab=members`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="tabular-nums text-[var(--muted-strong)] hover:underline"
+                    >
+                      {org.members}
+                    </Link>
                   </td>
                   <td className="px-3 py-2">
-                    <Count value={org.deadLettered24h} tone="bad" />
+                    <Count value={org.emailSentMtd} tone="plain" />
                   </td>
                   <td className="px-3 py-2">
-                    <Count value={org.retrying} tone="plain" />
-                  </td>
-                  <td className="px-3 py-2">
-                    <Count value={org.stuck} tone="bad" />
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
-                    {org.upcomingAppointments}
+                    <Count value={org.waSentMtd} tone="plain" />
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {org.voiceSecondsMtd === 0 && org.voiceCostMicroUsdMtd === 0 ? (
+                    {org.voiceCallsMtd === 0 && org.voiceSecondsMtd === 0 ? (
                       <span className="text-[var(--muted)]">—</span>
                     ) : (
                       <>
-                        <div>${(org.voiceBilledMicroUsdMtd / 1_000_000).toFixed(2)}</div>
+                        <div className="font-medium">
+                          {org.voiceCallsMtd}
+                          <span className="ml-1.5 font-normal text-[var(--muted)]">
+                            {Math.round(org.voiceSecondsMtd / 60)} min
+                          </span>
+                        </div>
                         <div className="text-xs text-[var(--muted)]">
-                          {Math.round(org.voiceSecondsMtd / 60)} min · Retell $
+                          ${(org.voiceBilledMicroUsdMtd / 1_000_000).toFixed(2)} · Retell $
                           {(org.voiceCostMicroUsdMtd / 1_000_000).toFixed(2)}
                         </div>
                       </>
                     )}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
+                    {org.upcomingAppointments === 0 ? (
+                      <span className="text-[var(--muted)]">—</span>
+                    ) : (
+                      org.upcomingAppointments
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Problems org={org} />
                   </td>
                   <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                     {ago(org.lastActivityAt)}

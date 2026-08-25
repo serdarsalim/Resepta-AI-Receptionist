@@ -46,6 +46,18 @@ import { CheckMark, SearchInput } from "@/components/DataTable";
 import { useSearch } from "@/lib/useTableState";
 import { MembersCard } from "./members";
 
+// Named once so the ?tab= guard and the state cannot fall out of step: an
+// unlisted value in the URL must land on Setup, not render an empty page.
+const ADMIN_TABS = [
+  "setup",
+  "agents",
+  "assistant",
+  "members",
+  "sends",
+  "activity",
+] as const;
+type AdminTab = (typeof ADMIN_TABS)[number];
+
 // The cal.com card is parked, not deleted — see the guard at its Section.
 const SHOW_CALCOM_CARD = false;
 
@@ -185,9 +197,20 @@ export default function TenantPage() {
   // Setup is the install-once config; Activity is an unbounded feed. One page
   // holding both scrolled forever, so the feed lives behind its own tab with
   // a filter and pagination.
-  const [tab, setTab] = useState<
-    "setup" | "agents" | "assistant" | "members" | "sends" | "activity"
-  >("setup");
+  const [tab, setTab] = useState<AdminTab>("setup");
+  // ?tab=members lands you where the link meant to send you — today that is the
+  // fleet table's Members count, which is a number you click BECAUSE you want
+  // to change it. Applied in an effect rather than in the useState initializer
+  // on purpose: the initializer also runs during SSR, where there is no
+  // location, so reading it there returns "setup" on the server and something
+  // else on the client, which is a hydration mismatch. One frame of Setup is
+  // the price. Read once, never written back — the tabs are not the URL.
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get("tab");
+    if (asked && (ADMIN_TABS as readonly string[]).includes(asked)) {
+      setTab(asked as AdminTab);
+    }
+  }, []);
   const [retryingAgent, setRetryingAgent] = useState<string | null>(null);
   // Phone lines shows only this business's numbers until the operator asks
   // to add one — the account list is pick-time inventory, not standing state.

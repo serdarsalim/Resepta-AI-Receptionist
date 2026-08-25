@@ -11,6 +11,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
+import { channelForKind, recordSendUsage } from "./lib/usage";
 
 const messageStatus = v.union(
   v.literal("queued"),
@@ -130,6 +131,11 @@ export const applySendResult = internalMutation({
         sendingAt: undefined,
         sentAt: Date.now(),
       });
+      // The fleet table's channel counters, on the same ledger row the voice
+      // and LLM meters use. Here for exactly the reason the open-rate counter
+      // below is here: one feeding site, and a row reaches this branch at most
+      // once, so retries cannot inflate it.
+      await recordSendUsage(ctx, message.orgId, channelForKind(message.kind));
       // The denominator of the template's open rate. Bumped HERE because this
       // is the one place every send path already reports, so the counter has a
       // single feeding site and cannot drift between the send path and the

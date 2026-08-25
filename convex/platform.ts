@@ -121,6 +121,14 @@ const orgHealth = v.object({
   voiceSecondsMtd: v.number(),
   voiceBilledMicroUsdMtd: v.number(),
   voiceCostMicroUsdMtd: v.number(),
+  // Sends this month, per channel, off the same ledger row — so the table can
+  // answer "who actually uses this" rather than only "who is broken". Counted
+  // where a send is confirmed (messages.applySendResult), never by scanning
+  // this org's message history, which is what would put this page back on a
+  // cost proportional to its busiest tenant.
+  emailSentMtd: v.number(),
+  waSentMtd: v.number(),
+  voiceCallsMtd: v.number(),
 });
 
 // Deployment-wide facts, the ones that are true for every org at once. Kept
@@ -342,6 +350,9 @@ async function healthFor(
     stuck,
     lastActivityAt: lastMessage?._creationTime,
     upcomingAppointments: upcoming.length,
+    emailSentMtd: monthUsage?.emailSent ?? 0,
+    waSentMtd: monthUsage?.waSent ?? 0,
+    voiceCallsMtd: monthUsage?.voiceCalls ?? 0,
     voiceSecondsMtd: monthUsage?.voiceSeconds ?? 0,
     voiceBilledMicroUsdMtd: monthUsage?.voiceBilledMicroUsd ?? 0,
     voiceCostMicroUsdMtd: monthUsage?.voiceCostMicroUsd ?? 0,

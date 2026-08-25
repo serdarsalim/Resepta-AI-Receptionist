@@ -2019,6 +2019,23 @@ export default defineSchema({
     // month re-arms both by existing.
     voiceBudgetAlert80At: v.optional(v.number()),
     voiceBudgetAlert100At: v.optional(v.number()),
+    // Sends that a provider actually took, by channel, on the same ledger row.
+    // These answer "who is using this" on the fleet table, and they live here
+    // rather than being counted off `messages` for the reason that table's own
+    // comments give at length: a per-org scan of messages is proportional to
+    // history, so the fleet page stops working somewhere around thirty
+    // businesses. A counter is proportional to nothing.
+    //
+    // Fed from ONE place (messages.applySendResult, the single site every send
+    // path already reports to) and only on the attempt that landed, so retries
+    // cannot inflate them. A staff reply typed on the salon's own phone and
+    // echoed back by Evolution is deliberately NOT counted: nothing was sent
+    // from this product, and the question is who uses the product.
+    //
+    // Optional because rows written before the meter existed carry none.
+    // migrations.backfillSendCounts fills those in.
+    emailSent: v.optional(v.number()),
+    waSent: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_org_month", ["orgId", "month"]),
 

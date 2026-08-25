@@ -98,6 +98,7 @@ import type * as reports from "../reports.js";
 import type * as retell from "../retell.js";
 import type * as retellAgent from "../retellAgent.js";
 import type * as schedule from "../schedule.js";
+import type * as sendBackfill from "../sendBackfill.js";
 import type * as services from "../services.js";
 import type * as staff from "../staff.js";
 import type * as team from "../team.js";
@@ -208,6 +209,7 @@ declare const fullApi: ApiFromModules<{
   retell: typeof retell;
   retellAgent: typeof retellAgent;
   schedule: typeof schedule;
+  sendBackfill: typeof sendBackfill;
   services: typeof services;
   staff: typeof staff;
   team: typeof team;
