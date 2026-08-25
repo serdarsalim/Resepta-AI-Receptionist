@@ -1343,7 +1343,6 @@ function RulesCard({
     void removeRule({ ruleId: rule._id });
   };
 
-  const orgHasChannel = waConnected || evolutionEnabled || emailEnabled;
   // One chip per channel that could ACTUALLY carry this rule — the chip list
   // is the truth, so there is nothing to warn about beside it. WhatsApp
   // qualifies through an Evolution outbound number, or through a Cloud number
@@ -1967,12 +1966,6 @@ function RulesCard({
             );
           })}
         </div>
-
-        {!orgHasChannel && (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-            {t("settings.rulesNoChannel")}
-          </p>
-        )}
 
         {/* "Reset to defaults" stood here until 2026-08-19. It offered to
             throw away every rule and every word an owner had written, in

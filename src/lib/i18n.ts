@@ -1643,14 +1643,6 @@ const dictionary = {
     en: "This removes the rule and the custom text you wrote for it. You can add the same rule again later; its text starts from the stock wording.",
     de: "Diese Regel und der eigene Text dazu werden gelöscht. Sie können die Regel später wieder hinzufügen; der Text beginnt dann mit dem Standardtext.",
   },
-  // Shown when NO channel is wired. The wiring is the operator's job, so this
-  // reassures rather than instructs: the rules above it already show that
-  // reminders exist, and this says why nothing sends yet and whose move it is.
-  "settings.rulesNoChannel": {
-    tr: "Hatırlatmalarınız hazır, kurulum bekliyor. WhatsApp ve e-posta bağlantısını biz yapıyoruz, bize ulaşmanız yeterli.",
-    en: "Your reminders are ready and waiting on setup. We wire up WhatsApp and email for you, just get in touch.",
-    de: "Ihre Erinnerungen stehen bereit und warten auf die Einrichtung. WhatsApp und E-Mail richten wir für Sie ein, melden Sie sich einfach.",
-  },
   "settings.ruleSendWindow": {
     tr: "Gönderim saatleri",
     en: "Sending hours",
