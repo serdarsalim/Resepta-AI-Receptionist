@@ -28,7 +28,12 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { ago } from "./parts";
+import { InfoTip } from "@/components/InfoTip";
 import type { Search } from "@/lib/useTableState";
+import {
+  VOICE_AGENT_TEMPLATE_VERSION,
+  VOICE_AGENT_MODEL,
+} from "../../../convex/lib/voiceAgentTemplate";
 
 const LANGS = ["tr", "en", "de"] as const;
 type Lang = (typeof LANGS)[number];
@@ -629,20 +634,10 @@ function FieldRow({
 
 // ---- The list ----
 
-const BLANK: AdminPreset = {
-  key: "",
-  name: { ...EMPTY },
-  services: [],
-  fields: [],
-  // A vertical drafted for later starts OFF. The reason to add one before it
-  // is ready is that it is not ready, and a half-filled vertical in the live
-  // wizard would seed a business three blank services.
-  active: false,
-  inCode: false,
-  edited: false,
-  updatedAt: null,
-  updatedBy: null,
-};
+// BLANK, the empty preset the "+ Add vertical" button opened, went with the
+// button (Serdar, 2026-08-25). The Editor still handles isNew because the
+// mutation behind it is unchanged and a future entry point can hand it a
+// draft; nothing in the console does today.
 
 export function OnboardingTab({ search }: { search: Search }) {
   const presets = useQuery(api.industryPresets.all, {});
@@ -650,7 +645,6 @@ export function OnboardingTab({ search }: { search: Search }) {
   const setActive = useMutation(api.industryPresets.setActive);
   const [open, setOpen] = useState<string | null>(null);
   const [openPrompt, setOpenPrompt] = useState<PromptCode | null>(null);
-  const [adding, setAdding] = useState(false);
 
   const shown = useMemo(
     () =>
@@ -679,10 +673,6 @@ export function OnboardingTab({ search }: { search: Search }) {
     );
   }
 
-  if (adding) {
-    return <Editor preset={BLANK} isNew onClose={() => setAdding(false)} />;
-  }
-
   const editing = presets.find((preset) => preset.key === open);
   if (editing) {
     // Keyed on the vertical so switching rows rebuilds the draft rather than
@@ -708,7 +698,10 @@ export function OnboardingTab({ search }: { search: Search }) {
           <code className="font-mono">convex/lib/industryPresets.ts</code> —
           editing here lays a row over it for this deployment.
         </p>
-        <Ghost onClick={() => setAdding(true)}>+ Add vertical</Ghost>
+        {/* No "+ Add vertical" (Serdar, 2026-08-25): verticals get added by
+            editing convex/lib/industryPresets.ts with Claude, not by typing a
+            blank one into a form, and the button offered the path that writes
+            an override row the page then nags about reverting. */}
       </div>
 
       {drifted > 0 && (
@@ -733,17 +726,17 @@ export function OnboardingTab({ search }: { search: Search }) {
                       shows in the editor a row click opens, which is where
                       someone wiring an integration goes anyway. */}
                   <th className="px-3 pb-2 pt-3.5 font-semibold">Vertical</th>
+                  {/* How many businesses picked it, in place of the services
+                      and fields counts (Serdar, 2026-08-25). Those described
+                      the preset's own contents — visible in the editor a row
+                      click opens — and never answered the question this list
+                      is for, which is whether a vertical earns its slot in
+                      the wizard. */}
                   <th
                     className="px-3 pb-2 pt-3.5 font-semibold"
-                    title="Seeded into the price list at onboarding"
+                    title="Businesses currently on this vertical"
                   >
-                    Services
-                  </th>
-                  <th
-                    className="px-3 pb-2 pt-3.5 font-semibold"
-                    title="Seeded onto the customer record, and collected by the phone agent"
-                  >
-                    Fields
+                    Businesses
                   </th>
                   <th className="px-3 pb-2 pt-3.5 font-semibold">Source</th>
                   <th className="px-3 pb-2 pt-3.5 font-semibold">Offered</th>
@@ -768,10 +761,7 @@ export function OnboardingTab({ search }: { search: Search }) {
                       </div>
                     </td>
                     <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
-                      {preset.services.length || <span className="text-[var(--muted)]">—</span>}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
-                      {preset.fields.length || <span className="text-[var(--muted)]">—</span>}
+                      {preset.orgs || <span className="text-[var(--muted)]">—</span>}
                     </td>
                     <td className="px-3 py-2">
                       {preset.inCode ? (
@@ -1093,12 +1083,12 @@ function PromptSection({
 
   return (
     <section className="rounded-lg bg-[var(--card)] p-3 shadow-[var(--card-shadow)] sm:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* The explanation rides the (i), like every other card on this page
+          (Serdar, 2026-08-25). Spelled out beside the title it was the widest
+          thing in the header and read as a caption on the card. */}
+      <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold">What a new phone agent is born saying</h2>
-        <span className="text-xs text-[var(--muted)]">
-          Per language, not per vertical — the services and contact fields above
-          are what make an agent sound like its trade.
-        </span>
+        <InfoTip text="Per language, not per vertical — the services and contact fields above are what make an agent sound like its trade." />
       </div>
       <div className="mt-3 divide-y divide-[var(--table-divider)]">
         {PROMPT_LANGUAGES.map(({ code, label }) => {
@@ -1139,6 +1129,61 @@ function PromptSection({
           ? "An edited prompt reaches agents created from now on. Agents that already exist keep theirs — their owners edit it in the app, and the template sync never sends prompt text."
           : "Editing one changes what the next agent is born saying. It never changes an agent that already exists."}
       </p>
+
+      {/* What every agent is born WITH, under what it is born SAYING (Serdar,
+          2026-08-25). The greeting rows above are the per-language half; this
+          is the half that is the same for a dentist in Berlin and a barber in
+          Ordu, and until now it lived only in the template module's comments
+          — so "can our agents hang up?" was a question you answered by
+          reading TypeScript.
+
+          Read from convex/lib/voiceAgentTemplate.ts rather than retyped: the
+          module is pure (no Convex imports), so the constants are the same
+          objects provisioning sends to the provider, and a knob that changes
+          there changes here. Not editable, deliberately — these ride the
+          template version, and a console that let one be flipped per
+          deployment would fork the fleet from the code that documents it. */}
+      <div className="mt-4 border-t border-[var(--table-divider)] pt-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold">
+            What every agent is born with
+          </h3>
+          <InfoTip text="The same for every vertical and every language, set by the template in convex/lib/voiceAgentTemplate.ts. Changing one is a code change and a template version bump, not a switch here — existing agents pick it up when their owner clicks update." />
+          <span className="ml-auto text-xs text-[var(--muted)]">
+            template v{VOICE_AGENT_TEMPLATE_VERSION}
+          </span>
+        </div>
+        <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+          {[
+            [
+              "Hanging up",
+              "Yes, by default — the end_call tool. Never in the same turn as its own goodbye, and never in reply to a greeting. A business can switch it off in its own agent editor.",
+            ],
+            [
+              "Voicemail",
+              "Not handled. Nothing detects an answering machine, so an agent that reaches one talks to it until the call ends.",
+            ],
+            [
+              "Call length",
+              "Bounded only by the provider's max call duration. There is no per-call limit of our own.",
+            ],
+            [
+              "Interruptions",
+              "Answers the moment you stop (responsiveness 0.99, dynamic responsiveness off) and only stops mid-word for a real interruption (sensitivity 0.4). Backchannels while you talk.",
+            ],
+            [
+              "What it can do",
+              "Check availability, book, find, cancel and reschedule, and save what the caller tells it about themselves.",
+            ],
+            ["Engine", `${VOICE_AGENT_MODEL}, priority inference, temperature 0.1.`],
+          ].map(([term, detail]) => (
+            <div key={term}>
+              <dt className="text-xs font-medium">{term}</dt>
+              <dd className="text-xs text-[var(--muted)]">{detail}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </section>
   );
 }

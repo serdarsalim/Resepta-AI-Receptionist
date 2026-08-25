@@ -51,6 +51,12 @@ const adminPreset = v.object({
   active: v.boolean(),
   inCode: v.boolean(),
   edited: v.boolean(),
+  // How many businesses are ON this vertical. The one number an operator
+  // actually wants from this list (Serdar, 2026-08-25) — the services and
+  // fields counts it replaced were facts about the preset's own contents,
+  // readable in the editor a row click opens, and told nobody whether the
+  // vertical earns its slot in the wizard.
+  orgs: v.number(),
   updatedAt: v.union(v.number(), v.null()),
   updatedBy: v.union(v.string(), v.null()),
 });
@@ -122,6 +128,15 @@ export const all = query({
         }),
       ),
     );
+    // Counted by scanning the orgs table rather than off an index: this is the
+    // operator console reading the whole fleet, which every other card on the
+    // page already does, and an index on orgs.industry would exist for one
+    // admin query nobody runs in a loop.
+    const orgCounts = new Map<string, number>();
+    for (const org of await ctx.db.query("orgs").collect()) {
+      if (!org.industry) continue;
+      orgCounts.set(org.industry, (orgCounts.get(org.industry) ?? 0) + 1);
+    }
     return presets.map((preset) => ({
       key: preset.key,
       name: preset.name,
@@ -138,6 +153,7 @@ export const all = query({
       active: preset.active,
       inCode: preset.inCode,
       edited: preset.edited,
+      orgs: orgCounts.get(preset.key) ?? 0,
       updatedAt: preset.updatedAt ?? null,
       updatedBy: preset.updatedBy ? (editors.get(preset.updatedBy) ?? null) : null,
     }));
