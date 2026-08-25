@@ -11,6 +11,7 @@ import { useLanguage, useT } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
 import { DEFAULT_TITLE, workspaceTitle } from "@/lib/brand";
+import { signOutDestination } from "@/lib/hosts";
 import { OperatorBanner } from "./OperatorBanner";
 import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
@@ -1073,7 +1074,22 @@ function UserMenu({
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => void signOut()}
+                // Leaves for the marketing site, not for /signin. See
+                // lib/hosts.signOutDestination — every page here is behind
+                // auth, so staying put means bouncing off a sign-in screen
+                // one click after saying you were done.
+                //
+                // .then, not .finally: a sign-out that failed has left the
+                // session standing, and navigating away from a session that
+                // still exists tells the person a lie about the shared laptop
+                // they are walking away from.
+                onClick={() =>
+                  void signOut().then(() => {
+                    window.location.href = signOutDestination(
+                      window.location.hostname,
+                    );
+                  })
+                }
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
               >
                 <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">

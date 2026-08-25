@@ -32,3 +32,19 @@ export function originForHost(host: string | null): string {
   if (host === DEMO_HOST) return DEMO_ORIGIN;
   return APEX_ORIGIN;
 }
+
+// Where signing out lands, and it is deliberately NOT a route in this app.
+// Since the split (2026-08-24) this deployment is app.resepta.xyz and every
+// page of it is behind auth, so a sign-out that stayed here bounced off
+// /signin — the product asking you to come back in at the exact moment you
+// said you were leaving. The marketing site is the door you came through, so
+// it is the door you leave by.
+//
+// A demo visitor goes back to the demo instead. They never had an account to
+// sign out OF; the anonymous session is the whole visit, and dropping them on
+// a pricing page is a strange way to end a look around. demo.resepta.xyz/
+// serves the demo's own entry to anyone signed out (src/proxy.ts).
+export function signOutDestination(host: string | null): string {
+  if (host === DEMO_HOST) return DEMO_ORIGIN;
+  return APEX_ORIGIN;
+}

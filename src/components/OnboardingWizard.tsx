@@ -9,6 +9,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { useNumberDocumentUpload } from "./NumberRequestCard";
 import { BrandMark } from "./BrandMark";
 import { LANGUAGES, type Language } from "@/lib/i18n";
+import { signOutDestination } from "@/lib/hosts";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 
 // First sign-in onboarding: the one-question gate grown into a short wizard.
@@ -281,7 +282,15 @@ export function OnboardingWizard() {
         </div>
         <button
           type="button"
-          onClick={() => void signOut()}
+          // Same landing as the account menu's. This one matters more, if
+          // anything: somebody who signs out mid-wizard has decided against
+          // the product, and the page that answers that is the one explaining
+          // it, not a sign-in card.
+          onClick={() =>
+            void signOut().then(() => {
+              window.location.href = signOutDestination(window.location.hostname);
+            })
+          }
           className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         >
           <SignOutIcon />
