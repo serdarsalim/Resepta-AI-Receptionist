@@ -777,11 +777,28 @@ export function VoiceVariablesEditor({
                   if (provided) {
                     return (
                       <div key={index} className={VAR_GRID}>
-                        <span
-                          title={provided.label}
-                          className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]"
-                        >
-                          {provided.key}
+                        {/* Label first, key under it. The label was here all
+                            along as a `title`, which is a hover tooltip: the
+                            human name for the thing was the part you could
+                            only reach with a mouse, on a table whose whole
+                            left column was slugs (Serdar, on seeing it: "why
+                            do we show the variable names here, we should show
+                            the label").
+
+                            The key STAYS, quietly, because it is what you type
+                            into the prompt — the editor there speaks keys and
+                            cannot speak labels (see PromptEditor's mirror
+                            note). A table that showed only labels would name
+                            things you then could not find in the box next to
+                            it. Same shape VariableInsertDropdown already uses:
+                            what it is called, then what to type. */}
+                        <span className="min-w-0 px-2 py-1">
+                          <span className="block truncate text-xs text-[var(--foreground)]">
+                            {provided.label}
+                          </span>
+                          <span className="block truncate font-mono text-[11px] leading-tight text-[var(--muted)]">
+                            {provided.key}
+                          </span>
                         </span>
                         <span className="px-2 py-1 text-xs text-[var(--muted)]">
                           {t(
@@ -864,11 +881,15 @@ export function VoiceVariablesEditor({
                 {group.id === "before" &&
                   [...availableBuiltins, ...injectedVoiceContext(t)].map((item) => (
                     <div key={item.key} className={VAR_GRID}>
-                      <span
-                        title={item.label}
-                        className="truncate px-2 py-1 font-mono text-xs text-[var(--muted)]"
-                      >
-                        {item.key}
+                      {/* Label over key, same as the row above and for the
+                          same reason. */}
+                      <span className="min-w-0 px-2 py-1">
+                        <span className="block truncate text-xs text-[var(--foreground)]">
+                          {item.label}
+                        </span>
+                        <span className="block truncate font-mono text-[11px] leading-tight text-[var(--muted)]">
+                          {item.key}
+                        </span>
                       </span>
                       {item.kind === "list" ? (
                         <ProvidedListPeek
