@@ -804,7 +804,10 @@ export const orgMemberCandidates = query({
       people: people.sort((a, b) =>
         (a.name ?? a.email).localeCompare(b.name ?? b.email),
       ),
-      capped: rows.length === CANDIDATE_SCAN && matches.length > CANDIDATE_RESULTS,
+      // Either way the list is incomplete: more matched than fit, or the scan
+      // itself stopped short of the whole table. An AND here would call a
+      // truncated list complete whenever the deployment happens to be small.
+      capped: rows.length === CANDIDATE_SCAN || matches.length > CANDIDATE_RESULTS,
     };
   },
 });

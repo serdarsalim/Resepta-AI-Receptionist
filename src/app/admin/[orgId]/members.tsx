@@ -217,7 +217,8 @@ export function MembersCard({
 
           {candidates?.capped && (
             <p className="mt-1.5 text-[11px] text-[var(--muted)]">
-              More accounts match than are shown. Keep typing to narrow it.
+              This list may not be complete — type more of the name or address.
+              Adding by full email address always works.
             </p>
           )}
 
