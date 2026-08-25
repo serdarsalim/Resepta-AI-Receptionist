@@ -118,12 +118,15 @@ type EditorContext = {
   runtimeConnectedAt: number | null;
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
+  voiceLockedIdentity: Array<"firstname" | "lastname" | "email">;
   fields: Array<{
     _id: string;
     key: string;
     label: string;
     type: "text" | "select" | "number" | "date";
     options?: string[];
+    voiceDescription?: string;
+    voiceConfirm?: boolean;
     source?: "manual" | "voice";
   }>;
 };
@@ -508,7 +511,12 @@ export const read = action({
         type: field.type,
         options: field.options ?? [],
         voice: field.source === "voice",
+        voiceDescription: field.voiceDescription ?? "",
+        voiceConfirm: field.voiceConfirm === true,
       })),
+      // The editor renders identity capture rows from this rather than a
+      // second query: derive and display must read the same lock list.
+      voiceLockedIdentity: context.voiceLockedIdentity,
     };
   },
 });
@@ -802,6 +810,98 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
 // thing in here that ever cared about identity, and it now takes the org
 // directly, so both doors below share one copy of the draft-then-publish
 // ordering rather than growing a second one that drifts.
+// ── Capture rows are DERIVED, not authored (2026-08-25) ─────────────────────
+//
+// The full merge with the Contact fields Voice column. What the agent collects
+// used to be a per-agent registry (voiceAgentVariables capture rows) that the
+// variables editor maintained beside the org's contact fields — the same fact
+// in two systems, and the systems could disagree: a field flipped to voice in
+// Business collected nothing until somebody re-published rows, and a field
+// flipped back kept being asked about. Now the field list IS the capture
+// config. One switch (the Voice column), one description, one confirm flag,
+// all on the field; every agent of the org derives the same capture set from
+// it at publish time.
+//
+// Identity columns ride along automatically: an unlocked first name, last
+// name or email is derived as a question landing on the customer's own
+// column, under the same key the ring-time injection already uses, so a
+// repeat caller is greeted rather than re-interrogated and a first-time
+// caller stops becoming a phone number with no name on it. voiceLockedIdentity
+// is the opt-out, same as everywhere else. Phone is never derived: the caller
+// is MATCHED by it.
+//
+// What the caller may still author per agent is CONTEXT rows only — static
+// values injected into every call. publishVariableSet filters its input down
+// to those, so an MCP client or a stale editor sending capture rows cannot
+// reintroduce the second registry: they are dropped in favour of what the
+// fields say.
+function deriveCaptureRows(context: EditorContext): VariableRow[] {
+  const locks = new Set(context.voiceLockedIdentity ?? []);
+  const rows: VariableRow[] = [];
+  const identity = [
+    {
+      lock: "firstname",
+      key: "customer_first_name",
+      label: "First name",
+      customerField: "firstName",
+      beforeSource: "customer_first_name",
+      description: "The caller's first name, exactly as they give it.",
+    },
+    {
+      lock: "lastname",
+      key: "customer_last_name",
+      label: "Last name",
+      customerField: "lastName",
+      beforeSource: "customer_last_name",
+      description: "The caller's last name, exactly as they give it.",
+    },
+    {
+      lock: "email",
+      key: "customer_email",
+      label: "Email",
+      customerField: "email",
+      beforeSource: "customer_email",
+      description: "The caller's email address, spelled out.",
+    },
+  ] as const;
+  for (const column of identity) {
+    if (locks.has(column.lock)) continue;
+    rows.push({
+      key: column.key,
+      label: column.label,
+      description: column.description,
+      type: "string",
+      required: false,
+      beforeSource: column.beforeSource,
+      duringMode: "if_missing",
+      afterCall: true,
+      destination: "customer",
+      customerField: column.customerField,
+    });
+  }
+  for (const field of context.fields) {
+    if ((field.source ?? "manual") !== "voice") continue;
+    rows.push({
+      key: field.key,
+      label: field.label,
+      // The generic fallback names the thing and nothing else — the
+      // abstention suffix publish appends is what stops the analysis pass
+      // rationalising an answer for it.
+      description: field.voiceDescription?.trim() || `The caller's ${field.label}.`,
+      type: field.type === "select" ? "enum" : field.type === "number" ? "number" : "string",
+      choices: field.type === "select" ? field.options ?? [] : undefined,
+      required: false,
+      beforeSource: "contact_field",
+      beforeFieldId: field._id as VariableRow["beforeFieldId"],
+      duringMode: field.voiceConfirm ? "confirm" : "if_missing",
+      afterCall: true,
+      destination: "contact",
+      contactFieldId: field._id as VariableRow["contactFieldId"],
+    });
+  }
+  return rows;
+}
+
 async function publishVariableSet(
   ctx: ActionCtx,
   {
@@ -818,7 +918,21 @@ async function publishVariableSet(
 ): Promise<{ ok: boolean; version: number | null }> {
   const context = await editorContext(ctx, agentId, orgId);
   const key = context.apiKey!;
-  const next = validateVariables(context, variables);
+  // Input keeps only its CONTEXT rows (inject, capture nothing); the capture
+  // set is derived from the org's fields, and a derived key beats an authored
+  // one so the two can never disagree about one variable.
+  const derived = deriveCaptureRows(context);
+  const derivedKeys = new Set(derived.map((row) => row.key));
+  const next = validateVariables(context, [
+    ...variables.filter(
+      (row) =>
+        row.duringMode === "none" &&
+        !row.afterCall &&
+        row.beforeSource !== "none" &&
+        !derivedKeys.has(row.key),
+    ),
+    ...derived,
+  ]);
   const id = encodeURIComponent(agentId);
   const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
   if (baseVersion !== undefined && live.version !== baseVersion) {

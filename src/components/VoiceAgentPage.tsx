@@ -84,6 +84,7 @@ type Detail = {
     items: VoiceVariable[];
   };
   contactFields: VoiceContactField[];
+  voiceLockedIdentity?: string[];
 };
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
@@ -761,6 +762,7 @@ export function VoiceAgentPage({
                 initial={detail.variableConfig.items}
                 seed={seed}
                 contactFields={detail.contactFields}
+                identityLocks={detail.voiceLockedIdentity ?? []}
                 onPublished={load}
                 onSaveStateChange={onVarsSaveState}
               />

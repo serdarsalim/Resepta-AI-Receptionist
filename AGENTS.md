@@ -2582,6 +2582,44 @@ here:
   are describing somebody else's site now. Fix them when you next touch that
   area.
 
+## The agent's capture config IS the Contact fields table (2026-08-25)
+
+Serdar's spec, in his words: the agent should know the caller and what we
+already have, collect the rest during or after the call, and the client
+setting an agent up must understand it "immediately without having to read an
+extensive manual". Three moves got there, in one day, in order:
+
+1. **Knows / Asks / Learns died.** The three headings were the runtime's
+   before/during/after timeline projected onto a filing system by priority;
+   the editor now has two sections, "What the agent sees" (injected context,
+   automatic, nothing to set up) and "What the agent fills in".
+2. **Capture rows are DERIVED, not authored.** `retellAgent.deriveCaptureRows`
+   builds the capture set at publish time from the org's contact fields
+   (`source === "voice"`, plus unlocked identity columns as questions landing
+   on the customer's own columns). The per-agent `voiceAgentVariables` rows a
+   caller may still author are CONTEXT ONLY (static injections);
+   `publishVariableSet` filters its input to those, so no client — editor or
+   MCP — can reintroduce a second capture registry. `set_agent_variables`
+   capture rows are silently superseded by field config; its tool description
+   still oversells and needs a trim.
+3. **The field carries its voice metadata.** `voiceDescription` (the
+   extractor's instruction) and `voiceConfirm` live on `contactFields`; the
+   fills section's rows write the field through the same mutations the
+   Contact fields table uses. Flipping `source` to manual no longer throws
+   `field-in-use` — it IS the unlink, and the next publish stops deriving.
+
+What did not change: runtime ring-time context (`contact`/`information`) was
+already field-driven; mid-call and post-call writes still go through
+`applyVoiceContactValues`. Field edits reach Retell on the agent's NEXT
+publish — there is deliberately no auto-republish (version spam per keystroke);
+the editor marks itself dirty via `fieldsTouched` instead. A field edited in
+Business while nobody re-publishes an agent is stale at Retell until then —
+same as it always was for anything else.
+
+Lost knowingly: per-agent capture variation (nobody used it), the `required`
+flag on capture rows, and hand-keyed capture rows whose destination was the
+call only ("visible debt" rows — they no longer publish).
+
 ## An inbox row opens the message, not the mailbox (2026-08-24)
 
 `messages.conversations` returns `lastId` — the id of the row its preview came

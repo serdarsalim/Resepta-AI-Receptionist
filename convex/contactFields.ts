@@ -27,6 +27,8 @@ const fieldDoc = v.object({
   options: v.optional(v.array(v.string())),
   order: v.number(),
   source: v.optional(fieldSource),
+  voiceDescription: v.optional(v.string()),
+  voiceConfirm: v.optional(v.boolean()),
 });
 
 export const list = query({
@@ -142,6 +144,11 @@ export const update = mutation({
     options: v.optional(v.array(v.string())),
     source: v.optional(fieldSource),
     key: v.optional(v.string()),
+    // Voice capture metadata (see schema). Empty string clears the
+    // description; false clears confirm — optional columns stay unset rather
+    // than holding a default nobody chose.
+    voiceDescription: v.optional(v.string()),
+    voiceConfirm: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -187,10 +194,20 @@ export const update = mutation({
       }
     }
     if (args.source !== undefined && args.source !== (field.source ?? "manual")) {
-      // Handing a field back to staff while an agent still writes it would
-      // fail that agent's next publish; unlink it on the agent first.
-      if (args.source === "manual" && (await usedByAgents())) throw new Error("field-in-use");
+      // Flipping to manual IS the unlink now. Capture rows are DERIVED from
+      // voice-enabled fields at publish time (retellAgent.deriveCaptureRows,
+      // 2026-08-25), so there is no per-agent row whose publish this breaks:
+      // the next publish simply stops deriving the field. The field-in-use
+      // guard that lived here belonged to the era when agents held their own
+      // capture registry; it survives above for KEY moves, where stored
+      // values and stale rows genuinely would be orphaned.
       patch.source = args.source === "voice" ? "voice" : undefined;
+    }
+    if (args.voiceDescription !== undefined) {
+      patch.voiceDescription = args.voiceDescription.trim() || undefined;
+    }
+    if (args.voiceConfirm !== undefined) {
+      patch.voiceConfirm = args.voiceConfirm || undefined;
     }
     if (Object.keys(patch).length > 0) await ctx.db.patch(args.fieldId, patch);
     return null;

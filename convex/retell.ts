@@ -788,6 +788,9 @@ export const agentEditorContext = internalQuery({
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
       fields: fields.sort((a, b) => a.order - b.order),
+      // Which identity columns the agent may not write — deriveCaptureRows
+      // reads this so a locked column is never offered as a question.
+      voiceLockedIdentity: org.voiceLockedIdentity ?? [],
     };
   },
 });

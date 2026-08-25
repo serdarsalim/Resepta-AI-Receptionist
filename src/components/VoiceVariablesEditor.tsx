@@ -101,7 +101,32 @@ export type VoiceContactField = {
   type: "text" | "select" | "number" | "date";
   options: string[];
   voice: boolean;
+  // The capture config lives ON the field since 2026-08-25 (the full merge
+  // with the Contact fields Voice column): the extractor's instruction and
+  // the confirm-first flag. deriveCaptureRows in retellAgent.ts reads the
+  // same two at publish time, so this editor and the publish can only ever
+  // say the same thing.
+  voiceDescription: string;
+  voiceConfirm: boolean;
 };
+
+// Context rows inject and capture nothing; they are all a caller may still
+// AUTHOR per agent. Everything the agent collects is derived from the org's
+// contact fields at publish time, so capture rows no longer live in the
+// draft at all.
+export function isContextRow(row: VoiceVariable): boolean {
+  return row.duringMode === "none" && !row.afterCall;
+}
+
+// The identity columns the agent asks for automatically while they are
+// unlocked. Mirrors deriveCaptureRows in retellAgent.ts row for row — the
+// editor renders this list, publish derives from the same lock set, and
+// voiceLockedIdentity is the single opt-out both read.
+const IDENTITY_CAPTURE = [
+  { lock: "firstname", labelKey: "customers.firstName", descKey: "voiceVariables.descFirstName" },
+  { lock: "lastname", labelKey: "customers.lastName", descKey: "voiceVariables.descLastName" },
+  { lock: "email", labelKey: "customers.email", descKey: "voiceVariables.descEmail" },
+] as const;
 
 // The context the runtime injects on every call without any configuration.
 // One list, exported so the @ picker in the instructions and the Variables
@@ -258,6 +283,7 @@ export function VoiceVariablesEditor({
   initial,
   seed,
   contactFields,
+  identityLocks,
   onPublished,
   onSaveStateChange,
 }: {
@@ -271,6 +297,10 @@ export function VoiceVariablesEditor({
   // against, so a restored draft still reports itself as unsaved.
   seed?: VoiceVariable[] | null;
   contactFields: VoiceContactField[];
+  // org.voiceLockedIdentity, from the same read as the fields: which identity
+  // columns the agent may not write, and so which auto-derived questions to
+  // hide. The ✕ on an identity row writes this list.
+  identityLocks: string[];
   onPublished: () => void;
   // Lets the page header own Save and Discard for the whole agent. The editor
   // still holds the draft — it just stops being the only place the save button
@@ -289,7 +319,16 @@ export function VoiceVariablesEditor({
   const orgSettings = useQuery(api.orgs.current, {});
   const createContactField = useMutation(api.contactFields.create);
   const updateContactField = useMutation(api.contactFields.update);
-  const [draft, setDraft] = useState(seed ?? initial);
+  const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
+  // Context rows only. Stored sets still hold the capture rows the last
+  // publish derived (and legacy hand-authored ones); the editor filters them
+  // out on the way in because they are no longer anybody's to edit here —
+  // the fields ARE that configuration now.
+  const [draft, setDraft] = useState(() => (seed ?? initial).filter(isContextRow));
+  // Field-side edits (description, confirm, the Voice switch itself) save to
+  // the org instantly but reach Retell on the next publish. This is what
+  // keeps the Publish button honest about them.
+  const [fieldsTouched, setFieldsTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [previous, setPrevious] = useState<VoiceVariable[] | null>(null);
@@ -303,9 +342,14 @@ export function VoiceVariablesEditor({
   // unpublished draft.
   const [createdFields, setCreatedFields] = useState<VoiceContactField[]>([]);
 
-  useEffect(() => setDraft(seed ?? initial), [initial, seed]);
+  useEffect(() => setDraft((seed ?? initial).filter(isContextRow)), [initial, seed]);
 
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
+  const dirty = useMemo(
+    () =>
+      fieldsTouched ||
+      JSON.stringify(draft) !== JSON.stringify(initial.filter(isContextRow)),
+    [draft, initial, fieldsTouched],
+  );
   const allFields = useMemo(
     () => [...contactFields, ...createdFields],
     [contactFields, createdFields],
@@ -344,7 +388,7 @@ export function VoiceVariablesEditor({
       })) as string;
       setCreatedFields((rows) => [
         ...rows,
-        { id, key: row.key, label, type: "text", options: [], voice: true },
+        { id, key: row.key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false },
       ]);
       patch(index, { destination: "contact", contactFieldId: id });
     } catch {
@@ -357,7 +401,52 @@ export function VoiceVariablesEditor({
   // value is injected before the call and the agent only asks when it is
   // missing. Without the prefill, every adopted field re-interrogated people
   // the business already knew.
-  const adoptField = (field: VoiceContactField, section: "sees" | "fills" = "fills") => {
+  // Fills-side actions write the FIELD, not a row. They mark fieldsTouched so
+  // the Publish button knows Retell is behind the org.
+  const touchFields = () => setFieldsTouched(true);
+  const enableFieldVoice = (field: VoiceContactField) => {
+    void updateContactField({ fieldId: field.id as Id<"contactFields">, source: "voice" });
+    setCreatedFields((rows) =>
+      rows.map((row) => (row.id === field.id ? { ...row, voice: true } : row)),
+    );
+    touchFields();
+  };
+  const disableFieldVoice = (field: VoiceContactField) => {
+    void updateContactField({ fieldId: field.id as Id<"contactFields">, source: "manual" });
+    setCreatedFields((rows) =>
+      rows.map((row) => (row.id === field.id ? { ...row, voice: false } : row)),
+    );
+    touchFields();
+  };
+  const createVoiceField = async (label: string) => {
+    const key = keyFromLabel(label);
+    if (!key) return;
+    const existing = allFields.find((field) => field.key === key);
+    if (existing) {
+      if (!existing.voice) enableFieldVoice(existing);
+      return;
+    }
+    try {
+      const id = (await createContactField({ label, type: "text", source: "voice" })) as string;
+      setCreatedFields((rows) => [
+        ...rows,
+        { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false },
+      ]);
+      touchFields();
+    } catch {
+      setStatus(t("voiceVariables.fieldExists"));
+    }
+  };
+  const unlockIdentity = (lock: "firstname" | "lastname" | "email") => {
+    void setIdentityLock({ key: lock, locked: false });
+    touchFields();
+  };
+  const lockIdentity = (lock: "firstname" | "lastname" | "email") => {
+    void setIdentityLock({ key: lock, locked: true });
+    touchFields();
+  };
+
+  const adoptField = (field: VoiceContactField) => {
     const base: VoiceVariable = {
       ...blankVariable(),
       key: field.key,
@@ -367,29 +456,18 @@ export function VoiceVariablesEditor({
       destination: "contact",
       contactFieldId: field.id,
     };
-    // A fills row gets the whole lifecycle at once — injected so a repeat
-    // caller is not re-interrogated, asked mid-call when missing, recovered
-    // from the transcript when the ask was missed. These used to be three
-    // separately-chosen phases; they are one behaviour now, because there is
-    // no honest reason to want a field asked-for but not recovered.
-    const row: VoiceVariable =
-      section === "sees"
-        ? // Context only: read the stored value into the call, capture nothing.
-          {
-            ...base,
-            duringMode: "none",
-            afterCall: false,
-            beforeSource: "contact_field",
-            beforeFieldId: field.id,
-            destination: "call",
-            contactFieldId: undefined,
-          }
-        : {
-            ...base,
-            beforeSource: "contact_field",
-            beforeFieldId: field.id,
-            afterCall: true,
-          };
+    // Context only: read the stored value into the call, capture nothing.
+    // (Capture is not a row anymore — it is the field's Voice switch, and
+    // publish derives it.)
+    const row: VoiceVariable = {
+      ...base,
+      duringMode: "none",
+      afterCall: false,
+      beforeSource: "contact_field",
+      beforeFieldId: field.id,
+      destination: "call",
+      contactFieldId: undefined,
+    };
     setDraft((rows) => [...rows, row]);
     setFocusLast(true);
   };
@@ -398,12 +476,12 @@ export function VoiceVariablesEditor({
   // fields at the same moment it becomes a row here, so the two registries
   // cannot drift apart. If the label folds to a key an unclaimed voice field
   // already owns, adopt that field instead of failing on the collision.
-  const createFieldAndAdopt = async (label: string, section: "sees" | "fills") => {
+  const createFieldAndAdopt = async (label: string) => {
     const key = keyFromLabel(label);
     if (!key) return;
     const existing = voiceFields.find((field) => field.key === key);
     if (existing) {
-      adoptField(existing, section);
+      adoptField(existing);
       return;
     }
     try {
@@ -412,9 +490,9 @@ export function VoiceVariablesEditor({
         type: "text",
         source: "voice",
       })) as string;
-      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true };
+      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false };
       setCreatedFields((rows) => [...rows, field]);
-      adoptField(field, section);
+      adoptField(field);
     } catch {
       setStatus(t("voiceVariables.fieldExists"));
     }
@@ -448,25 +526,6 @@ export function VoiceVariablesEditor({
   // column, because there is no other honest reading of "ask the caller their
   // name". It used to default to call-only, which is how a first-time caller
   // ended up as a record with a phone number and no name on it.
-  const adoptBuiltin = (builtin: PickerBuiltin) => {
-    const customerField = customerFieldOf(builtin.key);
-    const captures = true;
-    setDraft((rows) => [
-      ...rows,
-      {
-        ...blankVariable(),
-        label: builtin.label,
-        key: builtin.key,
-        beforeSource: builtin.source,
-        duringMode: "if_missing",
-        afterCall: true,
-        ...(customerField && captures
-          ? { destination: "customer" as const, customerField }
-          : {}),
-      },
-    ]);
-    setFocusLast(true);
-  };
 
   // Name-cell re-points: clicking a row's name and choosing something else
   // redefines what the row is. Identity fields move together — label, key,
@@ -536,7 +595,7 @@ export function VoiceVariablesEditor({
         type: "text",
         source: "voice",
       })) as string;
-      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true };
+      const field: VoiceContactField = { id, key, label, type: "text", options: [], voice: true, voiceDescription: "", voiceConfirm: false };
       setCreatedFields((rows) => [...rows, field]);
       relinkRow(index, field);
     } catch {
@@ -589,16 +648,7 @@ export function VoiceVariablesEditor({
   // Which group a row lives in. A Resepta variable is a LIFECYCLE, not a
   // single moment — one row can be seeded before the call, asked during it and
   // recovered from the analysis after. So the group is its most active phase,
-  // Context rows are injected and capture nothing; everything else is a
-  // capture row. This is the ONLY distinction the editor draws now. It used
-  // to project rows onto three phase headings (Knows / Asks / Learns) by
-  // priority — during beats after beats before — which meant two rows under
-  // one heading could behave differently and a row moved headings when a
-  // switch changed. The runtime's before/during/after timeline is real and
-  // still stored; it stopped being a filing system (Serdar: "knows asks
-  // learns is still getting me super confused").
-  const isContext = (row: VoiceVariable): boolean =>
-    row.duringMode === "none" && !row.afterCall;
+  const isContext = isContextRow;
 
   const patch = (index: number, next: Partial<VoiceVariable>) =>
     setDraft((rows) => rows.map((row, i) => (i === index ? { ...row, ...next } : row)));
@@ -618,10 +668,8 @@ export function VoiceVariablesEditor({
     { id: "fills", title: t("voiceVariables.fills"), tip: t("voiceVariables.fillsHint") },
   ];
 
-  // Built-ins and the org's voice-enabled customer fields that no row captures
-  // yet. Not editable — they are context the runtime always injects, or a
-  // field configured in Business — so they sit under their own quiet heading
-  // instead of pretending to be rows you can type in.
+  // Built-ins the runtime always injects, and the voice fields the sees
+  // section has not adopted as explicit context rows yet.
   const availableBuiltins = builtinVoiceVariables(t).filter(
     (builtin) => !draft.some((row) => row.key === builtin.key),
   );
@@ -640,15 +688,7 @@ export function VoiceVariablesEditor({
   // sees section offers no built-ins at all: everything they carry is already
   // on the always-sent rows, and adopting one there minted an editable clone
   // of a fact set elsewhere.
-  const pickerBuiltins = (): PickerBuiltin[] =>
-    availableBuiltins
-          .filter((builtin) => builtin.key !== "services")
-          .filter((builtin) => customerFieldOf(builtin.key))
-          .map((builtin) => ({
-            key: builtin.key,
-            label: builtin.label,
-            source: builtin.key as PickerBuiltin["source"],
-          }));
+
   // A row's own picker also lists what the row currently is, so the menu
   // always contains the current selection.
   const rowPickerFields = (row: VoiceVariable): VoiceContactField[] => {
@@ -701,13 +741,12 @@ export function VoiceVariablesEditor({
   };
 
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
-    const phased = isContext(row) ? [] : pickerBuiltins();
     const own = builtinVoiceVariables(t).find(
       (builtin) => builtin.key === row.key && builtin.key !== "services",
     );
     return own
-      ? [{ key: own.key, label: own.label, source: own.key as PickerBuiltin["source"] }, ...phased]
-      : phased;
+      ? [{ key: own.key, label: own.label, source: own.key as PickerBuiltin["source"] }]
+      : [];
   };
 
   return (
@@ -749,11 +788,16 @@ export function VoiceVariablesEditor({
       <div className="overflow-x-auto">
       <div className="min-w-[38rem] space-y-4">
         {sections.map((section) => {
-          const rows = draft
-            .map((row, index) => ({ row, index }))
-            .filter(({ row }) =>
-              section.id === "sees" ? isContext(row) : !isContext(row),
-            );
+          // The sees section edits DRAFT rows (all context now). The fills
+          // section renders no draft at all: its rows are the org's identity
+          // columns and voice-enabled fields, and every control on them
+          // writes the field. One registry, two renderings — this one and
+          // Customers → Contact fields — that cannot disagree because they
+          // are the same rows.
+          const rows =
+            section.id === "sees"
+              ? draft.map((row, index) => ({ row, index })).filter(({ row }) => isContext(row))
+              : [];
           return (
             <div key={section.id}>
               {/* Foreground and semibold, not muted: these headings are the
@@ -895,15 +939,115 @@ export function VoiceVariablesEditor({
                       <span />
                     </div>
                   ))}
+                {section.id === "fills" && (
+                  <>
+                    {/* Identity first: the questions every receptionist asks
+                        before any custom field. ✕ locks the column, the same
+                        write the Contact fields table's Locked control makes,
+                        and a locked one reappears in the picker below. */}
+                    {IDENTITY_CAPTURE.filter(
+                      (column) => !identityLocks.includes(column.lock),
+                    ).map((column) => (
+                      <div key={column.lock} className={`${VAR_GRID} group`}>
+                        <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
+                          {t(column.labelKey)}
+                        </span>
+                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
+                          {t("voiceVariables.text")}
+                        </span>
+                        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
+                          {t(column.descKey)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => lockIdentity(column.lock)}
+                          aria-label={t("voiceVariables.remove").replace(
+                            "{name}",
+                            t(column.labelKey),
+                          )}
+                          className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          <RemoveX />
+                        </button>
+                      </div>
+                    ))}
+                    {voiceFields.map((field) => (
+                      <FieldCaptureRow
+                        key={field.id}
+                        field={field}
+                        typeLabel={t(
+                          field.type === "select"
+                            ? "fields.type.select"
+                            : field.type === "number"
+                              ? "fields.type.number"
+                              : field.type === "date"
+                                ? "fields.type.date"
+                                : "fields.type.text",
+                        )}
+                        confirmLabel={t("voiceVariables.confirm")}
+                        onDescription={(text) => {
+                          void updateContactField({
+                            fieldId: field.id as Id<"contactFields">,
+                            voiceDescription: text,
+                          });
+                          setCreatedFields((rows) =>
+                            rows.map((row) =>
+                              row.id === field.id ? { ...row, voiceDescription: text } : row,
+                            ),
+                          );
+                          touchFields();
+                        }}
+                        onToggleConfirm={() => {
+                          void updateContactField({
+                            fieldId: field.id as Id<"contactFields">,
+                            voiceConfirm: !field.voiceConfirm,
+                          });
+                          setCreatedFields((rows) =>
+                            rows.map((row) =>
+                              row.id === field.id ? { ...row, voiceConfirm: !field.voiceConfirm } : row,
+                            ),
+                          );
+                          touchFields();
+                        }}
+                        onRemove={() => disableFieldVoice(field)}
+                        removeLabel={t("voiceVariables.remove").replace("{name}", field.label)}
+                      />
+                    ))}
+                  </>
+                )}
                 <VariablePicker
                   addLabel={
                     section.id === "sees" ? t("voiceVariables.addDefault") : undefined
                   }
-                  fields={availableFields}
-                  builtins={section.id === "sees" ? [] : pickerBuiltins()}
-                  onField={(field) => adoptField(field, section.id)}
-                  onBuiltin={(builtin) => adoptBuiltin(builtin)}
-                  onCreate={(label) => void createFieldAndAdopt(label, section.id)}
+                  fields={
+                    section.id === "sees"
+                      ? availableFields
+                      : allFields.filter((field) => !field.voice)
+                  }
+                  builtins={
+                    section.id === "sees"
+                      ? []
+                      : // Locked identity columns, offered back. Picking one
+                        // unlocks it — the same write, reversed.
+                        IDENTITY_CAPTURE.filter((column) =>
+                          identityLocks.includes(column.lock),
+                        ).map((column) => ({
+                          key: column.lock,
+                          label: t(column.labelKey),
+                          source: "none" as PickerBuiltin["source"],
+                        }))
+                  }
+                  onField={(field) =>
+                    section.id === "sees" ? adoptField(field) : enableFieldVoice(field)
+                  }
+                  onBuiltin={(builtin) =>
+                    unlockIdentity(builtin.key as "firstname" | "lastname" | "email")
+                  }
+                  onCreate={(label) =>
+                    section.id === "sees"
+                      ? void createFieldAndAdopt(label)
+                      : void createVoiceField(label)
+                  }
                   onCallOnly={(label) => addCallOnly(label)}
                   // "Just for this call" only where a row is context, not an
                   // answer. A capture variable's value must land somewhere, and
@@ -986,6 +1130,84 @@ type PickerBuiltin = {
 // silent free text. That is the CRM-property-picker contract: one registry,
 // referenced everywhere, created inline, and a row can always be re-pointed
 // by clicking its name.
+// One voice-enabled contact field as a fills row: label · type · the
+// extractor's instruction · ✕. Every control writes the FIELD — this row has
+// no draft, no publish of its own, and no way to disagree with the Contact
+// fields table, because it is that table's row in the agent's clothes.
+//
+// The description drafts locally and commits on blur, the same discipline as
+// every autosaving text input here: typing must not fight the round-trip.
+function FieldCaptureRow({
+  field,
+  typeLabel,
+  confirmLabel,
+  onDescription,
+  onToggleConfirm,
+  onRemove,
+  removeLabel,
+}: {
+  field: VoiceContactField;
+  typeLabel: string;
+  confirmLabel: string;
+  onDescription: (text: string) => void;
+  onToggleConfirm: () => void;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
+  const { t } = useLanguage();
+  const [text, setText] = useState(field.voiceDescription);
+  useEffect(() => setText(field.voiceDescription), [field.voiceDescription]);
+  return (
+    <div className={`${VAR_GRID} group`}>
+      <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
+        {field.label}
+      </span>
+      <span className="flex flex-col items-start px-2 py-1">
+        <span className="text-xs text-[var(--muted)]">
+          {typeLabel}
+          {field.type === "select" && field.options.length > 0
+            ? ` · ${field.options.length}`
+            : ""}
+        </span>
+        {/* Confirm-first, as a quiet toggle under the type. ON reads darker,
+            not accent: it is a state of this row, not an action. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={field.voiceConfirm}
+          onClick={onToggleConfirm}
+          className={`mt-0.5 rounded px-1 py-0.5 text-[10px] transition-colors ${
+            field.voiceConfirm
+              ? "bg-[var(--muted-bg)] font-medium text-[var(--foreground)]"
+              : "text-[var(--muted)] hover:text-[var(--foreground)]"
+          }`}
+        >
+          {field.voiceConfirm ? "✓ " : ""}
+          {confirmLabel}
+        </button>
+      </span>
+      <AutoGrowTextarea
+        value={text}
+        rows={1}
+        placeholder={t("voiceVariables.description")}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => {
+          if (text.trim() !== field.voiceDescription) onDescription(text.trim());
+        }}
+        className={CELL_CLASS}
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={removeLabel}
+        className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      >
+        <RemoveX />
+      </button>
+    </div>
+  );
+}
+
 function VariablePicker({
   current,
   title,

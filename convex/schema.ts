@@ -1089,6 +1089,19 @@ export default defineSchema({
     // the vertical's own vocabulary (plate number, last cleaning, insurance)
     // is org data, not a schema change.
     source: v.optional(v.union(v.literal("manual"), v.literal("voice"))),
+    // Voice capture metadata, ON THE FIELD since 2026-08-25. It lived on
+    // per-agent voiceAgentVariables rows, which meant the same field could
+    // carry different instructions per agent — a flexibility nobody used and
+    // a second registry everybody had to keep in step. The field IS the
+    // capture config now; publish derives the per-agent Retell lists from it.
+    //
+    // voiceDescription is the instruction the extraction and analysis models
+    // follow ("The caller's plate number, letters and digits"). Unset falls
+    // back to a generic wording built from the label.
+    voiceDescription: v.optional(v.string()),
+    // Confirm-first: the agent may only store this after the caller
+    // explicitly confirms it, rather than the moment it is heard.
+    voiceConfirm: v.optional(v.boolean()),
   }).index("by_org", ["orgId"]),
 
   services: defineTable({
