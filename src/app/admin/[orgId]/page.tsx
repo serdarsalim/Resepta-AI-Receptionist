@@ -912,22 +912,38 @@ export default function TenantPage() {
               as two unrelated features. The decision here is the operator's
               own cue to go buy the number at the provider and provision it
               above — the app never purchases numbers. */}
-          {numberReqs && numberReqs.length > 0 && (
+          {/* Always rendered once loaded, empty or not (Serdar, 2026-08-26:
+              "maybe I should see that card even though it hasn't been
+              uploaded yet so I know where it is"). A block that only exists
+              while a document is pending is a surface the operator cannot
+              learn the location of: the one time they go looking, it is
+              because a client ASKED, and the answer used to be a section
+              that was not there. */}
+          {numberReqs && (
             <div className="mt-2 space-y-3 border-t border-[var(--border)] pt-3">
               <p className="text-xs font-medium text-[var(--muted-strong)]">
                 Number requests
               </p>
+              {numberReqs.length === 0 && (
+                <p className="text-xs text-[var(--muted)]">
+                  Nothing to review. When the business uploads its company
+                  registration, the document lands here: accept it, then buy
+                  the number at the provider and tick it above.
+                </p>
+              )}
               {/* Said plainly for the OPERATOR, because the button used to
                   imply otherwise (Serdar, 2026-08-26): approving decides the
                   DOCUMENT and nothing else. Nothing in the provisioning path
                   reads this status — the grant is the checklist above. The
                   tenant sees only "received / approved / live", which is true
                   at every step and says nothing about who does which part. */}
-              <p className="text-xs text-[var(--muted)]">
-                Approving accepts the document and tells the business so. It
-                does not grant a line — buy the number at the provider and
-                tick it above, and their card then shows it as live.
-              </p>
+              {numberReqs.length > 0 && (
+                <p className="text-xs text-[var(--muted)]">
+                  Approving accepts the document and tells the business so. It
+                  does not grant a line — buy the number at the provider and
+                  tick it above, and their card then shows it as live.
+                </p>
+              )}
               {numberReqs.map((req) => (
                 <div
                   key={req.requestId}
