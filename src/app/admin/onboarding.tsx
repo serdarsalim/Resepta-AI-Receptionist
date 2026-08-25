@@ -728,8 +728,11 @@ export function OnboardingTab({ search }: { search: Search }) {
             <table className="w-full text-sm">
               <thead className="text-left text-xs">
                 <tr>
+                  {/* No Key column (Serdar, 2026-08-25): the slug is an
+                      internal identifier nobody reads down a list — it still
+                      shows in the editor a row click opens, which is where
+                      someone wiring an integration goes anyway. */}
                   <th className="px-3 pb-2 pt-3.5 font-semibold">Vertical</th>
-                  <th className="px-3 pb-2 pt-3.5 font-semibold">Key</th>
                   <th
                     className="px-3 pb-2 pt-3.5 font-semibold"
                     title="Seeded into the price list at onboarding"
@@ -763,9 +766,6 @@ export function OnboardingTab({ search }: { search: Search }) {
                       <div className="text-xs text-[var(--muted)]">
                         {preset.name.tr || "—"} · {preset.name.de || "—"}
                       </div>
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs text-[var(--muted-strong)]">
-                      {preset.key}
                     </td>
                     <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                       {preset.services.length || <span className="text-[var(--muted)]">—</span>}
