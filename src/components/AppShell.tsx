@@ -155,12 +155,19 @@ const VoicePhoneIcon = makeIcon(
 // a blob; every earlier attempt failed there rather than on the shape. A
 // quarter-unit thinner opens them and is invisible at the 18px this is seen
 // at, which is the size the whole thing was judged at.
+//
+// It fills nearly the whole 24 box, which for a hollow rectangle is not
+// greedy — it is how it matches its neighbours. Drawn at a note's honest
+// proportions it sat 14 units tall against the 20 of the $ above it in the
+// strip and read as a smaller icon rather than a wider one (Serdar,
+// 2026-08-25: "looks rather small"). An outline shape has to be bigger than a
+// glyph to weigh the same.
 const BillingNoteIcon = makeIcon(
   <>
-    <rect x="1.5" y="5" width="21" height="14" rx="2.5" />
+    <rect x="1" y="3.5" width="22" height="17" rx="3" />
     <g strokeWidth="1.75">
-      <path d="M14 9.4h-2.9a1.6 1.6 0 0 0 0 3.2h1.8a1.6 1.6 0 0 1 0 3.2H10" />
-      <path d="M12 7.8v9.4" />
+      <path d="M14.4 8.4h-3.3a1.9 1.9 0 0 0 0 3.8h1.8a1.9 1.9 0 0 1 0 3.8H9.6" />
+      <path d="M12 6.5v11" />
     </g>
   </>,
 );
