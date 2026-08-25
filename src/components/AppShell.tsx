@@ -1669,9 +1669,9 @@ export function AppShell({
             // The gap between the two rows is doing the separating, so it is
             // wider than the app's usual stack step. At 1.5 the product name
             // and the business under it read as one block with a line break in
-            // it, which is the thing this layout exists to stop.
+            // it; 3 split them but still crowded, so 4 is where it sits.
             className={`flex flex-col pt-3 ${
-              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-3 px-2 pb-2"
+              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-4 px-2 pb-2"
             }`}
           >
             <div
