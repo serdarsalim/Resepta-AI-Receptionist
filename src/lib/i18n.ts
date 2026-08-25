@@ -2134,13 +2134,14 @@ const dictionary = {
   // "Voice" was never the load-bearing half.
   "nav.voiceShort": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
-  // Named for the whole set, not its best-known member: a confirmation, a
-  // cancellation notice, a follow-up, a win-back and an away reply are not
-  // reminders, and five of the six had no word on the sidebar.
+  // "Automations", not "Messages" (2026-08-25): the page draws each rule as
+  // the flow it runs, and the label should sell what the page does — this
+  // works while you sleep — rather than name the artefact it sends. The key
+  // keeps its historical id, like the tab's id before it.
   "nav.messages": {
-    tr: "Mesajlar",
-    en: "Messages",
-    de: "Nachrichten",
+    tr: "Otomasyonlar",
+    en: "Automations",
+    de: "Automatisierungen",
   },
 
   "settings.voice": {

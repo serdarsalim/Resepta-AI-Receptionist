@@ -280,6 +280,10 @@ const NAV_TABS: {
   // follow-up, the win-back and the away reply with no name on the sidebar at
   // all. The id has read "messages" the whole time; only the label lagged.
   //
+  // And AUTOMATIONS since 2026-08-25, when the page started drawing each rule
+  // as the flow it runs. "Messages" named the artefact; the label now names
+  // the value — this sends while you sleep. The id stays put again.
+  //
   // Off the phone tab bar, in the drawer with Business. That argument is about
   // where it sits in the sidebar and it still holds there; the bar is a
   // different question. Five rules you set once and leave alone is not what a
