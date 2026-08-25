@@ -49,7 +49,13 @@ import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig, platformValue, type EmailConfig } from "./lib/platformConfig";
-import { recordActivity } from "./lib/activity";
+import { OPERATOR_ACTOR_NAME, recordActivity } from "./lib/activity";
+import {
+  addMemberByEmail,
+  revokeInviteRow,
+  revokeMembership,
+  setMemberRole,
+} from "./lib/members";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
 import {
   isVoiceModel,
@@ -518,6 +524,10 @@ export const orgDetail = query({
       // is no way to look it up from the other side.
       members: v.array(
         v.object({
+          // The id every write on this tab needs. Returned rather than acted
+          // on by email: an address is what a person typed once, an id is who
+          // they are, and the role picker must not depend on the two agreeing.
+          userId: v.id("users"),
           name: v.union(v.string(), v.null()),
           email: v.union(v.string(), v.null()),
           role: v.string(),
@@ -526,13 +536,27 @@ export const orgDetail = query({
           seenAt: v.union(v.number(), v.null()),
         }),
       ),
+      // Addresses with an open invite and no account yet. They are not members
+      // and must not be drawn as one — nobody holds this seat until the mailed
+      // token is used — but leaving them out entirely is how an operator adds
+      // the same person twice and then wonders why nothing arrived.
+      pendingInvites: v.array(
+        v.object({
+          _id: v.id("invites"),
+          email: v.string(),
+          role: v.string(),
+          invitedAt: v.number(),
+          expiresAt: v.union(v.number(), v.null()),
+        }),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const [wa, agents, voiceEvents, voiceProvisioning, memberships] = await Promise.all([
+    const [wa, agents, voiceEvents, voiceProvisioning, memberships, invites] =
+      await Promise.all([
       ctx.db
         .query("waAccounts")
         .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -555,12 +579,17 @@ export const orgDetail = query({
         .query("memberships")
         .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
         .collect(),
+      ctx.db
+        .query("invites")
+        .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+        .collect(),
     ]);
     const members = (
       await Promise.all(
         memberships.map(async (membership) => {
           const user = await ctx.db.get(membership.userId);
           return {
+            userId: membership.userId,
             name: user?.name ?? null,
             email: user?.email ?? null,
             role: membership.role,
@@ -576,6 +605,25 @@ export const orgDetail = query({
           ? -1
           : 1,
     );
+    // Open invites only. An accepted row is a member now and already appears
+    // above; an expired one is dead and drawing it as "pending" would send an
+    // operator waiting on a mail that can no longer be used.
+    const now = Date.now();
+    const pendingInvites = invites
+      .filter(
+        (row) =>
+          row.acceptedAt === undefined &&
+          row.token !== undefined &&
+          (row.expiresAt ?? Infinity) > now,
+      )
+      .map((row) => ({
+        _id: row._id,
+        email: row.email,
+        role: row.role,
+        invitedAt: row._creationTime,
+        expiresAt: row.expiresAt ?? null,
+      }))
+      .sort((a, b) => b.invitedAt - a.invitedAt);
     return {
       name: org.name,
       timezone: org.timezone,
@@ -647,12 +695,173 @@ export const orgDetail = query({
         error: job.error ?? null,
       })),
       members,
+      pendingInvites,
     };
   },
 });
 
 // A failed inbox row is still the durable source payload, so an operator can
 // safely retry it without asking the provider to send the event again.
+// ── Members, from the operator's side ────────────────────────────────────────
+//
+// The same four writes the salon's own Team card makes, behind a different
+// gate. Clients ask for this over WhatsApp — "add my new receptionist" — and
+// the answer until now was that somebody signed into their workspace and did
+// it by hand, which is both slower and worse: an operator standing inside a
+// tenant is exactly the state lib/activity works to keep out of a client's
+// feed.
+//
+// Every write goes through lib/members, which owns the rules (last owner,
+// staff rows keeping their appointments, seenAt left unset so the person is
+// told, an account-less address getting a token rather than a seat). Nothing
+// here re-implements any of them; the only thing this file adds is the
+// allowlist check and an orgId argument.
+
+const memberRole = v.union(v.literal("owner"), v.literal("staff"));
+
+// How many accounts to look through when the operator is picking somebody who
+// already has a login. Bounded because it is a scan — users has an exact-email
+// index and nothing else, and a substring match cannot use it.
+const CANDIDATE_SCAN = 500;
+const CANDIDATE_RESULTS = 20;
+
+// The existing-account pool: people with a login who are NOT already in this
+// business. Adding one of them is a membership, not an invite — there is
+// nothing to accept — so the picker exists to make that the easy path rather
+// than having the operator retype an address they could get wrong.
+export const orgMemberCandidates = query({
+  args: { orgId: v.id("orgs"), query: v.string() },
+  returns: v.object({
+    people: v.array(
+      v.object({
+        userId: v.id("users"),
+        name: v.union(v.string(), v.null()),
+        email: v.string(),
+        // Which businesses they are already in, by name. An operator reading a
+        // bare address cannot tell a client's staff from a stranger, and this
+        // is the fact that answers it.
+        alreadyIn: v.array(v.string()),
+      }),
+    ),
+    // Said out loud rather than silently truncated, same rule the fleet
+    // counters follow: a capped list reads as "this is everyone".
+    capped: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const here = new Set(
+      (
+        await ctx.db
+          .query("memberships")
+          .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+          .collect()
+      ).map((row) => row.userId as string),
+    );
+    const rows = await ctx.db.query("users").take(CANDIDATE_SCAN);
+    const needle = args.query.trim().toLowerCase();
+    const matches = rows.filter((user) => {
+      // No address is an anonymous demo walk-in, never a colleague — and there
+      // would be nothing to mail them anyway.
+      if (!user.email) return false;
+      if (here.has(user._id as string)) return false;
+      if (!needle) return true;
+      return (
+        user.email.toLowerCase().includes(needle) ||
+        (user.name ?? "").toLowerCase().includes(needle)
+      );
+    });
+    const people = await Promise.all(
+      matches.slice(0, CANDIDATE_RESULTS).map(async (user) => {
+        const memberships = await ctx.db
+          .query("memberships")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect();
+        const names: string[] = [];
+        for (const row of memberships) {
+          const org = await ctx.db.get(row.orgId);
+          if (org?.name) names.push(org.name);
+        }
+        return {
+          userId: user._id,
+          name: user.name ?? null,
+          email: user.email!,
+          alreadyIn: names.sort((a, b) => a.localeCompare(b)),
+        };
+      }),
+    );
+    return {
+      people: people.sort((a, b) =>
+        (a.name ?? a.email).localeCompare(b.name ?? b.email),
+      ),
+      capped: rows.length === CANDIDATE_SCAN && matches.length > CANDIDATE_RESULTS,
+    };
+  },
+});
+
+// One control, two outcomes — the same shape team.invite has always had. An
+// address with an account joins immediately; one without gets a mailed token
+// and shows up as pending until it is used. The caller is told which happened,
+// because "invited" means somebody has to go and read their mail and "joined"
+// means they can sign in right now.
+export const addOrgMember = mutation({
+  args: { orgId: v.id("orgs"), email: v.string(), role: memberRole },
+  returns: v.union(v.literal("joined"), v.literal("invited")),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const operator = await getAuthUserId(ctx);
+    if (!operator) throw new Error("not-signed-in");
+    return await addMemberByEmail(ctx, {
+      orgId: args.orgId,
+      email: args.email,
+      role: args.role,
+      invitedBy: operator,
+      // A BRAND, never the operator's own name. This string reaches a client's
+      // inbox as "X added you to Y" — the client bought a service and did not
+      // ask who was at the keyboard. Same rule lib/activity applies to the
+      // feed.
+      invitedByName: OPERATOR_ACTOR_NAME,
+    });
+  },
+});
+
+export const setOrgMemberRole = mutation({
+  args: { orgId: v.id("orgs"), userId: v.id("users"), role: memberRole },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    await setMemberRole(ctx, {
+      orgId: args.orgId,
+      userId: args.userId,
+      role: args.role,
+    });
+    return null;
+  },
+});
+
+// Revokes ACCESS, not existence: the staff row and every appointment on it
+// stay. Refuses to strip the last admin here exactly as it does inside the
+// app — an operator can undo that one, but the client cannot, and a workspace
+// nobody can administer is not a state to leave a paying business in.
+export const removeOrgMember = mutation({
+  args: { orgId: v.id("orgs"), userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    await revokeMembership(ctx, { orgId: args.orgId, userId: args.userId });
+    return null;
+  },
+});
+
+export const revokeOrgInvite = mutation({
+  args: { orgId: v.id("orgs"), inviteId: v.id("invites") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    await revokeInviteRow(ctx, { orgId: args.orgId, inviteId: args.inviteId });
+    return null;
+  },
+});
+
 export const retryVoiceEvents = mutation({
   args: { orgId: v.id("orgs"), retellAgentId: v.string() },
   returns: v.number(),
