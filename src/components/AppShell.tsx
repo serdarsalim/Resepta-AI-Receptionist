@@ -331,33 +331,18 @@ const BILLING_TAB: (typeof NAV_TABS)[number] = {
 // the two are told apart at a glance in a tab strip. Deliberately NOT --brand,
 // which stays green because it also paints row hover and selection, and red
 // there would read as danger on every hover.
-// The mark the sidebar wears: the SALON'S logo once they upload one, ours
-// until then (2026-08-20). An owner who has put their own logo into Settings
-// has said what this workspace is called and what it looks like; showing them
-// our chevron in their own product answers a question they already answered.
+// OrgMark lived here and is gone (2026-08-25). It resolved to the salon's logo
+// with OUR chevron as the fallback, which was right while the sidebar had only
+// one mark to give: the reasoning was that an owner who uploaded a logo has
+// already said what their workspace looks like, so showing them our glyph
+// answers a question they answered. The sidebar now carries BOTH marks, and
+// that same fallback became the bug described on WorkspaceMark below.
 //
-// The FAVICON stays ours here, and that is not an oversight — lib/brand.ts
-// makes the same split for the title. The owner's problem is finding Resepta
-// among thirty tabs, so the tab strip keeps the constant; the sidebar is
-// already inside the app, where the only useful thing a mark can say is which
-// business you are looking at. The customer-facing pages invert both, since
-// there the salon is what the reader came for (their generateMetadata).
-function OrgMark({ logoUrl, size = 26 }: { logoUrl?: string | null; size?: number }) {
-  if (!logoUrl) return <BrandMark size={size} />;
-  return (
-    /* eslint-disable-next-line @next/next/no-img-element -- a Convex storage
-       URL, not an asset next/image can optimize */
-    <img
-      src={logoUrl}
-      alt=""
-      width={size}
-      height={size}
-      style={{ width: size, height: size }}
-      className="shrink-0 rounded-[0.22em] object-cover"
-    />
-  );
-}
-
+// The FAVICON split it also documented still stands, and lib/brand.ts makes the
+// same one for the title: the tab strip keeps Resepta constant because finding
+// the app among thirty tabs is the owner's problem there, while inside the app
+// the useful thing is which business you are looking at. The customer-facing
+// pages invert both, since there the salon is what the reader came for.
 function BrandMark({ size = 26 }: { size?: number }) {
   return (
     <svg
@@ -388,6 +373,67 @@ function BrandMark({ size = 26 }: { size?: number }) {
     </svg>
   );
 }
+
+// The mark for the WORKSPACE row, which is not OrgMark and must not become it.
+// OrgMark falls back to BrandMark, and that fallback is right where the org
+// mark stands alone. Under the product wordmark it is wrong twice over: a
+// salon with no logo would wear Resepta's own chevrons directly beneath
+// Resepta's own chevrons, and the two rows this layout exists to tell apart
+// would open with the identical glyph.
+//
+// So the fallback is the business's own initial. Neutral rather than tinted:
+// a hue here would be a colour standing for a business that never chose one,
+// and every other hue in this sidebar already means something (see AGENTS.md,
+// "One state, one hue").
+function WorkspaceMark({
+  logoUrl,
+  name,
+  size = 24,
+}: {
+  logoUrl?: string | null;
+  name: string;
+  size?: number;
+}) {
+  if (logoUrl) {
+    return (
+      /* eslint-disable-next-line @next/next/no-img-element -- a Convex storage
+         URL, not an asset next/image can optimize */
+      <img
+        src={logoUrl}
+        alt=""
+        width={size}
+        height={size}
+        style={{ width: size, height: size }}
+        className="shrink-0 rounded-[0.28em] object-cover"
+      />
+    );
+  }
+  // Intl-aware rather than name[0]: a Turkish "İstanbul Kuaför" starts with a
+  // dotted capital I, and slicing a code unit off a name that opens with an
+  // astral character (an emoji logo typed as a name) yields half a surrogate
+  // pair and renders as the replacement glyph.
+  const initial = Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?";
+  return (
+    <span
+      aria-hidden
+      style={{ width: size, height: size, fontSize: size * 0.46 }}
+      className="flex shrink-0 items-center justify-center rounded-[0.28em] bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)] font-semibold leading-none text-[var(--muted-strong)]"
+    >
+      {initial}
+    </span>
+  );
+}
+
+// lucide chevrons-up-down. The selector glyph, and deliberately not the ▾ this
+// replaced: a single caret says "a menu drops from here", which is what the
+// avatar menu and every row kebab also say. Up AND down says "swap this for
+// another of the same kind", which is the one thing this control does.
+const ChevronsUpDownIcon = makeIcon(
+  <>
+    <path d="m7 15 5 5 5-5" />
+    <path d="m7 9 5-5 5 5" />
+  </>,
+);
 
 // lucide panel-left. One definition, used by the desktop collapse toggle and
 // by the phone menu button, and it is the SAME glyph in both states: the icon
@@ -1190,19 +1236,27 @@ function WorkspaceSwitcher({
   // real login always gets the menu, even with a single business: the "Add
   // business" row at its foot is the only door to founding a second one, and
   // a door only multi-business operators can see is a door nobody finds.
+  //
+  // It keeps the mark and the padding of the real control and drops only the
+  // wash and the chevron. Same box either way, so a walk-in and an owner see
+  // the sidebar laid out the same, and nothing below this row moves when the
+  // query lands.
   if (!data || (data.workspaces.length < 2 && !data.canFound)) {
     return collapsed ? (
-      <OrgMark logoUrl={logoUrl} size={24} />
+      <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
     ) : (
-      // Two lines before the ellipsis, not one: "Bella Güzellik Salo…" is the
-      // owner's own name cut off in their own product. The title carries the
-      // full name for the (rare) name that overflows even two lines.
-      <span
-        title={label}
-        className="line-clamp-2 break-words text-sm font-semibold leading-snug tracking-tight"
-      >
-        {label}
-      </span>
+      <div className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5">
+        <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
+        {/* Two lines before the ellipsis, not one: "Bella Güzellik Salo…" is
+            the owner's own name cut off in their own product. The title
+            carries the full name for the (rare) name that overflows two. */}
+        <span
+          title={label}
+          className="line-clamp-2 min-w-0 flex-1 break-words text-sm font-semibold leading-snug tracking-tight"
+        >
+          {label}
+        </span>
+      </div>
     );
   }
 
@@ -1227,16 +1281,25 @@ function WorkspaceSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         title={collapsed ? label : undefined}
+        // A RESTING wash, not just a hover one. The old trigger was bare text
+        // with a 10px caret parked at the far end of a flex-1 span, so at rest
+        // it read as the page's title and the only thing that said "control"
+        // appeared once the pointer was already on it. Serdar's note: it is
+        // not obvious you can switch. The container is what makes it obvious,
+        // and it is a wash rather than a border because a border on a button
+        // is out of the design language (AGENTS.md, "Borders only when
+        // absolutely necessary").
         className={
           collapsed
-            ? "rounded-md transition-opacity hover:opacity-80"
-            : "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--row-hover-bg)]"
+            ? "rounded-lg transition-opacity hover:opacity-80"
+            : "flex w-full items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--foreground)_5%,transparent)] px-1.5 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)]"
         }
       >
         {collapsed ? (
-          <OrgMark logoUrl={logoUrl} size={24} />
+          <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
         ) : (
           <>
+            <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
             {/* Same two-line grace as the single-workspace name above. */}
             <span
               title={label}
@@ -1244,7 +1307,11 @@ function WorkspaceSwitcher({
             >
               {label}
             </span>
-            <span className="text-[10px] text-[var(--muted)]">▾</span>
+            <ChevronsUpDownIcon
+              width={14}
+              height={14}
+              className="shrink-0 text-[var(--muted)]"
+            />
           </>
         )}
       </button>
@@ -1589,43 +1656,50 @@ export function AppShell({
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
           } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
-          {/* Brand row. The mark stays put across the collapse so the eye has a
-            fixed anchor; the name and the switcher are what fold away. */}
+          {/* Two rows, because they answer different questions. The top one is
+            WHICH PRODUCT this is and never changes; the one under it is WHICH
+            BUSINESS you are pointed at and is the thing an operator running
+            several of them changes all day.
+            They used to be one row: the org's mark and the org's name, sitting
+            where a product signature goes. So the workspace wore the product's
+            slot, nothing on the screen said "Resepta", and switching business
+            looked like editing a title. Splitting them is what makes the
+            switcher legible as a control, and it costs one line of height. */}
           <div
-            className={`flex items-center gap-2 pt-3 ${
-              showCollapsed ? "flex-col gap-1 px-1 pb-1" : "px-2 pb-2"
+            className={`flex flex-col pt-3 ${
+              showCollapsed ? "items-center gap-1 px-1 pb-1" : "gap-1.5 px-2 pb-2"
             }`}
           >
-            {showCollapsed ? (
-              <WorkspaceSwitcher
-                fallbackName={settings?.org.name}
-                logoUrl={settings?.org.logoUrl}
-                collapsed
-              />
-            ) : (
-              <>
-                <OrgMark logoUrl={settings?.org.logoUrl} size={26} />
-                <div className="min-w-0 flex-1">
-                  <WorkspaceSwitcher
-                    fallbackName={settings?.org.name}
-                    logoUrl={settings?.org.logoUrl}
-                  />
-                </div>
-              </>
-            )}
-            {/* One control, one glyph: on desktop it folds the sidebar down to
-              symbols, on the phone it slides the drawer away. Both mean "put
-              the sidebar back", which is why the icon does not change. */}
-            <button
-              type="button"
-              onClick={() =>
-                mobileOpen ? setMobileOpen(false) : toggleCollapsed()
-              }
-              aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
-              className="rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+            <div
+              className={`flex items-center ${
+                showCollapsed ? "flex-col gap-1" : "w-full gap-2 px-1.5"
+              }`}
             >
-              <PanelLeftIcon />
-            </button>
+              <BrandMark size={showCollapsed ? 24 : 20} />
+              {!showCollapsed && (
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+                  {t("app.name")}
+                </span>
+              )}
+              {/* One control, one glyph: on desktop it folds the sidebar down
+                to symbols, on the phone it slides the drawer away. Both mean
+                "put the sidebar back", which is why the icon does not change. */}
+              <button
+                type="button"
+                onClick={() =>
+                  mobileOpen ? setMobileOpen(false) : toggleCollapsed()
+                }
+                aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+                className="shrink-0 rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+              >
+                <PanelLeftIcon />
+              </button>
+            </div>
+            <WorkspaceSwitcher
+              fallbackName={settings?.org.name}
+              logoUrl={settings?.org.logoUrl}
+              collapsed={showCollapsed}
+            />
           </div>
 
           <nav
