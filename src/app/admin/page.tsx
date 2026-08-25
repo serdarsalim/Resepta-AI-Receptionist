@@ -196,18 +196,21 @@ export default function AdminPage() {
                     under the name — this table has one reader and he knows
                     what it counts, and a second line under four of nine
                     columns cost every row its height to tell him. */}
-                <th className="px-3 pb-2 pt-3.5 font-semibold" title="Emails sent this month">
+                <th
+                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  title="Emails sent, all time"
+                >
                   Email
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="WhatsApp messages sent this month"
+                  title="WhatsApp messages sent, all time"
                 >
                   WhatsApp
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="Voice calls this month: count, minutes, what we bill them, and what Retell charges us"
+                  title="Voice calls, all time: count, minutes, what we bill them, and what Retell charges us. The month-by-month breakdown is on the business's own page."
                 >
                   Calls
                 </th>
@@ -273,25 +276,25 @@ export default function AdminPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-2">
-                    <Count value={org.emailSentMtd} tone="plain" />
+                    <Count value={org.emailSentTotal} tone="plain" />
                   </td>
                   <td className="px-3 py-2">
-                    <Count value={org.waSentMtd} tone="plain" />
+                    <Count value={org.waSentTotal} tone="plain" />
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {org.voiceCallsMtd === 0 && org.voiceSecondsMtd === 0 ? (
+                    {org.voiceCallsTotal === 0 && org.voiceSecondsTotal === 0 ? (
                       <span className="text-[var(--muted)]">—</span>
                     ) : (
                       <>
                         <div className="font-medium">
-                          {org.voiceCallsMtd}
+                          {org.voiceCallsTotal}
                           <span className="ml-1.5 font-normal text-[var(--muted)]">
-                            {Math.round(org.voiceSecondsMtd / 60)} min
+                            {Math.round(org.voiceSecondsTotal / 60)} min
                           </span>
                         </div>
                         <div className="text-xs text-[var(--muted)]">
-                          ${(org.voiceBilledMicroUsdMtd / 1_000_000).toFixed(2)} · Retell $
-                          {(org.voiceCostMicroUsdMtd / 1_000_000).toFixed(2)}
+                          ${(org.voiceBilledMicroUsdTotal / 1_000_000).toFixed(2)} · Retell $
+                          {(org.voiceCostMicroUsdTotal / 1_000_000).toFixed(2)}
                         </div>
                       </>
                     )}

@@ -38,7 +38,6 @@ import {
 } from "./lib/platformAuth";
 import { enrichActivity } from "./activity";
 import { applyWalletCredit } from "./wallet";
-import { monthKey } from "./lib/usage";
 import { maskSecret } from "./lib/connections";
 import { foundOrg } from "./lib/foundOrg";
 import { resolvePreset } from "./lib/industryPresetStore";
@@ -114,21 +113,24 @@ const orgHealth = v.object({
   // onboarded, and the two look identical from a billing table.
   lastActivityAt: v.optional(v.number()),
   upcomingAppointments: v.number(),
-  // Voice meter, month to date (the org's own month, so this always agrees
-  // with the org page). Billed is what they owe us, cost is what Retell
-  // charged us — both micro-USD, shown together so the fleet table answers
-  // "who is burning money" without opening every org.
-  voiceSecondsMtd: v.number(),
-  voiceBilledMicroUsdMtd: v.number(),
-  voiceCostMicroUsdMtd: v.number(),
-  // Sends this month, per channel, off the same ledger row — so the table can
-  // answer "who actually uses this" rather than only "who is broken". Counted
-  // where a send is confirmed (messages.applySendResult), never by scanning
-  // this org's message history, which is what would put this page back on a
-  // cost proportional to its busiest tenant.
-  emailSentMtd: v.number(),
-  waSentMtd: v.number(),
-  voiceCallsMtd: v.number(),
+  // ALL-TIME totals, summed across every month on the ledger. Month-to-date
+  // was the first cut and it answered the wrong question: on the 3rd it says
+  // nothing about who adopted this, and this table is where you go to find out
+  // who did. The month-by-month breakdown lives on the org's own page
+  // (orgVoiceUsage), which is where a billing question belongs anyway.
+  //
+  // Sends are counted where a send is confirmed (messages.applySendResult),
+  // never by scanning an org's message history — that is what would put this
+  // page back on a cost proportional to its busiest tenant.
+  emailSentTotal: v.number(),
+  waSentTotal: v.number(),
+  // Billed is what they owe us, cost is what Retell charged us, both
+  // micro-USD, shown together so the table answers "who is burning money"
+  // without opening every org.
+  voiceCallsTotal: v.number(),
+  voiceSecondsTotal: v.number(),
+  voiceBilledMicroUsdTotal: v.number(),
+  voiceCostMicroUsdTotal: v.number(),
 });
 
 // Deployment-wide facts, the ones that are true for every org at once. Kept
@@ -232,6 +234,24 @@ export const fleet = query({
       .withIndex("by_start", (q) => q.gte("startAt", now))
       .take(FLEET_CAP);
     const membershipRows = await ctx.db.query("memberships").take(FLEET_CAP);
+    // The WHOLE ledger, not just this month. These columns are all-time totals
+    // now — a month-to-date number on the 3rd says nothing about who adopted
+    // this, which is the question the table exists to answer. It is one row
+    // per org per month, so a dozen businesses and a year of history is ~150
+    // documents, and it REPLACES the per-org point read healthFor used to do
+    // for the current month.
+    const usageRows = await ctx.db.query("usageMonthly").take(FLEET_CAP);
+    // Not silently truncated. This is one row per org per month, so the cap is
+    // years away from mattering — but a usage column that has quietly stopped
+    // counting reads as a tenant who stopped using the product, which is the
+    // worst way for this to fail. It goes in the logs rather than on the page
+    // because there is nowhere honest to put a per-ROW marker for a read that
+    // capped across the whole FLEET.
+    if (usageRows.length === FLEET_CAP) {
+      console.warn(
+        `platform.fleet: usageMonthly hit the ${FLEET_CAP}-row cap. Every usage total on this page is LOW. Raise FLEET_CAP or start rolling old months up.`,
+      );
+    }
     const templateRows = await ctx.db.query("waTemplates").take(FLEET_CAP);
     const waAccountRows = await ctx.db.query("waAccounts").take(FLEET_CAP);
 
@@ -240,6 +260,7 @@ export const fleet = query({
       queued: bucket(queuedRows),
       upcoming: bucket(upcomingRows),
       memberships: bucket(membershipRows),
+      usage: bucket(usageRows),
       templates: bucket(templateRows),
       waAccounts: new Set(waAccountRows.map((row) => row.orgId as string)),
       // Said out loud rather than silently truncated: a capped count reads as
@@ -285,6 +306,7 @@ type FleetReads = {
   queued: Map<string, Doc<"messages">[]>;
   upcoming: Map<string, Doc<"appointments">[]>;
   memberships: Map<string, Doc<"memberships">[]>;
+  usage: Map<string, Doc<"usageMonthly">[]>;
   templates: Map<string, Doc<"waTemplates">[]>;
   waAccounts: Set<string>;
   cappedUpcoming: boolean;
@@ -321,12 +343,12 @@ async function healthFor(
     .order("desc")
     .first();
 
-  const monthUsage = await ctx.db
-    .query("usageMonthly")
-    .withIndex("by_org_month", (q) =>
-      q.eq("orgId", org._id).eq("month", monthKey(now, org.timezone)),
-    )
-    .unique();
+  // Every month this org has, summed. Off the bucketed fleet read, so this is
+  // arithmetic rather than a query — the point read it replaced was the second
+  // of the two per-org reads this function had left.
+  const ledger = fleet.usage.get(key) ?? [];
+  const total = (pick: (row: Doc<"usageMonthly">) => number | undefined) =>
+    ledger.reduce((sum, row) => sum + (pick(row) ?? 0), 0);
 
   return {
     orgId: org._id,
@@ -350,12 +372,12 @@ async function healthFor(
     stuck,
     lastActivityAt: lastMessage?._creationTime,
     upcomingAppointments: upcoming.length,
-    emailSentMtd: monthUsage?.emailSent ?? 0,
-    waSentMtd: monthUsage?.waSent ?? 0,
-    voiceCallsMtd: monthUsage?.voiceCalls ?? 0,
-    voiceSecondsMtd: monthUsage?.voiceSeconds ?? 0,
-    voiceBilledMicroUsdMtd: monthUsage?.voiceBilledMicroUsd ?? 0,
-    voiceCostMicroUsdMtd: monthUsage?.voiceCostMicroUsd ?? 0,
+    emailSentTotal: total((row) => row.emailSent),
+    waSentTotal: total((row) => row.waSent),
+    voiceCallsTotal: total((row) => row.voiceCalls),
+    voiceSecondsTotal: total((row) => row.voiceSeconds),
+    voiceBilledMicroUsdTotal: total((row) => row.voiceBilledMicroUsd),
+    voiceCostMicroUsdTotal: total((row) => row.voiceCostMicroUsd),
   };
 }
 
