@@ -33,7 +33,6 @@ import {
   SearchSelect,
   Section,
   SecretRow,
-  Setup,
   TabStrip,
 } from "./parts";
 import { OnboardingTab } from "./onboarding";
@@ -189,7 +188,6 @@ export default function AdminPage() {
             <thead className="text-left text-xs">
               <tr>
                 <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold">Setup</th>
                 <th className="px-3 pb-2 pt-3.5 font-semibold" title="Failed sends, last 24h">
                   Failed
                 </th>
@@ -242,9 +240,6 @@ export default function AdminPage() {
                       {org.members} {org.members === 1 ? "member" : "members"} · {org.timezone}
                       {org.calcomConnected ? " · cal.com" : ""}
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    <Setup org={org} />
                   </td>
                   <td className="px-3 py-2">
                     <Count value={org.failed24h} tone="warn" capped={org.capped} />
