@@ -96,18 +96,21 @@ export function Count({
   );
 }
 
-// Everything that is wrong with a business's sending, in one cell.
+// Everything wrong with a business's sending, in one cell.
 //
 // These were four columns — Failed, Gave up, Retrying, Stuck — and on a healthy
 // fleet every one of them is an em dash, so a third of the table was spent
-// saying nothing. Worse, none of the four names its own meaning: "Stuck" is a
-// word you have to be told. Folded, the cell is BLANK when there is nothing to
-// say and names the kind when there is, which is the thing a bare number under
-// a one-word header could never do.
+// saying nothing. Folded, the cell is BLANK when there is nothing to say and
+// names the kind when there is.
+//
+// The words are the ones the CODE uses: dead-lettered, not "gave up". This
+// screen has one reader and it is the operator, who is going to go and grep
+// deadLetteredAt — softening it into client-facing language costs the one
+// person here the ability to match what they read to what they search.
 //
 // The tone is the worst thing present, not a colour per phrase: a row is
 // something you glance at, and three colours inside one cell is a legend.
-export function Problems({
+export function Errors({
   org,
 }: {
   org: {
@@ -122,7 +125,7 @@ export function Problems({
   // Loudest first. Dead letters outrank plain failures because they mean the
   // retry queue gave up, which nothing else recovers from — the same order the
   // fleet query sorts by.
-  if (org.deadLettered24h > 0) parts.push(`${org.deadLettered24h} gave up`);
+  if (org.deadLettered24h > 0) parts.push(`${org.deadLettered24h} dead-lettered`);
   if (org.failed24h > 0) {
     parts.push(`${org.failed24h}${org.capped ? "+" : ""} failed`);
   }
@@ -140,7 +143,7 @@ export function Problems({
   return (
     <span
       className={`text-xs font-medium tabular-nums ${color}`}
-      title="Failed: a send the provider refused in the last 24h. Gave up: retries exhausted, nothing will pick it up. Stuck: claimed for sending and never reported back. Retrying: waiting on another attempt."
+      title="failed: the provider refused it, last 24h. dead-lettered: retries exhausted, nothing will pick it up again. stuck: claimed for sending and never reported back. retrying: backoff, waiting on another attempt."
     >
       {parts.join(" · ")}
     </span>

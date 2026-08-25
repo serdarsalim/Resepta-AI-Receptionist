@@ -29,7 +29,7 @@ import {
   Count,
   KeyModelRow,
   Plane,
-  Problems,
+  Errors,
   Row,
   SearchSelect,
   Section,
@@ -192,37 +192,33 @@ export default function AdminPage() {
                 <th className="px-3 pb-2 pt-3.5 font-semibold" title="People who can sign in">
                   Members
                 </th>
-                {/* The three usage columns carry their period in the header
-                    rather than in a tooltip. A number in a table is read
-                    before anything you have to hover for, and "Email 412"
-                    with no period on it is a number nobody can act on. */}
+                {/* One header row. The period lives in the title rather than
+                    under the name — this table has one reader and he knows
+                    what it counts, and a second line under four of nine
+                    columns cost every row its height to tell him. */}
                 <th className="px-3 pb-2 pt-3.5 font-semibold" title="Emails sent this month">
                   Email
-                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
                   title="WhatsApp messages sent this month"
                 >
                   WhatsApp
-                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="Voice calls this month: what we bill them, and what Retell charges us"
+                  title="Voice calls this month: count, minutes, what we bill them, and what Retell charges us"
                 >
                   Calls
-                  <div className="font-normal text-[var(--muted)]">this month</div>
                 </th>
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
                   title="Appointments in the book from now on"
                 >
                   Booked
-                  <div className="font-normal text-[var(--muted)]">ahead</div>
                 </th>
                 {/* Four columns collapsed into one. They were four flavours of
-                    "a message broke" — failed, gave up, retrying, stuck — and
+                    "a message broke" — failed, dead-lettered, retrying, stuck — and
                     across a healthy fleet all four are empty, so they spent a
                     third of the table saying nothing. The cell stays blank
                     unless something is actually wrong, and then says which
@@ -231,9 +227,9 @@ export default function AdminPage() {
                     orders by dead letters, then failures, then stuck. */}
                 <th
                   className="px-3 pb-2 pt-3.5 font-semibold"
-                  title="Sends that broke: failed in the last 24h, gave up after retries, waiting on a retry, or claimed for sending and never reported back"
+                  title="Sends that broke: refused in the last 24h, dead-lettered after retries, stuck mid-send, or backing off for another attempt"
                 >
-                  Problems
+                  Errors
                 </th>
                 <th className="px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
               </tr>
@@ -308,7 +304,7 @@ export default function AdminPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <Problems org={org} />
+                    <Errors org={org} />
                   </td>
                   <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
                     {ago(org.lastActivityAt)}
