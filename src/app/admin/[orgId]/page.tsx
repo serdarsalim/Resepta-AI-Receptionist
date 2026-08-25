@@ -420,12 +420,42 @@ export default function TenantPage() {
               operator actually recognises, plus what can be WRONG: the
               runtime (an agent without it answers with nothing), the inbox
               only when something is stuck, and the enabled pill. Actual
-              failures keep their amber block below. */}
+              failures keep their amber block below.
+
+              ONE line now means one line (Serdar, 2026-08-25): the engine
+              picker sat on its own row under every agent, doubling each entry
+              for a control touched once a quarter. Inline, the list reads as
+              a table again.
+
+              The row itself is the drill-in: clicking it opens this agent's
+              edit page in the business's own app, signed in as them, because
+              the path here used to be "Open their app" → Voice agents → find
+              the same agent again. Same synchronous-blank-tab dance as the
+              fleet glyph — window.open after an await has lost the user
+              gesture and is what popup blockers exist for. The id chip and
+              the engine picker stop the click: copying an id must not also
+              open a tab. The picker's dropdown needs no guard — it portals to
+              body, outside this row. */}
           {detail.agents.map((agent) => (
-            <div key={agent.retellAgentId} className="space-y-2 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div key={agent.retellAgentId} className="py-1">
+              <div
+                onClick={() => {
+                  const editorTab = window.open("", "_blank");
+                  const dest = `/?tab=voice&agent=${encodeURIComponent(agent.retellAgentId)}`;
+                  void actAs({ orgId })
+                    .then(() => {
+                      if (editorTab) editorTab.location.href = dest;
+                      else router.push(dest);
+                    })
+                    .catch(() => editorTab?.close());
+                }}
+                title="Open this agent's edit page in the business's own app, signed in as them. Only one business at a time — opening another repoints it."
+                className="-mx-2 flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--muted-bg)]"
+              >
                 {agent.name && <span className="text-sm font-medium">{agent.name}</span>}
-                <CopyId value={agent.retellAgentId} />
+                <span onClick={(e) => e.stopPropagation()}>
+                  <CopyId value={agent.retellAgentId} />
+                </span>
                 <span className="text-xs text-[var(--muted)]">
                   {agent.inboundNumber ?? "No line"}
                 </span>
@@ -439,12 +469,6 @@ export default function TenantPage() {
                     {agent.pendingEvents} pending · {agent.failedEvents} failed
                   </Pill>
                 )}
-                <span className="ml-auto">
-                  <Pill tone={agent.enabled ? "ok" : "warn"}>
-                    {agent.enabled ? "Enabled" : "Disabled"}
-                  </Pill>
-                </span>
-              </div>
               {/* The ENGINE behind the agent: which model, at which tier,
                   priced per conversation minute — the whole point is deciding
                   here without opening Retell's pricing page. One picker
@@ -457,7 +481,10 @@ export default function TenantPage() {
                   a fleet of rows pinning today's default forever. Picking
                   anything else pins both, which is the trade this shape makes
                   — a fleet tier change stops reaching an agent that chose. */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span
+                  onClick={(e) => e.stopPropagation()}
+                  className="ml-auto flex items-center gap-2 text-xs"
+                >
                 <span className="text-[var(--muted)]">Engine</span>
                 <SearchSelect
                   className="w-72"
@@ -526,9 +553,13 @@ export default function TenantPage() {
                     {modelError.message}
                   </span>
                 )}
+                </span>
+                <Pill tone={agent.enabled ? "ok" : "warn"}>
+                  {agent.enabled ? "Enabled" : "Disabled"}
+                </Pill>
               </div>
               {agent.latestFailure && (
-                <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                <div className="mt-1 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
                       {agent.latestFailure.eventType} · {shortDate(agent.latestFailure.receivedAt)} · call {agent.latestFailure.callId} · {agent.latestFailure.attempts} attempts
@@ -609,7 +640,7 @@ export default function TenantPage() {
       {voice && (
         <Section
           title="Phone lines"
-          description="The numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and no lines means NO numbers for them until you provision one here. Add a phone line offers the Retell account's real numbers, so provisioning is a click, never retyped E.164."
+          description="The numbers this business may route inbound calls to, or place outbound calls from — their app's number pickers offer exactly this list, and no lines means NO numbers for them until you provision one here. Add a phone line offers the Retell account's real numbers, so provisioning is a click, never retyped E.164. Number requests below: the business uploaded its company registration to ask for a line. Verify it, approve (then buy the number at the provider and provision it above) or deny with a reason the business will read."
         >
           {provisionable === null ? (
             <p className="py-2.5 text-xs text-[var(--muted)]">
@@ -699,6 +730,99 @@ export default function TenantPage() {
                   {addingLine ? "Done" : "Add a phone line…"}
                 </button>
               </div>
+            </div>
+          )}
+          {/* The tenant's number request (numberRequests.ts): the registration
+              document regulators want before a number can be provisioned. In
+              THIS card rather than one of its own (Serdar, 2026-08-25): the
+              request is why you go buy a line, and the checklist above is
+              where you land it — one flow, and split across two cards it read
+              as two unrelated features. The decision here is the operator's
+              own cue to go buy the number at the provider and provision it
+              above — the app never purchases numbers. */}
+          {numberReqs && numberReqs.length > 0 && (
+            <div className="mt-2 space-y-3 border-t border-[var(--border)] pt-3">
+              <p className="text-xs font-medium text-[var(--muted-strong)]">
+                Number requests
+              </p>
+              {numberReqs.map((req) => (
+                <div
+                  key={req.requestId}
+                  className="rounded-xl border border-[var(--border)] px-3 py-2.5"
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    {req.url ? (
+                      <a
+                        href={req.url}
+                        target="_blank"
+                        rel="noopener"
+                        className="font-medium text-[var(--accent)] hover:underline"
+                      >
+                        {req.fileName}
+                      </a>
+                    ) : (
+                      <span className="font-medium">{req.fileName}</span>
+                    )}
+                    <span className="text-xs text-[var(--muted)]">
+                      {Math.max(1, Math.round(req.size / 1024))} KB ·{" "}
+                      {new Date(req.createdAt).toLocaleString("en-GB")}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        req.status === "pending"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                          : req.status === "approved"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                      }`}
+                    >
+                      {req.status}
+                    </span>
+                  </div>
+                  {req.note && (
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      Note to the business: {req.note}
+                    </p>
+                  )}
+                  {req.status === "pending" && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <input
+                        value={numberNote}
+                        onChange={(e) => setNumberNote(e.target.value)}
+                        placeholder="Note to the business (required to deny)"
+                        className="min-w-64 flex-1 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void decideNumberRequest({
+                            requestId: req.requestId,
+                            decision: "approved",
+                            note: numberNote.trim() || undefined,
+                          }).then(() => setNumberNote(""));
+                        }}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!numberNote.trim()}
+                        onClick={() => {
+                          void decideNumberRequest({
+                            requestId: req.requestId,
+                            decision: "denied",
+                            note: numberNote.trim(),
+                          }).then(() => setNumberNote(""));
+                        }}
+                        className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </Section>
@@ -859,98 +983,6 @@ export default function TenantPage() {
       </>
       )}
 
-      {/* The tenant's number request (numberRequests.ts): the registration
-          document regulators want before a number can be provisioned. The
-          decision here is the operator's own cue to go buy the line at the
-          provider and assign it above — the app never purchases numbers. */}
-      {(tab === "agents" || search.active) && numberReqs && numberReqs.length > 0 && (
-        <Section
-          title="Number provisioning"
-          description="The business uploaded its company registration to request a phone number. Download it, verify it, then approve (and go provision the line at the provider) or deny with a reason the business will read."
-        >
-          <div className="space-y-3 py-2">
-            {numberReqs.map((req) => (
-              <div
-                key={req.requestId}
-                className="rounded-xl border border-[var(--border)] px-3 py-2.5"
-              >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  {req.url ? (
-                    <a
-                      href={req.url}
-                      target="_blank"
-                      rel="noopener"
-                      className="font-medium text-[var(--accent)] hover:underline"
-                    >
-                      {req.fileName}
-                    </a>
-                  ) : (
-                    <span className="font-medium">{req.fileName}</span>
-                  )}
-                  <span className="text-xs text-[var(--muted)]">
-                    {Math.max(1, Math.round(req.size / 1024))} KB ·{" "}
-                    {new Date(req.createdAt).toLocaleString("en-GB")}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      req.status === "pending"
-                        ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                        : req.status === "approved"
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                          : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
-                    }`}
-                  >
-                    {req.status}
-                  </span>
-                </div>
-                {req.note && (
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    Note to the business: {req.note}
-                  </p>
-                )}
-                {req.status === "pending" && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <input
-                      value={numberNote}
-                      onChange={(e) => setNumberNote(e.target.value)}
-                      placeholder="Note to the business (required to deny)"
-                      className="min-w-64 flex-1 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void decideNumberRequest({
-                          requestId: req.requestId,
-                          decision: "approved",
-                          note: numberNote.trim() || undefined,
-                        }).then(() => setNumberNote(""));
-                      }}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!numberNote.trim()}
-                      onClick={() => {
-                        void decideNumberRequest({
-                          requestId: req.requestId,
-                          decision: "denied",
-                          note: numberNote.trim(),
-                        }).then(() => setNumberNote(""));
-                      }}
-                      className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
-                    >
-                      Deny
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-        </Section>
-      )}
 
       {/* Under Agents rather than a tab of its own (Serdar, 2026-08-20): the
           meter and the wallet are facts ABOUT the phone agents, and Assistant
