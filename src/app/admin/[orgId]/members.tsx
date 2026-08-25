@@ -79,8 +79,15 @@ export function MembersCard({
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<Role>("staff");
   const [busy, setBusy] = useState(false);
+  // The form's own error, shown inside the form next to the field that caused
+  // it. Kept apart from `notice` so a failed Add does not clear the line
+  // telling you the last person was invited.
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  // What just happened to the LIST, and how it went. One state carrying its
+  // own tone: an outcome and a failure are the same slot on the page, and a
+  // separate success-only box means the first refused role change paints
+  // itself green.
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   // Which row is mid-removal. A two-press confirm rather than window.confirm,
   // whose sheet is titled with the ORIGIN and reads as the browser warning you
   // about the site you are on.
@@ -115,14 +122,16 @@ export function MembersCard({
   function submit(email: string, asRole: Role) {
     setBusy(true);
     setError(null);
-    setResult(null);
+    setNotice(null);
     void addOrgMember({ orgId, email, role: asRole })
       .then((outcome) => {
-        setResult(
-          outcome === "joined"
-            ? `${email} was added. They can sign in now.`
-            : `${email} has no account yet — invite mailed, good for 14 days.`,
-        );
+        setNotice({
+          ok: true,
+          text:
+            outcome === "joined"
+              ? `${email} was added. They can sign in now.`
+              : `${email} has no account yet — invite mailed, good for 14 days.`,
+        });
         reset();
       })
       .catch((err: unknown) => setError(errorText(err, "Could not add them.")))
@@ -137,7 +146,7 @@ export function MembersCard({
         <button
           type="button"
           onClick={() => {
-            setResult(null);
+            setNotice(null);
             setAdding((was) => !was);
           }}
           className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium hover:bg-[var(--row-hover-bg)]"
@@ -224,9 +233,15 @@ export function MembersCard({
         </div>
       )}
 
-      {result && (
-        <p className="mb-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
-          {result}
+      {notice && (
+        <p
+          className={`mb-2 rounded-lg px-2 py-1.5 text-xs ${
+            notice.ok
+              ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+              : "bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+          }`}
+        >
+          {notice.text}
         </p>
       )}
 
@@ -260,11 +275,14 @@ export function MembersCard({
                     <button
                       type="button"
                       onClick={() => {
-                        setError(null);
+                        setNotice(null);
                         setConfirming(null);
                         void removeOrgMember({ orgId, userId: member.userId }).catch(
                           (err: unknown) =>
-                            setResult(errorText(err, "Could not remove them.")),
+                            setNotice({
+                              ok: false,
+                              text: errorText(err, "Could not remove them."),
+                            }),
                         );
                       }}
                       className="rounded-lg border border-red-500/40 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
@@ -284,13 +302,16 @@ export function MembersCard({
                     <select
                       value={member.role}
                       onChange={(event) => {
-                        setResult(null);
+                        setNotice(null);
                         void setOrgMemberRole({
                           orgId,
                           userId: member.userId,
                           role: event.target.value as Role,
                         }).catch((err: unknown) =>
-                          setResult(errorText(err, "Could not change their tier.")),
+                          setNotice({
+                            ok: false,
+                            text: errorText(err, "Could not change their tier."),
+                          }),
                         );
                       }}
                       className={SELECT_CLASS}
@@ -332,10 +353,13 @@ export function MembersCard({
               <button
                 type="button"
                 onClick={() => {
-                  setResult(null);
+                  setNotice(null);
                   void revokeOrgInvite({ orgId, inviteId: invite._id }).catch(
                     (err: unknown) =>
-                      setResult(errorText(err, "Could not revoke the invite.")),
+                      setNotice({
+                        ok: false,
+                        text: errorText(err, "Could not revoke the invite."),
+                      }),
                   );
                 }}
                 className="ml-auto text-xs text-[var(--muted)] hover:text-red-600 hover:underline dark:hover:text-red-400"
