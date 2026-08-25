@@ -791,6 +791,7 @@ export const agentEditorContext = internalQuery({
       // Which identity columns the agent may not write — deriveCaptureRows
       // reads this so a locked column is never offered as a question.
       voiceLockedIdentity: org.voiceLockedIdentity ?? [],
+      voiceIdentityDescriptions: org.voiceIdentityDescriptions ?? {},
     };
   },
 });

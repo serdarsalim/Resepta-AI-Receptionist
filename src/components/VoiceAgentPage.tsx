@@ -85,6 +85,7 @@ type Detail = {
   };
   contactFields: VoiceContactField[];
   voiceLockedIdentity?: string[];
+  voiceIdentityDescriptions?: Partial<Record<"firstname" | "lastname" | "email", string>>;
 };
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
@@ -763,6 +764,7 @@ export function VoiceAgentPage({
                 seed={seed}
                 contactFields={detail.contactFields}
                 identityLocks={detail.voiceLockedIdentity ?? []}
+                identityDescriptions={detail.voiceIdentityDescriptions ?? {}}
                 onPublished={load}
                 onSaveStateChange={onVarsSaveState}
               />

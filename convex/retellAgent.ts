@@ -119,6 +119,7 @@ type EditorContext = {
   inboundNumber: string | null;
   signatureRejectedAt: number | null;
   voiceLockedIdentity: Array<"firstname" | "lastname" | "email">;
+  voiceIdentityDescriptions: Partial<Record<"firstname" | "lastname" | "email", string>>;
   fields: Array<{
     _id: string;
     key: string;
@@ -519,6 +520,7 @@ export const read = action({
       // The editor renders identity capture rows from this rather than a
       // second query: derive and display must read the same lock list.
       voiceLockedIdentity: context.voiceLockedIdentity,
+      voiceIdentityDescriptions: context.voiceIdentityDescriptions,
     };
   },
 });
@@ -871,7 +873,10 @@ function deriveCaptureRows(context: EditorContext): VariableRow[] {
     rows.push({
       key: column.key,
       label: column.label,
-      description: column.description,
+      // The owner's wording when they gave one (the matrix edits it, stored
+      // on the org), the stock line otherwise.
+      description:
+        context.voiceIdentityDescriptions?.[column.lock]?.trim() || column.description,
       type: "string",
       required: false,
       beforeSource: column.beforeSource,
@@ -895,7 +900,10 @@ function deriveCaptureRows(context: EditorContext): VariableRow[] {
       required: false,
       beforeSource: "contact_field",
       beforeFieldId: field._id as VariableRow["beforeFieldId"],
-      duringMode: field.voiceConfirm ? "confirm" : "if_missing",
+      // Selects never confirm-first: the value must be one of the options,
+      // so the match is the confirmation. Mirrors the matrix hiding the chip.
+      duringMode:
+        field.voiceConfirm && field.type !== "select" ? "confirm" : "if_missing",
       afterCall: true,
       destination: "contact",
       contactFieldId: field._id as VariableRow["contactFieldId"],

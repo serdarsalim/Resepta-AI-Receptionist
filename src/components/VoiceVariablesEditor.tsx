@@ -286,6 +286,7 @@ export function VoiceVariablesEditor({
   seed,
   contactFields,
   identityLocks,
+  identityDescriptions,
   onPublished,
   onSaveStateChange,
 }: {
@@ -301,8 +302,11 @@ export function VoiceVariablesEditor({
   contactFields: VoiceContactField[];
   // org.voiceLockedIdentity, from the same read as the fields: which identity
   // columns the agent may not write, and so which auto-derived questions to
-  // hide. The ✕ on an identity row writes this list.
+  // hide. The fills switch on an identity row writes this list.
   identityLocks: string[];
+  // The owner's wording for the identity extraction instructions, org-stored
+  // (identity has no contactFields row to carry one). Empty = stock wording.
+  identityDescriptions: Partial<Record<"firstname" | "lastname" | "email", string>>;
   onPublished: () => void;
   // Lets the page header own Save and Discard for the whole agent. The editor
   // still holds the draft — it just stops being the only place the save button
@@ -315,6 +319,7 @@ export function VoiceVariablesEditor({
   const createContactField = useMutation(api.contactFields.create);
   const updateContactField = useMutation(api.contactFields.update);
   const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
+  const setIdentityDescription = useMutation(api.contactFields.setIdentityDescription);
   // Context rows only. Stored sets still hold the capture rows the last
   // publish derived (and legacy hand-authored ones); the editor filters them
   // out on the way in because they are no longer anybody's to edit here —
@@ -721,14 +726,23 @@ export function VoiceVariablesEditor({
               key={column.lock}
               label={t(column.labelKey)}
               typeLabel={t("voiceVariables.text")}
-              description={t(column.descKey)}
-              editableDescription={false}
+              // The owner's wording once they type one, the stock line until
+              // then — same fallback deriveCaptureRows makes, so what the
+              // matrix shows is what publish sends. Editable like every
+              // other description cell: identity being read-only here was
+              // the inconsistency Serdar hit ("why can i not edit this").
+              description={identityDescriptions[column.lock] ?? t(column.descKey)}
+              editableDescription
               sees={true}
               seesLocked
               fills={!identityLocks.includes(column.lock)}
               onFills={(next) =>
                 next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
               }
+              onDescription={(text) => {
+                void setIdentityDescription({ key: column.lock, text });
+                touchFields();
+              }}
             />
           ))}
           {allFields.map((field) => (
@@ -752,7 +766,15 @@ export function VoiceVariablesEditor({
               description={field.voiceDescription}
               editableDescription={field.voice}
               confirmLabel={t("voiceVariables.confirm")}
-              confirmOn={field.voice ? field.voiceConfirm : undefined}
+              // No confirm-first on a select: the value must already be one
+              // of the options, so the match IS the confirmation, and the
+              // chip under "Select · 3" read as a third thing to decode
+              // (Serdar: "what can we do other than confirming a pre filled
+              // list anyway"). Free text and numbers keep it — a plate
+              // number or an email is exactly what gets misheard.
+              confirmOn={
+                field.voice && field.type !== "select" ? field.voiceConfirm : undefined
+              }
               options={field.type === "select" ? field.options : null}
               onOptions={(next) => {
                 void updateContactField({
@@ -1195,7 +1217,7 @@ function MatrixRow({
         ) : (
           <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
         )}
-        {fills && onToggleConfirm && (
+        {fills && onToggleConfirm && confirmOn !== undefined && (
           <button
             type="button"
             role="switch"

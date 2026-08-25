@@ -77,6 +77,26 @@ export const setIdentityLock = mutation({
   },
 });
 
+// The identity rows' description half, the same job update's voiceDescription
+// arg does for org fields — on the org, because identity has no field row.
+export const setIdentityDescription = mutation({
+  args: {
+    key: v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
+    text: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { key, text }) => {
+    const { orgId } = await requireOwner(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) throw new Error("no-org");
+    const current = { ...(org.voiceIdentityDescriptions ?? {}) };
+    if (text.trim()) current[key] = text.trim();
+    else delete current[key];
+    await ctx.db.patch(orgId, { voiceIdentityDescriptions: current });
+    return null;
+  },
+});
+
 export const create = mutation({
   args: {
     label: v.string(),

@@ -394,6 +394,17 @@ export default defineSchema({
         v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
       ),
     ),
+    // The identity columns' extraction instructions, the same job
+    // contactFields.voiceDescription does for org fields. On the org because
+    // the identity columns have no contactFields row to carry it. Unset keys
+    // fall back to deriveCaptureRows' stock wording.
+    voiceIdentityDescriptions: v.optional(
+      v.object({
+        firstname: v.optional(v.string()),
+        lastname: v.optional(v.string()),
+        email: v.optional(v.string()),
+      }),
+    ),
     messageChannel: v.optional(
       v.union(v.literal("whatsapp"), v.literal("email"), v.literal("both")),
     ),
