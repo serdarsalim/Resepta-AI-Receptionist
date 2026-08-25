@@ -900,10 +900,12 @@ function deriveCaptureRows(context: EditorContext): VariableRow[] {
       required: false,
       beforeSource: "contact_field",
       beforeFieldId: field._id as VariableRow["beforeFieldId"],
-      // Selects never confirm-first: the value must be one of the options,
-      // so the match is the confirmation. Mirrors the matrix hiding the chip.
-      duringMode:
-        field.voiceConfirm && field.type !== "select" ? "confirm" : "if_missing",
+      // Always ask-when-missing. Confirm-first survived two rounds of matrix
+      // simplification and fell in the third (Serdar: "absolutely stupid...
+      // confusing"): it was extraction policy leaking into an owner surface.
+      // The stored voiceConfirm flags are ignored, not migrated — the column
+      // is dead config until someone argues it back.
+      duringMode: "if_missing",
       afterCall: true,
       destination: "contact",
       contactFieldId: field._id as VariableRow["contactFieldId"],

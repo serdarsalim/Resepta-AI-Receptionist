@@ -32,7 +32,7 @@ const VAR_GRID =
   "group grid grid-cols-[11rem_8.5rem_minmax(14rem,1fr)_1.75rem] items-start gap-x-2";
 // The matrix: name · type · description · two switch tracks.
 const MATRIX_GRID =
-  "grid grid-cols-[11rem_8.5rem_minmax(12rem,1fr)_3.5rem_3.5rem] items-start gap-x-2";
+  "grid grid-cols-[11rem_8.5rem_minmax(12rem,1fr)_2.5rem] items-start gap-x-2";
 
 function RemoveX() {
   return (
@@ -746,8 +746,10 @@ export function VoiceVariablesEditor({
           <span className="px-2">{t("voiceVariables.label")}</span>
           <span className="px-2">{t("voiceVariables.type")}</span>
           <span className="px-2">{t("voiceVariables.description")}</span>
-          <span className="text-right">{t("voiceVariables.colSees")}</span>
-          <span className="text-right">{t("voiceVariables.colFills")}</span>
+          {/* The switch column carries no word: one green check per row on the
+              agent's own page needs no caption, and every candidate label was
+              a second name for the row's whole meaning. */}
+          <span />
         </div>
         <div className="space-y-1.5">
           {IDENTITY_CAPTURE.map((column) => (
@@ -755,17 +757,10 @@ export function VoiceVariablesEditor({
               key={column.lock}
               label={t(column.labelKey)}
               typeLabel={t("voiceVariables.text")}
-              // The owner's wording once they type one, the stock line until
-              // then — same fallback deriveCaptureRows makes, so what the
-              // matrix shows is what publish sends. Editable like every
-              // other description cell: identity being read-only here was
-              // the inconsistency Serdar hit ("why can i not edit this").
               description={identityDescriptionsLive[column.lock] ?? t(column.descKey)}
               editableDescription
-              sees={true}
-              seesLocked
-              fills={!identityLocksLive.includes(column.lock)}
-              onFills={(next) =>
+              on={!identityLocksLive.includes(column.lock)}
+              onToggle={(next) =>
                 next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
               }
               onDescription={(text) => {
@@ -794,16 +789,6 @@ export function VoiceVariablesEditor({
               }
               description={field.voiceDescription}
               editableDescription={field.voice}
-              confirmLabel={t("voiceVariables.confirm")}
-              // No confirm-first on a select: the value must already be one
-              // of the options, so the match IS the confirmation, and the
-              // chip under "Select · 3" read as a third thing to decode
-              // (Serdar: "what can we do other than confirming a pre filled
-              // list anyway"). Free text and numbers keep it — a plate
-              // number or an email is exactly what gets misheard.
-              confirmOn={
-                field.voice && field.type !== "select" ? field.voiceConfirm : undefined
-              }
               options={field.type === "select" ? field.options : null}
               onOptions={(next) => {
                 void updateContactField({
@@ -815,27 +800,10 @@ export function VoiceVariablesEditor({
                     row.id === field.id ? { ...row, options: next } : row,
                   ),
                 );
-                // The published enum rebuilds from the field's options, so a
-                // changed list is a publish away from Retell.
                 touchFields();
               }}
-              sees={field.voice || field.voiceVisible}
-              seesLocked={field.voice}
-              fills={field.voice}
-              onSees={(next) => {
-                void updateContactField({
-                  fieldId: field.id as Id<"contactFields">,
-                  voiceVisible: next,
-                });
-                setCreatedFields((rows) =>
-                  rows.map((row) =>
-                    row.id === field.id ? { ...row, voiceVisible: next } : row,
-                  ),
-                );
-                // No touchFields: the card is built at ring time, so this is
-                // live on the very next call without a publish.
-              }}
-              onFills={(next) =>
+              on={field.voice}
+              onToggle={(next) =>
                 next ? enableFieldVoice(field) : disableFieldVoice(field)
               }
               onDescription={(text) => {
@@ -846,18 +814,6 @@ export function VoiceVariablesEditor({
                 setCreatedFields((rows) =>
                   rows.map((row) =>
                     row.id === field.id ? { ...row, voiceDescription: text } : row,
-                  ),
-                );
-                touchFields();
-              }}
-              onToggleConfirm={() => {
-                void updateContactField({
-                  fieldId: field.id as Id<"contactFields">,
-                  voiceConfirm: !field.voiceConfirm,
-                });
-                setCreatedFields((rows) =>
-                  rows.map((row) =>
-                    row.id === field.id ? { ...row, voiceConfirm: !field.voiceConfirm } : row,
                   ),
                 );
                 touchFields();
@@ -1127,12 +1083,10 @@ function SelectOptionsCell({
 // about the row, not a control, and a disabled switch is what read wrong.
 function CheckSwitch({
   on,
-  locked,
   label,
   onChange,
 }: {
   on: boolean;
-  locked?: boolean;
   label: string;
   onChange?: (next: boolean) => void;
 }) {
@@ -1151,22 +1105,6 @@ function CheckSwitch({
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );
-  if (locked) {
-    // Implied, not operable — and it must LOOK inert. It wore the same
-    // emerald pill as the live switch and Serdar clicked it expecting a
-    // toggle ("those are not toggleable rn why"): a bare muted check with no
-    // wash is a fact; the pill is a control. aria-hidden plus a title, since
-    // a screen reader should not be offered a switch either.
-    return (
-      <span
-        title={label}
-        aria-hidden
-        className="flex h-6 w-6 items-center justify-center text-[var(--muted)]"
-      >
-        {check}
-      </span>
-    );
-  }
   return (
     <button
       type="button"
@@ -1185,7 +1123,15 @@ function CheckSwitch({
   );
 }
 
-// One row of the matrix. Identity columns and org fields share it: label,
+// One row of the matrix: label · type · instruction · ONE switch. It briefly
+// carried two switch columns (sees / fills) plus a confirm chip, and Serdar
+// dismantled each on contact with reality: the implied-sees check read as
+// "not seen" ("you need to understand i'm human — if i see born in as not
+// toggled i assume it's not being seen"), the two columns collapsed ("if we
+// can see something we can fill in too"), and the confirm chip was "absolutely
+// stupid... confusing". On = the agent knows the field and fills it. Off = it
+// does not. Two visual states, nothing else to decode.
+// Old note, for the record: identity columns and org fields share it: label,
 // type, the extractor's instruction, then the two switches. Every control
 // writes the FIELD (or the identity lock) — no draft, no publish of its own,
 // no way to disagree with the Contact fields table.
@@ -1199,49 +1145,28 @@ function MatrixRow({
   options,
   onOptions,
   editableDescription,
-  confirmLabel,
-  confirmOn,
-  sees,
-  seesLocked,
-  fills,
-  onSees,
-  onFills,
+  on,
+  onToggle,
   onDescription,
-  onToggleConfirm,
 }: {
   label: string;
   typeLabel: string;
   description: string;
-  // Fields the agent fills edit their instruction; identity rows and
-  // fields it only sees show theirs muted (or nothing).
-  editableDescription: boolean;
-  confirmLabel?: string;
-  confirmOn?: boolean;
-  // A select's options, editable in place — the type cell is the trigger
-  // (Serdar: "what should be captured and type should be inline edit no?").
-  // Null on everything that is not a select.
   options?: string[] | null;
   onOptions?: (next: string[]) => void;
-  sees: boolean;
-  // True while sees is implied (identity, or fills on): the switch renders
-  // checked and disabled, because turning it off is not a thing — fills
-  // injects the stored value by design.
-  seesLocked?: boolean;
-  fills: boolean;
-  onSees?: (next: boolean) => void;
-  onFills: (next: boolean) => void;
+  editableDescription: boolean;
+  on: boolean;
+  onToggle: (next: boolean) => void;
   onDescription?: (text: string) => void;
-  onToggleConfirm?: () => void;
 }) {
   const { t } = useLanguage();
   const [text, setText] = useState(description);
   useEffect(() => setText(description), [description]);
-  const active = sees || fills;
   return (
     <div className={`${MATRIX_GRID} group`}>
       <span
         className={`block min-w-0 truncate px-2 py-1 text-xs ${
-          active ? "text-[var(--foreground)]" : "text-[var(--muted)]"
+          on ? "text-[var(--foreground)]" : "text-[var(--muted)]"
         }`}
       >
         {label}
@@ -1252,24 +1177,8 @@ function MatrixRow({
         ) : (
           <span className="text-xs text-[var(--muted)]">{typeLabel}</span>
         )}
-        {fills && onToggleConfirm && confirmOn !== undefined && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={confirmOn}
-            onClick={onToggleConfirm}
-            className={`mt-0.5 rounded px-1 py-0.5 text-[10px] transition-colors ${
-              confirmOn
-                ? "bg-[var(--muted-bg)] font-medium text-[var(--foreground)]"
-                : "text-[var(--muted)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {confirmOn ? "✓ " : ""}
-            {confirmLabel}
-          </button>
-        )}
       </span>
-      {fills && editableDescription && onDescription ? (
+      {on && editableDescription && onDescription ? (
         <AutoGrowTextarea
           value={text}
           rows={1}
@@ -1282,23 +1191,11 @@ function MatrixRow({
         />
       ) : (
         <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-          {fills ? description : ""}
+          {on ? description : ""}
         </span>
       )}
       <span className="flex justify-end pt-0.5">
-        <CheckSwitch
-          on={sees}
-          locked={seesLocked}
-          onChange={onSees}
-          label={`${label} · ${t("voiceVariables.colSees")}`}
-        />
-      </span>
-      <span className="flex justify-end pt-0.5">
-        <CheckSwitch
-          on={fills}
-          onChange={onFills}
-          label={`${label} · ${t("voiceVariables.colFills")}`}
-        />
+        <CheckSwitch on={on} onChange={onToggle} label={label} />
       </span>
     </div>
   );
