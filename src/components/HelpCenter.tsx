@@ -254,7 +254,9 @@ const CATEGORIES: Category[] = [
         title: "Use the Inbox and campaigns",
         summary: "Continue customer conversations and send approved outreach without losing the customer record.",
         steps: [
-          "Open Inbox to see every conversation, newest first — each row shows the channel, who wrote last, and what they said.",
+          "Open Inbox to see every conversation, newest first — each row shows the channel it happened on and the last thing that was said.",
+          "A red ✕ on a row means that message could not be sent. Open the conversation to see why and send it again.",
+          "On a call, an arrow says which way it went: up and to the right means you called them, down and to the left means they called you.",
           "Click a conversation to open that customer's record, with the thread already on the channel their last message came in on.",
           "Reply from the connected channel and use the attention marker to find conversations that still need someone.",
           "Open Campaigns when a WhatsApp number is connected and choose an approved template for outreach.",

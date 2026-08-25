@@ -2711,3 +2711,173 @@ Email and calls are the two tabs that list before they read, which is the whole
 reason: a row quoting one line of a six-mail history used to land on six
 subjects. WhatsApp and notes pass nothing — those open as a thread with the
 newest message already at the bottom.
+
+## Members, from the operator's side (2026-08-25)
+
+`/admin/<org>` → Members could list who can sign in and do nothing about it, so
+"add my new receptionist" — which arrives by WhatsApp, not through the app —
+was answered by signing into the client's own workspace and using their Team
+card. That is the exact state `lib/activity` spends its length keeping out of a
+tenant's feed, done deliberately, for a two-second edit.
+
+**The writes live in [`convex/lib/members.ts`](convex/lib/members.ts) and
+nothing else re-implements them.** `upsertMembership`, `setMemberRole`,
+`revokeMembership`, `addMemberByEmail`, `revokeInviteRow`. None of them check
+who is asking, by design — "owner of this org" and "platform admin" are not the
+same question and neither belongs inside a write. `convex/team.ts` keeps every
+gate it had and lost the bodies; `convex/platform.ts` adds the same operations
+behind `requirePlatformAdmin`.
+
+The reason it is one file rather than a second copy in platform.ts: membership
+carries four rules that are quiet, load-bearing and exactly the kind that get
+left out of a copy. An org must never lose its last owner. A staff row keeps
+its appointments when the login behind it is revoked. A new membership's
+`seenAt` stays UNSET so the person is TOLD rather than handed a workspace
+silently. An address with no account gets a TOKEN, never a seat.
+
+Two things the operator door does differently, both deliberate:
+
+- The invite mail carries `OPERATOR_ACTOR_NAME`, not the operator's own name.
+  It lands in a client's inbox as "you have been added to X" and the client did
+  not ask who was at the keyboard.
+- `platform.orgMemberCandidates` makes the EXISTING-ACCOUNT pool the easy path,
+  because most people being added already hold a login from another business
+  and adding one of those is a membership with nothing to accept. Each row
+  names the other businesses that account is in — an operator reading a bare
+  address cannot tell a client's staff from a stranger with a similar name. It
+  is a bounded scan (`users` has an exact-email index and nothing else), and it
+  says when it capped.
+
+`team.writeAccess` keeps its own cross-org guard (owner of BOTH ends, read
+fresh) because that guard is the whole reason that block is allowed to exist
+outside platform.ts. Its demo check stays a `not-found` rather than the lib's
+`demo-workspace`: that card must not advertise the showroom's existence.
+
+**Scar, and it is about editing this repo rather than about members.** The
+Members swap was made with a python slice — everything before the block, plus
+everything from the next tab guard onward — and `.index` searches from position
+ZERO, so `end` landed on the Setup guard 1,500 lines ABOVE the block. `end <
+start` does not throw; it silently returns the region between them a second
+time. `[orgId]/page.tsx` went from 1,422 to 2,200 lines with every card below
+the agents tab duplicated, and NOTHING downstream could see it: duplicated JSX
+is valid JSX, tsc passed, eslint passed, no export was duplicated because the
+copy was inside one component's return. Serdar saw two Members cards on screen.
+Anchor the second search (`s.index(needle, start)`) and assert `end > start`.
+
+## The fleet table answers who uses this (2026-08-25)
+
+It had nine columns and five of them were flavours of a message breaking:
+Setup, Failed, Gave up, Retrying, Stuck. On a healthy fleet all four failure
+columns are em dashes, so a third of the table said nothing, and Serdar's first
+question about the screen was what "Stuck" means.
+
+Now: **Business · Members · Email · WhatsApp · Calls · Booked · Errors · Last
+activity**, plus a hover-only icon that opens the client's own app.
+
+- **Setup is deleted.** "email only" was a setup-checklist word sitting in a
+  row of counts; everything it encoded is on the business's own Setup tab,
+  where the credentials that produce it are.
+- **Errors** folds the four failure columns into one cell: blank when nothing
+  is wrong, `2 dead-lettered · 3 failed` when it is. Tone is the worst thing
+  present, not a colour per phrase — a row is glanced at, and three colours in
+  one cell is a legend. **The words are the ones the CODE uses.** This screen
+  has one reader and he greps `deadLetteredAt`; "gave up" was client-facing
+  softening that cost him the ability to match what he reads to what he
+  searches for.
+- **Email / WhatsApp / Calls are ALL-TIME**, summed from every `usageMonthly`
+  row. Month-to-date was the first cut and it answered the wrong question: on
+  the 3rd it cannot tell a business that sent four thousand messages last year
+  from one that has never sent anything, and adoption is why the columns exist.
+  The month-by-month breakdown stays on the org's own page.
+- **The counters are `usageMonthly.emailSent` / `waSent`**, fed from
+  `messages.applySendResult` — the one site every send path already reports to,
+  so retries cannot inflate them. NOT counted off `messages`: that table's cost
+  is proportional to history, and this page's own comments record it throwing
+  around thirty businesses when it last did per-org message scans.
+  `usageMonthly` is read ONCE fleet-wide and bucketed by org, the same pattern
+  memberships and templates use here, which made this cheaper — `healthFor`
+  lost its per-org point read. `sendBackfill:run` rebuilds history and is safe
+  to run twice. A staff reply typed on the salon's own phone and echoed back by
+  Evolution is deliberately not counted: nothing was sent from this product.
+
+**Two layout corrections, and the second reverses the first.** The open-app
+action shipped as a 90px "Open app ↗" button in a column of its own, which ate
+the table; it is an icon in a `w-px` cell, revealed on row hover, slot held
+open at rest so nothing shifts under the pointer, permanently visible on touch.
+Then Business was given `w-full` on the "one flexible column" rule — **and that
+was the wrong rule.** One flexible column plus nowrap everywhere else is what
+you do to a table that OUTGROWS its card; it is the fix for a horizontal
+scrollbar. This table has never outgrown anything, so the rule bought nothing
+and put all the spare width in one cell: a fleet of one business drew
+"Barberio" across half the card. Auto layout, as before. **A rule that solves a
+problem you do not have will cause one.**
+
+`?tab=` deep links work on the org page now (read once on mount, in an effect —
+the `useState` initializer also runs during SSR, where there is no location, so
+reading it there is a hydration mismatch).
+
+## An inbox row's failure marker belonged to the wrong message (2026-08-25)
+
+Serdar, on eleven rows with four of them red: why is a failed send shouting at
+me, and "Siz:" in front of everything is stupid. The first half turned out to
+be worse than loud.
+
+`hasFailed` means "anything in this conversation ever failed to send", and the
+row drew it as the words **gönderilemedi** directly in front of the preview —
+which quotes the LAST entry. So it sat ahead of inbound text the customer had
+typed. On live data: *"not sent · ben gelemekten vazgeçtim"* — I decided not to
+come. Her message, arriving fine; the send it referred to was older and
+appeared nowhere on the row.
+
+The row reads **`lastFailed`** now — did the message being QUOTED fail — and
+draws a red **✕**, not a sentence. The conversation-wide answer still exists as
+`summary.hasFailed` and still feeds `attentionAt`; it is just not a thing to
+label one line with.
+
+**Known cost, stated rather than hidden:** a failure that is no longer the
+newest entry now has no marker in the list, because `unseen` is inbound-only
+and does not light for failures. That is a real loss of the safety property the
+old comment defends. If it bites, the fix is to make a failure light the dot —
+never to go back to labelling the wrong line, which is misinformation wearing
+safety's clothes.
+
+**"Siz:" is gone.** The gutter dot already answers whose turn it is, and every
+preview but one carries words somebody wrote — you can tell a salon's reminder
+from a customer's reply by reading it. The exception is a call with no summary,
+where "Arama" is the same four letters whoever dialled. Those rows carry an
+arrow: **↗ out, ↙ in**, with the old words kept as `title`/`aria-label`,
+because a shape with no accessible name is a shape nobody can read.
+
+**Shape, not colour, and that was a refusal.** Serdar proposed green-out /
+red-in. Both colours are already spoken for within a few pixels: red on that
+line is the failed-send ✕, green two columns left is the unseen dot. Coloured
+arrows would be read as STATES before they were read as directions. **Do not
+encode a new axis in a colour that already means something on the same row.**
+
+## The dev seed grew an email lane and a clock (2026-08-25)
+
+`devSeed:seed` had WhatsApp and calls and no email at all, so the entire email
+lane — thread view, inbox row, subject, reply attribution — could only be
+looked at against an empty state. It writes both directions now plus a bounce,
+and customers carry addresses (`example.com`, RFC 2606, so nothing here reaches
+a real inbox even if a seeded row found a send path). Two of the twenty stay
+without one, because "no address" is a state the contact card has to draw.
+
+**The bigger fix was that seeded rows had no `occurredAt`.** The whole seed
+lands in ONE transaction, so every row shared a `_creationTime` to the
+millisecond and the inbox had nothing to sort by — twenty conversations stamped
+the same minute, which is not a preview of anything. Every row is on a real
+clock now, clamped below `now` so an appointment two weeks out cannot stamp its
+confirmation in the future.
+
+Calls moved into the last half hour and NEWER than that customer's messages:
+the inbox row draws only the newest entry, so an hours-old call behind a
+minutes-old email is invisible there — the lane was seeded and the list still
+had nothing to show for it. Which of the pair is newer alternates, so both
+arrows appear.
+
+**Verify a seed by what the SURFACE will draw, not by the row count.** Barberio
+returns 76 messages and 8 calls either way; what makes it a preview is that
+across 18 conversations the list draws 7 inbound email, 5 outbound WhatsApp, 2
+failed email, 2 inbound call, 1 failed WhatsApp, 1 outbound call — every state
+the row can render, including both marks.
