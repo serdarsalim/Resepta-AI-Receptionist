@@ -1413,15 +1413,11 @@ export default function TenantPage() {
                 )}
               </>
             )}
-          </div>
-
-          {/* Below suspension, and deliberately not beside it: this is the end
-              of the business, not a heavier version of stopping its sends.
-              Everything about it is one step slower than the control above —
-              a disclosure, then the name, then a button that stays dead until
-              the two match. */}
-          <div className="border-t border-[var(--border)] pt-3">
-            {!deleteOpen ? (
+            {/* The second button, on the same line (Serdar, 2026-08-26). It
+                only shows while the delete form is CLOSED — open, it becomes
+                the block below, because a name field and a disclosure do not
+                belong in a row of buttons. */}
+            {!deleteOpen && (
               <button
                 type="button"
                 onClick={() => {
@@ -1433,7 +1429,18 @@ export default function TenantPage() {
               >
                 Delete account…
               </button>
-            ) : (
+            )}
+          </div>
+
+          {/* Beside suspension now, no rule between them (Serdar,
+              2026-08-26). The divider was making a two-button card look like
+              two sections, and one horizontal rule under a single button is a
+              lot of furniture for "and here is the other one". The SLOWNESS
+              is what keeps this safe, not the distance: a disclosure, then
+              the name typed out, then a button that stays dead until the two
+              match. None of that moved. */}
+          {deleteOpen && (
+            <div className="pt-1">
               <div className="space-y-2">
                 <p className="text-xs text-[var(--muted-strong)]">
                   Deletes every customer, message, call, appointment and file
@@ -1497,8 +1504,8 @@ export default function TenantPage() {
                   </p>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </Section>
       )}
     </Plane>
