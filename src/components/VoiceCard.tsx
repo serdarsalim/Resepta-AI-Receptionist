@@ -10,7 +10,7 @@ import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
-import { Toggle } from "./Toggle";
+import { CheckSwitch } from "./CheckSwitch";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { CheckMark, ITEM_CLASS, PANEL_CLASS } from "./DataTable";
 
@@ -591,9 +591,17 @@ export function VoiceCard({
                         />
                       </td>
                     ))}
-                    <td className="px-3 py-2">
-                      <Toggle
-                        checked={row.enabled}
+                    {/* The same CheckSwitch the Services table uses for its
+                        own in-use column (Serdar, 2026-08-26), not the pill
+                        Toggle. Two controls that answer the same yes/no
+                        question should not be two different shapes, and the
+                        pill is the louder of the two — a column of them was
+                        the heaviest thing on a table whose real content is
+                        names and numbers. */}
+                    <td className="px-2 py-2">
+                      <CheckSwitch
+                        on={row.enabled}
+                        label={t("settings.voiceEnabled")}
                         onChange={(next) => void update({ agentId: row._id, enabled: next })}
                       />
                     </td>
