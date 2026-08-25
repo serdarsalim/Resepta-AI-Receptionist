@@ -49,29 +49,21 @@ import { Sheet } from "./Sheet";
 // explanations behind InfoTips.
 
 // ── Flow strip ──────────────────────────────────────────────────────────────
-// A rule drawn as the automation it is: trigger → wait → message → channel,
-// nodes joined by arrows, instead of the three-column table this used to be.
-// Same rows, same click-through into the editor — only the reading changed.
-// The strip stacks vertically on a phone, where a horizontal chain would
-// scroll or wrap mid-arrow.
+// A rule drawn as the automation it is: when → message → channel, nodes
+// joined by arrows, instead of the three-column table this used to be. Same
+// rows, same click-through into the editor — only the reading changed. The
+// strip stacks vertically on a phone, where a horizontal chain would scroll
+// or wrap mid-arrow.
 
 function FlowNode({
   icon,
-  dashed,
   children,
 }: {
   icon: "zap" | "clock" | "message";
-  dashed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <span
-      className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--card)] px-2.5 py-1.5 text-xs ${
-        dashed
-          ? "border-dashed border-[var(--border)] text-[var(--muted)]"
-          : "border-[var(--border)]"
-      }`}
-    >
+    <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs">
       <svg
         width="13"
         height="13"
@@ -82,12 +74,13 @@ function FlowNode({
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden
-        // One accent per strip: the trigger's bolt. Everything after it is an
+        // One accent per strip, on the opening node's icon — bolt for the
+        // event rules, clock for the timed ones. Everything after it is an
         // effect, and a chain of coloured icons is a chain with no start.
         className={
-          icon === "zap"
-            ? "shrink-0 text-[var(--accent)]"
-            : "shrink-0 text-[var(--muted)]"
+          icon === "message"
+            ? "shrink-0 text-[var(--muted)]"
+            : "shrink-0 text-[var(--accent)]"
         }
       >
         {icon === "zap" && (
@@ -1470,35 +1463,28 @@ function RulesCard({
     org.quietHoursStart,
   )}:00–${pad(org.quietHoursEnd)}:00`;
 
-  // The strip's segments, as TEXT — a row that opens a page must not also
+  // The strip's opening node, as TEXT — a row that opens a page must not also
   // hold controls; everything editable lives inside the page the row opens.
-  // Three of the six triggers carry a wait between the event and the message.
-  // The old table folded event and wait into one sentence ("24 saat önce"),
-  // which read fine as a cell and reads wrong between arrows, so those three
-  // name their event here and hand the timing to a wait node of its own.
-  const ruleFlow = (rule: RuleRowData): { trigger: string; delay?: string } => {
+  //
+  // ONE node, not trigger-plus-wait (2026-08-25, hours after shipping the
+  // wait node): arrows read left-to-right as "this, then that", and a wait
+  // node after the event — "Randevu → 2 saat önce" — narrated time running
+  // backwards. The timed rules keep their whole sentence and wear a clock;
+  // the event rules wear the bolt.
+  const ruleWhenStatic = (rule: RuleRowData) => {
     switch (rule.trigger) {
       case "booking":
-        return { trigger: t("settings.ruleWhenBooked") };
+        return t("settings.ruleWhenBooked");
       case "cancellation":
-        return { trigger: t("settings.ruleWhenCancelled") };
+        return t("settings.ruleWhenCancelled");
       case "out_of_hours":
-        return { trigger: t("settings.ruleWhenClosed") };
+        return t("settings.ruleWhenClosed");
       case "before_start":
-        return {
-          trigger: t("settings.flowAppointment"),
-          delay: `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`,
-        };
+        return `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`;
       case "after_end":
-        return {
-          trigger: t("settings.flowCompleted"),
-          delay: `${rule.offsetHours} ${t("settings.flowHoursAfter")}`,
-        };
+        return `${rule.offsetHours} ${t("settings.ruleHoursAfterEnd")}`;
       case "no_show":
-        return {
-          trigger: t("settings.flowNoShow"),
-          delay: `${Math.round(rule.offsetHours / 24)} ${t("settings.flowDaysAfter")}`,
-        };
+        return `${Math.round(rule.offsetHours / 24)} ${t("settings.ruleDaysAfterNoShow")}`;
     }
   };
 
@@ -1861,7 +1847,6 @@ function RulesCard({
       >
         <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {rules.map((rule) => {
-            const flow = ruleFlow(rule);
             const liveChannels = wiredFor(rule).filter((channel) =>
               activeChannels(rule).has(channel),
             );
@@ -1891,8 +1876,16 @@ function RulesCard({
                       liveChannels.length === 0 ? "opacity-60" : ""
                     }`}
                   >
-                    <FlowNode icon="zap">
-                      {flow.trigger}
+                    <FlowNode
+                      icon={
+                        rule.trigger === "before_start" ||
+                        rule.trigger === "after_end" ||
+                        rule.trigger === "no_show"
+                          ? "clock"
+                          : "zap"
+                      }
+                    >
+                      {ruleWhenStatic(rule)}
                       {rule.trigger === "no_show" && (
                         <InfoTip text={winbackHint} />
                       )}
@@ -1903,14 +1896,6 @@ function RulesCard({
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
                     </FlowNode>
-                    {flow.delay && (
-                      <>
-                        <FlowArrow />
-                        <FlowNode icon="clock" dashed>
-                          {flow.delay}
-                        </FlowNode>
-                      </>
-                    )}
                     <FlowArrow />
                     <FlowNode icon="message">
                       <span className="max-w-56 truncate font-medium">
