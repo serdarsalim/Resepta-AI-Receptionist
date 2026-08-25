@@ -403,13 +403,15 @@ export function VoiceCard({
     }
   };
 
-  const status = !roster
+  // "Your voice agent isn't set up yet. We handle setup." is GONE (Serdar,
+  // 2026-08-26). It told the owner nothing they could act on and stated the
+  // obvious twice: an empty agents table already says nothing is set up, and
+  // the card below already promises the number within 24 hours. An error is
+  // different — that one is a fact the owner cannot see anywhere else and
+  // does need to act on, so it survives.
+  const status = !roster || roster.configured || !roster.error
     ? null
-    : roster.configured
-      ? null
-      : roster.error
-        ? t("settings.voiceUnreachable")
-        : t("settings.voiceNotProvisioned");
+    : t("settings.voiceUnreachable");
 
   const agentActions = (
     <>

@@ -2291,11 +2291,6 @@ const dictionary = {
     en: "Delete {name}? Its call history stays in Resepta, but the agent will no longer appear for this business.",
     de: "{name} löschen? Der Anrufverlauf bleibt in Resepta, der Assistent wird für diesen Betrieb jedoch nicht mehr angezeigt.",
   },
-  "settings.voiceNotProvisioned": {
-    tr: "Sesli asistanınız henüz kurulmadı. Kurulumu biz yapıyoruz.",
-    en: "Your voice agent isn't set up yet. We handle setup.",
-    de: "Ihr Sprachassistent ist noch nicht eingerichtet. Die Einrichtung übernehmen wir.",
-  },
   "settings.voiceUnreachable": {
     tr: "Sesli asistana şu anda ulaşılamıyor. Bizimle iletişime geçin.",
     en: "Can't reach your voice agent right now. Get in touch with us.",
