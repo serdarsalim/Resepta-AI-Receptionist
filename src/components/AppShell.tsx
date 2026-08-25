@@ -216,12 +216,20 @@ const NAV_TABS: {
   // and carries its own tabs (agents, calls, fields) rather than being tucked
   // inside a group. Knowledge left that strip for the Knowledge tab below on
   // 2026-08-22; what remains is the agent, its calls and its vocabulary.
+  // Off the phone bar, in the drawer (Serdar, 2026-08-26) — the Messages
+  // argument, word for word: an agent you configure once and leave running is
+  // not what a phone's bottom row is for, and the slot is worth more to a tab
+  // you tap all day. The one daily question this tab answered on the go —
+  // "did anyone call" — moved into the Inbox when calls became a channel
+  // there, so the bar's first tab already answers it. phoneKey stays for the
+  // day this earns its slot back.
   {
     id: "voice",
     key: "nav.voice",
     phoneKey: "nav.voiceShort",
     Icon: VoicePhoneIcon,
     color: "#10b981",
+    drawerOnly: true,
   },
   // Directly under Voice agent: the agent reads all of this at call time and
   // the public booking page builds its slots from the service list. That
