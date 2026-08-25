@@ -435,7 +435,7 @@ export function VoiceCard({
           !provisioningReady ||
           (!canCreate && !canConnect)
         }
-        className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-40"
+        className="card-action"
       >
         {t("settings.voiceConnect")}
       </button>

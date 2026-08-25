@@ -664,11 +664,23 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
 // switch — because the fixed sm columns add up to more than a 390px phone can
 // give them next to a name.
 //
-// NO KEY COLUMN. The list's reader is a salon owner deciding what they sell
-// and for how much; the key is the agent's address for a service, and it now
-// lives with the rest of the agent's vocabulary on the Contact fields tab
-// (ServiceKeysCard). It spent a while here as a monospace chip and read as
-// exactly what it was: a developer's column in an owner's price list.
+// NO KEY COLUMN, and as of 2026-08-25 no key SURFACE anywhere. It spent a
+// while here as a monospace chip and read as exactly what it was, a
+// developer's column in an owner's price list, so it moved to a card of its
+// own — which turned out to be the same mistake with more room (Serdar:
+// "service keys are totally stupid... why do we need it anyway, these
+// variables are auto generated from services").
+//
+// He is right, and the deciding fact is in PromptEditor's header: the owner
+// thinks in labels, the provider speaks keys, and the editor translates so
+// nobody has to remember or retype key syntax. A surface teaching keys undoes
+// the thing that editor exists to do. The card also offered to RENAME one,
+// which is the single edit nobody should ever make: the key is frozen
+// precisely so renaming a service cannot move the address automations point
+// at, so the only capability it exposed was a way to break references.
+//
+// The key still exists on the row and is still what the agent books by. It is
+// generated from the name and read by machines. Don't build a screen for it.
 //
 // The phone line is a GRID with fixed tracks, not a wrapping flex line. Each
 // row is its own grid container, so nothing lines up across rows by agreement
@@ -697,51 +709,6 @@ function serviceErrorText(err: unknown, t: (key: TranslationKey) => string): str
   const message = err instanceof Error ? err.message : String(err);
   if (message.includes("key-exists")) return t("services.keyExists");
   return message;
-}
-
-// Click-to-edit, the same shape the fields table uses for its key. Its own
-// component because the services list is a map() and this needs a piece of
-// state per row.
-function ServiceKeyCell({
-  value,
-  onSave,
-  className,
-}: {
-  value: string;
-  onSave: (key: string) => void;
-  className?: string;
-}) {
-  const { t } = useLanguage();
-  const [editing, setEditing] = useState(false);
-  return (
-    <span className={`flex min-w-0 items-center ${className ?? ""}`}>
-      {editing ? (
-        <input
-          autoFocus
-          defaultValue={value}
-          onBlur={(e) => {
-            const next = e.target.value.trim();
-            setEditing(false);
-            if (next && next !== value) onSave(next);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-            if (e.key === "Escape") setEditing(false);
-          }}
-          className="w-full min-w-0 rounded border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-xs"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          title={t("services.keyEditHint")}
-          className="min-w-0 truncate rounded bg-[var(--muted-bg)] px-1.5 py-0.5 text-left font-mono text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--foreground)] hover:underline"
-        >
-          {value}
-        </button>
-      )}
-    </span>
-  );
 }
 
 // Adding a service, as a sheet. It used to be an inline row that unfolded at
@@ -1175,7 +1142,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
             <button
               type="button"
               onClick={() => setAdding("service")}
-              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+              className="card-action"
             >
               {t("services.add")}
             </button>
@@ -1209,7 +1176,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               <button
                 type="button"
                 onClick={() => setAdding("good")}
-                className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+                className="card-action"
               >
                 {t("services.addProduct")}
               </button>
@@ -1225,67 +1192,6 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
         <NewServiceSheet initialKind={adding} onClose={() => setAdding(null)} />
       )}
     </div>
-  );
-}
-
-// The agent's addresses for what the business sells, shown beside the contact
-// fields because that page is already the agent's vocabulary — the things it
-// knows BY KEY. The Services list dropped its key column (see
-// SERVICE_ROW_GRID): its reader is an owner deciding what they sell and for
-// how much, and a monospace chip in that list was a developer's column in an
-// owner's price list. The key still has to live somewhere, because renaming a
-// service must not move the address automations point at — and the reader who
-// cares about that is on this tab already.
-//
-// Names are read-only here on purpose. The price list is where a service is
-// edited; this card answers one question — "what does the agent call it" —
-// and a second editing surface for the name would just be drift waiting.
-export function ServiceKeysCard({ isOwner }: { isOwner: boolean }) {
-  const { t } = useLanguage();
-  const services = useQuery(api.services.list, {});
-  const update = useMutation(api.services.update);
-  const [error, setError] = useState<string | null>(null);
-
-  const rows = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-
-  // No services yet: nothing to address, so no card. The Services tab is
-  // where the first one gets made.
-  if (services !== undefined && rows.length === 0) return null;
-
-  return (
-    <Card
-      title={t("fields.serviceKeys")}
-      tip={t("fields.serviceKeysHint")}
-      disabled={!isOwner}
-    >
-      {services === undefined ? (
-        <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-      ) : (
-        <div className="space-y-2">
-          <ul className="divide-y divide-[var(--border)]">
-            {rows.map((service) => (
-              <li
-                key={service._id}
-                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 py-1.5 text-sm"
-              >
-                <span className="min-w-0 truncate">{service.name}</span>
-                <ServiceKeyCell
-                  value={service.key}
-                  onSave={(key) =>
-                    void update({ serviceId: service._id, key }).catch((err) =>
-                      setError(serviceErrorText(err, t)),
-                    )
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -1590,7 +1496,7 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            className="card-action"
           >
             {t("fields.add")}
           </button>
@@ -2006,7 +1912,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+            className="card-action"
           >
             {t("roster.add")}
           </button>

@@ -453,6 +453,41 @@ thead {
     box-shadow: var(--card-shadow);
   }
 
+  /* A card's own primary action, in its header: Add field, Add agent, Add
+     member, Add message, Add service, Add product, Add knowledge.
+
+     Filled accent until 2026-08-25, when Serdar called it too strong for these
+     cards. He is describing a real arithmetic problem rather than a taste one:
+     the rule that put the action in the card header (AGENTS.md, "An action
+     belongs to the card it acts on") meant a page of three cards became a page
+     with three solid blue buttons down its right edge, each shouting as loudly
+     as the page's actual primary. One loud thing per screen is the budget, and
+     these had all been spending it.
+
+     Accent TEXT with an accent-tinted hover wash. It stays findable, stops
+     competing, and carries no border, which is the standing rule for anything
+     that is not a container. The wash is the affordance.
+
+     What did NOT change: a filled button still means the one action a screen
+     is FOR. The sheet that opens from these keeps its filled confirm, the
+     composer keeps its filled Send, and the Customers toolbar keeps its filled
+     Add customer, because that page IS the list it adds to. */
+  .card-action {
+    height: 2rem;
+    border-radius: 0.5rem;
+    padding-inline: 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--accent);
+    transition: background-color 120ms;
+  }
+  .card-action:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .card-action:disabled {
+    opacity: 0.4;
+  }
+
   /* The Resepta signature, taken from resepta.xyz rather than approximated:
      that site sets Nunito on <html> and draws the lockup as
      `text-xl font-extrabold tracking-tight`, so the weight and the tracking

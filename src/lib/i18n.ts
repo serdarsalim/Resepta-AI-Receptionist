@@ -3346,16 +3346,6 @@ const dictionary = {
   // The card under the contact fields listing each service's key. Keys left
   // the Services price list (owner-facing) and this tab is where key-minded
   // readers already are.
-  "fields.serviceKeys": {
-    tr: "Hizmet anahtarları",
-    en: "Service keys",
-    de: "Leistungsschlüssel",
-  },
-  "fields.serviceKeysHint": {
-    tr: "Sesli asistanın ve otomasyonların hizmetlere başvururken kullandığı sabit adresler. Hizmetin adı değişse de anahtarı değişmez, ona bağlı hiçbir şey kopmaz.",
-    en: "Fixed addresses the voice agent and automations use to refer to services. Renaming a service keeps its key, so nothing pointing at it breaks.",
-    de: "Feste Adressen, über die Sprachassistent und Automationen Leistungen ansprechen. Wird eine Leistung umbenannt, bleibt ihr Schlüssel erhalten – nichts, was darauf zeigt, geht kaputt.",
-  },
   "fields.system": { tr: "Sistem", en: "System", de: "System" },
   "fields.systemHint": {
     tr: "Her müşteride hazır olan kimlik alanları. Sesli asistan bunları okuyabilir ama değiştiremez; aramada ad ve soyad tek bir Müşteri adı (customer_name) değişkeni olarak görünür.",

@@ -11,7 +11,6 @@ import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { NumberRequestCard } from "./NumberRequestCard";
-import { ServiceKeysCard } from "./BusinessView";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -41,9 +40,9 @@ import { ServiceKeysCard } from "./BusinessView";
 // should say so wherever they live; what it must not do is look like it owns
 // them, which is what a tab on its own strip said.
 //
-// Service keys did NOT follow. A service's key is the price list's vocabulary
-// and has nothing to do with what the salon asks a customer, so it sits under
-// Agents now rather than holding a tab of its own for one read-only card.
+// Service keys did not follow it either, and then stopped existing: the card
+// was deleted the same day (Serdar: "totally stupid"). BusinessView's
+// SERVICE_ROW_GRID comment carries the reasoning.
 type VoiceSection = "agents" | "calls";
 
 function fmtDuration(sec: number | null): string {
@@ -237,13 +236,6 @@ export function VoiceView() {
               the registration document and the request stand. Owner-only —
               the query resolves null for staff and the card handles it. */}
           {isOwner && <NumberRequestCard />}
-          {/* The name the agent books a service by, beside the agent that
-              books it. It rode under contact fields while that tab was here
-              and was the weaker half of that pairing even then: a field is
-              what the salon ASKS a customer, a service key is what the price
-              list is CALLED on a call. Last card because it is reference, not
-              a control — you read it while writing a prompt. */}
-          <ServiceKeysCard isOwner={isOwner} />
         </div>
       )}
       {section === "calls" && <CallHistory />}

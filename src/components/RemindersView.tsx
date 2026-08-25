@@ -1772,7 +1772,7 @@ function RulesCard({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="h-8 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+              className="card-action"
             >
               {t("settings.ruleAdd")}
             </button>

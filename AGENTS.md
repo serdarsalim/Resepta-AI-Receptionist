@@ -2293,12 +2293,21 @@ agent, Add message, Add customer, Add member, Add field, Add sale, Add product
 and Add knowledge all sit there now; before this they floated above their card,
 sat at the foot of a list, or were shared between two cards.
 
-- **Two tiers, and they are different jobs.** A CARD's own primary action is
-  filled accent with no `+` and lives in the card header. A SECTION's action
-  inside a card is outlined and keeps its `+` — the contact record's
-  "+ Add appointment" is the reference. Filling that one would make it the
-  loudest thing on the contact page, competing with the page's real primary,
-  and it sits directly above a blue disclosure link.
+- **Two tiers, and they are different jobs.** A CARD's own primary action
+  lives in the card header, with no `+`, and wears `.card-action` — accent
+  TEXT on an accent-tinted hover wash. A SECTION's action inside a card is
+  outlined and keeps its `+`; the contact record's "+ Add appointment" is the
+  reference.
+  **AMENDED 2026-08-25.** The card action was filled accent until Serdar said
+  it was too strong ("should we do sort of secondary button that's sort of no
+  bg for these type of cards"). The original reasoning below still holds and
+  is exactly what broke: filling a SECTION action would make it the loudest
+  thing on the contact page, competing with the page's real primary. Putting a
+  card's action in its header multiplied that by however many cards a page
+  stacks, so Voice opened on three solid blue buttons down one edge and Business
+  on more. One loud thing per screen is the budget. A filled button now means
+  the single action a screen is FOR: the sheet's confirm, the composer's Send,
+  the Customers toolbar's Add customer (that page IS the list it adds to).
 - **The header carries `min-h-8`**, so a card with an action and one without
   keep the same header height, and an action that hides itself (Contact
   fields' button, while its form is open) moves nothing.
