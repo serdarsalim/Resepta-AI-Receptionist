@@ -189,8 +189,17 @@ export default function AdminPage() {
                 name flush against the card's top edge reads as clipped. */}
             <thead className="text-left text-xs">
               <tr>
-                <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold" title="People who can sign in">
+                {/* ONE flexible column, and it is this one. Without it the
+                    table's spare width is spread across all nine, so the
+                    counts drift apart into a field of em dashes and the last
+                    column ends up an inch from the one before it. Everything
+                    else is priced at its own content — the same rule the
+                    Voice agents table already runs on. */}
+                <th className="w-full px-3 pb-2 pt-3.5 font-semibold">Business</th>
+                <th
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  title="People who can sign in"
+                >
                   Members
                 </th>
                 {/* One header row. The period lives in the title rather than
@@ -198,25 +207,25 @@ export default function AdminPage() {
                     what it counts, and a second line under four of nine
                     columns cost every row its height to tell him. */}
                 <th
-                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="Emails sent, all time"
                 >
                   Email
                 </th>
                 <th
-                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="WhatsApp messages sent, all time"
                 >
                   WhatsApp
                 </th>
                 <th
-                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="Voice calls, all time: count, minutes, what we bill them, and what Retell charges us. The month-by-month breakdown is on the business's own page."
                 >
                   Calls
                 </th>
                 <th
-                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="Appointments in the book from now on"
                 >
                   Booked
@@ -230,16 +239,15 @@ export default function AdminPage() {
                     "Stuck" ever did. Sorting is unchanged: the query still
                     orders by dead letters, then failures, then stuck. */}
                 <th
-                  className="px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
                   title="Sends that broke: refused in the last 24h, dead-lettered after retries, stuck mid-send, or backing off for another attempt"
                 >
                   Errors
                 </th>
-                <th className="px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
-                {/* No header word. The column is one button wide and the
-                    button says what it does; a title over it would be the
-                    third time in eight characters. */}
-                <th className="px-3 pb-2 pt-3.5" />
+                <th className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
+                {/* No header word, and barely a column: w-px collapses it to
+                    its content so the action cannot buy width from the data. */}
+                <th className="w-px px-2 pb-2 pt-3.5" />
               </tr>
             </thead>
             <tbody>
@@ -252,7 +260,7 @@ export default function AdminPage() {
                 <tr
                   key={org.orgId}
                   onClick={() => router.push(`/admin/${org.orgId}`)}
-                  className="cursor-pointer border-t border-[var(--table-divider)] hover:bg-[var(--row-hover-bg)]"
+                  className="group cursor-pointer border-t border-[var(--table-divider)] hover:bg-[var(--row-hover-bg)]"
                 >
                   <td className="px-3 py-2">
                     <Link
@@ -321,15 +329,25 @@ export default function AdminPage() {
                       only on the business's page, so seeing a salon meant
                       opening its admin record first and then leaving it —
                       two navigations to look at a thing you could already
-                      see the name of.
+                      read the name of.
+
+                      A GLYPH, and only on hover. It shipped as "Open app ↗"
+                      in a column of its own and Serdar's read was that it ate
+                      the table: ninety pixels of button, on every row, for an
+                      action you take on one of them. Hover-revealed and icon
+                      sized, it costs a column the width of the icon, and the
+                      slot is held open at rest so nothing shifts under the
+                      pointer when it appears. Touch has no hover, so there it
+                      simply stays visible — the same bargain the inbox pin
+                      dot makes.
 
                       A new tab because the fleet list is where you were and
                       where you are going back to. The blank tab is opened
-                      SYNCHRONOUSLY, inside the click, and pointed at "/"
-                      once the mutation lands: window.open after an await has
-                      lost the user gesture and is a popup blocker's exact
+                      SYNCHRONOUSLY, inside the click, and pointed at "/" once
+                      the mutation lands: window.open after an await has lost
+                      the user gesture and is a popup blocker's exact
                       definition of a popup. */}
-                  <td className="px-3 py-2 text-right">
+                  <td className="w-px px-2 py-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -349,9 +367,24 @@ export default function AdminPage() {
                       // resolve which org a request belongs to, and this app
                       // has exactly one.
                       title="Open this business's own app in a new tab. Only one at a time — opening another repoints it."
-                      className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors hover:bg-[var(--muted-bg)]"
+                      aria-label="Open this business's own app in a new tab"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-strong)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     >
-                      Open app ↗
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <path d="M15 3h6v6" />
+                        <path d="M10 14 21 3" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
