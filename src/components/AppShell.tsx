@@ -144,12 +144,21 @@ const VoicePhoneIcon = makeIcon(
   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
 );
 
-// The card that pays for the agent — the Balance tab's mark, prepaid orgs
-// only.
-const WalletCardIcon = makeIcon(
+// A receipt, not a bank card (Serdar, 2026-08-25). The card said "a payment
+// method is stored"; this tab is about what was CHARGED and what is left, and
+// a torn-off receipt is the object people already associate with that answer.
+// Prepaid orgs only, so it is a receipt for money already spent rather than a
+// bill arriving.
+//
+// It carries the same $ strokes as RevenueIcon above, deliberately: money is
+// one idea in this sidebar and it should be drawn one way. The frame is what
+// separates them — Revenue is the money coming IN, bare; Billing is money on
+// a slip, which is the one that has a piece of paper behind it.
+const BillingReceiptIcon = makeIcon(
   <>
-    <rect x="2.5" y="5" width="19" height="14" rx="2" />
-    <path d="M2.5 9.5h19" />
+    <path d="M4 2.5v19l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1v-19l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
+    <path d="M14.5 9.5H11a1.75 1.75 0 0 0 0 3.5h2a1.75 1.75 0 0 1 0 3.5H9.5" />
+    <path d="M12 7.5v11" />
   </>,
 );
 
@@ -303,7 +312,7 @@ const FOOT_TABS: typeof NAV_TABS = [
 const BILLING_TAB: (typeof NAV_TABS)[number] = {
   id: "billing",
   key: "nav.billing",
-  Icon: WalletCardIcon,
+  Icon: BillingReceiptIcon,
   color: "var(--foreground)",
 };
 
