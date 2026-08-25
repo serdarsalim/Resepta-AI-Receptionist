@@ -213,9 +213,13 @@ the org page header with a confirm; every flip is an activity row.
 
 Org page (`/admin/[orgId]`):
 
-- **Assistant tab** — chat agent mode (off / shadow / live), the last turns
-  with status, tokens, cost and expandable tool calls, the month's usage, and
-  the per-org token budget override.
+- **Assistant tab** — chat agent mode (off / shadow / live) and the last turns
+  with status, tokens, cost and expandable tool calls. What the agent IS, not
+  what it spends.
+- **Billing tab** (2026-08-26) — the month's LLM cost and turn count sit in
+  the summary strip beside the voice figures, and the per-org budget override
+  lives in Billing settings next to the number it caps. "What does this client
+  cost" is one tab now.
 - **Header** — suspend/unsuspend with confirm.
 - **Setup tab** — the `llm.apiKey` override row appears with the other
   connection secrets automatically (it is a `CONNECTION_SPECS` entry).

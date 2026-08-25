@@ -2881,3 +2881,165 @@ returns 76 messages and 8 calls either way; what makes it a preview is that
 across 18 conversations the list draws 7 inbound email, 5 outbound WhatsApp, 2
 failed email, 2 inbound call, 1 failed WhatsApp, 1 outbound call — every state
 the row can render, including both marks.
+
+## The inbox filter row learned Nudge's shape, and its marks went monochrome (2026-08-25)
+
+The All chip is gone: all is the REST state, not a filter you pick. Unread and
+Pinned are toggles — clicking the active one releases it back to everything —
+and a third chip whose only job was "neither of the other two" spent a slot
+restating the default. Bulk verbs live behind a borderless ⋯ on the row's
+right; today that is mark-all-read, carrying the same count the Unread chip
+advertises. `messages.markAllConversationsRead` recomputes unseen exactly the
+way `conversations` does — same floor, same point lookup, muted rows skipped —
+so it stamps only what the list actually showed as unread. **A bulk write over
+a filtered view must recompute the filter, not approximate it**, or it spends
+writes on rows the user never saw.
+
+The row's channel glyphs and the failed ✕ are slate here, alone of all the
+feed surfaces: brand green, mail blue and call cyan down a whole column
+drowned the one colour this list trades on, the unseen dot. `FeedIcon` keeps
+its per-channel hues in the contact feed and the filter pills, where no dot
+competes — the `tinted` prop is the seam.
+
+## Prod seeds dev: the scrubbed-snapshot runbook (2026-08-25)
+
+`npx convex export --prod --include-file-storage --path prod.zip`, scrub,
+re-zip, `npx convex import --replace-all -y` into the local deployment. The
+scrub is NOT optional and exists because dev runs the same crons prod does —
+reminders tick every five minutes, and a snapshot that carries credentials has
+dev double-sending real WhatsApp and email to real customers before you have
+closed the terminal. What gets emptied or filtered, and why:
+
+- `platformConfig`: drop the secret rows (Resend, Stripe, Retell, LLM keys,
+  WhatsApp token), keep the settings rows (rate, modes, product name).
+- `connections`: emptied whole — every per-org provider secret lives here.
+- `mcpConnections`: emptied — it holds CLEAR `mk_` bearer keys, not hashes.
+- `authRefreshTokens`, `authSessions`, `authVerifiers`, `authVerificationCodes`,
+  `authRateLimits`: emptied — refresh tokens are live bearer secrets, and every
+  client just signs in fresh. `users` and `authAccounts` STAY, so Google
+  sign-in matches the imported account by provider id.
+
+`--replace-all` wipes the dev seed org. Do NOT re-run `devSeed:seed` blindly
+afterwards: it targets the FIRST org when none is passed, which after an
+import is a real client's data.
+
+## The showroom stops collecting ghosts (2026-08-25/26)
+
+Every anonymous walk-in mints a `users` row and a membership (auth.ts); nothing
+ever removed them, so the demo org's Members list grew by one identical "Demo /
+No address" row per visitor, forever — 17 on dev, 49 of 55 total users on prod.
+`demo.nightlyReset` now reaps them, auth rows included; safe precisely because
+they are anonymous — no address can sign back into a reaped account, and the
+next visit mints a new one.
+
+**The reap drives off USERS, not memberships.** The first version walked
+memberships and left nine standing: a walk-in carries its org on the user row
+too, and some have no membership at all — from before the membership write
+existed, or an arrival that died between the two inserts. Those are invisible
+to the Members card and still real rows, which is the leak in miniature. The
+Members card collapses survivors into one "N demo visitors" line between
+resets; the count is how many people walked through the demo, which is the
+only interesting fact about them.
+
+## The agents card is a table, and money got its own room (2026-08-25/26)
+
+One row per agent was the ask and the flex row kept missing it: a long name
+plus a number pushed the engine picker to a second line, so entries alternated
+heights and nothing lined up. **A table cannot wrap** — columns are Agent,
+Line, Tools (was "runtime", which named an internal; the operator's question
+is whether the booking tools answer), Engine (picker inline, "Default" not
+"Platform default"), Status (Enabled is the dot alone; Disabled keeps its
+word — an amber dot with no label is a colour to decode), and an Open column.
+Open is a BUTTON, not a clickable row: a row carrying a picker and a copy chip
+is a click surface with holes in it, and every hole needs a stopPropagation to
+stay one. It impersonates and deep-links `/?tab=voice&agent=<id>` in a new tab
+— blank tab opened synchronously inside the click, pointed after `actAs`
+lands, because window.open after an await is a popup blocker's definition of a
+popup.
+
+Billing is the 2026-08-20 "no seventh tab" call reversed, and the reversal is
+the lesson: that call was right for two cards and stopped being right when the
+card became four jobs in one box (config, state, action, history). The tab
+follows the standard anatomy — summary tiles first (Revenue page's divided
+strip idiom; the balance tile prints "new calls are declined" in red because
+$0.00 alone does not say outage), then money in (Wallet), money out (Voice
+usage), terms last. It holds BOTH channels' money: chat cost, turns and budget
+moved in, so "what does this client cost" is one tab. The one fact that could
+not move: an empty prepaid wallet declines the ring (retell.ts prepaid gate),
+so the Voice agent tab keeps an amber outage banner, rendered only when real.
+
+## One number, one business — without the operator as the transaction (2026-08-26)
+
+The Phone lines checklist refuses to tick a line another org holds, which is
+the right invariant with the wrong remedy: the fix was a four-step trip
+through the other business with the line half-assigned in between.
+`platform.claimPhoneNumber` does both edits in one mutation and schedules the
+same `releaseOrgLines` that `setAllowedPhoneNumbers` runs — without the
+release the loser's agent keeps answering on a line the console gave away.
+Arm-then-confirm on the row (self-disarming, like Suspend), and BOTH orgs get
+an activity row; the loser's is the one that matters, because a number
+vanishing with no record is a support call about missed calls.
+
+Two facts worth not re-deriving: `[]` and `undefined` are the SAME allowlist
+to every reader (`?? []` then `.length`), so write `undefined` when a list
+empties, matching `setAllowedPhoneNumbers` — two forms pretending to differ is
+its own bug. And an empty list does not hand a shared-account org the pool:
+`lineUsable` refuses everything to an empty list unless the org is on its own
+Retell account, where the numbers are its property anyway.
+
+The number-request flow closed its loop the same day. The tenant card promised
+"your number will appear here" and never showed one — the number lands on the
+agents table, so a finished request read as stuck. `retell.myNumbers` (union
+of allowlist and bound lines, the same set `orgNumberPolicy` computes) lets
+approved split into accepted vs live-with-the-number. `orgLines` could not
+answer this: it reads `agentLines`, which has no row until a number is BOUND
+to an agent, and provisioned-but-unwired is exactly the gap being reported.
+Admin buttons renamed Accept document / Reject document, because approving
+decides the document and nothing else — see docs/phone-agent.md.
+
+## Template v13: voicemail, and the two facts it stands on (2026-08-25)
+
+An outbound call that reached an answering machine talked to it until the
+provider's ceiling. The template now arms `voicemail_option` set to hang up.
+Learned from Nudge's AGENTS.md rather than the provider docs, verified there
+against the live API: **there is no boolean** (presence arms, explicit null
+disarms, so "off" must SEND null), and **a write that omits `detection_prompt`
+deletes it** — syncTemplate re-attaches the live agent's own, the same merge
+bargain as the analysis fields. No message is left on purpose: wording is a
+per-business, per-language decision, and a guessed one is worse than the
+silence it replaced. v13 lights the update banner fleet-wide, which is honest
+— the knob genuinely reaches existing agents when their owner publishes.
+
+## Explanations ride the (i); surfaces carry controls and facts (2026-08-25, standing)
+
+A day of Serdar's screenshots repeated one correction until it is a rule:
+**inline explainer prose goes behind an InfoTip, every time.** The billing
+mode sentence, the fleet engine paragraph, the prompt card's scope note, the
+number card's 24-hour promise — each was the longest thing on its surface,
+explaining a control to people who mostly already know it. The reader who
+needs the explanation hovers; the reader who knows scans labels. The only
+prose that stays visible is a STATE the user must act on (an outage banner, a
+drift warning) or a wizard step's subtitle, where explaining is the slot's
+job.
+
+Two siblings from the same day. **Money fields are short and wear their $**
+(`Row money` flag: 7rem, decimal keypad, $ inside the border) — a field's
+width is a promise about how much you are meant to type, and "(USD)" left the
+labels once the field said it. And **each locale speaks to its own reader**:
+the number-promise copy named Türkiye, Germany, Austria and the UK in all
+three languages, which reads as internal coverage notes — a salon owner in
+Bursa does not need the UK to upload a document. State the one fact that
+matters in that reader's world; name nobody else's country.
+
+## The verticals list answers a question worth asking (2026-08-25)
+
+The onboarding table dropped Key (an identifier nobody reads down a list — it
+still shows in the editor a row opens), Services and Fields (counts answering
+questions nobody asked), and the Add vertical button (verticals are added by
+editing `convex/lib/industryPresets.ts`, so the button built rows the code
+module would fight). What it gained is Businesses — how many orgs picked each
+vertical at sign-up — which is the only column that tells the operator
+anything they act on. The prompt card below grew the common-denominator block:
+what EVERY agent shares regardless of language (hang-up rules, voicemail,
+turn-taking, tools, the analysis field), because "what is a new agent born
+able to do" had no answer anywhere an operator could read.

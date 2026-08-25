@@ -19,6 +19,14 @@ detail that appears only in backend code and the platform-admin console.
   operator at `/admin`.
 - Resepta may assign an already-provisioned, unclaimed phone line. It does not
   buy or import a new number.
+- An agent detects an answering machine on an outbound call and hangs up
+  (template v13). It leaves no message: message wording is a per-business
+  decision, and a control for it on the agent page is open work.
+- A business requests its phone number by uploading a company registration
+  document. The tenant sees three states — received, approved, live — and is
+  never told which parts of the pipeline are people. Operator reality: the
+  approve button reviews the DOCUMENT only; nothing in provisioning reads that
+  status. The grant is the Phone lines checklist in `/admin`.
 
 The Phone agent destination has two sections:
 
@@ -236,9 +244,15 @@ plus a replay action in platform admin.
 2. Open `/admin`, choose the org and install that customer's provider API key
    under Voice. The secret is stored per org and only shown back as a masked
    tail.
-3. If the customer needs an inbound line, provision it in the provider account
-   first and leave it unassigned. Resepta will offer it in the Create new
-   picker. Number purchasing stays outside the app.
+3. If the customer needs an inbound line: when they uploaded a registration
+   document, review it under Phone lines (Accept document / Reject document
+   with a note they will read). Then buy the number at the provider, and tick
+   it in the same card's checklist — that tick is the actual grant, and their
+   request card flips to "live" with the number printed. A line another
+   business holds can be taken directly: click it, click again to confirm,
+   and `platform.claimPhoneNumber` moves the allowlist entry and releases the
+   loser's binding at the provider in one act. Number purchasing stays
+   outside the app.
 4. Have the org owner open **Phone agent → Add agent** and create the native
    receptionist. Connecting an existing agent is the fallback path.
 5. In platform admin, confirm the provisioning job completed, the Resepta
@@ -384,6 +398,27 @@ payment method must be on file), and `gpt-realtime-2.1-mini` on a real
 Turkish booking call was slower than Haiku (p50 1664ms vs 1586, p90 3.1s)
 and collapsed on instruction-following. Haiku remains the default on
 evidence, not inertia; the picker makes re-testing a ten-second flip.
+
+## Voicemail (template v13, 2026-08-25)
+
+`voicemail_option` is an agent-doc field, so it rides the same PATCH
+`syncTemplate` already sends: existing agents pick it up when their owner
+clicks update, new agents are born with it. Two facts learned from Nudge's
+implementation, both verified there against the live API:
+
+- **There is no boolean.** The field's PRESENCE arms detection; an explicit
+  `null` disarms it. An off switch must SEND null — omitting the key patches
+  nothing and would appear to work.
+- **A write that omits `detection_prompt` deletes it.** That field defines
+  what counts as an answering machine and is only writable in the provider's
+  dashboard, so `syncTemplate` reads the live agent and re-attaches it — the
+  same merge bargain as the analysis fields: ours replaces ours, theirs
+  survives.
+
+The template hangs up rather than leaving a message, deliberately: a message
+guessed in shared code would be worse than the silence it replaced, and an
+empty one records a beep the salon paid for. A per-business message wants a
+control on the agent page (Nudge's `setVoicemail` is the shape to copy).
 
 ## Current limits
 
