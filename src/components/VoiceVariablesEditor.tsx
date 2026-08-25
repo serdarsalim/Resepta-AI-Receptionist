@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -320,6 +320,14 @@ export function VoiceVariablesEditor({
   const updateContactField = useMutation(api.contactFields.update);
   const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
   const setIdentityDescription = useMutation(api.contactFields.setIdentityDescription);
+  // LIVE reads for everything the matrix renders. The contactFields/
+  // identityLocks props come off the agent `read` ACTION — a snapshot — and
+  // rendering the switches from a snapshot is how clicking one "did nothing"
+  // until reload (Serdar, in the browser: "when i click the check mark on
+  // and off it doesn't toggle" — the mutation landed, the paint never came).
+  // The props stay as first-render fallback while these queries load.
+  const liveFields = useQuery(api.contactFields.list, {});
+  const liveIdentity = useQuery(api.contactFields.identityVoiceConfig, {});
   // Context rows only. Stored sets still hold the capture rows the last
   // publish derived (and legacy hand-authored ones); the editor filters them
   // out on the way in because they are no longer anybody's to edit here —
@@ -344,16 +352,37 @@ export function VoiceVariablesEditor({
 
   useEffect(() => setDraft((seed ?? initial).filter(isContextRow)), [initial, seed]);
 
+  const fieldsFromLive = useMemo(
+    () =>
+      liveFields?.map((field) => ({
+        id: String(field._id),
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        options: field.options ?? [],
+        voice: field.source === "voice",
+        voiceDescription: field.voiceDescription ?? "",
+        voiceConfirm: field.voiceConfirm === true,
+        voiceVisible: field.voiceVisible === true,
+      })),
+    [liveFields],
+  );
+  const identityLocksLive = liveIdentity?.locks ?? identityLocks;
+  const identityDescriptionsLive = liveIdentity?.descriptions ?? identityDescriptions;
+
   const dirty = useMemo(
     () =>
       fieldsTouched ||
       JSON.stringify(draft) !== JSON.stringify(initial.filter(isContextRow)),
     [draft, initial, fieldsTouched],
   );
-  const allFields = useMemo(
-    () => [...contactFields, ...createdFields],
-    [contactFields, createdFields],
-  );
+  // Live wins; created-this-session rows cover the beat before the query
+  // returns the row it just made.
+  const allFields = useMemo(() => {
+    const base = fieldsFromLive ?? contactFields;
+    const seen = new Set(base.map((field) => field.id));
+    return [...base, ...createdFields.filter((field) => !seen.has(field.id))];
+  }, [fieldsFromLive, contactFields, createdFields]);
   const voiceFields = allFields.filter((field) => field.voice);
   const fieldById = new Map(allFields.map((field) => [field.id, field]));
   const supportsLive = engineType === "retell-llm";
@@ -731,11 +760,11 @@ export function VoiceVariablesEditor({
               // matrix shows is what publish sends. Editable like every
               // other description cell: identity being read-only here was
               // the inconsistency Serdar hit ("why can i not edit this").
-              description={identityDescriptions[column.lock] ?? t(column.descKey)}
+              description={identityDescriptionsLive[column.lock] ?? t(column.descKey)}
               editableDescription
               sees={true}
               seesLocked
-              fills={!identityLocks.includes(column.lock)}
+              fills={!identityLocksLive.includes(column.lock)}
               onFills={(next) =>
                 next ? unlockIdentity(column.lock) : lockIdentity(column.lock)
               }

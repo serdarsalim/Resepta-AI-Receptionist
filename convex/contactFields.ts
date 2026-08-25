@@ -59,6 +59,31 @@ export const identityLocks = query({
 });
 
 // The identity rows' half of the same toggle updateField gives custom rows.
+// The identity columns' voice config in one reactive read: the matrix
+// subscribes to this (and to `list`) so a toggle repaints the instant the
+// mutation lands. The one-shot agent `read` action also carries both, but an
+// action result is a snapshot — rendering switches from it is how a click
+// "did nothing" until reload.
+export const identityVoiceConfig = query({
+  args: {},
+  returns: v.object({
+    locks: v.array(v.string()),
+    descriptions: v.object({
+      firstname: v.optional(v.string()),
+      lastname: v.optional(v.string()),
+      email: v.optional(v.string()),
+    }),
+  }),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    return {
+      locks: org?.voiceLockedIdentity ?? [],
+      descriptions: org?.voiceIdentityDescriptions ?? {},
+    };
+  },
+});
+
 export const setIdentityLock = mutation({
   args: {
     key: v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
