@@ -492,12 +492,15 @@ export function Row({
   hint,
   current,
   placeholder,
+  money,
   onSave,
 }: {
   label: string;
   hint?: string;
   current?: string | null;
   placeholder?: string;
+  // A USD amount: narrow field, $ inside the border. See the input below.
+  money?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -513,18 +516,42 @@ export function Row({
         <div className="text-sm font-medium">{label}</div>
         {hint && <InfoTip text={hint} />}
       </div>
+      {/* A money field is SHORT (Serdar, 2026-08-25). "0.11" in a box 26rem
+          wide reads as an empty field with a number lost at one end, and the
+          box's width is a promise about how much you are meant to type. The
+          $ sits inside the border rather than in the label, so the unit is
+          where the number is. Everything else keeps the full width — an API
+          key or a domain genuinely needs it. */}
       <div className="min-w-0">
-        <input
-          value={draft ?? current ?? ""}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            if (draft === null || draft === (current ?? "")) return;
-            void onSave(draft);
-            setDraft(null);
-          }}
-          placeholder={placeholder}
-          className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-sm"
-        />
+        {money ? (
+          <div className="inline-flex w-28 items-center rounded-lg border border-[var(--border)] px-2 py-1 focus-within:border-[var(--muted-strong)]">
+            <span className="shrink-0 pr-1 text-sm text-[var(--muted)]">$</span>
+            <input
+              value={draft ?? current ?? ""}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => {
+                if (draft === null || draft === (current ?? "")) return;
+                void onSave(draft);
+                setDraft(null);
+              }}
+              inputMode="decimal"
+              placeholder={placeholder}
+              className="w-full min-w-0 border-0 bg-transparent p-0 text-sm outline-none"
+            />
+          </div>
+        ) : (
+          <input
+            value={draft ?? current ?? ""}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              if (draft === null || draft === (current ?? "")) return;
+              void onSave(draft);
+              setDraft(null);
+            }}
+            placeholder={placeholder}
+            className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-sm"
+          />
+        )}
       </div>
     </div>
   );

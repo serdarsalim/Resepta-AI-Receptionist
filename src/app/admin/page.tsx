@@ -624,7 +624,8 @@ export default function AdminPage() {
             }/stripe/webhook with the checkout.session.completed event, and paste its signing secret below. Businesses on invoice mode never touch the Stripe half.`}
           >
             <Row
-              label="Voice rate (USD per minute)"
+              label="Voice rate per minute"
+              money
               hint="What every business pays per called minute, billed per second. Set once here; the Voice meter on a business's Voice agent tab can override it. Changes only price calls from now on; history keeps its stamped rate."
               current={
                 mail.voiceRateMicroUsdPerMinute === null
@@ -675,7 +676,8 @@ export default function AdminPage() {
               </div>
             </div>
             <Row
-              label="Trial credit (USD)"
+              label="Trial credit"
+              money
               hint="Welcome money for businesses born prepaid: credited to the wallet once at sign-up, shown in their top-ups as trial credit. Empty or 0 = none. Invoice-mode sign-ups never receive it."
               current={
                 mail.trialCreditUsd === null
