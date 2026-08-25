@@ -10,6 +10,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
+import { CheckSwitch } from "./CheckSwitch";
 import { Sheet } from "./Sheet";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
@@ -1071,54 +1072,6 @@ function SelectOptionsCell({
   );
 }
 
-// The matrix's switch: the message-rule channel toggle (RemindersView) with
-// the word removed — emerald wash and a check when on, a hollow ring when
-// off. Ported, not invented: that control is this app's ON, and Serdar
-// rejected the iOS Toggle here ("apple switches don't look good"). The
-// off-state border is sanctioned by the same reference. A LOCKED cell (sees
-// implied by fills) renders as a static check, display-only: it is a fact
-// about the row, not a control, and a disabled switch is what read wrong.
-function CheckSwitch({
-  on,
-  label,
-  onChange,
-}: {
-  on: boolean;
-  label: string;
-  onChange?: (next: boolean) => void;
-}) {
-  const check = (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => onChange?.(!on)}
-      className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
-        on
-          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-          : "border border-[var(--border)] text-transparent hover:text-[var(--muted)]"
-      }`}
-    >
-      {check}
-    </button>
-  );
-}
 
 // One row of the matrix: label · type · instruction · ONE switch. It briefly
 // carried two switch columns (sees / fills) plus a confirm chip, and Serdar

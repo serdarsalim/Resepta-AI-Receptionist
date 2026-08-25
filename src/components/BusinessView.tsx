@@ -21,6 +21,7 @@ import { BusinessHoursCard } from "./RemindersView";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
+import { CheckSwitch } from "./CheckSwitch";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
@@ -1101,8 +1102,8 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         control whose whole job is showing its own state. The
                         Toggle carries the word as aria-label, so the name is
                         still there for anyone not reading the colour. */}
-                    <Toggle
-                      checked={service.active}
+                    <CheckSwitch
+                      on={service.active}
                       label={t("services.active")}
                       onChange={(next) =>
                         void update({ serviceId: service._id, active: next })
