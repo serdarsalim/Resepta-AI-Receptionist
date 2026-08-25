@@ -113,6 +113,16 @@ export type VoiceContactField = {
   voiceVisible: boolean;
 };
 
+// Every key the runtime provides on its own. Derived from the real lists
+// (labels resolve to their translation keys here — only the .key matters), so
+// this can never drift from what the runtime actually sends.
+const PROVIDED_VARIABLE_KEYS = new Set(
+  [
+    ...builtinVoiceVariables((key) => key as never),
+    ...injectedVoiceContext((key) => key as never),
+  ].map((variable) => variable.key),
+);
+
 // Context rows inject and capture nothing; they are all a caller may still
 // AUTHOR per agent. Everything the agent collects is derived from the org's
 // contact fields at publish time, so capture rows no longer live in the
@@ -333,7 +343,14 @@ export function VoiceVariablesEditor({
   // publish derived (and legacy hand-authored ones); the editor filters them
   // out on the way in because they are no longer anybody's to edit here —
   // the fields ARE that configuration now.
-  const [draft, setDraft] = useState(() => (seed ?? initial).filter(isContextRow));
+  // Clones of provided keys are dropped on the way in, not rendered as dead
+  // rows: an "İşletme adı" registry entry restates a fact every call already
+  // carries, and it rendered as a stray row floating under "Alan ekle"
+  // (Serdar: "why is işletme adı below alan ekle??"). Publishing the filtered
+  // draft is what retires them from storage too.
+  const contextRowsOf = (rows: VoiceVariable[]) =>
+    rows.filter((row) => isContextRow(row) && !PROVIDED_VARIABLE_KEYS.has(row.key));
+  const [draft, setDraft] = useState(() => contextRowsOf(seed ?? initial));
   // Field-side edits (description, confirm, the Voice switch itself) save to
   // the org instantly but reach Retell on the next publish. This is what
   // keeps the Publish button honest about them.
@@ -351,7 +368,7 @@ export function VoiceVariablesEditor({
   // unpublished draft.
   const [createdFields, setCreatedFields] = useState<VoiceContactField[]>([]);
 
-  useEffect(() => setDraft((seed ?? initial).filter(isContextRow)), [initial, seed]);
+  useEffect(() => setDraft(contextRowsOf(seed ?? initial)), [initial, seed]);
 
   const fieldsFromLive = useMemo(
     () =>
@@ -374,7 +391,7 @@ export function VoiceVariablesEditor({
   const dirty = useMemo(
     () =>
       fieldsTouched ||
-      JSON.stringify(draft) !== JSON.stringify(initial.filter(isContextRow)),
+      JSON.stringify(draft) !== JSON.stringify(contextRowsOf(initial)),
     [draft, initial, fieldsTouched],
   );
   // Live wins; created-this-session rows cover the beat before the query
@@ -669,11 +686,6 @@ export function VoiceVariablesEditor({
     const field = row.contactFieldId ? fieldById.get(row.contactFieldId) : undefined;
     return field?.type === "select" ? field : undefined;
   };
-  // Every runtime-provided variable by key, for spotting draft rows that
-  // merely restate one.
-  const providedByKey = new Map(
-    [...builtinVoiceVariables(t), ...injectedVoiceContext(t)].map((v) => [v.key, v]),
-  );
 
   const rowPickerBuiltins = (row: VoiceVariable): PickerBuiltin[] => {
     const own = builtinVoiceVariables(t).find(
@@ -846,37 +858,6 @@ export function VoiceVariablesEditor({
                 .map((row, index) => ({ row, index }))
                 .filter(({ row }) => isContext(row))
                 .map(({ row, index }) => {
-                  const provided = providedByKey.get(row.key);
-                  if (provided) {
-                    return (
-                      <div key={index} className={VAR_GRID}>
-                        <span className="block min-w-0 truncate px-2 py-1 text-xs text-[var(--foreground)]">
-                          {provided.label}
-                        </span>
-                        <span className="px-2 py-1 text-xs text-[var(--muted)]">
-                          {t(
-                            provided.kind === "list"
-                              ? "voiceVariables.list"
-                              : "voiceVariables.text",
-                          )}
-                        </span>
-                        <span className="truncate px-2 py-1 text-xs text-[var(--muted)]">
-                          {provided.description}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeAt(index)}
-                          aria-label={t("voiceVariables.remove").replace(
-                            "{name}",
-                            provided.label,
-                          )}
-                          className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] opacity-100 transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                        >
-                          <RemoveX />
-                        </button>
-                      </div>
-                    );
-                  }
                   return (
                     <VariableRow
                       key={index}
