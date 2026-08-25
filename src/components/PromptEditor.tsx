@@ -7,12 +7,10 @@ import { useLanguage } from "@/lib/LanguageProvider";
 // The instructions textarea with @-completion for the agent's variables.
 //
 // The owner thinks in labels ("Customer name"), the provider speaks keys
-// ("{{customer_name}}"). Typing @ opens a picker of labels and inserts the
-// key form, and a chip strip under the editor reads the draft back in labels,
-// so nobody has to remember or retype key syntax. A full token-pill editor
-// (contentEditable) was considered and rejected: autosave, caret and paste
-// behavior all get fragile, and the chip strip carries the readability win
-// at a fraction of the risk.
+// ("{{customer_name}}"), and since 2026-08-25 the owner never sees a key: the
+// textarea holds label form and it is translated to key form at the boundary.
+// See "The two faces of one prompt" below for how, and why that is not the
+// contentEditable token-pill editor this file has twice refused to become.
 
 export type PromptVariable = { key: string; label: string };
 
@@ -92,12 +90,64 @@ type Menu = {
 // each token and typing landed beside where the cursor stood. Colour and
 // background are the emphasis; weight, size, letter-spacing and family are
 // the textarea's to decide.
-const TOKEN_RE = /(\{\{\s*[a-z0-9_]+\s*\}\})/gi;
+// Anything between braces that is not itself a brace or a newline. It used to
+// be [a-z0-9_]+, which was the KEY alphabet — the editor now speaks labels, and
+// "Business name" has a space in it.
+const TOKEN_RE = /(\{\{\s*[^{}\n]+?\s*\}\})/g;
+const TOKEN_PARTS = /^(\{\{\s*)([^{}\n]+?)(\s*\}\})$/;
 
-function renderTokens(text: string) {
+// ── The two faces of one prompt ──────────────────────────────────────────────
+//
+// STORED is key form, "{{business_name}}", and it is what the parent holds,
+// what the draft saves and what Retell receives. DISPLAYED is label form,
+// "{{Business name}}", and it exists only inside this textarea.
+//
+// Serdar, on being told the mirror could not paint labels over keys: "we send
+// retell still business_name that's fine but we don't have to see business_name
+// ourselves no?!?" He was right and the objection was answerable. The mirror
+// cannot paint a string of one width over a string of another, so the fix is
+// not to paint over anything — put the LABEL in the textarea itself, and
+// translate at the boundary. The mirror then matches character for character
+// because it is rendering the same text the caret is walking through.
+//
+// The round trip has to be identity or the value changes under the cursor:
+// toStored(toDisplayed(x)) === x for every known variable, and anything
+// unrecognised passes through untouched in both directions, which is also what
+// keeps a half-typed "{{Business nam" from being rewritten mid-keystroke.
+//
+// This is why labels have to be unique (Serdar again, one message earlier —
+// he had the answer before I did). Two variables sharing a label would make
+// the way back ambiguous, so the map is built label-first and an exact match
+// is required; a duplicate silently keeps whichever came first and the other
+// stays literal, which shows up as an unresolved token rather than as a
+// wrong one.
+function tokenMaps(variables: PromptVariable[]) {
+  const byKey = new Map<string, string>();
+  const byLabel = new Map<string, string>();
+  for (const row of variables) {
+    if (!byKey.has(row.key)) byKey.set(row.key, row.label);
+    if (!byLabel.has(row.label)) byLabel.set(row.label, row.key);
+  }
+  return { byKey, byLabel };
+}
+
+function swapTokens(text: string, lookup: Map<string, string>): string {
+  return text.replace(TOKEN_RE, (whole) => {
+    const parts = whole.match(TOKEN_PARTS);
+    if (!parts) return whole;
+    const found = lookup.get(parts[2]);
+    return found === undefined ? whole : `{{${found}}}`;
+  });
+}
+
+function renderTokens(text: string, known: Set<string>) {
   return text.split(TOKEN_RE).map((part, i) => {
-    const match = part.match(/^(\{\{\s*)([a-z0-9_]+)(\s*\}\})$/i);
+    const match = part.match(TOKEN_PARTS);
     if (!match) return <span key={i}>{part}</span>;
+    // An unrecognised token stays plain text rather than wearing the pill: a
+    // typo that looks like a variable is the one thing this highlight exists
+    // to expose, and tinting it would hide it.
+    if (!known.has(match[2])) return <span key={i}>{part}</span>;
     return (
       <span
         key={i}
@@ -147,6 +197,17 @@ export function PromptEditor({
     return list.slice(0, 8);
   }, [menu, variables]);
 
+  // The label form the textarea actually holds. Everything below that touches
+  // text — the mirror, the caret, @-insert, the selection maths — works in
+  // THIS string; `value` and `onChange` stay key form so nothing outside this
+  // component learns that labels exist.
+  const { byKey, byLabel } = useMemo(() => tokenMaps(variables), [variables]);
+  const displayed = useMemo(() => swapTokens(value, byKey), [value, byKey]);
+  const knownLabels = useMemo(
+    () => new Set(variables.map((row) => row.label)),
+    [variables],
+  );
+
   const close = useCallback(() => {
     setMenu(null);
     setActive(0);
@@ -193,9 +254,13 @@ export function PromptEditor({
     const el = ref.current;
     if (!el || !menu) return;
     const caret = el.selectionStart ?? 0;
-    const token = `{{${variable.key}}}`;
-    const next = value.slice(0, menu.start) + token + value.slice(caret);
-    onChange(next);
+    // The LABEL goes in, and menu.start indexes the textarea, so both sides of
+    // the splice have to come from the textarea too — slicing `value` here
+    // would cut key-form text at a label-form offset.
+    const token = `{{${variable.label}}}`;
+    const source = el.value;
+    const next = source.slice(0, menu.start) + token + source.slice(caret);
+    onChange(swapTokens(next, byLabel));
     close();
     const pos = menu.start + token.length;
     requestAnimationFrame(() => {
@@ -259,15 +324,18 @@ export function PromptEditor({
           aria-hidden
           className={`${fieldClass} pointer-events-none absolute inset-0 overflow-hidden border-transparent`}
         >
-          {renderTokens(value)}
+          {renderTokens(displayed, knownLabels)}
           {/* Stops a trailing blank line collapsing out of the mirror. */}
           {"​"}
         </div>
         <textarea
         ref={ref}
-        value={value}
+        value={displayed}
         onChange={(event) => {
-          onChange(singleLine ? event.target.value.replace(/\n/g, " ") : event.target.value);
+          const next = singleLine
+            ? event.target.value.replace(/\n/g, " ")
+            : event.target.value;
+          onChange(swapTokens(next, byLabel));
           detect();
         }}
         onClick={detect}
@@ -355,10 +423,10 @@ export function PromptEditor({
                   index === active ? "bg-[var(--muted-bg)]" : ""
                 }`}
               >
+                {/* The label alone. It carried the key beside it for people
+                    who had to type key syntax, and nobody types it now
+                    (Serdar: "why do we need to see both key and label??"). */}
                 <span className="truncate">{row.label}</span>
-                <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">
-                  {row.key}
-                </span>
               </button>
             ))}
           </div>,
