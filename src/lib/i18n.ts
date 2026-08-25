@@ -1283,9 +1283,9 @@ const dictionary = {
   // somebody guessed in advance — a salon that wants 36 hours had no way in.
   // So: pick the message, then type the number and choose the unit.
   "settings.ruleAddPick": {
-    tr: "Hangi mesaj",
-    en: "Which message",
-    de: "Welche Nachricht",
+    tr: "Hangi otomasyon",
+    en: "Which automation",
+    de: "Welche Automatisierung",
   },
   "settings.ruleAddTiming": {
     tr: "Ne zaman gönderilsin",
