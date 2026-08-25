@@ -1763,10 +1763,12 @@ const dictionary = {
   // German column keeps the house Sie rather than WhatsApp's "Du:" — the
   // label addresses the business owner reading the screen, and this app
   // never drops into du.
-  // A call is the one row whose preview cannot imply its own direction —
-  // "Arama" is the same word whoever dialled. Every other line carries
-  // words somebody wrote, which is why the blanket "Siz:" prefix these
-  // replaced was restating what the line already said.
+  // The inbox's call arrow, as its title and its screen-reader label. A call
+  // is the one row whose preview cannot imply its own direction — "Arama" is
+  // the same word whoever dialled — and these were the visible text until
+  // Serdar pointed out that a phone's call log has never needed more than an
+  // arrow to say it. Not deleted with the words: the arrow is a shape, and a
+  // shape with no accessible name is a shape nobody can read.
   "inbox.calledOut": { tr: "Aradınız", en: "You called", de: "Sie haben angerufen" },
   "inbox.calledIn": { tr: "Aradı", en: "They called", de: "Hat angerufen" },
   "inbox.pinned": { tr: "Sabitlendi", en: "Pinned", de: "Angeheftet" },

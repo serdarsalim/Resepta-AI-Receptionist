@@ -38,7 +38,7 @@ function formatAgo(ts: number): string {
 // (`email.sendToCustomer` derives `body` from its html with htmlToText for
 // exactly this reason), so nothing has to strip markup.
 function previewOf(
-  c: { lastBody?: string; lastChannel: FeedIconType; lastDirection: "in" | "out" },
+  c: { lastBody?: string; lastChannel: FeedIconType },
   t: (k: TranslationKey) => string,
 ): string {
   const body = (c.lastBody ?? "").replace(/\s+/g, " ").trim();
@@ -47,15 +47,6 @@ function previewOf(
   // the KIND beats an empty line: "Arama" tells you what to expect on open,
   // blank tells you the row is broken.
   //
-  // A CALL says who rang whom, because that is the one row where the preview
-  // cannot imply it. Every other line carries words somebody wrote, and you
-  // can tell the salon's own reminder from a customer's reply by reading it;
-  // a bare "Arama" is the same four letters in both directions. This replaces
-  // a blanket "Siz:" prefix on every outbound row, which spent the front of
-  // the line restating what the line already said.
-  if (c.lastChannel === "call") {
-    return t(c.lastDirection === "out" ? "inbox.calledOut" : "inbox.calledIn");
-  }
   // A WhatsApp or email row with no body is a different thing — it is a queued
   // TEMPLATE whose text has not been rendered yet. The thread already says so
   // (`snippet || t("message.template")` in ConversationPanel), and the row has
@@ -66,7 +57,9 @@ function previewOf(
       ? "forms.title"
       : c.lastChannel === "note"
         ? "notes.title"
-        : "message.template",
+        : c.lastChannel === "call"
+          ? "channel.call"
+          : "message.template",
   );
 }
 
@@ -444,6 +437,41 @@ export function InboxView({
                               sits in front of (Serdar: "they look too big in
                               inbox"). */}
                           <FeedIcon type={c.lastChannel} size={12} />
+                          {/* Direction, on the one row that cannot imply it.
+                              A message preview is words somebody wrote, so a
+                              salon's reminder reads nothing like a customer's
+                              reply; "Arama" is the same four letters whoever
+                              dialled. This started as the words "Aradınız" /
+                              "Aradı" and Serdar's read was that it was a lot
+                              of wording for very little, which is right — a
+                              phone's own call log has never needed more than
+                              an arrow.
+
+                              Shape, NOT colour, and that is a refusal of the
+                              green-out / red-in he suggested: both colours are
+                              already spoken for within a few pixels of here.
+                              Red on this line is the failed-send ✕, and green
+                              two columns left is the unseen dot, so coloured
+                              arrows would be read as states before they were
+                              read as directions. The words survive as the
+                              title, so nothing is lost to a screen reader. */}
+                          {c.lastChannel === "call" && (
+                            <span
+                              className="shrink-0 leading-none text-[var(--muted)]"
+                              title={t(
+                                c.lastDirection === "out"
+                                  ? "inbox.calledOut"
+                                  : "inbox.calledIn",
+                              )}
+                              aria-label={t(
+                                c.lastDirection === "out"
+                                  ? "inbox.calledOut"
+                                  : "inbox.calledIn",
+                              )}
+                            >
+                              {c.lastDirection === "out" ? "↗" : "↙"}
+                            </span>
+                          )}
                           {c.lastFailed && (
                             <span
                               className="shrink-0 font-semibold leading-none text-[var(--now-line)]"
