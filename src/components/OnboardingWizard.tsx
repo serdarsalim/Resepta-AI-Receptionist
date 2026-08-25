@@ -147,6 +147,7 @@ export function OnboardingWizard() {
   const [about, setAbout] = useState("");
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   // Everyone in the founder's OTHER businesses, minus themselves. Empty for
   // the account founding its first one, which is what drops the step.
   const candidates = useQuery(api.team.shareCandidates, {});
@@ -508,14 +509,42 @@ export function OnboardingWizard() {
                   )}
                 </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={uploading}
-                  onClick={() => fileInput.current?.click()}
-                  className="rounded-lg border border-[var(--border)] px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                /* Same dropzone as NumberRequestCard, and deliberately the
+                   same shape: these two are one upload on two surfaces (they
+                   already share useNumberDocumentUpload), so an owner who
+                   drags the file here and an owner who drags it on the Voice
+                   tab later must not meet two different controls. */
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!uploading) setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragging(false);
+                    if (uploading) return;
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) void uploadDocument(file);
+                  }}
+                  className={`flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors ${
+                    dragging
+                      ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                      : "border-[var(--border)]"
+                  }`}
                 >
-                  {uploading ? t("common.loading") : t("onboarding.uploadDoc")}
-                </button>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => fileInput.current?.click()}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                  >
+                    {uploading ? t("common.loading") : t("onboarding.uploadDoc")}
+                  </button>
+                  <p className="text-xs text-[var(--muted)]">
+                    {t("onboarding.dropHint")}
+                  </p>
+                </div>
               )}
               <p className="text-xs text-[var(--muted)]">
                 {t("onboarding.uploadHint")}

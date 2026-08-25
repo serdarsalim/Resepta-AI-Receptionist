@@ -347,10 +347,15 @@ const dictionary = {
     en: "Your phone number",
     de: "Ihre Telefonnummer",
   },
+  // No country list (Serdar, 2026-08-26). All three locales carried the same
+  // sentence naming Türkiye, Germany, Austria and the UK — which reads as
+  // internal coverage notes, not as an instruction. A salon owner needs one
+  // fact: the document is required before a number can be issued. Each
+  // language says that to its own reader and names nobody else's country.
   "onboarding.numberPromise": {
-    tr: "Şirket kayıt belgenizi yükledikten sonra 24 saat içinde size bir telefon numarası tahsis ediyoruz. Türkiye'de bu belge zorunludur; Almanya, Avusturya ve Birleşik Krallık için de aynı belgeyle ilerliyoruz.",
-    en: "Upload your company registration document and we provision your phone number within 24 hours. The document is required in Türkiye; Germany, Austria and the UK follow the same step.",
-    de: "Laden Sie Ihren Handelsregisterauszug hoch und wir stellen Ihre Telefonnummer innerhalb von 24 Stunden bereit. In der Türkei ist das Dokument Pflicht; Deutschland, Österreich und das Vereinigte Königreich folgen demselben Schritt.",
+    tr: "Şirket kayıt belgenizi yükleyin, 24 saat içinde numaranızı tanımlayalım. Numara tahsisi için bu belge yasal olarak zorunlu.",
+    en: "Upload your company registration document and we set up your number within 24 hours. Regulators require it before a number can be issued.",
+    de: "Laden Sie Ihren Handelsregisterauszug hoch, wir richten Ihre Nummer innerhalb von 24 Stunden ein. Ohne dieses Dokument darf keine Nummer vergeben werden.",
   },
   "onboarding.uploadDoc": {
     tr: "Belge yükle",
@@ -361,6 +366,11 @@ const dictionary = {
     tr: "Belgeyi değiştir",
     en: "Replace document",
     de: "Dokument ersetzen",
+  },
+  "onboarding.dropHint": {
+    tr: "veya dosyayı buraya sürükleyin",
+    en: "or drag the file here",
+    de: "oder Datei hierher ziehen",
   },
   "onboarding.uploadHint": {
     tr: "PDF veya fotoğraf, en fazla 10 MB.",

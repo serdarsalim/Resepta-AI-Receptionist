@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatDateTime } from "@/lib/datetime";
 import { Card } from "./Card";
+import { InfoTip } from "./InfoTip";
 
 // One upload flow, two surfaces: the onboarding wizard's number step and
 // this card share it, so the validation and the error wording can never
@@ -70,12 +71,19 @@ export function NumberRequestCard() {
   const request = useQuery(api.numberRequests.mine, {});
   const { uploading, error, upload } = useNumberDocumentUpload();
   const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   if (request === undefined) return null;
 
   return (
     <Card>
-      <p className="text-sm font-medium">{t("onboarding.numberTitle")}</p>
+      {/* The promise rides the (i) (Serdar, 2026-08-26). Three lines of prose
+          about registration documents and four countries was the loudest
+          thing in a card whose actual job is one button. */}
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium">{t("onboarding.numberTitle")}</p>
+        <InfoTip text={t("onboarding.numberPromise")} />
+      </div>
       <input
         ref={fileInput}
         type="file"
@@ -89,18 +97,51 @@ export function NumberRequestCard() {
       />
       {request === null ? (
         <>
-          <p className="mt-2 text-sm text-[var(--muted)]">
-            {t("onboarding.numberPromise")}
-          </p>
-          <div className="mt-3">
+          {/* A DROP TARGET, not just a button (Serdar, 2026-08-26). The
+              document being uploaded here is a PDF the owner has just
+              downloaded or scanned, so it is already sitting in a folder or
+              on the desktop beside this window — dragging it is the shortest
+              path, and a file picker was the only one offered.
+
+              The button stays inside the zone rather than being replaced by
+              it: drag-and-drop is undiscoverable on its own, it is unusable
+              on a phone, and a zone with no control in it reads as a
+              decoration until someone happens to try. dragOver must call
+              preventDefault or the browser navigates to the file instead of
+              handing it over, which is the whole failure mode of a
+              hand-rolled dropzone. Only the FIRST file: the request is one
+              document, and silently taking one of three dropped is worse
+              than taking the one they aimed with. */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (uploading) return;
+              const file = e.dataTransfer.files?.[0];
+              if (file) void upload(file);
+            }}
+            className={`mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors ${
+              dragging
+                ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                : "border-[var(--border)]"
+            }`}
+          >
             <button
               type="button"
               disabled={uploading}
               onClick={() => fileInput.current?.click()}
-              className="rounded-lg border border-[var(--border)] px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
             >
               {uploading ? t("common.loading") : t("onboarding.uploadDoc")}
             </button>
+            <p className="text-xs text-[var(--muted)]">
+              {t("onboarding.dropHint")}
+            </p>
           </div>
           <p className="mt-2 text-xs text-[var(--muted)]">
             {t("onboarding.uploadHint")}
