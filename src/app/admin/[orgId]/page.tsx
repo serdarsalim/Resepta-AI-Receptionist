@@ -902,6 +902,17 @@ export default function TenantPage() {
               <p className="text-xs font-medium text-[var(--muted-strong)]">
                 Number requests
               </p>
+              {/* Said plainly for the OPERATOR, because the button used to
+                  imply otherwise (Serdar, 2026-08-26): approving decides the
+                  DOCUMENT and nothing else. Nothing in the provisioning path
+                  reads this status — the grant is the checklist above. The
+                  tenant sees only "received / approved / live", which is true
+                  at every step and says nothing about who does which part. */}
+              <p className="text-xs text-[var(--muted)]">
+                Approving accepts the document and tells the business so. It
+                does not grant a line — buy the number at the provider and
+                tick it above, and their card then shows it as live.
+              </p>
               {numberReqs.map((req) => (
                 <div
                   key={req.requestId}
@@ -960,7 +971,7 @@ export default function TenantPage() {
                         }}
                         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white"
                       >
-                        Approve
+                        Accept document
                       </button>
                       <button
                         type="button"
@@ -974,7 +985,7 @@ export default function TenantPage() {
                         }}
                         className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-400"
                       >
-                        Deny
+                        Reject document
                       </button>
                     </div>
                   )}

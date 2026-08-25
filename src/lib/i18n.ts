@@ -441,6 +441,11 @@ const dictionary = {
     en: "Approved. Your number will appear here shortly.",
     de: "Genehmigt. Ihre Nummer erscheint hier in Kürze.",
   },
+  "numberReq.live": {
+    tr: "Numaranız hazır ve çalışıyor.",
+    en: "Your number is live.",
+    de: "Ihre Nummer ist aktiv.",
+  },
   "numberReq.denied": {
     tr: "Belge kabul edilmedi. Lütfen yeni bir belge yükleyin.",
     en: "The document was not accepted. Please upload a new one.",

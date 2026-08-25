@@ -69,11 +69,17 @@ export function useNumberDocumentUpload() {
 export function NumberRequestCard() {
   const { t, language } = useLanguage();
   const request = useQuery(api.numberRequests.mine, {});
+  // The finish line. Without it the card promises "your number will appear
+  // here" and then never shows one, because the number lands on the agents
+  // table two cards down — so the owner reads a completed process as a stuck
+  // one and asks where their number is.
+  const numbers = useQuery(api.retell.myNumbers, {});
   const { uploading, error, upload } = useNumberDocumentUpload();
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   if (request === undefined) return null;
+  const live = numbers ?? [];
 
   return (
     <Card>
@@ -157,8 +163,18 @@ export function NumberRequestCard() {
             }`}
           >
             {request.status === "pending" && t("numberReq.pending")}
-            {request.status === "approved" && t("numberReq.approved")}
+            {/* Approved splits on whether the line is actually live yet. The
+                owner does not need to know which half of that is a person
+                reading a PDF and which is a number being bought — only which
+                step their request is on. */}
+            {request.status === "approved" &&
+              (live.length > 0 ? t("numberReq.live") : t("numberReq.approved"))}
             {request.status === "denied" && t("numberReq.denied")}
+            {request.status === "approved" && live.length > 0 && (
+              <span className="mt-1 block font-mono text-base font-medium">
+                {live.join(" · ")}
+              </span>
+            )}
             {request.note && (
               <span className="mt-1 block text-xs opacity-80">
                 {request.note}

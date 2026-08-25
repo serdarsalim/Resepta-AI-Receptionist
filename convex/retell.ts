@@ -437,6 +437,32 @@ export const orgLines = query({
   },
 });
 
+// The numbers this business has been GRANTED, for the number-request card to
+// close its own loop with.
+//
+// orgLines is not the same question and cannot answer this: it reads
+// agentLines, which only has a row once a number is BOUND to an agent. A line
+// the operator has provisioned but the owner has not pointed at an agent yet
+// is invisible there — and that gap is exactly the moment this card is trying
+// to report, between "approved" and the owner wiring it up.
+//
+// Allowlist plus bound, same union orgNumberPolicy computes, so the card and
+// the picker can never disagree about what the business has.
+export const myNumbers = query({
+  args: {},
+  returns: v.array(v.string()),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    const allowed = org?.allowedPhoneNumbers ?? [];
+    const bound = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    return [...new Set([...allowed, ...bound.map((line) => line.number)])];
+  },
+});
+
 // Per-agent call tallies for the details expansion. "Today" means the salon's
 // today: a call at 23:50 Istanbul time should not survive into tomorrow's
 // count because the server thinks in UTC. One org-wide pass — a salon's call
