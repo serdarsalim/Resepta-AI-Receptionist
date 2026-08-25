@@ -746,10 +746,7 @@ export function VoiceVariablesEditor({
           <span className="px-2">{t("voiceVariables.label")}</span>
           <span className="px-2">{t("voiceVariables.type")}</span>
           <span className="px-2">{t("voiceVariables.description")}</span>
-          {/* The switch column carries no word: one green check per row on the
-              agent's own page needs no caption, and every candidate label was
-              a second name for the row's whole meaning. */}
-          <span />
+          <span className="text-right">{t("voiceVariables.colAgent")}</span>
         </div>
         <div className="space-y-1.5">
           {IDENTITY_CAPTURE.map((column) => (

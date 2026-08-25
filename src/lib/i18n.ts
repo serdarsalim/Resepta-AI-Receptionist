@@ -2571,6 +2571,13 @@ const dictionary = {
     en: "Handed to the agent automatically on every call: the caller's card, their appointments, your services, staff and business knowledge. Nothing to set up.",
     de: "Wird dem Assistenten bei jedem Anruf automatisch mitgegeben: die Karte des Anrufers, seine Termine, Ihre Leistungen, das Team und die Betriebsinfos. Keine Einrichtung nötig.",
   },
+  // The matrix's switch-column header: whether the ASSISTANT uses the field.
+  // One word, because the track is 2.5rem.
+  "voiceVariables.colAgent": {
+    tr: "Asistan",
+    en: "Agent",
+    de: "Assistent",
+  },
   "voiceVariables.fills": {
     tr: "Asistanın doldurdukları",
     en: "What the agent fills in",
