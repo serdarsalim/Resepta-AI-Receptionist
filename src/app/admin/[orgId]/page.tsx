@@ -458,34 +458,26 @@ export default function TenantPage() {
                   Tools
                 </th>
                 <th className="pb-2 pr-3 pt-1 font-semibold">Engine</th>
-                <th className="pb-2 pt-1 font-semibold">Status</th>
+                <th className="pb-2 pr-3 pt-1 font-semibold">Status</th>
+                <th className="w-px pb-2 pt-1" />
               </tr>
             </thead>
             <tbody>
             {detail.agents.map((agent) => (
             <Fragment key={agent.retellAgentId}>
-              <tr
-                onClick={() => {
-                  const editorTab = window.open("", "_blank");
-                  const dest = `/?tab=voice&agent=${encodeURIComponent(agent.retellAgentId)}`;
-                  void actAs({ orgId })
-                    .then(() => {
-                      if (editorTab) editorTab.location.href = dest;
-                      else router.push(dest);
-                    })
-                    .catch(() => editorTab?.close());
-                }}
-                title="Open this agent's edit page in the business's own app, signed in as them. Only one business at a time — opening another repoints it."
-                className="cursor-pointer border-t border-[var(--table-divider)] transition-colors hover:bg-[var(--row-hover-bg)]"
-              >
+              {/* The whole row is no longer the target (Serdar, 2026-08-25).
+                  A row carrying a picker, a copy chip and a remove-less set of
+                  cells was a click surface with three holes in it, and every
+                  one of them needed a stopPropagation to stay a hole. The
+                  Open button says where it goes and the rest of the row is
+                  just cells again. */}
+              <tr className="border-t border-[var(--table-divider)]">
                 <td className="py-2 pr-3">
                   <div className="flex items-center gap-2">
                     {agent.name && (
                       <span className="font-medium">{agent.name}</span>
                     )}
-                    <span onClick={(e) => e.stopPropagation()}>
-                      <CopyId value={agent.retellAgentId} label="copy agent id" />
-                    </span>
+                    <CopyId value={agent.retellAgentId} label="copy agent id" />
                   </div>
                 </td>
                 <td className="whitespace-nowrap py-2 pr-3 text-xs text-[var(--muted)]">
@@ -515,7 +507,7 @@ export default function TenantPage() {
                   that chose. The option reads just "Default" plus the model
                   it resolves to; "Platform default" spent two words on a
                   distinction the row cannot make anyway. */}
-                <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}>
+                <td className="py-2 pr-3">
                   <div className="flex items-center gap-2 text-xs">
                 <SearchSelect
                   className="w-52"
@@ -581,17 +573,47 @@ export default function TenantPage() {
                 )}
                   </div>
                 </td>
-                <td className="whitespace-nowrap py-2">
+                {/* Enabled is the dot alone (Serdar, 2026-08-25): it is the
+                    state every healthy agent is in, so the word was printed
+                    down the whole column to say "normal". Disabled keeps its
+                    word — an amber dot with nothing beside it is a colour to
+                    decode, and this one is worth reading. */}
+                <td className="whitespace-nowrap py-2 pr-3">
                   <div className="flex items-center gap-2">
-                    <Pill tone={agent.enabled ? "ok" : "warn"}>
-                      {agent.enabled ? "Enabled" : "Disabled"}
-                    </Pill>
+                    {agent.enabled ? (
+                      <span
+                        className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"
+                        title="Enabled"
+                        aria-label="Enabled"
+                      />
+                    ) : (
+                      <Pill tone="warn">Disabled</Pill>
+                    )}
                     {(agent.pendingEvents > 0 || agent.failedEvents > 0) && (
                       <Pill tone={agent.failedEvents > 0 ? "warn" : "muted"}>
                         {agent.pendingEvents} pending · {agent.failedEvents} failed
                       </Pill>
                     )}
                   </div>
+                </td>
+                <td className="whitespace-nowrap py-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const editorTab = window.open("", "_blank");
+                      const dest = `/?tab=voice&agent=${encodeURIComponent(agent.retellAgentId)}`;
+                      void actAs({ orgId })
+                        .then(() => {
+                          if (editorTab) editorTab.location.href = dest;
+                          else router.push(dest);
+                        })
+                        .catch(() => editorTab?.close());
+                    }}
+                    title="Open this agent's edit page in the business's own app, signed in as them. Only one business at a time — opening another repoints it."
+                    className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)]"
+                  >
+                    Open
+                  </button>
                 </td>
               </tr>
               {/* Trouble gets a row of its own, spanning the table. Both of
@@ -601,14 +623,14 @@ export default function TenantPage() {
                   is what made the flex version wrap. */}
               {modelError?.agentId === agent.retellAgentId && (
                 <tr className="border-t border-[var(--table-divider)]">
-                  <td colSpan={5} className="py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <td colSpan={6} className="py-1.5 text-xs text-amber-700 dark:text-amber-400">
                     {modelError.message}
                   </td>
                 </tr>
               )}
               {agent.latestFailure && (
                 <tr className="border-t border-[var(--table-divider)]">
-                  <td colSpan={5} className="py-1.5">
+                  <td colSpan={6} className="py-1.5">
                 <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span>
@@ -939,7 +961,8 @@ export default function TenantPage() {
           </Fact>
         </div>
         <Row
-          label="Monthly budget (USD)"
+          label="Monthly budget"
+          money
           hint="Hard cap for this org's LLM spend. Empty = the platform default. The turn that would cross it is skipped and visible below."
           current={
             assistant.budgetMicroUsd === null
@@ -1051,7 +1074,8 @@ export default function TenantPage() {
         description="What this business's phone agent costs and earns. Every call is billed per second at the rate below, frozen onto the call the moment its duration lands, so changing the rate only affects calls from now on. Retell cost is what Retell charges us for the same calls; the margin column is the difference."
       >
         <Row
-          label="Rate (USD per minute)"
+          label="Rate per minute"
+          money
           hint={
             voice.defaultRateMicroUsdPerMinute === null
               ? "Override for this business only. Empty = the platform default, which is not set yet; calls bill at $0 until one exists (Platform tab on the fleet page)."
@@ -1119,7 +1143,8 @@ export default function TenantPage() {
               </div>
             </div>
             <Row
-              label="Add credit (USD)"
+              label="Add credit"
+              money
               hint="Manual credit on top of Stripe top-ups: goodwill, a correction, or negative to claw one back. Applies immediately."
               onSave={(value) => {
                 const parsed = Number(value.replace(",", "."));
