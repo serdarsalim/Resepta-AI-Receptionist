@@ -123,10 +123,10 @@ function InboxMenu({
         aria-label={t("inbox.menu")}
         aria-expanded={open}
         onClick={toggle}
-        className={`ml-auto flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border text-sm transition-colors ${
+        className={`ml-auto flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm transition-colors ${
           open
-            ? "border-[var(--accent)] text-[var(--accent)]"
-            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            ? "bg-[var(--muted-bg)] text-[var(--foreground)]"
+            : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         }`}
       >
         ⋯
@@ -526,7 +526,7 @@ export function InboxView({
                             question you have when the same person reaches you
                             on WhatsApp and by mail.
 
-                            A failed send is a red ✕ on the channel mark, not
+                            A failed send is a ✕ on the channel mark, not
                             the words "not sent" in front of the preview. Two
                             reasons, and the second is the real one. It was
                             SPELLED OUT, so four failures in eleven rows read
@@ -546,8 +546,18 @@ export function InboxView({
                               name, an age and a line of the message itself —
                               and at 13 it was reading as loud as the text it
                               sits in front of (Serdar: "they look too big in
-                              inbox"). */}
-                          <FeedIcon type={c.lastChannel} size={12} />
+                              inbox").
+
+                              MONOCHROME here, alone of all the feed surfaces
+                              (Serdar, 2026-08-25): brand green, mail blue and
+                              call cyan down a whole column drowned the one
+                              colour this list actually trades on, the unseen
+                              dot. The glyphs keep their hues in the contact
+                              feed and the filter pills, where no dot competes;
+                              here every mark is slate and green means new. */}
+                          <span className="flex text-[var(--muted)]">
+                            <FeedIcon type={c.lastChannel} size={12} tinted={false} />
+                          </span>
                           {/* Direction, on the one row that cannot imply it.
                               A message preview is words somebody wrote, so a
                               salon's reminder reads nothing like a customer's
@@ -585,7 +595,7 @@ export function InboxView({
                           )}
                           {c.lastFailed && (
                             <span
-                              className="shrink-0 font-semibold leading-none text-[var(--now-line)]"
+                              className="shrink-0 font-semibold leading-none text-[var(--muted)]"
                               title={t("message.failed")}
                               aria-label={t("message.failed")}
                             >
