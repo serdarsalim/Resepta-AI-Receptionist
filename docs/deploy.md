@@ -47,7 +47,7 @@ npx convex env set --prod WA_WEBHOOK_VERIFY_TOKEN <random retained value>
 npx convex env set --prod RESEND_API_KEY <Resend API key>
 npx convex env set --prod RESEND_INBOUND_DOMAIN <shared inbound email domain>
 npx convex env set --prod RESEND_WEBHOOK_SECRET <Resend whsec value>
-npx convex env set --prod SITE_URL <public Resepta app origin>
+npx convex env set --prod SITE_URL https://app.resepta.xyz
 ```
 
 Optional:
@@ -62,8 +62,35 @@ registered and Google is the only auth provider.
 
 The production demo origin is `https://demo.resepta.xyz`. It serves `/demo` to
 signed-out visitors and the normal app root after anonymous sign-in. Point it
-at the same Vercel project as `resepta.xyz`; the data boundary is the isolated
-demo org, not a second frontend deployment.
+at the same Vercel project as `app.resepta.xyz`; the data boundary is the
+isolated demo org, not a second frontend deployment.
+
+### Hostnames after the split (2026-08-24)
+
+This deployment answers on THREE hosts, and the apex is no longer one of them:
+
+| Host | Serves |
+|---|---|
+| `app.resepta.xyz` | the product — this repo, this Vercel project |
+| `demo.resepta.xyz` | `/demo`, rewritten in `src/proxy.ts`; same project |
+| `docs.resepta.xyz` | `/help`, same rewrite, same project |
+| `resepta.xyz` + `www` | the MARKETING SITE — a separate repo on a separate Vercel account |
+
+Consequences, each of which has bitten once already:
+
+- `SITE_URL` on the Convex deployment must be `https://app.resepta.xyz`. It is
+  what Convex Auth redirects to after the Google callback, and what builds
+  `/appt/<token>` and `/join?t=` links. Pointed at the apex, sign-in completed
+  and then dropped people on the marketing site.
+- The Google authorized redirect URI does NOT change with any of this. It is
+  `https://<deployment>.convex.site/api/auth/callback/google` and belongs to
+  Convex, not to Vercel.
+- Links already sent to customers point at the apex. The marketing project
+  needs redirects for `/appt/:token`, `/book/:slug` and `/join` to
+  `app.resepta.xyz` — redirects, not rewrites: proxying this app through that
+  origin serves its `/_next/*` from the wrong build.
+- A domain moving between Vercel ACCOUNTS needs a `_vercel` TXT record per
+  hostname (`vc-domain-verify=…`) to prove ownership. DNS is Porkbun.
 
 The Google Cloud authorized redirect URI is:
 

@@ -2428,6 +2428,14 @@ Ported from Nudge, violet and all. Settable from the contact record now, not
 only from the Inbox list — the page where you actually decide "deal with this
 later" had no way to say so.
 
+**Since 2026-08-24 it is ONE dot per row, in the left gutter**, not a pin after
+the name plus an unread dot on the left. Three states, one hit area: violet (I
+pinned this) beats brand green (they wrote, I have not opened it) beats a
+hollow ring that fades in on hover. The pin wins because it is a decision and
+unread is a fact that clears itself the moment the row opens — if green won,
+pinning a new conversation would look like the click did nothing. Nudge's inbox
+is the same control with the same precedence; keep them in step.
+
 **`messages.inboxPin`** reads ONE conversation's pin. It pays for the whole
 org's entries to answer about one row, deliberately: the SPENT rule (a pin
 older than the newest outbound has been paid) lives in `summariseEntries`, and
@@ -2530,3 +2538,47 @@ is org-scoped and is being emptied. Deleted memberships are also how the people
 who worked there stop resolving into it — `lib/orgAuth` falls back to their
 remaining membership, and a stale `actingAsOrgId` pointing at the deleted org
 already falls through there.
+
+## The app lives at app.resepta.xyz (2026-08-24)
+
+Marketing left. `resepta.xyz` and `www` are a SEPARATE repo on a separate
+Vercel account; this deployment is `app.resepta.xyz`, plus `demo.` and `docs.`
+which `src/proxy.ts` rewrites to `/demo` and `/help`. The operational half —
+`SITE_URL`, the Google callback that does NOT move, the redirects the marketing
+project owes us — is in [`docs/deploy.md`](docs/deploy.md). What it changed in
+here:
+
+- **`/` is the app and nothing else.** It came off the public matcher in
+  `src/proxy.ts`, so the redirect at the foot of that file sends a stranger to
+  `/signin` — the same rule that guards every other route, rather than a second
+  one written in the page. `src/app/page.tsx` has no auth branch left.
+  `HomeClient` keeps a client-side bounce for the session that expires between
+  the cookie check and the browser, and `/signin` sends an authenticated
+  visitor home (the anonymous demo sign-in creates a session without ever
+  navigating).
+- **Signing out leaves for `resepta.xyz`** — `lib/hosts.signOutDestination`,
+  used by the account menu and the wizard's way out. Every page here is behind
+  auth, so staying put meant bouncing off `/signin` one click after saying you
+  were done. A demo visitor goes back to the demo instead. `.then`, never
+  `.finally`: a sign-out that failed has left the session standing, and
+  navigating away from it lies to whoever is walking away from a shared laptop.
+- **`src/components/Landing.tsx` is now unreferenced.** Left in place
+  deliberately until the marketing repo has taken what it wants from it.
+  `src/lib/landing.ts` is still live — SignInDialog reads its copy.
+- **`src/app/sitemap.ts` and `robots.ts` still advertise the apex origin.** They
+  are describing somebody else's site now. Fix them when you next touch that
+  area.
+
+## An inbox row opens the message, not the mailbox (2026-08-24)
+
+`messages.conversations` returns `lastId` — the id of the row its preview came
+from, the same id `feedForCustomer` gives the feed — and the click passes it
+through `openContact` to `ConversationPanel`, which opens that thread or that
+call ONCE, when the feed first arrives. Once, because the back arrow is how the
+reader leaves, and an effect that kept re-deriving from the prop would shove
+them back into the call they just stepped out of.
+
+Email and calls are the two tabs that list before they read, which is the whole
+reason: a row quoting one line of a six-mail history used to land on six
+subjects. WhatsApp and notes pass nothing — those open as a thread with the
+newest message already at the bottom.
