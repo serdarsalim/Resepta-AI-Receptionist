@@ -1,27 +1,19 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { requireUser } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
 import { discardDraftOrg, draftIsUntouched } from "./lib/discardOrg";
-
-// inv_<48 hex>, 192 bits from the Web Crypto CSPRNG — same shape and same
-// reasoning as mcpKeys.mintKey. This string is the ONLY thing that admits
-// somebody to a workspace they were invited to, so it has to be unguessable:
-// the address it is mailed to used to be sufficient on its own.
-function mintInviteToken(): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return `inv_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-}
-
-// An invite left open forever is a trap that ages into a breach: the row sits
-// there until somebody with that address happens to sign up, which may be
-// months and a job change later.
-const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+import {
+  addMemberByEmail,
+  membershipFor,
+  revokeInviteRow,
+  revokeMembership,
+  setMemberRole,
+  upsertMembership,
+} from "./lib/members";
 
 const role = v.union(v.literal("owner"), v.literal("staff"));
 
@@ -177,36 +169,12 @@ export const roster = query({
   },
 });
 
-// Guard shared by both mutations that can strip the top tier. An org with no
-// admin left cannot change its own settings, invite anybody, or undo the
-// mistake — there is no support desk behind this to fix it.
-async function wouldOrphanOrg(
-  ctx: MutationCtx,
-  orgId: Id<"orgs">,
-  userId: Id<"users">,
-): Promise<boolean> {
-  const memberships = await ctx.db
-    .query("memberships")
-    .withIndex("by_org", (q) => q.eq("orgId", orgId))
-    .collect();
-  const admins = memberships.filter((row) => row.role === "owner");
-  return admins.length <= 1 && admins.some((row) => row.userId === userId);
-}
-
 export const setRole = mutation({
   args: { userId: v.id("users"), role },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_user_org", (q) => q.eq("userId", args.userId).eq("orgId", orgId))
-      .unique();
-    if (!membership) throw new Error("not-found");
-    if (args.role !== "owner" && (await wouldOrphanOrg(ctx, orgId, args.userId))) {
-      throw new Error("last-admin");
-    }
-    await ctx.db.patch(membership._id, { role: args.role });
+    await setMemberRole(ctx, { orgId, userId: args.userId, role: args.role });
     return null;
   },
 });
@@ -253,28 +221,7 @@ export const removeMember = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
-    const membership = await ctx.db
-      .query("memberships")
-      .withIndex("by_user_org", (q) => q.eq("userId", args.userId).eq("orgId", orgId))
-      .unique();
-    if (!membership) throw new Error("not-found");
-    if (await wouldOrphanOrg(ctx, orgId, args.userId)) throw new Error("last-admin");
-    const staffRows = await ctx.db
-      .query("staff")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .collect();
-    for (const staff of staffRows) {
-      if (staff.userId === args.userId) {
-        await ctx.db.patch(staff._id, { userId: undefined });
-      }
-    }
-    await ctx.db.delete(membership._id);
-    const removed = await ctx.db.get(args.userId);
-    await recordActivity(ctx, {
-      orgId,
-      kind: "member_removed",
-      detail: removed?.email ?? removed?.name,
-    });
+    await revokeMembership(ctx, { orgId, userId: args.userId });
     return null;
   },
 });
@@ -323,88 +270,18 @@ export const invite = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { user, orgId } = await requireOwner(ctx);
-    const email = args.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("bad-email");
-    // The demo workspace does not grow a team, and more to the point it does
-    // not send mail to a real address (convex/demo.ts). Anyone can walk into
-    // the demo, so an invite from it is a mail anybody can make the platform
-    // send from its own verified domain — and sendInvite has no org in hand to
-    // refuse it at the far end.
-    const inviteOrg = await ctx.db.get(orgId);
-    if (isDemo(inviteOrg)) throw new Error("demo-workspace");
-    // Checked before either branch writes anything: an id from another org, or
-    // one already claimed, must not quietly become an unlinked invite.
-    if (args.staffId) {
-      const staff = await ctx.db.get(args.staffId);
-      if (!staff || staff.orgId !== orgId) throw new Error("not-found");
-      if (staff.userId) throw new Error("already-linked");
-    }
-    const org = await ctx.db.get(orgId);
-    // Scheduled at the end of whichever branch takes, never before: the mail
-    // says "you have been added", and an invite that then failed validation
-    // would make that a lie. Fire and forget by design, see email.sendInvite.
-    const notify = (token?: string) =>
-      ctx.scheduler.runAfter(0, internal.email.sendInvite, {
-        to: email,
-        orgName: org?.name || "Resepta",
-        invitedByName: user.name?.trim() || user.email || "Resepta",
-        language: org?.language ?? "tr",
-        // Only the no-account branch carries one. An account that already
-        // exists was joined outright above, so there is nothing to accept and
-        // the mail is a notification, not a key.
-        ...(token !== undefined ? { token } : {}),
-      });
-    // Workspace model: an EXISTING account joins immediately as a membership
-    // (Retell/Slack behavior) — invite rows are only for addresses with no
-    // account yet.
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("email", (q) => q.eq("email", email))
-      .first();
-    if (existingUser) {
-      const already = await ctx.db
-        .query("memberships")
-        .withIndex("by_user_org", (q) =>
-          q.eq("userId", existingUser._id).eq("orgId", orgId),
-        )
-        .unique();
-      if (already) throw new Error("already-member");
-      await ctx.db.insert("memberships", {
-        userId: existingUser._id,
-        orgId,
-        role: args.role,
-      });
-      // This account already exists, so there is no acceptance to wait for and
-      // the link happens here instead of in auth.ts.
-      if (args.staffId) await ctx.db.patch(args.staffId, { userId: existingUser._id });
-      await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
-      await notify();
-      return null;
-    }
-    // Scoped to THIS org. It used to look across the whole table, so one salon
-    // inviting an address blocked every other salon from inviting the same
-    // person and told them "already-invited" about a workspace they cannot see.
-    // Coherent now that acceptance is by token: two orgs may each have an open
-    // invite for one address, and the token decides which one is being accepted.
-    const open = (
-      await ctx.db
-        .query("invites")
-        .withIndex("by_email", (q) => q.eq("email", email))
-        .collect()
-    ).find((row) => row.acceptedAt === undefined && row.orgId === orgId);
-    if (open) throw new Error("already-invited");
-    const token = mintInviteToken();
-    await ctx.db.insert("invites", {
+    // Owner of THIS org is the whole gate; the two outcomes behind it — an
+    // existing account joined outright, a new address sent a token — live in
+    // lib/members so the operator's door in convex/platform.ts runs the same
+    // code rather than a second copy of these rules.
+    await addMemberByEmail(ctx, {
       orgId,
-      email,
+      email: args.email,
       role: args.role,
       invitedBy: user._id,
+      invitedByName: user.name?.trim() || user.email || "Resepta",
       staffId: args.staffId,
-      token,
-      expiresAt: Date.now() + INVITE_TTL_MS,
     });
-    await recordActivity(ctx, { orgId, kind: "member_invited", detail: email });
-    await notify(token);
     return null;
   },
 });
@@ -543,10 +420,7 @@ export const revokeInvite = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
-    const invite = await ctx.db.get(args.inviteId);
-    if (!invite || invite.orgId !== orgId) throw new Error("not-found");
-    if (invite.acceptedAt !== undefined) throw new Error("already-accepted");
-    await ctx.db.delete(args.inviteId);
+    await revokeInviteRow(ctx, { orgId, inviteId: args.inviteId });
     return null;
   },
 });
@@ -652,87 +526,30 @@ async function writeAccess(
     role: "owner" | "staff" | null;
   },
 ): Promise<void> {
+  // Demo reads as ABSENT rather than refused: this card must not advertise the
+  // showroom's existence to somebody who cannot see it anyway.
   const target = await ctx.db.get(args.orgId);
   if (!target || isDemo(target)) throw new Error("not-found");
-  // Owner THERE, read fresh rather than trusted from the client.
-  const actorThere = await ctx.db
-    .query("memberships")
-    .withIndex("by_user_org", (q) =>
-      q.eq("userId", args.actor).eq("orgId", args.orgId),
-    )
-    .unique();
+  // Owner THERE, read fresh rather than trusted from the client. This is the
+  // half that makes the cross-org write safe; the write itself is the same one
+  // the Team card and the operator's panel run (lib/members).
+  const actorThere = await membershipFor(ctx, args.orgId, args.actor);
   if (!actorThere || actorThere.role !== "owner") throw new Error("owner-only");
-  const existing = await ctx.db
-    .query("memberships")
-    .withIndex("by_user_org", (q) =>
-      q.eq("userId", args.userId).eq("orgId", args.orgId),
-    )
-    .unique();
-  const person = await ctx.db.get(args.userId);
 
   if (args.role === null) {
-    if (!existing) return;
-    // The same guard the Team card runs, applied to the org being written to:
-    // an org whose last admin is revoked from another screen is exactly as
-    // stuck as one revoked from its own.
-    if (await wouldOrphanOrg(ctx, args.orgId, args.userId)) {
-      throw new Error("last-admin");
-    }
-    // Their bookable row over there keeps every appointment it holds; only the
-    // login link is cut, same as removeMember.
-    const staffRows = await ctx.db
-      .query("staff")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .collect();
-    for (const staff of staffRows) {
-      if (staff.userId === args.userId) {
-        await ctx.db.patch(staff._id, { userId: undefined });
-      }
-    }
-    await ctx.db.delete(existing._id);
-    await recordActivity(ctx, {
-      orgId: args.orgId,
-      kind: "member_removed",
-      detail: person?.email ?? person?.name,
-    });
+    // Already absent is the requested state, and revokeMembership would throw
+    // "not-found" at somebody who asked for exactly what they already have.
+    if (!(await membershipFor(ctx, args.orgId, args.userId))) return;
+    await revokeMembership(ctx, { orgId: args.orgId, userId: args.userId });
     return;
   }
 
-  if (existing) {
-    if (args.role !== "owner" && (await wouldOrphanOrg(ctx, args.orgId, args.userId))) {
-      throw new Error("last-admin");
-    }
-    if (existing.role !== args.role) {
-      await ctx.db.patch(existing._id, { role: args.role });
-    }
-    return;
-  }
-
-  // seenAt deliberately UNSET: somebody else put them here and they have not
-  // been told, which is exactly what users.unseenWorkspaces surfaces as the
-  // banner on their next visit. A stamp here would hand people a workspace
-  // silently.
-  await ctx.db.insert("memberships", {
+  await upsertMembership(ctx, {
+    orgId: args.orgId,
     userId: args.userId,
-    orgId: args.orgId,
     role: args.role,
+    invitedByName: args.actorName,
   });
-  await recordActivity(ctx, {
-    orgId: args.orgId,
-    kind: "member_invited",
-    detail: person?.email ?? person?.name,
-  });
-  // The same mail team.invite sends an existing account — "you have been
-  // added", no token, because there is nothing to accept. The banner alone
-  // would only reach somebody who happens to sign in.
-  if (person?.email) {
-    await ctx.scheduler.runAfter(0, internal.email.sendInvite, {
-      to: person.email,
-      orgName: target.name || "Resepta",
-      invitedByName: args.actorName,
-      language: target.language ?? "tr",
-    });
-  }
 }
 
 // Only people the caller already manages may be granted anything — the second
