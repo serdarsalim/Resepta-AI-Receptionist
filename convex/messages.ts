@@ -791,6 +791,52 @@ export const markConversationRead = mutation({
   },
 });
 
+// The inbox menu's "mark all as read": every conversation MY list currently
+// shows as unseen gets its read stamp, in one stroke. It recomputes unseen the
+// way `conversations` does — same floor, same point lookup, muted rows skipped
+// — because stamping rows the list never showed would spend writes on nothing
+// and, worse, quietly pre-read a conversation that gets unmuted later. Writes
+// stay bounded by what was actually unread, not by the size of the inbox.
+export const markAllConversationsRead = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const byCustomer = await conversationEntries(ctx, orgId);
+    const visit = await inboxVisit(ctx, orgId, user._id);
+    const readFloor = inboxReadFloor(visit, user);
+    const now = Date.now();
+    for (const [customerId, entries] of byCustomer) {
+      const customer = await ctx.db.get(customerId as Id<"customers">);
+      if (!customer || customer.mutedAt) continue;
+      const summary = summariseEntries(entries);
+      if (summary.lastInboundAt <= readFloor) continue;
+      const existing = await ctx.db
+        .query("inboxReads")
+        .withIndex("by_org_user_customer", (q) =>
+          q
+            .eq("orgId", orgId)
+            .eq("userId", user._id)
+            .eq("customerId", customer._id),
+        )
+        .unique();
+      if (existing) {
+        // Already read (and so not in the unseen set): leave the stamp alone.
+        if (existing.readAt >= summary.lastInboundAt) continue;
+        await ctx.db.patch(existing._id, { readAt: now });
+      } else {
+        await ctx.db.insert("inboxReads", {
+          orgId,
+          userId: user._id,
+          customerId: customer._id,
+          readAt: now,
+        });
+      }
+    }
+    return null;
+  },
+});
+
 // Is this one conversation pinned for me? The inbox list gets this for free
 // inside `conversations`; the contact record needs it for a single customer,
 // because the pin toggle now sits beside that person's name.

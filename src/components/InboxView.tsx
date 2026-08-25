@@ -5,7 +5,8 @@
 // One row per CUSTOMER across all three channels; calls are a channel here,
 // not a separate tab (ported from Nudge's InboxView).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -63,6 +64,104 @@ function previewOf(
   );
 }
 
+// The filter row's ⋯ menu (Nudge convention): bulk verbs live behind it so the
+// row stays one line. One item today — mark all as read, carrying the same
+// count the Unread chip advertises. Portal + fixed positioning, measured at
+// open time, for the same reason as AppointmentsView's RowMenu: an absolute
+// child would clip on the card's overflow-hidden.
+function InboxMenu({
+  unseenCount,
+  onMarkAllRead,
+}: {
+  unseenCount: number;
+  onMarkAllRead: () => void;
+}) {
+  const { t } = useLanguage();
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const open = pos !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setPos(null);
+      }
+    };
+    // Fixed coords go stale when the PAGE scrolls — but the menu's own
+    // scrollbar is the exception: scrolling the list is using it.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setPos(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("scroll", onScroll, true);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) return setPos(null);
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const MENU_W = 224; // w-56
+    setPos({
+      top: r.bottom + 4,
+      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+    });
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={t("inbox.menu")}
+        aria-expanded={open}
+        onClick={toggle}
+        className={`ml-auto flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full border text-sm transition-colors ${
+          open
+            ? "border-[var(--accent)] text-[var(--accent)]"
+            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        }`}
+      >
+        ⋯
+      </button>
+      {pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
+            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+          >
+            <button
+              type="button"
+              disabled={unseenCount === 0}
+              onClick={() => {
+                setPos(null);
+                onMarkAllRead();
+              }}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              <span>{t("inbox.markAllRead")}</span>
+              {/* The chip's rule again: zero renders nothing. */}
+              {unseenCount > 0 && (
+                <span className="tabular-nums text-[var(--muted)]">
+                  {unseenCount}
+                </span>
+              )}
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 export function InboxView({
   onOpenContact,
 }: {
@@ -76,6 +175,7 @@ export function InboxView({
   const conversations = useQuery(api.messages.conversations, {});
   const setInboxPin = useMutation(api.messages.setInboxPin);
   const markConversationRead = useMutation(api.messages.markConversationRead);
+  const markAllRead = useMutation(api.messages.markAllConversationsRead);
   const search = useHeaderSearch(t("common.search"));
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   // Re-snapped to the conversation's own channel on every select; "all" is
@@ -190,10 +290,17 @@ export function InboxView({
 
               ONE LINE ONLY — a second row of chips spills rather than pushing
               the list down. */}
+          {/* No "All" chip any more (Serdar, 2026-08-25, matching Nudge). All
+              is the REST state, not a filter you pick: two toggle chips, and
+              clicking the active one releases it back to everything. A third
+              chip whose only job was "neither of the other two" spent a slot
+              restating the default. Bulk verbs live behind the ⋯ on the right
+              instead of widening this row — one line only, as above. Nudge
+              also filters by owner there; this app has no owner on a
+              conversation, so the menu is just the read stroke. */}
           <div className="flex h-11 shrink-0 items-center gap-1.5 px-3">
             {(
               [
-                ["all", t("inbox.filterAll"), 0],
                 ["unread", t("inbox.filterUnread"), unseenCount],
                 ["pinned", t("inbox.filterPinned"), pinnedCount],
               ] as const
@@ -202,7 +309,7 @@ export function InboxView({
                 key={key}
                 type="button"
                 aria-pressed={view === key}
-                onClick={() => chooseView(key)}
+                onClick={() => chooseView(view === key ? "all" : key)}
                 className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-sm transition-colors ${
                   view === key
                     ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
@@ -214,6 +321,10 @@ export function InboxView({
                 {count > 0 && <span className="tabular-nums">{count}</span>}
               </button>
             ))}
+            <InboxMenu
+              unseenCount={unseenCount}
+              onMarkAllRead={() => void markAllRead({})}
+            />
           </div>
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
             {conversations === undefined ? (
