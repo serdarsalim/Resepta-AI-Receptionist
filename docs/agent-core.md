@@ -171,13 +171,17 @@ means. Giving chat the persona later is one string in `loadTurnContext`.
 
 Still open, in the order they will probably matter:
 
-1. `save_customer_details` for chat. The Talimat tells the agent to save card
-   details; on chat the tool does not exist, the adapter says so, and an
-   attempted call returns a readable unknown-tool error. Adding it gives chat
-   the same card-writing the phone has, through the same `{{information}}` gate.
-2. The voice-side freshness gap this doc names is UNTOUCHED: a Resepta rule
+Closed the same night, in the same session: `save_customer_details` on chat
+(template v5, same write gate as voice), the chat toggle on the assistants
+table (`retellAgents.chatEnabled`, a radio — one agent holds chat, and an org
+with agents but no selection skips visibly as `chat-agent-not-selected`), and
+the rename ("Sesli asistan" + handset → "Asistan / Agent" + robot head, across
+sidebar, page title and the assistants-table column).
+
+Still open:
+
+1. The voice-side freshness gap this doc names is UNTOUCHED: a Resepta rule
    improvement still reaches new voice agents only. The `{{rules}}` idea above
    remains the candidate fix, now cheaper because the variable plumbing is
    shared.
-3. Two-way memory (voice knowing about chat) and the sidebar rename
-   ("Sesli asistan" → the one assistant) — the product half, not started.
+2. Two-way memory — voice knowing about chat the way chat knows about calls.
