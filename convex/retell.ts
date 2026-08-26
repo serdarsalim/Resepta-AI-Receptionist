@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { noteText } from "./lib/noteBody";
+import { builtinAgentVariables } from "./lib/agentVariables";
 import {
   action,
   internalAction,
@@ -31,7 +31,7 @@ import { queueOrgAlert } from "./lib/alerts";
 import { WALLET_LOW_MICRO_USD } from "./wallet";
 import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
 import { voiceVariableInput } from "./lib/voiceVariables";
-import { spokenClock, spokenDateTime, spokenDuration, spokenLead, spokenPrice } from "./lib/speech";
+import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 
@@ -1139,8 +1139,7 @@ export const beforeCallContext = internalQuery({
     // registry row first — the @ picker offers these as built-ins, so the
     // injection must not depend on the owner having added them. A registry
     // row with the same key is deliberate configuration and wins.
-    const lang = customer?.language ?? org.language;
-    const currency = org.currency ?? "TRY";
+    //
     // Everything the agent needs BEFORE it can be useful, handed over while the
     // phone is still ringing.
     //
@@ -1156,131 +1155,18 @@ export const beforeCallContext = internalQuery({
     // that is ringing, and the clock is knowable here. So it arrives up front
     // and the tool becomes what it should always have been — a way to
     // re-check something mid-call, not a toll on the first sentence.
-    const builtins: Record<string, string> = {
-      business_name: org.name,
-      // Empty when the salon never named her. The prompt line that reads this
-      // says what empty means, rather than leaving the model to invent a name
-      // for itself — see GENERAL_PROMPTS in lib/voiceAgentTemplate.
-      agent_name: agent.personaName ?? "",
-      customer_name: customer
-        ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
-        : "",
-      // Kept alongside the two columns: an opening line saying the whole name
-      // is the common case, and {{customer_name}} is already written into
-      // prompts. It is READ-only context — nothing writes back through it.
-      customer_first_name: customer?.firstName ?? "",
-      customer_last_name: customer?.lastName ?? "",
-      customer_phone: customer?.phone ?? normalised ?? "",
-      customer_email: customer?.email ?? "",
-      customer_language: lang,
-      next_appointment: next
-        ? spokenDateTime(next.startAt, org.timezone, lang)
-        : "",
-      // What "yarın" means, resolved here rather than by a tool. The agent has
-      // no clock of its own and the salon may be in another timezone than the
-      // caller; both spellings go over because one is for saying out loud and
-      // the other is what book_appointment needs to receive.
-      now: (() => {
-        const parts = getLocalPartsSafe(Date.now(), org.timezone);
-        const pad = (n: number) => String(n).padStart(2, "0");
-        const iso = `${parts.y}-${pad(parts.m0 + 1)}-${pad(parts.d)}`;
-        return `${spokenDateTime(Date.now(), org.timezone, lang)} (${iso} ${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}, ${org.timezone})`;
-      })(),
-      // Names only. Which of them is free at three o'clock is availability's
-      // job; this exists so a caller asking for a person by name gets an agent
-      // that knows whether that person works here.
-      staff: staffRows
-        .filter((row) => row.active)
-        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
-        .map((row) => row.name)
-        .join(", "),
-      // The whole customer card and the writable keys, from ONE list: the
-      // Contact fields table. Identity columns first under their table keys,
-      // then every unlocked custom field. Locked fields are withheld
-      // entirely, value and definition both — the standing doctrine: data
-      // that never arrives cannot be read back to whoever is on the phone.
-      //
-      // contact says what IS; information says what may be WRITTEN. Empty
-      // values ride along as a dash so the agent also knows what is missing.
-      contact: (() => {
-        const labels =
-          lang === "tr"
-            ? { firstname: "Ad", lastname: "Soyad", email: "E-posta" }
-            : lang === "de"
-              ? { firstname: "Vorname", lastname: "Nachname", email: "E-Mail" }
-              : { firstname: "First name", lastname: "Last name", email: "Email" };
-        const parts = [
-          `${labels.firstname}: ${customer?.firstName || "-"}`,
-          `${labels.lastname}: ${customer?.lastName || "-"}`,
-          `${labels.email}: ${customer?.email || "-"}`,
-          ...fields
-            // Seen ≠ written. The card carries every field the agent may
-            // KNOW: the ones it fills, plus staff-curated fields flagged
-            // voiceVisible ("agent sees" without "agent fills") — a VIP note
-            // it can read back but never asks about. `information` below
-            // stays voice-only, because that list is the WRITE gate's public
-            // face and a visible-only field must never appear writable.
-            .filter((field) => field.source === "voice" || field.voiceVisible === true)
-            .map((field) => `${field.label}: ${String(customer?.custom?.[field.key] ?? "") || "-"}`),
-        ];
-        return parts.join(", ");
-      })(),
-      // Identity keys drop out when the salon locked them — the write list
-      // must match what the gate will accept or the agent invents excuses.
-      // They stay on the card above either way: the lock is a WRITE lock, and
-      // withholding the caller's own name would break the greeting.
-      information: [
-        ...["firstname", "lastname", "email"].filter(
-          (key) => !(org.voiceLockedIdentity ?? []).includes(key as "email"),
-        ),
-        ...fields
-          .filter((field) => field.source === "voice")
-          .map((field) => field.key),
-      ].join(", "),
-      // Spoken, not written — this variable is read down a phone line
-      // verbatim. This exact line is where Bella got "90 dk için ₺3.000":
-      // "dk" was hardcoded here, and the price came from Intl with its
-      // grouping separator and symbol still in. lib/speech owns the wording
-      // now, for this and for runtimeCallContext, so the ring-time list and
-      // the mid-call list can never disagree again.
-      services: services
-        .filter((service) => service.active)
-        .map((service) => {
-          // null for a good — spokenDuration refuses 0, correctly: a cake
-          // has a price and no length, and "(null)" down a phone line was
-          // the bug this branch exists to avoid.
-          const duration = spokenDuration(service.durationMinutes ?? 0, lang);
-          const price =
-            service.price !== undefined
-              ? spokenPrice(service.price, currency, lang)
-              : null;
-          const parts = [duration, price].filter(Boolean);
-          return parts.length
-            ? `${service.name} (${parts.join(", ")})`
-            : service.name;
-        })
-        .join("; "),
-      // What the business wrote about itself (the Knowledge tab), injected at
-      // ring time like everything else here so an edit reaches the very next
-      // call with no republish. PLAIN TEXT by contract: knowledge.forAgent's
-      // rule — whatever the editor renders, the agent reads words. Capped so
-      // a thirty-block org cannot blow the provider's payload; the cut lands
-      // between blocks, never mid-sentence.
-      knowledge: (() => {
-        const blocks = knowledgeRows
-          .filter((row) => noteText(row.body).trim())
-          .sort((a, b) => a.order - b.order);
-        const parts: string[] = [];
-        let budget = 8000;
-        for (const block of blocks) {
-          const text = `${block.title}: ${noteText(block.body).trim()}`;
-          if (text.length > budget) break;
-          budget -= text.length;
-          parts.push(text);
-        }
-        return parts.join("\n");
-      })(),
-    };
+    const builtins = builtinAgentVariables({
+      style: "spoken",
+      org,
+      personaName: agent.personaName ?? "",
+      customer,
+      fallbackPhone: normalised ?? undefined,
+      nextAppointmentAt: next ? next.startAt : null,
+      staffRows,
+      services,
+      knowledgeRows,
+      contactFields: fields,
+    });
     for (const [key, value] of Object.entries(builtins)) {
       if (!(key in dynamicVariables)) dynamicVariables[key] = value;
     }
