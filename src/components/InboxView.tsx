@@ -12,6 +12,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
@@ -39,11 +40,23 @@ function formatAgo(ts: number): string {
 // (`email.sendToCustomer` derives `body` from its html with htmlToText for
 // exactly this reason), so nothing has to strip markup.
 function previewOf(
-  c: { lastBody?: string; lastChannel: FeedIconType },
+  c: {
+    lastBody?: string;
+    lastChannel: FeedIconType;
+    lastMediaContentType?: string;
+    lastMediaFileName?: string;
+  },
   t: (k: TranslationKey) => string,
 ): string {
   const body = (c.lastBody ?? "").replace(/\s+/g, " ").trim();
   if (body) return body;
+  // An uncaptioned attachment has no words to preview, but it is emphatically
+  // not the queued template the fallback below describes. Naming the kind is
+  // what the salon needs off a list: "Sesli mesaj" is a thing to go and
+  // listen to, "Şablon mesajı" was a lie about what had arrived.
+  if (c.lastMediaContentType) {
+    return t(mediaKindKey(c.lastMediaContentType, c.lastMediaFileName));
+  }
   // A call, a form arrival and a bare note can all land with no body. Naming
   // the KIND beats an empty line: "Arama" tells you what to expect on open,
   // blank tells you the row is broken.

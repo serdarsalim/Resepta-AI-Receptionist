@@ -28,6 +28,13 @@ export type FailureClass = "transient" | "permanent";
 // reached "sent" and the staff thread rendered a photo the customer never got.
 export const EVOLUTION_NO_MEDIA = "evolution-no-media";
 
+// The same shape for reactions. Reacting over Baileys needs the full message
+// key, which this lane never stored — so the button admits it rather than
+// writing an emoji into the salon's thread that the customer's phone will
+// never show. Not in LOCAL_REFUSALS below because a reaction writes no message
+// row: nothing gets retried, so nothing needs classifying.
+export const EVOLUTION_NO_REACTION = "evolution-no-reaction";
+
 // Our own refusals, raised before the provider was ever called.
 const LOCAL_REFUSALS = new Set([
   "no-consent",

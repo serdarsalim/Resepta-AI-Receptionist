@@ -87,11 +87,33 @@ export const handleWhatsappEvent = internalMutation({
               | { button_reply?: { id?: string } }
               | undefined
           )?.button_reply?.id;
-          // An image arrives as an id plus an optional caption. A salon gets
-          // these constantly — "this is the colour I want" — and dropping
-          // them left a bubble saying nothing at all.
-          const image = message.image as
-            | { id?: string; caption?: string }
+          // Every attachment Meta delivers shares one shape: an id that is a
+          // HANDLE rather than the file, an optional caption the sender typed
+          // beside it, and — for a document — the filename they picked.
+          //
+          // All five types are read, not just the image. A salon gets photos
+          // constantly ("this is the colour I want") and those were already
+          // handled, but a voice note is a REPLY — somebody answering in
+          // words, just spoken — and dropping it lost exactly what a dropped
+          // text would. Documents, video and stickers were the same silent
+          // hole: the row landed with an empty body, and an empty body
+          // renders as "template message", so the thread actively told the
+          // salon that nothing had arrived.
+          const type = message.type as string | undefined;
+          const part = (
+            type && type !== "text" && type !== "reaction"
+              ? (message as Record<string, unknown>)[type]
+              : undefined
+          ) as
+            | { id?: string; caption?: string; filename?: string; mime_type?: string }
+            | undefined;
+          // A reaction is NOT a message. It carries an emoji and the wamid of
+          // the message it belongs to, so it lands ON that bubble rather than
+          // becoming a bubble of its own — which is all a "[reaction]" row
+          // would ever have been, a line saying an emoji happened somewhere.
+          // An EMPTY emoji means the reaction was taken back.
+          const reactionPart = message.reaction as
+            | { message_id?: string; emoji?: string }
             | undefined;
           await processInboundMessage(ctx, {
             orgId,
@@ -99,8 +121,21 @@ export const handleWhatsappEvent = internalMutation({
             text: (message.text as { body?: string } | undefined)?.body ?? "",
             payload: buttonPayload ?? interactivePayload ?? "",
             wamid: message.id as string | undefined,
-            imageId: image?.id,
-            imageCaption: image?.caption,
+            mediaId: part?.id,
+            mediaCaption: part?.caption,
+            mediaFileName: part?.filename,
+            mediaContentType: part?.mime_type,
+            // Carried so a type we cannot fetch (a location, an unknown
+            // future one) still names itself in the bubble instead of
+            // arriving blank.
+            messageType: type,
+            reaction:
+              type === "reaction" && reactionPart?.message_id
+                ? {
+                    targetWamid: reactionPart.message_id,
+                    emoji: reactionPart.emoji ?? "",
+                  }
+                : undefined,
           });
         }
       }
@@ -129,8 +164,24 @@ export async function processInboundMessage(
     text: string;
     payload: string;
     wamid?: string;
-    imageId?: string;
-    imageCaption?: string;
+    // Any attachment: photo, voice note, video, document, sticker. One shape
+    // because Meta uses one shape — only the key it hangs under differs, and
+    // the webhook has already resolved that.
+    mediaId?: string;
+    mediaCaption?: string;
+    mediaFileName?: string;
+    // Meta declares this on the webhook itself, so the row can record WHAT
+    // arrived before the bytes do. That is the difference between a failed
+    // download leaving "a voice message we could not load" and leaving a
+    // blank bubble that reads as "the customer sent nothing".
+    mediaContentType?: string;
+    // Meta's own word for the message type. Only consulted for the types we
+    // cannot fetch (a location, a contact card) so the bubble names them
+    // rather than arriving empty.
+    messageType?: string;
+    // A reaction on one of OUR messages. Not a message of its own — see the
+    // branch below.
+    reaction?: { targetWamid: string; emoji: string };
     // Unset = cloud, which is what the Meta caller passes by omission.
     lane?: "cloud" | "evolution";
   },
@@ -140,8 +191,8 @@ export async function processInboundMessage(
     .query("customers")
     .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
     .unique();
-  const image = args.imageId
-    ? { id: args.imageId, caption: args.imageCaption }
+  const media = args.mediaId
+    ? { id: args.mediaId, caption: args.mediaCaption }
     : undefined;
   const message = { id: args.wamid };
 
@@ -167,22 +218,73 @@ export async function processInboundMessage(
     });
   }
 
+  // A reaction writes ONTO the message it belongs to and then stops. It is
+  // not a row: a bubble whose entire content is "somebody put an emoji
+  // somewhere" is the noise this replaces. It does not wake the chat agent
+  // and it does not alert the staff either — a thumbs-up is an
+  // acknowledgement, and paging someone for it teaches them to ignore the
+  // alerts that matter.
+  //
+  // It IS an inbound signal, so the window stamp below still fires: a person
+  // who reacts has engaged with the thread, whether or not they typed.
+  if (args.reaction) {
+    const target = await ctx.db
+      .query("messages")
+      .withIndex("by_wamid", (q) => q.eq("wamid", args.reaction!.targetWamid))
+      .first();
+    if (!target) {
+      // A message we never stored — sent from the shop's own handset, or
+      // older than this lane. There is nothing to hang the emoji on, and a
+      // free-floating one is exactly the noise being removed.
+      console.warn(`wa reaction: no message for wamid ${args.reaction.targetWamid}`);
+    } else if (target.orgId !== orgId) {
+      // A wamid is globally unique so this should be unreachable, but the
+      // alternative to checking is writing one salon's customer's emoji onto
+      // another salon's conversation.
+      console.warn(`wa reaction: wamid ${args.reaction.targetWamid} belongs to another org`);
+    } else {
+      // Patching to undefined DELETES the field, which is exactly right for
+      // a reaction that was taken back — Meta signals that with an empty
+      // emoji, not with a separate event.
+      await ctx.db.patch(target._id, {
+        reactionEmoji: args.reaction.emoji || undefined,
+      });
+    }
+    await ctx.db.patch(contactId, {
+      lastInboundAt: Date.now(),
+      lastInboundLane: args.lane ?? "cloud",
+    });
+    return;
+  }
+
   const loggedId = await logInboundRow(ctx, {
     orgId,
     customerId: contactId,
-    body: payload || text || image?.caption || "",
+    // A caption is real words the customer typed beside the photo, so it is
+    // the body. Failing all three, a type we cannot fetch names itself —
+    // otherwise a shared location lands as an empty bubble, which renders as
+    // "template message" and tells the salon a lie about what happened.
+    body:
+      payload ||
+      text ||
+      media?.caption ||
+      (!media && args.messageType && args.messageType !== "text"
+        ? `[${args.messageType}]`
+        : ""),
     wamid: message.id as string | undefined,
-    mediaPending: Boolean(image?.id),
+    mediaPending: Boolean(media?.id),
+    mediaContentType: args.mediaContentType,
+    mediaFileName: args.mediaFileName,
     lane: args.lane,
   });
   // Scheduled, not awaited: Meta retries a webhook that does not get a
   // fast 200, so two network round-trips inside this handler would
   // turn one slow image into duplicate deliveries of the message.
-  if (image?.id) {
+  if (media?.id) {
     await ctx.scheduler.runAfter(0, internal.wa.downloadInboundMedia, {
       orgId,
       messageId: loggedId,
-      mediaId: image.id,
+      mediaId: media.id,
     });
   }
   // Opens Meta's 24h session window for any future free-form reply, and

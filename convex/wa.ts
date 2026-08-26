@@ -20,6 +20,7 @@ import { resolveWaAccount } from "./lib/platformConfig";
 import {
   fetchWaMedia,
   sendWaCloudImage,
+  sendWaCloudReaction,
   sendWaCloudTemplate,
   sendWaCloudText,
 } from "./lib/waCloud";
@@ -35,7 +36,7 @@ import {
   loadEvolutionCreds,
 } from "./lib/waLane";
 import { isDemo } from "./demo";
-import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
+import { EVOLUTION_NO_MEDIA, EVOLUTION_NO_REACTION } from "./lib/sendFailure";
 import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
 import { resolvePublicPhone } from "./lib/publicPhone";
@@ -270,6 +271,125 @@ export const sendSession = action({
     // retried. The caller still gets the reason back — someone typed this
     // message and is watching for it to land.
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+// ---- Reactions ----
+//
+// Reacting is the cheapest honest answer a busy salon has. "Görüldü, tamam"
+// costs a message and reopens nothing; a thumbs-up on the customer's own line
+// says the same thing and reads, on their phone, exactly like a person picking
+// up the message — because that is what it is.
+//
+// Only INBOUND rows can be reacted to. That is not a Meta rule; it is what
+// keeps messages.reactionEmoji unambiguous — one field, and direction says
+// whose emoji is in it. Reacting to our own outbound message would overwrite
+// whatever the customer put there.
+
+export const loadReactionTarget = internalQuery({
+  args: { messageId: v.id("messages") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    // requireOrg, unlike the webhook-triggered loaders in this file: the
+    // caller is a signed-in person clicking an emoji, and the org has to come
+    // from their session rather than from the row they named.
+    const { orgId } = await requireOrg(ctx);
+    const message = await ctx.db.get(args.messageId);
+    if (!message || message.orgId !== orgId) return null;
+    if (!message.customerId) return null;
+    const customer = await ctx.db.get(message.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    const org = await ctx.db.get(orgId);
+    const waAccount = await resolveWaAccount(
+      ctx,
+      await ctx.db
+        .query("waAccounts")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .unique(),
+    );
+    return { message, customer, org, waAccount };
+  },
+});
+
+export const setReaction = internalMutation({
+  args: { messageId: v.id("messages"), emoji: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Patching to undefined DELETES the field, which is what taking a
+    // reaction back means.
+    await ctx.db.patch(args.messageId, { reactionEmoji: args.emoji || undefined });
+    return null;
+  },
+});
+
+export const reactToMessage = action({
+  args: {
+    messageId: v.id("messages"),
+    // Empty removes the reaction — Meta has no separate unreact call, it is
+    // the same request with an empty emoji.
+    emoji: v.string(),
+  },
+  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
+  // Annotated for the same reason as sendSession: this handler calls
+  // internal.wa.* from the file that defines them, and without a written
+  // return type the inference runs back through the generated api and lands
+  // on itself.
+  handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
+    const target = await ctx.runQuery(internal.wa.loadReactionTarget, {
+      messageId: args.messageId,
+    });
+    if (!target) return { ok: false, reason: "not-found" };
+    const { message, customer, org, waAccount } = target;
+    if (message.direction !== "in") return { ok: false, reason: "not-inbound" };
+    if (!message.wamid) {
+      // A row imported from the salon's old phone, or one that predates the
+      // Cloud lane. There is no message id at Meta to attach an emoji to.
+      return { ok: false, reason: "no-wamid" };
+    }
+    if (org && (org.status ?? "active") === "suspended") {
+      return { ok: false, reason: "org-suspended" };
+    }
+    // The demo org has no credentials by design, and a demo thread that
+    // refuses to react would read as the feature being broken.
+    if (isDemo(org)) {
+      await ctx.runMutation(internal.wa.setReaction, {
+        messageId: args.messageId,
+        emoji: args.emoji,
+      });
+      return { ok: true };
+    }
+    // Evolution is a linked handset over Baileys and reacting through it needs
+    // the full message key, which this lane never stored. Said out loud rather
+    // than written locally and called a success: an emoji that appears in the
+    // salon's thread and nowhere on the customer's phone is worse than a
+    // button that admits it cannot.
+    if (message.lane === "evolution") {
+      return { ok: false, reason: EVOLUTION_NO_REACTION };
+    }
+    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+    if (
+      !customer.lastInboundAt ||
+      Date.now() - customer.lastInboundAt > SESSION_WINDOW_MS
+    ) {
+      return { ok: false, reason: "session-window-closed" };
+    }
+    const result = await sendWaCloudReaction({
+      accessToken: waAccount.accessToken,
+      phoneNumberId: waAccount.phoneNumberId,
+      to: customer.phone,
+      wamid: message.wamid,
+      emoji: args.emoji,
+    });
+    // Written only after Meta takes it. The alternative — write first, roll
+    // back on failure — puts an emoji on the salon's screen that the customer
+    // never saw, and a reaction is precisely the kind of small signal nobody
+    // goes back to verify.
+    if (!result.ok) return { ok: false, reason: result.reason };
+    await ctx.runMutation(internal.wa.setReaction, {
+      messageId: args.messageId,
+      emoji: args.emoji,
+    });
+    return { ok: true };
   },
 });
 
@@ -983,11 +1103,15 @@ export const accountForOrg = internalQuery({
   },
 });
 
-// ---- Inbound image download ----
+// ---- Inbound media download ----
+//
+// Every attachment, not just photos: a voice note is a reply somebody spoke
+// instead of typing, and a price list a supplier sends back is a document the
+// salon needs to open.
 //
 // Scheduled by the webhook, never awaited by it. Meta retries a webhook it
 // does not get a fast 200 for, so doing two network round-trips inside the
-// handler would turn one slow image into duplicate deliveries of the whole
+// handler would turn one slow download into duplicate deliveries of the whole
 // message.
 export const downloadInboundMedia = internalAction({
   args: {
@@ -1022,6 +1146,7 @@ export const downloadInboundMedia = internalAction({
     await ctx.runMutation(internal.messages.attachMedia, {
       messageId: args.messageId,
       storageId,
+      contentType: media.contentType,
     });
     return null;
   },

@@ -22,6 +22,8 @@ import {
   CallTranscript,
   humanizeCallEnd,
 } from "./CallDetail";
+import { MessageMedia } from "./MessageMedia";
+import { EmojiPicker } from "./EmojiPicker";
 
 // The header row above the feed has to sit in the same column as the feed, or
 // the primary button (Place call, Compose) hangs past the right edge of the
@@ -83,6 +85,10 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "missing-email": "error.missing-email",
   "no-from-address": "error.no-from-address",
   "email-not-configured": "error.email-not-configured",
+  // Reactions.
+  "evolution-no-reaction": "error.evolution-no-reaction",
+  "no-wamid": "error.no-wamid",
+  "reaction-failed": "message.reactionFailed",
 };
 
 // WhatsApp's own delivery language, because it is the one the salon already
@@ -194,6 +200,7 @@ export function ConversationPanel({
         : ("answering" as const)
       : null;
   const sendSession = useAction(api.wa.sendSession);
+  const react = useAction(api.wa.reactToMessage);
   // Placing a call is owner-only server-side (requireOwner inside testCall), so
   // the agent list is too — for staff this resolves to undefined and the button
   // never appears rather than appearing and failing.
@@ -1093,6 +1100,18 @@ export function ConversationPanel({
           return (
             <Fragment key={item.id}>
             {daySeparator}
+            {/* The row, not the bubble: a bubble that has to carry a
+                reaction pill under it and a react button beside it is two
+                more things than a bubble can be, and stacking them inside
+                would push the emoji over the timestamp. `group` is what lets
+                the button appear on hover of the whole row, which is where a
+                pointer actually is when someone decides to react. */}
+            <div
+              className={`group flex items-end gap-1 ${
+                outbound ? "flex-row-reverse" : ""
+              }`}
+            >
+            <div className="flex max-w-[78%] flex-col">
             <div
               // Ours right and green, theirs left and white — the arrangement
               // every WhatsApp user already reads without being taught. The
@@ -1107,9 +1126,14 @@ export function ConversationPanel({
               // of on a line of its own underneath, which is what every
               // messenger does and what stopped these bubbles from being
               // twice as tall as they needed to be.
-              className={`flex w-fit max-w-[78%] items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-[var(--bubble-shadow)] ${
+              //
+              // The cap moved to the column above (a reaction pill has to be
+              // able to sit under the bubble and be measured against the same
+              // 78%), and ml-auto went with it — the row is reversed for our
+              // own messages, which right-aligns the whole group.
+              className={`flex w-fit max-w-full items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-[var(--bubble-shadow)] ${
                 outbound
-                  ? "ml-auto rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
+                  ? "self-end rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
                   : "rounded-bl-sm bg-[var(--card)]"
               } ${
                 // A send that never left keeps its side and its colour and
@@ -1141,29 +1165,30 @@ export function ConversationPanel({
               {item.emailSubject && (
                 <p className="mb-1 font-semibold">{item.emailSubject}</p>
               )}
-              {/* The picture IS the message when a customer sends one — "this
-                  is the colour I want" — so it leads, capped rather than
-                  stretched: a portrait photo blown to bubble width pushes
-                  everything else off the screen. */}
-              {item.mediaUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={item.mediaUrl}
-                  alt=""
-                  className="mb-1 max-h-52 w-auto max-w-[15rem] rounded-lg object-contain"
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none";
-                  }}
-                />
-              )}
-              {item.mediaPending && (
+              {item.mediaPending ? (
                 // The row exists before the bytes do. A placeholder says
-                // "there is a picture coming"; nothing at all says the
-                // customer sent an empty message.
+                // "there is a file coming"; nothing at all says the customer
+                // sent an empty message.
                 <span className="mb-1 flex h-24 w-40 animate-pulse items-center justify-center rounded-lg bg-[var(--muted-bg)] text-[11px] text-[var(--muted)]">
-                  {t("message.imageLoading")}
+                  {t("message.mediaLoading")}
                 </span>
-              )}
+              ) : item.mediaUrl || item.mediaContentType ? (
+                // A photo IS the message when a customer sends one — "this is
+                // the colour I want" — so it leads, capped rather than
+                // stretched: a portrait blown to bubble width pushes
+                // everything else off the screen. A voice note and a document
+                // lead for the same reason, in the shapes they need.
+                //
+                // Reached with no mediaUrl when the download failed or the
+                // file was over the ceiling; MessageMedia then names what was
+                // sent instead of rendering an empty bubble.
+                <MessageMedia
+                  url={item.mediaUrl}
+                  contentType={item.mediaContentType}
+                  fileName={item.mediaFileName}
+                  imgClassName="mb-1 max-h-52 w-auto max-w-[15rem] rounded-lg object-contain"
+                />
+              ) : null}
               {/* The sender's own markup, sanitised, but ONLY inside an open
                   thread. In a list a formatted email is a wall; the flattened
                   text below is what belongs there. */}
@@ -1219,6 +1244,63 @@ export function ConversationPanel({
                   </>
                 )}
               </p>
+            </div>
+            {/* The reaction, hung off the bubble's bottom corner the way
+                WhatsApp hangs it. Pulled up into the bubble's edge rather than
+                sitting on its own line: a full line per emoji would double the
+                height of a thread where people mostly answer with one. */}
+            {item.reactionEmoji && (
+              <span
+                className={`z-10 -mt-2 w-fit rounded-full border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[13px] leading-none shadow-sm ${
+                  outbound ? "mr-2 self-end" : "ml-2"
+                }`}
+                // Whose emoji it is follows from the side it hangs on, but a
+                // screen reader has no sides.
+                title={(outbound && contactName) || undefined}
+              >
+                {item.reactionEmoji}
+              </span>
+            )}
+            </div>
+            {/* Reacting is the cheapest honest answer a busy salon has, and it
+                is only offered on the customer's own lines: one emoji field per
+                message, and reacting to ourselves would overwrite theirs.
+                Quiet-but-present on a phone, hover-revealed on a pointer — the
+                staff reading this are on their phones half the time, and a
+                control that only exists on hover does not exist there. */}
+            {canCompose &&
+              item.channel === "whatsapp" &&
+              item.direction === "in" && (
+                <EmojiPicker
+                  title={t("message.react")}
+                  className="mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] opacity-60 transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] sm:opacity-0 sm:group-hover:opacity-100"
+                  onPick={async (emoji) => {
+                    setSendError(null);
+                    const result = await react({
+                      messageId: item.id as Id<"messages">,
+                      // Clicking the emoji already on the message takes it
+                      // back, which is the same gesture WhatsApp uses and the
+                      // only way to remove one without a second control.
+                      emoji: item.reactionEmoji === emoji ? "" : emoji,
+                    });
+                    if (!result.ok) setSendError(result.reason ?? "reaction-failed");
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+                    <path d="M9 9.5h.01M15 9.5h.01" />
+                  </svg>
+                </EmojiPicker>
+              )}
             </div>
             </Fragment>
           );
@@ -1340,9 +1422,43 @@ export function ConversationPanel({
               disabled={!composerLive || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
             />
-            {/* Inside the same pill as the clock: both are secondary actions
-                on the message you are writing, and giving either its own
-                surface outside the pill turns a chat box back into a form. */}
+            {/* Inside the same pill as the clock: all three are secondary
+                actions on the message you are writing, and giving any of them
+                its own surface outside the pill turns a chat box back into a
+                form. Emoji first, because it is the one that edits the text
+                rather than adding something beside it — and because it is
+                where every other composer in this app already keeps it
+                (CampaignsView, RemindersView, EmailBodyEditor). */}
+            <EmojiPicker
+              title={t("editor.insertEmoji")}
+              disabled={!composerLive || sending}
+              className="shrink-0 self-center rounded-full p-2 text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
+              onPick={(emoji) => {
+                // At the cursor, not appended: someone who went back to fix a
+                // word and then reached for an emoji means it to land there.
+                const field = composerRef.current;
+                if (!field) {
+                  setDraft((prev) => prev + emoji);
+                  return;
+                }
+                const at = field.selectionStart ?? field.value.length;
+                const end = field.selectionEnd ?? at;
+                setDraft(field.value.slice(0, at) + emoji + field.value.slice(end));
+                // Restored after React has painted the new value, or the
+                // caret snaps to the end of the box and the next emoji lands
+                // somewhere the writer did not ask for.
+                requestAnimationFrame(() => {
+                  field.focus();
+                  field.setSelectionRange(at + emoji.length, at + emoji.length);
+                });
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+                <path d="M9 9.5h.01M15 9.5h.01" />
+              </svg>
+            </EmojiPicker>
             <button
               type="button"
               onClick={() => setAttaching((prev) => !prev)}

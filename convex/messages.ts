@@ -271,10 +271,15 @@ export async function logInboundRow(
     customerId?: Id<"customers">;
     body?: string;
     wamid?: string;
-    // Set when the message carried an image. The row lands immediately with
-    // the caption and a pending flag; the bytes follow from an action,
+    // Set when the message carried an attachment. The row lands immediately
+    // with the caption and a pending flag; the bytes follow from an action,
     // because a mutation cannot reach Meta.
     mediaPending?: boolean;
+    // What Meta said the attachment IS, recorded at arrival rather than at
+    // download. A download that fails then still leaves a row that knows a
+    // voice note was sent, instead of a blank one.
+    mediaContentType?: string;
+    mediaFileName?: string;
     // Which lane carried it. Unset = cloud.
     lane?: "cloud" | "evolution";
   },
@@ -289,21 +294,29 @@ export async function logInboundRow(
     status: "received",
     ...(args.lane ? { lane: args.lane } : {}),
     ...(args.mediaPending ? { mediaPending: true } : {}),
+    ...(args.mediaContentType ? { mediaContentType: args.mediaContentType } : {}),
+    ...(args.mediaFileName ? { mediaFileName: args.mediaFileName } : {}),
   });
 }
 
-// The image, once the action has it. Clears the pending flag in the same
-// write, so a row is never both pending and complete.
+// The file, once the action has it. Clears the pending flag in the same write,
+// so a row is never both pending and complete.
 export const attachMedia = internalMutation({
   args: {
     messageId: v.id("messages"),
     storageId: v.optional(v.id("_storage")),
+    // Meta's media LOOKUP is more authoritative than the webhook's summary,
+    // so a type that arrives here wins over the one recorded at arrival.
+    // Optional because a failed download has nothing better to offer and must
+    // not erase what the webhook already told us.
+    contentType: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.patch(args.messageId, {
       mediaStorageId: args.storageId,
       mediaPending: undefined,
+      ...(args.contentType ? { mediaContentType: args.contentType } : {}),
     });
     return null;
   },
@@ -376,11 +389,20 @@ const feedItem = v.object({
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
   emailHtml: v.optional(v.string()),
-  // A signed URL for the stored image, minted per read. The storage id itself
+  // A signed URL for the stored file, minted per read. The storage id itself
   // never reaches the client — it is a handle to a file, and a URL is what a
   // browser can actually render.
   mediaUrl: v.optional(v.string()),
   mediaPending: v.optional(v.boolean()),
+  // What the file IS, which decides whether the bubble paints a picture,
+  // draws a player, or offers a chip to open. Carried even when mediaUrl is
+  // absent: a download that failed still knows a voice note was sent, and
+  // saying so beats an empty bubble.
+  mediaContentType: v.optional(v.string()),
+  mediaFileName: v.optional(v.string()),
+  // The emoji reacted to this message. Whose it is follows from direction —
+  // on our outbound row it is the customer's, on their inbound row it is ours.
+  reactionEmoji: v.optional(v.string()),
   // Set while a send is waiting for its moment. The bubble counts down to it
   // and can be cancelled until the cron picks it up.
   scheduledFor: v.optional(v.number()),
@@ -455,6 +477,9 @@ export const feedForCustomer = query({
         emailHtml: m.emailHtml,
         mediaUrl: mediaUrls.get(m._id as string),
         mediaPending: m.mediaPending,
+        mediaContentType: m.mediaContentType,
+        mediaFileName: m.mediaFileName,
+        reactionEmoji: m.reactionEmoji,
         scheduledFor: m.scheduledFor,
       })),
       ...calls.map((c) => ({
@@ -505,6 +530,12 @@ export type ConversationEntry = {
   at: number;
   direction: "in" | "out";
   body?: string;
+  // What the attachment IS, when the entry has one. Carried so a preview can
+  // say "Voice message" for a row whose whole content is a recording — with
+  // no body at all such a row previewed as "template message", which named
+  // the one thing it definitely was not.
+  mediaContentType?: string;
+  mediaFileName?: string;
   failed: boolean;
 };
 
@@ -557,6 +588,8 @@ export async function conversationEntries(
       at: m.occurredAt ?? m._creationTime,
       direction: m.direction,
       body: m.body,
+      mediaContentType: m.mediaContentType,
+      mediaFileName: m.mediaFileName,
       failed: m.status === "failed",
     });
   }
@@ -922,6 +955,11 @@ export const conversations = query({
       email: v.optional(v.string()),
       lastAt: v.number(),
       lastBody: v.optional(v.string()),
+      // Set when the previewed row's content is an attachment. The LABEL is
+      // the client's to write — it is one of three words and they have to be
+      // in the reader's language, which the dictionary in src/lib/i18n.ts owns.
+      lastMediaContentType: v.optional(v.string()),
+      lastMediaFileName: v.optional(v.string()),
       lastDirection: v.union(v.literal("out"), v.literal("in")),
       // The last thing that HAPPENED, which can be a form arrival. Distinct
       // from awaitingChannels below, which is only ever real channels because
@@ -994,6 +1032,8 @@ export const conversations = query({
         email: customer.email,
         lastAt: summary.last.at,
         lastBody: summary.last.body,
+        lastMediaContentType: summary.last.mediaContentType,
+        lastMediaFileName: summary.last.mediaFileName,
         lastDirection: summary.last.direction,
         lastChannel: summary.last.channel,
         lastId: summary.last.id,

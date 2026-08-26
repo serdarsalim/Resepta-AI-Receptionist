@@ -1527,6 +1527,25 @@ export default defineSchema({
     // lands. A row that is waiting shows a placeholder instead of nothing,
     // which is the difference between "loading" and "we lost it".
     mediaPending: v.optional(v.boolean()),
+    // What KIND of file landed, as Meta declared it. Not derivable from the
+    // storage id — a Convex storage URL is extensionless — and it is the
+    // single fact that decides whether the bubble paints a picture, draws a
+    // voice player, or offers a file to open. Rows predating attachments
+    // other than images carry none, and those were all images.
+    mediaContentType: v.optional(v.string()),
+    // Document-only, and only when the sender's own file had a name. A voice
+    // note has none (Meta sends none, because a recording is not a file
+    // somebody named), which is exactly how the renderer tells a recorded
+    // note from an audio file someone picked off their phone.
+    mediaFileName: v.optional(v.string()),
+    // The emoji reacted to THIS message, if any. Direction says who put it
+    // there: a reaction on an outbound row is the customer's, one on an
+    // inbound row is ours. One emoji, last one wins — WhatsApp allows a
+    // person only one reaction per message, and replacing it sends a fresh
+    // event. UNSET means no reaction, which is also what taking one back
+    // writes (an empty emoji arrives, and patching to undefined deletes the
+    // field).
+    reactionEmoji: v.optional(v.string()),
     // When this should go out. Unset = send now. A row that carries one sits
     // at status "queued" until the cron reaches it, and can be cancelled up
     // to the moment it does.

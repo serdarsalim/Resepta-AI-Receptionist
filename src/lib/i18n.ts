@@ -829,6 +829,16 @@ const dictionary = {
     en: "No sender address set (Business settings)",
     de: "Keine Absenderadresse hinterlegt (Betriebseinstellungen)",
   },
+  "error.evolution-no-reaction": {
+    tr: "Tepkiler yalnızca Meta numarasından gönderilebilir.",
+    en: "Reactions can only be sent from the Meta number.",
+    de: "Reaktionen können nur über die Meta-Nummer gesendet werden.",
+  },
+  "error.no-wamid": {
+    tr: "Bu mesaja tepki verilemiyor.",
+    en: "This message can't be reacted to.",
+    de: "Auf diese Nachricht kann nicht reagiert werden.",
+  },
   "error.email-not-configured": {
     tr: "E-posta bağlı değil",
     en: "Email is not connected",
@@ -1067,10 +1077,25 @@ const dictionary = {
     en: "not sent",
     de: "nicht gesendet",
   },
-  "message.imageLoading": {
-    tr: "Görsel yükleniyor…",
-    en: "Loading image…",
-    de: "Bild wird geladen…",
+  "message.react": { tr: "Tepki ver", en: "React", de: "Reagieren" },
+  "message.reactionRemove": {
+    tr: "Tepkiyi kaldır",
+    en: "Remove reaction",
+    de: "Reaktion entfernen",
+  },
+  // Why a reaction refused to send. The window is Meta's rule, not ours, and
+  // the person clicking an emoji deserves the reason rather than a shrug.
+  "message.reactionFailed": {
+    tr: "Tepki gönderilemedi.",
+    en: "The reaction could not be sent.",
+    de: "Die Reaktion konnte nicht gesendet werden.",
+  },
+  // Any attachment, not only a photo — the row exists before the bytes do
+  // whatever kind of file is on its way.
+  "message.mediaLoading": {
+    tr: "Dosya yükleniyor…",
+    en: "Loading attachment…",
+    de: "Anhang wird geladen…",
   },
   "message.scheduleAt": {
     tr: "Sonra gönder",
@@ -4054,6 +4079,28 @@ const dictionary = {
     tr: "Bu görsel gönderilmiş bir mesajda var, silinemez.",
     en: "This image is in a message already sent, so it can't be deleted.",
     de: "Dieses Bild steht in einer bereits gesendeten Nachricht und kann nicht gelöscht werden.",
+  },
+
+  // What arrived, in one word, for the surfaces that cannot show the thing
+  // itself — an inbox line, a failed download's bubble. WhatsApp's own Turkish
+  // wording, because the salon reads this next to the app it already uses.
+  "media.kind.image": { tr: "Fotoğraf", en: "Photo", de: "Foto" },
+  "media.kind.voice": { tr: "Sesli mesaj", en: "Voice message", de: "Sprachnachricht" },
+  "media.kind.audio": { tr: "Ses dosyası", en: "Audio file", de: "Audiodatei" },
+  "media.kind.video": { tr: "Video", en: "Video", de: "Video" },
+  "media.kind.document": { tr: "Belge", en: "Document", de: "Dokument" },
+  "media.openHint": {
+    tr: "yeni sekmede açılır",
+    en: "opens in a new tab",
+    de: "öffnet in neuem Tab",
+  },
+  // The download failed or the file was over the ceiling. Naming what it WAS
+  // is the whole point — "a voice message we could not load" is a thing the
+  // salon can act on (open WhatsApp on the phone), a blank bubble is not.
+  "media.unavailable": {
+    tr: "yüklenemedi",
+    en: "could not be loaded",
+    de: "konnte nicht geladen werden",
   },
 
   // Activity log. The kind labels are written as things that HAPPENED, not as

@@ -182,6 +182,43 @@ export async function sendWaCloudImage(args: {
   );
 }
 
+// ---- Reactions ----
+//
+// A reaction is a message to Meta like any other, so it obeys the same 24h
+// session window — which is fine, because the only thing you can react to is
+// something the customer just sent you.
+//
+// An EMPTY emoji is how a reaction is taken back. Meta has no separate
+// "unreact" call; sending the same reaction object with emoji: "" removes it.
+export function waCloudReactionPayload(
+  to: string,
+  wamid: string,
+  emoji: string,
+): Record<string, unknown> {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "reaction",
+    reaction: { message_id: wamid, emoji },
+  };
+}
+
+export async function sendWaCloudReaction(args: {
+  accessToken: string;
+  phoneNumberId: string;
+  to: string;
+  // The wamid of the message being reacted to, not of the reaction.
+  wamid: string;
+  emoji: string;
+}): Promise<WaCloudSendResult> {
+  return postWaCloud(
+    args.accessToken,
+    args.phoneNumberId,
+    waCloudReactionPayload(args.to, args.wamid, args.emoji),
+  );
+}
+
 // ---- Inbound media ----
 //
 // Meta hands the webhook a media ID, not the bytes, and the download is TWO
@@ -189,6 +226,14 @@ export async function sendWaCloudImage(args: {
 // request carrying the access token. Both are why the image has to be pulled
 // into our own storage rather than linked — a Meta media URL is a broken
 // image by the next morning, and the token can never reach a browser.
+// Meta's own ceilings run to 100 MB for a document and 16 MB for a video.
+// This is the ceiling on what an ACTION will pull into memory and what the
+// salon will be charged to store — a file over it keeps its row and its type
+// (so the bubble still says a video arrived) and simply has no bytes behind
+// it. Checked twice: file_size is Meta's claim before the download, and the
+// real byte count is the fact after it.
+const MAX_INBOUND_MEDIA_BYTES = 20 * 1024 * 1024;
+
 export async function fetchWaMedia(args: {
   accessToken: string;
   mediaId: string;
@@ -198,17 +243,30 @@ export async function fetchWaMedia(args: {
       headers: { authorization: `Bearer ${args.accessToken}` },
     });
     if (!lookup.ok) return null;
-    const meta = (await lookup.json()) as { url?: string; mime_type?: string };
+    const meta = (await lookup.json()) as {
+      url?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
     if (!meta.url) return null;
+    if (meta.file_size && meta.file_size > MAX_INBOUND_MEDIA_BYTES) return null;
     const file = await fetch(meta.url, {
       headers: { authorization: `Bearer ${args.accessToken}` },
     });
     if (!file.ok) return null;
-    const blob = await file.blob();
-    return {
-      blob,
-      contentType: meta.mime_type ?? blob.type ?? "application/octet-stream",
-    };
+    const bytes = await file.arrayBuffer();
+    if (bytes.byteLength > MAX_INBOUND_MEDIA_BYTES) return null;
+    // Rebuilt with Meta's declared type rather than handed through from
+    // file.blob(): the STORED content type is what decides whether a browser
+    // plays the thing or downloads it, and the CDN's own header is not always
+    // the honest answer (voice notes come back as application/octet-stream
+    // often enough to matter).
+    const contentType =
+      meta.mime_type ?? file.headers.get("content-type") ?? "application/octet-stream";
+    // Meta appends codec parameters — "audio/ogg; codecs=opus". Convex stores
+    // the string verbatim and the browser is happier with the bare type.
+    const bare = contentType.split(";")[0].trim();
+    return { blob: new Blob([bytes], { type: bare }), contentType: bare };
   } catch {
     return null;
   }

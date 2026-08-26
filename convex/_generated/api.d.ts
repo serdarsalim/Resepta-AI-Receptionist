@@ -54,6 +54,7 @@ import type * as lib_industryPresets from "../lib/industryPresets.js";
 import type * as lib_keys from "../lib/keys.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
+import type * as lib_mediaKind from "../lib/mediaKind.js";
 import type * as lib_members from "../lib/members.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_money from "../lib/money.js";
@@ -165,6 +166,7 @@ declare const fullApi: ApiFromModules<{
   "lib/keys": typeof lib_keys;
   "lib/llm": typeof lib_llm;
   "lib/mcpProtocol": typeof lib_mcpProtocol;
+  "lib/mediaKind": typeof lib_mediaKind;
   "lib/members": typeof lib_members;
   "lib/metaSig": typeof lib_metaSig;
   "lib/money": typeof lib_money;

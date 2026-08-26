@@ -18,9 +18,21 @@ const PANEL_H = 400;
 export function EmojiPicker({
   onPick,
   title,
+  children,
+  className,
+  disabled,
 }: {
   onPick: (emoji: string) => void;
   title: string;
+  // The trigger's face. Defaults to the bordered pill the composer toolbars
+  // use; a message bubble's react button passes its own icon and classes,
+  // because a toolbar pill floating beside a bubble reads as a second
+  // message rather than as an affordance belonging to the one below it.
+  children?: React.ReactNode;
+  className?: string;
+  // Composers gate every other control on whether a message can be sent at
+  // all; without this the emoji button stayed live over a disabled textarea.
+  disabled?: boolean;
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -72,10 +84,14 @@ export function EmojiPicker({
         type="button"
         title={title}
         aria-label={title}
+        disabled={disabled}
         onClick={() => (pos ? setPos(null) : openPanel())}
-        className="inline-flex items-center rounded-full border border-[var(--border)] px-2 py-0.5 text-sm leading-none transition-colors hover:bg-[var(--muted-bg)]"
+        className={
+          className ??
+          "inline-flex items-center rounded-full border border-[var(--border)] px-2 py-0.5 text-sm leading-none transition-colors hover:bg-[var(--muted-bg)]"
+        }
       >
-        🙂
+        {children ?? "🙂"}
       </button>
       {pos &&
         typeof document !== "undefined" &&
