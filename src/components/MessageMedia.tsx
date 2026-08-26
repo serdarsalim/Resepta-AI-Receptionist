@@ -9,7 +9,8 @@
 // bubble that says nothing arrived at all. That was the old behaviour for
 // every attachment a salon receives which is not a photo.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   isRenderableImage,
   mediaKindOf,
@@ -40,6 +41,11 @@ export function MessageMedia({
   // back to the chip, where the recording can at least be downloaded and
   // played locally.
   const [audioFailed, setAudioFailed] = useState(false);
+  // A photo in a bubble is capped at 208px so a portrait shot does not push
+  // the conversation off the screen — which makes "this is the colour I want",
+  // the single most common thing a salon is sent, unreadable at the size that
+  // matters. Clicking opens it properly.
+  const [zoomed, setZoomed] = useState(false);
   const { t } = useLanguage();
 
   const kind = mediaKindOf(url ?? "", fileName, contentType);
@@ -58,15 +64,19 @@ export function MessageMedia({
 
   if (isRenderableImage(contentType, fileName, url)) {
     return (
-      /* eslint-disable-next-line @next/next/no-img-element */
-      <img
-        src={url}
-        alt={label}
-        className={imgClassName}
-        onError={(event) => {
-          event.currentTarget.style.display = "none";
-        }}
-      />
+      <>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={label}
+          onClick={() => setZoomed(true)}
+          className={`${imgClassName ?? ""} cursor-zoom-in`}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+        />
+        {zoomed && <Lightbox url={url} alt={label} onClose={() => setZoomed(false)} />}
+      </>
     );
   }
 
@@ -135,5 +145,57 @@ export function MessageMedia({
         </span>
       </span>
     </a>
+  );
+}
+
+// The opened photo. A portal because a bubble sits inside two overflow-hidden
+// scrollers, and a fixed child of one is still clipped by it.
+function Lightbox({
+  url,
+  alt,
+  onClose,
+}: {
+  url: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      // Anywhere closes it, which is what every photo viewer trains people to
+      // expect. The image itself stops the click so dragging to look at a
+      // detail does not dismiss the thing being looked at.
+      onClick={onClose}
+      role="presentation"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={alt}
+        onClick={(event) => event.stopPropagation()}
+        className="max-h-full max-w-full cursor-default rounded-lg object-contain shadow-2xl"
+      />
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+        // Full resolution in its own tab, and the only route to saving it —
+        // the overlay swallows the right-click menu people reach for first.
+        className="absolute bottom-6 right-6 rounded-lg bg-white/15 px-3 py-1.5 text-sm text-white backdrop-blur transition-colors hover:bg-white/25"
+      >
+        ↗
+      </a>
+    </div>,
+    document.body,
   );
 }
