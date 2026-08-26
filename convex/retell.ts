@@ -62,6 +62,7 @@ const agentRow = v.object({
   inboundNumber: v.optional(v.string()),
   transferNumber: v.optional(v.string()),
   enabled: v.boolean(),
+  chatEnabled: v.optional(v.boolean()),
   connectedAt: v.number(),
 });
 
@@ -81,6 +82,7 @@ export const list = query({
       inboundNumber: a.inboundNumber,
       transferNumber: a.transferNumber,
       enabled: a.enabled,
+      chatEnabled: a.chatEnabled,
       connectedAt: a._creationTime,
     }));
   },
@@ -206,16 +208,38 @@ export const update = mutation({
     agentId: v.id("retellAgents"),
     transferNumber: v.optional(v.string()),
     enabled: v.optional(v.boolean()),
+    chatEnabled: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ownedAgent(ctx, args.agentId);
+    // Chat is a radio, not a set of switches: one conversation surface, one
+    // agent answering it. Adopting chat clears it from every other row in
+    // the same mutation — the applyLineAssignment shape, for the same
+    // reason a phone line answers as exactly one agent.
+    if (args.chatEnabled === true) {
+      const siblings = await ctx.db
+        .query("retellAgents")
+        .withIndex("by_org", (q) => q.eq("orgId", row.orgId))
+        .collect();
+      for (const sibling of siblings) {
+        if (sibling._id !== row._id && sibling.chatEnabled) {
+          await ctx.db.patch(sibling._id, { chatEnabled: undefined });
+        }
+      }
+    }
     await ctx.db.patch(row._id, {
       transferNumber:
         args.transferNumber === undefined
           ? row.transferNumber
           : args.transferNumber.trim() || undefined,
       enabled: args.enabled ?? row.enabled,
+      // True or absent, never false — one spelling of "not the chat agent"
+      // (the schema note).
+      chatEnabled:
+        args.chatEnabled === undefined
+          ? row.chatEnabled
+          : args.chatEnabled || undefined,
     });
     return null;
   },

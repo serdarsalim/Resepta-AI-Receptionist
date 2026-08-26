@@ -229,16 +229,19 @@ export const loadTurnContext = internalQuery({
 
     // ONE assistant, two lanes (docs/agent-core.md, template v4): the chat
     // system prompt composes over the salon's own Talimat — the mirror of
-    // what their voice agent runs. Freshest mirror wins, an enabled agent
-    // beats a disabled one, and an org with no mirror at all (chat-only, or
-    // an agent connected rather than born here) runs the code template in
-    // the org's language: the same document a voice agent would be born
-    // with. Read PER MESSAGE, which is the whole point — an owner's edit
-    // reaches the next WhatsApp reply with no sync and no publish.
-    const mirrored = agents
-      .filter((a) => (a.generalPrompt ?? "").trim())
-      .sort((a, b) => (b.promptMirroredAt ?? 0) - (a.promptMirroredAt ?? 0));
-    const voiceAgent = mirrored.find((a) => a.enabled) ?? mirrored[0] ?? null;
+    // what their voice agent runs. WHICH agent is the owner's explicit
+    // choice, the chat toggle on the assistants table (retellAgents
+    // .chatEnabled, a radio — retell.update). An org that HAS assistants but
+    // has pointed chat at none of them skips with a visible reason rather
+    // than guessing: the toggle is the activation, and an agent nobody chose
+    // answering customers is worse than a silence the flight recorder
+    // explains. An org with NO assistants at all (chat-only) runs the code
+    // template in the org's language — the same document a voice agent would
+    // be born with, and nothing to select between. The Talimat is read PER
+    // MESSAGE, which is the whole point: an owner's edit reaches the next
+    // WhatsApp reply with no sync and no publish.
+    const voiceAgent = agents.find((a) => a.chatEnabled === true) ?? null;
+    if (!skip && agents.length > 0 && !voiceAgent) skip = "chat-agent-not-selected";
     const voiceLanguage: VoiceAgentLanguage =
       org.language === "tr" ? "tr-TR" : org.language === "de" ? "de-DE" : "en-US";
     const voicePrompt =

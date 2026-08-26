@@ -2494,6 +2494,12 @@ const dictionary = {
     en: "On, the agent answers and books. Off keeps the connection but stops bookings; just switch it off for holidays.",
     de: "Eingeschaltet nimmt der Assistent Anrufe an und vergibt Termine. Ausgeschaltet bleibt die Verbindung bestehen, aber es wird nichts gebucht; für den Urlaub einfach ausschalten.",
   },
+  "settings.chatEnabled": { tr: "Sohbet", en: "Chat", de: "Chat" },
+  "settings.chatEnabledHint": {
+    tr: "WhatsApp sohbet asistanı bu asistanın talimatıyla yanıt verir. Sohbeti aynı anda tek asistan yürütür; birini açmak diğerini kapatır. Telefon kapalıyken de çalışır.",
+    en: "The WhatsApp chat assistant answers with this agent's instructions. Only one agent holds chat at a time; switching one on switches the other off. Works even while the phone is off.",
+    de: "Der WhatsApp-Chat-Assistent antwortet mit den Anweisungen dieses Agenten. Den Chat führt immer nur ein Agent; einen einzuschalten schaltet den anderen aus. Funktioniert auch bei ausgeschaltetem Telefon.",
+  },
   "settings.voiceArchive": { tr: "Arşivle", en: "Archive", de: "Archivieren" },
   "settings.voiceRestore": {
     tr: "Geri getir",

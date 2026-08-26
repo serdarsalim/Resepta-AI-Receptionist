@@ -738,6 +738,15 @@ export default defineSchema({
     // line is not a greeting. Injected as {{agent_name}} at ring time, so
     // renaming her takes effect on the next call with no republish.
     personaName: v.optional(v.string()),
+    // True on the ONE agent whose Talimat the WhatsApp chat lane composes
+    // over (chatAgent.loadTurnContext). At most one per org — chat is a
+    // single conversation surface and two agents answering it is not a thing
+    // — enforced as a radio in retell.update: switching an agent on switches
+    // every other row off in the same mutation. Stored as true-or-absent,
+    // never false, so there is one spelling of "not the chat agent".
+    // Independent of `enabled` above, which is the VOICE switch: a salon may
+    // run chat while the phone is off for holidays.
+    chatEnabled: v.optional(v.boolean()),
     // Whether the agent may hang up. Unset reads as ON, matching the template
     // default and what a new agent is provisioned with. Stored here so the
     // toggle can render without a provider round trip and so syncTemplate does

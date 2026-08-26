@@ -493,6 +493,18 @@ export function VoiceCard({
                     <InfoTip text={t("settings.voiceEnabledHint")} />
                   </span>
                 </th>
+                {/* Which agent answers WhatsApp — a radio wearing switch
+                    clothes: retell.update clears the mark off every other
+                    row when one adopts it, so the column can never show two
+                    checks. Separate from Enabled on purpose; that one is the
+                    VOICE switch, and a salon may run chat with the phone off
+                    for holidays. */}
+                <th className="px-2 py-2 font-medium">
+                  <span className="inline-flex items-center gap-1">
+                    {t("settings.chatEnabled")}
+                    <InfoTip text={t("settings.chatEnabledHint")} />
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -607,10 +619,19 @@ export function VoiceCard({
                         onChange={(next) => void update({ agentId: row._id, enabled: next })}
                       />
                     </td>
+                    <td className="px-2 py-2">
+                      <CheckSwitch
+                        on={row.chatEnabled === true}
+                        label={t("settings.chatEnabled")}
+                        onChange={(next) =>
+                          void update({ agentId: row._id, chatEnabled: next })
+                        }
+                      />
+                    </td>
                   </tr>
                   {openInfo === row.retellAgentId && (
                     <tr className="bg-[var(--muted-bg)]">
-                      <td colSpan={4} className="px-3 pb-3 pt-1">
+                      <td colSpan={5} className="px-3 pb-3 pt-1">
                         <div className="grid gap-4 text-xs sm:grid-cols-2">
                           <div>
                             <div className="mb-1 font-medium">
@@ -681,7 +702,7 @@ export function VoiceCard({
                     health?.needsAttention ||
                     lineErrorId === row.retellAgentId) && (
                     <tr className="border-t border-[var(--border)] bg-amber-50 dark:bg-amber-950/30">
-                      <td colSpan={4} className="px-3 py-2">
+                      <td colSpan={5} className="px-3 py-2">
                         <span className="flex flex-wrap items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                           {connectionNeedsFix && (
                             <span>
