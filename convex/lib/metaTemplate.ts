@@ -348,10 +348,18 @@ export function defaultForKey(
 // written as one paragraph sends; one written with line breaks is refused by
 // Meta with error 132000. That is a property of the campaign design, not of
 // this submission — see the note in convex/campaigns.ts.
+//
+// And the wrapper needs FLESH. The first version was three variables held
+// together by one word — "Merhaba {{1}},\n\n{{3}}\n\n{{2}}" — and Meta
+// refused it with "too many variables for its length": review enforces a
+// ratio of fixed text to parameters, precisely because an all-parameter
+// template could say anything. The greeting and the closing line below are
+// not decoration; they are the fixed text that makes the ratio pass, and
+// they conveniently give every campaign a consistent open and close.
 const CAMPAIGN_BODIES: Record<string, string> = {
-  tr: "Merhaba {{1}},\n\n{{3}}\n\n{{2}}",
-  en: "Hello {{1}},\n\n{{3}}\n\n{{2}}",
-  de: "Hallo {{1}},\n\n{{3}}\n\n{{2}}",
+  tr: "Merhaba {{1}}! {{2}} işletmesinden kısa bir haberimiz var:\n\n{{3}}\n\nSorularınız için bu mesajı yanıtlamanız yeterli.",
+  en: "Hello {{1}}! A quick note from {{2}}:\n\n{{3}}\n\nAny questions? Just reply to this message.",
+  de: "Hallo {{1}}! Eine kurze Nachricht von {{2}}:\n\n{{3}}\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
 };
 
 export const CAMPAIGN_PARAMS = ["firstName", "businessName", "campaignLine"];

@@ -1526,17 +1526,18 @@ export default function TenantPage() {
           onSave={(value) => org({ evolutionInstance: value })}
         />
         <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-          <div className="text-sm font-medium">Webhook URL</div>
+          {/* The explainer rides an (i) like every other row (Serdar,
+              2026-08-26) — inline it was a paragraph of prose sitting where
+              every other row keeps a value. */}
+          <div className="flex items-center gap-2 text-sm font-medium">
+            Webhook URL
+            <InfoTip text="No token yet, so this endpoint refuses every call. Generate one and paste the URL into Evolution's webhook settings." />
+          </div>
           <div className="min-w-0 space-y-1.5 text-xs text-[var(--muted)]">
-            {detail.evolutionWebhookToken ? (
+            {detail.evolutionWebhookToken && (
               <CopyId
                 value={`/whatsapp/evolution?token=${detail.evolutionWebhookToken}`}
               />
-            ) : (
-              <p>
-                No token yet, so this endpoint refuses every call. Generate one
-                and paste the URL into Evolution&apos;s webhook settings.
-              </p>
             )}
             <button
               type="button"
