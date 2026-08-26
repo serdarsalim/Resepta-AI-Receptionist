@@ -487,6 +487,66 @@ export function TabStrip<T extends string>({
   );
 }
 
+// A field save is a round trip that can REFUSE — setWaAccount alone throws
+// phone-number-id-required for a blank id and number-already-connected when
+// another org already holds it. Every editable row on this surface used to
+// fire the mutation and clear its draft in the same breath, so a refusal
+// rendered as the value silently reverting: the operator typed a WABA id,
+// tabbed out, and watched it vanish with nothing on screen saying why
+// (Serdar, 2026-08-26). Hold the draft until the write actually lands, and
+// put the refusal under the field it belongs to. Code-to-English follows
+// onboarding.tsx's SAVE_ERRORS shape; an unmapped throw shows raw rather
+// than being swallowed, because a message we did not anticipate is still
+// worth more than silence.
+const FIELD_SAVE_ERRORS: Record<string, string> = {
+  "phone-number-id-required":
+    "Set the phone number ID first — it is this row's identity, so nothing else in this card can save without it.",
+  "number-already-connected":
+    "Another business already uses that phone number ID.",
+  "instance-already-connected":
+    "Another business already uses that instance name.",
+  "address-taken": "Another business already uses that address.",
+  "no-such-org": "This business no longer exists.",
+};
+
+function fieldSaveError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const code = Object.keys(FIELD_SAVE_ERRORS).find((entry) =>
+    raw.includes(entry),
+  );
+  return code ? FIELD_SAVE_ERRORS[code] : raw;
+}
+
+// Resolves to whether the write landed, so each caller decides what to do with
+// its own draft — Row falls back to `current`, SecretRow blanks back to the
+// mask — and neither may do so on a refusal.
+function useFieldSave(onSave: (value: string) => unknown) {
+  const [error, setError] = useState<string | null>(null);
+  const commit = useCallback(
+    async (value: string) => {
+      try {
+        await onSave(value);
+        setError(null);
+        return true;
+      } catch (err) {
+        setError(fieldSaveError(err));
+        return false;
+      }
+    },
+    [onSave],
+  );
+  return { commit, error, clearError: useCallback(() => setError(null), []) };
+}
+
+function FieldError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="mt-0.5 text-xs text-red-600 dark:text-red-400">
+      {message}
+    </div>
+  );
+}
+
 export function Row({
   label,
   hint,
@@ -504,8 +564,21 @@ export function Row({
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const { commit, error, clearError } = useFieldSave(onSave);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
+  // Shared by both branches below: the draft survives a refusal so the
+  // operator's typing is still on screen next to the reason it was rejected.
+  const save = () => {
+    if (draft === null || draft === (current ?? "")) return;
+    void commit(draft).then((ok) => {
+      if (ok) setDraft(null);
+    });
+  };
+  const type = (next: string) => {
+    setDraft(next);
+    if (error) clearError();
+  };
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
       {/* The hint rides an (i) beside the label, same affordance as Section's
@@ -528,12 +601,8 @@ export function Row({
             <span className="shrink-0 pr-1 text-sm text-[var(--muted)]">$</span>
             <input
               value={draft ?? current ?? ""}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => {
-                if (draft === null || draft === (current ?? "")) return;
-                void onSave(draft);
-                setDraft(null);
-              }}
+              onChange={(e) => type(e.target.value)}
+              onBlur={save}
               inputMode="decimal"
               placeholder={placeholder}
               className="w-full min-w-0 border-0 bg-transparent p-0 text-sm outline-none"
@@ -542,16 +611,13 @@ export function Row({
         ) : (
           <input
             value={draft ?? current ?? ""}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-              if (draft === null || draft === (current ?? "")) return;
-              void onSave(draft);
-              setDraft(null);
-            }}
+            onChange={(e) => type(e.target.value)}
+            onBlur={save}
             placeholder={placeholder}
             className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-sm"
           />
         )}
+        <FieldError message={error} />
       </div>
     </div>
   );
@@ -584,6 +650,7 @@ export function ModelRow({
   // null = never fetched; [] = fetched and empty, with reason saying why.
   const [options, setOptions] = useState<string[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
+  const { commit, error, clearError } = useFieldSave(onSave);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   const filter = (draft ?? "").trim().toLowerCase();
@@ -610,6 +677,7 @@ export function ModelRow({
           onChange={(e) => {
             setDraft(e.target.value);
             setOpen(true);
+            if (error) clearError();
           }}
           onFocus={() => {
             fetchOnce();
@@ -618,13 +686,15 @@ export function ModelRow({
           onBlur={() => {
             setOpen(false);
             if (draft === null || draft === (current ?? "")) return;
-            void onSave(draft);
-            setDraft(null);
+            void commit(draft).then((ok) => {
+              if (ok) setDraft(null);
+            });
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
             if (e.key === "Escape") {
               setDraft(null);
+              clearError();
               setOpen(false);
             }
           }}
@@ -644,7 +714,7 @@ export function ModelRow({
                   e.preventDefault();
                   setDraft(o);
                   setOpen(false);
-                  if (o !== (current ?? "")) void onSave(o);
+                  if (o !== (current ?? "")) void commit(o);
                 }}
                 className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
               >
@@ -658,6 +728,7 @@ export function ModelRow({
             couldn&apos;t list models ({reason}) — type a name instead
           </div>
         )}
+        <FieldError message={error} />
       </div>
     </div>
   );
@@ -694,6 +765,18 @@ export function KeyModelRow({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<string[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
+  // Two halves, two independent writes, so two independent refusals — a
+  // rejected key must not blank the model's error or the other way round.
+  const {
+    commit: commitKey,
+    error: keyError,
+    clearError: clearKeyError,
+  } = useFieldSave(onSaveKey);
+  const {
+    commit: commitModel,
+    error: modelError,
+    clearError: clearModelError,
+  } = useFieldSave(onSaveModel);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   const filter = (modelDraft ?? "").trim().toLowerCase();
@@ -715,25 +798,33 @@ export function KeyModelRow({
         {hint && <InfoTip text={hint} />}
       </div>
       <div className="flex min-w-0 gap-2">
-        <input
-          value={keyDraft}
-          onChange={(e) => setKeyDraft(e.target.value)}
-          onBlur={() => {
-            const value = keyDraft.trim();
-            if (!value) return;
-            void onSaveKey(value);
-            setKeyDraft("");
-          }}
-          placeholder={masked ?? undefined}
-          aria-label={`${label} API key`}
-          className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
-        />
+        <div className="min-w-0 flex-1">
+          <input
+            value={keyDraft}
+            onChange={(e) => {
+              setKeyDraft(e.target.value);
+              if (keyError) clearKeyError();
+            }}
+            onBlur={() => {
+              const value = keyDraft.trim();
+              if (!value) return;
+              void commitKey(value).then((ok) => {
+                if (ok) setKeyDraft("");
+              });
+            }}
+            placeholder={masked ?? undefined}
+            aria-label={`${label} API key`}
+            className="w-full min-w-0 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+          />
+          <FieldError message={keyError} />
+        </div>
         <div className="relative min-w-0 flex-1">
           <input
             value={modelDraft ?? model ?? ""}
             onChange={(e) => {
               setModelDraft(e.target.value);
               setOpen(true);
+              if (modelError) clearModelError();
             }}
             onFocus={() => {
               fetchOnce();
@@ -742,13 +833,15 @@ export function KeyModelRow({
             onBlur={() => {
               setOpen(false);
               if (modelDraft === null || modelDraft === (model ?? "")) return;
-              void onSaveModel(modelDraft);
-              setModelDraft(null);
+              void commitModel(modelDraft).then((ok) => {
+                if (ok) setModelDraft(null);
+              });
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               if (e.key === "Escape") {
                 setModelDraft(null);
+                clearModelError();
                 setOpen(false);
               }
             }}
@@ -769,7 +862,7 @@ export function KeyModelRow({
                     e.preventDefault();
                     setModelDraft(o);
                     setOpen(false);
-                    if (o !== (model ?? "")) void onSaveModel(o);
+                    if (o !== (model ?? "")) void commitModel(o);
                   }}
                   className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
                 >
@@ -783,6 +876,7 @@ export function KeyModelRow({
               couldn&apos;t list models ({reason}) — type a name instead
             </div>
           )}
+          <FieldError message={modelError} />
         </div>
       </div>
     </div>
@@ -812,6 +906,7 @@ export function SecretRow({
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState("");
+  const { commit, error, clearError } = useFieldSave(onSave);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   return (
@@ -823,16 +918,24 @@ export function SecretRow({
       <div className="min-w-0">
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (error) clearError();
+          }}
+          // Blanking back to the mask is the "it saved" signal here, so it
+          // must not happen on a refusal — that would read as a stored
+          // credential that was never stored.
           onBlur={() => {
             const value = draft.trim();
             if (!value) return;
-            void onSave(value);
-            setDraft("");
+            void commit(value).then((ok) => {
+              if (ok) setDraft("");
+            });
           }}
           placeholder={masked ?? undefined}
           className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
         />
+        <FieldError message={error} />
       </div>
     </div>
   );
