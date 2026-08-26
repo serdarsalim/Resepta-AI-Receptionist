@@ -624,6 +624,13 @@ export const publishPrompt = action({
         retellAgentId: agentId,
       });
     }
+    // The chat lane reads its copy of this text on every turn — see the
+    // mirror's schema note on retellAgents.generalPrompt.
+    await ctx.runMutation(internal.retell.stampPromptMirror, {
+      retellAgentId: agentId,
+      generalPrompt,
+      promptVersion: version,
+    });
     // Returned so the caller can offer "undo" without a second round trip. The
     // LLM is patched in place, so there is no earlier version to point at.
     return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
@@ -713,6 +720,11 @@ export const publishPromptForOrg = internalAction({
         retellAgentId: agentId,
       });
     }
+    await ctx.runMutation(internal.retell.stampPromptMirror, {
+      retellAgentId: agentId,
+      generalPrompt,
+      promptVersion: version,
+    });
     return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
   },
 });
@@ -1410,6 +1422,8 @@ async function provisionAgent(
       leaseToken,
       retellAgentId: agentId,
       inboundNumber: started.row.inboundNumber,
+      generalPrompt: String(template.llm.general_prompt ?? ""),
+      promptVersion: initialVersion,
     });
     if (started.row.inboundNumber) {
       await bindInboundNumber(key, site, started.row.inboundNumber, agentId);

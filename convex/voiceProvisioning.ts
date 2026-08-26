@@ -204,11 +204,25 @@ export const connect = internalMutation({
     leaseToken: v.string(),
     retellAgentId: v.string(),
     inboundNumber: v.optional(v.string()),
+    // The born prompt and the provider version it published as — the first
+    // entry in the prompt mirror (schema: retellAgents.generalPrompt), so a
+    // freshly provisioned agent's Talimat is readable by the chat lane
+    // before the owner ever opens the editor.
+    generalPrompt: v.optional(v.string()),
+    promptVersion: v.optional(v.number()),
   },
   returns: v.id("retellAgents"),
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.leaseToken !== args.leaseToken) throw new Error("setup-lease-lost");
+    const mirror =
+      args.generalPrompt !== undefined
+        ? {
+            generalPrompt: args.generalPrompt,
+            promptVersion: args.promptVersion,
+            promptMirroredAt: Date.now(),
+          }
+        : {};
     const claimed = await ctx.db
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
@@ -222,8 +236,13 @@ export const connect = internalMutation({
         await ctx.db.patch(claimed._id, { name: job.name });
       }
       // A resumed job re-connects the same agent it built; the build was from
-      // the current template either way.
-      await ctx.db.patch(claimed._id, { templateVersion: job.templateVersion });
+      // the current template either way. The mirror only ever moves FORWARD
+      // here: a resumed job must not overwrite a prompt the owner has since
+      // published with the older text it was born with.
+      await ctx.db.patch(claimed._id, {
+        templateVersion: job.templateVersion,
+        ...(claimed.generalPrompt === undefined ? mirror : {}),
+      });
       return claimed._id;
     }
     return await ctx.db.insert("retellAgents", {
@@ -233,6 +252,7 @@ export const connect = internalMutation({
       inboundNumber: args.inboundNumber,
       enabled: true,
       templateVersion: job.templateVersion,
+      ...mirror,
     });
   },
 });

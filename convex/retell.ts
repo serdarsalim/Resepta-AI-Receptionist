@@ -1773,6 +1773,33 @@ export const markRuntimeConnected = internalMutation({
   },
 });
 
+// The prompt mirror (schema: retellAgents.generalPrompt) — called by every
+// path that just sent prompt text to the provider, AFTER the publish
+// succeeded, so the mirror can claim nothing the live agent does not say.
+// Tolerant of a missing row rather than throwing: the publish already
+// happened, and failing here would report a successful publish as an error.
+export const stampPromptMirror = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    generalPrompt: v.string(),
+    promptVersion: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, generalPrompt, promptVersion }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    await ctx.db.patch(agent._id, {
+      generalPrompt,
+      promptVersion: promptVersion ?? undefined,
+      promptMirroredAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 // The caller-facing name, owned by Resepta and read at ring time. A plain
 // mutation, not an action: nothing about it lives at the provider, so naming
 // her costs no draft, no publish and no provider round trip, and takes effect

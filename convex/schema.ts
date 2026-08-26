@@ -767,6 +767,22 @@ export default defineSchema({
     // connected; both read as "behind", which is honest — neither carries the
     // current template's tuning.
     templateVersion: v.optional(v.number()),
+    // The general_prompt Resepta last PUBLISHED to this agent — a mirror of
+    // the provider's copy, not a second truth: the provider still holds what
+    // the live agent actually says. Stamped by every path that sends prompt
+    // text (publishPrompt, publishPromptForOrg, provisioning), because until
+    // this existed the only copy of a salon's edited Talimat lived at the
+    // provider, two HTTP hops away — and the CHAT lane composes its system
+    // prompt from this text on every inbound message (docs/agent-core.md),
+    // which cannot afford a provider round trip per turn. Absent on agents
+    // that were connected rather than born here and have not been published
+    // since; chat falls back to the code template until they are.
+    generalPrompt: v.optional(v.string()),
+    // The provider agent version that publish produced (the "v73" the editor
+    // shows), stamped beside the text so a chat turn can name the exact
+    // prompt generation it ran under.
+    promptVersion: v.optional(v.number()),
+    promptMirroredAt: v.optional(v.number()),
     // Set only after a variable publication succeeds at Retell. This separate
     // marker matters because an intentionally empty registry is still a real,
     // managed configuration and must not re-import deleted provider fields.
@@ -2022,6 +2038,12 @@ export default defineSchema({
     toolCalls: v.optional(v.string()),
     model: v.string(),
     templateVersion: v.number(),
+    // A turn is the product of TWO documents once the chat lane composes over
+    // the voice Talimat: the chat adapter (templateVersion above) and the
+    // salon's published prompt. This is the provider version of that prompt
+    // (retellAgents.promptVersion at compose time); absent means the turn ran
+    // on the code template — no mirror existed, or the org has no voice agent.
+    voicePromptVersion: v.optional(v.number()),
     inputTokens: v.number(),
     outputTokens: v.number(),
     // What this turn cost in micro-USD, at the price table version current
