@@ -1472,6 +1472,8 @@ export default function TenantPage() {
         />
       </Section>
 
+      <TemplatesSection orgId={orgId} />
+
       {/* Hidden, not removed (Serdar, 2026-08-19): the cal.com lane stays
           dormant — no org is wired, native booking owns availability, and the
           card only invited the operator to configure a path nothing uses.
@@ -1710,5 +1712,140 @@ export default function TenantPage() {
       )}
     </Plane>
     </AdminSearchProvider>
+  );
+}
+
+// The Meta registration desk, operator-side (Serdar, 2026-08-26): the salon's
+// Automations page stopped showing template approval — an owner was staring at
+// "Onaya gönder" for a bureaucracy they never chose — and the Cloud wording is
+// platform text now (lib/metaTemplate CLOUD_TEMPLATE_TEXTS). Registering the
+// standard set is part of wiring a business up, so it lives beside the
+// WhatsApp credentials it depends on.
+function TemplatesSection({ orgId }: { orgId: Id<"orgs"> }) {
+  const rows = useQuery(api.waTemplates.listForOrgAdmin, { orgId });
+  const submitOne = useAction(api.waTemplates.submitForOrg);
+  const syncOrg = useAction(api.waTemplates.syncForOrg);
+  const registerAll = useAction(api.waTemplates.registerStandardSet);
+  // Which control is in flight ("all", "sync", or a template id), and the
+  // last outcome as one line — an action against live Meta must never end in
+  // silent nothing.
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const STATUS_STYLE: Record<string, string> = {
+    approved:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+    pending:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+    rejected: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+    draft: "bg-[var(--muted-bg)] text-[var(--muted)]",
+  };
+
+  return (
+    <Section
+      title="Message templates"
+      description="What this business's Cloud number may send outside the 24-hour window. The wording is platform text; the salon never sees this desk."
+    >
+      <div className="flex flex-wrap items-center gap-2 pb-3">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("all");
+            setNote(null);
+            void registerAll({ orgId })
+              .then((results) =>
+                setNote(
+                  results
+                    .map(
+                      (r) =>
+                        `${r.kind}: ${r.ok ? (r.reason === "already-approved" ? "approved" : "submitted") : (r.detail ?? r.reason ?? "failed")}`,
+                    )
+                    .join(" · "),
+                ),
+              )
+              .catch((err) => setNote(err instanceof Error ? err.message : "failed"))
+              .finally(() => setBusy(null));
+          }}
+          className="rounded-lg bg-[var(--accent,#2563eb)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy === "all" ? "Registering…" : "Register standard set"}
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("sync");
+            setNote(null);
+            void syncOrg({ orgId })
+              .then((r) =>
+                setNote(r.ok ? `Synced — ${r.matched ?? 0} matched` : (r.reason ?? "failed")),
+              )
+              .catch((err) => setNote(err instanceof Error ? err.message : "failed"))
+              .finally(() => setBusy(null));
+          }}
+          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+        >
+          {busy === "sync" ? "Syncing…" : "Sync from Meta"}
+        </button>
+        {note && <span className="text-xs text-[var(--muted)]">{note}</span>}
+      </div>
+      {rows === undefined ? (
+        <p className="text-sm text-[var(--muted)]">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">
+          No template rows yet — Register standard set creates and submits them.
+        </p>
+      ) : (
+        <div className="divide-y divide-[var(--border)]">
+          {rows.map((row) => (
+            <div
+              key={row._id}
+              className="flex flex-wrap items-center gap-2 py-2 text-sm"
+            >
+              <span className="min-w-28 font-medium">{row.kind}</span>
+              <span className="text-xs text-[var(--muted)]">{row.language}</span>
+              <span className="font-mono text-xs text-[var(--muted)]">
+                {row.metaName ?? "—"}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
+                title={row.metaRejectionReason ?? row.metaStatusDetail}
+              >
+                {row.status}
+              </span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => {
+                  setBusy(row._id);
+                  setNote(null);
+                  void submitOne({ orgId, templateId: row._id })
+                    .then((r) =>
+                      setNote(
+                        r.ok
+                          ? `${row.kind}: submitted`
+                          : `${row.kind}: ${r.detail ?? r.reason ?? "failed"}`,
+                      ),
+                    )
+                    .catch((err) =>
+                      setNote(err instanceof Error ? err.message : "failed"),
+                    )
+                    .finally(() => setBusy(null));
+                }}
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+              >
+                {busy === row._id
+                  ? "Submitting…"
+                  : row.status === "approved"
+                    ? "Resubmit"
+                    : "Submit"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
   );
 }
