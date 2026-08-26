@@ -156,6 +156,17 @@ export const current = query({
         metaName: v.optional(v.string()),
         language: v.string(),
         status: templateStatus,
+        // Meta's own word behind the normalised status, why review said no,
+        // and when it last went. Together they are the difference between a
+        // red pill and a red pill the owner can act on.
+        metaStatusDetail: v.optional(v.string()),
+        metaRejectionReason: v.optional(v.string()),
+        submittedAt: v.optional(v.number()),
+        // Set once the app has registered this row with Meta. Its presence is
+        // what tells the card whether the button says "submit" or "resubmit",
+        // and a resubmission is an EDIT that sends an approved template back
+        // into review — worth saying out loud before it is clicked.
+        metaTemplateId: v.optional(v.string()),
         bodyPreview: v.optional(v.string()),
         // The editor's unsaved buffer, and the flag the pill keys on. The
         // blob rides along so the editor can seed draft-first and resume a
@@ -260,6 +271,10 @@ export const current = query({
         subject: t.subject,
         variableDefaults: t.variableDefaults,
         metaName: t.metaName,
+        metaStatusDetail: t.metaStatusDetail,
+        metaRejectionReason: t.metaRejectionReason,
+        submittedAt: t.submittedAt,
+        metaTemplateId: t.metaTemplateId,
         language: t.language,
         status: t.status,
         bodyPreview: t.bodyPreview,

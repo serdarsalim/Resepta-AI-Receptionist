@@ -34,6 +34,7 @@ import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
+  formatDateTime,
   minutesToTimeValue,
   timeValueToMinutes,
   weekdayNames,
@@ -149,6 +150,10 @@ type TemplateRow = {
   language: string;
   status: string;
   metaName?: string;
+  metaStatusDetail?: string;
+  metaRejectionReason?: string;
+  submittedAt?: number;
+  metaTemplateId?: string;
   body?: string;
   bodyHtml?: string;
   subject?: string;
@@ -2341,6 +2346,16 @@ export function RemindersView() {
             tip={t("settings.templatesHint")}
             disabled={!isOwner}
           >
+            {/* One pull for the whole card, not one per row: Meta answers
+                with every template on the WABA at once, and a button per
+                template would be six round trips for one answer.
+
+                It earns its place twice over. Templates registered in
+                Business Manager before this screen existed adopt their real
+                status and their Meta id here — nobody has to re-register
+                anything — and a status webhook that never arrived is caught
+                by the same click. */}
+            {settings.whatsapp.connected && <TemplateSync />}
             <div className="divide-y divide-[var(--border)]">
               {metaTemplates.map((template) => (
                 <div key={template._id} className="space-y-2 py-4">
@@ -2414,26 +2429,7 @@ export function RemindersView() {
                           })
                         }
                       />
-                      <select
-                        defaultValue={template.status}
-                        aria-label={t("settings.templateStatus")}
-                        onChange={(e) =>
-                          void updateTemplate({
-                            templateId: template._id,
-                            status: e.target.value as
-                              "draft" | "pending" | "approved" | "rejected",
-                          })
-                        }
-                      >
-                        <option value="draft">{t("template.draft")}</option>
-                        <option value="pending">{t("template.pending")}</option>
-                        <option value="approved">
-                          {t("template.approved")}
-                        </option>
-                        <option value="rejected">
-                          {t("template.rejected")}
-                        </option>
-                      </select>
+                      <TemplateApproval template={template} />
                     </div>
                   )}
                 </div>
@@ -2444,6 +2440,143 @@ export function RemindersView() {
       </>
 
       <ShopPhoneCard isOwner={isOwner} />
+    </div>
+  );
+}
+
+// The approval half of a template row: what Meta currently says, and the one
+// button that changes it.
+//
+// It replaced a dropdown the owner set by hand. That dropdown was the whole
+// problem — picking "approved" made nothing true, so a template that Meta had
+// never seen sat in settings looking ready while every send using it failed
+// with an error code nobody could read.
+function TemplateApproval({ template }: { template: TemplateRow }) {
+  const { t, language } = useLanguage();
+  const submit = useAction(api.waTemplates.submit);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ reason: string; detail?: string } | null>(null);
+
+  const STATUS_STYLE: Record<string, string> = {
+    approved:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+    pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+    rejected: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+    draft: "bg-[var(--muted-bg)] text-[var(--muted)]",
+  };
+  const STATUS_LABEL: Record<string, TranslationKey> = {
+    approved: "template.approved",
+    pending: "template.pending",
+    rejected: "template.rejected",
+    draft: "template.draft",
+  };
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+          STATUS_STYLE[template.status] ?? STATUS_STYLE.draft
+        }`}
+        // Meta's own word behind our four. "rejected" covers refused, paused,
+        // disabled and deleted, and which one it is decides what to do next.
+        title={template.metaStatusDetail}
+      >
+        {t(STATUS_LABEL[template.status] ?? "template.draft")}
+      </span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const result = await submit({ templateId: template._id });
+          if (!result.ok) {
+            setError({
+              reason: result.rejectedTokens?.length
+                ? `${t("template.tokensNotSendable")} ${result.rejectedTokens
+                    .map((token) => `[${token}]`)
+                    .join(", ")}`
+                : t(TEMPLATE_ERROR_KEY[result.reason ?? ""] ?? "template.submitFailed"),
+              detail: result.detail,
+            });
+          }
+          setBusy(false);
+        }}
+        className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+      >
+        {busy
+          ? t("template.submitting")
+          : template.metaTemplateId
+            ? t("template.resubmit")
+            : t("template.submit")}
+      </button>
+      {/* Waiting since WHEN, which is the question an owner actually has
+          about a pending template — Meta usually answers in minutes and
+          sometimes in a day, and "pending" alone cannot tell those apart. */}
+      {template.status === "pending" && template.submittedAt !== undefined && (
+        <span className="shrink-0 text-xs text-[var(--muted)]">
+          {formatDateTime(template.submittedAt, language)}
+        </span>
+      )}
+      {/* Meta's verdict, verbatim and on its own line. It is the single most
+          useful thing on this row when the pill is red, and there is nowhere
+          else to read it without opening Business Manager. */}
+      {template.status === "rejected" && template.metaRejectionReason && (
+        <p className="w-full text-xs text-red-600 dark:text-red-400">
+          {template.metaRejectionReason}
+        </p>
+      )}
+      {error && (
+        <p className="w-full text-xs text-red-600 dark:text-red-400">
+          {error.reason}
+          {error.detail ? ` — ${error.detail}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Why a submission never reached Meta, as opposed to why Meta said no. Both
+// end up under the same button; only these have a sentence of ours.
+const TEMPLATE_ERROR_KEY: Record<string, TranslationKey> = {
+  "wa-not-configured": "error.wa-not-configured",
+  "no-waba-id": "template.noWabaId",
+  "no-body": "template.noBody",
+  "language-unsupported": "template.languageUnsupported",
+  "body-too-long": "template.bodyTooLong",
+  "kind-not-templated": "template.kindNotTemplated",
+  "meta-unreachable": "template.metaUnreachable",
+  "meta-refused": "template.metaRefused",
+};
+
+// The pull. See the note at its call site for why it is one button per card.
+function TemplateSync() {
+  const { t } = useLanguage();
+  const sync = useAction(api.waTemplates.syncFromMeta);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 pb-3">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setResult(null);
+          const out = await sync({});
+          setResult(
+            out.ok
+              ? t("template.syncDone").replace("{n}", String(out.matched ?? 0))
+              : t(TEMPLATE_ERROR_KEY[out.reason ?? ""] ?? "template.submitFailed"),
+          );
+          setBusy(false);
+        }}
+        className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+      >
+        {busy ? t("template.syncing") : t("template.sync")}
+      </button>
+      {result && <span className="text-xs text-[var(--muted)]">{result}</span>}
     </div>
   );
 }

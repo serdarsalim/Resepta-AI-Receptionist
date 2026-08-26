@@ -829,6 +829,69 @@ const dictionary = {
     en: "No sender address set (Business settings)",
     de: "Keine Absenderadresse hinterlegt (Betriebseinstellungen)",
   },
+  // Meta template approval (convex/waTemplates.ts, the Templates card).
+  "template.submit": { tr: "Onaya gönder", en: "Submit for approval", de: "Zur Prüfung senden" },
+  "template.resubmit": { tr: "Yeniden gönder", en: "Resubmit", de: "Erneut senden" },
+  "template.submitting": { tr: "Gönderiliyor…", en: "Submitting…", de: "Wird gesendet…" },
+  "template.sync": { tr: "Meta ile eşitle", en: "Sync with Meta", de: "Mit Meta abgleichen" },
+  "template.syncing": { tr: "Eşitleniyor…", en: "Syncing…", de: "Wird abgeglichen…" },
+  // Said as a COUNT, because the useful answer to "did it work" is how many
+  // of the salon's templates Meta actually recognised.
+  "template.syncDone": {
+    tr: "{n} şablon eşitlendi.",
+    en: "{n} templates synced.",
+    de: "{n} Vorlagen abgeglichen.",
+  },
+  "template.submitFailed": {
+    tr: "Şablon gönderilemedi.",
+    en: "The template could not be submitted.",
+    de: "Die Vorlage konnte nicht gesendet werden.",
+  },
+  // The WABA id is the account the approval belongs to. Without it there is
+  // nowhere to send the template, and the fix is one field on the WhatsApp
+  // connection — so the message points at it rather than saying "failed".
+  "template.noWabaId": {
+    tr: "WhatsApp hesabı kimliği (WABA) eksik. WhatsApp bağlantısında girin.",
+    en: "The WhatsApp account id (WABA) is missing. Add it on the WhatsApp connection.",
+    de: "Die WhatsApp-Konto-ID (WABA) fehlt. Tragen Sie sie in der WhatsApp-Verbindung ein.",
+  },
+  "template.noBody": {
+    tr: "Önce mesajı yazın.",
+    en: "Write the message first.",
+    de: "Schreiben Sie zuerst die Nachricht.",
+  },
+  "template.languageUnsupported": {
+    tr: "Bu dil Meta'ya gönderilemiyor.",
+    en: "This language can't be submitted to Meta.",
+    de: "Diese Sprache kann nicht an Meta gesendet werden.",
+  },
+  "template.bodyTooLong": {
+    tr: "Mesaj çok uzun (Meta sınırı 1024 karakter).",
+    en: "The message is too long (Meta allows 1024 characters).",
+    de: "Die Nachricht ist zu lang (Meta erlaubt 1024 Zeichen).",
+  },
+  "template.kindNotTemplated": {
+    tr: "Bu mesaj onay gerektirmez — müşteri az önce yazdığı için doğrudan gider.",
+    en: "This message needs no approval — the customer just wrote, so it goes straight out.",
+    de: "Diese Nachricht braucht keine Freigabe — der Kunde hat gerade geschrieben, sie geht direkt raus.",
+  },
+  "template.metaUnreachable": {
+    tr: "Meta'ya ulaşılamadı. Birazdan tekrar deneyin.",
+    en: "Meta could not be reached. Try again shortly.",
+    de: "Meta war nicht erreichbar. Versuchen Sie es gleich erneut.",
+  },
+  "template.metaRefused": {
+    tr: "Meta şablonu kabul etmedi:",
+    en: "Meta did not accept the template:",
+    de: "Meta hat die Vorlage nicht angenommen:",
+  },
+  // Named, not summarised: the owner has to know WHICH words to take out, and
+  // these tokens are legal everywhere else in the same message.
+  "template.tokensNotSendable": {
+    tr: "Bu alanlar onaylı şablonda kullanılamaz (e-posta ve dükkân telefonunda çalışır):",
+    en: "These fields can't be used in an approved template (they still work on email and the shop phone):",
+    de: "Diese Felder sind in einer freigegebenen Vorlage nicht möglich (per E-Mail und Ladentelefon funktionieren sie weiterhin):",
+  },
   "error.evolution-no-reaction": {
     tr: "Tepkiler yalnızca Meta numarasından gönderilebilir.",
     en: "Reactions can only be sent from the Meta number.",
