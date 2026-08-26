@@ -2155,18 +2155,24 @@ function AgentHandoverBar({
             </svg>
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
-          {paused ? t("agent.paused") : t("agent.answering")}
-        </span>
-        {/* Live, and it is worth saying: "the assistant is answering" is a
-            claim about RIGHT NOW, and a static label makes it read like a
-            setting somebody switched on once. */}
-        {!paused && (
-          <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+        {/* Label and pulse ride together in the flexible column, so the dot
+            hugs the words it qualifies. Left to fill on its own it drifted to
+            the far edge and sat against the button, where it reads as part of
+            the control rather than as the status being live. */}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="min-w-0 truncate text-xs font-medium text-[var(--foreground)]">
+            {paused ? t("agent.paused") : t("agent.answering")}
           </span>
-        )}
+          {/* Worth saying at all because "the assistant is answering" is a
+              claim about RIGHT NOW, and a static label makes it read like a
+              setting somebody switched on once. */}
+          {!paused && (
+            <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            </span>
+          )}
+        </span>
         <button
           type="button"
           onClick={onToggle}
