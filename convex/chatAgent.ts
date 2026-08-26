@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import { noteText } from "./lib/noteBody";
 import {
   internalAction,
   internalMutation,
@@ -31,6 +30,8 @@ import {
   chatAgentTools,
   disclosureLine,
 } from "./lib/chatAgentTemplate";
+import { builtinAgentVariables } from "./lib/agentVariables";
+import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
   hasBusinessHours,
   isWithinActiveWindow,
@@ -41,7 +42,6 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
-import { formatMoney } from "./lib/money";
 import {
   cancelBooking,
   createBooking,
@@ -52,7 +52,6 @@ import { laneAvailability, laneForReply, loadEvolutionCreds } from "./lib/waLane
 import { sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { nextUpcomingOf } from "./appointments";
-import { serviceKey } from "./services";
 
 // The WhatsApp chat agent's runtime (docs/chat-agent.md). One inbound
 // customer message → one TURN: guards, context, a bounded tool loop against
@@ -167,8 +166,10 @@ export const loadTurnContext = internalQuery({
       }));
 
     // Structured business context (spec: prose can never contradict the
-    // calendar, because the calendar is read from the tables).
-    const [services, staff, knowledge] = await Promise.all([
+    // calendar, because the calendar is read from the tables). Contact fields
+    // and the org's voice agents joined the list with template v4: the fields
+    // feed {{contact}}, the agents carry the Talimat mirror.
+    const [services, staff, knowledge, fields, agents] = await Promise.all([
       ctx.db
         .query("services")
         .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
@@ -179,6 +180,14 @@ export const loadTurnContext = internalQuery({
         .collect(),
       ctx.db
         .query("knowledge")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+      ctx.db
+        .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+        .collect(),
+      ctx.db
+        .query("retellAgents")
         .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
         .collect(),
     ]);
@@ -212,6 +221,42 @@ export const loadTurnContext = internalQuery({
         .collect()
     ).some((t) => t.status === "sent");
 
+    // ONE assistant, two lanes (docs/agent-core.md, template v4): the chat
+    // system prompt composes over the salon's own Talimat — the mirror of
+    // what their voice agent runs. Freshest mirror wins, an enabled agent
+    // beats a disabled one, and an org with no mirror at all (chat-only, or
+    // an agent connected rather than born here) runs the code template in
+    // the org's language: the same document a voice agent would be born
+    // with. Read PER MESSAGE, which is the whole point — an owner's edit
+    // reaches the next WhatsApp reply with no sync and no publish.
+    const mirrored = agents
+      .filter((a) => (a.generalPrompt ?? "").trim())
+      .sort((a, b) => (b.promptMirroredAt ?? 0) - (a.promptMirroredAt ?? 0));
+    const voiceAgent = mirrored.find((a) => a.enabled) ?? mirrored[0] ?? null;
+    const voiceLanguage: VoiceAgentLanguage =
+      org.language === "tr" ? "tr-TR" : org.language === "de" ? "de-DE" : "en-US";
+    const voicePrompt =
+      voiceAgent?.generalPrompt?.trim() || codePrompt(voiceLanguage).general;
+
+    // The same built-ins the voice lane injects at ring time, rendered for a
+    // screen instead of a mouth (lib/agentVariables). personaName is empty BY
+    // DECISION, not omission: the chat assistant is nameless (Serdar,
+    // 2026-08-26 — the robot, not the persona), and the Talimat's own line
+    // says what an empty {{agent_name}} means. Giving chat the persona later
+    // is this one string.
+    const next = nextUpcomingOf(appointments, now, ["scheduled", "confirmed"]);
+    const variables = builtinAgentVariables({
+      style: "written",
+      org,
+      personaName: "",
+      customer,
+      nextAppointmentAt: next ? next.startAt : null,
+      staffRows: staff,
+      services,
+      knowledgeRows: knowledge,
+      contactFields: fields,
+    });
+
     return {
       skip,
       orgId: customer.orgId,
@@ -242,24 +287,15 @@ export const loadTurnContext = internalQuery({
       month,
       history,
       needsDisclosure: !disclosed,
-      services: services
-        .filter((s) => s.active)
-        .map((s) => ({
-          name: s.name,
-          key: serviceKey(s),
-          // null = a good: no length, no calendar footprint, quantity allowed.
-          durationMinutes: s.durationMinutes ?? null,
-          leadMinutes: s.leadMinutes ?? null,
-          price: s.price ?? null,
-        })),
-      teamNames: staff.filter((s) => s.active).map((s) => s.name),
-      // noteText, not the raw column: a block edited in the rich editor
-      // stores markup, and the model reads words (lib/noteBody doctrine —
-      // what goes to the agent is text only).
-      knowledge: knowledge
-        .sort((a, b) => a.order - b.order)
-        .filter((k) => noteText(k.body).trim())
-        .map((k) => ({ title: k.title, body: noteText(k.body) })),
+      // The business context now travels as the SUBSTITUTED variables and
+      // the Talimat itself, not as separate lists — one rendering, shared
+      // with the voice lane (lib/agentVariables applies the noteText
+      // doctrine to knowledge on both).
+      voicePrompt,
+      voicePromptVersion: voiceAgent?.generalPrompt?.trim()
+        ? (voiceAgent.promptVersion ?? null)
+        : null,
+      variables,
       upcoming: upcoming.map((a) => ({
         spoken: formatAppointmentTime(a.startAt, org.timezone, language),
         service: a.items?.map((i) => i.name).join(", ") || undefined,
@@ -292,6 +328,9 @@ export const recordTurn = internalMutation({
     reply: v.optional(v.string()),
     toolCalls: v.optional(v.string()),
     model: v.string(),
+    // The Talimat generation this turn composed over (schema note on
+    // chatAgentTurns.voicePromptVersion). Absent = the code template.
+    voicePromptVersion: v.optional(v.number()),
     inputTokens: v.number(),
     outputTokens: v.number(),
     costMicroUsd: v.number(),
@@ -312,6 +351,7 @@ export const recordTurn = internalMutation({
       toolCalls: args.toolCalls,
       model: args.model,
       templateVersion: CHAT_AGENT_TEMPLATE_VERSION,
+      voicePromptVersion: args.voicePromptVersion,
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       costMicroUsd: args.costMicroUsd,
@@ -461,6 +501,7 @@ export const respond = internalAction({
           ? JSON.stringify(fields.toolCalls)
           : undefined,
         model,
+        voicePromptVersion: context.voicePromptVersion ?? undefined,
         inputTokens: fields.inputTokens ?? 0,
         outputTokens: fields.outputTokens ?? 0,
         costMicroUsd: costMicroUsd(
@@ -500,47 +541,17 @@ export const respond = internalAction({
     }
 
     const openness = openHoursForAgent(context.org.businessHours);
+    // Template v4: the adapter over the salon's own Talimat, with the shared
+    // built-ins rendered for text. Services, team, knowledge, the clock and
+    // the customer card all arrive through the substituted {{variables}} —
+    // one rendering, shared with the voice lane.
     const system = chatAgentSystemPrompt({
       businessName: context.org.name,
       language: context.customer.language,
-      timezone: context.org.timezone,
-      localNow: localNow(context.org.timezone),
       openHours: openness.open_hours,
       closedDays: openness.closed_days,
-      services: (context.services as {
-        name: string;
-        durationMinutes: number | null;
-        leadMinutes: number | null;
-        price: number | null;
-      }[]).map((s) => ({
-        name: s.name,
-        durationMinutes: s.durationMinutes ?? undefined,
-        leadMinutes: s.leadMinutes ?? undefined,
-        price:
-          s.price === null
-            ? undefined
-            : // The SHARED formatter. This hand-rolled its own for a while,
-              // hardcoding tr-TR and /100 — so a German salon's agent quoted
-              // prices with Turkish separators, and a zero-decimal currency
-              // came out 100× too small. It also decided the decimals itself,
-              // which meant the chat agent could quote "₺350,00" for a salon
-              // whose booking page and reminders both say "₺350".
-              formatMoney(
-                s.price,
-                context.org.currency,
-                context.org.language,
-                context.org.priceDecimals,
-              ),
-      })),
-      teamNames: context.teamNames,
-      knowledge: context.knowledge,
-      customer: {
-        name: `${context.customer.firstName} ${context.customer.lastName ?? ""}`.trim(),
-        hasName: Boolean(
-          context.customer.firstName &&
-            context.customer.firstName !== context.customer.phone,
-        ),
-      },
+      voicePrompt: context.voicePrompt,
+      variables: context.variables,
       appointments: context.upcoming,
       recentCalls: context.recentCalls,
     });
@@ -925,23 +936,5 @@ async function executeTool(
   }
 }
 
-// "2026-08-10 Sunday 14:30" in the org's zone — the model cannot know the
-// clock, and every "tomorrow" depends on it.
-function localNow(timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      weekday: "long",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date());
-  } catch {
-    return new Date().toISOString();
-  }
-}
 
 

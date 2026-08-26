@@ -17,6 +17,7 @@
 
 import { getLocalPartsSafe } from "./businessHours";
 import { spokenDateTime, spokenDuration, spokenPrice } from "./speech";
+import { formatAppointmentTime } from "./format";
 import { formatMoney } from "./money";
 import { noteText } from "./noteBody";
 
@@ -86,19 +87,29 @@ export function builtinAgentVariables(args: {
     customer_phone: customer?.phone ?? args.fallbackPhone ?? "",
     customer_email: customer?.email ?? "",
     customer_language: lang,
+    // The one styled datetime: spokenDateTime says "akşam sekiz elli sekiz"
+    // for the mouth, formatAppointmentTime writes "26 Ağustos Çarşamba 20:58"
+    // for the screen — the pair the chat thread and the reminders already use.
     next_appointment:
       args.nextAppointmentAt !== null
-        ? spokenDateTime(args.nextAppointmentAt, org.timezone, lang)
+        ? style === "spoken"
+          ? spokenDateTime(args.nextAppointmentAt, org.timezone, lang)
+          : formatAppointmentTime(args.nextAppointmentAt, org.timezone, lang)
         : "",
     // What "yarın" means, resolved here rather than by a tool. The agent has
     // no clock of its own and the salon may be in another timezone than the
-    // caller; both spellings go over because one is for saying out loud and
-    // the other is what book_appointment needs to receive.
+    // caller; both spellings go over because one is for saying out loud (or
+    // reading, per style) and the other is what book_appointment needs to
+    // receive.
     now: (() => {
       const parts = getLocalPartsSafe(Date.now(), org.timezone);
       const pad = (n: number) => String(n).padStart(2, "0");
       const iso = `${parts.y}-${pad(parts.m0 + 1)}-${pad(parts.d)}`;
-      return `${spokenDateTime(Date.now(), org.timezone, lang)} (${iso} ${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}, ${org.timezone})`;
+      const styled =
+        style === "spoken"
+          ? spokenDateTime(Date.now(), org.timezone, lang)
+          : formatAppointmentTime(Date.now(), org.timezone, lang);
+      return `${styled} (${iso} ${pad(parts.hour)}:${pad(parts.minutesOfDay % 60)}, ${org.timezone})`;
     })(),
     // Names only. Which of them is free at three o'clock is availability's
     // job; this exists so a caller asking for a person by name gets an agent
