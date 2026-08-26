@@ -610,36 +610,53 @@ export const ensureStandardRows = internalMutation({
   handler: async (ctx, args) => {
     const org = await ctx.db.get(args.orgId);
     if (!org) return [];
-    const language = org.language ?? "tr";
+    const orgLanguage = org.language ?? "tr";
     const rows = await ctx.db
       .query("waTemplates")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
       .collect();
-    const stock = DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en;
     const out: { templateId: Id<"waTemplates">; kind: string; status: string }[] = [];
-    for (const kind of STANDARD_CLOUD_KINDS) {
-      const existing = rows.find(
-        (row) => row.ruleId === undefined && row.kind === kind && row.language === language,
-      );
-      if (existing) {
-        out.push({ templateId: existing._id, kind, status: String(existing.status) });
-        continue;
+    // EVERY supported language, not the org's one. Sends resolve the template
+    // by the CUSTOMER's language (wa.ts), falling back to the org's, and a
+    // missing language fails the send visibly by doctrine — so an org-language
+    // registration quietly guaranteed that failure for every customer who
+    // speaks one of the other two. Fifteen templates per WABA is nothing
+    // against Meta's ceiling; a Turkish regular of an English-configured
+    // salon getting her reminder is everything. Found live on Bella: org
+    // language en, customer base Turkish.
+    for (const language of ["tr", "en", "de"]) {
+      const stock = DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en;
+      for (const kind of STANDARD_CLOUD_KINDS) {
+        const existing = rows.find(
+          (row) => row.ruleId === undefined && row.kind === kind && row.language === language,
+        );
+        if (existing) {
+          out.push({
+            templateId: existing._id,
+            kind: `${kind}/${language}`,
+            status: String(existing.status),
+          });
+          continue;
+        }
+        // Seeded with the rich stock text: the row's body serves Evolution and
+        // email, while the Cloud registration reads CLOUD_TEMPLATE_TEXTS — see
+        // performSubmit.
+        const id = await ctx.db.insert("waTemplates", {
+          orgId: args.orgId,
+          kind,
+          language,
+          status: "draft",
+          body: stock[kind].body,
+          subject: stock[kind].subject,
+        });
+        out.push({ templateId: id, kind: `${kind}/${language}`, status: "draft" });
       }
-      // Seeded with the rich stock text: the row's body serves Evolution and
-      // email, while the Cloud registration reads CLOUD_TEMPLATE_TEXTS — see
-      // performSubmit.
-      const id = await ctx.db.insert("waTemplates", {
-        orgId: args.orgId,
-        kind,
-        language,
-        status: "draft",
-        body: stock[kind].body,
-        subject: stock[kind].subject,
-      });
-      out.push({ templateId: id, kind, status: "draft" });
     }
     // The campaign wrapper — orgs.ensureCampaignTemplate's shape, reachable
     // without a session because the operator is doing the registering now.
+    // Org language only: campaigns are written by the OWNER in one language
+    // per run, unlike the lifecycle sends that follow each customer.
+    const language = orgLanguage;
     const campaign = rows.find(
       (row) => row.kind === "campaign" && row.language === language,
     );
