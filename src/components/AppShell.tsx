@@ -139,9 +139,19 @@ const CampaignsIcon = makeIcon(
   </>,
 );
 
-// The handset without a person: the agent answers, nobody is held to the desk.
-const VoicePhoneIcon = makeIcon(
-  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />,
+// A robot head, not a handset (Serdar, 2026-08-26: "a robot head, and call
+// this agent only"). The same agent now answers the phone AND the WhatsApp
+// thread, so the door is drawn as the worker rather than as one of its
+// channels — a handset would name the half that happened to ship first.
+const AgentIcon = makeIcon(
+  <>
+    <path d="M12 8V4H8" />
+    <rect x="4" y="8" width="16" height="12" rx="2" />
+    <path d="M2 14h2" />
+    <path d="M20 14h2" />
+    <path d="M9 13v2" />
+    <path d="M15 13v2" />
+  </>,
 );
 
 // A banknote with a dollar on it. It was a bank card, briefly a receipt
@@ -227,7 +237,7 @@ const NAV_TABS: {
     id: "voice",
     key: "nav.voice",
     phoneKey: "nav.voiceShort",
-    Icon: VoicePhoneIcon,
+    Icon: AgentIcon,
     color: "#10b981",
     drawerOnly: true,
   },

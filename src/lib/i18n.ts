@@ -2178,18 +2178,17 @@ const dictionary = {
     de: "Limit gleichzeitiger Anrufe erreicht",
   },
   "calls.end.error": { tr: "Arama hatası", en: "Call error", de: "Anruffehler" },
-  // The sidebar destination and its two sections. "Voice agent" — what the
-  // industry calls these, and what a salon owner now hears elsewhere too. It
-  // was "Phone agent", which described the channel rather than the thing.
+  // The sidebar destination. Was "Sesli asistan / Voice agent"; the qualifier
+  // came off (Serdar, 2026-08-26) when the chat lane started composing over
+  // the same Talimat — one agent, two channels, and a door named after one
+  // channel misdescribes the thing behind it. The phone bar's short form made
+  // this exact call first and the sidebar now simply agrees with it.
   // Never "Retell": the vendor is an implementation detail nobody chose.
   "nav.voice": {
-    tr: "Sesli asistan",
-    en: "Voice agent",
-    de: "Sprachassistent",
+    tr: "Asistan",
+    en: "Agent",
+    de: "Assistent",
   },
-  // The phone tab bar's version. Six labels share the width of a phone, so the
-  // qualifier goes and the noun stays: nothing else in the bar is an agent, so
-  // "Voice" was never the load-bearing half.
   "nav.voiceShort": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "voice.agents": { tr: "Asistanlar", en: "Agents", de: "Assistenten" },
   // "Automations", not "Messages" (2026-08-25): the page draws each rule as
@@ -2203,9 +2202,9 @@ const dictionary = {
   },
 
   "settings.voice": {
-    tr: "Sesli asistan",
-    en: "Voice agent",
-    de: "Sprachassistent",
+    tr: "Asistan",
+    en: "Agent",
+    de: "Assistent",
   },
   "settings.voiceCollectsCount": {
     tr: "{n} alan",
@@ -2219,12 +2218,14 @@ const dictionary = {
     en: "These URLs can't be resolved on this deployment — they point at a local address. NEXT_PUBLIC_CONVEX_SITE_URL needs to be set.",
     de: "Diese URLs lassen sich in dieser Umgebung nicht auflösen — sie zeigen auf eine lokale Adresse. NEXT_PUBLIC_CONVEX_SITE_URL muss gesetzt werden.",
   },
-  // The salon's word for the thing, not the vendor's. They bought a phone that
-  // gets answered; "Retell agent" is an implementation detail they never chose.
+  // The salon's word for the thing, not the vendor's — "Retell agent" is an
+  // implementation detail they never chose. Qualifier dropped with the rest
+  // of the surface: this column now sits beside a Chat toggle, and a header
+  // calling the row voice-only would be contradicted two cells to its right.
   "settings.voiceAgent": {
-    tr: "Sesli asistan",
-    en: "Voice agent",
-    de: "Sprachassistent",
+    tr: "Asistan",
+    en: "Agent",
+    de: "Assistent",
   },
   "settings.voiceAgentChoose": {
     tr: "Asistan seçin",
