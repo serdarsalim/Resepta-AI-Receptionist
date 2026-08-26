@@ -2610,10 +2610,15 @@ const dictionary = {
     en: "On, the agent says a short goodbye and hangs up once the caller is done. Off, the line stays open until the caller hangs up. The change publishes straight away.",
     de: "An verabschiedet sich der Agent kurz und legt auf, sobald der Anrufer fertig ist. Aus bleibt die Leitung offen, bis der Anrufer auflegt. Die Änderung wird sofort veröffentlicht.",
   },
+  // IDENTICAL to voiceVariables.agentName below, on purpose (Serdar,
+  // 2026-08-26): this field fills the {{agent_name}} pill the Talimat shows
+  // as "Asistanın adı", and two spellings for one thing made the connection
+  // invisible — "Ajan" was also the old vocabulary this surface shed when it
+  // became Asistan.
   "voiceDetail.persona": {
-    tr: "Ajanın adı",
-    en: "Agent name",
-    de: "Name der Agentin",
+    tr: "Asistanın adı",
+    en: "Agent's name",
+    de: "Name des Agenten",
   },
   "voiceDetail.personaHint": {
     tr: "Arayana kendini bu isimle tanıtır. Boş bırakırsanız isim uydurmaz, randevu görevlisi olduğunu söyler. Değişiklik bir sonraki aramada geçerli olur.",
@@ -2651,7 +2656,7 @@ const dictionary = {
     de: "Wird aktualisiert…",
   },
   "voiceDetail.templateUpdated": {
-    tr: "Ajan güncellendi.",
+    tr: "Asistan güncellendi.",
     en: "Agent updated.",
     de: "Agent aktualisiert.",
   },
