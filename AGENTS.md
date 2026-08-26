@@ -178,6 +178,44 @@ style issue.
     reaction is exactly the signal nobody goes back to verify.
   - The Evolution lane refuses (`EVOLUTION_NO_REACTION`): reacting over Baileys
     needs the full message key, which that lane never stored.
+- **Template approval (2026-08-26, `convex/waTemplates.ts` +
+  `convex/lib/metaTemplate.ts`).** A `waTemplates` row IS the submission:
+  `submit` converts the authored named-token body to Meta's positional
+  placeholders, attaches a worked example per variable, and POSTs to
+  `/<WABA_ID>/message_templates`. Status arrives three ways and all three are
+  handled — the create response (Meta sometimes auto-approves inline), the
+  `message_template_status_update` webhook (dispatched in `webhook.ts` BEFORE
+  the phone_number_id guard, because a template verdict carries no
+  phone_number_id and was being dropped by it), and `syncFromMeta`.
+  - **`metaParams` is the contract.** It records which canonical token sits
+    behind each `{{n}}`, and the send replays it. Unset means the old hardcoded
+    triple ({{1}} first name, {{2}} business, {{3}} date+time), which is exactly
+    what every hand-registered template declares — so those keep sending. Read
+    off the row that owns the metaName (`metaSource`), never off the content
+    row: those two legitimately differ, and crossing them fills one template's
+    placeholders with another's tokens.
+  - **Declare exactly what the send passes.** `sendAppointmentMessage` attaches
+    two quick replies on every lifecycle send, and Meta refuses a send whose
+    button components the approved template does not declare.
+    `metaTemplate.buttonsFor` is the one answer both sides read.
+  - **Meta rejects an empty body parameter (132000) and fails the whole send**,
+    so a token with no value falls to the owner's `variableDefaults` and then to
+    a dash. `defaultForKey` exists because that table is keyed by the token AS
+    TYPED ("ad") while metaParams is canonical ("firstName").
+  - **Newlines and 4+ spaces in a parameter are also rejected.** Tokens that
+    render multi-line ([service], [pricelist]) or get stripped by review (the
+    links) are in `metaTemplate.UNSENDABLE` and refuse the submission by name.
+    They stay legal in the same body on email and Evolution, which have no
+    approval and no parameter rules. **Known live consequence:** a campaign's
+    {{3}} is the whole typed message, so a campaign written with line breaks is
+    refused per recipient. One paragraph sends. See `CAMPAIGN_BODIES`.
+  - `campaign` registers a fixed WRAPPER, not the row's words — that is what
+    makes one approval serve every run. `out_of_hours` is never templated: the
+    customer just wrote, so the window is open.
+  - Status normalises Meta's nine values into four. `status === "approved"`
+    gates every Cloud send, and a fifth value would have to be handled correctly
+    at each read or a template would quietly become unsendable; the raw word
+    survives in `metaStatusDetail` for display.
 - Reminders are cron-driven (`convex/crons.ts` → `reminders.tick`, every 5
   min): offsets come from `orgs.reminderOffsetsHours` (default 24h and 2h
   before start). The tick stamps `reminderSentOffsets` BEFORE scheduling the
