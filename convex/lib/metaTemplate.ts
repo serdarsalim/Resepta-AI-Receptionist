@@ -170,6 +170,68 @@ export function normalizeMetaStatus(
   return "pending";
 }
 
+// The Cloud lane's OWN wording for the lifecycle kinds — what actually gets
+// registered at Meta, regardless of what the row's rich body says.
+//
+// Two facts make this split correct rather than sneaky. First, Meta sends ITS
+// stored text: the row's body is only ever raw material for registration, so
+// the Cloud template and the rich body were always allowed to differ — the
+// send fills metaParams into Meta's copy. Second, the rich bodies carry
+// [service] and [manage_link], which the Cloud lane cannot register (UNSENDABLE
+// above) — and does not need: every lifecycle template already declares the
+// confirm/cancel quick replies (buttonsFor), which are the manage link's job
+// in button form. The rich body keeps serving Evolution and email untouched.
+//
+// Platform-owned by decision (Serdar, 2026-08-26): salons do not edit the
+// Cloud wording, the operator approves this exact set from /admin, and custom
+// per-salon templates are a later feature. One text per kind per language,
+// here, is the whole registry.
+export const CLOUD_TEMPLATE_TEXTS: Record<
+  string,
+  Record<string, string>
+> = {
+  tr: {
+    confirmation:
+      "Merhaba [name]! [business] randevunuz [date] için alındı.\n\nSorunuz varsa bu mesajı yanıtlamanız yeterli.",
+    reminder:
+      "Merhaba [name]! [business] randevunuzu hatırlatırız: [date].\n\nDeğişiklik için bu mesajı yanıtlayabilirsiniz.",
+    winback:
+      "Merhaba [name]! [business] olarak sizi özledik. Yeni bir randevu ayarlayalım mı?\n\nBu mesajı yanıtlamanız yeterli.",
+    followup:
+      "Merhaba [name]! [business] ziyaretiniz için teşekkürler. Memnun kaldıysanız bize birkaç kelime bırakır mısınız?",
+    cancellation:
+      "Merhaba [name], [date] tarihli [business] randevunuz iptal edildi. Yeni bir randevu isterseniz bu mesajı yanıtlamanız yeterli.",
+  },
+  en: {
+    confirmation:
+      "Hello [name]! Your appointment at [business] is booked for [date].\n\nAny questions? Just reply to this message.",
+    reminder:
+      "Hi [name]! A reminder from [business]: your appointment is on [date].\n\nNeed a change? Just reply to this message.",
+    winback:
+      "Hi [name]! We've missed you at [business]. Shall we set up your next visit?\n\nJust reply to this message.",
+    followup:
+      "Hi [name]! Thanks for visiting [business]. If you have a minute, we'd love a few words about how it went.",
+    cancellation:
+      "Hi [name], your [business] appointment on [date] has been cancelled. Want a new time? Just reply to this message.",
+  },
+  de: {
+    confirmation:
+      "Hallo [name]! Ihr Termin bei [business] ist für [date] gebucht.\n\nBei Fragen antworten Sie einfach auf diese Nachricht.",
+    reminder:
+      "Hallo [name]! [business] erinnert Sie an Ihren Termin am [date].\n\nFür Änderungen antworten Sie einfach auf diese Nachricht.",
+    winback:
+      "Hallo [name]! Wir haben Sie bei [business] vermisst. Wie wäre es mit einem neuen Termin?\n\nAntworten Sie einfach auf diese Nachricht.",
+    followup:
+      "Hallo [name]! Danke für Ihren Besuch bei [business]. Wenn Sie eine Minute haben, freuen wir uns über ein paar Worte.",
+    cancellation:
+      "Hallo [name], Ihr Termin bei [business] am [date] wurde storniert. Einen neuen finden wir jederzeit — antworten Sie einfach auf diese Nachricht.",
+  },
+};
+
+export function cloudBodyFor(kind: string, language: string): string | null {
+  return CLOUD_TEMPLATE_TEXTS[language.trim().toLowerCase()]?.[kind] ?? null;
+}
+
 // Which Meta category a kind belongs in.
 //
 // Appointment messages are UTILITY: they are about a transaction the customer

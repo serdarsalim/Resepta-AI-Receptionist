@@ -17,9 +17,17 @@
 //                                   for webhooks that never came
 
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  query,
+  type ActionCtx,
+} from "./_generated/server";
 import { requireOwner } from "./lib/orgAuth";
+import { requirePlatformAdmin } from "./lib/platformAuth";
 import { resolveWaAccount } from "./lib/platformConfig";
 import { WA_CLOUD_GRAPH_BASE } from "./lib/waCloud";
 import {
@@ -27,12 +35,14 @@ import {
   CAMPAIGN_PARAMS,
   campaignBodyFor,
   categoryFor,
+  cloudBodyFor,
   componentsFor,
   metaLanguageFor,
   metaNameFor,
   normalizeMetaStatus,
   toPositionalBody,
 } from "./lib/metaTemplate";
+import { DEFAULT_TEMPLATE_TEXTS } from "./lib/templateTexts";
 
 // ---- Reads --------------------------------------------------------------
 
@@ -170,146 +180,175 @@ export const applyStatusUpdate = internalMutation({
 
 // ---- Submit -------------------------------------------------------------
 
+type SubmitResult = {
+  ok: boolean;
+  reason?: string;
+  detail?: string;
+  rejectedTokens?: string[];
+};
+
+const submitResult = v.object({
+  ok: v.boolean(),
+  // A slug the UI translates, never a sentence built here — the owner reads
+  // this in Turkish and the server has no business picking the language.
+  reason: v.optional(v.string()),
+  // Meta's own words when review or the API objected. Shown verbatim under
+  // the translated line, because "Invalid parameter" from Meta is more use
+  // than a generic failure from us.
+  detail: v.optional(v.string()),
+  // Tokens the body uses that cannot be template parameters, so the UI can
+  // name them instead of saying "it didn't work".
+  rejectedTokens: v.optional(v.array(v.string())),
+});
+
+// The submission itself, shared by the owner door and the /admin doors — one
+// payload builder, so the operator registering a template and an owner doing
+// it can never produce different templates.
+async function performSubmit(
+  ctx: ActionCtx,
+  templateId: Id<"waTemplates">,
+  context: {
+    template: {
+      _id: string;
+      kind: string;
+      language: string;
+      body?: string;
+      metaName?: string;
+      metaTemplateId?: string;
+    };
+    waAccount: { accessToken: string } | null;
+    wabaId?: string;
+  },
+): Promise<SubmitResult> {
+  const { template, waAccount, wabaId } = context;
+  if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+  if (!wabaId) return { ok: false, reason: "no-waba-id" };
+
+  // out_of_hours is session text by design — the customer just wrote, so the
+  // window is open and no approval applies. Submitting one would register a
+  // template that nothing will ever send.
+  if (template.kind === "out_of_hours") {
+    return { ok: false, reason: "kind-not-templated" };
+  }
+  const language = metaLanguageFor(template.language);
+  if (!language) return { ok: false, reason: "language-unsupported" };
+
+  // What gets registered, per species. The campaign template registers a
+  // fixed wrapper rather than the row's words: campaigns.ts fills {{3}} with
+  // the whole message the owner types per run, which is what makes one
+  // approval serve every campaign. The LIFECYCLE kinds register the
+  // platform's own Cloud text (CLOUD_TEMPLATE_TEXTS) rather than the row's
+  // rich body — the body carries [service] and [manage_link], which the
+  // Cloud lane cannot take and whose job the quick-reply buttons already do;
+  // the rich body keeps serving Evolution and email. Only a kind this module
+  // does not know registers the row's own words.
+  const campaign = template.kind === "campaign";
+  const wrapper = campaign ? campaignBodyFor(template.language) : null;
+  if (campaign && !wrapper) return { ok: false, reason: "language-unsupported" };
+  const platformBody = campaign ? null : cloudBodyFor(template.kind, template.language);
+  const body = platformBody ?? (template.body ?? "").trim();
+  if (!campaign && !body) return { ok: false, reason: "no-body" };
+  const { text, variables, rejected } = campaign
+    ? { text: wrapper!, variables: CAMPAIGN_PARAMS, rejected: [] as string[] }
+    : toPositionalBody(body);
+  if (rejected.length > 0) {
+    // Refused rather than stripped. A [service] list silently removed from
+    // an approved template is a message that goes out for months saying
+    // less than the salon wrote and believes it is sending.
+    return { ok: false, reason: "tokens-not-sendable", rejectedTokens: rejected };
+  }
+  // Meta's ceiling. Worth catching here: the API answers a 1024-char body
+  // with a generic parameter error that reads like a bug in the payload.
+  if (text.length > 1024) return { ok: false, reason: "body-too-long" };
+
+  const metaName = template.metaName?.trim() || metaNameFor(template.kind, template.language);
+  const components = componentsFor({
+    kind: template.kind,
+    language: template.language,
+    text,
+    variables,
+    examples: campaign ? CAMPAIGN_EXAMPLES[template.language] : undefined,
+  });
+  const category = categoryFor(template.kind);
+
+  // CREATE vs EDIT. Meta refuses a create whose (name, language) already
+  // exists on the WABA, so a template that has been submitted before can
+  // only be changed through the edit endpoint on its own id. An edit sends
+  // it back into review while the approved version keeps delivering.
+  //
+  // The category is NOT sent on an edit: Meta locks it at approval and
+  // answers a change with an error, which would fail an edit whose only
+  // real change was the wording.
+  const editingId: string | undefined = template.metaTemplateId;
+  const url = editingId
+    ? `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(editingId)}`
+    : `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(wabaId)}/message_templates`;
+  const payload = editingId
+    ? { components }
+    : { name: metaName, language, category, components };
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${waAccount.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "meta-unreachable",
+      detail: err instanceof Error ? err.message : undefined,
+    };
+  }
+  const json = (await res.json().catch(() => ({}))) as {
+    id?: string;
+    status?: string;
+    category?: string;
+    success?: boolean;
+    error?: { message?: string; error_user_msg?: string; code?: number };
+  };
+  if (!res.ok || json.error) {
+    return {
+      ok: false,
+      reason: "meta-refused",
+      // error_user_msg is the sentence Meta writes for a human; message is
+      // the one it writes for a log. Prefer the human one when it exists.
+      detail:
+        json.error?.error_user_msg ??
+        json.error?.message ??
+        `HTTP ${res.status}`,
+    };
+  }
+
+  await ctx.runMutation(internal.waTemplates.recordSubmission, {
+    templateId,
+    metaName,
+    // An edit returns { success: true } and no id — it already had one.
+    metaTemplateId: json.id ?? template.metaTemplateId,
+    metaWabaId: wabaId,
+    metaParams: variables,
+    // Meta usually answers PENDING and reviews asynchronously, but a
+    // template it can auto-approve comes back APPROVED in this same
+    // response. Reading it beats waiting for a webhook that will not come.
+    status: json.status ? normalizeMetaStatus(json.status) : "pending",
+    metaStatusDetail: json.status?.toUpperCase(),
+  });
+  return { ok: true };
+}
+
 export const submit = action({
   args: { templateId: v.id("waTemplates") },
-  returns: v.object({
-    ok: v.boolean(),
-    // A slug the UI translates, never a sentence built here — the owner reads
-    // this in Turkish and the server has no business picking the language.
-    reason: v.optional(v.string()),
-    // Meta's own words when review or the API objected. Shown verbatim under
-    // the translated line, because "Invalid parameter" from Meta is more use
-    // than a generic failure from us.
-    detail: v.optional(v.string()),
-    // Tokens the body uses that cannot be template parameters, so the UI can
-    // name them instead of saying "it didn't work".
-    rejectedTokens: v.optional(v.array(v.string())),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    ok: boolean;
-    reason?: string;
-    detail?: string;
-    rejectedTokens?: string[];
-  }> => {
+  returns: submitResult,
+  handler: async (ctx, args): Promise<SubmitResult> => {
     const context = await ctx.runQuery(internal.waTemplates.loadForSubmit, {
       templateId: args.templateId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { template, waAccount, wabaId } = context;
-    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
-    if (!wabaId) return { ok: false, reason: "no-waba-id" };
-
-    // out_of_hours is session text by design — the customer just wrote, so the
-    // window is open and no approval applies. Submitting one would register a
-    // template that nothing will ever send.
-    if (template.kind === "out_of_hours") {
-      return { ok: false, reason: "kind-not-templated" };
-    }
-    const body = (template.body ?? "").trim();
-    if (!body) return { ok: false, reason: "no-body" };
-    const language = metaLanguageFor(template.language);
-    if (!language) return { ok: false, reason: "language-unsupported" };
-
-    // The campaign template registers a fixed wrapper rather than the row's
-    // words: campaigns.ts fills {{3}} with the whole message the owner types
-    // per run, which is what makes one approval serve every campaign. Reading
-    // the row's tokens here would register a template the send cannot fill.
-    const campaign = template.kind === "campaign";
-    const wrapper = campaign ? campaignBodyFor(template.language) : null;
-    if (campaign && !wrapper) return { ok: false, reason: "language-unsupported" };
-    const { text, variables, rejected } = campaign
-      ? { text: wrapper!, variables: CAMPAIGN_PARAMS, rejected: [] as string[] }
-      : toPositionalBody(body);
-    if (rejected.length > 0) {
-      // Refused rather than stripped. A [service] list silently removed from
-      // an approved template is a message that goes out for months saying
-      // less than the salon wrote and believes it is sending.
-      return { ok: false, reason: "tokens-not-sendable", rejectedTokens: rejected };
-    }
-    // Meta's ceiling. Worth catching here: the API answers a 1024-char body
-    // with a generic parameter error that reads like a bug in the payload.
-    if (text.length > 1024) return { ok: false, reason: "body-too-long" };
-
-    const metaName = template.metaName?.trim() || metaNameFor(template.kind, template.language);
-    const components = componentsFor({
-      kind: template.kind,
-      language: template.language,
-      text,
-      variables,
-      examples: campaign ? CAMPAIGN_EXAMPLES[template.language] : undefined,
-    });
-    const category = categoryFor(template.kind);
-
-    // CREATE vs EDIT. Meta refuses a create whose (name, language) already
-    // exists on the WABA, so a template that has been submitted before can
-    // only be changed through the edit endpoint on its own id. An edit sends
-    // it back into review while the approved version keeps delivering.
-    //
-    // The category is NOT sent on an edit: Meta locks it at approval and
-    // answers a change with an error, which would fail an edit whose only
-    // real change was the wording.
-    const editingId: string | undefined = template.metaTemplateId;
-    const url = editingId
-      ? `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(editingId)}`
-      : `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(wabaId)}/message_templates`;
-    const payload = editingId
-      ? { components }
-      : { name: metaName, language, category, components };
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${waAccount.accessToken}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      return {
-        ok: false,
-        reason: "meta-unreachable",
-        detail: err instanceof Error ? err.message : undefined,
-      };
-    }
-    const json = (await res.json().catch(() => ({}))) as {
-      id?: string;
-      status?: string;
-      category?: string;
-      success?: boolean;
-      error?: { message?: string; error_user_msg?: string; code?: number };
-    };
-    if (!res.ok || json.error) {
-      return {
-        ok: false,
-        reason: "meta-refused",
-        // error_user_msg is the sentence Meta writes for a human; message is
-        // the one it writes for a log. Prefer the human one when it exists.
-        detail:
-          json.error?.error_user_msg ??
-          json.error?.message ??
-          `HTTP ${res.status}`,
-      };
-    }
-
-    await ctx.runMutation(internal.waTemplates.recordSubmission, {
-      templateId: args.templateId,
-      metaName,
-      // An edit returns { success: true } and no id — it already had one.
-      metaTemplateId: json.id ?? template.metaTemplateId,
-      metaWabaId: wabaId,
-      metaParams: variables,
-      // Meta usually answers PENDING and reviews asynchronously, but a
-      // template it can auto-approve comes back APPROVED in this same
-      // response. Reading it beats waiting for a webhook that will not come.
-      status: json.status ? normalizeMetaStatus(json.status) : "pending",
-      metaStatusDetail: json.status?.toUpperCase(),
-    });
-    return { ok: true };
+    return await performSubmit(ctx, args.templateId, context);
   },
 });
 
@@ -323,72 +362,86 @@ export const submit = action({
 // status update that never arrived because the app was not subscribed to the
 // field yet. Also the only way to notice a template someone DELETED at Meta,
 // which produces no webhook the app will match.
+type SyncResult = { ok: boolean; reason?: string; matched?: number };
+
+const syncResult = v.object({
+  ok: v.boolean(),
+  reason: v.optional(v.string()),
+  matched: v.optional(v.number()),
+});
+
+// The pull itself, shared by the owner door and the /admin door below.
+async function performSync(
+  ctx: ActionCtx,
+  context: {
+    orgId: string;
+    wabaId?: string;
+    waAccount: { accessToken: string } | null;
+  },
+): Promise<SyncResult> {
+  const { waAccount, wabaId, orgId } = context;
+  if (!waAccount) return { ok: false, reason: "wa-not-configured" };
+  if (!wabaId) return { ok: false, reason: "no-waba-id" };
+
+  // 250 is Meta's practical page ceiling and far past what one salon has.
+  const url =
+    `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(wabaId)}/message_templates` +
+    `?limit=250&fields=id,name,language,status,category,rejected_reason`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { authorization: `Bearer ${waAccount.accessToken}` },
+    });
+  } catch {
+    return { ok: false, reason: "meta-unreachable" };
+  }
+  if (!res.ok) return { ok: false, reason: "meta-refused" };
+  const json = (await res.json().catch(() => ({}))) as {
+    data?: {
+      id?: string;
+      name?: string;
+      language?: string;
+      status?: string;
+      rejected_reason?: string;
+    }[];
+  };
+
+  const rows = await ctx.runQuery(internal.waTemplates.listForOrgInternal, {
+    orgId: orgId as Id<"orgs">,
+  });
+  let matched = 0;
+  for (const remote of json.data ?? []) {
+    if (!remote.name || !remote.status) continue;
+    // Matched on the pair Meta itself treats as unique. A row whose
+    // metaName the owner typed by hand is adopted here, which is how the
+    // templates that exist today get their real status and their id without
+    // anybody re-registering them.
+    const row = (rows as { _id: string; metaName?: string; language: string }[]).find(
+      (t) => t.metaName === remote.name && t.language === remote.language,
+    );
+    if (!row) continue;
+    matched++;
+    await ctx.runMutation(internal.waTemplates.applyStatusUpdate, {
+      metaTemplateId: remote.id,
+      wabaId,
+      metaName: remote.name,
+      language: remote.language,
+      status: remote.status,
+      // Meta names the reason as a slug ("INCORRECT_CATEGORY"), which is
+      // still the answer to "why was this refused".
+      reason: remote.rejected_reason,
+    });
+  }
+  return { ok: true, matched };
+}
+
 export const syncFromMeta = action({
   args: {},
-  returns: v.object({
-    ok: v.boolean(),
-    reason: v.optional(v.string()),
-    matched: v.optional(v.number()),
-  }),
-  handler: async (
-    ctx,
-  ): Promise<{ ok: boolean; reason?: string; matched?: number }> => {
+  returns: syncResult,
+  handler: async (ctx): Promise<SyncResult> => {
     const context = await ctx.runQuery(internal.waTemplates.loadSyncContext, {});
     if (!context) return { ok: false, reason: "not-found" };
-    const { waAccount, wabaId, orgId } = context;
-    if (!waAccount) return { ok: false, reason: "wa-not-configured" };
-    if (!wabaId) return { ok: false, reason: "no-waba-id" };
-
-    // 250 is Meta's practical page ceiling and far past what one salon has.
-    const url =
-      `${WA_CLOUD_GRAPH_BASE}/${encodeURIComponent(wabaId)}/message_templates` +
-      `?limit=250&fields=id,name,language,status,category,rejected_reason`;
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        headers: { authorization: `Bearer ${waAccount.accessToken}` },
-      });
-    } catch {
-      return { ok: false, reason: "meta-unreachable" };
-    }
-    if (!res.ok) return { ok: false, reason: "meta-refused" };
-    const json = (await res.json().catch(() => ({}))) as {
-      data?: {
-        id?: string;
-        name?: string;
-        language?: string;
-        status?: string;
-        rejected_reason?: string;
-      }[];
-    };
-
-    const rows = await ctx.runQuery(internal.waTemplates.listForOrgInternal, {
-      orgId,
-    });
-    let matched = 0;
-    for (const remote of json.data ?? []) {
-      if (!remote.name || !remote.status) continue;
-      // Matched on the pair Meta itself treats as unique. A row whose
-      // metaName the owner typed by hand is adopted here, which is how the
-      // templates that exist today get their real status and their id without
-      // anybody re-registering them.
-      const row = (rows as { _id: string; metaName?: string; language: string }[]).find(
-        (t) => t.metaName === remote.name && t.language === remote.language,
-      );
-      if (!row) continue;
-      matched++;
-      await ctx.runMutation(internal.waTemplates.applyStatusUpdate, {
-        metaTemplateId: remote.id,
-        wabaId,
-        metaName: remote.name,
-        language: remote.language,
-        status: remote.status,
-        // Meta names the reason as a slug ("INCORRECT_CATEGORY"), which is
-        // still the answer to "why was this refused".
-        reason: remote.rejected_reason,
-      });
-    }
-    return { ok: true, matched };
+    return await performSync(ctx, context);
   },
 });
 
@@ -406,5 +459,240 @@ export const loadSyncContext = internalQuery({
       wabaId: own?.wabaId,
       waAccount: await resolveWaAccount(ctx, own),
     };
+  },
+});
+
+
+// ---- The /admin doors ---------------------------------------------------
+//
+// Approval is operator work now (Serdar, 2026-08-26): the registration desk
+// left the salon's Automations page, the Cloud wording is platform-owned
+// (CLOUD_TEMPLATE_TEXTS in lib/metaTemplate), and the operator registers the
+// standard set per business from the tenant page. Every db-touching step
+// re-checks requirePlatformAdmin, because these are public functions whose
+// orgId is caller-supplied.
+
+export const loadForSubmitAdmin = internalQuery({
+  args: { orgId: v.id("orgs"), templateId: v.id("waTemplates") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const template = await ctx.db.get(args.templateId);
+    if (!template || template.orgId !== args.orgId) return null;
+    const own = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+    return {
+      template,
+      waAccount: await resolveWaAccount(ctx, own),
+      // The row's own WABA, never the platform's — the same rule as
+      // loadForSubmit above: approvals belong to a business.
+      wabaId: own?.wabaId,
+    };
+  },
+});
+
+export const submitForOrg = action({
+  args: { orgId: v.id("orgs"), templateId: v.id("waTemplates") },
+  returns: submitResult,
+  handler: async (ctx, args): Promise<SubmitResult> => {
+    const context = await ctx.runQuery(internal.waTemplates.loadForSubmitAdmin, {
+      orgId: args.orgId,
+      templateId: args.templateId,
+    });
+    if (!context) return { ok: false, reason: "not-found" };
+    return await performSubmit(ctx, args.templateId, context);
+  },
+});
+
+export const loadSyncContextAdmin = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const own = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .unique();
+    return {
+      orgId: args.orgId,
+      wabaId: own?.wabaId,
+      waAccount: await resolveWaAccount(ctx, own),
+    };
+  },
+});
+
+export const syncForOrg = action({
+  args: { orgId: v.id("orgs") },
+  returns: syncResult,
+  handler: async (ctx, args): Promise<SyncResult> => {
+    const context = await ctx.runQuery(internal.waTemplates.loadSyncContextAdmin, {
+      orgId: args.orgId,
+    });
+    if (!context) return { ok: false, reason: "not-found" };
+    return await performSync(ctx, context);
+  },
+});
+
+// The tenant page's registration desk: the org's kind-level rows — the ones
+// Meta registration lives on. Rule-bound wording rows have no Meta life of
+// their own, and out_of_hours is session text with nothing to register.
+export const listForOrgAdmin = query({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      _id: v.id("waTemplates"),
+      kind: v.string(),
+      language: v.string(),
+      metaName: v.optional(v.string()),
+      status: v.string(),
+      metaStatusDetail: v.optional(v.string()),
+      metaRejectionReason: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const rows = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    return rows
+      .filter((row) => row.ruleId === undefined && row.kind !== "out_of_hours")
+      .map((row) => ({
+        _id: row._id,
+        kind: row.kind,
+        language: row.language,
+        metaName: row.metaName,
+        status: String(row.status),
+        metaStatusDetail: row.metaStatusDetail,
+        metaRejectionReason: row.metaRejectionReason,
+      }));
+  },
+});
+
+// What "register the standard set" registers. out_of_hours stays out (session
+// text); campaign rides along because its wrapper is as standard as the rest.
+const STANDARD_CLOUD_KINDS = [
+  "confirmation",
+  "reminder",
+  "winback",
+  "followup",
+  "cancellation",
+] as const;
+
+export const ensureStandardRows = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      templateId: v.id("waTemplates"),
+      kind: v.string(),
+      status: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return [];
+    const language = org.language ?? "tr";
+    const rows = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
+      .collect();
+    const stock = DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en;
+    const out: { templateId: Id<"waTemplates">; kind: string; status: string }[] = [];
+    for (const kind of STANDARD_CLOUD_KINDS) {
+      const existing = rows.find(
+        (row) => row.ruleId === undefined && row.kind === kind && row.language === language,
+      );
+      if (existing) {
+        out.push({ templateId: existing._id, kind, status: String(existing.status) });
+        continue;
+      }
+      // Seeded with the rich stock text: the row's body serves Evolution and
+      // email, while the Cloud registration reads CLOUD_TEMPLATE_TEXTS — see
+      // performSubmit.
+      const id = await ctx.db.insert("waTemplates", {
+        orgId: args.orgId,
+        kind,
+        language,
+        status: "draft",
+        body: stock[kind].body,
+        subject: stock[kind].subject,
+      });
+      out.push({ templateId: id, kind, status: "draft" });
+    }
+    // The campaign wrapper — orgs.ensureCampaignTemplate's shape, reachable
+    // without a session because the operator is doing the registering now.
+    const campaign = rows.find(
+      (row) => row.kind === "campaign" && row.language === language,
+    );
+    if (campaign) {
+      out.push({ templateId: campaign._id, kind: "campaign", status: String(campaign.status) });
+    } else {
+      const preview: Record<string, string> = {
+        tr: "Merhaba {{1}}! {{2}} olarak {{3}}",
+        en: "Hello {{1}}! {{2}} here — {{3}}",
+        de: "Hallo {{1}}! {{2}} — {{3}}",
+      };
+      const id = await ctx.db.insert("waTemplates", {
+        orgId: args.orgId,
+        kind: "campaign",
+        metaName: "randevu_kampanya",
+        language,
+        status: "draft",
+        bodyPreview: preview[language] ?? preview.en,
+      });
+      out.push({ templateId: id, kind: "campaign", status: "draft" });
+    }
+    return out;
+  },
+});
+
+// One click per business: every standard row exists, then everything not
+// already approved goes to Meta. Sequential on purpose — six templates is
+// six requests, and Meta rate-limits template creation harder than most
+// endpoints; a Promise.all here is how one click becomes three mystery
+// failures.
+export const registerStandardSet = action({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      kind: v.string(),
+      ok: v.boolean(),
+      reason: v.optional(v.string()),
+      detail: v.optional(v.string()),
+    }),
+  ),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ kind: string; ok: boolean; reason?: string; detail?: string }[]> => {
+    const rows = await ctx.runMutation(internal.waTemplates.ensureStandardRows, {
+      orgId: args.orgId,
+    });
+    const results: { kind: string; ok: boolean; reason?: string; detail?: string }[] = [];
+    for (const row of rows) {
+      if (row.status === "approved") {
+        results.push({ kind: row.kind, ok: true, reason: "already-approved" });
+        continue;
+      }
+      const context = await ctx.runQuery(internal.waTemplates.loadForSubmitAdmin, {
+        orgId: args.orgId,
+        templateId: row.templateId,
+      });
+      if (!context) {
+        results.push({ kind: row.kind, ok: false, reason: "not-found" });
+        continue;
+      }
+      const result = await performSubmit(ctx, row.templateId, context);
+      results.push({
+        kind: row.kind,
+        ok: result.ok,
+        reason: result.reason,
+        detail: result.detail,
+      });
+    }
+    return results;
   },
 });
