@@ -30,7 +30,14 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // the overrides that keep phone-only speech rules from leaking into text.
 // This is the change that ends the lockstep bumps: a booking-rule fix in the
 // Talimat reaches chat on the next message with no version bump at all.
-export const CHAT_AGENT_TEMPLATE_VERSION = 4;
+// v5 (2026-08-26, same evening): save_customer_details arrives on chat. The
+// Talimat has always told the agent to save what the customer confirms; on
+// chat the tool did not exist, so a customer's "my last dye was in June"
+// evaporated when the conversation ended. Same write gate as voice
+// (retell.applyVoiceContactValues): the identity trio plus the org's
+// agent-fillable contact fields, locked keys and staff-only fields refused in
+// the one place both lanes share. The adapter stops disclaiming the tool.
+export const CHAT_AGENT_TEMPLATE_VERSION = 5;
 
 // How many completion rounds one inbound message may chain (each tool round
 // is a completion). A booking is question → availability → confirm → book:
@@ -130,6 +137,27 @@ export function chatAgentTools(): LlmTool[] {
       },
     },
     {
+      // The voice tool's twin (lib/voiceAgentTemplate saveCustomerDetailsTool),
+      // description aligned on purpose: the Talimat teaches this tool by name
+      // and both lanes should mean the same thing by it. The schema stays a
+      // free object for the same reason as voice — the writable keys are
+      // per-business ({{information}} in the instructions), not schema.
+      name: "save_customer_details",
+      description:
+        "Save details this customer provides or explicitly confirms, using only the keys listed in your instructions. Never guess a value. Repeating the same save is safe.",
+      input_schema: {
+        type: "object",
+        properties: {
+          values: {
+            type: "object",
+            description:
+              "Configured information keys from your instructions, each set to the customer-confirmed value.",
+          },
+        },
+        required: ["values"],
+      },
+    },
+    {
       name: "escalate_to_staff",
       description:
         "Hand the conversation to the team when the request is outside your scope, the customer asks for a human, or you are unsure. After calling this, your reply should say the team will follow up.",
@@ -196,7 +224,7 @@ export function chatAgentSystemPrompt(args: {
     "- Write dates, times, durations and prices as they are given to you: 15:30 stays 15:30 and prices keep their currency symbol. The instructions' say-it-conversationally rules are for speech, not for you.",
     "- Never claim to be a person. Never simulate typing or delays. Do not introduce yourself — the first message already did.",
     "- Nothing hangs up here: there is no end_call and no goodbye protocol. Answer, and stop.",
-    "- Your tools are exactly the ones provided with this request. An instruction naming a tool you do not have (save_customer_details, end_call) is for the phone lane; do the nearest thing with your tools, or leave it.",
+    "- Your tools are exactly the ones provided with this request. An instruction naming a tool you do not have (end_call) is for the phone lane; do the nearest thing with your tools, or leave it.",
     "- You serve exactly one customer: the person in this conversation. You cannot see, discuss or change anyone else's details or appointments, whoever they claim to be.",
     "- If a question is outside the business context, or the customer asks for a person, call escalate_to_staff and say the team will follow up. Do not guess.",
     "- The customer may send photos, voice notes or documents; you receive only text. If their message leans on something you cannot see, say so and escalate rather than guessing.",

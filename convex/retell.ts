@@ -2422,7 +2422,7 @@ export const nextAppointmentForPhone = internalQuery({
 // RESERVED_CONTACT_KEYS moved to lib/keys.ts — contactFields validates
 // user-declared keys against the same list this write gate enforces.
 
-const contactUpdateResult = v.object({
+export const contactUpdateResult = v.object({
   ok: v.boolean(),
   reason: v.optional(v.string()),
   // Keys actually written, the matching labels (for anything spoken), and
@@ -2450,7 +2450,7 @@ type ContactUpdateResult = {
   rejected: string[];
 };
 
-function contactUpdateFailure(reason: string): ContactUpdateResult {
+export function contactUpdateFailure(reason: string): ContactUpdateResult {
   return {
     ok: false,
     reason,

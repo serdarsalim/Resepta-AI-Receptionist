@@ -52,6 +52,12 @@ import { laneAvailability, laneForReply, loadEvolutionCreds } from "./lib/waLane
 import { sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { nextUpcomingOf } from "./appointments";
+import {
+  applyVoiceContactValues,
+  contactUpdateFailure,
+  contactUpdateResult,
+} from "./retell";
+import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 
 // The WhatsApp chat agent's runtime (docs/chat-agent.md). One inbound
 // customer message → one TURN: guards, context, a bounded tool loop against
@@ -455,6 +461,36 @@ export const nextForCustomer = internalQuery({
       startAt: next.startAt,
       service: next.items?.map((i) => i.name).join(", ") || undefined,
     };
+  },
+});
+
+// The chat lane's pen — save_customer_details, bound to the customer the
+// WEBHOOK resolved (the isolation invariant: the model picks values, never
+// identities). Thin on purpose: every rule about WHAT may be written — the
+// identity trio, locked keys, staff-only fields, type coercion — lives in
+// retell.applyVoiceContactValues, the one gate both lanes share, so voice and
+// chat can never disagree about what a field accepts. No voiceAgentVariables
+// aliases here: chat's Talimat lists the canonical keys ({{information}}),
+// which is exactly the vocabulary the gate speaks.
+export const saveCustomerDetails = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    values: v.record(v.string(), v.string()),
+  },
+  returns: contactUpdateResult,
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return contactUpdateFailure("no-such-customer");
+    return await applyVoiceContactValues(ctx, {
+      orgId: customer.orgId,
+      phone: customer.phone,
+      values: args.values,
+      identity: {
+        firstname: { field: "firstName", label: "firstname" },
+        lastname: { field: "lastName", label: "lastname" },
+        email: { field: "email", label: "email" },
+      },
+    });
   },
 });
 
@@ -916,6 +952,30 @@ async function executeTool(
         externalUid: newUid,
       });
       return { rescheduled: true, spoken_time: spokenOf(startAt) };
+    }
+
+    if (name === "save_customer_details") {
+      // Same normaliser as the voice endpoint: models nest the map under
+      // values/properties/fields or spread it flat, and both lanes should
+      // read every shape the same way.
+      const values = voiceValuesFromToolArgs(input);
+      if (Object.keys(values).length === 0) {
+        return { saved: false, note: "Nothing to save." };
+      }
+      const result = await ctx.runMutation(internal.chatAgent.saveCustomerDetails, {
+        customerId: customer._id,
+        values,
+      });
+      return {
+        saved: result.updated.length > 0,
+        updated: result.updated,
+        // The buckets the gate reports, under names a model reads cold: keys
+        // this org has no field for, fields a person owns, values that did
+        // not survive their type.
+        ignored: result.ignored,
+        staff_only: result.notForVoice,
+        rejected: result.rejected,
+      };
     }
 
     if (name === "escalate_to_staff") {
