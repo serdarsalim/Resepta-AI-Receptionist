@@ -1038,7 +1038,11 @@ export const setWaAccount = mutation({
     orgId: v.id("orgs"),
     phoneNumberId: v.string(),
     wabaId: v.optional(v.string()),
-    accessToken: v.optional(v.string()),
+    // A string stores the org's own token; NULL removes it so the row rides
+    // the platform token; absent (and blank, below) leaves it alone. Three
+    // intents, and the middle one cannot be spelled with an optional string —
+    // blank already means "keep" for a secret the operator cannot read back.
+    accessToken: v.optional(v.union(v.string(), v.null())),
     displayNumber: v.optional(v.string()),
   },
   returns: v.null(),
@@ -1048,6 +1052,14 @@ export const setWaAccount = mutation({
     if (!org) throw new Error("no-such-org");
     const phoneNumberId = args.phoneNumberId.trim();
     if (!phoneNumberId) throw new Error("phone-number-id-required");
+    // Clearing hands authentication to the platform token, so refuse while
+    // there is none: the row would resolve to no token at all and every send
+    // on this number would degrade to "Cloud is off" — silently, hours after
+    // the operator stopped looking at this page.
+    if (args.accessToken === null) {
+      const platformToken = await platformValue(ctx, "whatsappAccessToken");
+      if (!platformToken) throw new Error("no-platform-token");
+    }
     // Inbound WhatsApp resolves an org by metadata.phone_number_id through a
     // .unique() lookup, so two orgs sharing one id does not degrade gracefully
     // — it throws on every inbound message for BOTH of them. Refuse it here,
@@ -1069,7 +1081,10 @@ export const setWaAccount = mutation({
         orgId: args.orgId,
         phoneNumberId,
         wabaId: args.wabaId?.trim() || undefined,
-        accessToken: args.accessToken?.trim() || undefined,
+        accessToken:
+          typeof args.accessToken === "string"
+            ? args.accessToken.trim() || undefined
+            : undefined,
         displayNumber: args.displayNumber?.trim() || undefined,
       });
       return null;
@@ -1079,8 +1094,12 @@ export const setWaAccount = mutation({
       wabaId: applied(args.wabaId, existing.wabaId),
       // Blank means "keep the token", not "clear it": the operator editing a
       // display number should not have to re-paste a credential they cannot
-      // read back off the screen.
-      accessToken: args.accessToken?.trim() || existing.accessToken,
+      // read back off the screen. Only the explicit null — the "use platform
+      // token" control — takes the token off the row.
+      accessToken:
+        args.accessToken === null
+          ? undefined
+          : args.accessToken?.trim() || existing.accessToken,
       displayNumber: applied(args.displayNumber, existing.displayNumber),
     });
     return null;

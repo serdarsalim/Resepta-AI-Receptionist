@@ -250,7 +250,7 @@ export default function TenantPage() {
     setOrgConfig({ ...patch, orgId });
   // Every WhatsApp write carries phoneNumberId because it is the row's
   // identity, not an optional field: the webhook resolves an org by it.
-  const wa = (patch: { phoneNumberId?: string; wabaId?: string; accessToken?: string; displayNumber?: string }) =>
+  const wa = (patch: { phoneNumberId?: string; wabaId?: string; accessToken?: string | null; displayNumber?: string }) =>
     setWaAccount({
       orgId,
       phoneNumberId: patch.phoneNumberId ?? detail.wa?.phoneNumberId ?? "",
@@ -1464,9 +1464,11 @@ export default function TenantPage() {
         />
         <SecretRow
           label="Access token"
-          hint="Empty = the platform token (Platform tab) authenticates this number. Paste one only when this business runs its own Meta app."
+          hint="Empty = the platform token (fleet page, WhatsApp section) authenticates this number. Paste one only when this business runs its own Meta app."
           masked={detail.wa?.accessToken}
           onSave={(value) => wa({ accessToken: value })}
+          onClear={() => wa({ accessToken: null })}
+          clearLabel="Use platform token"
         />
       </Section>
 

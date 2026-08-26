@@ -507,6 +507,8 @@ const FIELD_SAVE_ERRORS: Record<string, string> = {
     "Another business already uses that instance name.",
   "address-taken": "Another business already uses that address.",
   "no-such-org": "This business no longer exists.",
+  "no-platform-token":
+    "Set the platform token first (fleet page, WhatsApp section) — clearing this now would leave the number with nothing to authenticate as.",
 };
 
 function fieldSaveError(error: unknown): string {
@@ -899,14 +901,26 @@ export function SecretRow({
   hint,
   masked,
   onSave,
+  onClear,
+  clearLabel = "Clear",
 }: {
   label: string;
   hint?: string;
   masked?: string | null;
   onSave: (value: string) => unknown;
+  // Removing a stored secret is its own write, never a save of blank: blank
+  // already means "keep" here (the operator cannot re-paste what they cannot
+  // read back), so a secret that can be taken off gets an explicit control.
+  // Rendered only while something is stored — with nothing installed there is
+  // nothing to take off.
+  onClear?: () => unknown;
+  clearLabel?: string;
 }) {
   const [draft, setDraft] = useState("");
   const { commit, error, clearError } = useFieldSave(onSave);
+  // Its own save hook so a refused clear surfaces like a refused paste, under
+  // the field it belongs to.
+  const clearField = useFieldSave(() => onClear?.());
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   return (
@@ -916,26 +930,37 @@ export function SecretRow({
         {hint && <InfoTip text={hint} />}
       </div>
       <div className="min-w-0">
-        <input
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (error) clearError();
-          }}
-          // Blanking back to the mask is the "it saved" signal here, so it
-          // must not happen on a refusal — that would read as a stored
-          // credential that was never stored.
-          onBlur={() => {
-            const value = draft.trim();
-            if (!value) return;
-            void commit(value).then((ok) => {
-              if (ok) setDraft("");
-            });
-          }}
-          placeholder={masked ?? undefined}
-          className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
-        />
-        <FieldError message={error} />
+        <div className="flex items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (error) clearError();
+            }}
+            // Blanking back to the mask is the "it saved" signal here, so it
+            // must not happen on a refusal — that would read as a stored
+            // credential that was never stored.
+            onBlur={() => {
+              const value = draft.trim();
+              if (!value) return;
+              void commit(value).then((ok) => {
+                if (ok) setDraft("");
+              });
+            }}
+            placeholder={masked ?? undefined}
+            className="w-full min-w-0 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+          />
+          {onClear && masked && (
+            <button
+              type="button"
+              onClick={() => void clearField.commit("")}
+              className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              {clearLabel}
+            </button>
+          )}
+        </div>
+        <FieldError message={error ?? clearField.error} />
       </div>
     </div>
   );
