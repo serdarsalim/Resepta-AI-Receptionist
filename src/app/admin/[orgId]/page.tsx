@@ -1619,7 +1619,10 @@ export default function TenantPage() {
             {/* The second button, on the same line (Serdar, 2026-08-26). It
                 only shows while the delete form is CLOSED — open, it becomes
                 the block below, because a name field and a disclosure do not
-                belong in a row of buttons. */}
+                belong in a row of buttons. A REAL button, no ellipsis
+                (Serdar, same day): ghost text beside a bordered button read
+                as a caption, and the "…" promised a dialog when what opens
+                is a form right here. */}
             {!deleteOpen && (
               <button
                 type="button"
@@ -1628,9 +1631,9 @@ export default function TenantPage() {
                   setDeleteName("");
                   setDeleteError(null);
                 }}
-                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-400"
               >
-                Delete account…
+                Delete account
               </button>
             )}
           </div>
