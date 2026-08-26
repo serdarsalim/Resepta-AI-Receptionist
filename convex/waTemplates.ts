@@ -99,6 +99,7 @@ export const recordSubmission = internalMutation({
       v.literal("rejected"),
     ),
     metaStatusDetail: v.optional(v.string()),
+    metaCategory: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -109,6 +110,9 @@ export const recordSubmission = internalMutation({
       metaParams: args.metaParams,
       status: args.status,
       metaStatusDetail: args.metaStatusDetail,
+      // Only when Meta answered one — an EDIT response carries no category,
+      // and an absent key must not erase the landed one.
+      ...(args.metaCategory ? { metaCategory: args.metaCategory } : {}),
       // Cleared on every submission. A reason from the last rejection sitting
       // under a template that is now pending reads as the current verdict.
       metaRejectionReason: undefined,
@@ -131,6 +135,7 @@ export const applyStatusUpdate = internalMutation({
     // Meta's raw word.
     status: v.string(),
     reason: v.optional(v.string()),
+    category: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -172,6 +177,10 @@ export const applyStatusUpdate = internalMutation({
       // Undefined DELETES the field, which is right: an approval clears the
       // reason the previous rejection gave.
       metaRejectionReason: status === "rejected" ? args.reason || undefined : undefined,
+      // The landed category, when the caller learned one (the sync pull
+      // does; the status webhook does not) — review recategorises, and the
+      // landed value is what sends are billed at.
+      ...(args.category ? { metaCategory: args.category.toLowerCase() } : {}),
       // Learned late for a hand-made template the sync just matched by name.
       ...(row.metaTemplateId ? {} : { metaTemplateId: args.metaTemplateId }),
     });
@@ -337,6 +346,7 @@ async function performSubmit(
     // response. Reading it beats waiting for a webhook that will not come.
     status: json.status ? normalizeMetaStatus(json.status) : "pending",
     metaStatusDetail: json.status?.toUpperCase(),
+    metaCategory: json.category?.toLowerCase(),
   });
   return { ok: true };
 }
@@ -403,6 +413,7 @@ async function performSync(
       name?: string;
       language?: string;
       status?: string;
+      category?: string;
       rejected_reason?: string;
     }[];
   };
@@ -431,6 +442,7 @@ async function performSync(
       // Meta names the reason as a slug ("INCORRECT_CATEGORY"), which is
       // still the answer to "why was this refused".
       reason: remote.rejected_reason,
+      category: remote.category,
     });
   }
   return { ok: true, matched };
@@ -566,6 +578,7 @@ export const listForOrgAdmin = query({
       status: v.string(),
       metaStatusDetail: v.optional(v.string()),
       metaRejectionReason: v.optional(v.string()),
+      metaCategory: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -584,6 +597,7 @@ export const listForOrgAdmin = query({
         status: String(row.status),
         metaStatusDetail: row.metaStatusDetail,
         metaRejectionReason: row.metaRejectionReason,
+        metaCategory: row.metaCategory,
       }));
   },
 });

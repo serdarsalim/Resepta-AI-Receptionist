@@ -1814,6 +1814,13 @@ function TemplatesSection({ orgId }: { orgId: Id<"orgs"> }) {
               >
                 {row.status}
               </span>
+              {/* What Meta says it LANDED as, not what we intended — review
+                  recategorises, and the landed category is the billing. */}
+              {row.metaCategory && (
+                <span className="text-xs text-[var(--muted)]">
+                  {row.metaCategory}
+                </span>
+              )}
               <span className="flex-1" />
               <button
                 type="button"

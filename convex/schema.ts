@@ -1520,6 +1520,12 @@ export default defineSchema({
     // beside the normalised one because "rejected" is four different
     // situations and the owner needs to know which.
     metaStatusDetail: v.optional(v.string()),
+    // The category Meta says the template LANDED as ("utility"/"marketing"),
+    // from the submit response and the sync pull. Stored beside what we
+    // intended (lib/metaTemplate categoryFor) because review recategorises
+    // what it disagrees with, the landed category is what every send is
+    // billed at, and Business Manager is the only other place to learn it.
+    metaCategory: v.optional(v.string()),
     // Why review said no, verbatim. The single most useful thing on this row
     // when it is red, and there is nowhere else to read it without opening
     // Business Manager.
