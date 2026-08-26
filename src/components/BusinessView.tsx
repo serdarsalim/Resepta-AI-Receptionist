@@ -526,10 +526,36 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             label={t("settings.language")}
             hint={t("settings.languageHint")}
           />
+          {/* Behind a confirmation since 2026-08-26 (Serdar): the value
+              implicates the assistant's fallback language, the automated
+              messages and the campaign template, and prod Bella sat on the
+              wrong one for weeks without anyone noticing. Loud beats locked
+              — the same wrong value under an immutable field would have
+              needed operator surgery to fix. */}
           <select
             className="sm:max-w-56"
             defaultValue={settings.org.language}
-            onChange={(e) => void update({ language: e.target.value })}
+            onChange={(e) => {
+              const el = e.target;
+              const next = el.value;
+              const prev = settings.org.language;
+              if (next === prev) return;
+              void (async () => {
+                const ok = await confirm({
+                  title: t("settings.languageChange"),
+                  body: t("settings.languageChangeBody"),
+                  confirmLabel: t("settings.languageChangeConfirm"),
+                });
+                // Reverted by hand because the select is uncontrolled: the
+                // stored value never moved, but the browser already painted
+                // the new choice.
+                if (!ok) {
+                  el.value = prev;
+                  return;
+                }
+                await update({ language: next });
+              })();
+            }}
           >
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>

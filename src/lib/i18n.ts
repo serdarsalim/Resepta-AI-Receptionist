@@ -1301,6 +1301,21 @@ const dictionary = {
     en: "The language your customers see: the messages you send, your booking page, and the page they manage an appointment from. It also selects the approved WhatsApp template, so a language with no approved template cannot send. To read the app in your own language, use the language setting in your account menu.",
     de: "Die Sprache, die Ihre Kundschaft sieht: gesendete Nachrichten, Ihre Buchungsseite und die Seite zur Terminverwaltung. Sie wählt auch die freigegebene WhatsApp-Vorlage — ohne Vorlage in dieser Sprache kann nichts gesendet werden. Für die App in Ihrer eigenen Sprache nutzen Sie die Spracheinstellung im Kontomenü.",
   },
+  "settings.languageChange": {
+    tr: "Müşteri dilini değiştir",
+    en: "Change customer language",
+    de: "Kundensprache ändern",
+  },
+  "settings.languageChangeBody": {
+    tr: "Bu ayar, asistanın dilini bilmediği müşterilere hangi dilde yanıt vereceğini, otomatik mesajların dilini ve kampanya şablonunu değiştirir. Onaylı şablonlar ve mevcut randevular olduğu gibi kalır.",
+    en: "This changes which language the assistant falls back to for customers it doesn't know yet, the language of your automated messages, and the campaign template. Approved templates and existing appointments stay as they are.",
+    de: "Diese Einstellung ändert, in welcher Sprache der Assistent unbekannten Kundinnen und Kunden antwortet, die Sprache der automatischen Nachrichten und die Kampagnenvorlage. Genehmigte Vorlagen und bestehende Termine bleiben unverändert.",
+  },
+  "settings.languageChangeConfirm": {
+    tr: "Değiştir",
+    en: "Change",
+    de: "Ändern",
+  },
   // Three words. It sits inline beside the currency select, where the example
   // it used to carry ("₺350.00 rather than ₺350") made the row read as a
   // sentence rather than a control — and the switch demonstrates itself the
