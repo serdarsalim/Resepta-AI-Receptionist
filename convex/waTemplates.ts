@@ -711,6 +711,14 @@ async function performRegisterStandardSet(
       results.push({ kind: row.kind, ok: true, reason: "already-approved" });
       continue;
     }
+    // A pending row's submission is already on Meta's desk; re-submitting it
+    // as an edit would reset its review for nothing. The bulk run CONVERGES —
+    // the per-row Submit button on the tenant page stays the force-resubmit
+    // for a row that is genuinely stuck.
+    if (row.status === "pending") {
+      results.push({ kind: row.kind, ok: true, reason: "in-review" });
+      continue;
+    }
     const context = await ctx.runQuery(internal.waTemplates.loadForSubmitByOrg, {
       orgId,
       templateId: row.templateId,
