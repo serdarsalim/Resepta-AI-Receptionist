@@ -288,7 +288,16 @@ These change what gets built next — don't paper over them:
   hybrid. Affects whether a super-admin surface exists at all.
 - **WABA ownership.** Does each salon go through Meta embedded signup, or does
   the partner hold numbers as a Tech Provider? This is the real onboarding
-  bottleneck and it is unvalidated.
+  bottleneck and it is unvalidated. **Partially answered 2026-08-26:** the
+  manual path is now walked end to end (see "Wiring a Meta Cloud number") and
+  costs about an hour per business. Embedded Signup was deliberately deferred
+  — it needs App Review plus business verification, which is disproportionate
+  with one number live. Revisit at business three, or the first time a
+  prospect refuses to grant access to their own WABA. Two facts to price in
+  before selling it: it does NOT set the profile picture or description
+  (separate Business Profile API call, which this app could own), and it fails
+  outright if the salon's number is already on consumer WhatsApp or the
+  WhatsApp Business app, which is how that flow usually derails.
 - **Template approval.** Every org currently types its own Meta-approved
   template names into the Reminders tab. If the partner owns the WABA,
   templates are approved once centrally and this UI gets much smaller.
@@ -559,6 +568,72 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
   operator's cue to go buy the line at the provider; the app still never
   purchases numbers.
 
+## Wiring a Meta Cloud number (walked end to end 2026-08-26)
+
+The first real Cloud API number went live for the **Bella** workspace on this
+date. The env vars and the code were never the hard part; the two traps below
+were, and **neither writes a log line anywhere on either side**. Meta reports
+the message as sent, the app receives nothing, and no error exists to find.
+
+**Trap 1: the app must be subscribed to the WABA.** The webhook-field toggles
+in the app dashboard (`messages` and friends) are app-level settings meaning
+"when I get events, send me these fields". They do not link the app to a
+specific WABA. Granting the system user full access to the WABA does not do
+it either — that grants permission to act, not event delivery. It is a
+separate call, and nothing in Meta's UI hints at the distinction:
+
+```bash
+# empty data array = this is the bug
+curl -s "https://graph.facebook.com/v25.0/<WABA_ID>/subscribed_apps" \
+  -H "Authorization: Bearer <SYSTEM_USER_TOKEN>"
+curl -X POST "https://graph.facebook.com/v25.0/<WABA_ID>/subscribed_apps" \
+  -H "Authorization: Bearer <SYSTEM_USER_TOKEN>"
+```
+
+**Trap 2: an unpublished Meta app delivers no production webhooks.** Meta's
+own warning sits on the webhook config screen and is easy to scroll past:
+while unpublished, only test webhooks sent from the dashboard arrive, and no
+production data reaches the endpoint even for app admins and developers.
+
+**One app secret, fleet-wide.** `convex/http.ts` verifies every inbound
+signature against a single `WA_APP_SECRET`, so ONE Meta app fronts every
+org's number. A business that insists on its own Meta app cannot be onboarded
+without adding a per-org app secret first. This is the Tech Provider shape the
+`waAccounts` row already assumes.
+
+**Diagnosing "nothing arrives".** `npx convex logs --prod` streams and never
+exits, so it hangs a foreground shell; bound it, and do not pipe it through
+`tail` while doing so (`tail` buffers to EOF and a killed process flushes
+nothing):
+
+```bash
+perl -e 'alarm 20; exec @ARGV' npx convex logs --prod --success --history 200 > out.txt 2>&1
+```
+
+HTTP routes log as `H(POST /whatsapp/webhook)`, so their **absence is
+evidence** that Meta is not delivering — provided some other `H(...)` line is
+present to prove routes are being logged at all. A healthy inbound message is
+two lines, `H(POST /whatsapp/webhook)` then `M(webhook:handleWhatsappEvent)`.
+The Convex MCP server refuses `data`, `logs` and `runOneoffQuery` against
+prod, so the CLI is the only route to prod logs.
+
+**Changing a display name is a three-step dance, not a field edit.**
+`POST /<PHONE_NUMBER_ID>?new_display_name=…` submits it, the name goes to
+`PENDING_REVIEW`, and it does not take effect until you re-register the number
+after approval (`POST /<PHONE_NUMBER_ID>/register`, 14-day window; registering
+before approval does nothing). Re-registration needs the number's 6-digit
+two-step verification PIN, which is set at first registration and is the step
+people discover at the worst moment — a new PIN can be set with the same token
+via `POST /<PHONE_NUMBER_ID>` with `pin=…`, no knowledge of the old one
+required. Limit is 10 name changes per 30 days. Do name changes BEFORE
+completing business verification: once verification lands, Meta initiates
+display name review across every number on the account and each later change
+is reviewed before it can be used.
+
+Ownership specifics for the live Autotakt/Bella number (WABA id, app id, which
+Meta account holds what) live in Mana's `20_Projects/Resepta.md`, not here —
+they are account facts, not repo facts.
+
 ## Operational readiness (audited 2026-08-20) — read before "why didn't it send"
 
 A three-way audit (onboarding path, silent-failure surfaces, config surface)
@@ -566,10 +641,10 @@ against the live prod deployment. Everything here is a KNOWN state, not a
 discovery to re-make. Re-verify before acting — items get fixed.
 
 **Dead in prod at audit time, config not code:**
-- `WA_APP_SECRET` and `WA_WEBHOOK_VERIFY_TOKEN` are UNSET, so the Cloud
-  webhook 503s every POST and Meta cannot even register the callback. No
-  inbound WhatsApp: no replies, no confirm/cancel buttons, no session window.
-  Neither has an admin field by design — they are `convex env set --prod`.
+- ~~`WA_APP_SECRET` and `WA_WEBHOOK_VERIFY_TOKEN` are UNSET~~ **FIXED
+  2026-08-26.** Both are set on prod and the first real number is live — see
+  "Wiring a Meta Cloud number" above. Neither has an admin field by design;
+  they are `convex env set --prod`.
 - No LLM key of either provider ⇒ every chat-agent turn logs a
   `llm-not-configured` skip. The provider pill says OpenAI.
 - `voiceRateMicroUsdPerMinute` unset ⇒ the meter resolves org ?? platform ??
