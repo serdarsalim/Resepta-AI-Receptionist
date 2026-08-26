@@ -4056,29 +4056,31 @@ const dictionary = {
   },
 
   // Outbound images.
-  "media.attach": { tr: "Görsel ekle", en: "Attach image", de: "Bild anhängen" },
-  "media.library": { tr: "Görseller", en: "Images", de: "Bilder" },
+  "media.attach": { tr: "Dosya ekle", en: "Attach a file", de: "Datei anhängen" },
+  "media.library": { tr: "Dosyalar", en: "Files", de: "Dateien" },
   "media.upload": { tr: "Yükle", en: "Upload", de: "Hochladen" },
   "media.empty": {
-    tr: "Henüz görsel yok. Fiyat listesi, önce-sonra fotoğrafı — bir kez yükleyin, hep kullanın.",
-    en: "No images yet. A price list, a before-and-after — upload once, send it forever.",
-    de: "Noch keine Bilder. Eine Preisliste, ein Vorher-Nachher — einmal hochladen, immer senden.",
+    tr: "Henüz dosya yok. Fiyat listesi, önce-sonra fotoğrafı — bir kez yükleyin, hep kullanın.",
+    en: "No files yet. A price list, a before-and-after — upload once, send it forever.",
+    de: "Noch keine Dateien. Eine Preisliste, ein Vorher-Nachher — einmal hochladen, immer senden.",
   },
   "media.remove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
+  // Two ceilings, one sentence. Naming both beats naming the one that happens
+  // to be wrong for the file somebody just picked.
   "media.tooLarge": {
-    tr: "Dosya çok büyük (en fazla 2 MB).",
-    en: "That file is too large (2 MB maximum).",
-    de: "Die Datei ist zu groß (maximal 2 MB).",
+    tr: "Dosya çok büyük (görsel en fazla 2 MB, belge 5 MB).",
+    en: "That file is too large (2 MB for an image, 5 MB for a document).",
+    de: "Die Datei ist zu groß (Bild maximal 2 MB, Dokument 5 MB).",
   },
   "media.unsupported": {
-    tr: "Yalnızca JPG, PNG ve WebP gönderilebilir.",
-    en: "Only JPG, PNG and WebP can be sent.",
-    de: "Es können nur JPG, PNG und WebP gesendet werden.",
+    tr: "Yalnızca JPG, PNG, WebP, PDF, Word ve Excel gönderilebilir.",
+    en: "Only JPG, PNG, WebP, PDF, Word and Excel can be sent.",
+    de: "Es können nur JPG, PNG, WebP, PDF, Word und Excel gesendet werden.",
   },
   "media.inUse": {
-    tr: "Bu görsel gönderilmiş bir mesajda var, silinemez.",
-    en: "This image is in a message already sent, so it can't be deleted.",
-    de: "Dieses Bild steht in einer bereits gesendeten Nachricht und kann nicht gelöscht werden.",
+    tr: "Bu dosya gönderilmiş bir mesajda var, silinemez.",
+    en: "This file is in a message already sent, so it can't be deleted.",
+    de: "Diese Datei steht in einer bereits gesendeten Nachricht und kann nicht gelöscht werden.",
   },
 
   // What arrived, in one word, for the surfaces that cannot show the thing

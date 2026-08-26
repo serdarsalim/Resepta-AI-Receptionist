@@ -6,7 +6,10 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  type QueryCtx,
 } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { DOC_EXTENSIONS, fileNameForAsset } from "./media";
 import { formatAppointmentTime } from "./lib/format";
 import {
   customerSender,
@@ -19,6 +22,7 @@ import { appointmentIcs } from "./lib/ics";
 import { resolveWaAccount } from "./lib/platformConfig";
 import {
   fetchWaMedia,
+  sendWaCloudDocument,
   sendWaCloudImage,
   sendWaCloudReaction,
   sendWaCloudTemplate,
@@ -46,7 +50,14 @@ const SESSION_WINDOW_MS = 24 * 3600_000;
 // Context for a rep-typed session message. Runs with the caller's auth (auth
 // propagates through runQuery), so the org scoping holds inside the action.
 export const loadSessionContext = internalQuery({
-  args: { customerId: v.id("customers") },
+  args: {
+    customerId: v.id("customers"),
+    // The library asset being attached, if any. Resolved HERE rather than at
+    // the send because the payload Meta wants differs by type — an image and a
+    // document are different objects, not one object with a different link —
+    // and the action doing the send has no db to ask what the file is.
+    mediaStorageId: v.optional(v.id("_storage")),
+  },
   returns: v.any(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
@@ -81,9 +92,37 @@ export const loadSessionContext = internalQuery({
       org: org ? { ...org, publicPhone: await resolvePublicPhone(ctx, org) } : org,
       evolution,
       contactFields,
+      asset: args.mediaStorageId
+        ? await resolveAsset(ctx, orgId, args.mediaStorageId)
+        : null,
     };
   },
 });
+
+// What an attached library file IS, in the two facts a send needs: the type
+// that picks the payload, and the name the customer will see on their phone.
+//
+// Scoped to the org on the way through. The storage id arrives from the
+// client, and without this check one salon could attach another's file by
+// pasting its id — the blob is not org-scoped, only the row that names it is.
+export async function resolveAsset(
+  ctx: QueryCtx,
+  orgId: Id<"orgs">,
+  storageId: Id<"_storage">,
+): Promise<{ contentType: string; fileName: string | null } | null> {
+  const row = await ctx.db
+    .query("mediaAssets")
+    .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+    .unique();
+  if (!row || row.orgId !== orgId) return null;
+  return {
+    contentType: row.contentType,
+    fileName:
+      row.contentType in DOC_EXTENSIONS
+        ? fileNameForAsset(row.name, row.contentType)
+        : null,
+  };
+}
 
 // Free-form reply from the contact page composer. Session messages only work
 // inside the 24h window the customer's last inbound opened — outside it Meta
@@ -96,9 +135,10 @@ export const sendSession = action({
     // cron to pick up — the salon writing tonight's follow-up at 23:00 and
     // having it land at 10:00 tomorrow.
     scheduledFor: v.optional(v.number()),
-    // An image from the library (convex/media.ts). With one attached the body
-    // becomes the CAPTION rather than a separate message, because two
-    // notifications for one thought is how a salon's thread becomes noise.
+    // A file from the library (convex/media.ts) — a photo or a document. With
+    // one attached the body becomes the CAPTION rather than a separate
+    // message, because two notifications for one thought is how a salon's
+    // thread becomes noise.
     mediaStorageId: v.optional(v.id("_storage")),
   },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
@@ -109,14 +149,19 @@ export const sendSession = action({
   // for every caller in src/, which is a much noisier failure than it looks.
   handler: async (ctx, args): Promise<{ ok: boolean; reason?: string }> => {
     const raw = args.body.trim();
-    // An image on its own is a message; text on its own is a message; neither
+    // A file on its own is a message; text on its own is a message; neither
     // is not.
     if (!raw && !args.mediaStorageId) return { ok: false, reason: "empty" };
     const context = await ctx.runQuery(internal.wa.loadSessionContext, {
       customerId: args.customerId,
+      mediaStorageId: args.mediaStorageId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { customer, waAccount, org, evolution, contactFields } = context;
+    const { customer, waAccount, org, evolution, contactFields, asset } = context;
+    // Named a file we cannot account for. Refused rather than sent as a bare
+    // link: the storage id comes from the client, and an asset that resolves
+    // to nothing is either another org's or one that has been deleted.
+    if (args.mediaStorageId && !asset) return { ok: false, reason: "media-missing" };
     // A human is answering this thread, so the chat agent stands down for it
     // (docs/chat-agent.md §5). Stamped before the send on purpose: even a
     // send that fails downstream is a person engaging, and the agent talking
@@ -186,6 +231,8 @@ export const sendSession = action({
       body,
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
+      mediaContentType: asset?.contentType,
+      mediaFileName: asset?.fileName ?? undefined,
       lane: lane ?? undefined,
     });
     // Parked. The row is visible in the thread immediately, counting down,
@@ -247,13 +294,25 @@ export const sendSession = action({
       : null;
     const result =
       args.mediaStorageId && link
-        ? await sendWaCloudImage({
-            accessToken: waAccount.accessToken,
-            phoneNumberId: waAccount.phoneNumberId,
-            to: customer.phone,
-            link,
-            caption: body || undefined,
-          })
+        ? // A document carries a filename and an image does not; sending a PDF
+          // through the image payload is rejected by Meta outright. asset is
+          // non-null here — the guard above returned already if it were not.
+          asset?.fileName
+          ? await sendWaCloudDocument({
+              accessToken: waAccount.accessToken,
+              phoneNumberId: waAccount.phoneNumberId,
+              to: customer.phone,
+              link,
+              fileName: asset.fileName,
+              caption: body || undefined,
+            })
+          : await sendWaCloudImage({
+              accessToken: waAccount.accessToken,
+              phoneNumberId: waAccount.phoneNumberId,
+              to: customer.phone,
+              link,
+              caption: body || undefined,
+            })
         : await sendWaCloudText({
             accessToken: waAccount.accessToken,
             phoneNumberId: waAccount.phoneNumberId,
@@ -1193,6 +1252,11 @@ export const dueScheduled = internalQuery({
       // attached this is the caption.
       body: v.optional(v.string()),
       mediaStorageId: v.optional(v.id("_storage")),
+      // Set when the attachment is a document, and it is the name the
+      // customer will see. Read off the ROW rather than re-resolved from the
+      // library: this is the record of what was composed, and a file renamed
+      // in the hour between writing and sending must not change what goes out.
+      mediaFileName: v.optional(v.string()),
       // Which number this was written to go out on. Unset = cloud.
       lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     }),
@@ -1214,6 +1278,7 @@ export const dueScheduled = internalQuery({
         customerId: row.customerId!,
         body: row.body,
         mediaStorageId: row.mediaStorageId,
+        mediaFileName: row.mediaFileName,
         lane: row.lane,
       }));
   },
@@ -1339,13 +1404,22 @@ export const sendDueScheduled = internalAction({
         : !waAccount
           ? ({ ok: false as const, reason: "wa-not-configured" })
           : item.mediaStorageId && link
-          ? await sendWaCloudImage({
-              accessToken: waAccount.accessToken,
-              phoneNumberId: waAccount.phoneNumberId,
-              to: customer.phone,
-              link,
-              caption: item.body || undefined,
-            })
+          ? item.mediaFileName
+            ? await sendWaCloudDocument({
+                accessToken: waAccount.accessToken,
+                phoneNumberId: waAccount.phoneNumberId,
+                to: customer.phone,
+                link,
+                fileName: item.mediaFileName,
+                caption: item.body || undefined,
+              })
+            : await sendWaCloudImage({
+                accessToken: waAccount.accessToken,
+                phoneNumberId: waAccount.phoneNumberId,
+                to: customer.phone,
+                link,
+                caption: item.body || undefined,
+              })
           : await sendWaCloudText({
               accessToken: waAccount.accessToken,
               phoneNumberId: waAccount.phoneNumberId,

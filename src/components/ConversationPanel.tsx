@@ -23,6 +23,7 @@ import {
   humanizeCallEnd,
 } from "./CallDetail";
 import { MessageMedia } from "./MessageMedia";
+import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { EmojiPicker } from "./EmojiPicker";
 
 // The header row above the feed has to sit in the same column as the feed, or
@@ -220,7 +221,7 @@ export function ConversationPanel({
   // An image from the library, chosen for THIS message. Same disclosure shape
   // as the schedule row: closed by default, because most messages are words.
   const [attaching, setAttaching] = useState(false);
-  const [attached, setAttached] = useState<AttachedImage | null>(null);
+  const [attached, setAttached] = useState<AttachedFile | null>(null);
   // Grows with the message, capped, bottom-anchored — the extra lines push the
   // field upward the way WhatsApp Web does rather than pushing the thread down.
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -1345,7 +1346,7 @@ export function ConversationPanel({
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
-              // An image on its own is a message. Requiring text alongside it
+              // A file on its own is a message. Requiring text alongside it
               // would mean captioning a price list to send a price list.
               if (!body && !attached) return;
               setSending(true);
@@ -1531,12 +1532,21 @@ export function ConversationPanel({
           )}
           {attached && (
             <div className="flex items-center gap-2 px-3 pb-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={attached.url}
-                alt=""
-                className="h-10 w-10 rounded object-cover"
-              />
+              {attached.fileName ? (
+                // Pointing an <img> at a PDF fails its load, and the composer
+                // would then show an empty square next to a file that is
+                // perfectly attached.
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[var(--border)] bg-[var(--muted-bg)] text-[10px] font-semibold text-[var(--muted)]">
+                  {mediaTypeLabel(attached.contentType, attached.fileName)}
+                </span>
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={attached.url}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded object-cover"
+                />
+              )}
               <span className="min-w-0 flex-1 truncate text-xs text-[var(--muted)]">
                 {attached.name}
               </span>
@@ -1563,9 +1573,18 @@ export function ConversationPanel({
   );
 }
 
-type AttachedImage = { storageId: Id<"_storage">; name: string; url: string };
+type AttachedFile = {
+  storageId: Id<"_storage">;
+  name: string;
+  url: string;
+  contentType: string;
+  // Set for a document, null for an image — the same distinction the send
+  // path makes, carried so the composer's preview strip does not have to
+  // guess at a picture that isn't one.
+  fileName: string | null;
+};
 
-// The org's image library, as a row of thumbnails plus an upload tile.
+// The org's attachment library, as a row of tiles plus an upload tile.
 //
 // A library rather than a file input per message: the same price list goes out
 // forty times, and re-picking it off a phone every time is the difference
@@ -1577,7 +1596,7 @@ function MediaStrip({
   onPick,
 }: {
   selectedId?: Id<"_storage">;
-  onPick: (asset: AttachedImage) => void;
+  onPick: (asset: AttachedFile) => void;
 }) {
   const { t } = useLanguage();
   const assets = useQuery(api.media.list, {});
@@ -1628,6 +1647,8 @@ function MediaStrip({
                     storageId: asset.storageId,
                     name: asset.name,
                     url: asset.url!,
+                    contentType: asset.contentType,
+                    fileName: asset.fileName,
                   })
                 }
                 title={asset.name}
@@ -1637,12 +1658,27 @@ function MediaStrip({
                     : ""
                 }`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={asset.url}
-                  alt={asset.name}
-                  className="h-full w-full object-cover"
-                />
+                {asset.fileName ? (
+                  // A document has no thumbnail to show, so the tile says what
+                  // it IS — "PDF" over a truncated name. A generic file glyph
+                  // on every one of them turns a library of six price lists
+                  // into six identical squares.
+                  <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-1">
+                    <span className="text-[10px] font-semibold text-[var(--muted-strong,var(--foreground))]">
+                      {mediaTypeLabel(asset.contentType, asset.fileName)}
+                    </span>
+                    <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--muted)]">
+                      {asset.name}
+                    </span>
+                  </span>
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={asset.url}
+                    alt={asset.name}
+                    className="h-full w-full object-cover"
+                  />
+                )}
               </button>
             ),
         )}
@@ -1653,7 +1689,7 @@ function MediaStrip({
         >
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/jpeg,image/png,image/webp,application/pdf,.xlsx,.xls,.docx,.doc"
             className="hidden"
             disabled={uploading}
             onChange={(event) => {

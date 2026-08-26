@@ -49,9 +49,15 @@ export const logOutQueued = internalMutation({
     // want words, not markup.
     emailHtml: v.optional(v.string()),
     scheduledFor: v.optional(v.number()),
-    // An outbound image from the library. Same field the inbound path uses, so
-    // the thread renders both directions without knowing which is which.
+    // An outbound attachment from the library. Same fields the inbound path
+    // uses, so the thread renders both directions without knowing which is
+    // which — and the type travels with the row rather than being re-guessed
+    // from an extensionless storage URL every time a bubble paints.
     mediaStorageId: v.optional(v.id("_storage")),
+    mediaContentType: v.optional(v.string()),
+    // Documents only. It is the name the CUSTOMER sees on their phone, so it
+    // carries its extension; an image needs none.
+    mediaFileName: v.optional(v.string()),
     // Which number this goes out on. Unset = cloud.
     lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     // Email open tracking (winback + campaign mail only): the pixel token and
@@ -75,6 +81,8 @@ export const logOutQueued = internalMutation({
       emailHtml: args.emailHtml,
       scheduledFor: args.scheduledFor,
       mediaStorageId: args.mediaStorageId,
+      mediaContentType: args.mediaContentType,
+      mediaFileName: args.mediaFileName,
       lane: args.lane,
       trackingToken: args.trackingToken,
       templateId: args.templateId,

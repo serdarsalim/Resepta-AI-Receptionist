@@ -182,6 +182,39 @@ export async function sendWaCloudImage(args: {
   );
 }
 
+// A document is its own payload type, not an image with a different link:
+// Meta needs the filename to show the recipient, and sending a PDF as an
+// image is rejected outright.
+export function waCloudDocumentPayload(
+  to: string,
+  link: string,
+  fileName: string,
+  caption?: string,
+): Record<string, unknown> {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "document",
+    document: { link, filename: fileName, ...(caption ? { caption } : {}) },
+  };
+}
+
+export async function sendWaCloudDocument(args: {
+  accessToken: string;
+  phoneNumberId: string;
+  to: string;
+  link: string;
+  fileName: string;
+  caption?: string;
+}): Promise<WaCloudSendResult> {
+  return postWaCloud(
+    args.accessToken,
+    args.phoneNumberId,
+    waCloudDocumentPayload(args.to, args.link, args.fileName, args.caption),
+  );
+}
+
 // ---- Reactions ----
 //
 // A reaction is a message to Meta like any other, so it obeys the same 24h
