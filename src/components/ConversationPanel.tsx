@@ -1360,30 +1360,15 @@ export function ConversationPanel({
       </div>
 
       {canCompose && agentChipState && (
-        /* The takeover chip (docs/chat-agent.md §5). One line above the
-           composer, two states: the agent has this chat, or a human does.
-           Sending any manual message also takes over (stamped server-side in
-           wa.sendSession); the chip is how the thread is handed BACK, which
-           no message can express. */
-        <div
-          className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-[var(--muted)]"
-        >
-          <span>
-            {agentChipState === "paused" ? t("agent.paused") : t("agent.answering")}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              void setAgentPaused({
-                customerId,
-                paused: agentChipState !== "paused",
-              })
-            }
-            className="shrink-0 rounded-lg px-2 py-1 font-medium text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            {agentChipState === "paused" ? t("agent.handBack") : t("agent.takeOver")}
-          </button>
-        </div>
+        <AgentHandoverBar
+          paused={agentChipState === "paused"}
+          onToggle={() =>
+            void setAgentPaused({
+              customerId,
+              paused: agentChipState !== "paused",
+            })
+          }
+        />
       )}
       {canCompose && (
         <>
@@ -2109,6 +2094,90 @@ function CallEntry({
           </div>
         </details>
       )}
+    </div>
+  );
+}
+
+// Who owns this chat right now, and the one control that changes it.
+//
+// The takeover chip (docs/chat-agent.md §5). It was a line of grey text with
+// a text button floated opposite, which is what a status line looks like when
+// nobody has decided whether it is a status or a control. It is both: the
+// answer to "is a robot talking to my customer" and the switch that stops it,
+// which is the single most consequential toggle on this screen.
+//
+// So it is a BAR, and the two states are told apart by colour and icon before
+// a word is read — the whole point being that a salon owner glancing at a
+// thread should know who is holding it without parsing a sentence.
+//
+// Sending any manual message also takes over (stamped server-side in
+// wa.sendSession); this is how a thread is handed BACK, which no message can
+// express.
+function AgentHandoverBar({
+  paused,
+  onToggle,
+}: {
+  paused: boolean;
+  onToggle: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div className="px-3 pt-3">
+      <div
+        className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 ${
+          paused
+            ? "border-[var(--border)] bg-[var(--muted-bg)]"
+            : // Accent-tinted, not emerald: emerald is the outbound bubble
+              // and a green bar directly above the composer read as one more
+              // message rather than as a piece of chrome.
+              "border-[var(--accent)]/30 bg-[var(--accent)]/[0.08]"
+        }`}
+      >
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+            paused
+              ? "bg-[var(--card)] text-[var(--muted)]"
+              : "bg-[var(--accent)]/15 text-[var(--accent)]"
+          }`}
+        >
+          {paused ? (
+            // A person. Whoever is reading this is the one answering now.
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          ) : (
+            // The same four-point spark the app already uses for automation
+            // (FeedIcon, the rules header), so the agent looks like itself
+            // everywhere rather than picking a new symbol per screen.
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+              <path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
+            </svg>
+          )}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--foreground)]">
+          {paused ? t("agent.paused") : t("agent.answering")}
+        </span>
+        {/* Live, and it is worth saying: "the assistant is answering" is a
+            claim about RIGHT NOW, and a static label makes it read like a
+            setting somebody switched on once. */}
+        {!paused && (
+          <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          // On its own surface rather than a bare text link: this is the
+          // switch, and the bar around it is the status. A borderless label
+          // opposite a sentence reads as the other half of the sentence.
+          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+        >
+          {paused ? t("agent.handBack") : t("agent.takeOver")}
+        </button>
+      </div>
     </div>
   );
 }

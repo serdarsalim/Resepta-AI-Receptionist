@@ -3631,15 +3631,18 @@ const dictionary = {
 
   // The chat-agent takeover chip above the composer (docs/chat-agent.md §5).
   "agent.answering": {
-    tr: "Asistan bu sohbeti yanıtlıyor",
-    en: "The assistant is answering this chat",
-    de: "Der Assistent beantwortet diesen Chat",
+    tr: "Asistan yanıtlıyor",
+    en: "Assistant is answering",
+    de: "Assistent antwortet",
   },
   "agent.takeOver": { tr: "Devral", en: "Take over", de: "Übernehmen" },
+  // No em dash, and no "the assistant is paused" either: the person icon and
+  // a button offering to hand the chat BACK already say the assistant is off.
+  // What the reader needs from the words is whose chat it is now.
   "agent.paused": {
-    tr: "Asistan duraklatıldı — sohbet sizde",
-    en: "Assistant paused — this chat is yours",
-    de: "Assistent pausiert — dieser Chat gehört Ihnen",
+    tr: "Sohbet sizde",
+    en: "This chat is yours",
+    de: "Dieser Chat gehört Ihnen",
   },
   "agent.handBack": {
     tr: "Asistana geri ver",
