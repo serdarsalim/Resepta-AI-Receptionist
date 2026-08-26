@@ -32,6 +32,7 @@ import type * as http from "../http.js";
 import type * as industryPresets from "../industryPresets.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_activity from "../lib/activity.js";
+import type * as lib_agentVariables from "../lib/agentVariables.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_bookingLimits from "../lib/bookingLimits.js";
@@ -146,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   industryPresets: typeof industryPresets;
   knowledge: typeof knowledge;
   "lib/activity": typeof lib_activity;
+  "lib/agentVariables": typeof lib_agentVariables;
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;
   "lib/bookingLimits": typeof lib_bookingLimits;
