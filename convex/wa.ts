@@ -31,6 +31,7 @@ import {
 import { isOrgSetupFailure } from "./lib/alerts";
 import { outOfHoursMessage } from "./lib/awayReply";
 import { renderTokens, tokenDefaults } from "./lib/renderTokens";
+import { defaultForKey } from "./lib/metaTemplate";
 import { sendEvolutionText } from "./lib/evolution";
 import {
   evolutionReplyHint,
@@ -735,7 +736,16 @@ export const sendAppointmentMessage = internalAction({
         : kindTemplate;
     const cloudTemplate =
       metaSource && metaSource.status === "approved" && metaSource.metaName
-        ? { metaName: metaSource.metaName, language: metaSource.language }
+        ? {
+            metaName: metaSource.metaName,
+            language: metaSource.language,
+            // From the SAME row as the name. metaParams describes the body
+            // that row registered, so reading it off the content template
+            // instead would fill one template's placeholders with another
+            // template's tokens the moment those two rows differ — which is
+            // the whole point of the fallback above.
+            metaParams: metaSource.metaParams as string[] | undefined,
+          }
         : undefined;
 
     const fail = async (reason: string) => {
@@ -774,7 +784,6 @@ export const sendAppointmentMessage = internalAction({
     }
 
     const when = formatAppointmentTime(appointment.startAt, org.timezone, language);
-    const bodyParams = [customer.firstName, org.name, when];
     // The authored body, when the owner has written one — named tokens, same
     // vocabulary as the composer and campaigns. The positional bodyPreview
     // survives only as the fallback for rows nobody has authored yet; it is a
@@ -853,6 +862,36 @@ export const sendAppointmentMessage = internalAction({
     // customer has no value for still says something (schema:
     // waTemplates.variableDefaults).
     const defaults = tokenDefaults(contentTemplate?.variableDefaults);
+    // What fills {{1}}..{{n}} in the Meta template.
+    //
+    // From metaParams when the template was submitted through the app, which
+    // records WHICH token is behind each placeholder — so the salon's own
+    // sentence gets its own parameters instead of everyone being stuck with
+    // the one sentence the fixed triple could express.
+    //
+    // The triple stays as the fallback, and it is not legacy debris: it is
+    // exactly what every template registered by hand in Business Manager
+    // declares ({{1}} first name, {{2}} business, {{3}} date+time), so those
+    // keep sending untouched.
+    const metaParams = (cloudTemplate as { metaParams?: string[] } | undefined)
+      ?.metaParams;
+    const bodyParams = metaParams?.length
+      ? metaParams.map((key) => {
+          const value = (tokenValues as Record<string, unknown>)[key];
+          const text = typeof value === "string" ? value.trim() : "";
+          // Meta rejects an EMPTY parameter outright (132000) and takes the
+          // whole message down with it, so a token this customer has no value
+          // for falls to the owner's default and then to a dash. A dash in one
+          // sentence beats a reminder nobody receives.
+          //
+          // Newlines and runs of spaces are rejected the same way. Those are
+          // refused at submit time (lib/metaTemplate UNSENDABLE), but a value
+          // can still arrive with one — a business name someone pasted across
+          // two lines — so it is flattened here rather than trusted.
+          const filled = text || defaultForKey(key, defaults) || "-";
+          return filled.replace(/\s+/g, " ");
+        })
+      : [customer.firstName, org.name, when];
     const body = contentTemplate?.body
       ? renderTokens(contentTemplate.body, tokenValues, defaults)
       : contentTemplate?.bodyPreview

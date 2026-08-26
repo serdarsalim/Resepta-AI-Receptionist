@@ -50,10 +50,43 @@ export const handleWhatsappEvent = internalMutation({
   handler: async (ctx, args) => {
     const entries = (args.payload?.entry ?? []) as Record<string, unknown>[];
     for (const entry of entries) {
-      const changes = (entry.changes ?? []) as { value?: Record<string, unknown> }[];
+      const changes = (entry.changes ?? []) as {
+        field?: string;
+        value?: Record<string, unknown>;
+      }[];
       for (const change of changes) {
         const value = change.value;
         if (!value) continue;
+
+        // A template review verdict, which is NOT a message and carries no
+        // phone_number_id — the guard below would drop it. It names a WABA
+        // (entry.id) and a template, so it is dispatched before any of the
+        // message handling and never reaches it.
+        //
+        // The app has been subscribed to this field all along; until now the
+        // payloads were parsed and thrown away, which is why a rejection at
+        // Meta never reached the person who could fix it.
+        if (change.field === "message_template_status_update") {
+          const event = value.event as string | undefined;
+          if (event) {
+            const templateId = value.message_template_id as
+              | number
+              | string
+              | undefined;
+            await ctx.runMutation(internal.waTemplates.applyStatusUpdate, {
+              // A NUMBER in Meta's payload; ours is a string, and comparing
+              // the two would never match.
+              metaTemplateId:
+                templateId != null ? String(templateId) : undefined,
+              wabaId: entry.id as string | undefined,
+              metaName: value.message_template_name as string | undefined,
+              language: value.message_template_language as string | undefined,
+              status: event,
+              reason: (value.reason as string | null | undefined) ?? undefined,
+            });
+          }
+          continue;
+        }
 
         // Resolve the org by phone_number_id — never by the customer's number
         // (the same person can be a customer of two salons on this deployment).

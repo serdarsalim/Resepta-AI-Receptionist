@@ -1440,9 +1440,17 @@ export default defineSchema({
     // metaName would force a fake value into every such row.
     metaName: v.optional(v.string()),
     language: v.string(),
-    // Meta's approval state, hand-tracked by the operator. Gates the Cloud
-    // send only — the same row's body still emails and sends via Evolution
-    // while this says "draft".
+    // Meta's approval state. Moves on its own now: submitting sets pending,
+    // the message_template_status_update webhook and waTemplates.syncFromMeta
+    // both write the outcome. Still editable by hand, because a template
+    // registered in Business Manager before this existed has no other way to
+    // be told about. Gates the Cloud send only — the same row's body still
+    // emails and sends via Evolution while this says "draft".
+    //
+    // Four values, where Meta has nine. lib/metaTemplate.normalizeMetaStatus
+    // does the mapping; `status === "approved"` gates every Cloud send, and a
+    // fifth value here would have to be handled correctly at each read or a
+    // template would quietly become unsendable.
     status: v.union(
       v.literal("draft"),
       v.literal("pending"),
@@ -1453,6 +1461,38 @@ export default defineSchema({
     // business, {{3}} date+time). Kept as the legacy content fallback for rows
     // whose owner has not authored a body yet.
     bodyPreview: v.optional(v.string()),
+    // ---- Submission to Meta (convex/waTemplates.ts) -------------------------
+    //
+    // Meta's own id for the registered template. The join key for the status
+    // webhook, and the address the edit endpoint needs — an approved template
+    // cannot be re-created, only edited on its own id.
+    metaTemplateId: v.optional(v.string()),
+    // Which WABA it is registered on. A number can move between WABAs, and a
+    // template approved on the old one does not exist on the new: without this
+    // the app would keep sending a name the current WABA has never heard of.
+    metaWabaId: v.optional(v.string()),
+    // The canonical token key behind each {{n}}, IN ORDER — the contract the
+    // send path replays. Before this the app hardcoded {{1}}=first name,
+    // {{2}}=business, {{3}}=date+time everywhere, so a salon could only ever
+    // have the one sentence Meta had approved for them. With it, the words
+    // they wrote are what gets submitted, and the parameters follow.
+    //
+    // Unset on every row registered by hand, which is exactly the old fixed
+    // triple — so the send path falls back to it and nothing that works today
+    // stops working.
+    metaParams: v.optional(v.array(v.string())),
+    // Meta's raw status word (IN_APPEAL, PENDING_DELETION, PAUSED…), kept
+    // beside the normalised one because "rejected" is four different
+    // situations and the owner needs to know which.
+    metaStatusDetail: v.optional(v.string()),
+    // Why review said no, verbatim. The single most useful thing on this row
+    // when it is red, and there is nowhere else to read it without opening
+    // Business Manager.
+    metaRejectionReason: v.optional(v.string()),
+    // When it last went for review. Distinct from _creationTime: a rejected
+    // template is fixed and resubmitted, and "waiting since when" is what the
+    // owner is actually asking.
+    submittedAt: v.optional(v.number()),
     // Email engagement, denormalised because the honest alternative is
     // scanning every message the org ever sent. Sent bumps in ONE place
     // (messages.applySendResult, where every path already reports), opened in
@@ -1484,7 +1524,12 @@ export default defineSchema({
     // validated against the real typed fields at commit time.
     draft: v.optional(v.any()),
     draftUpdatedAt: v.optional(v.number()),
-  }).index("by_org", ["orgId"]),
+  })
+    .index("by_org", ["orgId"])
+    // The status webhook names a template by Meta's id, not by ours, so
+    // resolving it must be an indexed point read rather than a scan of every
+    // template on the deployment.
+    .index("by_meta_template_id", ["metaTemplateId"]),
 
   messages: defineTable({
     orgId: v.id("orgs"),

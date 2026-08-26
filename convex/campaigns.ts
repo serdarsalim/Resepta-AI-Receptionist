@@ -373,6 +373,12 @@ export const fanOut = internalMutation({
           kind: "campaign",
           status: "queued",
           templateName: args.templateName,
+          // {{3}} is the whole rendered message, which is what makes one
+          // approved template serve every campaign — and it is also the one
+          // constraint worth knowing before a run fails: Meta rejects a body
+          // parameter containing a NEWLINE (error 132000). A campaign written
+          // as one paragraph sends; one written with line breaks is refused
+          // per recipient. See lib/metaTemplate.CAMPAIGN_BODIES.
           templateParams: [customer.firstName, org.name, line],
           body: line,
           nextAttemptAt: Date.now(),
