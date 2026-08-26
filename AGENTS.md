@@ -749,6 +749,68 @@ Ownership specifics for the live Autotakt/Bella number (WABA id, app id, which
 Meta account holds what) live in Mana's `20_Projects/Resepta.md`, not here —
 they are account facts, not repo facts.
 
+## One assistant, two lanes — and the platform WhatsApp shape (2026-08-26 evening)
+
+One session moved five contracts. Each has its full story in the commits and
+in `docs/agent-core.md`; this is the map so nobody rediscovers them the hard
+way.
+
+**The chat agent composes over the salon's voice Talimat.** Chat template v5
+(`lib/chatAgentTemplate`) is a channel ADAPTER wrapped around the prompt the
+salon's phone agent runs, with the ring-time built-ins rendered written
+instead of spoken (`lib/agentVariables`, one module, `style` switch — change a
+builder and BOTH lanes change). The Talimat text chat reads is the MIRROR
+stamped on `retellAgents.generalPrompt` by every publish path; an agent never
+published since the mirror existed has no mirror, and chat falls back to
+`codePrompt`. WHICH agent chat speaks as is the radio toggle
+`retellAgents.chatEnabled` (assistants table, "Sohbet" column) — an org with
+agents but none toggled skips visibly as `chat-agent-not-selected`. Chat's
+`{{agent_name}}` renders EMPTY by decision: the nameless robot. Turn rows
+stamp `voicePromptVersion` beside `templateVersion`; a reply is the product
+of two documents.
+
+**WhatsApp runs the Tech Provider shape for real now.** The system-user token
+lives at platform level (`platformConfig.whatsappAccessToken`, fleet page);
+org `waAccounts` rows carry routing facts only (phoneNumberId, wabaId,
+displayNumber). "Use platform token" on the tenant Setup tab clears an org's
+own token — refused while no platform token exists. One number belongs to one
+org, always: inbound resolves the org by `phone_number_id` and `.unique()`
+throws for both orgs on a shared id. Numbers cannot be platform-wide; only
+auth can.
+
+**Salons never meet Meta.** The registration desk left the salon's
+Automations page for the /admin tenant page; the wording of the five
+lifecycle kinds is LOCKED for salons (`LOCKED_TEMPLATE_KINDS` in
+`lib/templateTexts`, enforced in `orgs.updateTemplate`/`saveTemplateDraft`
+as `wording-locked` — hidden editors are just honest UI). What Meta registers
+for those kinds is the platform's own Cloud text
+(`lib/metaTemplate CLOUD_TEMPLATE_TEXTS`) — no `[service]`, no links, the
+quick-reply buttons do that job — while the rich row bodies keep serving
+Evolution and email. Registration is AUTOMATIC: a WABA id arriving or
+changing on an org (platform.setWaAccount, orgs.connectWhatsapp) schedules
+`registerStandardSetForOrg`; the fleet page has one rollout button for
+backfills and wording updates. All three languages register per org, because
+sends resolve templates by the CUSTOMER's language and a missing language
+fails the send by doctrine. The bulk run skips approved AND pending rows;
+per-row Submit is the force. `waTemplates.metaCategory` records what a
+template LANDED as (review recategorises; landed is what sends are billed
+at). The campaign wrapper is PARKED (Serdar): Meta refused the old
+all-parameter body ("too many variables for its length"); the fleshed
+wrapper is in `CAMPAIGN_BODIES`, unsubmitted.
+
+**Campaigns is a section of Automations, not a sidebar door**, rendered at
+the foot of RemindersView's stack so the drill-in rule still hides it;
+`?tab=campaigns` aliases to `messages`. The sidebar door is "Asistan" with a
+robot head — one agent, two channels; "Sesli asistan" and "Ajan" are dead
+vocabulary in user-facing copy.
+
+**The customers validator bit again.** `lastReadReceiptWamid` reached the
+schema without reaching `customerFields` in `convex/customers.ts`, and the
+one prod customer carrying it crashed the whole tab for anyone opening him
+(the throw loops the renderer — presents as Chrome's sad tab, not an error
+boundary). That mirror's warning comment now records TWO occurrences: a
+schema column on customers MUST be added there in the same change.
+
 ## Operational readiness (audited 2026-08-20) — read before "why didn't it send"
 
 A three-way audit (onboarding path, silent-failure surfaces, config surface)
