@@ -134,6 +134,50 @@ style issue.
   customer's number alone. Button payloads confirm/cancel the exact
   appointment; bare "EVET"/"İPTAL" text falls back to the customer's next
   upcoming appointment.
+- **Attachments, both directions (2026-08-26).** Meta hangs every media type
+  under a key named after `message.type` with the SAME shape — `{ id, mime_type,
+  caption?, filename? }` — so `webhook.ts` reads it generically rather than
+  branching per type. `id` is a handle, not the file: it resolves to a URL that
+  lives ~5 minutes and only serves to a request carrying the access token, which
+  is why bytes are copied into Convex storage at arrival and never linked
+  (`wa.downloadInboundMedia` → `lib/waCloud.fetchWaMedia`, capped at 20 MB and
+  checked twice — `file_size` is Meta's claim, the byte count is the fact).
+  - `messages.mediaContentType` is written at ARRIVAL from the webhook, not at
+    download. That is what lets a failed fetch render "voice message · could not
+    be loaded" instead of a blank bubble, and blank bubbles previewed as
+    "Şablon mesajı", which named the one thing they definitely were not.
+  - `mediaFileName` is documents-only and is the name the CUSTOMER sees. Its
+    presence is also how a voice NOTE is told from an audio FILE: a recording
+    carries no filename because nobody named it.
+  - One renderer, `src/components/MessageMedia.tsx`, over the shared kind rules
+    in `convex/lib/mediaKind.ts` (imported by both server and client on purpose;
+    a client copy is what drifts). Voice notes arrive as OGG/Opus — Safari may
+    refuse to decode, and a refused `<audio>` still RENDERS as a dead player, so
+    a decode error falls back to the file chip.
+  - Outbound, a document is its own Meta payload with a `filename`, NOT an image
+    with a different link — sending a PDF through the image payload is rejected.
+    Both send sites branch on it: `wa.sendSession` and the scheduled dispatch.
+    The scheduled one reads `mediaFileName` off the ROW, so renaming a library
+    asset between composing and sending cannot change what goes out.
+  - Sends only work from a DEPLOYED backend. Meta fetches the file from the URL
+    itself, and in dev `ctx.storage.getUrl` returns a 127.0.0.1 address.
+- **Reactions (2026-08-26).** A reaction is not a message and never becomes a
+  row: it carries an emoji plus the wamid of the message it belongs to, so
+  `webhook.ts` looks that row up on `by_wamid` and patches
+  `messages.reactionEmoji`. An EMPTY emoji is how Meta signals one being taken
+  back, and patching to `undefined` deletes the field, which is the right
+  behaviour here (elsewhere it is a trap).
+  - ONE field, and `direction` says whose emoji is in it — the customer's on an
+    outbound row, ours on an inbound one. That invariant is why `reactToMessage`
+    refuses to react to our own messages: it would overwrite theirs.
+  - The reaction path stamps `lastInboundAt` (a person who reacts has engaged)
+    but does NOT alert staff or wake the chat agent. Paging someone for a
+    thumbs-up teaches them to ignore the alerts that matter.
+  - Outbound reactions write only AFTER Meta accepts. Write-then-rollback would
+    put an emoji on the salon's screen that the customer never saw, and a
+    reaction is exactly the signal nobody goes back to verify.
+  - The Evolution lane refuses (`EVOLUTION_NO_REACTION`): reacting over Baileys
+    needs the full message key, which that lane never stored.
 - Reminders are cron-driven (`convex/crons.ts` → `reminders.tick`, every 5
   min): offsets come from `orgs.reminderOffsetsHours` (default 24h and 2h
   before start). The tick stamps `reminderSentOffsets` BEFORE scheduling the

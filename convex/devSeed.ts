@@ -277,6 +277,11 @@ export const seed = internalMutation({
             status: i % 6 === 5 ? "failed" : i % 2 === 0 ? "read" : "delivered",
             error: i % 6 === 5 ? "wa-not-configured" : undefined,
             wamid: `wamid.seed.${i}.${r}.conf`,
+            // Some customers answer a confirmation with an emoji instead of a
+            // word. Seeded because the reaction pill hangs off a bubble corner
+            // and overlaps its neighbours' spacing — a state you cannot check
+            // by reading the JSX, only by looking at a thread that has one.
+            ...(i % 3 === 0 ? { reactionEmoji: "👍" } : {}),
           });
           messageCount++;
           if (reminded) {
@@ -304,6 +309,9 @@ export const seed = internalMutation({
               occurredAt: Math.min(startAt - DAY + HOUR, now - (i + 1) * HOUR),
               status: "received",
               wamid: `wamid.seed.${i}.${r}.in`,
+              // The other direction: the salon acknowledging with an emoji
+              // rather than spending a message on "great, see you then".
+              ...(i % 4 === 1 ? { reactionEmoji: "❤️" } : {}),
             });
             messageCount++;
           }
