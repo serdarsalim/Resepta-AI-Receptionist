@@ -161,6 +161,21 @@ style issue.
     asset between composing and sending cannot change what goes out.
   - Sends only work from a DEPLOYED backend. Meta fetches the file from the URL
     itself, and in dev `ctx.storage.getUrl` returns a 127.0.0.1 address.
+- **Reading a thread you are already in (2026-08-26).** The inbox dot's read
+  stamp and the blue-tick receipt are both keyed on the NEWEST INBOUND item in
+  `ConversationPanel`, not on `ContactView` mounting. The mount stamp covered
+  every case except the commonest: the customer answers while you sit in their
+  thread typing back, and the dot then re-lit behind the reader for a message
+  on the screen in front of them (Serdar hit this live on 2026-08-26).
+  - Two separate keys. The dot's is every channel — an inbound CALL lights it
+    too — while the tick's is WhatsApp only, because a call has nothing on
+    WhatsApp to acknowledge.
+  - Both gated on `useWindowPresence` (visible AND focused). A thread parked on
+    a second monitor all afternoon must not answer for a person who is not
+    there — and with receipts live, an unfocused window would be telling the
+    customer a human read them when nobody did.
+  - `ContactView`'s mount stamp stays. It costs one write and it covers a
+    contact whose panel renders no inbound rows at all.
 - **Read receipts / blue ticks (2026-08-26).** `wa.markThreadRead` (mutation,
   decides) → `wa.sendReadReceipt` (action, tells Meta) → `stampReadReceipt`.
   Marking ONE message read marks every earlier message in that conversation, so

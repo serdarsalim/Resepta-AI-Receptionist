@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useConfirm } from "./ConfirmDialog";
 import { useToast } from "@/lib/ToastProvider";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useWindowPresence } from "@/lib/useWindowPresence";
 import type { TranslationKey } from "@/lib/i18n";
 import {
   formatDateTime,
@@ -203,6 +204,7 @@ export function ConversationPanel({
   const sendSession = useAction(api.wa.sendSession);
   const react = useAction(api.wa.reactToMessage);
   const markThreadRead = useMutation(api.wa.markThreadRead);
+  const markConversationRead = useMutation(api.messages.markConversationRead);
   // Placing a call is owner-only server-side (requireOwner inside testCall), so
   // the agent list is too — for staff this resolves to undefined and the button
   // never appears rather than appearing and failing.
@@ -350,31 +352,53 @@ export function ConversationPanel({
       : visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
 
-  // Blue ticks on the customer's phone. Keyed on the newest thing they sent,
-  // not on mounting: a message arriving while somebody is already reading the
-  // thread has to tick the moment it lands, which is what a person looking at
-  // their phone expects and the one case an on-mount stamp cannot cover.
+  // ---- Reading a thread you are already in --------------------------------
+  //
+  // Both of these used to happen once, when a contact page mounted, and that
+  // covered every case except the commonest one: the customer answers WHILE
+  // you are sitting in their thread typing back. The inbox dot then re-lit
+  // behind the reader for a message on the screen in front of them, and the
+  // customer's phone kept showing two grey ticks while a human read the words.
+  //
+  // So both are keyed on the newest inbound instead of on mount, and both are
+  // gated on the window actually being in front of somebody — a thread parked
+  // on a second monitor must not answer for a person who is not there.
   //
   // Scanned by timestamp rather than taken off an end, because `thread` flips
-  // direction with chatOrder and an index would silently pick the oldest
-  // message on the mail tab.
-  //
-  // Not gated on `canCompose`: reading a conversation is reading it whichever
-  // tab is showing, and the mutation itself refuses anything that is not an
-  // inbound Cloud-lane message with a wamid.
+  // direction with chatOrder and an index would silently pick the oldest.
   const newestInboundId = inScope.reduce<{ id: string; at: number } | null>(
     (newest, item) =>
-      item.channel === "whatsapp" && item.direction === "in" && (!newest || item.at > newest.at)
+      "direction" in item && item.direction === "in" && (!newest || item.at > newest.at)
         ? { id: item.id, at: item.at }
         : newest,
     null,
   )?.id;
+  // WhatsApp only, and it is a SEPARATE key: an inbound call arriving must
+  // clear the dot, but there is nothing on WhatsApp to tick for it.
+  const newestWaInboundId = inScope.reduce<{ id: string; at: number } | null>(
+    (newest, item) =>
+      item.channel === "whatsapp" &&
+      "direction" in item &&
+      item.direction === "in" &&
+      (!newest || item.at > newest.at)
+        ? { id: item.id, at: item.at }
+        : newest,
+    null,
+  )?.id;
+  const present = useWindowPresence();
+
   useEffect(() => {
-    if (!newestInboundId) return;
+    if (!newestInboundId || !present) return;
+    // The inbox dot. Every channel, because a call lights it too.
+    void markConversationRead({ customerId }).catch(() => {});
+  }, [newestInboundId, present, customerId, markConversationRead]);
+
+  useEffect(() => {
+    if (!newestWaInboundId || !present) return;
     // Swallowed: a receipt that fails is two grey ticks for another minute,
     // and there is nothing the person reading the thread could do about it.
     void markThreadRead({ customerId }).catch(() => {});
-  }, [newestInboundId, customerId, markThreadRead]);
+  }, [newestWaInboundId, present, customerId, markThreadRead]);
 
   useEffect(() => {
     // Skipped while a return position is pending, or the restore below would
