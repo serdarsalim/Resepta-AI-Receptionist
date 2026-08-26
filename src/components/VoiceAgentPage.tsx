@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
+import type { TranslationKey } from "@/lib/i18n";
 import { VoicePicker } from "./VoicePicker";
 import { InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
@@ -130,6 +131,32 @@ function clearDraft(agentId: string) {
   }
 }
 
+// Opening an editor refuses for four reasons that are ABOUT something, and
+// every one of them used to arrive as "could not be updated, please try
+// again" — a message that names no cause and asks for a retry that cannot
+// work. no-such-agent is the one seen in production (Serdar, 2026-08-26):
+// the agent has no row under the business being acted as, so retrying it
+// forever was the only path the UI offered.
+//
+// Substring match, not equality: retellAgent.editorContext throws prose for
+// three of these, and requireOwner's code arrives wrapped in Convex's own
+// "Uncaught Error:" framing. Anything unmatched keeps the generic message,
+// which is still the right words for a provider having a bad minute.
+const LOAD_ERRORS: [string, TranslationKey][] = [
+  ["no-such-agent", "settings.voiceAgentMissing"],
+  ["demo workspace", "settings.voiceDemoWorkspace"],
+  ["No Retell API key", "settings.voiceNoKey"],
+  ["owner-only", "settings.voiceOwnerOnly"],
+];
+
+function loadErrorKey(error: unknown): TranslationKey {
+  const raw = error instanceof Error ? error.message : String(error);
+  return (
+    LOAD_ERRORS.find(([code]) => raw.includes(code))?.[1] ??
+    "settings.voiceActionFailed"
+  );
+}
+
 export function VoiceAgentPage({
   agentId,
   onBack,
@@ -215,7 +242,7 @@ export function VoiceAgentPage({
         }
         setRestored(true);
       })
-      .catch(() => setError(t("settings.voiceActionFailed")));
+      .catch((err) => setError(t(loadErrorKey(err))));
   }, [read, agentId, t]);
 
   useEffect(() => load(), [load]);

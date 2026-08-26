@@ -2306,6 +2306,31 @@ const dictionary = {
     en: "The voice agent could not be updated. Please try again.",
     de: "Der Sprachassistent konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
   },
+  // The four ways opening an agent's editor refuses for a REASON, as opposed
+  // to the provider having a bad minute. voiceActionFailed above ends in
+  // "please try again", which is right for a network blip and wrong for every
+  // one of these: none of them change on a retry, and the reader is owed the
+  // cause instead (Serdar, 2026-08-26).
+  "settings.voiceAgentMissing": {
+    tr: "Bu asistan artık bu iş yerine bağlı değil. Bağlantısı kesilmiş veya silinmiş olabilir.",
+    en: "This agent is no longer connected to this business. It may have been disconnected or deleted.",
+    de: "Dieser Assistent ist nicht mehr mit diesem Betrieb verbunden. Möglicherweise wurde die Verbindung getrennt oder er wurde gelöscht.",
+  },
+  "settings.voiceDemoWorkspace": {
+    tr: "Bu demo iş yeri. Sesli asistan bilgileri burada tutulmuyor.",
+    en: "This is the demo business. It holds no voice credentials.",
+    de: "Dies ist der Demo-Betrieb. Hier sind keine Zugangsdaten für Sprachassistenten hinterlegt.",
+  },
+  "settings.voiceNoKey": {
+    tr: "Bu iş yeri için henüz Retell API anahtarı tanımlanmadı.",
+    en: "No Retell API key is set for this business yet.",
+    de: "Für diesen Betrieb ist noch kein Retell-API-Schlüssel hinterlegt.",
+  },
+  "settings.voiceOwnerOnly": {
+    tr: "Sesli asistan ayarlarını yalnızca iş yeri sahibi açabilir.",
+    en: "Only an owner can open the voice agent settings.",
+    de: "Nur Inhaber können die Einstellungen des Sprachassistenten öffnen.",
+  },
   "settings.voiceNoAgents": {
     tr: "Bu hesapta asistan yok.",
     en: "No agents in this account.",
