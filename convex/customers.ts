@@ -39,6 +39,13 @@ const customerFields = {
   lastInboundLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
   lastAutoReplyAt: v.optional(v.number()),
   lastEmailAutoReplyAt: v.optional(v.number()),
+  // And it HAPPENED AGAIN with read receipts (2026-08-26): the blue-tick
+  // high-water mark reached the schema without reaching this mirror, so the
+  // first customer whose thread was read with receipts live — one row in
+  // prod — crashed `get` and `list` for everyone who opened him. The
+  // validator throw took the whole tab down, which is how a one-field drift
+  // presented as "the app crashes on this person's profile".
+  lastReadReceiptWamid: v.optional(v.string()),
 };
 
 // Only the LIST carries the dot. Resolving it costs a scan of the org's recent
