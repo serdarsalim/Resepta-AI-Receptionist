@@ -32,7 +32,6 @@ export type TabId =
   | "appointments"
   | "customers"
   | "inbox"
-  | "campaigns"
   | "voice"
   | "messages"
   | "revenue"
@@ -131,14 +130,6 @@ const KnowledgeIcon = makeIcon(
 );
 // A megaphone: one thing said to many people, which is exactly what separates
 // this from the Inbox above it.
-const CampaignsIcon = makeIcon(
-  <>
-    <path d="M3 11v2a1 1 0 0 0 1 1h2l4 3V7L6 10H4a1 1 0 0 0-1 1z" />
-    <path d="M14 8a4 4 0 0 1 0 8" />
-    <path d="M17 5a8 8 0 0 1 0 14" />
-  </>,
-);
-
 // A robot head, not a handset (Serdar, 2026-08-26: "a robot head, and call
 // this agent only"). The same agent now answers the phone AND the WhatsApp
 // thread, so the door is drawn as the worker rather than as one of its
@@ -206,15 +197,11 @@ const NAV_TABS: {
   // every morning goes first, and Customers moves below the messaging pair so
   // the two never sit shoulder to shoulder again.
   { id: "inbox", key: "nav.inbox", Icon: InboxIcon, color: "#0ea5e9" },
-  // Beside Inbox, not under Business: both are places you send messages from,
-  // and a campaign is work rather than configuration.
-  {
-    id: "campaigns",
-    key: "campaign.title",
-    Icon: CampaignsIcon,
-    color: "#ec4899",
-  },
-  // Below the two messaging tabs, not above them. Customers is the record you
+  // Campaigns left the sidebar (Serdar, 2026-08-26): a whole door for a thing
+  // written a few times a year read as clutter next to tabs used daily. The
+  // cards live at the foot of Automations now — every message the business
+  // sends on one page — and ?tab=campaigns aliases there.
+  // Below the messaging tab, not above it. Customers is the record you
   // look someone up in, not the queue you work through.
   {
     id: "customers",
@@ -1500,14 +1487,9 @@ export function AppShell({
   // being a constant. Filtered rather than conditionally rendered so the
   // phone bar and the sidebar can never disagree about which tabs exist.
   //
-  // Takings is opt-in. Campaigns is not a preference — it is earned by
-  // connecting a number, because until one is connected the tab is a heading
-  // over a disabled button, which reads as the product being broken rather
-  // than unconfigured. Settings is where the number gets connected, and the
-  // tab appearing afterwards is the reward for having done it.
+  // Takings is opt-in.
   const navTabs = NAV_TABS.filter((entry) => {
     if (entry.id === "revenue") return Boolean(settings?.org.revenueEnabled);
-    if (entry.id === "campaigns") return Boolean(settings?.whatsapp.connected);
     return true;
   });
   const footTabs = FOOT_TABS;
@@ -1521,8 +1503,6 @@ export function AppShell({
   useEffect(() => {
     if (!settings) return;
     if (tab === "revenue" && !settings.org.revenueEnabled)
-      onTab("appointments");
-    if (tab === "campaigns" && !settings.whatsapp.connected)
       onTab("appointments");
     if (tab === "billing" && settings.me.role !== "owner")
       onTab("appointments");

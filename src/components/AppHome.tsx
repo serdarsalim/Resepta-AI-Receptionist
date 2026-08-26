@@ -8,7 +8,6 @@ import { CustomersView } from "@/components/CustomersView";
 import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
 import { RemindersView } from "@/components/RemindersView";
-import { CampaignsView } from "@/components/CampaignsView";
 import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
 import { KnowledgeView } from "@/components/KnowledgeView";
@@ -126,7 +125,6 @@ export function AppHome() {
           {tab === "appointments" && <AppointmentsView onOpenContact={openContact} />}
           {tab === "customers" && <CustomersView onOpenContact={openContact} />}
           {tab === "inbox" && <InboxView onOpenContact={openContact} />}
-          {tab === "campaigns" && <CampaignsView />}
           {tab === "voice" && <VoiceView />}
           {/* Content the business maintains, not configuration: every agent
               reads it and the booking page builds its slots from the service
@@ -156,7 +154,12 @@ const TAB_STORAGE_KEY = "randevu.tab";
 // browser was last on, and ?tab= links get pasted into WhatsApp — so a rename
 // with no alias silently drops returning owners onto the calendar. One line
 // per rename is cheaper than that, and cheaper than never renaming a tab.
-const TAB_ALIASES: Record<string, TabId> = { services: "knowledge" };
+const TAB_ALIASES: Record<string, TabId> = {
+  services: "knowledge",
+  // Campaigns folded into Automations (2026-08-26); its cards sit at the foot
+  // of that page.
+  campaigns: "messages",
+};
 
 // Every tab that may appear in the URL. Validated rather than cast: ?tab= is
 // user-editable (and localStorage survives releases that rename tabs), and a
@@ -165,7 +168,6 @@ const TAB_IDS: TabId[] = [
   "appointments",
   "customers",
   "inbox",
-  "campaigns",
   "voice",
   "messages",
   "revenue",

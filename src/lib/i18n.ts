@@ -4112,10 +4112,14 @@ const dictionary = {
     en: "No campaigns yet.",
     de: "Noch keine Kampagnen.",
   },
+  // Rewritten 2026-08-26: the old text described the two-window flow — get it
+  // approved at Meta, then mark it approved by hand — that the in-app
+  // submission replaced. The templates card this points at now sits on the
+  // same page, right above these cards.
   "campaign.needsTemplate": {
-    tr: "Kampanya göndermek için Meta'nın onayladığı bir kampanya şablonu gerekir. Taslağı oluşturup Meta'ya onaylatın, sonra Ayarlar'da onaylandı olarak işaretleyin.",
-    en: "Sending campaigns needs a Meta-approved campaign template. Create the draft, get it approved by Meta, then mark it approved in Settings.",
-    de: "Für Kampagnen ist eine von Meta genehmigte Kampagnenvorlage nötig. Entwurf anlegen, von Meta genehmigen lassen, dann in den Einstellungen als genehmigt markieren.",
+    tr: "Kampanya göndermek için Meta'nın onayladığı bir kampanya şablonu gerekir. Taslağı oluşturun ve yukarıdaki şablonlar kartından onaya gönderin; sonuç aynı karta kendiliğinden düşer.",
+    en: "Sending campaigns needs a Meta-approved campaign template. Create the draft and submit it from the templates card above; the verdict lands on that card by itself.",
+    de: "Für Kampagnen ist eine von Meta genehmigte Kampagnenvorlage nötig. Entwurf anlegen und über die Vorlagen-Karte oben zur Genehmigung einreichen; das Ergebnis erscheint dort von selbst.",
   },
   "campaign.createTemplate": {
     tr: "Şablon taslağı oluştur",

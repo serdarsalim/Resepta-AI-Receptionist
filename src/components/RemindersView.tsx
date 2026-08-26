@@ -44,6 +44,7 @@ import { TimezoneSelect } from "./TimezoneSelect";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
+import { CampaignsView } from "./CampaignsView";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -2440,6 +2441,15 @@ export function RemindersView() {
       </>
 
       <ShopPhoneCard isOwner={isOwner} />
+
+      {/* Campaigns, at the foot: they left the sidebar on 2026-08-26
+          (Serdar — "a separate card in Otomasyonlar"). Every message the
+          business sends now lives on this one page, and the campaign
+          template's registration desk is the card just above — the two
+          halves of "can this send at all" finally within one scroll. The
+          section gates itself on a connected Cloud number, same as the
+          registration desk. */}
+      <CampaignsView />
     </div>
   );
 }

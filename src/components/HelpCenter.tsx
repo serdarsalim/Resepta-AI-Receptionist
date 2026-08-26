@@ -259,7 +259,7 @@ const CATEGORIES: Category[] = [
           "On a call, an arrow says which way it went: up and to the right means you called them, down and to the left means they called you.",
           "Click a conversation to open that customer's record, with the thread already on the channel their last message came in on.",
           "Reply from the connected channel and use the attention marker to find conversations that still need someone.",
-          "Open Campaigns when a WhatsApp number is connected and choose an approved template for outreach.",
+          "Open Automations when a WhatsApp number is connected — campaigns live at the foot of that page — and choose an approved template for outreach.",
           "Review send outcomes on the customer timeline instead of treating the campaign as a separate list.",
         ],
         keywords: ["inbox", "reply", "campaign", "email", "conversation", "failed"],

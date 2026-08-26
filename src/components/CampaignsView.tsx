@@ -2,7 +2,14 @@
 
 // One message to a group of customers.
 //
-// The surface exists to answer two questions before anything is sent: who is
+// A SECTION of Automations since 2026-08-26, not a sidebar destination: a
+// whole door for a thing written a few times a year read as clutter (Serdar),
+// and the page that already holds every message the business sends — and the
+// Meta registration desk the campaign template goes through — is where it
+// belongs. Rendered at the foot of RemindersView's stack, so opening a rule
+// editor hides it along with everything else, per that page's drill-in rule.
+//
+// The section exists to answer two questions before anything is sent: who is
 // this going to, and can it go at all. Both are shown before the Send button
 // is reachable, because a campaign cannot be recalled and "how many people is
 // this?" is the question that stops one going to the wrong list.
@@ -41,6 +48,11 @@ export function CampaignsView() {
   if (!settings || campaigns === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
+  // The old sidebar tab was earned by connecting a number, because until one
+  // is connected this is a heading over a disabled button — which reads as
+  // the product being broken rather than unconfigured. Same rule as a
+  // section, and the same gate the Meta registration desk beside it uses.
+  if (!settings.whatsapp.connected) return null;
   const isOwner = settings.me.role !== "staff";
   const template = settings.templates.find(
     (row) => row.kind === "campaign" && row.status === "approved",
@@ -48,7 +60,9 @@ export function CampaignsView() {
   const draftExists = settings.templates.some((row) => row.kind === "campaign");
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 page-stack">
+    // No page wrapper: width, rhythm and the page-stack bottom padding belong
+    // to the Automations stack this sits in.
+    <div className="space-y-4">
       {/* The gate, not a warning to skim past: without this nothing sends. */}
       {!template && (
         <Card title={t("campaign.title")} tip={t("campaign.whyTemplate")}>
