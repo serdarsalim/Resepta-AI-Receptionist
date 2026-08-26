@@ -21,6 +21,7 @@ import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   query,
@@ -463,20 +464,35 @@ export const loadSyncContext = internalQuery({
 });
 
 
-// ---- The /admin doors ---------------------------------------------------
+// ---- The platform's own registration machinery ---------------------------
 //
-// Approval is operator work now (Serdar, 2026-08-26): the registration desk
-// left the salon's Automations page, the Cloud wording is platform-owned
-// (CLOUD_TEMPLATE_TEXTS in lib/metaTemplate), and the operator registers the
-// standard set per business from the tenant page. Every db-touching step
-// re-checks requirePlatformAdmin, because these are public functions whose
-// orgId is caller-supplied.
+// Approval is the PLATFORM'S work (Serdar, 2026-08-26, twice): the desk left
+// the salon's Automations page, the Cloud wording is platform text
+// (CLOUD_TEMPLATE_TEXTS in lib/metaTemplate) — and registration is not even a
+// per-client click. Templates are per-WABA at Meta, that is physics; but the
+// standard set is the same for every client, so the SYSTEM registers it: the
+// moment a WABA id lands on an org (platform.setWaAccount, orgs
+// .connectWhatsapp) a scheduled run submits the set, and the fleet page has
+// one button to roll the current texts across every connected business.
+//
+// Authorization shape: the internal loaders below are UNGATED because the
+// scheduler has no user identity — they are reachable only from our own code.
+// Every PUBLIC action here instead opens with assertPlatformAdmin, the one
+// query whose whole job is to throw for anyone else.
 
-export const loadForSubmitAdmin = internalQuery({
+export const assertPlatformAdmin = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    return null;
+  },
+});
+
+export const loadForSubmitByOrg = internalQuery({
   args: { orgId: v.id("orgs"), templateId: v.id("waTemplates") },
   returns: v.any(),
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== args.orgId) return null;
     const own = await ctx.db
@@ -497,7 +513,8 @@ export const submitForOrg = action({
   args: { orgId: v.id("orgs"), templateId: v.id("waTemplates") },
   returns: submitResult,
   handler: async (ctx, args): Promise<SubmitResult> => {
-    const context = await ctx.runQuery(internal.waTemplates.loadForSubmitAdmin, {
+    await ctx.runQuery(internal.waTemplates.assertPlatformAdmin, {});
+    const context = await ctx.runQuery(internal.waTemplates.loadForSubmitByOrg, {
       orgId: args.orgId,
       templateId: args.templateId,
     });
@@ -506,11 +523,10 @@ export const submitForOrg = action({
   },
 });
 
-export const loadSyncContextAdmin = internalQuery({
+export const loadSyncContextByOrg = internalQuery({
   args: { orgId: v.id("orgs") },
   returns: v.any(),
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
     const own = await ctx.db
       .query("waAccounts")
       .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
@@ -527,7 +543,8 @@ export const syncForOrg = action({
   args: { orgId: v.id("orgs") },
   returns: syncResult,
   handler: async (ctx, args): Promise<SyncResult> => {
-    const context = await ctx.runQuery(internal.waTemplates.loadSyncContextAdmin, {
+    await ctx.runQuery(internal.waTemplates.assertPlatformAdmin, {});
+    const context = await ctx.runQuery(internal.waTemplates.loadSyncContextByOrg, {
       orgId: args.orgId,
     });
     if (!context) return { ok: false, reason: "not-found" };
@@ -591,7 +608,6 @@ export const ensureStandardRows = internalMutation({
     }),
   ),
   handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return [];
     const language = org.language ?? "tr";
@@ -654,45 +670,124 @@ export const ensureStandardRows = internalMutation({
 // six requests, and Meta rate-limits template creation harder than most
 // endpoints; a Promise.all here is how one click becomes three mystery
 // failures.
+type StandardSetResult = { kind: string; ok: boolean; reason?: string; detail?: string };
+
+const standardSetResults = v.array(
+  v.object({
+    kind: v.string(),
+    ok: v.boolean(),
+    reason: v.optional(v.string()),
+    detail: v.optional(v.string()),
+  }),
+);
+
+async function performRegisterStandardSet(
+  ctx: ActionCtx,
+  orgId: Id<"orgs">,
+): Promise<StandardSetResult[]> {
+  const rows = await ctx.runMutation(internal.waTemplates.ensureStandardRows, {
+    orgId,
+  });
+  const results: StandardSetResult[] = [];
+  for (const row of rows) {
+    if (row.status === "approved") {
+      results.push({ kind: row.kind, ok: true, reason: "already-approved" });
+      continue;
+    }
+    const context = await ctx.runQuery(internal.waTemplates.loadForSubmitByOrg, {
+      orgId,
+      templateId: row.templateId,
+    });
+    if (!context) {
+      results.push({ kind: row.kind, ok: false, reason: "not-found" });
+      continue;
+    }
+    const result = await performSubmit(ctx, row.templateId, context);
+    results.push({
+      kind: row.kind,
+      ok: result.ok,
+      reason: result.reason,
+      detail: result.detail,
+    });
+  }
+  return results;
+}
+
+// The tenant page's manual run — a repair door now, since wiring a WABA
+// registers the set on its own.
 export const registerStandardSet = action({
   args: { orgId: v.id("orgs") },
+  returns: standardSetResults,
+  handler: async (ctx, args): Promise<StandardSetResult[]> => {
+    await ctx.runQuery(internal.waTemplates.assertPlatformAdmin, {});
+    return await performRegisterStandardSet(ctx, args.orgId);
+  },
+});
+
+// The scheduler's door — fired by platform.setWaAccount and
+// orgs.connectWhatsapp the moment a WABA id lands on an org, so wiring a
+// number IS the registration and no human clicks anything per client. A
+// failure here is not silent: every row it touched carries its status and
+// the tenant page shows them.
+export const registerStandardSetForOrg = internalAction({
+  args: { orgId: v.id("orgs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const results = await performRegisterStandardSet(ctx, args.orgId);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      console.warn(
+        `standard set for ${args.orgId}: ${failed
+          .map((r) => `${r.kind}=${r.reason ?? "failed"}`)
+          .join(", ")}`,
+      );
+    }
+    return null;
+  },
+});
+
+// Every org with a WABA to register on — the fleet rollout's work list.
+export const listConnectedOrgsInternal = internalQuery({
+  args: {},
+  returns: v.array(v.object({ orgId: v.id("orgs"), name: v.string() })),
+  handler: async (ctx) => {
+    const accounts = await ctx.db.query("waAccounts").collect();
+    const out: { orgId: Id<"orgs">; name: string }[] = [];
+    for (const account of accounts) {
+      if (!account.wabaId?.trim()) continue;
+      const org = await ctx.db.get(account.orgId);
+      if (org) out.push({ orgId: account.orgId, name: org.name });
+    }
+    return out;
+  },
+});
+
+// The fleet button: the standard set is the same for every client, so rolling
+// a wording update out is ONE click here, not a tour of tenant pages.
+// Sequential across orgs for the same rate-limit reason as within one.
+export const registerStandardSetAll = action({
+  args: {},
   returns: v.array(
     v.object({
-      kind: v.string(),
-      ok: v.boolean(),
-      reason: v.optional(v.string()),
-      detail: v.optional(v.string()),
+      org: v.string(),
+      results: standardSetResults,
     }),
   ),
   handler: async (
     ctx,
-    args,
-  ): Promise<{ kind: string; ok: boolean; reason?: string; detail?: string }[]> => {
-    const rows = await ctx.runMutation(internal.waTemplates.ensureStandardRows, {
-      orgId: args.orgId,
-    });
-    const results: { kind: string; ok: boolean; reason?: string; detail?: string }[] = [];
-    for (const row of rows) {
-      if (row.status === "approved") {
-        results.push({ kind: row.kind, ok: true, reason: "already-approved" });
-        continue;
-      }
-      const context = await ctx.runQuery(internal.waTemplates.loadForSubmitAdmin, {
-        orgId: args.orgId,
-        templateId: row.templateId,
-      });
-      if (!context) {
-        results.push({ kind: row.kind, ok: false, reason: "not-found" });
-        continue;
-      }
-      const result = await performSubmit(ctx, row.templateId, context);
-      results.push({
-        kind: row.kind,
-        ok: result.ok,
-        reason: result.reason,
-        detail: result.detail,
+  ): Promise<{ org: string; results: StandardSetResult[] }[]> => {
+    await ctx.runQuery(internal.waTemplates.assertPlatformAdmin, {});
+    const orgs = await ctx.runQuery(
+      internal.waTemplates.listConnectedOrgsInternal,
+      {},
+    );
+    const out: { org: string; results: StandardSetResult[] }[] = [];
+    for (const org of orgs) {
+      out.push({
+        org: org.name,
+        results: await performRegisterStandardSet(ctx, org.orgId),
       });
     }
-    return results;
+    return out;
   },
 });

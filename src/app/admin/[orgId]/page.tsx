@@ -1744,7 +1744,7 @@ function TemplatesSection({ orgId }: { orgId: Id<"orgs"> }) {
   return (
     <Section
       title="Message templates"
-      description="What this business's Cloud number may send outside the 24-hour window. The wording is platform text; the salon never sees this desk."
+      description="What this business's Cloud number may send outside the 24-hour window. The wording is platform text and registers itself when the WABA is wired — this desk is status and repair, not a required step."
     >
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <button

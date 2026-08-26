@@ -1077,21 +1077,32 @@ export const setWaAccount = mutation({
       // No token is a valid account now: the row rides the platform token
       // (lib/platformConfig resolveWaAccount) — the Tech Provider shape,
       // where per-org setup is just the routing facts.
+      const wabaId = args.wabaId?.trim() || undefined;
       await ctx.db.insert("waAccounts", {
         orgId: args.orgId,
         phoneNumberId,
-        wabaId: args.wabaId?.trim() || undefined,
+        wabaId,
         accessToken:
           typeof args.accessToken === "string"
             ? args.accessToken.trim() || undefined
             : undefined,
         displayNumber: args.displayNumber?.trim() || undefined,
       });
+      // Wiring a WABA IS registering the standard template set (see the
+      // machinery note in waTemplates): the same six messages serve every
+      // client, so no human clicks per client — the statuses land on this
+      // page's own Templates section.
+      if (wabaId) {
+        await ctx.scheduler.runAfter(0, internal.waTemplates.registerStandardSetForOrg, {
+          orgId: args.orgId,
+        });
+      }
       return null;
     }
+    const nextWabaId = applied(args.wabaId, existing.wabaId);
     await ctx.db.patch(existing._id, {
       phoneNumberId,
-      wabaId: applied(args.wabaId, existing.wabaId),
+      wabaId: nextWabaId,
       // Blank means "keep the token", not "clear it": the operator editing a
       // display number should not have to re-paste a credential they cannot
       // read back off the screen. Only the explicit null — the "use platform
@@ -1102,6 +1113,14 @@ export const setWaAccount = mutation({
           : args.accessToken?.trim() || existing.accessToken,
       displayNumber: applied(args.displayNumber, existing.displayNumber),
     });
+    // Only a WABA that just ARRIVED or CHANGED triggers registration — an
+    // operator fixing a display number must not resubmit six templates into
+    // Meta review as a side effect.
+    if (nextWabaId && nextWabaId !== existing.wabaId) {
+      await ctx.scheduler.runAfter(0, internal.waTemplates.registerStandardSetForOrg, {
+        orgId: args.orgId,
+      });
+    }
     return null;
   },
 });

@@ -602,11 +602,12 @@ export const connectWhatsapp = mutation({
       .query("waAccounts")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .unique();
+    const wabaId = args.wabaId?.trim() || undefined;
     if (existing) {
       await ctx.db.patch(existing._id, {
         phoneNumberId,
         accessToken,
-        wabaId: args.wabaId?.trim() || undefined,
+        wabaId,
         displayNumber: args.displayNumber?.trim() || undefined,
       });
     } else {
@@ -614,8 +615,17 @@ export const connectWhatsapp = mutation({
         orgId,
         phoneNumberId,
         accessToken,
-        wabaId: args.wabaId?.trim() || undefined,
+        wabaId,
         displayNumber: args.displayNumber?.trim() || undefined,
+      });
+    }
+    // A WABA that just arrived or changed gets the standard template set
+    // registered automatically — same trigger as the /admin path
+    // (platform.setWaAccount), so a business bringing its own Meta app is
+    // sendable without anyone touching a templates screen.
+    if (wabaId && wabaId !== existing?.wabaId) {
+      await ctx.scheduler.runAfter(0, internal.waTemplates.registerStandardSetForOrg, {
+        orgId,
       });
     }
     // The displayed number, never the token. Reconnecting is also the usual

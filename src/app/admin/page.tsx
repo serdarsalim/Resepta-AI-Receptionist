@@ -66,6 +66,9 @@ export default function AdminPage() {
   // The model pickers' option source: each provider's own /v1/models, read
   // with the platform key, fetched lazily on first focus (see ModelRow).
   const listModels = useAction(api.platformConfig.listModels);
+  const registerTemplatesAll = useAction(api.waTemplates.registerStandardSetAll);
+  const [templatesBusy, setTemplatesBusy] = useState(false);
+  const [templatesNote, setTemplatesNote] = useState<string | null>(null);
   // Two rooms, not one scroll: the tenant list is what the operator opens
   // this page FOR, and deployment settings are visited a handful of times
   // ever. Living below the table meant the settings had no address and the
@@ -609,6 +612,50 @@ export default function AdminPage() {
               masked={mail.whatsappAccessToken}
               onSave={(value) => setConfig({ key: "whatsappAccessToken", value })}
             />
+            {/* The fleet rollout: the standard template set is the same for
+                every client, so a wording update is ONE click here — wiring
+                a new WABA already registers it automatically, this is for
+                re-rolling texts and backfilling. */}
+            <div className="flex flex-wrap items-center gap-2 pt-3">
+              <button
+                type="button"
+                disabled={templatesBusy}
+                onClick={() => {
+                  setTemplatesBusy(true);
+                  setTemplatesNote(null);
+                  void registerTemplatesAll({})
+                    .then((all) =>
+                      setTemplatesNote(
+                        all.length === 0
+                          ? "No businesses with a WABA yet."
+                          : all
+                              .map(
+                                (entry) =>
+                                  `${entry.org}: ${entry.results
+                                    .map(
+                                      (r) =>
+                                        `${r.kind} ${r.ok ? (r.reason === "already-approved" ? "✓" : "sent") : (r.detail ?? r.reason ?? "failed")}`,
+                                    )
+                                    .join(", ")}`,
+                              )
+                              .join(" · "),
+                      ),
+                    )
+                    .catch((err) =>
+                      setTemplatesNote(err instanceof Error ? err.message : "failed"),
+                    )
+                    .finally(() => setTemplatesBusy(false));
+                }}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+              >
+                {templatesBusy
+                  ? "Registering…"
+                  : "Register standard templates on all businesses"}
+              </button>
+              {templatesNote && (
+                <span className="text-xs text-[var(--muted)]">{templatesNote}</span>
+              )}
+            </div>
           </Section>
 
           {/* The Resend doctrine once more: one Stripe account for the whole
