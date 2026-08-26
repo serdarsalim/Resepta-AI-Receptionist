@@ -131,3 +131,22 @@ export const DEFAULT_TEMPLATE_TEXTS: Record<
   },
 };
 
+// The kinds whose WORDING is platform-owned (Serdar, 2026-08-26): each has a
+// Meta-approved Cloud template behind it (lib/metaTemplate CLOUD_TEMPLATE_TEXTS),
+// and a salon edit would desync the text the owner reads in the editor from
+// the text Meta actually sends. out_of_hours stays editable — session text,
+// no approval anywhere — and custom per-salon templates are a later feature,
+// gated on the standard set proving itself first. Enforced server-side in
+// orgs.updateTemplate/saveTemplateDraft; the editors hide themselves too,
+// but the mutation guard is the contract.
+export const LOCKED_TEMPLATE_KINDS = [
+  "confirmation",
+  "reminder",
+  "winback",
+  "followup",
+  "cancellation",
+] as const;
+
+export function isWordingLocked(kind: string): boolean {
+  return (LOCKED_TEMPLATE_KINDS as readonly string[]).includes(kind);
+}

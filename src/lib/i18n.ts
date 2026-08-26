@@ -2495,6 +2495,18 @@ const dictionary = {
     en: "On, the agent answers and books. Off keeps the connection but stops bookings; just switch it off for holidays.",
     de: "Eingeschaltet nimmt der Assistent Anrufe an und vergibt Termine. Ausgeschaltet bleibt die Verbindung bestehen, aber es wird nichts gebucht; für den Urlaub einfach ausschalten.",
   },
+  // The platform-owned wording (lib/templateTexts LOCKED_TEMPLATE_KINDS):
+  // what the salon reads where the message editor used to be.
+  "settings.wordingLocked": {
+    tr: "Standart mesaj",
+    en: "Standard message",
+    de: "Standardnachricht",
+  },
+  "settings.wordingLockedHint": {
+    tr: "Bu mesajın metni Resepta tarafından yönetilir; WhatsApp onaylı şablonla her zaman eşleşmesi için düzenlenemez. Zamanlamayı ve kanalları siz seçersiniz.",
+    en: "Resepta manages this message's wording; it can't be edited, so it always matches the WhatsApp-approved template. Timing and channels are yours.",
+    de: "Den Text dieser Nachricht verwaltet Resepta; er ist nicht editierbar, damit er immer der von WhatsApp genehmigten Vorlage entspricht. Zeitpunkt und Kanäle wählen Sie.",
+  },
   "settings.chatEnabled": { tr: "Sohbet", en: "Chat", de: "Chat" },
   "settings.chatEnabledHint": {
     tr: "WhatsApp sohbet asistanı bu asistanın talimatıyla yanıt verir. Sohbeti aynı anda tek asistan yürütür; birini açmak diğerini kapatır. Telefon kapalıyken de çalışır.",

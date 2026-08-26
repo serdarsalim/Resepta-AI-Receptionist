@@ -15,6 +15,7 @@ import {
   slugMatchesName,
 } from "./lib/publicSlug";
 import { resolvePublicPhone } from "./lib/publicPhone";
+import { isWordingLocked } from "./lib/templateTexts";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -764,6 +765,14 @@ export const saveTemplateDraft = mutation({
     const { orgId } = await requireOwner(ctx);
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== orgId) throw new Error("not-found");
+    // Same lock as updateTemplate: a draft of wording that can never commit
+    // is a Save button that only ever errors.
+    if (
+      (args.body !== undefined || args.bodyHtml !== undefined) &&
+      isWordingLocked(template.kind)
+    ) {
+      throw new Error("wording-locked");
+    }
     const { templateId, ...draft } = args;
     // A draft that would change NOTHING is cleared rather than stored. Type a
     // letter, delete it again, and the draft now matches the live row —
@@ -892,6 +901,17 @@ export const updateTemplate = mutation({
     const { orgId } = await requireOwner(ctx);
     const template = await ctx.db.get(args.templateId);
     if (!template || template.orgId !== orgId) throw new Error("not-found");
+    // The wording of the lifecycle kinds is platform-owned (Serdar,
+    // 2026-08-26, lib/templateTexts LOCKED_TEMPLATE_KINDS): each has a
+    // Meta-approved Cloud template behind it, and a salon edit would desync
+    // what the editor shows from what Meta sends. Subject and variable
+    // defaults stay writable — neither touches the approved text.
+    if (
+      (args.body !== undefined || args.bodyHtml !== undefined) &&
+      isWordingLocked(template.kind)
+    ) {
+      throw new Error("wording-locked");
+    }
     const patch: Record<string, unknown> = {};
     if (args.variableDefaults !== undefined) {
       // Blanks are dropped rather than stored: an empty box means "no

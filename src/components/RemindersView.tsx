@@ -28,13 +28,13 @@ import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { useConfirm } from "./ConfirmDialog";
 import {
   DEFAULT_TEMPLATE_TEXTS,
+  isWordingLocked,
   type TemplateKind,
 } from "../../convex/lib/templateTexts";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
 import {
-  formatDateTime,
   minutesToTimeValue,
   timeValueToMinutes,
   weekdayNames,
@@ -984,6 +984,10 @@ function AddRuleSheet({
 
   const selected =
     ADD_OPTIONS.find((option) => option.trigger === trigger) ?? ADD_OPTIONS[0];
+  // Platform-owned wording (lib/templateTexts): the sheet still creates the
+  // rule and sets its timing, but the message renders as the preview alone —
+  // what you read is what sends, and there is nothing to type.
+  const locked = isWordingLocked(KIND_FOR_TRIGGER[trigger]);
   const taken = (option: AddOption) =>
     !option.repeatable && rules.some((rule) => rule.trigger === option.trigger);
   // Present exactly when the selected type is a non-repeatable that already
@@ -1213,24 +1217,39 @@ function AddRuleSheet({
                 </span>
               </div>
             )}
-            <input
-              value={draft.subject}
-              placeholder={t("settings.templateSubject")}
-              aria-label={t("settings.templateSubject")}
-              onChange={(event) => patchDraft({ subject: event.target.value })}
-            />
-            {/* The SAME editor the rule page opens, preview tab included —
-                keyed by trigger so tiptap re-seeds when the sidebar picks a
-                different message instead of carrying the old buffer over. */}
-            <EmailBodyEditor
-              key={trigger}
-              value={draft.html}
-              placeholder={t("settings.templateBodyPlaceholder")}
-              previewPane={previewPane}
-              previewLabel={t("settings.rulePreview")}
-              onLiveChange={(html) => patchDraft({ html })}
-              onSave={(html) => patchDraft({ html })}
-            />
+            {locked ? (
+              <>
+                {/* p-3 cancels the pane's -m-3, which was cut for the
+                    editor's preview tab. */}
+                <div className="overflow-hidden rounded-lg border border-[var(--border)] p-3">
+                  {previewPane}
+                </div>
+                <p className="text-xs text-[var(--muted)]">
+                  {t("settings.wordingLockedHint")}
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  value={draft.subject}
+                  placeholder={t("settings.templateSubject")}
+                  aria-label={t("settings.templateSubject")}
+                  onChange={(event) => patchDraft({ subject: event.target.value })}
+                />
+                {/* The SAME editor the rule page opens, preview tab included —
+                    keyed by trigger so tiptap re-seeds when the sidebar picks a
+                    different message instead of carrying the old buffer over. */}
+                <EmailBodyEditor
+                  key={trigger}
+                  value={draft.html}
+                  placeholder={t("settings.templateBodyPlaceholder")}
+                  previewPane={previewPane}
+                  previewLabel={t("settings.rulePreview")}
+                  onLiveChange={(html) => patchDraft({ html })}
+                  onSave={(html) => patchDraft({ html })}
+                />
+              </>
+            )}
           </div>
 
           {/* Reserved whether or not it holds anything, so a rejected number
@@ -1293,6 +1312,11 @@ function RulesCard({
   const removeRule = useMutation(api.messageRules.remove);
   const ensureTemplate = useMutation(api.messageRules.ensureTemplate);
   const updateTemplate = useMutation(api.orgs.updateTemplate);
+  // Whether a rule's WORDING is platform-owned (lib/templateTexts): the
+  // editor never opens for these, and the mutations refuse them anyway. The
+  // rule itself — timing, channels, on/off — stays the salon's.
+  const wordingLocked = (trigger: RuleTrigger) =>
+    isWordingLocked(KIND_FOR_TRIGGER[trigger]);
   // Blur writes go to the BUFFER, never to the live row: reminders send from a
   // cron, so a body caught mid-sentence used to be a body a customer could
   // receive. Save is what makes words live. (Ported from Nudge's
@@ -1445,7 +1469,7 @@ function RulesCard({
     openRule(rule._id);
     // Creates the rule's own wording row (copied from the kind fallback) the
     // first time it is opened; a no-op after that.
-    if (isOwner)
+    if (isOwner && !wordingLocked(rule.trigger))
       void ensureTemplate({ ruleId: rule._id, language: org.language });
   };
   // A rule deleted in another tab, or an id someone pasted: fall back to the
@@ -1458,7 +1482,7 @@ function RulesCard({
   // through open() — a refresh inside a rule that had no wording row yet
   // would otherwise land on an editor with nothing to bind to.
   useEffect(() => {
-    if (opened && isOwner) {
+    if (opened && isOwner && !wordingLocked(opened.trigger)) {
       void ensureTemplate({ ruleId: opened._id, language: org.language });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1564,6 +1588,10 @@ function RulesCard({
     text: { body: string; bodyHtml: string; subject: string },
   ) => {
     const ruleId = await addRule({ trigger, offsetHours: offsetHours ?? 0 });
+    // Locked kinds take the rule and its timing but never the wording — the
+    // sheet showed a read-only preview, and orgs.updateTemplate would refuse
+    // the body anyway.
+    if (wordingLocked(trigger)) return;
     const templateId = await ensureTemplate({ ruleId, language: org.language });
     await updateTemplate({
       templateId,
@@ -1580,6 +1608,8 @@ function RulesCard({
     ruleId: Id<"messageRules">,
     text: { body: string; bodyHtml: string; subject: string },
   ) => {
+    const rule = rules.find((row) => row._id === ruleId);
+    if (!rule || wordingLocked(rule.trigger)) return;
     const templateId = await ensureTemplate({ ruleId, language: org.language });
     await updateTemplate({
       templateId,
@@ -1596,6 +1626,83 @@ function RulesCard({
     const ownTemplate = templates.find(
       (tpl) => tpl.ruleId === opened._id && tpl.language === org.language,
     );
+    // Platform-owned wording (lib/templateTexts LOCKED_TEMPLATE_KINDS): the
+    // drill-in still owns timing and channels, but the message itself renders
+    // read-only — what you read here is what the approved Cloud template and
+    // the session lanes send, resolved the way sends resolve it.
+    const openedLocked = wordingLocked(opened.trigger);
+    const openedKind = KIND_FOR_TRIGGER[opened.trigger] as TemplateKind;
+    const lockedBody =
+      ownTemplate?.body ??
+      templates.find(
+        (tpl) =>
+          tpl.ruleId === undefined &&
+          tpl.kind === openedKind &&
+          tpl.language === org.language,
+      )?.body ??
+      (DEFAULT_TEMPLATE_TEXTS[org.language] ?? DEFAULT_TEMPLATE_TEXTS.en)[openedKind]
+        .body;
+    const openedMeta = (
+      <>
+        <RowLabel
+          label={t("settings.rulesWhen")}
+          hint={
+            opened.trigger === "no_show"
+              ? winbackHint
+              : opened.trigger === "after_end"
+                ? t("settings.ruleFollowupHint")
+                : opened.trigger === "out_of_hours"
+                  ? t("settings.ruleOutOfHoursHint")
+                  : undefined
+          }
+        />
+        <span className="flex min-h-8 items-center gap-1.5 text-sm">
+          {ruleWhen(opened)}
+        </span>
+        <RowLabel label={t("settings.rulesWhere")} />
+        <span className="flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
+          {wiredFor(opened).map((channel) => {
+            const on = activeChannels(opened).has(channel);
+            return (
+              <button
+                key={channel}
+                type="button"
+                role="switch"
+                aria-checked={on}
+                aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
+                onClick={() => toggleChannel(opened, channel)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors ${
+                  on
+                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {/* The check is what says "pressed" — colour alone made
+                    the on-state read as a decorative tag, and the off
+                    state as a button not yet discovered. */}
+                {on && (
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+                {channelLabel(channel)}
+              </button>
+            );
+          })}
+        </span>
+      </>
+    );
+
     return (
       <Card disabled={!isOwner}>
         {/* Back left, title centred. The button PRINTS its label rather than
@@ -1694,87 +1801,50 @@ function RulesCard({
           </span>
         </div>
 
-        <RuleEditor
-          rule={opened}
-          // When and Channel, as rows of the editor's own grid. They used to
-          // be an unlabelled strip above it ("When booked  Email"), which read
-          // as one drifting phrase and hid that the amber pill is a switch.
-          meta={
-            <>
-              <RowLabel
-                label={t("settings.rulesWhen")}
-                hint={
-                  opened.trigger === "no_show"
-                    ? winbackHint
-                    : opened.trigger === "after_end"
-                      ? t("settings.ruleFollowupHint")
-                      : opened.trigger === "out_of_hours"
-                        ? t("settings.ruleOutOfHoursHint")
-                        : undefined
-                }
-              />
-              <span className="flex min-h-8 items-center gap-1.5 text-sm">
-                {ruleWhen(opened)}
-              </span>
-              <RowLabel label={t("settings.rulesWhere")} />
-              <span className="flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
-                {wiredFor(opened).map((channel) => {
-                  const on = activeChannels(opened).has(channel);
-                  return (
-                    <button
-                      key={channel}
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
-                      onClick={() => toggleChannel(opened, channel)}
-                      className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors ${
-                        on
-                          ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                          : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                      }`}
-                    >
-                      {/* The check is what says "pressed" — colour alone made
-                          the on-state read as a decorative tag, and the off
-                          state as a button not yet discovered. */}
-                      {on && (
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
-                        >
-                          <path d="M20 6L9 17l-5-5" />
-                        </svg>
-                      )}
-                      {channelLabel(channel)}
-                    </button>
-                  );
-                })}
-              </span>
-            </>
-          }
-          template={ownTemplate}
-          contactFields={contactFieldRows}
-          orgName={org.name}
-          orgLanguage={org.language}
-          orgCurrency={org.currency}
-          orgPriceDecimals={org.priceDecimals}
-          orgTimezone={org.timezone}
-          orgBookingUrl={org.bookingUrl}
-          orgPublicPhone={org.publicPhone}
-          emailEnabled={emailEnabled}
-          waConnected={waConnected}
-          resetToken={resetToken}
-          onSaveTemplate={(templateId, patch) =>
-            void saveTemplateDraft({ templateId, ...patch })
-          }
-        />
+        {openedLocked ? (
+          // The read-only face: the same When/Where rows, then the text
+          // that actually sends. No editor, no drafts, no Save — the
+          // wording is the platform's, and the mutations refuse it anyway
+          // (orgs.updateTemplate, "wording-locked").
+          <div className={ROW_GRID}>
+            {openedMeta}
+            <RowLabel
+              label={t("settings.wordingLocked")}
+              hint={t("settings.wordingLockedHint")}
+            />
+            <div className="space-y-2">
+              <p className="whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
+                {lockedBody}
+              </p>
+              <p className="text-xs text-[var(--muted)]">
+                {t("settings.wordingLockedHint")}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <RuleEditor
+            rule={opened}
+            // When and Channel, as rows of the editor's own grid. They used to
+            // be an unlabelled strip above it ("When booked  Email"), which read
+            // as one drifting phrase and hid that the amber pill is a switch.
+            meta={openedMeta}
+            template={ownTemplate}
+            contactFields={contactFieldRows}
+            orgName={org.name}
+            orgLanguage={org.language}
+            orgCurrency={org.currency}
+            orgPriceDecimals={org.priceDecimals}
+            orgTimezone={org.timezone}
+            orgBookingUrl={org.bookingUrl}
+            orgPublicPhone={org.publicPhone}
+            emailEnabled={emailEnabled}
+            waConnected={waConnected}
+            resetToken={resetToken}
+            onSaveTemplate={(templateId, patch) =>
+              void saveTemplateDraft({ templateId, ...patch })
+            }
+          />
+        )}
         {/* Deleting lives with the thing being deleted, and sits at the far
             end from Save: the two are opposite intentions, and a destructive
             button next to the one people press on every visit is a mis-click
@@ -2266,30 +2336,21 @@ export function RemindersView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const rulesData = useQuery(api.messageRules.list, {});
-  const updateTemplate = useMutation(api.orgs.updateTemplate);
 
   if (!settings || !rulesData)
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
 
   // Backend enforces this too (requireOwner); the fieldsets are just honest UI.
   const isOwner = settings.me.role !== "staff";
-  // What the lower templates card still owns. Rule-bound wording moved into
-  // each rule's own panel, so this card is the Meta registration desk (plus the
-  // campaign row, which was always its own thing): rows only exist to be edited
-  // when a Cloud number makes approval a real concept.
-  //
   // The `migrated` fork is gone from this file. Every org runs on messageRules
   // (migrateAll has run in prod, and seedDefaultRules stamps new orgs at
   // creation), so the legacy NotificationRulesCard and the three conditions that
   // chose between the two models were unreachable — a second full editor for the
   // same settings, maintained in parallel, that no signup could ever see.
-  const metaTemplates = settings.templates.filter((template) => {
-    if (template.ruleId !== undefined) return false;
-    // The campaign's email subject moved into the campaign composer, where
-    // campaigns are actually written. What is left of this row is its Meta
-    // registration, which only exists as a concept on a Cloud number.
-    return settings.whatsapp.connected;
-  });
+  //
+  // The Meta registration desk that used to render here moved to /admin
+  // (2026-08-26) — approval is operator work now, and the Cloud wording is
+  // platform text (lib/metaTemplate CLOUD_TEMPLATE_TEXTS).
 
   return (
     // Wider than the settings default: the expanded rule panel is a real
@@ -2335,109 +2396,11 @@ export function RemindersView() {
           </Card>
         )}
 
-        {/* The templates the rules send, one editor per kind. The body is
-              the salon's own words in named tokens; where a send actually
-              leaves from is a single status line, and the Meta registration
-              (name + approval) is a technical detail row that only exists
-              while a Business number is connected — the shop phone and email
-              need no approval from anybody. */}
-        {metaTemplates.length > 0 && (
-          <Card
-            title={t("settings.templates")}
-            tip={t("settings.templatesHint")}
-            disabled={!isOwner}
-          >
-            {/* One pull for the whole card, not one per row: Meta answers
-                with every template on the WABA at once, and a button per
-                template would be six round trips for one answer.
-
-                It earns its place twice over. Templates registered in
-                Business Manager before this screen existed adopt their real
-                status and their Meta id here — nobody has to re-register
-                anything — and a status webhook that never arrived is caught
-                by the same click. */}
-            {settings.whatsapp.connected && <TemplateSync />}
-            <div className="divide-y divide-[var(--border)]">
-              {metaTemplates.map((template) => (
-                <div key={template._id} className="space-y-2 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-medium">
-                      {template.kind === "confirmation"
-                        ? t("settings.ruleConfirmation")
-                        : template.kind === "reminder"
-                          ? t("settings.ruleReminder")
-                          : template.kind === "winback"
-                            ? t("settings.ruleWinback")
-                            : template.kind === "followup"
-                              ? t("settings.ruleFollowup")
-                              : template.kind === "cancellation"
-                                ? t("settings.ruleCancellation")
-                                : t("settings.templateKindCampaign")}
-                    </span>
-                    {/* Which number this leaves from, in the salon's words.
-                          Cloud wins whenever it exists (lib/waLane rule 2),
-                          so the shop-phone line only shows when the shop
-                          phone is the org's only WhatsApp. Neither lane: the
-                          rules card already says so once, in amber. */}
-                    {(settings.whatsapp.connected ||
-                      settings.evolutionEnabled) && (
-                      <span className="text-xs text-[var(--muted)]">
-                        {settings.whatsapp.connected
-                          ? t("settings.templateLaneCloud")
-                          : t("settings.templateLaneShopPhone")}
-                      </span>
-                    )}
-                  </div>
-                  {/* Outside the campaign guard: a campaign has no body
-                        here, but its emails need a subject like everyone
-                        else's (campaigns.fanOut renders it per customer). On
-                        the rules model every other subject lives in its
-                        rule's panel. */}
-                  {template.kind === "campaign" && settings.emailEnabled && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="w-36 shrink-0 text-xs text-[var(--muted)]">
-                        {t("settings.templateSubject")}
-                      </span>
-                      <input
-                        className="min-w-0 flex-1"
-                        defaultValue={template.subject ?? ""}
-                        onBlur={(e) =>
-                          void updateTemplate({
-                            templateId: template._id,
-                            subject: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                  )}
-                  {settings.whatsapp.connected && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex w-36 shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
-                        {t("settings.templateName")}
-                        {/* The exact string Meta approved, for checking the
-                              authored body against it. */}
-                        {template.bodyPreview && (
-                          <InfoTip text={template.bodyPreview} />
-                        )}
-                      </span>
-                      <input
-                        className="min-w-0 flex-1"
-                        defaultValue={template.metaName ?? ""}
-                        onBlur={(e) =>
-                          void updateTemplate({
-                            templateId: template._id,
-                            metaName: e.target.value,
-                          })
-                        }
-                      />
-                      <TemplateApproval template={template} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
+        {/* No registration desk here any more (Serdar, 2026-08-26): the
+            Meta name, status and Onaya gönder moved to /admin with the
+            credentials they depend on — same doctrine as the connect
+            form above. The Cloud wording is platform text; a salon
+            never meets Meta. */}
       </>
 
       <ShopPhoneCard isOwner={isOwner} />
@@ -2454,139 +2417,5 @@ export function RemindersView() {
   );
 }
 
-// The approval half of a template row: what Meta currently says, and the one
-// button that changes it.
-//
-// It replaced a dropdown the owner set by hand. That dropdown was the whole
-// problem — picking "approved" made nothing true, so a template that Meta had
-// never seen sat in settings looking ready while every send using it failed
-// with an error code nobody could read.
-function TemplateApproval({ template }: { template: TemplateRow }) {
-  const { t, language } = useLanguage();
-  const submit = useAction(api.waTemplates.submit);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ reason: string; detail?: string } | null>(null);
 
-  const STATUS_STYLE: Record<string, string> = {
-    approved:
-      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
-    pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-    rejected: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
-    draft: "bg-[var(--muted-bg)] text-[var(--muted)]",
-  };
-  const STATUS_LABEL: Record<string, TranslationKey> = {
-    approved: "template.approved",
-    pending: "template.pending",
-    rejected: "template.rejected",
-    draft: "template.draft",
-  };
 
-  return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <span
-        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-          STATUS_STYLE[template.status] ?? STATUS_STYLE.draft
-        }`}
-        // Meta's own word behind our four. "rejected" covers refused, paused,
-        // disabled and deleted, and which one it is decides what to do next.
-        title={template.metaStatusDetail}
-      >
-        {t(STATUS_LABEL[template.status] ?? "template.draft")}
-      </span>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          const result = await submit({ templateId: template._id });
-          if (!result.ok) {
-            setError({
-              reason: result.rejectedTokens?.length
-                ? `${t("template.tokensNotSendable")} ${result.rejectedTokens
-                    .map((token) => `[${token}]`)
-                    .join(", ")}`
-                : t(TEMPLATE_ERROR_KEY[result.reason ?? ""] ?? "template.submitFailed"),
-              detail: result.detail,
-            });
-          }
-          setBusy(false);
-        }}
-        className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-      >
-        {busy
-          ? t("template.submitting")
-          : template.metaTemplateId
-            ? t("template.resubmit")
-            : t("template.submit")}
-      </button>
-      {/* Waiting since WHEN, which is the question an owner actually has
-          about a pending template — Meta usually answers in minutes and
-          sometimes in a day, and "pending" alone cannot tell those apart. */}
-      {template.status === "pending" && template.submittedAt !== undefined && (
-        <span className="shrink-0 text-xs text-[var(--muted)]">
-          {formatDateTime(template.submittedAt, language)}
-        </span>
-      )}
-      {/* Meta's verdict, verbatim and on its own line. It is the single most
-          useful thing on this row when the pill is red, and there is nowhere
-          else to read it without opening Business Manager. */}
-      {template.status === "rejected" && template.metaRejectionReason && (
-        <p className="w-full text-xs text-red-600 dark:text-red-400">
-          {template.metaRejectionReason}
-        </p>
-      )}
-      {error && (
-        <p className="w-full text-xs text-red-600 dark:text-red-400">
-          {error.reason}
-          {error.detail ? ` — ${error.detail}` : ""}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Why a submission never reached Meta, as opposed to why Meta said no. Both
-// end up under the same button; only these have a sentence of ours.
-const TEMPLATE_ERROR_KEY: Record<string, TranslationKey> = {
-  "wa-not-configured": "error.wa-not-configured",
-  "no-waba-id": "template.noWabaId",
-  "no-body": "template.noBody",
-  "language-unsupported": "template.languageUnsupported",
-  "body-too-long": "template.bodyTooLong",
-  "kind-not-templated": "template.kindNotTemplated",
-  "meta-unreachable": "template.metaUnreachable",
-  "meta-refused": "template.metaRefused",
-};
-
-// The pull. See the note at its call site for why it is one button per card.
-function TemplateSync() {
-  const { t } = useLanguage();
-  const sync = useAction(api.waTemplates.syncFromMeta);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 pb-3">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setResult(null);
-          const out = await sync({});
-          setResult(
-            out.ok
-              ? t("template.syncDone").replace("{n}", String(out.matched ?? 0))
-              : t(TEMPLATE_ERROR_KEY[out.reason ?? ""] ?? "template.submitFailed"),
-          );
-          setBusy(false);
-        }}
-        className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-      >
-        {busy ? t("template.syncing") : t("template.sync")}
-      </button>
-      {result && <span className="text-xs text-[var(--muted)]">{result}</span>}
-    </div>
-  );
-}
