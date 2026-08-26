@@ -1026,6 +1026,16 @@ export default defineSchema({
     // arrives from a number they have never seen replying to a conversation
     // they had somewhere else. Unset = cloud.
     lastInboundLane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
+    // The newest inbound wamid we have told Meta was read — the blue ticks on
+    // the CUSTOMER's phone.
+    //
+    // A high-water mark rather than a per-message flag, because that is what
+    // Meta's call is: marking one message read marks every message before it
+    // in the same conversation. So one field answers the only question the
+    // send path asks — "is the newest thing they sent already ticked" — and it
+    // answers it truthfully, which a per-row `readReceiptAt` stamped on the
+    // newest row alone would not.
+    lastReadReceiptWamid: v.optional(v.string()),
     // Last out-of-hours away-reply. One per session window, or a customer
     // sending four messages in a row collects four identical bot replies.
     lastAutoReplyAt: v.optional(v.number()),

@@ -215,6 +215,27 @@ export async function sendWaCloudDocument(args: {
   );
 }
 
+// ---- Read receipts ----
+//
+// The blue ticks. Not a message and not a status we receive — it is the one
+// call that goes the other way, telling Meta that WE have read something the
+// customer sent, so their phone stops showing our side as merely delivered.
+//
+// Marking ONE message read marks every earlier message in that conversation,
+// which is why the caller only ever sends the newest.
+export async function markWaCloudRead(args: {
+  accessToken: string;
+  phoneNumberId: string;
+  // The wamid of the INBOUND message being acknowledged.
+  wamid: string;
+}): Promise<WaCloudSendResult> {
+  return postWaCloud(args.accessToken, args.phoneNumberId, {
+    messaging_product: "whatsapp",
+    status: "read",
+    message_id: args.wamid,
+  });
+}
+
 // ---- Reactions ----
 //
 // A reaction is a message to Meta like any other, so it obeys the same 24h

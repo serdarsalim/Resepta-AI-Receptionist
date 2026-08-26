@@ -22,6 +22,7 @@ import { appointmentIcs } from "./lib/ics";
 import { resolveWaAccount } from "./lib/platformConfig";
 import {
   fetchWaMedia,
+  markWaCloudRead,
   sendWaCloudDocument,
   sendWaCloudImage,
   sendWaCloudReaction,
@@ -331,6 +332,119 @@ export const sendSession = action({
     // retried. The caller still gets the reason back — someone typed this
     // message and is watching for it to land.
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+// ---- Read receipts ----
+//
+// The blue ticks on the customer's phone. Without this, someone who wrote to
+// the salon sees their message sitting at "delivered" forever, including while
+// a human is reading it and typing an answer — which reads as being ignored by
+// a business that is in fact right there.
+//
+// Deliberately separate from messages.markConversationRead, which is the
+// INBOX dot: "I have looked at this" is a fact about our own list, and it
+// fires once when a contact page mounts. Blue ticks answer a different
+// question at a different moment — a message arriving while the thread is
+// already open has to tick immediately, and the dot has no reason to move.
+
+export const markThreadRead = mutation({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId) return null;
+    // Evolution is a linked handset: the phone itself owns its read state, and
+    // Baileys needs the full message key, which that lane never stored — the
+    // same wall the reaction path hits.
+    if ((customer.lastInboundLane ?? "cloud") !== "cloud") return null;
+
+    // Newest first, and only a handful are read: an inbound row with a wamid
+    // is almost always at the very top of a thread somebody just opened, and
+    // the alternative is pulling a conversation's whole history to find one id.
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(20);
+    const newest = recent.find(
+      (row) =>
+        row.direction === "in" &&
+        row.wamid !== undefined &&
+        (row.lane ?? "cloud") === "cloud",
+    );
+    if (!newest?.wamid) return null;
+    // Already ticked. This is the guard that makes the call safe to fire on
+    // every render of an open thread, which is exactly how it is used.
+    if (customer.lastReadReceiptWamid === newest.wamid) return null;
+
+    await ctx.scheduler.runAfter(0, internal.wa.sendReadReceipt, {
+      customerId: args.customerId,
+      wamid: newest.wamid,
+    });
+    return null;
+  },
+});
+
+export const sendReadReceipt = internalAction({
+  args: { customerId: v.id("customers"), wamid: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const context = await ctx.runQuery(internal.wa.loadReadReceiptContext, {
+      customerId: args.customerId,
+    });
+    if (!context?.waAccount) return null;
+    // No message row, no alert, no retry. A read receipt that does not land is
+    // a customer who keeps seeing two grey ticks for another minute; writing a
+    // red row into their conversation about it would be a worse product than
+    // the missing tick. Meta also refuses receipts for messages older than
+    // roughly a day, and a thread nobody opened for a week must not fill the
+    // log with failures nobody can act on.
+    const result = await markWaCloudRead({
+      accessToken: context.waAccount.accessToken,
+      phoneNumberId: context.waAccount.phoneNumberId,
+      wamid: args.wamid,
+    });
+    if (!result.ok) {
+      console.warn(`wa read receipt: ${args.wamid} failed — ${result.reason}`);
+      return null;
+    }
+    await ctx.runMutation(internal.wa.stampReadReceipt, {
+      customerId: args.customerId,
+      wamid: args.wamid,
+    });
+    return null;
+  },
+});
+
+export const loadReadReceiptContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    // No requireOrg: the caller is a scheduled action, which carries no auth
+    // identity (the lesson loadScheduledSendContext records). The org comes
+    // off the customer row the mutation already scoped to the caller's org.
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return null;
+    return {
+      waAccount: await resolveWaAccount(
+        ctx,
+        await ctx.db
+          .query("waAccounts")
+          .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+          .unique(),
+      ),
+    };
+  },
+});
+
+export const stampReadReceipt = internalMutation({
+  args: { customerId: v.id("customers"), wamid: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.customerId, { lastReadReceiptWamid: args.wamid });
+    return null;
   },
 });
 

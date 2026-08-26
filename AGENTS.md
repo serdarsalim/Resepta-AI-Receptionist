@@ -161,6 +161,24 @@ style issue.
     asset between composing and sending cannot change what goes out.
   - Sends only work from a DEPLOYED backend. Meta fetches the file from the URL
     itself, and in dev `ctx.storage.getUrl` returns a 127.0.0.1 address.
+- **Read receipts / blue ticks (2026-08-26).** `wa.markThreadRead` (mutation,
+  decides) → `wa.sendReadReceipt` (action, tells Meta) → `stampReadReceipt`.
+  Marking ONE message read marks every earlier message in that conversation, so
+  only the newest inbound wamid is ever sent, and the high-water mark lives on
+  `customers.lastReadReceiptWamid` — a per-message `readReceiptAt` stamped on
+  the newest row alone would be a field whose name lies.
+  - **Deliberately NOT `messages.markConversationRead`**, which is the inbox
+    dot. That fires once on contact-page mount; blue ticks are keyed on the
+    newest inbound message instead, because one arriving while the thread is
+    already open has to tick immediately and the dot has no reason to move.
+  - Fires on every render of an open thread by design; the wamid comparison is
+    the guard.
+  - Failures are swallowed with a warn — no row, no alert, no retry. Meta
+    refuses receipts for messages older than roughly a day, so a thread nobody
+    opened for a week would otherwise log failures nobody can act on, and the
+    visible cost of a miss is two grey ticks for another minute.
+  - Cloud lane only. Evolution is a linked handset that owns its own read
+    state, and Baileys needs the full message key this lane never stored.
 - **Reactions (2026-08-26).** A reaction is not a message and never becomes a
   row: it carries an emoji plus the wamid of the message it belongs to, so
   `webhook.ts` looks that row up on `by_wamid` and patches

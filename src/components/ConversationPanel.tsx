@@ -202,6 +202,7 @@ export function ConversationPanel({
       : null;
   const sendSession = useAction(api.wa.sendSession);
   const react = useAction(api.wa.reactToMessage);
+  const markThreadRead = useMutation(api.wa.markThreadRead);
   // Placing a call is owner-only server-side (requireOwner inside testCall), so
   // the agent list is too — for staff this resolves to undefined and the button
   // never appears rather than appearing and failing.
@@ -348,6 +349,32 @@ export function ConversationPanel({
       ? [openCall]
       : visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
+
+  // Blue ticks on the customer's phone. Keyed on the newest thing they sent,
+  // not on mounting: a message arriving while somebody is already reading the
+  // thread has to tick the moment it lands, which is what a person looking at
+  // their phone expects and the one case an on-mount stamp cannot cover.
+  //
+  // Scanned by timestamp rather than taken off an end, because `thread` flips
+  // direction with chatOrder and an index would silently pick the oldest
+  // message on the mail tab.
+  //
+  // Not gated on `canCompose`: reading a conversation is reading it whichever
+  // tab is showing, and the mutation itself refuses anything that is not an
+  // inbound Cloud-lane message with a wamid.
+  const newestInboundId = inScope.reduce<{ id: string; at: number } | null>(
+    (newest, item) =>
+      item.channel === "whatsapp" && item.direction === "in" && (!newest || item.at > newest.at)
+        ? { id: item.id, at: item.at }
+        : newest,
+    null,
+  )?.id;
+  useEffect(() => {
+    if (!newestInboundId) return;
+    // Swallowed: a receipt that fails is two grey ticks for another minute,
+    // and there is nothing the person reading the thread could do about it.
+    void markThreadRead({ customerId }).catch(() => {});
+  }, [newestInboundId, customerId, markThreadRead]);
 
   useEffect(() => {
     // Skipped while a return position is pending, or the restore below would
