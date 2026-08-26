@@ -1,8 +1,9 @@
 # One assistant, two lanes: what is actually shared and what is not
 
-Exploration only. Nothing here is built. Serdar's question was "shouldn't we use
-the same assistant for chat that we use for voice", and this is the first leg of
-finding out. Written 2026-08-26 so a fresh session can pick it up cold.
+Serdar's question was "shouldn't we use the same assistant for chat that we
+use for voice". Written 2026-08-26 as exploration; the same evening he chose
+the shared-prompt shape and the first leg WAS BUILT — see "What is now built"
+at the end. The analysis below stands as written.
 
 ## The short answer
 
@@ -138,3 +139,45 @@ bigger difference to a customer. It is probably the right first move.
 - Token cost on the chat side if the shared context grows.
 - Whether a salon that edited its voice prompt would end up with rules stated
   twice, once in their prose and once injected.
+
+## What is now built (2026-08-26, same evening)
+
+Serdar picked a stronger version of the proposal than the one above: not a
+shared `{{rules}}` variable, but the whole Talimat. Chat composes over the
+salon's own voice prompt. Three commits:
+
+- **The prompt mirror.** The only copy of a published prompt used to live at
+  the provider. Now every publish path (owner editor, MCP door, provisioning)
+  stamps `retellAgents.generalPrompt` + `promptVersion` after the provider
+  accepts. An agent connected rather than born here has no mirror until its
+  owner next publishes — chat runs the code template for it meanwhile.
+- **`lib/agentVariables`** — the "one context module, two renderers" of this
+  doc, real. The ring-time builtins moved out of `beforeCallContext` verbatim
+  behind a `style: "spoken" | "written"` switch. The styles differ only where
+  the medium forces it: durations ("doksan dakika" vs "90 dk"), prices
+  (symbol-less speech vs "₺3.000"), datetimes (`spokenDateTime` vs
+  `formatAppointmentTime`). Everything else is the same string in both lanes.
+- **Chat template v4** (`lib/chatAgentTemplate`): the chat system prompt is a
+  channel adapter — WhatsApp style, no-hang-up, single-customer binding,
+  escalation, the speech-rule overrides — wrapped around the substituted
+  Talimat. Variables are read per message, so an owner's edit reaches the next
+  WhatsApp reply with no sync and no publish. Turn rows stamp
+  `voicePromptVersion` beside `templateVersion`: a reply is the product of two
+  documents and the flight recorder names both.
+
+The identity call, for now: chat renders `{{agent_name}}` EMPTY on purpose —
+the nameless robot, per Serdar. The Talimat already says what an empty name
+means. Giving chat the persona later is one string in `loadTurnContext`.
+
+Still open, in the order they will probably matter:
+
+1. `save_customer_details` for chat. The Talimat tells the agent to save card
+   details; on chat the tool does not exist, the adapter says so, and an
+   attempted call returns a readable unknown-tool error. Adding it gives chat
+   the same card-writing the phone has, through the same `{{information}}` gate.
+2. The voice-side freshness gap this doc names is UNTOUCHED: a Resepta rule
+   improvement still reaches new voice agents only. The `{{rules}}` idea above
+   remains the candidate fix, now cheaper because the variable plumbing is
+   shared.
+3. Two-way memory (voice knowing about chat) and the sidebar rename
+   ("Sesli asistan" → the one assistant) — the product half, not started.
