@@ -842,6 +842,10 @@ export const registerStandardSetAll = action({
 
 // Every editable wording, current text beside the code default. The editor
 // renders exactly this; `overridden` is what makes "Reset to default" honest.
+// `stale` is how many registered templates a resubmit would actually push new
+// wording into — the editor shows the resubmit button only when it is > 0, so
+// a resting page offers no doomed or pointless submissions (Serdar,
+// 2026-08-27: the button "should only appear when we change something").
 export const platformWording = query({
   args: {},
   returns: v.array(
@@ -851,28 +855,64 @@ export const platformWording = query({
       body: v.string(),
       defaultBody: v.string(),
       overridden: v.boolean(),
+      stale: v.number(),
     }),
   ),
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx);
+    // The fleet's kind-level rows, once: same population kindRowsAcrossOrgs
+    // walks (wired WABA, kind-level row exists).
+    const accounts = await ctx.db.query("waAccounts").collect();
+    const fleetRows: { kind: string; language: string; status: string; submittedBody?: string }[] = [];
+    for (const account of accounts) {
+      if (!account.wabaId?.trim()) continue;
+      const rows = await ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", account.orgId))
+        .collect();
+      for (const row of rows) {
+        if (row.ruleId !== undefined) continue;
+        fleetRows.push({
+          kind: row.kind,
+          language: row.language,
+          status: String(row.status),
+          submittedBody: row.submittedBody,
+        });
+      }
+    }
     const out: {
       kind: string;
       language: string;
       body: string;
       defaultBody: string;
       overridden: boolean;
+      stale: number;
     }[] = [];
     for (const language of ["tr", "en", "de"]) {
       for (const kind of LOCKED_TEMPLATE_KINDS) {
         const defaultBody = cloudBodyFor(kind, language);
         if (!defaultBody) continue;
         const body = await resolvePlatformBody(ctx, kind, language);
+        const current = body ?? defaultBody;
+        // Rows a resubmit would touch with NEW text: not pending (Meta locks
+        // those), submittedBody known and different. Unknown rows (submitted
+        // before submittedBody existed) don't light the button — the per-row
+        // Submit in the matrix still reaches them.
+        const stale = fleetRows.filter(
+          (row) =>
+            row.kind === kind &&
+            row.language === language &&
+            row.status !== "pending" &&
+            row.submittedBody !== undefined &&
+            row.submittedBody !== current,
+        ).length;
         out.push({
           kind,
           language,
-          body: body ?? defaultBody,
+          body: current,
           defaultBody,
           overridden: body !== defaultBody,
+          stale,
         });
       }
     }
