@@ -1160,6 +1160,9 @@ export default defineSchema({
   services: defineTable({
     orgId: v.id("orgs"),
     name: v.string(),
+    // Drag-reorder position (contactFields.order's pattern). Unset rows sort
+    // after ordered ones, alphabetically, so nothing needs migrating.
+    order: v.optional(v.number()),
     // The address the voice agent books by, exactly the job contactFields.key
     // does for properties: derived from the name once, then fixed. A salon
     // renaming "Manikür" to "Manikür & pedikür" must not break an agent

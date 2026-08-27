@@ -814,11 +814,57 @@ at). The campaign wrapper is PARKED (Serdar): Meta refused the old
 all-parameter body ("too many variables for its length"); the fleshed
 wrapper is in `CAMPAIGN_BODIES`, unsubmitted.
 
-**Campaigns is a section of Automations, not a sidebar door**, rendered at
-the foot of RemindersView's stack so the drill-in rule still hides it;
-`?tab=campaigns` aliases to `messages`. The sidebar door is "Asistan" with a
-robot head — one agent, two channels; "Sesli asistan" and "Ajan" are dead
-vocabulary in user-facing copy.
+**Campaigns is UNMOUNTED entirely** (Serdar, 2026-08-28: hidden until the
+feature launches; it was a section of Automations before that). CampaignsView
+stays intact in the tree; re-mounting it at the foot of RemindersView's stack
+is the whole relaunch. `?tab=campaigns` still aliases to `messages`. The
+sidebar door is "Asistan" with a robot head — one agent, two channels;
+"Sesli asistan" and "Ajan" are dead vocabulary in user-facing copy.
+
+## The email wording joined the fleet desk (2026-08-28)
+
+The same five locked kinds send an email (and Evolution session text) from
+each org's `waTemplates` row body/subject/bodyHtml — and that wording is now
+fleet-editable beside the Cloud text. Store: `platformRichTexts` (subject,
+body, optional bodyHtml), written by `waTemplates.setPlatformRichText`.
+Rollout physics differ from the Cloud lane ON PURPOSE: nothing reviews an
+email, so a save IS the rollout — the mutation patches every org's rows of
+that kind/language on the spot (kind-level and per-rule alike) and returns
+the count; there is no resubmit step. Seeding (`registerStandardSet`,
+`resetToDefaults`, `ensureTemplate`) reads `lib/richText resolveRichText`
+(override or `DEFAULT_TEMPLATE_TEXTS`), so a new org is born with the
+operator's words. The desk's editor is the salon's own `EmailBodyEditor`
+(WYSIWYG; bodyHtml is what emails send, plain body derives via
+`lib/emailText htmlToText` for the session lane — the RemindersView split,
+now shared). Save validates every `[token]` against the renderer's
+vocabulary (`renderTokens isKnownToken`): an unknown token reaches customers
+as literal bracket text, tolerable for one salon, not pushed fleet-wide.
+BEWARE `??` on body/bodyHtml: rows exist carrying empty STRINGS, which slid
+past every nullish check and blanked previews — seed/preview code uses `||`.
+
+Preview grammar, both products: `lib/previewSamples` holds one invented
+per-language booking (Ayşe/Bella Kuaför for tr); real org facts override
+where known. The desk cards collapse, hold one lane at a time behind a
+WhatsApp/Email switch, and preview live (WA bubble beside the textarea, the
+editor's Preview tab for email). Salon-side, locked kinds render
+`LockedPreview` (RemindersView) — the message as bubble or email paper, no
+token soup — in the rule drill-in and the add sheet; the automations list is
+two named columns (When | Message) with the real WhatsApp glyph and an
+envelope as the chip's channel icons, and a wired-nothing org's rows say
+"won't send" in words.
+
+Other 2026-08-28 facts: `check_availability` takes the customer's asked
+`time` and answers it deterministically (`requested_time` with
+available/reason) — gpt-4.1-mini read the old `suggested_slots` (now
+`example_free_times`) as exhaustive and refused a free 11:00; never make the
+model infer what the tool can state. The chat agent's human pacing is
+jittered (read beat 1–4.5s random, typing ±20% around 35ms/char, cap 9s).
+`services.order` + `services.reorder` give the Bilgi services/goods lists
+drag-reorder (six-dot handle, the contactFields pattern); `services.list`
+sorts order-then-name, so the booking page and price-list tokens inherit the
+owner's arrangement. The dark values of `--chat-paper`/`--chat-field` live
+on `.dark` itself, not `.dark .chat-wallpaper` — CallDetail sits on
+`--chat-field` in the voice tab where no wallpaper ancestor exists.
 
 **The customers validator bit again.** `lastReadReceiptWamid` reached the
 schema without reaching `customerFields` in `convex/customers.ts`, and the

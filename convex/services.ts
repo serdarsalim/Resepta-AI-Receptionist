@@ -12,6 +12,8 @@ const serviceDoc = v.object({
   // Never optional on the way OUT, even though the column is: a caller has to
   // be able to render and paste it without knowing which rows predate keys.
   key: v.string(),
+  // Drag-reorder position; unset rows sort after ordered ones, by name.
+  order: v.optional(v.number()),
   // Unset = this is a good (no duration, no calendar footprint). See schema.
   durationMinutes: v.optional(v.number()),
   leadMinutes: v.optional(v.number()),
@@ -59,7 +61,32 @@ export const list = query({
       .query("services")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    // The owner's drag order first, name for the rows that predate it —
+    // sorted HERE so the booking page, the price-list token and the agents
+    // all inherit the same order the owner arranged.
+    rows.sort(
+      (a, b) =>
+        (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) ||
+        a.name.localeCompare(b.name),
+    );
     return rows.map((row) => ({ ...row, key: serviceKey(row) }));
+  },
+});
+
+// Persists a drag-reorder: the client sends one list's full order, every row
+// gets its index. Timed services and goods keep independent sequences — the
+// two lists never sort against each other. contactFields.reorder's pattern.
+export const reorder = mutation({
+  args: { orderedIds: v.array(v.id("services")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    for (const [index, id] of args.orderedIds.entries()) {
+      const row = await ctx.db.get(id);
+      if (!row || row.orgId !== orgId) throw new Error("not-found");
+      await ctx.db.patch(id, { order: index });
+    }
+    return null;
   },
 });
 

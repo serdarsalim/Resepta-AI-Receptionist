@@ -954,14 +954,25 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   const services = useQuery(api.services.list, {});
   const update = useMutation(api.services.update);
   const remove = useMutation(api.services.remove);
+  const reorder = useMutation(api.services.reorder);
   // Null when closed, otherwise the kind the button that opened it stands for.
   // It was a boolean while one shared button sat above both cards and the
   // sheet asked Type itself.
   const [adding, setAdding] = useState<"service" | "good" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  // The row being dragged by its six-dot handle (Serdar, 2026-08-28), the
+  // contact-fields pattern. One id serves both lists; a drop checks the
+  // dragged row actually lives in the list it lands on.
+  const [dragId, setDragId] = useState<Id<"services"> | null>(null);
 
-  const sorted = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  // The same comparator the list query uses: the owner's drag order first,
+  // name for rows that predate it.
+  const sorted = [...(services ?? [])].sort(
+    (a, b) =>
+      (a.order ?? Number.MAX_SAFE_INTEGER) -
+        (b.order ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name),
+  );
   // Two cards, not one list with a quiet gap in its Duration column. A product
   // is not a short service: it books no time, holds no chair, and answers a
   // different question in every column this table has. Mixed together, the only
@@ -981,6 +992,23 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   // twice is how the two copies start to differ.
   // `goods` names the column over "Hair gel" and "Shampoo". The two lists share
   // every other column, so this is one word, not a second renderer.
+  // Reordering rewrites the dropped-on list's whole sequence, same reasoning
+  // as the team roster: the lists are short, and a single patch would leave
+  // two rows sharing a position the next drag resolves arbitrarily.
+  const moveService = (rows: typeof sorted, target: (typeof sorted)[number]) => {
+    if (!dragId || dragId === target._id) return;
+    const ids = rows.map((row) => row._id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(target._id);
+    setDragId(null);
+    // A drag from the other list lands here with from === -1: ignored, the
+    // two lists order independently.
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    next.splice(to, 0, ...next.splice(from, 1));
+    void reorder({ orderedIds: next });
+  };
+
   const serviceList = (rows: typeof sorted, goodsList = false) => (
     <div className="space-y-2">
             {rows.length > 0 && (
@@ -1016,20 +1044,48 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
               {rows.map((service) => (
                 <li
                   key={service._id}
-                  className={`group relative py-1.5 text-sm ${SERVICE_ROW_GRID}`}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => moveService(rows, service)}
+                  className={`group relative py-1.5 text-sm ${SERVICE_ROW_GRID} ${
+                    dragId === service._id ? "opacity-40" : ""
+                  }`}
                 >
                   {/* The whole top line on a phone, so the name is not fighting
                       264px of fixed columns for the 60px that is left. Reserves
                       the right end for the delete ×, parked there below sm —
                       pr-8 clears its w-7, where the old "Delete" word needed
                       twice that. */}
-                  <span className="min-w-0 max-sm:col-span-4 max-sm:row-start-1 max-sm:pr-8">
-                    <InlineEditValue
-                      value={service.name}
-                      onSave={(next) =>
-                        next && update({ serviceId: service._id, name: next })
-                      }
-                    />
+                  <span className="flex min-w-0 items-center gap-1 max-sm:col-span-4 max-sm:row-start-1 max-sm:pr-8">
+                    {/* The six-dot handle, sm and up: touch drag on the phone
+                        layout fights scrolling, and the fields table already
+                        made this call. */}
+                    {isOwner && (
+                      <span
+                        draggable
+                        onDragStart={() => setDragId(service._id)}
+                        onDragEnd={() => setDragId(null)}
+                        title={t("fields.reorder")}
+                        aria-label={t("fields.reorder")}
+                        className="hidden shrink-0 cursor-grab select-none text-[var(--muted-strong)] hover:text-[var(--foreground)] active:cursor-grabbing sm:inline-flex"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="9" cy="6" r="1.5" />
+                          <circle cx="15" cy="6" r="1.5" />
+                          <circle cx="9" cy="12" r="1.5" />
+                          <circle cx="15" cy="12" r="1.5" />
+                          <circle cx="9" cy="18" r="1.5" />
+                          <circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <InlineEditValue
+                        value={service.name}
+                        onSave={(next) =>
+                          next && update({ serviceId: service._id, name: next })
+                        }
+                      />
+                    </span>
                   </span>
                   {/* EMPTY for a good, unless one has a lead time set. The
                       column asks "how long", and a product has no answer — it
