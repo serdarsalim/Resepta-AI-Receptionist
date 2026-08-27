@@ -1268,6 +1268,36 @@ export const resubmitTemplateAll = action({
   },
 });
 
+// One-off repair for rows submitted before submittedBody existed (added
+// 2026-08-27): they read as "unknown", which leaves Resubmit live forever on
+// rows that in fact carry the current text (Serdar: "i shouldn't see resubmit
+// if i don't have any changes"). Every such row went to Meta with the text
+// the platform resolves TODAY — the override table did not exist yet — so
+// stamping the current expected body records what was actually sent. Rows
+// with a submittedBody, and per-rule rows, are untouched. Run once per
+// deployment with `npx convex run`; harmlessly idempotent.
+export const backfillSubmittedBody = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    let stamped = 0;
+    for (const row of await ctx.db.query("waTemplates").collect()) {
+      if (row.ruleId !== undefined) continue;
+      if (row.submittedBody !== undefined) continue;
+      if (row.status !== "approved" && row.status !== "pending") continue;
+      if (!row.metaName) continue;
+      const expected =
+        row.kind === "campaign"
+          ? campaignBodyFor(row.language)
+          : await resolvePlatformBody(ctx, row.kind, row.language);
+      if (!expected) continue;
+      await ctx.db.patch(row._id, { submittedBody: expected });
+      stamped++;
+    }
+    return stamped;
+  },
+});
+
 // The matrix: every business in the WhatsApp play, with its kind-level rows.
 // A business counts if it has a wired WABA (registration can run) or any
 // kind-level template row (history exists even if the WABA went away) — one
