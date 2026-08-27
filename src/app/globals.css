@@ -657,8 +657,10 @@ thead {
     width: 100%;
   }
 
-  input[type="checkbox"] {
+  input[type="checkbox"],
+  input[type="radio"] {
     width: auto;
+    accent-color: var(--accent);
   }
 
   input:focus,

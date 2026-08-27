@@ -26,6 +26,7 @@ import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { plainToHtml, htmlToText } from "@/lib/emailText";
+import { previewSampleValues } from "@/lib/previewSamples";
 import { useConfirm } from "./ConfirmDialog";
 import {
   DEFAULT_TEMPLATE_TEXTS,
@@ -104,30 +105,8 @@ function FlowNode({
   );
 }
 
-// The joint between nodes: an arrow from sm up, and on a phone — where the
-// strip stacks — a short vertical stem indented under the node's icon, which
-// is enough to say "then" without an arrowhead's ceremony.
-function FlowArrow() {
-  return (
-    <span aria-hidden className="flex shrink-0 sm:items-center">
-      <span className="ml-6 h-3 w-px bg-[var(--border)] sm:hidden" />
-      <svg
-        width="20"
-        height="12"
-        viewBox="0 0 20 12"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="mx-0.5 hidden shrink-0 text-[var(--muted)] opacity-60 sm:block"
-      >
-        <path d="M2 6h13" />
-        <path d="M12 2.5 15.5 6 12 9.5" />
-      </svg>
-    </span>
-  );
-}
+// FlowArrow, the joint between nodes, lived here until 2026-08-28: the list
+// became two named columns and the arrows had nothing left to join.
 
 type RuleTrigger =
   | "booking"
@@ -194,7 +173,9 @@ function editorSeed(template?: TemplateRow, ignoreDraft = false) {
   return {
     body,
     subject: draft?.subject ?? template?.subject ?? "",
-    bodyHtml: draft?.bodyHtml ?? template?.bodyHtml ?? plainToHtml(body),
+    // || over ??: an empty-string bodyHtml on a row or draft must fall back
+    // to the plain body, not seed a blank editor.
+    bodyHtml: draft?.bodyHtml || template?.bodyHtml || plainToHtml(body),
     defaults: draft?.variableDefaults ?? template?.variableDefaults ?? [],
   };
 }
@@ -302,6 +283,86 @@ const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
 
 // The two projections of one authored email — plainToHtml and htmlToText —
 // moved to lib/emailText when the fleet desk started making the same split.
+
+// A platform-owned message, shown the only way a salon ever meets it:
+// rendered (Serdar, 2026-08-28 — the raw token box "sucks"). One channel at
+// a time behind an Email/WhatsApp toggle when the rule really travels both;
+// a single wired lane shows itself with nothing to click. Both faces fill
+// their tokens from the sample booking, so the owner reads the message a
+// customer will read, not syntax.
+function LockedPreview({
+  lanes,
+  subject,
+  body,
+  bodyHtml,
+  values,
+  orgName,
+}: {
+  lanes: ("email" | "whatsapp")[];
+  subject: string;
+  body: string;
+  bodyHtml?: string;
+  values: ReturnType<typeof previewSampleValues>;
+  orgName: string;
+}) {
+  const { t } = useLanguage();
+  const [pick, setPick] = useState<"email" | "whatsapp" | null>(null);
+  // Nothing wired yet: still show both faces — the owner is reading words a
+  // channel the operator will connect later is going to carry.
+  const shown: ("email" | "whatsapp")[] =
+    lanes.length > 0 ? lanes : ["email", "whatsapp"];
+  const lane = pick && shown.includes(pick) ? pick : shown[0];
+  return (
+    <div className="space-y-2">
+      {shown.length > 1 && (
+        // The app's segmented switch (native radios auditioned here for an
+        // afternoon; Serdar: "ugly"): a muted track, the picked face riding
+        // it as a card — the same control the rule editor's preview toggle
+        // already taught.
+        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
+          {shown.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setPick(option)}
+              className={`rounded-full px-2.5 py-1 transition-colors ${
+                lane === option
+                  ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
+                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp")}
+            </button>
+          ))}
+        </span>
+      )}
+      {lane === "email" ? (
+        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+          <div className="email-paper flex flex-col">
+            <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
+              {renderTokens(subject, values) || orgName}
+            </p>
+            <div
+              className="email-body-editor px-3 py-3 text-sm"
+              dangerouslySetInnerHTML={{
+                __html: sanitizeEmailHtml(
+                  // || over ??: a row that carries bodyHtml as an empty
+                  // STRING (found live on Bella's reminder) must fall back
+                  // to the plain body, not render a blank sheet.
+                  renderTokens(bodyHtml || plainToHtml(body), values),
+                ),
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+          {renderTokens(body, values)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // A number that reads as part of the sentence until it is touched: no border,
 // no spinners, just an underline on hover saying "this is yours to change".
@@ -622,26 +683,29 @@ function RuleEditor({
   // booking stays literal, and a token with a fallback shows the fallback.
   // That is Nudge's rule, and it is the honest one: no invented names, no
   // invented prices, but never a blank pane either.
-  const contactlessSlot = (key: string, label: string) =>
-    liveDefaults?.[key] ?? `⟨${label}⟩`;
+  // The sample booking (lib/previewSamples), a template's own "when empty"
+  // fallback still winning where the owner typed one. Real org facts resolve
+  // for real; person and booking tokens read as Ayşe's Wednesday booking
+  // (Serdar, 2026-08-28: fake names over labelled slots) — a message, not
+  // syntax.
+  const sample = previewSampleValues(orgLanguage);
+  const contactlessSlot = (key: string, fallback: string | undefined) =>
+    liveDefaults?.[key] ?? fallback ?? "";
   const contactlessValues = {
     // True no matter who is reading, so they resolve for real.
     businessName: orgName,
-    phone: orgPublicPhone || contactlessSlot("phone", t("vars.phone")),
+    phone: orgPublicPhone || contactlessSlot("phone", sample.phone),
     bookingLink:
-      orgBookingUrl || contactlessSlot("booking_link", t("vars.bookingLink")),
-    // Everything that belongs to a person or a booking. A labelled slot rather
-    // than the raw [token] Nudge leaves behind: it reads as the shape of the
-    // sentence instead of as syntax, which is what a preview is for.
-    firstName: contactlessSlot("name", t("vars.firstName")),
-    appointmentAt: contactlessSlot("date", t("vars.date")),
-    staffName: contactlessSlot("staff", t("vars.staff")),
-    serviceName: contactlessSlot("service", t("vars.service")),
-    servicePriceList: contactlessSlot("pricelist", t("vars.priceList")),
-    price: contactlessSlot("price", t("vars.price")),
-    manageLink: contactlessSlot("manage_link", t("vars.manageLink")),
-    // Org fields resolve to their own labelled slots too, so a body built out
-    // of contact fields is not a row of blanks before anyone is picked.
+      orgBookingUrl || contactlessSlot("booking_link", sample.bookingLink),
+    firstName: contactlessSlot("name", sample.firstName),
+    appointmentAt: contactlessSlot("date", sample.appointmentAt),
+    staffName: contactlessSlot("staff", sample.staffName),
+    serviceName: contactlessSlot("service", sample.serviceName),
+    servicePriceList: contactlessSlot("pricelist", sample.servicePriceList),
+    price: contactlessSlot("price", sample.price),
+    manageLink: contactlessSlot("manage_link", sample.manageLink),
+    // Org fields still preview as labelled slots — the sample booking cannot
+    // invent a value for a field only this business defines.
     custom: Object.fromEntries(
       contactFields.map((field) => [
         field.key,
@@ -792,7 +856,7 @@ function RuleEditor({
         // and emoji built in. Every save writes BOTH projections: the HTML
         // the email sends and the plain text the WhatsApp lane sends.
         <EmailBodyEditor
-          value={template.bodyHtml ?? plainToHtml(template.body ?? "")}
+          value={template.bodyHtml || plainToHtml(template.body ?? "")}
           placeholder={t("settings.templateBodyPlaceholder")}
           previewPane={previewPane}
           previewLabel={t("settings.rulePreview")}
@@ -908,10 +972,16 @@ function AddRuleSheet({
   rules,
   templates,
   org,
+  emailEnabled,
+  waConnected,
   onAdd,
   onSaveExisting,
   onClose,
 }: {
+  // What the org has wired, so the locked preview shows the channel faces a
+  // send could actually take.
+  emailEnabled: boolean;
+  waConnected: boolean;
   rules: RuleRowData[];
   // The org's kind-level fallback rows, so the sheet shows the wording this
   // business will actually get rather than the shipped stock text they may
@@ -991,11 +1061,14 @@ function AddRuleSheet({
     const stock = (DEFAULT_TEMPLATE_TEXTS[org.language] ??
       DEFAULT_TEMPLATE_TEXTS.en)[kind as TemplateKind];
     const source = own ?? fallback;
+    // || over ??, deliberately: rows exist whose bodyHtml or body is an
+    // empty STRING, and seeding "" gives the sheet a blank preview with a
+    // working subject over it (found live on Bella's reminder).
     return {
-      html: source
-        ? (source.bodyHtml ?? plainToHtml(source.body ?? ""))
-        : plainToHtml(stock?.body ?? ""),
-      subject: source?.subject ?? stock?.subject ?? "",
+      html:
+        (source && (source.bodyHtml || plainToHtml(source.body || ""))) ||
+        plainToHtml(stock?.body ?? ""),
+      subject: source?.subject || stock?.subject || "",
     };
   };
 
@@ -1073,21 +1146,14 @@ function AddRuleSheet({
     onClose();
   };
 
-  // The contactless preview, exactly the rule page's rule: org facts resolve
-  // for real, everything belonging to a person or a booking previews as its
-  // own labelled slot — never blank, never an invented name or price.
-  const previewValues = {
+  // The sample booking, org facts kept real (lib/previewSamples): the sheet
+  // previews a message a customer could actually receive, not a row of
+  // labelled slots.
+  const previewValues = previewSampleValues(org.language, {
     businessName: org.name,
-    phone: org.publicPhone || `⟨${t("vars.phone")}⟩`,
-    bookingLink: org.bookingUrl || `⟨${t("vars.bookingLink")}⟩`,
-    firstName: `⟨${t("vars.firstName")}⟩`,
-    appointmentAt: `⟨${t("vars.date")}⟩`,
-    staffName: `⟨${t("vars.staff")}⟩`,
-    serviceName: `⟨${t("vars.service")}⟩`,
-    servicePriceList: `⟨${t("vars.priceList")}⟩`,
-    price: `⟨${t("vars.price")}⟩`,
-    manageLink: `⟨${t("vars.manageLink")}⟩`,
-  };
+    phone: org.publicPhone,
+    bookingLink: org.bookingUrl,
+  });
   const previewPane = (
     // The email as a mail client shows it — same email-paper the rule page
     // renders, so the sheet's preview and the page's preview can never look
@@ -1190,11 +1256,17 @@ function AddRuleSheet({
             )}
             {locked ? (
               <>
-                {/* p-3 cancels the pane's -m-3, which was cut for the
-                    editor's preview tab. */}
-                <div className="overflow-hidden rounded-lg border border-[var(--border)] p-3">
-                  {previewPane}
-                </div>
+                <LockedPreview
+                  lanes={[
+                    ...(emailEnabled ? (["email"] as const) : []),
+                    ...(waConnected ? (["whatsapp"] as const) : []),
+                  ]}
+                  subject={draft.subject}
+                  body={htmlToText(draft.html)}
+                  bodyHtml={draft.html}
+                  values={previewValues}
+                  orgName={org.name}
+                />
                 <p className="text-xs text-[var(--muted)]">
                   {t("settings.wordingLockedHint")}
                 </p>
@@ -1481,11 +1553,20 @@ function RulesCard({
       case "out_of_hours":
         return t("settings.ruleWhenClosed");
       case "before_start":
-        return `${rule.offsetHours} ${t("settings.ruleHoursBefore")}`;
+        return t("settings.ruleWhenBeforeFull").replace(
+          "{n}",
+          String(rule.offsetHours),
+        );
       case "after_end":
-        return `${rule.offsetHours} ${t("settings.ruleHoursAfterEnd")}`;
+        return t("settings.ruleWhenAfterEndFull").replace(
+          "{n}",
+          String(rule.offsetHours),
+        );
       case "no_show":
-        return `${Math.round(rule.offsetHours / 24)} ${t("settings.ruleDaysAfterNoShow")}`;
+        return t("settings.ruleWhenNoShowFull").replace(
+          "{n}",
+          String(Math.round(rule.offsetHours / 24)),
+        );
     }
   };
 
@@ -1603,73 +1684,104 @@ function RulesCard({
     // the session lanes send, resolved the way sends resolve it.
     const openedLocked = wordingLocked(opened.trigger);
     const openedKind = KIND_FOR_TRIGGER[opened.trigger] as TemplateKind;
-    const lockedBody =
-      ownTemplate?.body ??
+    // The text that actually sends, all three faces of it, in send-path
+    // resolution order: this rule's own row, the kind-level fallback, stock.
+    const lockedSource =
+      ownTemplate ??
       templates.find(
         (tpl) =>
           tpl.ruleId === undefined &&
           tpl.kind === openedKind &&
           tpl.language === org.language,
-      )?.body ??
-      (DEFAULT_TEMPLATE_TEXTS[org.language] ?? DEFAULT_TEMPLATE_TEXTS.en)[openedKind]
-        .body;
+      );
+    const lockedStock = (DEFAULT_TEMPLATE_TEXTS[org.language] ??
+      DEFAULT_TEMPLATE_TEXTS.en)[openedKind];
+    // || over ??: an empty-string body or bodyHtml on the row must fall
+    // through, not preview as a blank message.
+    const lockedText = {
+      body: lockedSource?.body || lockedStock.body,
+      bodyHtml: lockedSource?.bodyHtml || undefined,
+      subject: lockedSource?.subject || lockedStock.subject,
+    };
+    // The lanes this rule could actually travel — RuleEditor's own rule: the
+    // rule's channel narrowed by what the org has wired.
+    const lockedLanes: ("email" | "whatsapp")[] = [];
+    if (opened.channel !== "whatsapp" && emailEnabled) lockedLanes.push("email");
+    if (opened.channel !== "email" && waConnected) lockedLanes.push("whatsapp");
+    // Every channel, always (Serdar, 2026-08-28: "not showing them is
+    // stupid") — a wired one is a switch, an unwired one sits greyed with
+    // the reason in its tooltip. An empty Kanal row read as a broken page.
+    const openedChannelPills = (
+      <>
+        {(["whatsapp", "email"] as const).map((channel) => {
+          const wired = wiredFor(opened).includes(channel);
+          if (!wired) {
+            return (
+              <span
+                key={channel}
+                title={t("settings.channelUnavailable")}
+                className="flex items-center gap-1.5 rounded-full border border-[var(--border)] px-3 py-1 text-[var(--muted)] opacity-50"
+              >
+                {channelLabel(channel)}
+              </span>
+            );
+          }
+          const on = activeChannels(opened).has(channel);
+          return (
+            <button
+              key={channel}
+              type="button"
+              role="switch"
+              aria-checked={on}
+              aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
+              onClick={() => toggleChannel(opened, channel)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors ${
+                on
+                  ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {/* The check is what says "pressed" — colour alone made
+                  the on-state read as a decorative tag, and the off
+                  state as a button not yet discovered. */}
+              {on && (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              )}
+              {channelLabel(channel)}
+            </button>
+          );
+        })}
+      </>
+    );
+    const openedWhenHint =
+      opened.trigger === "no_show"
+        ? winbackHint
+        : opened.trigger === "after_end"
+          ? t("settings.ruleFollowupHint")
+          : opened.trigger === "out_of_hours"
+            ? t("settings.ruleOutOfHoursHint")
+            : undefined;
     const openedMeta = (
       <>
-        <RowLabel
-          label={t("settings.rulesWhen")}
-          hint={
-            opened.trigger === "no_show"
-              ? winbackHint
-              : opened.trigger === "after_end"
-                ? t("settings.ruleFollowupHint")
-                : opened.trigger === "out_of_hours"
-                  ? t("settings.ruleOutOfHoursHint")
-                  : undefined
-          }
-        />
+        <RowLabel label={t("settings.rulesWhen")} hint={openedWhenHint} />
         <span className="flex min-h-8 items-center gap-1.5 text-sm">
           {ruleWhen(opened)}
         </span>
         <RowLabel label={t("settings.rulesWhere")} />
         <span className="flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
-          {wiredFor(opened).map((channel) => {
-            const on = activeChannels(opened).has(channel);
-            return (
-              <button
-                key={channel}
-                type="button"
-                role="switch"
-                aria-checked={on}
-                aria-label={`${ruleName(opened.trigger)} — ${channelLabel(channel)}`}
-                onClick={() => toggleChannel(opened, channel)}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors ${
-                  on
-                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                    : "border border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {/* The check is what says "pressed" — colour alone made
-                    the on-state read as a decorative tag, and the off
-                    state as a button not yet discovered. */}
-                {on && (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                )}
-                {channelLabel(channel)}
-              </button>
-            );
-          })}
+          {openedChannelPills}
         </span>
       </>
     );
@@ -1773,23 +1885,51 @@ function RulesCard({
         </div>
 
         {openedLocked ? (
-          // The read-only face: the same When/Where rows, then the text
-          // that actually sends. No editor, no drafts, no Save — the
+          // The read-only face (Serdar, 2026-08-28: the label/value grid
+          // read "pretty empty and weirdly organized" here): When and Kanal
+          // side by side under their own headers, then the message itself,
+          // full width, rendered. No editor, no drafts, no Save — the
           // wording is the platform's, and the mutations refuse it anyway
           // (orgs.updateTemplate, "wording-locked").
-          <div className={ROW_GRID}>
-            {openedMeta}
-            <RowLabel
-              label={t("settings.wordingLocked")}
-              hint={t("settings.wordingLockedHint")}
-            />
-            <div className="space-y-2">
-              <p className="whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2.5 text-sm">
-                {lockedBody}
-              </p>
-              <p className="text-xs text-[var(--muted)]">
-                {t("settings.wordingLockedHint")}
-              </p>
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <div className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-[var(--muted-strong)]">
+                  {t("settings.rulesWhen")}
+                  {openedWhenHint && <InfoTip text={openedWhenHint} />}
+                </div>
+                <span className="flex min-h-8 items-center gap-1.5 text-sm">
+                  {ruleWhen(opened)}
+                </span>
+              </div>
+              <div>
+                <div className="pb-1.5 text-xs font-medium text-[var(--muted-strong)]">
+                  {t("settings.rulesWhere")}
+                </div>
+                <span className="flex min-h-8 flex-wrap items-center gap-1.5 text-sm">
+                  {openedChannelPills}
+                </span>
+              </div>
+            </div>
+            <div>
+              {/* "Mesaj", not "Standart mesaj": it IS the message content,
+                  and the lock is the (i)'s story, not the label's. */}
+              <div className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-[var(--muted-strong)]">
+                {t("settings.rulesWhat")}
+                <InfoTip text={t("settings.wordingLockedHint")} />
+              </div>
+              <LockedPreview
+                lanes={lockedLanes}
+                subject={lockedText.subject}
+                body={lockedText.body}
+                bodyHtml={lockedText.bodyHtml}
+                values={previewSampleValues(org.language, {
+                  businessName: org.name,
+                  phone: org.publicPhone,
+                  bookingLink: org.bookingUrl,
+                })}
+                orgName={org.name}
+              />
             </div>
           </div>
         ) : (
@@ -1892,6 +2032,15 @@ function RulesCard({
           ) : undefined
         }
       >
+        {/* Two named columns (Serdar, 2026-08-28): when, and what we send.
+            The arrow chain narrated itself row after row; a header says it
+            once. The channel is no longer a third node — the message chip's
+            own icons say WhatsApp, email or both, and a rule sending nowhere
+            says so by dimming. */}
+        <div className="hidden grid-cols-[minmax(0,17rem)_minmax(0,1fr)] gap-x-6 px-3 pb-1.5 pt-1 text-xs font-medium text-[var(--muted-strong)] sm:grid">
+          <span>{t("settings.rulesWhen")}</span>
+          <span>{t("settings.rulesWhat")}</span>
+        </div>
         <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {rules.map((rule) => {
             const liveChannels = wiredFor(rule).filter((channel) =>
@@ -1916,10 +2065,10 @@ function RulesCard({
                   }}
                   className="-mx-3 cursor-pointer rounded-lg px-3 py-3 transition-colors hover:bg-[var(--muted-bg)]"
                 >
-                  {/* A rule sending nowhere dims its whole strip: "off" is a
-                      fact about the chain, not about one cell at its end. */}
+                  {/* A rule sending nowhere dims its whole row: "off" is a
+                      fact about the chain, not a word at its end. */}
                   <div
-                    className={`flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-y-2 ${
+                    className={`grid grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] sm:items-center sm:gap-x-6 ${
                       liveChannels.length === 0 ? "opacity-60" : ""
                     }`}
                   >
@@ -1943,8 +2092,53 @@ function RulesCard({
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
                     </FlowNode>
-                    <FlowArrow />
-                    <FlowNode icon="message">
+                    <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs">
+                      {/* The channel icons ARE the message's type icons: a
+                          bubble for WhatsApp, an envelope for email, both
+                          when it travels both. A rule on neither keeps the
+                          generic bubble, muted, and the dimmed row says the
+                          rest. */}
+                      {(liveChannels.length > 0
+                        ? liveChannels
+                        : (["whatsapp"] as const)
+                      ).map((channel) =>
+                        channel === "email" ? (
+                          <svg
+                            key={channel}
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                            className={`shrink-0 ${liveChannels.length > 0 ? "text-sky-600 dark:text-sky-400" : "text-[var(--muted)]"}`}
+                          >
+                            <title>{channelLabel(channel)}</title>
+                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                            <path d="m3 7 9 6 9-6" />
+                          </svg>
+                        ) : (
+                          <svg
+                            key={channel}
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                            className={`shrink-0 ${liveChannels.length > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--muted)]"}`}
+                          >
+                            <title>{channelLabel("whatsapp")}</title>
+                            <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3a8.5 8.5 0 0 1 8.5 8.5z" />
+                          </svg>
+                        ),
+                      )}
                       <span className="max-w-56 truncate font-medium">
                         {ruleName(rule.trigger)}
                       </span>
@@ -1964,34 +2158,7 @@ function RulesCard({
                           {t("settings.templateUnsaved")}
                         </span>
                       )}
-                    </FlowNode>
-                    <FlowArrow />
-                    {/* The chain's terminal: which lanes this rule is ON,
-                        stated. The switches moved inside with everything else
-                        editable. Bare pills, not a bordered node — a pill in
-                        a box is chrome on chrome. */}
-                    {liveChannels.length > 0 ? (
-                      <span className="flex flex-wrap items-center gap-1.5 text-xs">
-                        {liveChannels.map((channel) => (
-                          <span
-                            key={channel}
-                            // EMERALD, not amber: the unsaved-draft pill on
-                            // this very strip is amber, and one row carrying
-                            // two amber pills said entirely different things
-                            // in the same voice. Emerald is also what this
-                            // app already says by "on" — the editor draws the
-                            // SAME state with the same emerald toggle.
-                            className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                          >
-                            {channelLabel(channel)}
-                          </span>
-                        ))}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-[var(--muted)]">
-                        {t("settings.ruleOff")}
-                      </span>
-                    )}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -2012,6 +2179,8 @@ function RulesCard({
           rules={rules}
           templates={templates}
           org={org}
+          emailEnabled={emailEnabled}
+          waConnected={waConnected}
           onAdd={(trigger, offsetHours, text) =>
             void doAdd(trigger, offsetHours, text)
           }

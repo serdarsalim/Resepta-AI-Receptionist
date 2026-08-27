@@ -1469,6 +1469,23 @@ const dictionary = {
     en: "hours before",
     de: "Stunden vorher",
   },
+  // The list rows' whole sentences (Serdar, 2026-08-28: "Randevudan 2 saat
+  // önce" over "2 saat önce" — the row must say what the clock counts from).
+  "settings.ruleWhenBeforeFull": {
+    tr: "Randevudan {n} saat önce",
+    en: "{n} hours before the appointment",
+    de: "{n} Stunden vor dem Termin",
+  },
+  "settings.ruleWhenAfterEndFull": {
+    tr: "Randevu bittikten {n} saat sonra",
+    en: "{n} hours after the appointment",
+    de: "{n} Stunden nach dem Termin",
+  },
+  "settings.ruleWhenNoShowFull": {
+    tr: "Gelmeyen müşteriye {n} gün sonra",
+    en: "{n} days after a no-show",
+    de: "{n} Tage nach einem Nichterscheinen",
+  },
   // The follow-up needs the visit marked done before it can count from the
   // end — the hourly sweep does that the next day, a same-day nudge needs the
   // owner to complete the appointment themselves.
@@ -2514,10 +2531,15 @@ const dictionary = {
     en: "Standard message",
     de: "Standardnachricht",
   },
+  "settings.channelUnavailable": {
+    tr: "Bu kanal henüz bağlı değil",
+    en: "This channel isn't connected yet",
+    de: "Dieser Kanal ist noch nicht verbunden",
+  },
   "settings.wordingLockedHint": {
-    tr: "Bu mesajın metni Resepta tarafından yönetilir; WhatsApp onaylı şablonla her zaman eşleşmesi için düzenlenemez. Zamanlamayı ve kanalları siz seçersiniz.",
-    en: "Resepta manages this message's wording; it can't be edited, so it always matches the WhatsApp-approved template. Timing and channels are yours.",
-    de: "Den Text dieser Nachricht verwaltet Resepta; er ist nicht editierbar, damit er immer der von WhatsApp genehmigten Vorlage entspricht. Zeitpunkt und Kanäle wählen Sie.",
+    tr: "Bu metni Resepta yazar ve tüm işletmelerde aynıdır. WhatsApp metni önceden onaylar, bu yüzden burada değiştirilemez.",
+    en: "Resepta writes this text and it is the same for every business. WhatsApp approves it in advance, so it cannot be edited here.",
+    de: "Diesen Text schreibt Resepta, er ist für alle Betriebe gleich. WhatsApp genehmigt ihn vorab, deshalb lässt er sich hier nicht ändern.",
   },
   "settings.chatEnabled": { tr: "Sohbet", en: "Chat", de: "Chat" },
   "settings.chatEnabledHint": {
