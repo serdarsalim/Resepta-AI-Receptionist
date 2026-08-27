@@ -2092,16 +2092,15 @@ function RulesCard({
                         <InfoTip text={t("settings.ruleOutOfHoursHint")} />
                       )}
                     </FlowNode>
+                    <span className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs">
                       {/* The channel icons ARE the message's type icons: a
                           bubble for WhatsApp, an envelope for email, both
-                          when it travels both. A rule on neither keeps the
-                          generic bubble, muted, and the dimmed row says the
-                          rest. */}
-                      {(liveChannels.length > 0
-                        ? liveChannels
-                        : (["whatsapp"] as const)
-                      ).map((channel) =>
+                          when it travels both. A rule sending on NEITHER
+                          shows no icon at all (Serdar, 2026-08-28) — a
+                          bubble on a message that cannot send is
+                          decoration. */}
+                      {liveChannels.map((channel) =>
                         channel === "email" ? (
                           <svg
                             key={channel}
@@ -2114,7 +2113,7 @@ function RulesCard({
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             aria-hidden
-                            className={`shrink-0 ${liveChannels.length > 0 ? "text-sky-600 dark:text-sky-400" : "text-[var(--muted)]"}`}
+                            className="shrink-0 text-sky-600 dark:text-sky-400"
                           >
                             <title>{channelLabel(channel)}</title>
                             <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -2132,7 +2131,7 @@ function RulesCard({
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             aria-hidden
-                            className={`shrink-0 ${liveChannels.length > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--muted)]"}`}
+                            className="shrink-0 text-emerald-600 dark:text-emerald-400"
                           >
                             <title>{channelLabel("whatsapp")}</title>
                             <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3a8.5 8.5 0 0 1 8.5 8.5z" />
@@ -2158,6 +2157,14 @@ function RulesCard({
                           {t("settings.templateUnsaved")}
                         </span>
                       )}
+                    </span>
+                    {/* Nothing wired at all: say WHY this row is dim instead
+                        of letting a bare chip imply a working automation. */}
+                    {wiredFor(rule).length === 0 && (
+                      <span className="text-xs text-[var(--muted)]">
+                        {t("settings.ruleWontSend")}
+                      </span>
+                    )}
                     </span>
                   </div>
                 </div>

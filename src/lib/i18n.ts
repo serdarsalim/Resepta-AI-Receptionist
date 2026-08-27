@@ -2536,6 +2536,11 @@ const dictionary = {
     en: "This channel isn't connected yet",
     de: "Dieser Kanal ist noch nicht verbunden",
   },
+  "settings.ruleWontSend": {
+    tr: "Gönderilmez, bağlı kanal yok",
+    en: "Won't send, no channel connected",
+    de: "Wird nicht gesendet, kein Kanal verbunden",
+  },
   "settings.wordingLockedHint": {
     tr: "Bu metni Resepta yazar ve tüm işletmelerde aynıdır. WhatsApp metni önceden onaylar, bu yüzden burada değiştirilemez.",
     en: "Resepta writes this text and it is the same for every business. WhatsApp approves it in advance, so it cannot be edited here.",
