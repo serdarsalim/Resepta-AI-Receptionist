@@ -53,6 +53,7 @@ const ADMIN_TABS = [
   "setup",
   "agents",
   "assistant",
+  "templates",
   "billing",
   "members",
   "sends",
@@ -369,6 +370,11 @@ export default function TenantPage() {
           { id: "setup" as const, label: "Setup" },
           { id: "agents" as const, label: "Voice agent" },
           { id: "assistant" as const, label: "Chat agent" },
+          // Their own room (Serdar, 2026-08-27): the wording every WhatsApp
+          // automation sends is the thing the operator most needs to review
+          // per client, and an eighteen-row registry was buried mid-Setup
+          // between the Meta credentials and a dormant bookings card.
+          { id: "templates" as const, label: "Templates" },
           // Money got its own room (Serdar, 2026-08-26), reversing the
           // 2026-08-20 call that put the meter under Agents. That call was
           // right for what the card was then and stopped being right as it
@@ -1101,6 +1107,8 @@ export default function TenantPage() {
       </>
       )}
 
+      {(tab === "templates" || search.active) && <TemplatesSection orgId={orgId} />}
+
       {(tab === "assistant" || search.active) && assistant && (
       <>
       <Section
@@ -1544,8 +1552,6 @@ export default function TenantPage() {
         />
       </Section>
 
-      <TemplatesSection orgId={orgId} />
-
       {/* Hidden, not removed (Serdar, 2026-08-19): the cal.com lane stays
           dormant — no org is wired, native booking owns availability, and the
           card only invited the operator to configure a path nothing uses.
@@ -1820,7 +1826,7 @@ function TemplatesSection({ orgId }: { orgId: Id<"orgs"> }) {
   return (
     <Section
       title="Message templates"
-      description="What this business's Cloud number may send outside the 24-hour window. The wording is platform text and registers itself when the WABA is wired — this desk is status and repair, not a required step."
+      description="What this business's Cloud number may send outside the 24-hour window, with the exact wording each row registers. The wording is platform text (lib/metaTemplate CLOUD_TEMPLATE_TEXTS): reviewed here, changed in code for the whole fleet, approved per WABA. Registration fires itself when the WABA is wired — this desk is review, status and repair, not a required step."
     >
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <button
@@ -1875,56 +1881,81 @@ function TemplatesSection({ orgId }: { orgId: Id<"orgs"> }) {
       ) : (
         <div className="divide-y divide-[var(--border)]">
           {rows.map((row) => (
-            <div
-              key={row._id}
-              className="flex flex-wrap items-center gap-2 py-2 text-sm"
-            >
-              <span className="min-w-28 font-medium">{row.kind}</span>
-              <span className="text-xs text-[var(--muted)]">{row.language}</span>
-              <span className="font-mono text-xs text-[var(--muted)]">
-                {row.metaName ?? "—"}
-              </span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
-                title={row.metaRejectionReason ?? row.metaStatusDetail}
-              >
-                {row.status}
-              </span>
-              {/* What Meta says it LANDED as, not what we intended — review
-                  recategorises, and the landed category is the billing. */}
-              {row.metaCategory && (
-                <span className="text-xs text-[var(--muted)]">
-                  {row.metaCategory}
+            <div key={row._id} className="py-2.5 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-28 font-medium">{row.kind}</span>
+                <span className="text-xs text-[var(--muted)]">{row.language}</span>
+                <span className="font-mono text-xs text-[var(--muted)]">
+                  {row.metaName ?? "—"}
                 </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
+                >
+                  {row.status}
+                </span>
+                {/* What Meta says it LANDED as, not what we intended — review
+                    recategorises, and the landed category is the billing. */}
+                {row.metaCategory && (
+                  <span className="text-xs text-[var(--muted)]">
+                    {row.metaCategory}
+                  </span>
+                )}
+                <span className="flex-1" />
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setBusy(row._id);
+                    setNote(null);
+                    void submitOne({ orgId, templateId: row._id })
+                      .then((r) =>
+                        setNote(
+                          r.ok
+                            ? `${row.kind}: submitted`
+                            : `${row.kind}: ${r.detail ?? r.reason ?? "failed"}`,
+                        ),
+                      )
+                      .catch((err) =>
+                        setNote(err instanceof Error ? err.message : "failed"),
+                      )
+                      .finally(() => setBusy(null));
+                  }}
+                  className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                >
+                  {busy === row._id
+                    ? "Submitting…"
+                    : row.status === "approved"
+                      ? "Resubmit"
+                      : "Submit"}
+                </button>
+              </div>
+              {/* The wording itself, the reason this desk exists as a tab.
+                  Rendered as the registered text, whitespace and all, with
+                  the quick replies the template declares beside it — the
+                  whole shape Meta reviews, not a summary of it. */}
+              {row.cloudBody === null ? (
+                <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  No platform wording for {row.kind} in {row.language} — this
+                  row cannot register until CLOUD_TEMPLATE_TEXTS carries it.
+                </p>
+              ) : (
+                <div className="mt-1.5 max-w-xl whitespace-pre-line rounded-lg bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--foreground)]">
+                  {row.cloudBody}
+                  {row.buttons && (
+                    <span className="mt-1.5 block text-[var(--muted)]">
+                      + confirm / cancel quick replies
+                    </span>
+                  )}
+                </div>
               )}
-              <span className="flex-1" />
-              <button
-                type="button"
-                disabled={busy !== null}
-                onClick={() => {
-                  setBusy(row._id);
-                  setNote(null);
-                  void submitOne({ orgId, templateId: row._id })
-                    .then((r) =>
-                      setNote(
-                        r.ok
-                          ? `${row.kind}: submitted`
-                          : `${row.kind}: ${r.detail ?? r.reason ?? "failed"}`,
-                      ),
-                    )
-                    .catch((err) =>
-                      setNote(err instanceof Error ? err.message : "failed"),
-                    )
-                    .finally(() => setBusy(null));
-                }}
-                className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-              >
-                {busy === row._id
-                  ? "Submitting…"
-                  : row.status === "approved"
-                    ? "Resubmit"
-                    : "Submit"}
-              </button>
+              {/* Meta's own words on a rejection, in the open. As a tooltip
+                  on the status pill it was invisible exactly when the
+                  operator came here to fix a rejected row. */}
+              {(row.metaRejectionReason ?? row.metaStatusDetail) && (
+                <p className="mt-1.5 max-w-xl text-xs text-red-700 dark:text-red-400">
+                  {row.metaRejectionReason ?? row.metaStatusDetail}
+                </p>
+              )}
             </div>
           ))}
         </div>

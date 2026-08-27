@@ -34,6 +34,7 @@ import { WA_CLOUD_GRAPH_BASE } from "./lib/waCloud";
 import {
   CAMPAIGN_EXAMPLES,
   CAMPAIGN_PARAMS,
+  buttonsFor,
   campaignBodyFor,
   categoryFor,
   cloudBodyFor,
@@ -579,6 +580,17 @@ export const listForOrgAdmin = query({
       metaStatusDetail: v.optional(v.string()),
       metaRejectionReason: v.optional(v.string()),
       metaCategory: v.optional(v.string()),
+      // The EXACT wording this row registers at Meta — resolved from the same
+      // pure functions the submission path reads (cloudBodyFor /
+      // campaignBodyFor), so the desk can never show a text the registration
+      // would not send. Platform text by decision (2026-08-26): the operator
+      // reviews it here and changes it in code, for the whole fleet at once.
+      // Null when the kind has no Cloud wording in this language, which is
+      // itself worth seeing: that row will refuse to register.
+      cloudBody: v.union(v.string(), v.null()),
+      // Whether the registered template declares the confirm/cancel quick
+      // replies, so the desk shows the whole shape Meta reviews.
+      buttons: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -598,6 +610,11 @@ export const listForOrgAdmin = query({
         metaStatusDetail: row.metaStatusDetail,
         metaRejectionReason: row.metaRejectionReason,
         metaCategory: row.metaCategory,
+        cloudBody:
+          row.kind === "campaign"
+            ? campaignBodyFor(row.language)
+            : cloudBodyFor(row.kind, row.language),
+        buttons: buttonsFor(row.kind),
       }));
   },
 });
