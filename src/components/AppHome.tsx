@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { AppShell, type TabId } from "@/components/AppShell";
 import { AppointmentsView } from "@/components/AppointmentsView";
@@ -59,6 +61,31 @@ export function AppHome() {
   // click was meant to solve. WhatsApp and notes need nothing: those channels
   // open as a thread with the newest message already at the bottom.
   const [contactItem, setContactItem] = useState<string | undefined>(undefined);
+  // Which business the ids above belong to. AppShell subscribes to this same
+  // query, so reading it here opens no second subscription.
+  //
+  // contactId is the only org-scoped id in the app that is not derived from a
+  // list. The inbox's open conversation heals itself — it comes off the
+  // conversations list, which empties of the previous org the moment the
+  // switch lands — but a contact opened in one workspace keeps asking the
+  // NEXT one about a customer it has never heard of. Cleared during render
+  // rather than from an effect on purpose: the org change and the contact
+  // queries arrive in one consistent snapshot, so an effect fires a beat too
+  // late and ContactView renders once against the wrong business first.
+  const activeOrgId = useQuery(api.orgs.current, {})?.org._id;
+  const [selectionOrgId, setSelectionOrgId] = useState<Id<"orgs"> | null>(null);
+  if (activeOrgId && activeOrgId !== selectionOrgId) {
+    setSelectionOrgId(activeOrgId);
+    // Not on the first resolve: there is nothing open yet, and clearing then
+    // would fight a contact deep-linked into a fresh load.
+    if (selectionOrgId !== null) {
+      setContactId(null);
+      setContactName("");
+      setContactFilter(undefined);
+      setContactItem(undefined);
+    }
+  }
+
   // One door, so nothing can set an id without settling the channel with it.
   const openContact = (
     id: Id<"customers">,

@@ -427,7 +427,15 @@ export const feedForCustomer = query({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    // Empty, not a throw. customers.get and inboxPin already answer an id
+    // from another org this way, and this query used to be the outlier: a
+    // customerId can go stale WHILE a subscription is open, because the
+    // workspace switcher changes the org under a contact page that is holding
+    // one in React state. The next consistent snapshot then asks this org
+    // about the previous org's customer, and a throw from a live query with
+    // no error boundary above it takes down the whole app rather than the one
+    // pane that asked. Nothing crosses the boundary either way.
+    if (!customer || customer.orgId !== orgId) return [];
 
     const messages = (
       await ctx.db

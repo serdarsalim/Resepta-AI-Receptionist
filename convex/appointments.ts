@@ -244,7 +244,10 @@ export const listForCustomer = query({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    // Empty rather than a throw, for the reason spelled out in
+    // messages.feedForCustomer: the contact page asks both queries about one
+    // id, and that id outlives a workspace switch.
+    if (!customer || customer.orgId !== orgId) return [];
     const rows = await ctx.db
       .query("appointments")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
