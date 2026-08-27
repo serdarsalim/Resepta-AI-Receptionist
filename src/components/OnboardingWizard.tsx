@@ -546,9 +546,6 @@ export function OnboardingWizard() {
                   </p>
                 </div>
               )}
-              <p className="text-xs text-[var(--muted)]">
-                {t("onboarding.uploadHint")}
-              </p>
               {uploadError && (
                 <p className="text-sm text-red-600 dark:text-red-400">
                   {uploadError}

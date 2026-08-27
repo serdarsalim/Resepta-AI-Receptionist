@@ -149,9 +149,6 @@ export function NumberRequestCard() {
               {t("onboarding.dropHint")}
             </p>
           </div>
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            {t("onboarding.uploadHint")}
-          </p>
         </>
       ) : (
         <>

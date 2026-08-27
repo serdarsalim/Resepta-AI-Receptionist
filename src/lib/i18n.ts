@@ -372,11 +372,6 @@ const dictionary = {
     en: "or drag the file here",
     de: "oder Datei hierher ziehen",
   },
-  "onboarding.uploadHint": {
-    tr: "PDF veya fotoğraf, en fazla 10 MB.",
-    en: "PDF or photo, up to 10 MB.",
-    de: "PDF oder Foto, maximal 10 MB.",
-  },
   "onboarding.uploadLater": {
     tr: "Bu adımı geçebilirsiniz; belgeyi daha sonra Sesli asistan sekmesinden yükleyebilirsiniz.",
     en: "You can skip this and upload the document later from the Voice agent tab.",
