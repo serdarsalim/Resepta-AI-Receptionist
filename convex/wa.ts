@@ -25,6 +25,7 @@ import {
   markWaCloudRead,
   sendWaCloudDocument,
   sendWaCloudImage,
+  sendWaCloudVideo,
   sendWaCloudReaction,
   sendWaCloudTemplate,
   sendWaCloudText,
@@ -296,9 +297,11 @@ export const sendSession = action({
       : null;
     const result =
       args.mediaStorageId && link
-        ? // A document carries a filename and an image does not; sending a PDF
-          // through the image payload is rejected by Meta outright. asset is
-          // non-null here — the guard above returned already if it were not.
+        ? // Each species is its own Meta payload type, and sending one
+          // through another's is rejected outright: a document carries a
+          // filename, a video declares itself video, everything else is an
+          // image. asset is non-null here — the guard above returned already
+          // if it were not.
           asset?.fileName
           ? await sendWaCloudDocument({
               accessToken: waAccount.accessToken,
@@ -308,13 +311,21 @@ export const sendSession = action({
               fileName: asset.fileName,
               caption: body || undefined,
             })
-          : await sendWaCloudImage({
-              accessToken: waAccount.accessToken,
-              phoneNumberId: waAccount.phoneNumberId,
-              to: customer.phone,
-              link,
-              caption: body || undefined,
-            })
+          : asset?.contentType?.startsWith("video/")
+            ? await sendWaCloudVideo({
+                accessToken: waAccount.accessToken,
+                phoneNumberId: waAccount.phoneNumberId,
+                to: customer.phone,
+                link,
+                caption: body || undefined,
+              })
+            : await sendWaCloudImage({
+                accessToken: waAccount.accessToken,
+                phoneNumberId: waAccount.phoneNumberId,
+                to: customer.phone,
+                link,
+                caption: body || undefined,
+              })
         : await sendWaCloudText({
             accessToken: waAccount.accessToken,
             phoneNumberId: waAccount.phoneNumberId,
@@ -1439,6 +1450,9 @@ export const dueScheduled = internalQuery({
       // library: this is the record of what was composed, and a file renamed
       // in the hour between writing and sending must not change what goes out.
       mediaFileName: v.optional(v.string()),
+      // What the attachment IS, so dispatch picks the right Meta payload
+      // type (video vs image; a document already declares itself by name).
+      mediaContentType: v.optional(v.string()),
       // Which number this was written to go out on. Unset = cloud.
       lane: v.optional(v.union(v.literal("cloud"), v.literal("evolution"))),
     }),
@@ -1461,6 +1475,7 @@ export const dueScheduled = internalQuery({
         body: row.body,
         mediaStorageId: row.mediaStorageId,
         mediaFileName: row.mediaFileName,
+        mediaContentType: row.mediaContentType,
         lane: row.lane,
       }));
   },
@@ -1595,13 +1610,21 @@ export const sendDueScheduled = internalAction({
                 fileName: item.mediaFileName,
                 caption: item.body || undefined,
               })
-            : await sendWaCloudImage({
-                accessToken: waAccount.accessToken,
-                phoneNumberId: waAccount.phoneNumberId,
-                to: customer.phone,
-                link,
-                caption: item.body || undefined,
-              })
+            : item.mediaContentType?.startsWith("video/")
+              ? await sendWaCloudVideo({
+                  accessToken: waAccount.accessToken,
+                  phoneNumberId: waAccount.phoneNumberId,
+                  to: customer.phone,
+                  link,
+                  caption: item.body || undefined,
+                })
+              : await sendWaCloudImage({
+                  accessToken: waAccount.accessToken,
+                  phoneNumberId: waAccount.phoneNumberId,
+                  to: customer.phone,
+                  link,
+                  caption: item.body || undefined,
+                })
           : await sendWaCloudText({
               accessToken: waAccount.accessToken,
               phoneNumberId: waAccount.phoneNumberId,

@@ -63,6 +63,9 @@ export function isRenderableImage(
 // width of a thumb.
 export function mediaTypeLabel(contentType?: string, fileName?: string): string {
   const mime = contentType?.toLowerCase().trim() ?? "";
+  // Named here because a video has no filename to fall through to: the
+  // library tile and the attach card would otherwise label it with nothing.
+  if (mime.startsWith("video/")) return "Video";
   if (mime.includes("pdf")) return "PDF";
   if (mime.includes("spreadsheet") || mime.includes("excel")) return "Excel";
   if (mime.includes("presentation") || mime.includes("powerpoint")) return "PPT";

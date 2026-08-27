@@ -27,6 +27,12 @@ const MAX_DOC_BYTES = 5 * 1024 * 1024;
 // The three image types WhatsApp renders, and nothing else.
 const ALLOWED_IMAGES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
+// The two video containers Cloud API takes (H.264 + AAC inside). Capped at
+// Meta's own 16 MB send ceiling: a video the library accepts but WhatsApp
+// refuses to carry would be a tile that can never be sent.
+const ALLOWED_VIDEOS = new Set(["video/mp4", "video/3gpp"]);
+const MAX_VIDEO_BYTES = 16 * 1024 * 1024;
+
 // Documents → the extension the recipient sees. The map doubles as the
 // allow-list: a type absent from it cannot be uploaded, so adding a format is
 // one line and never a check that happens to pass.
@@ -76,14 +82,20 @@ export const register = mutation({
 
     const contentType = meta.contentType ?? "";
     const isImage = ALLOWED_IMAGES.has(contentType);
+    const isVideo = ALLOWED_VIDEOS.has(contentType);
     const isDoc = contentType in DOC_EXTENSIONS;
-    if (!isImage && !isDoc) {
+    if (!isImage && !isVideo && !isDoc) {
       // The blob is dropped rather than left orphaned: nothing references it,
       // and storage nobody can see is storage nobody will ever clean up.
       await ctx.storage.delete(args.storageId);
       throw new Error("unsupported-type");
     }
-    if (meta.size > (isImage ? MAX_IMAGE_BYTES : MAX_DOC_BYTES)) {
+    const cap = isImage
+      ? MAX_IMAGE_BYTES
+      : isVideo
+        ? MAX_VIDEO_BYTES
+        : MAX_DOC_BYTES;
+    if (meta.size > cap) {
       await ctx.storage.delete(args.storageId);
       throw new Error("too-large");
     }
@@ -91,7 +103,9 @@ export const register = mutation({
     return await ctx.db.insert("mediaAssets", {
       orgId,
       storageId: args.storageId,
-      name: args.name.trim().slice(0, 120) || (isDoc ? "document" : "image"),
+      name:
+        args.name.trim().slice(0, 120) ||
+        (isDoc ? "document" : isVideo ? "video" : "image"),
       contentType,
       size: meta.size,
       uploadedBy: user._id,

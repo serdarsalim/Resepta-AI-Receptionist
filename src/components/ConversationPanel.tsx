@@ -1757,14 +1757,14 @@ function MediaStrip({
                     : ""
                 }`}
               >
-                {asset.fileName ? (
+                {asset.fileName || asset.contentType.startsWith("video/") ? (
                   // A document has no thumbnail to show, so the tile says what
                   // it IS — "PDF" over a truncated name. A generic file glyph
                   // on every one of them turns a library of six price lists
                   // into six identical squares.
                   <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-1">
                     <span className="text-[10px] font-semibold text-[var(--muted-strong,var(--foreground))]">
-                      {mediaTypeLabel(asset.contentType, asset.fileName)}
+                      {mediaTypeLabel(asset.contentType, asset.fileName ?? undefined)}
                     </span>
                     <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--muted)]">
                       {asset.name}
@@ -1788,7 +1788,7 @@ function MediaStrip({
         >
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf,.xlsx,.xls,.docx,.doc"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,application/pdf,.xlsx,.xls,.docx,.doc"
             className="hidden"
             disabled={uploading}
             onChange={(event) => {

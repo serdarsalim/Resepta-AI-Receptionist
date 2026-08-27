@@ -182,6 +182,36 @@ export async function sendWaCloudImage(args: {
   );
 }
 
+// A video is its own payload type too. Same link mechanics as the image;
+// Meta transcodes what it accepts (H.264/AAC mp4 or 3gpp, 16 MB ceiling).
+export function waCloudVideoPayload(
+  to: string,
+  link: string,
+  caption?: string,
+): Record<string, unknown> {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "video",
+    video: { link, ...(caption ? { caption } : {}) },
+  };
+}
+
+export async function sendWaCloudVideo(args: {
+  accessToken: string;
+  phoneNumberId: string;
+  to: string;
+  link: string;
+  caption?: string;
+}): Promise<WaCloudSendResult> {
+  return postWaCloud(
+    args.accessToken,
+    args.phoneNumberId,
+    waCloudVideoPayload(args.to, args.link, args.caption),
+  );
+}
+
 // A document is its own payload type, not an image with a different link:
 // Meta needs the filename to show the recipient, and sending a PDF as an
 // image is rejected outright.
