@@ -752,6 +752,8 @@ export function KeyModelRow({
   modelPlaceholder,
   loadOptions,
   onSaveModel,
+  isDefault,
+  onMakeDefault,
 }: {
   label: string;
   hint?: string;
@@ -761,6 +763,11 @@ export function KeyModelRow({
   modelPlaceholder?: string;
   loadOptions: () => Promise<{ models: string[]; reason: string | null }>;
   onSaveModel: (value: string) => unknown;
+  // When rows compete for one job (the chat providers), the winner wears a
+  // pill on its own row instead of a separate picker row naming them again
+  // (Serdar, 2026-08-27). Both omitted = a row with no competition.
+  isDefault?: boolean;
+  onMakeDefault?: () => unknown;
 }) {
   const [keyDraft, setKeyDraft] = useState("");
   const [modelDraft, setModelDraft] = useState<string | null>(null);
@@ -798,6 +805,20 @@ export function KeyModelRow({
       <div className="flex items-center gap-2">
         <div className="text-sm font-medium">{label}</div>
         {hint && <InfoTip text={hint} />}
+        {onMakeDefault !== undefined &&
+          (isDefault ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+              default
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void onMakeDefault()}
+              className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              set default
+            </button>
+          ))}
       </div>
       <div className="flex min-w-0 gap-2">
         <div className="min-w-0 flex-1">

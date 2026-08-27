@@ -536,34 +536,17 @@ export default function AdminPage() {
                 />
               </div>
             </div>
-            {/* Which dialect every org's chat agent speaks by default. The
-                key rows below both stay settable — switching provider is one
-                click, not a re-paste. Whether the active provider has a key
-                is readable off its own row (an empty field IS the answer);
-                the status line that used to repeat it here is gone. */}
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-              <div className="text-sm font-medium">Chat agent provider</div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(["anthropic", "openai"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() =>
-                      void setConfig({ key: "chatAgentProvider", value: option })
-                    }
-                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                      mail.chatAgentProvider === option
-                        ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {option === "anthropic" ? "Anthropic (Claude)" : "OpenAI (GPT)"}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Which dialect every org's chat agent speaks by default: the
+                pill on the provider's own row, not a separate picker row
+                (Serdar, 2026-08-27). Both key rows stay settable — switching
+                provider is one click on the other row's pill, not a
+                re-paste. */}
             <KeyModelRow
               label="Anthropic (Claude)"
+              isDefault={mail.chatAgentProvider === "anthropic"}
+              onMakeDefault={() =>
+                setConfig({ key: "chatAgentProvider", value: "anthropic" })
+              }
               hint={`${
                 mail.fromEnv.anthropicApiKey
                   ? "The key currently comes from the ANTHROPIC_API_KEY env var; saving here overrides it."
@@ -580,6 +563,10 @@ export default function AdminPage() {
             />
             <KeyModelRow
               label="OpenAI (GPT)"
+              isDefault={mail.chatAgentProvider === "openai"}
+              onMakeDefault={() =>
+                setConfig({ key: "chatAgentProvider", value: "openai" })
+              }
               hint={`${
                 mail.fromEnv.openaiApiKey
                   ? "The key currently comes from the OPENAI_API_KEY env var; saving here overrides it."
@@ -629,26 +616,9 @@ export default function AdminPage() {
               )
             }/stripe/webhook with the checkout.session.completed event, and paste its signing secret below. Businesses on invoice mode never touch the Stripe half.`}
           >
-            <Row
-              label="Voice rate per minute"
-              money
-              hint="What every business pays per called minute, billed per second. Set once here; the Voice meter on a business's Voice agent tab can override it. Changes only price calls from now on; history keeps its stamped rate."
-              current={
-                mail.voiceRateMicroUsdPerMinute === null
-                  ? undefined
-                  : String(mail.voiceRateMicroUsdPerMinute / 1_000_000)
-              }
-              onSave={(value) => {
-                const parsed = Number(value.replace(",", "."));
-                return setConfig({
-                  key: "voiceRateMicroUsdPerMinute",
-                  value:
-                    !value.trim() || Number.isNaN(parsed)
-                      ? ""
-                      : String(Math.max(0, Math.round(parsed * 1_000_000))),
-                });
-              }}
-            />
+            {/* The mode a business is born into leads the section (Serdar,
+                2026-08-27): it is the billing decision, the rate below only
+                prices it. */}
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
               {/* The explanation rides the (i), the Row affordance exactly —
                   it sat inline after the pills and was the longest thing in
@@ -681,6 +651,26 @@ export default function AdminPage() {
                 ))}
               </div>
             </div>
+            <Row
+              label="Voice rate per minute"
+              money
+              hint="What every business pays per called minute, billed per second. Set once here; the Voice meter on a business's Voice agent tab can override it. Changes only price calls from now on; history keeps its stamped rate."
+              current={
+                mail.voiceRateMicroUsdPerMinute === null
+                  ? undefined
+                  : String(mail.voiceRateMicroUsdPerMinute / 1_000_000)
+              }
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                return setConfig({
+                  key: "voiceRateMicroUsdPerMinute",
+                  value:
+                    !value.trim() || Number.isNaN(parsed)
+                      ? ""
+                      : String(Math.max(0, Math.round(parsed * 1_000_000))),
+                });
+              }}
+            />
             <Row
               label="Trial credit"
               money
@@ -723,35 +713,11 @@ export default function AdminPage() {
             />
           </Section>
 
-          {/* Its own card at the very bottom (Serdar, 2026-08-19): an
-              emergency brake sitting between ordinary key rows read as one
-              more setting, and the one time it matters is the one time it
-              must not be hunted for. */}
-          <Section
-            title="Kill switch"
-            description="Stops every org's chat agent before the model runs. Immediate, platform-wide, reversible. Also visible on each business's Chat agent tab."
-          >
-            <div className="py-2.5">
-              <button
-                type="button"
-                onClick={() =>
-                  void setConfig({
-                    key: "chatAgentDisabled",
-                    value: mail.chatAgentDisabled ? "" : "true",
-                  })
-                }
-                className={`rounded-lg px-2 py-1 text-xs ${
-                  mail.chatAgentDisabled
-                    ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-                }`}
-              >
-                {mail.chatAgentDisabled
-                  ? "Every agent is stopped. Click to re-enable"
-                  : "Stop every org's chat agent"}
-              </button>
-            </div>
-          </Section>
+          {/* The platform-wide kill switch card lived here until 2026-08-27
+              (Serdar: "very destructive and i don't see where i'd use it").
+              The chatAgentDisabled flag and its gate in the agent stay — a
+              stuck-on flag would need `npx convex run` to clear, which is
+              exactly the ceremony a platform-wide stop deserves. */}
 
           {/* A footer, not a header (Serdar, 2026-08-20): who the operators
               are is reference material, not the page's opening line. Printed
