@@ -63,23 +63,16 @@ export function CampaignsView() {
     // No page wrapper: width, rhythm and the page-stack bottom padding belong
     // to the Automations stack this sits in.
     <div className="space-y-4">
-      {/* The gate, not a warning to skim past: without this nothing sends. */}
-      {!template && (
-        <Card title={t("campaign.title")} tip={t("campaign.whyTemplate")}>
-          <p className="text-sm text-[var(--muted)]">{t("campaign.needsTemplate")}</p>
-          {!draftExists && isOwner && (
-            <button
-              type="button"
-              onClick={() => void ensureTemplate()}
-              className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
-            >
-              {t("campaign.createTemplate")}
-            </button>
-          )}
-        </Card>
-      )}
-
-      <Card title={t("campaign.title")} disabled={!isOwner}>
+      {/* ONE card (Serdar, 2026-08-27: "why do i have 2 cards for
+          campaigns?"). The approval gate used to be its own card above this
+          one, which put two identically-titled cards on the page — and in
+          the waiting state the top one was a paragraph with nothing to do.
+          The gate is a STATE of campaigns, not a sibling of them: while no
+          approved template exists it is the card's own empty line, with the
+          create-draft button when even the draft is missing. Yeni kampanya
+          stays visible-but-grey through the wait, because it is the control
+          this card exists for and it starts working the moment review lands. */}
+      <Card title={t("campaign.title")} tip={t("campaign.whyTemplate")} disabled={!isOwner}>
         <div className="mb-3 flex justify-end">
           <button
             type="button"
@@ -91,7 +84,23 @@ export function CampaignsView() {
           </button>
         </div>
 
-        {campaigns.length === 0 ? (
+        {!template && campaigns.length === 0 ? (
+          // The gate text replaces "no campaigns yet" while the template is
+          // not approved: both lines would say less than either alone, and
+          // this one says what to do about it.
+          <>
+            <p className="text-sm text-[var(--muted)]">{t("campaign.needsTemplate")}</p>
+            {!draftExists && isOwner && (
+              <button
+                type="button"
+                onClick={() => void ensureTemplate()}
+                className="mt-3 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+              >
+                {t("campaign.createTemplate")}
+              </button>
+            )}
+          </>
+        ) : campaigns.length === 0 ? (
           <p className="text-sm text-[var(--muted)]">{t("campaign.empty")}</p>
         ) : (
           <ul className="divide-y divide-[var(--border)]">
