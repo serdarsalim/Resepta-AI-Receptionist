@@ -2506,9 +2506,9 @@ const dictionary = {
     de: "Behoben.",
   },
   "settings.voiceEnabledHint": {
-    tr: "Açıkken asistan aramaları yanıtlar ve randevu alır. Kapatınca bağlantı korunur ama randevu alamaz; tatile çıkarken kapatmanız yeterli.",
-    en: "On, the agent answers and books. Off keeps the connection but stops bookings; just switch it off for holidays.",
-    de: "Eingeschaltet nimmt der Assistent Anrufe an und vergibt Termine. Ausgeschaltet bleibt die Verbindung bestehen, aber es wird nichts gebucht; für den Urlaub einfach ausschalten.",
+    tr: "Açıkken asistan aramaları yanıtlar ve randevu alır. Telefonu aynı anda tek asistan yürütür; birini açmak diğerini kapatır. Kapatınca bağlantı korunur ama randevu alamaz; tatile çıkarken kapatmanız yeterli.",
+    en: "On, the agent answers and books. Only one agent holds the phone at a time; switching one on switches the other off. Off keeps the connection but stops bookings; just switch it off for holidays.",
+    de: "Eingeschaltet nimmt der Assistent Anrufe an und vergibt Termine. Das Telefon führt immer nur ein Assistent; einen einzuschalten schaltet den anderen aus. Ausgeschaltet bleibt die Verbindung bestehen, aber es wird nichts gebucht; für den Urlaub einfach ausschalten.",
   },
   // The platform-owned wording (lib/templateTexts LOCKED_TEMPLATE_KINDS):
   // what the salon reads where the message editor used to be.

@@ -235,19 +235,35 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ownedAgent(ctx, args.agentId);
-    // Chat is a radio, not a set of switches: one conversation surface, one
-    // agent answering it. Adopting chat clears it from every other row in
-    // the same mutation — the applyLineAssignment shape, for the same
-    // reason a phone line answers as exactly one agent.
-    if (args.chatEnabled === true) {
+    // Both lanes are radios, not sets of switches: one agent answers the
+    // phone, one agent answers chat. Adopting either clears it from every
+    // other row in the same mutation — the applyLineAssignment shape, for the
+    // same reason a phone line answers as exactly one agent.
+    //
+    // Voice joined chat as a radio on 2026-08-27 (Serdar: "we probably should
+    // have the green switch only on one account"). Everything downstream had
+    // already assumed it: resolvePublicPhone puts "the first enabled agent
+    // with an inbound line" into the [phone] token customers are told to ring,
+    // which is a collection-order coin flip the moment two are live. A second
+    // live agent was never a second front desk, only a second row. Keeping
+    // spare agents and switching between them is the point; turning the last
+    // one OFF stays allowed and is how the phone goes quiet for a holiday.
+    if (args.enabled === true || args.chatEnabled === true) {
       const siblings = await ctx.db
         .query("retellAgents")
         .withIndex("by_org", (q) => q.eq("orgId", row.orgId))
         .collect();
       for (const sibling of siblings) {
-        if (sibling._id !== row._id && sibling.chatEnabled) {
-          await ctx.db.patch(sibling._id, { chatEnabled: undefined });
+        if (sibling._id === row._id) continue;
+        // Built per sibling so a row that already holds neither is not
+        // patched at all, and so the two flags keep their own spellings:
+        // enabled is a real false, chatEnabled is absent (the schema note).
+        const patch: { enabled?: boolean; chatEnabled?: undefined } = {};
+        if (args.enabled === true && sibling.enabled) patch.enabled = false;
+        if (args.chatEnabled === true && sibling.chatEnabled) {
+          patch.chatEnabled = undefined;
         }
+        if (Object.keys(patch).length > 0) await ctx.db.patch(sibling._id, patch);
       }
     }
     await ctx.db.patch(row._id, {
