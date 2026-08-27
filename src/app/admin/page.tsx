@@ -18,7 +18,7 @@
 // page has exactly one reader and translating it would mean maintaining a
 // second copy of every operational term for nobody.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
@@ -71,9 +71,32 @@ export default function AdminPage() {
   // this page FOR, and deployment settings are visited a handful of times
   // ever. Living below the table meant the settings had no address and the
   // table had a basement. Same pill pattern as the org detail page.
-  const [tab, setTab] = useState<
+  //
+  // The tab rides the URL (Serdar, 2026-08-28: refresh must not dump him
+  // back on Businesses). Read once on mount, written with replaceState —
+  // not useSearchParams, which would demand a Suspense boundary around the
+  // whole page for one string.
+  const [tab, setTabState] = useState<
     "businesses" | "onboarding" | "templates" | "platform"
   >("businesses");
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("tab");
+    if (
+      raw === "onboarding" ||
+      raw === "templates" ||
+      raw === "platform"
+    ) {
+      setTabState(raw);
+    }
+  }, []);
+  const setTab = (next: typeof tab) => {
+    setTabState(next);
+    window.history.replaceState(
+      null,
+      "",
+      next === "businesses" ? "/admin" : `/admin?tab=${next}`,
+    );
+  };
   // One box, three jobs, decided by the tab under it: on Businesses it narrows
   // the table, on Onboarding the vertical list, on Platform the settings rows.
   // The salon app's own search box, so the console does not invent a second.
