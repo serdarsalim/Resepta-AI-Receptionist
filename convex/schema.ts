@@ -1838,6 +1838,13 @@ export default defineSchema({
     // The operator's word to the business — a denial without a reason is a
     // dead end, and an approval may carry the assigned number's ETA.
     note: v.optional(v.string()),
+    // The operator filed this document, not the business. Set when a client
+    // sends the registration some other way (email, a sales visit) and the
+    // operator puts it in for them, which is most of them: the self-serve
+    // upload is the tidy path, not the common one. Unset reads as "the
+    // business uploaded it", so every row written before this keeps its
+    // meaning. Same line, same name, as activityLog.viaOperator.
+    viaOperator: v.optional(v.boolean()),
     createdAt: v.number(),
     decidedAt: v.optional(v.number()),
     decidedBy: v.optional(v.id("users")),

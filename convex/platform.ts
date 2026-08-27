@@ -43,6 +43,7 @@ import { foundOrg } from "./lib/foundOrg";
 import { resolvePreset } from "./lib/industryPresetStore";
 import { seedPreset } from "./onboarding";
 import { resolvePublicSlug } from "./lib/publicSlug";
+import { fileRegistrationDocument } from "./lib/numberDocument";
 import { assignInboundAddress } from "./lib/inboundAddress";
 import { resolveChatLlm } from "./lib/chatLlm";
 import { resolveInboundAddress } from "./lib/inboundAddress";
@@ -2295,6 +2296,11 @@ export const orgNumberRequests = query({
       contentType: v.string(),
       size: v.number(),
       note: v.union(v.string(), v.null()),
+      // Who put this document here. The console labels the operator-filed
+      // ones, because "we accepted a document the business sent us" and "we
+      // accepted a document we typed in for them" are different claims to be
+      // making months later.
+      viaOperator: v.boolean(),
       createdAt: v.number(),
       decidedAt: v.union(v.number(), v.null()),
       // Convex storage URLs are long-lived and unguessable; handing one to
@@ -2317,11 +2323,68 @@ export const orgNumberRequests = query({
         contentType: row.contentType,
         size: row.size,
         note: row.note ?? null,
+        viaOperator: row.viaOperator === true,
         createdAt: row.createdAt,
         decidedAt: row.decidedAt ?? null,
         url: await ctx.storage.getUrl(row.storageId),
       })),
     );
+  },
+});
+
+// The operator's own upload door. The self-serve flow assumes the business
+// logs in and uploads its registration; in practice the document arrives by
+// email, on WhatsApp, or across a table during a sales visit, and the request
+// row that is supposed to make the 24-hour promise inspectable never exists.
+// Telling the client to go log in and re-send a document they already sent is
+// friction that buys nothing.
+//
+// Separate from numberRequests.generateUploadUrl rather than loosening it:
+// that one is owner-only on purpose (a registration document is the
+// business's legal identity), and an operator is not an owner of this org.
+export const numberDocumentUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+// Files a document against an org the operator names. Shares its whole body
+// with the business's own upload (lib/numberDocument), so the row is
+// identical except for viaOperator, and lands PENDING: filing a document and
+// accepting it are two acts, and the accept is the one the business is told
+// about. The Accept button sits under the upload, so vouching for a document
+// already read is one more click.
+export const fileNumberRequest = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("not-found");
+    await fileRegistrationDocument(ctx, {
+      orgId: args.orgId,
+      storageId: args.storageId,
+      fileName: args.fileName,
+      viaOperator: true,
+    });
+    // "filed", not "uploaded": the wording is the whole difference between
+    // this row and the one numberRequests.submit writes. recordActivity
+    // derives viaOperator from acting-as state rather than taking it, and the
+    // console is not acting-as, so the verb is what carries it in the feed.
+    // The durable version of the same fact is numberRequests.viaOperator.
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail: "number provisioning document filed",
+    });
+    return null;
   },
 });
 

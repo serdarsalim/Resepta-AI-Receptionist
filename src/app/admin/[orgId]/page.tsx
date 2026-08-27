@@ -13,7 +13,7 @@
 // Secrets are shown masked and re-pasted to change. Nothing here reads a
 // credential back to the browser; see convex/connections.ts for why.
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -149,6 +149,38 @@ export default function TenantPage() {
   );
   const decideNumberRequest = useMutation(api.platform.decideNumberRequest);
   const [numberNote, setNumberNote] = useState("");
+  // Filing a document the client sent some other way. Most of them do: the
+  // self-serve upload is the tidy path, not the common one, and without this
+  // the only way to get a request row was to ask the client to re-send a
+  // document they had already sent.
+  const numberDocumentUploadUrl = useMutation(
+    api.platform.numberDocumentUploadUrl,
+  );
+  const fileNumberRequest = useMutation(api.platform.fileNumberRequest);
+  const numberFileInput = useRef<HTMLInputElement>(null);
+  const [filingDoc, setFilingDoc] = useState(false);
+  const [fileDocError, setFileDocError] = useState<string | null>(null);
+  const fileDocument = async (file: File) => {
+    setFileDocError(null);
+    setFilingDoc(true);
+    try {
+      const url = await numberDocumentUploadUrl();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      await fileNumberRequest({ orgId, storageId, fileName: file.name });
+    } catch (err) {
+      // The operator's own console, so the thrown string is shown as thrown
+      // (the 2026-08-25 rule: use the code's own words here). unsupported-type
+      // and too-large are the two that actually happen.
+      setFileDocError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFilingDoc(false);
+    }
+  };
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
   const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
   const claimPhoneNumber = useMutation(api.platform.claimPhoneNumber);
@@ -928,7 +960,43 @@ export default function TenantPage() {
                 <p className="text-xs text-[var(--muted)]">
                   Nothing to review. When the business uploads its company
                   registration, the document lands here: accept it, then buy
-                  the number at the provider and tick it above.
+                  the number at the provider and tick it above. If they sent
+                  it to you instead, file it yourself below.
+                </p>
+              )}
+              {/* File-on-their-behalf. Always available, not only while the
+                  list is empty: a business that uploaded the wrong document
+                  then emailed the right one is the same situation, and
+                  fileNumberRequest replaces any unapproved row the way a
+                  re-upload does. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={numberFileInput}
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void fileDocument(file);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={filingDoc}
+                  onClick={() => numberFileInput.current?.click()}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  {filingDoc ? "Uploading…" : "File a document for them"}
+                </button>
+                <span className="text-xs text-[var(--muted)]">
+                  Lands pending, marked as filed by us. Accept it below to
+                  decide it.
+                </span>
+              </div>
+              {fileDocError && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {fileDocError}
                 </p>
               )}
               {/* Said plainly for the OPERATOR, because the button used to
@@ -940,7 +1008,7 @@ export default function TenantPage() {
               {numberReqs.length > 0 && (
                 <p className="text-xs text-[var(--muted)]">
                   Approving accepts the document and tells the business so. It
-                  does not grant a line — buy the number at the provider and
+                  does not grant a line: buy the number at the provider and
                   tick it above, and their card then shows it as live.
                 </p>
               )}
@@ -965,6 +1033,10 @@ export default function TenantPage() {
                     <span className="text-xs text-[var(--muted)]">
                       {Math.max(1, Math.round(req.size / 1024))} KB ·{" "}
                       {new Date(req.createdAt).toLocaleString("en-GB")}
+                      {/* Months later, "we accepted what the business sent"
+                          and "we accepted what we typed in for them" are
+                          different claims, and the file cannot say which. */}
+                      {req.viaOperator && " · filed by us"}
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${

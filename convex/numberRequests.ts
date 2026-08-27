@@ -12,17 +12,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOwner } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
-
-// A registration document is a scan or an export: PDF from the registry,
-// photo from a phone. Bigger than the image library's cap because a
-// multi-page registry PDF is legitimately a few megabytes.
-const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
+import { fileRegistrationDocument } from "./lib/numberDocument";
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -35,11 +25,9 @@ export const generateUploadUrl = mutation({
   },
 });
 
-// Called after the browser has POSTed the bytes. Validates what actually
-// landed rather than trusting the client (media.ts doctrine), and REPLACES
-// any previous request that has not been approved: one live request per org,
-// and re-uploading after a denial is the expected correction path. An
-// approved request is settled history and stays.
+// Called after the browser has POSTed the bytes. The validation, the replace
+// rule and the row shape live in lib/numberDocument so the operator's door
+// (platform.fileNumberRequest) files an identical document.
 export const submit = mutation({
   args: {
     storageId: v.id("_storage"),
@@ -48,36 +36,10 @@ export const submit = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOwner(ctx);
-    const meta = await ctx.storage.getMetadata(args.storageId);
-    if (!meta) throw new Error("upload-missing");
-    const contentType = meta.contentType ?? "";
-    if (!ALLOWED.has(contentType)) {
-      await ctx.storage.delete(args.storageId);
-      throw new Error("unsupported-type");
-    }
-    if (meta.size > MAX_BYTES) {
-      await ctx.storage.delete(args.storageId);
-      throw new Error("too-large");
-    }
-
-    const existing = await ctx.db
-      .query("numberRequests")
-      .withIndex("by_org", (q) => q.eq("orgId", orgId))
-      .collect();
-    for (const row of existing) {
-      if (row.status === "approved") continue;
-      await ctx.storage.delete(row.storageId);
-      await ctx.db.delete(row._id);
-    }
-
-    await ctx.db.insert("numberRequests", {
+    await fileRegistrationDocument(ctx, {
       orgId,
       storageId: args.storageId,
-      fileName: args.fileName.trim().slice(0, 120) || "document",
-      contentType,
-      size: meta.size,
-      status: "pending",
-      createdAt: Date.now(),
+      fileName: args.fileName,
     });
     await recordActivity(ctx, {
       orgId,
