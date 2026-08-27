@@ -513,6 +513,31 @@ export const respond = internalAction({
       customerId: args.customerId,
     });
     if (!context) return null;
+
+    // Blue-tick the customer's message and show "typing…" before the model
+    // starts thinking (Serdar, 2026-08-27: "make the agent more human like").
+    // One Meta call carries both, and the indicator holds until our reply
+    // lands (25s cap, far above any turn). Live cloud lane only: shadow must
+    // not promise a reply nobody sends, and Evolution's handset owns its own
+    // read state. Scheduled, not awaited, so the model round-trip and the
+    // receipt travel in parallel; a receipt that fails costs a grey tick,
+    // not the reply.
+    if (
+      context.org.mode === "live" &&
+      context.lane !== "evolution" &&
+      context.waAccount
+    ) {
+      const wamid = await ctx.runQuery(internal.wa.newestInboundWamid, {
+        customerId: args.customerId,
+      });
+      if (wamid) {
+        await ctx.scheduler.runAfter(0, internal.wa.sendReadReceipt, {
+          customerId: args.customerId,
+          wamid,
+          typing: true,
+        });
+      }
+    }
     const llm = context.llm as {
       provider: LlmProvider;
       model: string;
@@ -677,6 +702,19 @@ export const respond = internalAction({
         outputTokens,
       });
       return null;
+    }
+
+    // A person reads, then types. The model often answers a one-line
+    // question in under two seconds, and an instant reply reads as the
+    // machine it is — so the send waits until the turn has taken as long as
+    // a human plausibly would: a beat to read plus typing time scaled to the
+    // reply, capped where patience runs out. The model's own latency counts
+    // toward it, so slow turns wait nothing extra and the ceiling stays what
+    // it always was.
+    const humanPaceMs = Math.min(9000, 1500 + body.length * 35);
+    const paceRemaining = humanPaceMs - (Date.now() - started);
+    if (paceRemaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, paceRemaining));
     }
 
     // Live: log the row, send on the resolved lane, land the outcome in the

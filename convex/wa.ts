@@ -388,7 +388,13 @@ export const markThreadRead = mutation({
 });
 
 export const sendReadReceipt = internalAction({
-  args: { customerId: v.id("customers"), wamid: v.string() },
+  args: {
+    customerId: v.id("customers"),
+    wamid: v.string(),
+    // The chat agent's variant: blue-tick AND show "typing…", because the
+    // agent genuinely is about to write. Never set by the thread-open path.
+    typing: v.optional(v.boolean()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const context = await ctx.runQuery(internal.wa.loadReadReceiptContext, {
@@ -405,6 +411,7 @@ export const sendReadReceipt = internalAction({
       accessToken: context.waAccount.accessToken,
       phoneNumberId: context.waAccount.phoneNumberId,
       wamid: args.wamid,
+      typing: args.typing,
     });
     if (!result.ok) {
       console.warn(`wa read receipt: ${args.wamid} failed — ${result.reason}`);
@@ -415,6 +422,28 @@ export const sendReadReceipt = internalAction({
       wamid: args.wamid,
     });
     return null;
+  },
+});
+
+// The newest inbound cloud wamid, for the chat agent's read-and-typing call.
+// Same scan as markRead above, minus the session gates: the agent was woken
+// BY an inbound message, so one is always near the top.
+export const newestInboundWamid = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
+      .order("desc")
+      .take(20);
+    const newest = recent.find(
+      (row) =>
+        row.direction === "in" &&
+        row.wamid !== undefined &&
+        (row.lane ?? "cloud") === "cloud",
+    );
+    return newest?.wamid ?? null;
   },
 });
 

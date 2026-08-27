@@ -228,11 +228,18 @@ export async function markWaCloudRead(args: {
   phoneNumberId: string;
   // The wamid of the INBOUND message being acknowledged.
   wamid: string;
+  // Also show "typing…" on the customer's phone. Rides the same call by
+  // Meta's design: the indicator holds for up to 25 seconds or until a
+  // message lands, whichever comes first. Only the chat agent passes this —
+  // a read receipt from a human opening the thread must not promise a reply
+  // no one is writing.
+  typing?: boolean;
 }): Promise<WaCloudSendResult> {
   return postWaCloud(args.accessToken, args.phoneNumberId, {
     messaging_product: "whatsapp",
     status: "read",
     message_id: args.wamid,
+    ...(args.typing ? { typing_indicator: { type: "text" } } : {}),
   });
 }
 
