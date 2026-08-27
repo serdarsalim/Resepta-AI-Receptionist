@@ -382,6 +382,7 @@ export function AppointmentsView({
                 staffId: row.staffId ?? null,
                 notes: row.notes,
                 status: row.status,
+                fulfillment: row.fulfillment,
               },
               anchorRect,
             );
@@ -431,6 +432,7 @@ export function AppointmentsView({
               staffId: row.staffId ?? null,
               notes: row.notes,
               status: row.status,
+              fulfillment: row.fulfillment,
             }, anchor);
           }}
           onDraft={(startAt, durationMinutes, band, anchor) => {
@@ -675,6 +677,7 @@ type CalendarAppointment = {
     quantity?: number;
   }[];
   total?: number;
+  fulfillment?: { kind: "pickup" | "delivery"; asap?: boolean; address?: string };
 };
 
 // Fill per status AND per tense, the way Google Calendar paints it: an

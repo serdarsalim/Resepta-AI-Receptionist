@@ -133,6 +133,16 @@ const enrichedAppointment = v.object({
   serviceName: v.optional(v.string()),
   items: v.optional(v.array(storedItem)),
   total: v.optional(v.number()),
+  // Goods-only orders from the booking page: how the order reaches its
+  // customer. The sheet reports it read-only; the write side stays public
+  // (convex/booking.ts book).
+  fulfillment: v.optional(
+    v.object({
+      kind: v.union(v.literal("pickup"), v.literal("delivery")),
+      asap: v.optional(v.boolean()),
+      address: v.optional(v.string()),
+    }),
+  ),
 });
 
 // Just the start times, for the year grid's dots.
@@ -203,6 +213,7 @@ export const listRange = query({
         serviceName: itemsLabel(row.items),
         items: row.items,
         total: itemsTotal(row.items),
+        fulfillment: row.fulfillment,
       });
     }
     return out;

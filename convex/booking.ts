@@ -744,6 +744,16 @@ export const manage = query({
       durationMinutes: v.number(),
       status: v.string(),
       services: v.array(v.string()),
+      // Present on goods-only orders. The page swaps its appointment words
+      // for order words on this alone, and an asap order shows the promise
+      // ("as soon as possible") rather than the minute it was placed.
+      fulfillment: v.optional(
+        v.object({
+          kind: v.union(v.literal("pickup"), v.literal("delivery")),
+          asap: v.optional(v.boolean()),
+          address: v.optional(v.string()),
+        }),
+      ),
       // The org's public slug and the line's serviceId used to ride along for
       // the reschedule picker. slotsForToken made both unnecessary, and this
       // is an unauthenticated endpoint: what it stops needing, it stops
@@ -776,6 +786,7 @@ export const manage = query({
         30,
       status: appointment.status,
       services: (appointment.items ?? []).map((item) => item.name),
+      ...(appointment.fulfillment ? { fulfillment: appointment.fulfillment } : {}),
       canModify: !providerOwned,
       // The number the salon answers on, for the "call us" fallback.
       phone: (await resolvePublicPhone(ctx, org)) ?? null,
@@ -844,6 +855,18 @@ export const reschedule = mutation({
     }
     await ctx.db.patch(appointment._id, {
       startAt: args.startMs,
+      // Choosing a minute retires the ASAP promise: the order is now FOR that
+      // time, and startAt goes back to meaning what it means everywhere else.
+      ...(appointment.fulfillment?.asap
+        ? {
+            fulfillment: {
+              kind: appointment.fulfillment.kind,
+              ...(appointment.fulfillment.address
+                ? { address: appointment.fulfillment.address }
+                : {}),
+            },
+          }
+        : {}),
       icsSequence: (appointment.icsSequence ?? 0) + 1,
     });
     await syncAppointmentSchedule(ctx, appointment._id);

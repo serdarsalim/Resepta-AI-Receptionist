@@ -46,6 +46,9 @@ export type ModalDraft = {
   staffId?: Id<"staff"> | null;
   notes?: string;
   status?: string;
+  // Goods-only orders from the booking page. Read-only in the sheet: how the
+  // order reaches its customer is the customer's answer, not the owner's.
+  fulfillment?: { kind: "pickup" | "delivery"; asap?: boolean; address?: string };
 };
 
 export type ModalSubmit = {
@@ -698,6 +701,31 @@ export function AppointmentModal({
               </div>
             )}
           </div>
+
+          {/* How a goods order reaches its customer — pickup or delivery,
+              ASAP or the time above, the address when one was given. A
+              readout, not a control: the customer answered this on the
+              booking page and the sheet only reports it. */}
+          {draft.fulfillment && (
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="w-24 shrink-0 pt-2 text-xs font-medium">
+                {t("appointments.fulfillment")}
+              </span>
+              <span className="min-w-0 flex-1 px-3 py-2 text-sm">
+                {[
+                  t(
+                    draft.fulfillment.kind === "pickup"
+                      ? "booking.pickup"
+                      : "booking.delivery",
+                  ),
+                  draft.fulfillment.asap ? t("booking.asap") : "",
+                  draft.fulfillment.address ?? "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            </div>
+          )}
 
           {/* One row per service delivered. A cut plus a beard trim is one
               visit with two lines, not two bookings on top of each other. */}

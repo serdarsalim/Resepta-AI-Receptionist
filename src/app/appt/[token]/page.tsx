@@ -100,8 +100,14 @@ export default function ManageAppointmentPage({
     );
   }
 
+  // A goods order wears order words end to end; presence of fulfillment is
+  // the tell, and legacy goods rows without one keep appointment wording.
+  const order = appointment.fulfillment;
   const upcoming =
-    appointment.startAt > Date.now() &&
+    // An ASAP order's startAt is the minute it was PLACED — already in the
+    // past by the time this page loads — so the clock cannot decide whether
+    // it is still open; its status alone does.
+    (appointment.startAt > Date.now() || Boolean(order?.asap)) &&
     (appointment.status === "scheduled" || appointment.status === "confirmed");
 
   return (
@@ -112,11 +118,20 @@ export default function ManageAppointmentPage({
             <p className="text-sm font-medium">{appointment.services.join(", ")}</p>
           )}
           <p className="text-sm text-[var(--muted)]">
-            {dateTimeLabel(appointment.startAt)}
+            {order
+              ? [
+                  t(order.kind === "pickup" ? "booking.pickup" : "booking.delivery"),
+                  // ASAP prints the promise, not the minute the order landed.
+                  order.asap ? t("booking.asap") : dateTimeLabel(appointment.startAt),
+                ].join(" · ")
+              : dateTimeLabel(appointment.startAt)}
           </p>
+          {order?.address && (
+            <p className="text-sm text-[var(--muted)]">{order.address}</p>
+          )}
           {appointment.status === "cancelled" && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-              {t("booking.cancelled")}
+              {t(order ? "booking.orderCancelled" : "booking.cancelled")}
             </p>
           )}
           {moved && (
@@ -152,7 +167,7 @@ export default function ManageAppointmentPage({
                 onClick={() => setConfirmingCancel(true)}
                 className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 dark:border-red-900 dark:text-red-400"
               >
-                {t("booking.cancel")}
+                {t(order ? "booking.cancelOrder" : "booking.cancel")}
               </button>
             ) : (
               <button

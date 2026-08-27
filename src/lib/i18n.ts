@@ -481,6 +481,13 @@ const dictionary = {
     en: "This item needs more notice, please pick a later day",
     de: "Dieser Artikel braucht mehr Vorlauf, bitte einen späteren Tag wählen",
   },
+  // The sheet's read-only row on a goods order: pickup/delivery, ASAP, the
+  // address. Label kept to one plain word like its neighbours (When, Service).
+  "appointments.fulfillment": {
+    tr: "Teslim",
+    en: "Handover",
+    de: "Übergabe",
+  },
   "appointments.bookAnyway": {
     tr: "Yine de kaydet",
     en: "Book anyway",
@@ -1068,6 +1075,16 @@ const dictionary = {
     tr: "Siparişi görüntüle, değiştir veya iptal et",
     en: "View, change or cancel this order",
     de: "Bestellung ansehen, ändern oder stornieren",
+  },
+  "booking.cancelOrder": {
+    tr: "Siparişi iptal et",
+    en: "Cancel order",
+    de: "Bestellung stornieren",
+  },
+  "booking.orderCancelled": {
+    tr: "Bu sipariş iptal edildi.",
+    en: "This order is cancelled.",
+    de: "Diese Bestellung ist storniert.",
   },
   "booking.book": {
     tr: "Randevuyu al",
