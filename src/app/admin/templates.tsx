@@ -12,10 +12,8 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { categoryFor } from "../../../convex/lib/metaTemplate";
-import {
-  renderTokens,
-  type TokenValues,
-} from "../../../convex/lib/renderTokens";
+import { renderTokens } from "../../../convex/lib/renderTokens";
+import { previewSampleValues } from "@/lib/previewSamples";
 import { EmailBodyEditor } from "@/components/EmailBodyEditor";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { plainToHtml, htmlToText } from "@/lib/emailText";
@@ -45,54 +43,6 @@ function plainError(err: unknown): string {
   const m = msg.match(/Uncaught Error:\s*([\s\S]*?)(?:\s+at handler|\n|$)/);
   return m ? m[1].trim() : msg;
 }
-
-// What the previews fill tokens with: an invented customer and salon, per
-// language (Serdar, 2026-08-28: fake names over labelled slots, "so we see
-// how it'll look like for sure"). Hardcoded on purpose — the desk previews
-// the WORDING, and one stable pretend booking is easier to read against
-// than slots. Formats mirror what the send path really produces: dates as
-// lib/format writes them, the price list with the appended price.
-const PREVIEW_VALUES: Record<string, TokenValues> = {
-  tr: {
-    firstName: "Ayşe",
-    businessName: "Bella Kuaför",
-    appointmentAt: "3 Eylül Çarşamba 14:00",
-    staffName: "Elif",
-    serviceName: "• Saç kesimi",
-    servicePriceList: "• Saç kesimi — ₺350,00",
-    price: "₺350,00",
-    manageLink: "https://resepta.app/r/x7k2",
-    bookingLink: "https://resepta.app/b/bella",
-    phone: "+90 212 555 34 12",
-    email: "merhaba@bellakuafor.com",
-  },
-  en: {
-    firstName: "Emma",
-    businessName: "Bella Salon",
-    appointmentAt: "Wednesday, 3 September, 2:00 PM",
-    staffName: "Sophie",
-    serviceName: "• Haircut",
-    servicePriceList: "• Haircut — €35.00",
-    price: "€35.00",
-    manageLink: "https://resepta.app/r/x7k2",
-    bookingLink: "https://resepta.app/b/bella",
-    phone: "+353 1 555 0134",
-    email: "hello@bellasalon.com",
-  },
-  de: {
-    firstName: "Anna",
-    businessName: "Salon Bella",
-    appointmentAt: "Mittwoch, 3. September, 14:00",
-    staffName: "Lena",
-    serviceName: "• Haarschnitt",
-    servicePriceList: "• Haarschnitt — 35,00 €",
-    price: "35,00 €",
-    manageLink: "https://resepta.app/r/x7k2",
-    bookingLink: "https://resepta.app/b/bella",
-    phone: "+43 1 555 01 34",
-    email: "hallo@salonbella.at",
-  },
-};
 
 const STATUS_STYLE: Record<string, string> = {
   approved:
@@ -140,6 +90,11 @@ function WordingSection() {
   // Unsaved edits survive a switch — they live in the draft maps — and the
   // tab wears a dot while its lane holds any.
   const [lanePick, setLanePick] = useState<Record<string, "whatsapp" | "email">>({});
+  // Collapsed by default (Serdar, 2026-08-28): five cards of editor are a
+  // page of scroll when the visit is usually about one kind. A card holding
+  // unsaved edits keeps its dot on the collapsed header, so folding never
+  // hides work in progress.
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   // One note slot per (kind, language): save confirmations, validation
   // refusals, and per-org resubmit results all land next to the text they
@@ -189,6 +144,7 @@ function WordingSection() {
             const value = draft ?? row.body;
             const dirty = draft !== undefined && draft !== row.body;
             const lane = lanePick[key] ?? "whatsapp";
+            const isOpen = openCards[key] ?? false;
             const emailKey = `${key}/email`;
             const emailDraft = emailDrafts[key];
             const emailSubject = emailDraft?.subject ?? row.emailSubject;
@@ -213,13 +169,13 @@ function WordingSection() {
             const emailPreview = (
               <div className="email-paper -m-3 flex flex-col">
                 <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
-                  {renderTokens(emailSubject, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en) || "—"}
+                  {renderTokens(emailSubject, previewSampleValues(language)) || "—"}
                 </p>
                 <div
                   className="email-body-editor min-h-40 px-3 py-3 text-sm"
                   dangerouslySetInnerHTML={{
                     __html: sanitizeEmailHtml(
-                      renderTokens(emailHtml, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en),
+                      renderTokens(emailHtml, previewSampleValues(language)),
                     ),
                   }}
                 />
@@ -235,19 +191,51 @@ function WordingSection() {
                 className="rounded-xl border border-[var(--border)] p-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">{kind}</span>
-                  {/* What this kind SUBMITS as (categoryFor, the same answer
-                      the submission sends). What it LANDED as after review is
-                      per business and lives in the matrix below — Meta may
-                      recategorise, and the landed one is the billing. */}
-                  <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                    {categoryFor(kind).toLowerCase()}
-                  </span>
-                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenCards((prev) => ({ ...prev, [key]: !isOpen }))
+                    }
+                    aria-expanded={isOpen}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                      className={`shrink-0 text-[var(--muted)] transition-transform ${isOpen ? "rotate-90" : ""}`}
+                    >
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-sm font-semibold">{kind}</span>
+                    {/* What this kind SUBMITS as (categoryFor, the same
+                        answer the submission sends). What it LANDED as after
+                        review is per business and lives in the matrix below
+                        — Meta may recategorise, and the landed one is the
+                        billing. */}
+                    <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                      {categoryFor(kind).toLowerCase()}
+                    </span>
+                    {!isOpen && (dirty || emailDirty) && (
+                      <span
+                        className="text-amber-500"
+                        title="unsaved changes inside"
+                      >
+                        •
+                      </span>
+                    )}
+                  </button>
                   {/* One form at a time (Serdar, 2026-08-28): the lane
                       toggle from the salon editor's preview. A lane holding
                       unsaved edits wears a dot, so switching away never
                       reads as losing them. */}
+                  {isOpen && (
                   <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
                     {(["whatsapp", "email"] as const).map((option) => (
                       <button
@@ -269,8 +257,9 @@ function WordingSection() {
                       </button>
                     ))}
                   </span>
+                  )}
                 </div>
-                {lane === "whatsapp" && (
+                {isOpen && lane === "whatsapp" && (
                 <div className="px-1 sm:px-6">
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {row.overridden && (
@@ -421,13 +410,13 @@ function WordingSection() {
                       live off the box beside it. */}
                   <div className="mt-2 md:mt-1.5">
                     <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
-                      {renderTokens(value, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en)}
+                      {renderTokens(value, previewSampleValues(language))}
                     </div>
                   </div>
                 </div>
                 </div>
                 )}
-                {lane === "email" && (
+                {isOpen && lane === "email" && (
                 <div className="max-w-4xl px-1 sm:px-6">
                 {/* The email form of the same message. Its Save is the
                     rollout: no review sits between this box and customers,
