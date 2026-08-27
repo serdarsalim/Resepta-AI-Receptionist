@@ -4177,9 +4177,9 @@ const dictionary = {
   "media.library": { tr: "Dosyalar", en: "Files", de: "Dateien" },
   "media.upload": { tr: "Yükle", en: "Upload", de: "Hochladen" },
   "media.empty": {
-    tr: "Henüz dosya yok. Fiyat listesi, önce-sonra fotoğrafı — bir kez yükleyin, hep kullanın.",
-    en: "No files yet. A price list, a before-and-after — upload once, send it forever.",
-    de: "Noch keine Dateien. Eine Preisliste, ein Vorher-Nachher — einmal hochladen, immer senden.",
+    tr: "Henüz dosya yok. Fiyat listesi, önce-sonra fotoğrafı: bir kez yükleyin, hep kullanın.",
+    en: "No files yet. A price list, a before-and-after: upload once, send it forever.",
+    de: "Noch keine Dateien. Eine Preisliste, ein Vorher-Nachher: einmal hochladen, immer senden.",
   },
   "media.remove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
   // Two ceilings, one sentence. Naming both beats naming the one that happens

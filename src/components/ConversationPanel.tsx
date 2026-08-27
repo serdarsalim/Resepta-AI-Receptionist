@@ -1262,10 +1262,14 @@ export function ConversationPanel({
                 ) : (
                   <p className="whitespace-pre-wrap">{item.body}</p>
                 )
-              ) : (
+              ) : item.mediaUrl || item.mediaPending || item.mediaContentType ? null : (
                 // Template sends store no body (the text lives in Meta's
                 // approved template), so the bubble would otherwise be blank.
-                // Name what was sent instead of showing an empty box.
+                // Name what was sent instead of showing an empty box. Media
+                // rows are NOT that case: an image sent without a caption
+                // already shows the image, and printing "Şablon mesajı"
+                // under it called a photo a template in the customer's own
+                // thread.
                 <p className="text-[var(--muted)]">{t("message.template")}</p>
               )}
               </div>
