@@ -711,7 +711,14 @@ export const respond = internalAction({
     // reply, capped where patience runs out. The model's own latency counts
     // toward it, so slow turns wait nothing extra and the ceiling stays what
     // it always was.
-    const humanPaceMs = Math.min(9000, 1500 + body.length * 35);
+    //
+    // Both parts jittered (Serdar, 2026-08-28): the fixed 1500ms floor meant
+    // every short exchange replied at exactly the same beat, and a metronome
+    // is its own tell. The reading beat lands anywhere in 1–4.5s, typing
+    // speed drifts ±20% around 35ms a character.
+    const readMs = 1000 + Math.random() * 3500;
+    const typeMs = body.length * 35 * (0.8 + Math.random() * 0.4);
+    const humanPaceMs = Math.min(9000, readMs + typeMs);
     const paceRemaining = humanPaceMs - (Date.now() - started);
     if (paceRemaining > 0) {
       await new Promise((resolve) => setTimeout(resolve, paceRemaining));
