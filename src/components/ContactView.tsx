@@ -256,7 +256,9 @@ export function ContactView({
       {/* 40/60 split, each column its own scroll region (WhatsApp Web / HubSpot
           dual-scroll): the record scrolls left, the conversation scrolls right,
           the page itself never does. */}
-      <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* gap-2, matching the inbox (Serdar, 2026-08-28): record and
+          conversation are one working surface. */}
+      <div className="grid min-h-0 min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Left: the record, everything ABOUT the customer. */}
         <div
           className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col lg:flex`}
