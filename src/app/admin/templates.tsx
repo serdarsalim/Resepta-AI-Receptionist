@@ -1,0 +1,549 @@
+"use client";
+
+// The fleet template desk. Wording and rollout are FLEET facts (Serdar,
+// 2026-08-27): the standard set is identical for every business, which is
+// what lets one WABA approval serve every hosted number, so the operator
+// edits a text once here and pushes it everywhere, and reads approval as a
+// matrix of businesses rather than a tour of tenant pages. The per-org
+// Templates tab this replaces lasted one day.
+
+import { useState } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { categoryFor } from "../../../convex/lib/metaTemplate";
+import { Section } from "./parts";
+import type { useSearch } from "@/lib/useTableState";
+
+type Search = ReturnType<typeof useSearch>;
+
+const LANGUAGES = ["tr", "en", "de"] as const;
+const KINDS = [
+  "confirmation",
+  "reminder",
+  "winback",
+  "followup",
+  "cancellation",
+] as const;
+// The matrix shows campaign too: its wrapper is parked, but which businesses
+// hold an approved one is still a fleet fact.
+const MATRIX_KINDS = [...KINDS, "campaign"] as const;
+
+// The sentence the mutation threw, out of Convex's wrapper. The guard
+// messages are written for the operator ("tokens the Cloud lane cannot
+// send: manage_link") and the [CONVEX M(...)] [Request ID] framing around
+// them is transport noise even on an operator page.
+function plainError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = msg.match(/Uncaught Error:\s*([\s\S]*?)(?:\s+at handler|\n|$)/);
+  return m ? m[1].trim() : msg;
+}
+
+const STATUS_STYLE: Record<string, string> = {
+  approved:
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+  pending:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+  rejected: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+  draft: "bg-[var(--muted-bg)] text-[var(--muted)]",
+};
+
+export function TemplatesTab({ search }: { search: Search }) {
+  return (
+    <>
+      <WordingSection />
+      <RolloutSection search={search} />
+    </>
+  );
+}
+
+// ---- Wording ------------------------------------------------------------
+
+function WordingSection() {
+  const wording = useQuery(api.waTemplates.platformWording, {});
+  const save = useMutation(api.waTemplates.setPlatformWording);
+  const clear = useMutation(api.waTemplates.clearPlatformWording);
+  const resubmitAll = useAction(api.waTemplates.resubmitTemplateAll);
+
+  const [language, setLanguage] = useState<(typeof LANGUAGES)[number]>("tr");
+  // Buffered on purpose (the design language's one buffering case): these
+  // texts stand behind approved templates that send while you type, so
+  // nothing leaves the browser until Save.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  // One note slot per (kind, language): save confirmations, validation
+  // refusals, and per-org resubmit results all land next to the text they
+  // are about.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  const note = (key: string, text: string | null) =>
+    setNotes((prev) => {
+      const next = { ...prev };
+      if (text === null) delete next[key];
+      else next[key] = text;
+      return next;
+    });
+
+  return (
+    <Section
+      title="Message wording"
+      description="The Cloud text every business registers, one text per kind per language. Identical wording across the fleet is what keeps approval per WABA instead of per client. Saving stores the text for every FUTURE registration; already-registered templates keep their old text until you resubmit, which sends them back into Meta review while the approved version keeps delivering. If a new text is REJECTED, that kind stops sending for the affected business until it is fixed and re-approved, which is why rollout is per kind, not all at once. Review round-trips are the official edit flow; Meta caps edits per template (about ten per month), it does not punish them."
+    >
+      <div className="flex flex-wrap items-center gap-1.5 pb-3">
+        {LANGUAGES.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setLanguage(option)}
+            className={`rounded-full px-3 py-1 text-sm transition-colors ${
+              language === option
+                ? "bg-amber-100 font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+      {wording === undefined ? (
+        <p className="text-sm text-[var(--muted)]">Loading…</p>
+      ) : (
+        <div className="space-y-4">
+          {KINDS.map((kind) => {
+            const row = wording.find(
+              (w) => w.kind === kind && w.language === language,
+            );
+            if (!row) return null;
+            const key = `${kind}/${language}`;
+            const draft = drafts[key];
+            const value = draft ?? row.body;
+            const dirty = draft !== undefined && draft !== row.body;
+            return (
+              <div key={key}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{kind}</span>
+                  {/* What this kind SUBMITS as (categoryFor, the same answer
+                      the submission sends). What it LANDED as after review is
+                      per business and lives in the matrix below — Meta may
+                      recategorise, and the landed one is the billing. */}
+                  <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                    {categoryFor(kind).toLowerCase()}
+                  </span>
+                  {row.overridden && (
+                    <span className="text-xs text-[var(--muted)]">
+                      edited from default
+                    </span>
+                  )}
+                  <span className="flex-1" />
+                  {row.overridden && !dirty && (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => {
+                        setBusy(key);
+                        note(key, null);
+                        void clear({ kind, language })
+                          .then(() => {
+                            setDrafts((prev) => {
+                              const next = { ...prev };
+                              delete next[key];
+                              return next;
+                            });
+                            note(key, "Back to the default. Resubmit to apply at Meta.");
+                          })
+                          .catch((err) =>
+                            note(key, plainError(err)),
+                          )
+                          .finally(() => setBusy(null));
+                      }}
+                      className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                  {dirty && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[key];
+                            return next;
+                          });
+                          note(key, null);
+                        }}
+                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      >
+                        Discard
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setBusy(key);
+                          note(key, null);
+                          void save({ kind, language, body: value })
+                            .then(() => {
+                              setDrafts((prev) => {
+                                const next = { ...prev };
+                                delete next[key];
+                                return next;
+                              });
+                              note(key, "Saved. Resubmit to apply at Meta.");
+                            })
+                            .catch((err) =>
+                              // The mutation throws plain sentences (bad
+                              // tokens, over-length); show them as thrown.
+                              note(key, plainError(err)),
+                            )
+                            .finally(() => setBusy(null));
+                        }}
+                        className="rounded-lg bg-[var(--accent,#2563eb)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {busy === key ? "Saving…" : "Save"}
+                      </button>
+                    </>
+                  )}
+                  {!dirty && (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => {
+                        setBusy(key);
+                        note(key, null);
+                        void resubmitAll({ kind, language })
+                          .then((results) =>
+                            note(
+                              key,
+                              results.length === 0
+                                ? "No business has this template registered yet."
+                                : results
+                                    .map(
+                                      (r) =>
+                                        `${r.org}: ${r.ok ? "sent to review" : (r.detail ?? r.reason ?? "failed")}`,
+                                    )
+                                    .join(" · "),
+                            ),
+                          )
+                          .catch((err) =>
+                            note(key, plainError(err)),
+                          )
+                          .finally(() => setBusy(null));
+                      }}
+                      className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                    >
+                      {busy === key ? "Working…" : "Resubmit everywhere"}
+                    </button>
+                  )}
+                </div>
+                <textarea
+                  value={value}
+                  rows={Math.max(3, value.split("\n").length)}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                  }
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                />
+                {notes[key] && (
+                  <p className="mt-1 text-xs text-[var(--muted)]">{notes[key]}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ---- Rollout ------------------------------------------------------------
+
+function RolloutSection({ search }: { search: Search }) {
+  const fleet = useQuery(api.waTemplates.fleetTemplateStatus, {});
+  const registerAll = useAction(api.waTemplates.registerStandardSetAll);
+  const registerOrg = useAction(api.waTemplates.registerStandardSet);
+  const syncOrg = useAction(api.waTemplates.syncForOrg);
+  const submitOne = useAction(api.waTemplates.submitForOrg);
+
+  const [open, setOpen] = useState<Id<"orgs"> | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [fleetNote, setFleetNote] = useState<string | null>(null);
+  // Per-org result lines, shown inside that org's expansion.
+  const [orgNotes, setOrgNotes] = useState<Record<string, string>>({});
+
+  const shown = (fleet ?? []).filter((org) => search.matches(org.name));
+
+  return (
+    <Section
+      title="Businesses"
+      description="Who holds which approval. Register creates and submits the standard rows for one business; the fleet button converges every wired business, skipping approved and in-review rows. Open a row for per-template detail and rejection reasons."
+    >
+      <div className="flex flex-wrap items-center gap-2 pb-2">
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("all");
+            setFleetNote(null);
+            void registerAll({})
+              .then((all) =>
+                setFleetNote(
+                  all.length === 0
+                    ? "No businesses with a WABA yet."
+                    : all
+                        .map(
+                          (entry) =>
+                            `${entry.org}: ${entry.results
+                              .map(
+                                (r) =>
+                                  `${r.kind} ${r.ok ? (r.reason === "already-approved" ? "✓" : r.reason === "in-review" ? "…" : "sent") : (r.detail ?? r.reason ?? "failed")}`,
+                              )
+                              .join(", ")}`,
+                        )
+                        .join(" · "),
+                ),
+              )
+              .catch((err) =>
+                setFleetNote(plainError(err)),
+              )
+              .finally(() => setBusy(null));
+          }}
+          className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+        >
+          {busy === "all" ? "Registering…" : "Register standard set on all businesses"}
+        </button>
+        {fleetNote && (
+          <span className="text-xs text-[var(--muted)]">{fleetNote}</span>
+        )}
+      </div>
+      {fleet === undefined ? (
+        <p className="text-sm text-[var(--muted)]">Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-[var(--muted)]">
+          No business has a WABA wired yet. Wire one on its Setup tab and the
+          standard set registers itself.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-[var(--muted-strong)]">
+                <th className="py-2 pr-3 font-medium">Business</th>
+                {MATRIX_KINDS.map((kind) => (
+                  <th key={kind} className="px-2 py-2 font-medium">
+                    {kind}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {shown.map((org) => (
+                <OrgRow
+                  key={org.orgId}
+                  org={org}
+                  open={open === org.orgId}
+                  onToggle={() =>
+                    setOpen(open === org.orgId ? null : org.orgId)
+                  }
+                  busy={busy}
+                  setBusy={setBusy}
+                  note={orgNotes[org.orgId]}
+                  setNote={(text) =>
+                    setOrgNotes((prev) => ({ ...prev, [org.orgId]: text }))
+                  }
+                  registerOrg={registerOrg}
+                  syncOrg={syncOrg}
+                  submitOne={submitOne}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+type FleetOrg = NonNullable<
+  ReturnType<typeof useQuery<typeof api.waTemplates.fleetTemplateStatus>>
+>[number];
+
+function OrgRow({
+  org,
+  open,
+  onToggle,
+  busy,
+  setBusy,
+  note,
+  setNote,
+  registerOrg,
+  syncOrg,
+  submitOne,
+}: {
+  org: FleetOrg;
+  open: boolean;
+  onToggle: () => void;
+  busy: string | null;
+  setBusy: (b: string | null) => void;
+  note: string | undefined;
+  setNote: (text: string) => void;
+  registerOrg: ReturnType<typeof useAction<typeof api.waTemplates.registerStandardSet>>;
+  syncOrg: ReturnType<typeof useAction<typeof api.waTemplates.syncForOrg>>;
+  submitOne: ReturnType<typeof useAction<typeof api.waTemplates.submitForOrg>>;
+}) {
+  return (
+    <>
+      <tr
+        onClick={onToggle}
+        className="cursor-pointer transition-colors hover:bg-[var(--hover-bg,rgba(0,0,0,0.03))]"
+      >
+        <td className="py-2 pr-3">
+          <span className="font-medium">{org.name}</span>
+          {!org.hasWaba && (
+            <span className="ml-2 text-xs text-[var(--muted)]">no WABA</span>
+          )}
+        </td>
+        {MATRIX_KINDS.map((kind) => {
+          const cells = org.rows.filter((row) => row.kind === kind);
+          return (
+            <td key={kind} className="px-2 py-2">
+              {/* Blank over zero: no row, no chip. Language order is fixed so
+                  a column scans vertically. */}
+              <span className="flex gap-1">
+                {LANGUAGES.map((lang) => {
+                  const row = cells.find((c) => c.language === lang);
+                  if (!row) return null;
+                  return (
+                    <span
+                      key={lang}
+                      title={`${lang}: ${row.status}`}
+                      className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
+                    >
+                      {lang}
+                    </span>
+                  );
+                })}
+              </span>
+            </td>
+          );
+        })}
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={MATRIX_KINDS.length + 1} className="pb-3 pl-3">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={busy !== null || !org.hasWaba}
+                onClick={() => {
+                  setBusy(org.orgId);
+                  void registerOrg({ orgId: org.orgId })
+                    .then((results) =>
+                      setNote(
+                        results
+                          .map(
+                            (r) =>
+                              `${r.kind}: ${r.ok ? (r.reason === "already-approved" ? "approved" : r.reason === "in-review" ? "in review" : "submitted") : (r.detail ?? r.reason ?? "failed")}`,
+                          )
+                          .join(" · "),
+                      ),
+                    )
+                    .catch((err) =>
+                      setNote(plainError(err)),
+                    )
+                    .finally(() => setBusy(null));
+                }}
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+              >
+                Register standard set
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null || !org.hasWaba}
+                onClick={() => {
+                  setBusy(org.orgId);
+                  void syncOrg({ orgId: org.orgId })
+                    .then((r) =>
+                      setNote(
+                        r.ok
+                          ? `Synced, ${r.matched ?? 0} matched`
+                          : (r.reason ?? "failed"),
+                      ),
+                    )
+                    .catch((err) =>
+                      setNote(plainError(err)),
+                    )
+                    .finally(() => setBusy(null));
+                }}
+                className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+              >
+                Sync from Meta
+              </button>
+              {note && <span className="text-xs text-[var(--muted)]">{note}</span>}
+            </div>
+            <div className="mt-1 divide-y divide-[var(--border)]">
+              {org.rows.map((row) => (
+                <div
+                  key={row._id}
+                  className="flex flex-wrap items-center gap-2 py-1.5 text-sm"
+                >
+                  <span className="min-w-24 font-medium">{row.kind}</span>
+                  <span className="text-xs text-[var(--muted)]">{row.language}</span>
+                  <span className="font-mono text-xs text-[var(--muted)]">
+                    {row.metaName ?? "—"}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
+                  >
+                    {row.status}
+                  </span>
+                  {row.metaCategory && (
+                    <span className="text-xs text-[var(--muted)]">
+                      {row.metaCategory}
+                    </span>
+                  )}
+                  {/* Meta's own words, in the open, next to the row they
+                      judge. */}
+                  {(row.metaRejectionReason ?? row.metaStatusDetail) && (
+                    <span className="text-xs text-red-700 dark:text-red-400">
+                      {row.metaRejectionReason ?? row.metaStatusDetail}
+                    </span>
+                  )}
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    disabled={busy !== null || !org.hasWaba}
+                    onClick={() => {
+                      setBusy(row._id);
+                      void submitOne({ orgId: org.orgId, templateId: row._id })
+                        .then((r) =>
+                          setNote(
+                            r.ok
+                              ? `${row.kind}/${row.language}: submitted`
+                              : `${row.kind}/${row.language}: ${r.detail ?? r.reason ?? "failed"}`,
+                          ),
+                        )
+                        .catch((err) =>
+                          setNote(plainError(err)),
+                        )
+                        .finally(() => setBusy(null));
+                    }}
+                    className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                  >
+                    {busy === row._id
+                      ? "Submitting…"
+                      : row.status === "approved"
+                        ? "Resubmit"
+                        : "Submit"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}

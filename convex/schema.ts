@@ -1824,6 +1824,23 @@ export default defineSchema({
   // provider — the app itself never purchases anything (retellAgent doctrine:
   // it may assign an already-provisioned line, never buy one). status/note
   // are salon-visible; decidedBy never is.
+  // The operator's runtime overrides of CLOUD_TEMPLATE_TEXTS, one row per
+  // (kind, language) that has been edited away from the code default. The
+  // registered Cloud wording resolves override-first (waTemplates
+  // resolvePlatformBody); no row means the code constant stands, and saving
+  // a body identical to the default deletes the row rather than storing a
+  // copy that would go stale when the constant moves.
+  //
+  // Platform-wide on purpose, no orgId: identical wording across the fleet is
+  // what lets one WABA's approval serve every hosted number. A per-org
+  // override would quietly fork that and put approval back to per-client.
+  platformTemplateTexts: defineTable({
+    kind: v.string(),
+    language: v.string(),
+    body: v.string(),
+    updatedAt: v.number(),
+  }).index("by_kind_language", ["kind", "language"]),
+
   numberRequests: defineTable({
     orgId: v.id("orgs"),
     storageId: v.id("_storage"),

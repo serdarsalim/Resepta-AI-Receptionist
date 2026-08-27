@@ -24,8 +24,10 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
   type ActionCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import { requireOwner } from "./lib/orgAuth";
 import { requirePlatformAdmin } from "./lib/platformAuth";
@@ -34,7 +36,6 @@ import { WA_CLOUD_GRAPH_BASE } from "./lib/waCloud";
 import {
   CAMPAIGN_EXAMPLES,
   CAMPAIGN_PARAMS,
-  buttonsFor,
   campaignBodyFor,
   categoryFor,
   cloudBodyFor,
@@ -44,7 +45,28 @@ import {
   normalizeMetaStatus,
   toPositionalBody,
 } from "./lib/metaTemplate";
-import { DEFAULT_TEMPLATE_TEXTS } from "./lib/templateTexts";
+import { DEFAULT_TEMPLATE_TEXTS, LOCKED_TEMPLATE_KINDS } from "./lib/templateTexts";
+
+// The Cloud wording a (kind, language) registers RIGHT NOW: the operator's
+// stored override when one exists (platformTemplateTexts), the code constant
+// otherwise. Every reader of the registered text goes through here — the
+// submit loaders, the editor, the fleet desk — so an edit saved in the
+// editor is what the next submission sends, with no second copy to drift.
+// Campaign stays code-only (campaignBodyFor): its wrapper is parked by
+// decision and its fixed-text ratio is load-bearing at Meta review.
+async function resolvePlatformBody(
+  ctx: QueryCtx,
+  kind: string,
+  language: string,
+): Promise<string | null> {
+  const override = await ctx.db
+    .query("platformTemplateTexts")
+    .withIndex("by_kind_language", (q) =>
+      q.eq("kind", kind).eq("language", language.trim().toLowerCase()),
+    )
+    .unique();
+  return override?.body ?? cloudBodyFor(kind, language);
+}
 
 // ---- Reads --------------------------------------------------------------
 
@@ -71,7 +93,12 @@ export const loadForSubmit = internalQuery({
       .query("waAccounts")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .unique();
-    return { template, waAccount, wabaId: own?.wabaId };
+    return {
+      template,
+      waAccount,
+      wabaId: own?.wabaId,
+      platformBody: await resolvePlatformBody(ctx, template.kind, template.language),
+    };
   },
 });
 
@@ -229,6 +256,10 @@ async function performSubmit(
     };
     waAccount: { accessToken: string } | null;
     wabaId?: string;
+    // The wording resolved by the loader (override ?? code constant). The
+    // fallback below keeps an older caller correct, but the loader's value is
+    // the truth — it is what the editor showed the operator.
+    platformBody?: string | null;
   },
 ): Promise<SubmitResult> {
   const { template, waAccount, wabaId } = context;
@@ -256,7 +287,9 @@ async function performSubmit(
   const campaign = template.kind === "campaign";
   const wrapper = campaign ? campaignBodyFor(template.language) : null;
   if (campaign && !wrapper) return { ok: false, reason: "language-unsupported" };
-  const platformBody = campaign ? null : cloudBodyFor(template.kind, template.language);
+  const platformBody = campaign
+    ? null
+    : (context.platformBody ?? cloudBodyFor(template.kind, template.language));
   const body = platformBody ?? (template.body ?? "").trim();
   if (!campaign && !body) return { ok: false, reason: "no-body" };
   const { text, variables, rejected } = campaign
@@ -518,6 +551,7 @@ export const loadForSubmitByOrg = internalQuery({
       // The row's own WABA, never the platform's — the same rule as
       // loadForSubmit above: approvals belong to a business.
       wabaId: own?.wabaId,
+      platformBody: await resolvePlatformBody(ctx, template.kind, template.language),
     };
   },
 });
@@ -565,59 +599,6 @@ export const syncForOrg = action({
   },
 });
 
-// The tenant page's registration desk: the org's kind-level rows — the ones
-// Meta registration lives on. Rule-bound wording rows have no Meta life of
-// their own, and out_of_hours is session text with nothing to register.
-export const listForOrgAdmin = query({
-  args: { orgId: v.id("orgs") },
-  returns: v.array(
-    v.object({
-      _id: v.id("waTemplates"),
-      kind: v.string(),
-      language: v.string(),
-      metaName: v.optional(v.string()),
-      status: v.string(),
-      metaStatusDetail: v.optional(v.string()),
-      metaRejectionReason: v.optional(v.string()),
-      metaCategory: v.optional(v.string()),
-      // The EXACT wording this row registers at Meta — resolved from the same
-      // pure functions the submission path reads (cloudBodyFor /
-      // campaignBodyFor), so the desk can never show a text the registration
-      // would not send. Platform text by decision (2026-08-26): the operator
-      // reviews it here and changes it in code, for the whole fleet at once.
-      // Null when the kind has no Cloud wording in this language, which is
-      // itself worth seeing: that row will refuse to register.
-      cloudBody: v.union(v.string(), v.null()),
-      // Whether the registered template declares the confirm/cancel quick
-      // replies, so the desk shows the whole shape Meta reviews.
-      buttons: v.boolean(),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    await requirePlatformAdmin(ctx);
-    const rows = await ctx.db
-      .query("waTemplates")
-      .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-      .collect();
-    return rows
-      .filter((row) => row.ruleId === undefined && row.kind !== "out_of_hours")
-      .map((row) => ({
-        _id: row._id,
-        kind: row.kind,
-        language: row.language,
-        metaName: row.metaName,
-        status: String(row.status),
-        metaStatusDetail: row.metaStatusDetail,
-        metaRejectionReason: row.metaRejectionReason,
-        metaCategory: row.metaCategory,
-        cloudBody:
-          row.kind === "campaign"
-            ? campaignBodyFor(row.language)
-            : cloudBodyFor(row.kind, row.language),
-        buttons: buttonsFor(row.kind),
-      }));
-  },
-});
 
 // What "register the standard set" registers. out_of_hours stays out (session
 // text); campaign rides along because its wrapper is as standard as the rest.
@@ -844,6 +825,292 @@ export const registerStandardSetAll = action({
         results: await performRegisterStandardSet(ctx, org.orgId),
       });
     }
+    return out;
+  },
+});
+
+// ---- The fleet template desk (/admin Templates tab) ---------------------
+//
+// Wording and rollout are FLEET facts, not per-client ones (Serdar,
+// 2026-08-27): the standard set is identical for every business, so the
+// operator edits a text once and pushes it everywhere, and reads approval
+// status as a matrix of businesses rather than a tour of tenant pages.
+
+// Every editable wording, current text beside the code default. The editor
+// renders exactly this; `overridden` is what makes "Reset to default" honest.
+export const platformWording = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      kind: v.string(),
+      language: v.string(),
+      body: v.string(),
+      defaultBody: v.string(),
+      overridden: v.boolean(),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    const out: {
+      kind: string;
+      language: string;
+      body: string;
+      defaultBody: string;
+      overridden: boolean;
+    }[] = [];
+    for (const language of ["tr", "en", "de"]) {
+      for (const kind of LOCKED_TEMPLATE_KINDS) {
+        const defaultBody = cloudBodyFor(kind, language);
+        if (!defaultBody) continue;
+        const body = await resolvePlatformBody(ctx, kind, language);
+        out.push({
+          kind,
+          language,
+          body: body ?? defaultBody,
+          defaultBody,
+          overridden: body !== defaultBody,
+        });
+      }
+    }
+    return out;
+  },
+});
+
+export const setPlatformWording = mutation({
+  args: { kind: v.string(), language: v.string(), body: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const kind = args.kind.trim();
+    const language = args.language.trim().toLowerCase();
+    if (!(LOCKED_TEMPLATE_KINDS as readonly string[]).includes(kind)) {
+      throw new Error(`not an editable kind: ${kind}`);
+    }
+    const defaultBody = cloudBodyFor(kind, language);
+    if (!defaultBody) throw new Error(`no default wording for ${kind}/${language}`);
+    const body = args.body.replace(/\r\n/g, "\n").trim();
+    if (!body) throw new Error("body is empty");
+    // The same three checks performSubmit runs, run NOW: a wording the
+    // editor accepts and the submission then refuses is a trap sprung at
+    // rollout time, org by org.
+    const { text, rejected } = toPositionalBody(body);
+    if (rejected.length > 0) {
+      throw new Error(
+        `tokens the Cloud lane cannot send: ${rejected.join(", ")}`,
+      );
+    }
+    if (text.length > 1024) {
+      throw new Error(`body is ${text.length} chars; Meta's ceiling is 1024`);
+    }
+    const existing = await ctx.db
+      .query("platformTemplateTexts")
+      .withIndex("by_kind_language", (q) =>
+        q.eq("kind", kind).eq("language", language),
+      )
+      .unique();
+    // Saving the default back is a reset, not an override: a stored copy of
+    // the constant would go stale the day the constant moves.
+    if (body === defaultBody) {
+      if (existing) await ctx.db.delete(existing._id);
+      return null;
+    }
+    if (existing) {
+      await ctx.db.patch(existing._id, { body, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("platformTemplateTexts", {
+        kind,
+        language,
+        body,
+        updatedAt: Date.now(),
+      });
+    }
+    return null;
+  },
+});
+
+export const clearPlatformWording = mutation({
+  args: { kind: v.string(), language: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const existing = await ctx.db
+      .query("platformTemplateTexts")
+      .withIndex("by_kind_language", (q) =>
+        q.eq("kind", args.kind.trim()).eq("language", args.language.trim().toLowerCase()),
+      )
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+    return null;
+  },
+});
+
+// The rollout work list for one (kind, language): every wired org's existing
+// kind-level row. Orgs with no row are skipped on purpose — creating rows is
+// registerStandardSet's job; this door pushes new wording into rows that
+// already have a Meta life.
+export const kindRowsAcrossOrgs = internalQuery({
+  args: { kind: v.string(), language: v.string() },
+  returns: v.array(
+    v.object({
+      orgId: v.id("orgs"),
+      name: v.string(),
+      templateId: v.id("waTemplates"),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const accounts = await ctx.db.query("waAccounts").collect();
+    const out: { orgId: Id<"orgs">; name: string; templateId: Id<"waTemplates"> }[] = [];
+    for (const account of accounts) {
+      if (!account.wabaId?.trim()) continue;
+      const org = await ctx.db.get(account.orgId);
+      if (!org) continue;
+      const rows = await ctx.db
+        .query("waTemplates")
+        .withIndex("by_org", (q) => q.eq("orgId", account.orgId))
+        .collect();
+      const row = rows.find(
+        (r) =>
+          r.ruleId === undefined &&
+          r.kind === args.kind &&
+          r.language === args.language,
+      );
+      if (row) out.push({ orgId: account.orgId, name: org.name, templateId: row._id });
+    }
+    return out;
+  },
+});
+
+// Push the current wording of one (kind, language) to every wired business.
+// Unlike registerStandardSetAll this does NOT skip approved or pending rows —
+// skipping is right when the bulk run is converging on the same text, and
+// exactly wrong when the text just changed. performSubmit edits by Meta
+// template id where one exists, so an approved template goes back into
+// review while its approved version keeps delivering. Sequential for the
+// same rate-limit reason as every other loop in this file.
+export const resubmitTemplateAll = action({
+  args: { kind: v.string(), language: v.string() },
+  returns: v.array(
+    v.object({
+      org: v.string(),
+      ok: v.boolean(),
+      reason: v.optional(v.string()),
+      detail: v.optional(v.string()),
+    }),
+  ),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ org: string; ok: boolean; reason?: string; detail?: string }[]> => {
+    await ctx.runQuery(internal.waTemplates.assertPlatformAdmin, {});
+    const rows = await ctx.runQuery(internal.waTemplates.kindRowsAcrossOrgs, {
+      kind: args.kind,
+      language: args.language,
+    });
+    const out: { org: string; ok: boolean; reason?: string; detail?: string }[] = [];
+    for (const row of rows) {
+      const context = await ctx.runQuery(internal.waTemplates.loadForSubmitByOrg, {
+        orgId: row.orgId,
+        templateId: row.templateId,
+      });
+      if (!context) {
+        out.push({ org: row.name, ok: false, reason: "not-found" });
+        continue;
+      }
+      const result = await performSubmit(ctx, row.templateId, context);
+      out.push({
+        org: row.name,
+        ok: result.ok,
+        reason: result.reason,
+        detail: result.detail,
+      });
+    }
+    return out;
+  },
+});
+
+// The matrix: every business in the WhatsApp play, with its kind-level rows.
+// A business counts if it has a wired WABA (registration can run) or any
+// kind-level template row (history exists even if the WABA went away) — one
+// with neither has nothing to show and is not a blank line here.
+export const fleetTemplateStatus = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      orgId: v.id("orgs"),
+      name: v.string(),
+      hasWaba: v.boolean(),
+      rows: v.array(
+        v.object({
+          _id: v.id("waTemplates"),
+          kind: v.string(),
+          language: v.string(),
+          metaName: v.optional(v.string()),
+          status: v.string(),
+          metaStatusDetail: v.optional(v.string()),
+          metaRejectionReason: v.optional(v.string()),
+          metaCategory: v.optional(v.string()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requirePlatformAdmin(ctx);
+    const accounts = await ctx.db.query("waAccounts").collect();
+    const wabaOrgIds = new Set(
+      accounts.filter((a) => a.wabaId?.trim()).map((a) => a.orgId),
+    );
+    // One scan of the whole table, grouped in memory: the fleet is dozens of
+    // orgs, and per-org indexed reads here would be a query per business for
+    // a page the operator opens once a day.
+    const all = await ctx.db.query("waTemplates").collect();
+    const byOrg = new Map<Id<"orgs">, typeof all>();
+    for (const row of all) {
+      if (row.ruleId !== undefined || row.kind === "out_of_hours") continue;
+      const list = byOrg.get(row.orgId) ?? [];
+      list.push(row);
+      byOrg.set(row.orgId, list);
+    }
+    const orgIds = new Set<Id<"orgs">>([...wabaOrgIds, ...byOrg.keys()]);
+    const out: {
+      orgId: Id<"orgs">;
+      name: string;
+      hasWaba: boolean;
+      rows: {
+        _id: Id<"waTemplates">;
+        kind: string;
+        language: string;
+        metaName?: string;
+        status: string;
+        metaStatusDetail?: string;
+        metaRejectionReason?: string;
+        metaCategory?: string;
+      }[];
+    }[] = [];
+    for (const orgId of orgIds) {
+      const org = await ctx.db.get(orgId);
+      if (!org) continue;
+      out.push({
+        orgId,
+        name: org.name,
+        hasWaba: wabaOrgIds.has(orgId),
+        rows: (byOrg.get(orgId) ?? []).map((row) => ({
+          _id: row._id,
+          kind: row.kind,
+          language: row.language,
+          metaName: row.metaName,
+          status: String(row.status),
+          metaStatusDetail: row.metaStatusDetail,
+          metaRejectionReason: row.metaRejectionReason,
+          metaCategory: row.metaCategory,
+        })),
+      });
+    }
+    // Wired businesses first, then by name — the ones registration can act
+    // on are the ones the operator came for.
+    out.sort(
+      (a, b) =>
+        Number(b.hasWaba) - Number(a.hasWaba) || a.name.localeCompare(b.name),
+    );
     return out;
   },
 });

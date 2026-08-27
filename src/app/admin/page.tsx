@@ -37,6 +37,7 @@ import {
   TabStrip,
 } from "./parts";
 import { OnboardingTab } from "./onboarding";
+import { TemplatesTab } from "./templates";
 import { InfoTip } from "@/components/InfoTip";
 import { SearchInput } from "@/components/DataTable";
 import {
@@ -66,16 +67,13 @@ export default function AdminPage() {
   // The model pickers' option source: each provider's own /v1/models, read
   // with the platform key, fetched lazily on first focus (see ModelRow).
   const listModels = useAction(api.platformConfig.listModels);
-  const registerTemplatesAll = useAction(api.waTemplates.registerStandardSetAll);
-  const [templatesBusy, setTemplatesBusy] = useState(false);
-  const [templatesNote, setTemplatesNote] = useState<string | null>(null);
   // Two rooms, not one scroll: the tenant list is what the operator opens
   // this page FOR, and deployment settings are visited a handful of times
   // ever. Living below the table meant the settings had no address and the
   // table had a basement. Same pill pattern as the org detail page.
-  const [tab, setTab] = useState<"businesses" | "onboarding" | "platform">(
-    "businesses",
-  );
+  const [tab, setTab] = useState<
+    "businesses" | "onboarding" | "templates" | "platform"
+  >("businesses");
   // One box, three jobs, decided by the tab under it: on Businesses it narrows
   // the table, on Onboarding the vertical list, on Platform the settings rows.
   // The salon app's own search box, so the console does not invent a second.
@@ -114,7 +112,7 @@ export default function AdminPage() {
           value={search.query}
           onChange={search.setQuery}
           placeholder={
-            tab === "businesses"
+            tab === "businesses" || tab === "templates"
               ? "Search businesses"
               : tab === "onboarding"
                 ? "Search verticals"
@@ -130,6 +128,10 @@ export default function AdminPage() {
             // Between the fleet and the deployment plumbing, which is where it
             // belongs: a vertical is neither one business nor a provider key.
             { id: "onboarding" as const, label: "Onboarding" },
+            // Fleet-level by design (2026-08-27): one wording for everyone is
+            // what keeps approval per WABA, so the desk that edits it and
+            // reads the fleet's approval state is not a per-client page.
+            { id: "templates" as const, label: "Templates" },
             { id: "platform" as const, label: "Platform" },
           ]}
           active={tab}
@@ -166,6 +168,7 @@ export default function AdminPage() {
           the header in ./onboarding for why editing here is an override on
           top of the code module rather than a move into the database. */}
       {tab === "onboarding" && <OnboardingTab search={search} />}
+      {tab === "templates" && <TemplatesTab search={search} />}
 
       {tab === "businesses" && (shownFleet.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">
@@ -612,50 +615,6 @@ export default function AdminPage() {
               masked={mail.whatsappAccessToken}
               onSave={(value) => setConfig({ key: "whatsappAccessToken", value })}
             />
-            {/* The fleet rollout: the standard template set is the same for
-                every client, so a wording update is ONE click here — wiring
-                a new WABA already registers it automatically, this is for
-                re-rolling texts and backfilling. */}
-            <div className="flex flex-wrap items-center gap-2 pt-3">
-              <button
-                type="button"
-                disabled={templatesBusy}
-                onClick={() => {
-                  setTemplatesBusy(true);
-                  setTemplatesNote(null);
-                  void registerTemplatesAll({})
-                    .then((all) =>
-                      setTemplatesNote(
-                        all.length === 0
-                          ? "No businesses with a WABA yet."
-                          : all
-                              .map(
-                                (entry) =>
-                                  `${entry.org}: ${entry.results
-                                    .map(
-                                      (r) =>
-                                        `${r.kind} ${r.ok ? (r.reason === "already-approved" ? "✓" : "sent") : (r.detail ?? r.reason ?? "failed")}`,
-                                    )
-                                    .join(", ")}`,
-                              )
-                              .join(" · "),
-                      ),
-                    )
-                    .catch((err) =>
-                      setTemplatesNote(err instanceof Error ? err.message : "failed"),
-                    )
-                    .finally(() => setTemplatesBusy(false));
-                }}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-              >
-                {templatesBusy
-                  ? "Registering…"
-                  : "Register standard templates on all businesses"}
-              </button>
-              {templatesNote && (
-                <span className="text-xs text-[var(--muted)]">{templatesNote}</span>
-              )}
-            </div>
           </Section>
 
           {/* The Resend doctrine once more: one Stripe account for the whole

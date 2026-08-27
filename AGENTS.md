@@ -778,21 +778,32 @@ org, always: inbound resolves the org by `phone_number_id` and `.unique()`
 throws for both orgs on a shared id. Numbers cannot be platform-wide; only
 auth can.
 
-**Salons never meet Meta.** The registration desk left the salon's
-Automations page for the /admin tenant page; the wording of the five
-lifecycle kinds is LOCKED for salons (`LOCKED_TEMPLATE_KINDS` in
-`lib/templateTexts`, enforced in `orgs.updateTemplate`/`saveTemplateDraft`
-as `wording-locked` — hidden editors are just honest UI). What Meta registers
-for those kinds is the platform's own Cloud text
-(`lib/metaTemplate CLOUD_TEMPLATE_TEXTS`) — no `[service]`, no links, the
-quick-reply buttons do that job — while the rich row bodies keep serving
-Evolution and email. Registration is AUTOMATIC: a WABA id arriving or
-changing on an org (platform.setWaAccount, orgs.connectWhatsapp) schedules
-`registerStandardSetForOrg`; the fleet page has one rollout button for
-backfills and wording updates. All three languages register per org, because
-sends resolve templates by the CUSTOMER's language and a missing language
-fails the send by doctrine. The bulk run skips approved AND pending rows;
-per-row Submit is the force. `waTemplates.metaCategory` records what a
+**Salons never meet Meta.** Template administration is FLEET-level (Serdar,
+2026-08-27: wording and rollout are fleet facts; the per-org desk lasted one
+day): the /admin Templates tab holds the wording editor and the
+business-by-kind status matrix, and the per-org admin page has no templates
+surface. The wording of the five lifecycle kinds is LOCKED for salons
+(`LOCKED_TEMPLATE_KINDS` in `lib/templateTexts`, enforced in
+`orgs.updateTemplate`/`saveTemplateDraft` as `wording-locked` — hidden
+editors are just honest UI). What Meta registers for those kinds resolves
+override-first: `platformTemplateTexts` rows (the fleet editor's store,
+written by `waTemplates.setPlatformWording`) over the code constants
+(`lib/metaTemplate CLOUD_TEMPLATE_TEXTS`), via `resolvePlatformBody` — every
+submit loader reads it, so the editor and the registration can never say
+different texts. Still no `[service]`, no links; the quick-reply buttons do
+that job, while the rich row bodies keep serving Evolution and email. One
+wording for the whole fleet is deliberate: it is what keeps Meta approval
+per WABA instead of per client. Registration is AUTOMATIC: a WABA id
+arriving or changing on an org (platform.setWaAccount, orgs.connectWhatsapp)
+schedules `registerStandardSetForOrg`; the fleet tab keeps the one rollout
+button for backfills. All three languages register per org, because sends
+resolve templates by the CUSTOMER's language and a missing language fails
+the send by doctrine. The bulk run skips approved AND pending rows
+(converges); `resubmitTemplateAll` is the wording-update push — it does NOT
+skip, because performSubmit EDITS by Meta template id, which re-enters
+review while the approved version keeps delivering. A rejected edit stops
+that kind sending for that org until repaired, which is why the push is per
+kind per language. `waTemplates.metaCategory` records what a
 template LANDED as (review recategorises; landed is what sends are billed
 at). The campaign wrapper is PARKED (Serdar): Meta refused the old
 all-parameter body ("too many variables for its length"); the fleshed
