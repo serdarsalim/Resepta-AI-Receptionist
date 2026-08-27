@@ -52,6 +52,29 @@ function dayStrip(timezone: string, fromMs: number): { date: string; ms: number 
 
 type Step = "service" | "time" | "details";
 
+// The device remembers its owner. Written after a successful booking, read
+// back on the next visit, so a repeat customer meets their own name and
+// number already filled in instead of a blank form. One key for the whole
+// product rather than per salon — these are the customer's own details, the
+// same at every salon they book.
+//
+// Deliberately NOT a server lookup: a page that answers a typed phone number
+// with the matching name would hand anyone's identity to whoever types their
+// number. The server still matches by phone on submit; it just never echoes.
+const CONTACT_KEY = "resepta.bookingContact";
+type StoredContact = { name?: string; phone?: string; email?: string };
+function storedContact(): StoredContact {
+  // Guarded: this also runs during prerender, where there is no storage.
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CONTACT_KEY) ?? "null");
+    if (parsed && typeof parsed === "object") return parsed as StoredContact;
+  } catch {
+    // A blocked or corrupted store reads as a first visit.
+  }
+  return {};
+}
+
 export default function BookingPage({
   params,
 }: {
@@ -84,8 +107,11 @@ export default function BookingPage({
   const [lines, setLines] = useState<{ serviceId: Id<"services">; quantity: number }[]>([]);
   const [date, setDate] = useState<string | null>(null);
   const [startMs, setStartMs] = useState<number | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  // Read once at mount; the details step mounts and unmounts as the wizard
+  // swaps screens, so the prefill has to live up here with the other fields.
+  const [prefill] = useState(storedContact);
+  const [name, setName] = useState(prefill.name ?? "");
+  const [email, setEmail] = useState(prefill.email ?? "");
   const [note, setNote] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -790,7 +816,21 @@ export default function BookingPage({
               ...(note.trim() ? { note } : {}),
             });
             setSending(false);
-            if (result.ok) setDone({ token: result.token, startMs });
+            if (result.ok) {
+              try {
+                localStorage.setItem(
+                  CONTACT_KEY,
+                  JSON.stringify({
+                    name: name.trim(),
+                    phone,
+                    ...(email.trim() ? { email: email.trim() } : {}),
+                  }),
+                );
+              } catch {
+                // A full or blocked store costs the prefill, not the booking.
+              }
+              setDone({ token: result.token, startMs });
+            }
             else if (result.reason === "slot-taken") {
               // Someone got there first. Back to the grid — which is live —
               // to ask again.
@@ -813,6 +853,14 @@ export default function BookingPage({
               each — and it leaves the phone row twelve pixels of slack rather
               than none. */}
           <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
+            {/* PHONE FIRST. It is how the salon knows who this is — the key
+                every other lane (WhatsApp, voice, the CRM) already runs on —
+                and the one field the device memory cannot spare a stranger.
+                A span, not a label: PhoneInput is a country select plus a
+                text field, and a label pointing at one of two controls would
+                send a click to whichever it named. */}
+            <span className="text-sm">{t("forms.phone")}</span>
+            <PhoneInput required autoFocus defaultValue={prefill.phone} />
             <label htmlFor="booking-name" className="text-sm">
               {t("forms.name")}
             </label>
@@ -821,13 +869,7 @@ export default function BookingPage({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              autoFocus
             />
-            {/* A span, not a label: PhoneInput is a country select plus a text
-                field, and a label pointing at one of two controls would send a
-                click to whichever it named. */}
-            <span className="text-sm">{t("forms.phone")}</span>
-            <PhoneInput required />
             {/* "Optional" moved into the box, the way Business settings marks
                 an optional price. As part of the LABEL it was the longest
                 string in the column and set its width on its own — a

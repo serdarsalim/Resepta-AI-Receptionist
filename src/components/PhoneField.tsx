@@ -238,6 +238,8 @@ export function PhoneInput({
   id,
   required,
   className,
+  defaultValue,
+  autoFocus,
 }: {
   name?: string;
   // Point the row's <label htmlFor> at the number box rather than letting the
@@ -245,10 +247,20 @@ export function PhoneInput({
   id?: string;
   required?: boolean;
   className?: string;
+  // An E.164 number to start from — the booking page's device memory. Read
+  // once at mount, and it wins over geo detection: the code it carries is a
+  // fact about this person, where the lookup is a guess about their network.
+  defaultValue?: string;
+  autoFocus?: boolean;
 }) {
   const { language } = useLanguage();
-  const [code, setCode] = useState("");
-  const [national, setNational] = useState("");
+  const [code, setCode] = useState(() => {
+    const parts = defaultValue ? splitPhone(defaultValue) : null;
+    return parts?.code ? `+${parts.code}` : "";
+  });
+  const [national, setNational] = useState(
+    () => (defaultValue ? splitPhone(defaultValue).national : ""),
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const missingCode = national.trim() !== "" && !code;
 
@@ -286,6 +298,7 @@ export function PhoneInput({
           type="tel"
           inputMode="tel"
           required={required}
+          autoFocus={autoFocus}
           aria-label={COPY.number[language]}
           value={national}
           onChange={(e) => applyNationalInput(e.target.value, setCode, setNational)}
