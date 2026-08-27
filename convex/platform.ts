@@ -181,8 +181,15 @@ export const fleet = query({
     // rows are disappearing underneath every health figure on this page, so
     // the honest thing is not to draw it rather than to draw a salon whose
     // numbers fall every time the screen refreshes.
+    //
+    // The demo workspace goes with them, for a related reason: it is the
+    // showroom anyone can walk into (convex/demo.ts), not a customer. Its
+    // numbers move when a stranger clicks around, and a fleet list is read as
+    // "who is using this", so a row nobody is paying for sitting between two
+    // salons is a row that has to be mentally subtracted every time. The
+    // drafts list at the foot of this file has always skipped it.
     const orgs = (await ctx.db.query("orgs").take(200)).filter(
-      (org) => org.deletingAt === undefined,
+      (org) => org.deletingAt === undefined && org.demoMode !== true,
     );
     // Read ONCE and passed down. emailConfig is deployment-global and was the
     // first statement of healthFor, so it ran a full platformConfig collect per
