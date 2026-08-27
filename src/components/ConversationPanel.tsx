@@ -542,16 +542,23 @@ export function ConversationPanel({
   // rows on a patterned ground read as a table somebody spilled something on,
   // which is the same reason the email index and notes stay on the card. So
   // the call tab paints paper only once a call is open.
-  // Exactly one ENABLED agent, or no button (Serdar's call, 2026-08-17). An org
-  // can hold several voice agents — VoiceView is a list you drill into — so
-  // there is no "the org's agent" to default to, and a button that guesses
-  // rings a real phone from the wrong line. Where there is only one the answer
-  // is unambiguous; where there are several the call is placed from the Voice
-  // agent page, which already made you choose.
-  const dialAgent =
-    voiceAgents && voiceAgents.filter((a) => a.enabled).length === 1
-      ? voiceAgents.find((a) => a.enabled)!.retellAgentId
-      : null;
+  // Exactly one agent that can DIAL, or no button (Serdar's call, 2026-08-17,
+  // amended 2026-08-27). An org can hold several voice agents — VoiceView is a
+  // list you drill into — so there is no "the org's agent" to default to, and a
+  // button that guesses rings a real phone from the wrong line. Where the
+  // answer is unambiguous the button appears; where it is not, the call is
+  // placed from the Voice agent page, which already made you choose.
+  //
+  // The amendment: "enabled" was the wrong test for candidacy. A second agent
+  // with no line attached cannot place a call at all — testCall would throw
+  // "no phone number to call from" — so it was never a second answer, only a
+  // second row. Counting it suppressed the button on the one org that had
+  // exactly one working line. Candidacy now matches what testCall can actually
+  // do: its own outbound line, or its inbound number as the fallback.
+  const dialAgents = (voiceAgents ?? []).filter(
+    (a) => a.enabled && (a.outboundNumber || a.inboundNumber),
+  );
+  const dialAgent = dialAgents.length === 1 ? dialAgents[0].retellAgentId : null;
   const dialTo = customerRecord?.phone?.trim() || "";
   const canPlaceCall = !!dialAgent && !!dialTo;
 

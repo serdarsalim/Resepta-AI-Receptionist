@@ -60,6 +60,14 @@ const agentRow = v.object({
   // was the roster's transient outage presented as the agent's identity.
   name: v.optional(v.string()),
   inboundNumber: v.optional(v.string()),
+  // The line this agent DIALS FROM, resolved from agentLines.outboundAgentId.
+  // Carried on the agent row because the only question callers ask of it is
+  // "can this agent place a call", and that is a property of the agent as far
+  // as they are concerned. retellAgent.testCall answers it the same way: the
+  // agent's own bound line first, its inbound number as the fallback, an error
+  // when there is neither. A surface offering the call button reads these two
+  // fields so the button appears exactly when the action would go through.
+  outboundNumber: v.optional(v.string()),
   transferNumber: v.optional(v.string()),
   enabled: v.boolean(),
   chatEnabled: v.optional(v.boolean()),
@@ -75,11 +83,25 @@ export const list = query({
       .query("retellAgents")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    // One extra org-indexed collect, and it saves every caller a second query
+    // plus the join. An agent can hold more than one outbound line; the first
+    // is enough, since callers use this to know whether a line exists at all.
+    const lines = await ctx.db
+      .query("agentLines")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const outboundByAgent = new Map<string, string>();
+    for (const line of lines) {
+      if (line.outboundAgentId && !outboundByAgent.has(line.outboundAgentId)) {
+        outboundByAgent.set(line.outboundAgentId, line.number);
+      }
+    }
     return rows.map((a) => ({
       _id: a._id,
       retellAgentId: a.retellAgentId,
       name: a.name,
       inboundNumber: a.inboundNumber,
+      outboundNumber: outboundByAgent.get(a.retellAgentId),
       transferNumber: a.transferNumber,
       enabled: a.enabled,
       chatEnabled: a.chatEnabled,
