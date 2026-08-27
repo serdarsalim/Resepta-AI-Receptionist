@@ -805,22 +805,8 @@ export function KeyModelRow({
       <div className="flex items-center gap-2">
         <div className="text-sm font-medium">{label}</div>
         {hint && <InfoTip text={hint} />}
-        {onMakeDefault !== undefined &&
-          (isDefault ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-              default
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void onMakeDefault()}
-              className="rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            >
-              set default
-            </button>
-          ))}
       </div>
-      <div className="flex min-w-0 gap-2">
+      <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0 flex-1">
           <input
             value={keyDraft}
@@ -901,6 +887,27 @@ export function KeyModelRow({
           )}
           <FieldError message={modelError} />
         </div>
+        {/* After the fields, on the row's own line (Serdar, 2026-08-28: in
+            the label column it wrapped "Anthropic (Claude)" in two). A fixed
+            width keeps both rows' pills in one column, and keeps the inputs
+            the same width whichever row is the default. */}
+        {onMakeDefault !== undefined && (
+          <span className="flex w-20 shrink-0 justify-start self-center">
+            {isDefault ? (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                default
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void onMakeDefault()}
+                className="whitespace-nowrap rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              >
+                set default
+              </button>
+            )}
+          </span>
+        )}
       </div>
     </div>
   );
