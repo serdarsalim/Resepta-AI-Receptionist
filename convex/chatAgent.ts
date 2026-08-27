@@ -36,6 +36,7 @@ import {
   hasBusinessHours,
   isWithinActiveWindow,
   localDayRangeUtc,
+  localWallTimeToUtcMs,
   openHoursForAgent,
   parseLocalStart,
   suggestFreeSlots,
@@ -829,27 +830,73 @@ async function executeTool(
           full: booked.full,
           nowMs: Date.now(),
         });
+        // The customer asked for a SPECIFIC time: answer it here, as a fact,
+        // instead of hoping the model derives it. Found live on Bella
+        // (2026-08-28): gpt-4.1-mini read the free-slot examples as an
+        // exhaustive list and told a customer 11:00 was taken on an empty
+        // Friday.
+        let requestedTime: Record<string, unknown> | undefined;
+        const timeRaw = typeof input.time === "string" ? input.time.trim() : "";
+        const timeMatch = timeRaw.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+          const [y, m, d] = dayIso.split("-").map(Number);
+          const askedMs = localWallTimeToUtcMs(
+            y,
+            m - 1,
+            d,
+            Number(timeMatch[1]),
+            Number(timeMatch[2]),
+            org.timezone,
+          );
+          const conflict = booked.full.find(
+            (slot: { startAt: number; durationMinutes: number | null }) => {
+              const end = slot.startAt + (slot.durationMinutes ?? 30) * 60_000;
+              return askedMs >= slot.startAt && askedMs < end;
+            },
+          );
+          const withinHours = isWithinActiveWindow(
+            askedMs,
+            org.timezone,
+            org.businessHours ?? {},
+          );
+          const inPast = askedMs < Date.now();
+          requestedTime = {
+            time: spokenOf(askedMs),
+            available: !conflict && withinHours && !inPast,
+            ...(conflict
+              ? { reason: "already-booked" }
+              : !withinHours
+                ? { reason: "outside-open-hours" }
+                : inPast
+                  ? { reason: "in-the-past" }
+                  : {}),
+          };
+        }
         return {
           date: dayIso,
+          ...(requestedTime ? { requested_time: requestedTime } : {}),
           booked_slots: booked.full.map(
             (slot: { startAt: number; durationMinutes: number | null }) => ({
               start: spokenOf(slot.startAt),
               duration_minutes: slot.durationMinutes ?? 30,
             }),
           ),
+          // "example", not "suggested": the old name read as the list of
+          // open slots, and a mini model answered from it as if it were.
           ...(suggested.length > 0
-            ? { suggested_slots: suggested.map((at) => spokenOf(at)) }
+            ? { example_free_times: suggested.map((at) => spokenOf(at)) }
             : {}),
           ...openness,
           note:
-            (suggested.length > 0
-              ? "Offer two or three of suggested_slots as concrete times." +
-                " Never answer by reciting the opening hours. "
+            "EVERY time inside open_hours is available unless it overlaps booked_slots" +
+            (openness.closed_days ? " or falls on closed_days" : "") +
+            ". " +
+            (requestedTime
+              ? "requested_time answers the customer's asked time; trust it. "
               : "") +
-            "These times are FULL — everything else is free. Offer times that avoid them" +
-            (openness.open_hours ? ", stay inside open_hours" : "") +
-            (openness.closed_days ? ", never offer a date on closed_days" : "") +
-            ".",
+            (suggested.length > 0
+              ? "example_free_times are examples to offer, NOT the only free times. Offer two or three as concrete times; never answer by reciting the opening hours."
+              : ""),
         };
       }
       const result = await getAvailableSlots({

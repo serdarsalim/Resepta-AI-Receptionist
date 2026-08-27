@@ -73,11 +73,16 @@ export function chatAgentTools(): LlmTool[] {
     {
       name: "check_availability",
       description:
-        "Check appointment times for one local calendar date before offering a slot. Returns either free slots or the times that are already full plus open hours.",
+        "Check appointment times for one local calendar date before offering a slot. Returns which times are full plus open hours; when the customer asked for a specific time, pass it and the result answers it directly.",
       input_schema: {
         type: "object",
         properties: {
           date: { type: "string", description: "Local date, YYYY-MM-DD." },
+          time: {
+            type: "string",
+            description:
+              "The specific time the customer asked for, 24h HH:MM, when they named one. The result's requested_time then says whether it is available — trust that answer.",
+          },
         },
         required: ["date"],
       },
