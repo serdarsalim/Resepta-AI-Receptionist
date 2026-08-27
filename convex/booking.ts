@@ -516,7 +516,8 @@ export const book = mutation({
         quantity: v.optional(v.number()),
       }),
     ),
-    startMs: v.number(),
+    // Absent only for an ASAP goods order — every timed booking sends it.
+    startMs: v.optional(v.number()),
     name: v.string(),
     phone: v.string(),
     email: v.optional(v.string()),
@@ -525,6 +526,16 @@ export const book = mutation({
     // where the salon already reads everything else about them, rather than as
     // a field on the appointment that only the booking sheet would show.
     note: v.optional(v.string()),
+    // Goods-only baskets say how the order reaches them: picked up or
+    // delivered, now or at a chosen time. Dropped for any basket holding a
+    // time-bound service — the visit IS the fulfillment.
+    fulfillment: v.optional(
+      v.object({
+        kind: v.union(v.literal("pickup"), v.literal("delivery")),
+        asap: v.optional(v.boolean()),
+        address: v.optional(v.string()),
+      }),
+    ),
   },
   returns: v.object({
     ok: v.boolean(),
@@ -550,34 +561,51 @@ export const book = mutation({
     // it holds no chair and no colleague's hour, so the capacity guards below
     // fall through by construction exactly as they did for one good.
     const duration = picked.duration;
+    // A fulfillment only sticks to a goods-only basket. Dropped silently
+    // otherwise rather than refused: only a hand-crafted request can send one
+    // alongside a service, and the booking is still valid without it.
+    const fulfillment = duration === 0 ? args.fulfillment : undefined;
+    const asap = Boolean(fulfillment?.asap);
 
     const now = Date.now();
-    const noticeMs = Math.max(MIN_NOTICE_MS, picked.leadMs);
-    if (args.startMs < now + noticeMs - 60_000) {
-      // The minute of slack forgives a slot picked just before the boundary
-      // crossed it — refusing a booking the page offered seconds ago reads
-      // as the product breaking. lead-time is its own reason so the page can
-      // say "order a day ahead" instead of pretending the slot filled up.
-      return {
-        ok: false,
-        reason: args.startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
-      };
+    // ASAP books AT the moment of ordering: startAt records when the order
+    // was placed and the flag carries the promise, so the notice floor and
+    // the open-hours fit do not apply — "as soon as you can" at 8pm is an
+    // order the salon reads in the morning, not a refusal. Lead time still
+    // binds: asap on a cake that needs a day's notice is a promise nobody
+    // can keep, and the page never offers it.
+    if (asap && picked.leadMs > 0) return { ok: false, reason: "lead-time" };
+    const startMs = asap ? now : args.startMs;
+    if (startMs === undefined) return { ok: false, reason: "not-found" };
+    if (!asap) {
+      const noticeMs = Math.max(MIN_NOTICE_MS, picked.leadMs);
+      if (startMs < now + noticeMs - 60_000) {
+        // The minute of slack forgives a slot picked just before the boundary
+        // crossed it — refusing a booking the page offered seconds ago reads
+        // as the product breaking. lead-time is its own reason so the page can
+        // say "order a day ahead" instead of pretending the slot filled up.
+        return {
+          ok: false,
+          reason: startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
+        };
+      }
+      if (startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
+      // The write holds the invariant itself, exactly like the voice lane:
+      // being offered by the slots query is not being bound by it.
+      if (!fitsOpenHours(org, startMs, duration)) {
+        return { ok: false, reason: "slot-taken" };
+      }
     }
-    if (args.startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
-    // The write holds the invariant itself, exactly like the voice lane:
-    // being offered by the slots query is not being bound by it.
-    if (!fitsOpenHours(org, args.startMs, duration)) {
-      return { ok: false, reason: "slot-taken" };
-    }
-    const rows = await activeRowsAround(
-      ctx,
-      org._id,
-      args.startMs,
-      args.startMs + duration * 60_000,
-    );
-    const capacity = await orgCapacity(ctx, org._id);
-    if (overlapCount(rows, args.startMs, duration) >= capacity) {
-      return { ok: false, reason: "slot-taken" };
+    // Skipped for ASAP because every term below is a no-op at duration 0
+    // anyway — an ASAP order should not pay for a read that cannot refuse it.
+    const rows = asap
+      ? []
+      : await activeRowsAround(ctx, org._id, startMs, startMs + duration * 60_000);
+    if (!asap) {
+      const capacity = await orgCapacity(ctx, org._id);
+      if (overlapCount(rows, startMs, duration) >= capacity) {
+        return { ok: false, reason: "slot-taken" };
+      }
     }
 
     // Same phone, same person — the forms.ts rule.
@@ -629,17 +657,31 @@ export const book = mutation({
     // `rows`, not allUpcoming: this window's rows include an appointment that
     // started before now and is still running, which is precisely the one a
     // caller can collide with.
-    if (customerConflict(rows, customerId, args.startMs, duration)) {
+    if (customerConflict(rows, customerId, startMs, duration)) {
       return { ok: false, reason: "customer-busy" };
     }
 
+    // Capped like the note below, and for the same reason: public free text.
+    const address =
+      fulfillment?.kind === "delivery"
+        ? fulfillment.address?.trim().slice(0, 500)
+        : undefined;
     const manageToken = crypto.randomUUID();
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: org._id,
       customerId,
-      startAt: args.startMs,
+      startAt: startMs,
       durationMinutes: duration,
       items: picked.items,
+      ...(fulfillment
+        ? {
+            fulfillment: {
+              kind: fulfillment.kind,
+              ...(asap ? { asap: true } : {}),
+              ...(address ? { address } : {}),
+            },
+          }
+        : {}),
       status: "scheduled",
       source: "booking_page",
       manageToken,

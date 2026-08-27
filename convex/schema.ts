@@ -1257,6 +1257,20 @@ export default defineSchema({
         }),
       ),
     ),
+    // How a goods-only order reaches its customer. Only ever set when every
+    // line is a good (durationMinutes 0 on the row): a haircut is fulfilled
+    // in the chair and needs no word for it. asap means startAt records the
+    // moment the order was PLACED, not a promised minute — the customer said
+    // "as soon as you can" and the flag carries that promise. address is a
+    // snapshot on this order, not a field on the customer: it is where THIS
+    // delivery goes, and the customer record deliberately has no address.
+    fulfillment: v.optional(
+      v.object({
+        kind: v.union(v.literal("pickup"), v.literal("delivery")),
+        asap: v.optional(v.boolean()),
+        address: v.optional(v.string()),
+      }),
+    ),
     staffId: v.optional(v.id("staff")),
     startAt: v.number(),
     durationMinutes: v.optional(v.number()),
