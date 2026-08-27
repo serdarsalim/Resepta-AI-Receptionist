@@ -229,10 +229,13 @@ need to know which voice provider executes the calls.
 ## 8. Open product decisions
 
 1. **Operator model:** pure self-serve, partner-operated agency or a hybrid.
-2. **WABA ownership:** each business owns its Meta account, or the partner acts
-   as a Tech Provider.
-3. **Template approval:** per-business templates versus centrally managed
-   approvals if the partner owns WABA infrastructure.
+2. **WABA ownership:** DECIDED 2026-08-26: the platform acts as Tech Provider.
+   One system-user token in platformConfig fronts every hosted number; a
+   business with its own Meta app pastes its own token, which always wins.
+3. **Template approval:** DECIDED 2026-08-26/27: centrally managed. The Cloud
+   wording is platform text (one text per kind per language, the /admin
+   Templates tab edits it fleet-wide), which is what keeps Meta approval per
+   WABA instead of per client.
 4. **Phone-number onboarding:** the app currently assigns existing unclaimed
    lines but does not buy or provision them.
 5. **Scheduling activation:** cal.com is the chosen system but still needs a
@@ -240,3 +243,43 @@ need to know which voice provider executes the calls.
 6. **Voice-quality gate:** noisy Turkish names, dates and numbers require live
    pilot validation even when the software path is correct.
 7. **Billing:** intentionally later; pilot businesses can be hand-billed.
+
+## 9. Roadmap
+
+What is deliberately not being worked on, and what is next. A parked item is
+finished thinking, not unfinished work: the state below is enough to resume
+without re-deriving it.
+
+### Parked
+
+- **Campaigns** (Serdar, 2026-08-27; wrapper already parked 2026-08-26,
+  "don't worry about campaign bro"). The lane is BUILT end to end: composer,
+  per-run wrapper fill, batched sends with counts, the single card at the
+  foot of Otomasyonlar. The one thing between built and live is submitting
+  the campaign wrapper template for Meta review: the tr and en rows sit in
+  draft, and the fleshed wrapper text (greeting + closing line, the
+  fixed-text ratio Meta wants) has been in CAMPAIGN_BODIES since the older
+  all-parameter body was refused with "too many variables for its length".
+  Un-parking is one per-row Submit on the /admin Templates tab per language,
+  then waiting out review. Spend nothing here until Serdar says otherwise.
+- **Showcase-number takeover affordance** (offered 2026-08-26, undecided).
+  One-click /admin move of the floating showcase number between real
+  accounts. Do not build unless he asks.
+
+### Next
+
+- **Two-way memory, voice side** (design agreed 2026-08-27): a
+  {{recent_chat}} ring-time variable carrying the customer's recent WhatsApp
+  thread, bounded three ways: last 7 days, max 10 messages, ~800 chars total,
+  oldest trimmed first. Trim, never summarize (a rolling LLM summary is a
+  second artifact that costs money and can be wrong). Chat already reads the
+  last 3 calls, so this closes the loop.
+- **Meta business verification, then display name → Resepta** (external, at
+  Meta, currently pending on Meta's side). The growth axis: it gates hosted
+  number count and messaging tiers, which the shared-WABA template play
+  depends on. Display name must move before verification completes
+  (AGENTS.md documents the three-step dance and the PIN).
+- **Voice-note recording** in the composer (playback shipped; recording is
+  the missing half, and it is why audio stayed out of the media library when
+  video went in, 2026-08-27).
+- **Voice-side {{rules}} freshness gap** (docs/agent-core.md open list).
