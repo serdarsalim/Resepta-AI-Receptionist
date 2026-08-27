@@ -286,7 +286,10 @@ export function InboxView({
           with nothing selected, that rule put the empty state underneath the
           list instead of beside it. Below lg it is still one column and the two
           panes swap. */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      {/* gap-2, down from gap-4 (Serdar, 2026-08-28): list and thread are
+          one working surface, and a wide gutter read them as two unrelated
+          panels. */}
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Conversation list. On small screens it swaps with the open
             conversation instead of sharing the row. */}
         <section
