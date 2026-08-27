@@ -196,7 +196,6 @@ export default function TenantPage() {
   const setChatAgentBudget = useMutation(api.platform.setChatAgentBudget);
   const setOrgStatus = useMutation(api.platform.setOrgStatus);
   const deleteOrg = useAction(api.platform.deleteOrg);
-  const setPlatformFlag = useMutation(api.platformConfig.set);
   // Suspend is two clicks, not a dialog: the admin shell has no confirm
   // provider, and a state that arms and disarms itself is the same protection
   // with less machinery.
@@ -1141,36 +1140,15 @@ export default function TenantPage() {
               </Pill>
             )}
           </Fact>
-          <Fact label="Platform kill switch">
-            {assistant.killSwitch ? (
+          {/* The stop-everything toggle is gone from the UI (Serdar,
+              2026-08-27: too destructive to sit one click away). The flag
+              itself survives — settable only by CLI now — so a set flag
+              still explains itself here instead of skipping turns silently. */}
+          {assistant.killSwitch && (
+            <Fact label="Platform kill switch">
               <Pill tone="warn">On, every org stopped</Pill>
-            ) : (
-              <span className="text-[var(--muted)]">Off</span>
-            )}
-          </Fact>
-        </div>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
-          <div className="text-sm font-medium">Platform kill switch</div>
-          <div>
-            <button
-              type="button"
-              onClick={() =>
-                void setPlatformFlag({
-                  key: "chatAgentDisabled",
-                  value: assistant.killSwitch ? "" : "true",
-                })
-              }
-              className={`rounded-lg px-2 py-1 text-xs ${
-                assistant.killSwitch
-                  ? "bg-amber-50 font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              }`}
-            >
-              {assistant.killSwitch
-                ? "Every agent is stopped. Click to re-enable"
-                : "Stop every org's agent"}
-            </button>
-          </div>
+            </Fact>
+          )}
         </div>
       </Section>
 
