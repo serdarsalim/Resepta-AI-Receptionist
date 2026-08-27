@@ -583,14 +583,22 @@ thead {
    Keep this rule rather than scoping the light one: it is what documents the
    decision, and --chat-paper is what the composer's field reads to sit on the
    right ground in both themes. */
-.dark .chat-wallpaper {
+.dark {
   /* Near-black paper with LIFTED bubbles on it — WhatsApp's own dark
      treatment. Not --card: the bubbles and the composer field are --card too,
      so a --card paper made both invisible, which is precisely what dropping
      the pattern exposed. A chat needs two levels whether or not it has a
-     wallpaper; light gets them from paper-vs-white, dark gets them from here. */
+     wallpaper; light gets them from paper-vs-white, dark gets them from here.
+
+     On .dark itself, NOT .dark .chat-wallpaper (2026-08-28): CallDetail
+     renders its bubbles and summary on --chat-field wherever it sits, and
+     the voice tab's call log has no wallpaper ancestor — scoped to the
+     wallpaper, dark mode there resolved the :root WHITE and painted light
+     paper under light text. */
   --chat-paper: #0f0f0f;
   --chat-field: #242424;
+}
+.dark .chat-wallpaper {
   background-image: none;
 }
 
