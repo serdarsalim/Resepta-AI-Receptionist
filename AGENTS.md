@@ -799,9 +799,14 @@ schedules `registerStandardSetForOrg`; the fleet tab keeps the one rollout
 button for backfills. All three languages register per org, because sends
 resolve templates by the CUSTOMER's language and a missing language fails
 the send by doctrine. The bulk run skips approved AND pending rows
-(converges); `resubmitTemplateAll` is the wording-update push — it does NOT
-skip, because performSubmit EDITS by Meta template id, which re-enters
-review while the approved version keeps delivering. A rejected edit stops
+(converges); `resubmitTemplateAll` is the wording-update push — it submits
+CHANGED wording through performSubmit's EDIT path (by Meta template id,
+re-entering review while the approved version keeps delivering), and skips
+pending rows (Meta locks a template during review) and approved rows whose
+wording matches `waTemplates.submittedBody`, the stored text of the last
+submission — identical resubmits burn one of Meta's ~10 monthly edit slots
+per template for nothing. The fleet UI greys per-row Submit by the same two
+rules and shows `submittedAt` as "submitted Nh ago". A rejected edit stops
 that kind sending for that org until repaired, which is why the push is per
 kind per language. `waTemplates.metaCategory` records what a
 template LANDED as (review recategorises; landed is what sends are billed

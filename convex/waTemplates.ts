@@ -121,6 +121,7 @@ export const recordSubmission = internalMutation({
     metaTemplateId: v.optional(v.string()),
     metaWabaId: v.string(),
     metaParams: v.array(v.string()),
+    submittedBody: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("approved"),
@@ -136,6 +137,7 @@ export const recordSubmission = internalMutation({
       metaTemplateId: args.metaTemplateId,
       metaWabaId: args.metaWabaId,
       metaParams: args.metaParams,
+      submittedBody: args.submittedBody,
       status: args.status,
       metaStatusDetail: args.metaStatusDetail,
       // Only when Meta answered one — an EDIT response carries no category,
@@ -375,6 +377,8 @@ async function performSubmit(
     metaTemplateId: json.id ?? template.metaTemplateId,
     metaWabaId: wabaId,
     metaParams: variables,
+    // What actually went, named tokens, for the changed-since-submit check.
+    submittedBody: campaign ? wrapper! : body,
     // Meta usually answers PENDING and reviews asynchronously, but a
     // template it can auto-approve comes back APPROVED in this same
     // response. Reading it beats waiting for a webhook that will not come.
@@ -955,11 +959,25 @@ export const kindRowsAcrossOrgs = internalQuery({
       orgId: v.id("orgs"),
       name: v.string(),
       templateId: v.id("waTemplates"),
+      status: v.string(),
+      // Same three-value read as fleetTemplateStatus: false = the row last
+      // submitted exactly the text it would submit now.
+      changed: v.union(v.boolean(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
     const accounts = await ctx.db.query("waAccounts").collect();
-    const out: { orgId: Id<"orgs">; name: string; templateId: Id<"waTemplates"> }[] = [];
+    const expected =
+      args.kind === "campaign"
+        ? campaignBodyFor(args.language)
+        : await resolvePlatformBody(ctx, args.kind, args.language);
+    const out: {
+      orgId: Id<"orgs">;
+      name: string;
+      templateId: Id<"waTemplates">;
+      status: string;
+      changed: boolean | null;
+    }[] = [];
     for (const account of accounts) {
       if (!account.wabaId?.trim()) continue;
       const org = await ctx.db.get(account.orgId);
@@ -974,7 +992,16 @@ export const kindRowsAcrossOrgs = internalQuery({
           r.kind === args.kind &&
           r.language === args.language,
       );
-      if (row) out.push({ orgId: account.orgId, name: org.name, templateId: row._id });
+      if (row) {
+        out.push({
+          orgId: account.orgId,
+          name: org.name,
+          templateId: row._id,
+          status: String(row.status),
+          changed:
+            row.submittedBody === undefined ? null : expected !== row.submittedBody,
+        });
+      }
     }
     return out;
   },
@@ -1008,6 +1035,21 @@ export const resubmitTemplateAll = action({
     });
     const out: { org: string; ok: boolean; reason?: string; detail?: string }[] = [];
     for (const row of rows) {
+      // Two skips, both about not spending anything for nothing. A pending
+      // row cannot be edited — Meta locks a template while it reviews it, so
+      // the request would only error. An approved row whose wording has not
+      // changed since its last submission would re-enter review with
+      // IDENTICAL text, burning one of the ~10 monthly edit slots to change
+      // nothing. Unknown (null) stays live: rows submitted before
+      // submittedBody existed cannot prove they are unchanged.
+      if (row.status === "pending") {
+        out.push({ org: row.name, ok: true, reason: "in-review" });
+        continue;
+      }
+      if (row.status === "approved" && row.changed === false) {
+        out.push({ org: row.name, ok: true, reason: "unchanged" });
+        continue;
+      }
       const context = await ctx.runQuery(internal.waTemplates.loadForSubmitByOrg, {
         orgId: row.orgId,
         templateId: row.templateId,
@@ -1049,6 +1091,12 @@ export const fleetTemplateStatus = query({
           metaStatusDetail: v.optional(v.string()),
           metaRejectionReason: v.optional(v.string()),
           metaCategory: v.optional(v.string()),
+          submittedAt: v.union(v.number(), v.null()),
+          // Whether the wording this row WOULD submit differs from what it
+          // LAST submitted. false greys the button (a resubmit would push
+          // identical text); null is "unknown" — rows submitted before
+          // submittedBody existed — and leaves the button live.
+          changed: v.union(v.boolean(), v.null()),
         }),
       ),
     }),
@@ -1071,6 +1119,31 @@ export const fleetTemplateStatus = query({
       byOrg.set(row.orgId, list);
     }
     const orgIds = new Set<Id<"orgs">>([...wabaOrgIds, ...byOrg.keys()]);
+    // The wording each (kind, language) would submit today, resolved once —
+    // it is fleet-wide, so per-row resolution would repeat the same read for
+    // every business.
+    const expected = new Map<string, string | null>();
+    const expectedFor = async (kind: string, language: string) => {
+      const key = `${kind}/${language}`;
+      if (!expected.has(key)) {
+        expected.set(
+          key,
+          kind === "campaign"
+            ? campaignBodyFor(language)
+            : await resolvePlatformBody(ctx, kind, language),
+        );
+      }
+      return expected.get(key) ?? null;
+    };
+    const KIND_ORDER = [
+      "confirmation",
+      "reminder",
+      "winback",
+      "followup",
+      "cancellation",
+      "campaign",
+    ];
+    const LANG_ORDER = ["tr", "en", "de"];
     const out: {
       orgId: Id<"orgs">;
       name: string;
@@ -1084,16 +1157,15 @@ export const fleetTemplateStatus = query({
         metaStatusDetail?: string;
         metaRejectionReason?: string;
         metaCategory?: string;
+        submittedAt: number | null;
+        changed: boolean | null;
       }[];
     }[] = [];
     for (const orgId of orgIds) {
       const org = await ctx.db.get(orgId);
       if (!org) continue;
-      out.push({
-        orgId,
-        name: org.name,
-        hasWaba: wabaOrgIds.has(orgId),
-        rows: (byOrg.get(orgId) ?? []).map((row) => ({
+      const rows = await Promise.all(
+        (byOrg.get(orgId) ?? []).map(async (row) => ({
           _id: row._id,
           kind: row.kind,
           language: row.language,
@@ -1102,7 +1174,25 @@ export const fleetTemplateStatus = query({
           metaStatusDetail: row.metaStatusDetail,
           metaRejectionReason: row.metaRejectionReason,
           metaCategory: row.metaCategory,
+          submittedAt: row.submittedAt ?? null,
+          changed:
+            row.submittedBody === undefined
+              ? null
+              : (await expectedFor(row.kind, row.language)) !== row.submittedBody,
         })),
+      );
+      // Kind then language, the editor's own order, so the expansion scans
+      // instead of interleaving languages in insertion order.
+      rows.sort(
+        (a, b) =>
+          KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
+          LANG_ORDER.indexOf(a.language) - LANG_ORDER.indexOf(b.language),
+      );
+      out.push({
+        orgId,
+        name: org.name,
+        hasWaba: wabaOrgIds.has(orgId),
+        rows,
       });
     }
     // Wired businesses first, then by name — the ones registration can act

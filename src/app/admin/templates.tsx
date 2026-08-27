@@ -12,7 +12,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { categoryFor } from "../../../convex/lib/metaTemplate";
-import { Section } from "./parts";
+import { Section, ago } from "./parts";
 import type { useSearch } from "@/lib/useTableState";
 
 type Search = ReturnType<typeof useSearch>;
@@ -222,7 +222,15 @@ function WordingSection() {
                                 : results
                                     .map(
                                       (r) =>
-                                        `${r.org}: ${r.ok ? "sent to review" : (r.detail ?? r.reason ?? "failed")}`,
+                                        `${r.org}: ${
+                                          r.ok
+                                            ? r.reason === "in-review"
+                                              ? "already in review"
+                                              : r.reason === "unchanged"
+                                                ? "unchanged, skipped"
+                                                : "sent to review"
+                                            : (r.detail ?? r.reason ?? "failed")
+                                        }`,
                                     )
                                     .join(" · "),
                             ),
@@ -504,40 +512,72 @@ function OrgRow({
                       {row.metaCategory}
                     </span>
                   )}
-                  {/* Meta's own words, in the open, next to the row they
-                      judge. */}
-                  {(row.metaRejectionReason ?? row.metaStatusDetail) && (
-                    <span className="text-xs text-red-700 dark:text-red-400">
-                      {row.metaRejectionReason ?? row.metaStatusDetail}
+                  {row.submittedAt !== null && (
+                    <span className="text-xs text-[var(--muted)]">
+                      submitted {ago(row.submittedAt)} ago
                     </span>
                   )}
+                  {/* Meta's rejection verdict in the open, in red, next to
+                      the row it judges. The status DETAIL only when it says
+                      more than the pill already does — after a submission it
+                      is literally the word PENDING, and printing that in red
+                      beside an amber "pending" pill repeated the state and
+                      dressed it as an error. */}
+                  {row.metaRejectionReason ? (
+                    <span className="text-xs text-red-700 dark:text-red-400">
+                      {row.metaRejectionReason}
+                    </span>
+                  ) : row.metaStatusDetail &&
+                    row.metaStatusDetail.toLowerCase() !== row.status ? (
+                    <span className="text-xs text-[var(--muted)]">
+                      {row.metaStatusDetail}
+                    </span>
+                  ) : null}
                   <span className="flex-1" />
-                  <button
-                    type="button"
-                    disabled={busy !== null || !org.hasWaba}
-                    onClick={() => {
-                      setBusy(row._id);
-                      void submitOne({ orgId: org.orgId, templateId: row._id })
-                        .then((r) =>
-                          setNote(
-                            r.ok
-                              ? `${row.kind}/${row.language}: submitted`
-                              : `${row.kind}/${row.language}: ${r.detail ?? r.reason ?? "failed"}`,
-                          ),
-                        )
-                        .catch((err) =>
-                          setNote(plainError(err)),
-                        )
-                        .finally(() => setBusy(null));
-                    }}
-                    className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-                  >
-                    {busy === row._id
-                      ? "Submitting…"
-                      : row.status === "approved"
-                        ? "Resubmit"
-                        : "Submit"}
-                  </button>
+                  {/* Three resting states, matching what a click could DO.
+                      Pending: nothing — Meta locks a template while it
+                      reviews it, so the button says where things stand
+                      instead of inviting a doomed request. Approved and
+                      unchanged: nothing — identical text would re-enter
+                      review and burn an edit slot to change nothing
+                      (Serdar, 2026-08-27: "so i don't accidentally submit
+                      again"). Everything else submits. */}
+                  {row.status === "pending" ? (
+                    <span className="text-xs text-[var(--muted)]">
+                      in review
+                    </span>
+                  ) : row.status === "approved" && row.changed === false ? (
+                    <span className="text-xs text-[var(--muted)]">
+                      up to date
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy !== null || !org.hasWaba}
+                      onClick={() => {
+                        setBusy(row._id);
+                        void submitOne({ orgId: org.orgId, templateId: row._id })
+                          .then((r) =>
+                            setNote(
+                              r.ok
+                                ? `${row.kind}/${row.language}: submitted`
+                                : `${row.kind}/${row.language}: ${r.detail ?? r.reason ?? "failed"}`,
+                            ),
+                          )
+                          .catch((err) =>
+                            setNote(plainError(err)),
+                          )
+                          .finally(() => setBusy(null));
+                      }}
+                      className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                    >
+                      {busy === row._id
+                        ? "Submitting…"
+                        : row.status === "approved"
+                          ? "Resubmit"
+                          : "Submit"}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

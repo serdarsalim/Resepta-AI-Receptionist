@@ -1534,6 +1534,14 @@ export default defineSchema({
     // template is fixed and resubmitted, and "waiting since when" is what the
     // owner is actually asking.
     submittedAt: v.optional(v.number()),
+    // The named-token body the last submission actually sent (the resolved
+    // platform wording; the campaign wrapper for campaign rows). Exists so
+    // "has the wording changed since this went to Meta" is answerable — the
+    // fleet desk greys Submit on a row whose resubmission would push
+    // IDENTICAL text, because that click costs an edit-cap slot and buys
+    // nothing. Unset on rows submitted before this existed, which reads as
+    // "unknown" and leaves the button live.
+    submittedBody: v.optional(v.string()),
     // Email engagement, denormalised because the honest alternative is
     // scanning every message the org ever sent. Sent bumps in ONE place
     // (messages.applySendResult, where every path already reports), opened in
