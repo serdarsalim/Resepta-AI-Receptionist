@@ -35,6 +35,7 @@ import {
   AdminSearchProvider,
   CopyId,
   Plane,
+  PercentRow,
   Row,
   SearchSelect,
   Section,
@@ -182,6 +183,8 @@ export default function TenantPage() {
     }
   };
   const setVoiceRate = useMutation(api.platform.setVoiceRate);
+  const setChatRate = useMutation(api.platform.setChatRate);
+  const setWaMarkup = useMutation(api.platform.setWaMarkup);
   const setAllowedPhoneNumbers = useMutation(api.platform.setAllowedPhoneNumbers);
   const claimPhoneNumber = useMutation(api.platform.claimPhoneNumber);
   // Which held line is armed, and what went wrong if a claim was refused.
@@ -1428,6 +1431,59 @@ export default function TenantPage() {
                 !value.trim() || Number.isNaN(parsed)
                   ? null
                   : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        <Row
+          label="Chat rate per reply"
+          money
+          hint={
+            voice.defaultChatRateMicroUsdPerTurn === null
+              ? "Override for this business only. Empty = the platform default, which is not set yet; AI replies bill at $0 until one exists (Platform tab on the fleet page)."
+              : `Override for this business only. Empty = the platform default, currently $${(voice.defaultChatRateMicroUsdPerTurn / 1_000_000).toFixed(3)}/reply. Only replies the agent actually sends are billed.`
+          }
+          current={
+            voice.chatRateMicroUsdPerTurn === null
+              ? undefined
+              : String(voice.chatRateMicroUsdPerTurn / 1_000_000)
+          }
+          placeholder={
+            voice.defaultChatRateMicroUsdPerTurn === null
+              ? undefined
+              : String(voice.defaultChatRateMicroUsdPerTurn / 1_000_000)
+          }
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setChatRate({
+              orgId,
+              rateMicroUsdPerTurn:
+                !value.trim() || Number.isNaN(parsed)
+                  ? null
+                  : Math.round(parsed * 1_000_000),
+            });
+          }}
+        />
+        <PercentRow
+          label="WhatsApp markup"
+          hint={
+            voice.defaultWaMarkupPercent === null
+              ? "Override for this business only, on top of Meta's per-message rate for template sends. Empty = the platform default, currently pass-through (0%)."
+              : `Override for this business only, on top of Meta's per-message rate for template sends. Empty = the platform default, currently ${voice.defaultWaMarkupPercent}%. An explicit 0 makes this business pass-through.`
+          }
+          current={
+            voice.waMarkupPercent === null ? "" : String(voice.waMarkupPercent)
+          }
+          placeholder={
+            voice.defaultWaMarkupPercent === null
+              ? undefined
+              : String(voice.defaultWaMarkupPercent)
+          }
+          onSave={(value) => {
+            const parsed = Number(value.replace(",", "."));
+            return setWaMarkup({
+              orgId,
+              markupPercent:
+                !value.trim() || Number.isNaN(parsed) ? null : parsed,
             });
           }}
         />

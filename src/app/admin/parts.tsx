@@ -625,6 +625,53 @@ export function Row({
   );
 }
 
+// The money Row with the unit on the other side: a percent, % inside the
+// border where Row's $ sits. Same short-field promise — nobody types more
+// than a few digits of markup. Optional placeholder carries the platform
+// default the way Row's does, so an empty override says what applies.
+export function PercentRow({
+  label,
+  hint,
+  current,
+  placeholder,
+  onSave,
+}: {
+  label: string;
+  hint: string;
+  current: string;
+  placeholder?: string;
+  onSave: (value: string) => unknown;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const { hidden } = useRowSearch(label);
+  if (hidden) return null;
+  const save = () => {
+    if (draft === null || draft === current) return;
+    void Promise.resolve(onSave(draft)).then(() => setDraft(null));
+  };
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-1 py-2.5 sm:grid-cols-[minmax(180px,220px)_minmax(0,26rem)] sm:items-center">
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-medium">{label}</div>
+        <InfoTip text={hint} />
+      </div>
+      <div className="min-w-0">
+        <div className="inline-flex w-28 items-center rounded-lg border border-[var(--border)] px-2 py-1 focus-within:border-[var(--muted-strong)]">
+          <input
+            value={draft ?? current}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={save}
+            inputMode="decimal"
+            placeholder={placeholder ?? "0"}
+            className="w-full min-w-0 border-0 bg-transparent p-0 text-sm outline-none"
+          />
+          <span className="shrink-0 pl-1 text-sm text-[var(--muted)]">%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // A Row whose value is a model name, with a picker fed live from the
 // provider's own model list the first time the field is focused (the nudge
 // listOpenAiModels pattern: names churn, and a scoped key only reaches what

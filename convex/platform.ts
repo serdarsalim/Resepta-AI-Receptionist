@@ -132,6 +132,11 @@ const orgHealth = v.object({
   voiceSecondsTotal: v.number(),
   voiceBilledMicroUsdTotal: v.number(),
   voiceCostMicroUsdTotal: v.number(),
+  // The WhatsApp lane's money, same billed/cost split — what they owe us for
+  // Cloud template sends against what Meta charges for them. Zero for orgs
+  // whose sends predate the price book or ride the free lanes.
+  waBilledMicroUsdTotal: v.number(),
+  waCostMicroUsdTotal: v.number(),
 });
 
 // Deployment-wide facts, the ones that are true for every org at once. Kept
@@ -386,6 +391,8 @@ async function healthFor(
     voiceSecondsTotal: total((row) => row.voiceSeconds),
     voiceBilledMicroUsdTotal: total((row) => row.voiceBilledMicroUsd),
     voiceCostMicroUsdTotal: total((row) => row.voiceCostMicroUsd),
+    waBilledMicroUsdTotal: total((row) => row.waBilledMicroUsd),
+    waCostMicroUsdTotal: total((row) => row.waCostMicroUsd),
   };
 }
 
@@ -1347,6 +1354,13 @@ export const orgVoiceUsage = query({
     v.object({
       rateMicroUsdPerMinute: v.union(v.number(), v.null()),
       defaultRateMicroUsdPerMinute: v.union(v.number(), v.null()),
+      // The other two per-tenant prices, override beside default like the
+      // voice rate above: the chat lane's per-reply rate and the WhatsApp
+      // markup percent on top of Meta's card.
+      chatRateMicroUsdPerTurn: v.union(v.number(), v.null()),
+      defaultChatRateMicroUsdPerTurn: v.union(v.number(), v.null()),
+      waMarkupPercent: v.union(v.number(), v.null()),
+      defaultWaMarkupPercent: v.union(v.number(), v.null()),
       // The prepaid wallet, resolved rather than raw: unset mode reads as
       // "invoice" so the panel never renders a third state that only means
       // "older org".
@@ -1394,6 +1408,12 @@ export const orgVoiceUsage = query({
       rateMicroUsdPerMinute: org.voiceRateMicroUsdPerMinute ?? null,
       defaultRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
+      chatRateMicroUsdPerTurn: org.chatRateMicroUsdPerTurn ?? null,
+      defaultChatRateMicroUsdPerTurn:
+        Number(await platformValue(ctx, "chatRateMicroUsdPerTurn")) || null,
+      waMarkupPercent: org.waMarkupPercent ?? null,
+      defaultWaMarkupPercent:
+        Number(await platformValue(ctx, "waMarkupPercent")) || null,
       billingMode: org.billingMode ?? "invoice",
       allowedPhoneNumbers: org.allowedPhoneNumbers ?? [],
       walletBalanceMicroUsd: org.walletBalanceMicroUsd ?? 0,
@@ -1447,6 +1467,66 @@ export const setVoiceRate = mutation({
         args.rateMicroUsdPerMinute === null
           ? "voice rate cleared"
           : `voice rate → $${(args.rateMicroUsdPerMinute / 1_000_000).toFixed(2)}/min`,
+    });
+    return null;
+  },
+});
+
+// The chat lane's setVoiceRate: what THIS org pays per sent AI reply.
+// null clears the override back to the platform default.
+export const setChatRate = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    rateMicroUsdPerTurn: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, {
+      chatRateMicroUsdPerTurn:
+        args.rateMicroUsdPerTurn === null
+          ? undefined
+          : Math.max(0, Math.round(args.rateMicroUsdPerTurn)),
+    });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail:
+        args.rateMicroUsdPerTurn === null
+          ? "chat rate cleared"
+          : `chat rate → $${(args.rateMicroUsdPerTurn / 1_000_000).toFixed(3)}/reply`,
+    });
+    return null;
+  },
+});
+
+// What THIS org pays on top of Meta's per-message rate, percent. null clears
+// to the platform default; an explicit 0 means pass-through for this org.
+export const setWaMarkup = mutation({
+  args: {
+    orgId: v.id("orgs"),
+    markupPercent: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    await ctx.db.patch(args.orgId, {
+      waMarkupPercent:
+        args.markupPercent === null
+          ? undefined
+          : Math.max(0, args.markupPercent),
+    });
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "settings_changed",
+      detail:
+        args.markupPercent === null
+          ? "WhatsApp markup cleared"
+          : `WhatsApp markup → ${args.markupPercent}%`,
     });
     return null;
   },

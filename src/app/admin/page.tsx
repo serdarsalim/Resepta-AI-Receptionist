@@ -30,6 +30,7 @@ import {
   KeyModelRow,
   Plane,
   Errors,
+  PercentRow,
   Row,
   SearchSelect,
   Section,
@@ -251,7 +252,7 @@ export default function AdminPage() {
                 </th>
                 <th
                   className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
-                  title="WhatsApp messages sent, all time"
+                  title="WhatsApp messages sent, all time: count, what we bill them for template sends, and what Meta charges us. Session replies and Evolution sends are free."
                 >
                   WhatsApp
                 </th>
@@ -281,7 +282,10 @@ export default function AdminPage() {
                 >
                   Errors
                 </th>
-                <th className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold">Last activity</th>
+                {/* One word and pushed to the wall: the age is the narrowest
+                    fact on the row, and "Last activity" spent its width on
+                    the label rather than the answer (Serdar, 2026-08-28). */}
+                <th className="whitespace-nowrap px-3 pb-2 pt-3.5 text-right font-semibold">Activity</th>
                 {/* No header word, and barely a column: w-px collapses it to
                     its content so the action cannot buy width from the data. */}
                 <th className="w-px px-2 pb-2 pt-3.5" />
@@ -328,8 +332,20 @@ export default function AdminPage() {
                   <td className="px-3 py-2">
                     <Count value={org.emailSentTotal} tone="plain" />
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 tabular-nums">
                     <Count value={org.waSentTotal} tone="plain" />
+                    {/* The Calls column's billed · cost line, for the lane
+                        Meta charges. Only when money actually moved: most
+                        sends are free session replies, and "$0.00 · Meta
+                        $0.00" under every count would read as a broken
+                        meter rather than a free lane. */}
+                    {(org.waBilledMicroUsdTotal > 0 ||
+                      org.waCostMicroUsdTotal > 0) && (
+                      <div className="text-xs text-[var(--muted)]">
+                        ${(org.waBilledMicroUsdTotal / 1_000_000).toFixed(2)} · Meta $
+                        {(org.waCostMicroUsdTotal / 1_000_000).toFixed(2)}
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {org.voiceCallsTotal === 0 && org.voiceSecondsTotal === 0 ? (
@@ -359,7 +375,7 @@ export default function AdminPage() {
                   <td className="px-3 py-2">
                     <Errors org={org} />
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
+                  <td className="px-3 py-2 text-right tabular-nums text-[var(--muted-strong)]">
                     {ago(org.lastActivityAt)}
                   </td>
                   {/* Into the client's OWN app, from the list. This existed
@@ -695,6 +711,47 @@ export default function AdminPage() {
               }}
             />
             <Row
+              label="Chat rate per reply"
+              money
+              hint="What every business pays per AI chat reply the agent actually sends. Shadow, skipped and failed turns are never billed. Per-business override on the business's Billing settings; empty here and there = replies bill at $0 while the meter still counts them."
+              current={
+                mail.chatRateMicroUsdPerTurn === null
+                  ? undefined
+                  : String(mail.chatRateMicroUsdPerTurn / 1_000_000)
+              }
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                return setConfig({
+                  key: "chatRateMicroUsdPerTurn",
+                  value:
+                    !value.trim() || Number.isNaN(parsed)
+                      ? ""
+                      : String(Math.max(0, Math.round(parsed * 1_000_000))),
+                });
+              }}
+            />
+            <PercentRow
+              label="WhatsApp markup"
+              hint="Percent added on top of Meta's own per-message rate when a template send is billed to a business. Empty or 0 = pass-through: businesses pay exactly what Meta charges, per country. Per-business override on the business's Billing settings."
+              current={
+                mail.waMarkupPercent === null ? "" : String(mail.waMarkupPercent)
+              }
+              onSave={(value) => {
+                const parsed = Number(value.replace(",", "."));
+                return setConfig({
+                  key: "waMarkupPercent",
+                  value:
+                    !value.trim() || Number.isNaN(parsed) || parsed <= 0
+                      ? ""
+                      : String(parsed),
+                });
+              }}
+            />
+            <WaRateCard
+              rows={mail.waRateTable}
+              onSave={(value) => setConfig({ key: "waRateTable", value })}
+            />
+            <Row
               label="Trial credit"
               money
               hint="Welcome money for businesses born prepaid: credited to the wallet once at sign-up, shown in their top-ups as trial credit. Empty or 0 = none. Invoice-mode sign-ups never receive it."
@@ -761,5 +818,117 @@ export default function AdminPage() {
         </AdminSearchProvider>
       )}
     </Plane>
+  );
+}
+
+// Meta's per-message rate card, editable in place. The backend hands the
+// EFFECTIVE table — checked-in defaults with the stored override already
+// merged (platformConfig.status) — so what this renders is what sends are
+// being priced at right now. Any edit saves the whole visible table as the
+// override; Reset clears the row and the card falls back to the defaults in
+// lib/waPricing, which is also how a new Meta rate card lands by deploy.
+function WaRateCard({
+  rows,
+  onSave,
+}: {
+  rows: Array<{
+    country: string;
+    marketing: number;
+    utility: number;
+    authentication: number;
+    overridden: boolean;
+  }>;
+  onSave: (value: string) => unknown;
+}) {
+  const CATS = ["marketing", "utility", "authentication"] as const;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const usd = (micro: number) => String(micro / 1_000_000);
+  const cell = (country: string, cat: string) => `${country}:${cat}`;
+  const shown = (row: (typeof rows)[number], cat: (typeof CATS)[number]) =>
+    drafts[cell(row.country, cat)] ?? usd(row[cat]);
+  const save = () => {
+    if (Object.keys(drafts).length === 0) return;
+    const table: Record<string, Record<string, number>> = {};
+    for (const row of rows) {
+      table[row.country] = Object.fromEntries(
+        CATS.map((cat) => {
+          const parsed = Number(shown(row, cat).replace(",", "."));
+          return [
+            cat,
+            Number.isFinite(parsed) && parsed >= 0
+              ? Math.round(parsed * 1_000_000)
+              : row[cat],
+          ];
+        }),
+      );
+    }
+    void Promise.resolve(onSave(JSON.stringify(table))).then(() =>
+      setDrafts({}),
+    );
+  };
+  return (
+    <div className="py-2.5">
+      <div className="flex items-center gap-2 pb-2">
+        <div className="text-sm font-medium">WhatsApp rates</div>
+        <InfoTip text="Meta's price per DELIVERED template message, USD, by recipient country and the category the template landed as. Session replies inside the 24h window and Evolution sends are free. Countries without a row bill at “other”. Businesses pay these plus the markup above; edits only price sends from now on." />
+        {rows.some((row) => row.overridden) && (
+          <button
+            type="button"
+            onClick={() => void onSave("")}
+            className="text-xs text-[var(--muted)] underline-offset-2 hover:underline"
+          >
+            Reset to Meta card
+          </button>
+        )}
+      </div>
+      <table className="text-sm tabular-nums">
+        <thead>
+          <tr className="text-left text-xs text-[var(--muted)]">
+            <th className="pr-6 pb-1 font-normal">Country</th>
+            <th className="pr-6 pb-1 font-normal">Marketing</th>
+            <th className="pr-6 pb-1 font-normal">Utility</th>
+            <th className="pb-1 font-normal">Auth</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.country}>
+              <td className="pr-6 py-0.5 text-[var(--muted-strong)]">
+                {row.country}
+                {row.overridden && (
+                  <span
+                    className="ml-1 text-[var(--muted)]"
+                    title="Edited; not Meta's card"
+                  >
+                    *
+                  </span>
+                )}
+              </td>
+              {CATS.map((cat) => (
+                <td key={cat} className="pr-6 py-0.5 last:pr-0">
+                  <div className="inline-flex w-24 items-center rounded-lg border border-[var(--border)] px-2 py-0.5 focus-within:border-[var(--muted-strong)]">
+                    <span className="shrink-0 pr-1 text-xs text-[var(--muted)]">
+                      $
+                    </span>
+                    <input
+                      value={shown(row, cat)}
+                      onChange={(e) =>
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [cell(row.country, cat)]: e.target.value,
+                        }))
+                      }
+                      onBlur={save}
+                      inputMode="decimal"
+                      className="w-full min-w-0 border-0 bg-transparent p-0 text-sm outline-none"
+                    />
+                  </div>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
