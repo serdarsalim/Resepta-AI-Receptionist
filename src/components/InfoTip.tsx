@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // Small (i) icon with a hover/focus tooltip. Lets us push verbose help
@@ -17,6 +17,38 @@ import { createPortal } from "react-dom";
 // mounted while open — hidden tooltips have no layout box (see the app-shell
 // phantom-scrollbar note in AGENTS.md).
 const TIP_WIDTH = 288; // w-72, used for the viewport clamp
+const GAP = 6; // breathing room between the trigger and the tip
+const GUTTER = 8; // smallest distance a tip may sit from a viewport edge
+
+// Vertical placement, resolved against the tip's REAL height rather than a
+// guess. The text is variable length, so an estimate puts a two-line tip on
+// screen and a five-line one under the fold — which is exactly how the consent
+// and mute tips on a contact card ended up unreadable at the bottom of the
+// page. `placement` is now a preference: the tip takes the preferred side when
+// it fits there, flips when it doesn't, and picks the roomier side when
+// neither fits, clamped so it always starts on screen.
+function resolveTop(
+  trigger: DOMRect,
+  tipHeight: number,
+  prefer: "above" | "below",
+): number {
+  const below = trigger.bottom + GAP;
+  const above = trigger.top - GAP - tipHeight;
+  const roomBelow = window.innerHeight - GUTTER - (below + tipHeight);
+  const roomAbove = above - GUTTER;
+  const preferAbove = prefer === "above";
+  const first = preferAbove ? above : below;
+  const second = preferAbove ? below : above;
+  const firstFits = preferAbove ? roomAbove >= 0 : roomBelow >= 0;
+  const secondFits = preferAbove ? roomBelow >= 0 : roomAbove >= 0;
+
+  let top: number;
+  if (firstFits) top = first;
+  else if (secondFits) top = second;
+  else top = roomAbove >= roomBelow ? above : below;
+
+  return Math.max(GUTTER, Math.min(top, window.innerHeight - GUTTER - tipHeight));
+}
 
 // An action button whose label lives in a tooltip instead of text. For icon
 // buttons in dense rows (the voice table's disconnect ✕): a text label widens
@@ -48,22 +80,38 @@ export function ActionTip({
   children: React.ReactNode;
 }) {
   const btnRef = useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const tipRef = useRef<HTMLSpanElement | null>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [top, setTop] = useState<number | null>(null);
 
   const show = () => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    // Clamped on BOTH sides. Anchoring to the button's right edge grows the
-    // box leftward, and a wrapped sentence near the left of the viewport ran
-    // off it — the right offset can never exceed the room actually available.
-    const width = multiline ? TIP_WIDTH : 0;
-    const right = Math.max(8, window.innerWidth - r.right);
-    setPos({
-      top: r.bottom + 6,
-      right: Math.min(right, Math.max(8, window.innerWidth - width - 8)),
-    });
+    setTop(null);
+    setRect(r);
   };
-  const hide = () => setPos(null);
+  const hide = () => {
+    setRect(null);
+    setTop(null);
+  };
+
+  // Layout effect, not effect: it runs after the tip is in the DOM but before
+  // the browser paints, so the flip is never a visible jump.
+  useLayoutEffect(() => {
+    if (!rect || !tipRef.current) return;
+    setTop(resolveTop(rect, tipRef.current.offsetHeight, "below"));
+  }, [rect]);
+
+  // Clamped on BOTH sides. Anchoring to the button's right edge grows the box
+  // leftward, and a wrapped sentence near the left of the viewport ran off it —
+  // the right offset can never exceed the room actually available.
+  const width = multiline ? TIP_WIDTH : 0;
+  const right = rect
+    ? Math.min(
+        Math.max(GUTTER, window.innerWidth - rect.right),
+        Math.max(GUTTER, window.innerWidth - width - GUTTER),
+      )
+    : 0;
 
   return (
     <>
@@ -89,14 +137,19 @@ export function ActionTip({
       >
         {children}
       </button>
-      {pos &&
+      {rect &&
         createPortal(
           <span
+            ref={tipRef}
             role="tooltip"
             style={{
               position: "fixed",
-              ...pos,
+              top: top ?? rect.bottom + GAP,
+              right,
               ...(multiline ? { width: TIP_WIDTH } : {}),
+              // One frame of hidden while the height is measured. Never seen:
+              // the layout effect resolves the real top before paint.
+              ...(top === null ? { visibility: "hidden" as const } : {}),
             }}
             className={`pointer-events-none z-[100] rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg ${
               multiline ? "" : "whitespace-nowrap"
@@ -117,6 +170,8 @@ export function InfoTip({
   hoverOnly = false,
 }: {
   text: string;
+  // Preferred side. The tip flips to the other one when the preferred side
+  // would push it off screen, so this never has to be right, only better.
   placement?: "above" | "below";
   // Horizontal anchor: "left" extends the tooltip to the right of the icon
   // (default); "right" anchors to the icon's right edge so it extends left.
@@ -133,23 +188,39 @@ export function InfoTip({
   hoverOnly?: boolean;
 }) {
   const btnRef = useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(
-    null,
-  );
+  const tipRef = useRef<HTMLSpanElement | null>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [top, setTop] = useState<number | null>(null);
 
   const show = () => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    const anchoredLeft = align === "right" ? r.right - TIP_WIDTH : r.left;
-    // Clamp inside the viewport with an 8px gutter on both sides.
-    const left = Math.max(8, Math.min(anchoredLeft, window.innerWidth - TIP_WIDTH - 8));
-    setPos(
-      placement === "above"
-        ? { bottom: window.innerHeight - r.top + 6, left }
-        : { top: r.bottom + 6, left },
-    );
+    setTop(null);
+    setRect(r);
   };
-  const hide = () => setPos(null);
+  const hide = () => {
+    setRect(null);
+    setTop(null);
+  };
+
+  // Layout effect, not effect: it runs after the tip is in the DOM but before
+  // the browser paints, so the flip is never a visible jump.
+  useLayoutEffect(() => {
+    if (!rect || !tipRef.current) return;
+    setTop(resolveTop(rect, tipRef.current.offsetHeight, placement));
+  }, [rect, placement]);
+
+  // Clamp inside the viewport with a gutter on both sides. Guarded on `rect`
+  // so `window` is only touched once the tip is open, never during SSR.
+  const left = rect
+    ? Math.max(
+        GUTTER,
+        Math.min(
+          align === "right" ? rect.right - TIP_WIDTH : rect.left,
+          window.innerWidth - TIP_WIDTH - GUTTER,
+        ),
+      )
+    : 0;
 
   return (
     <span
@@ -172,11 +243,20 @@ export function InfoTip({
       >
         i
       </button>
-      {pos &&
+      {rect &&
         createPortal(
           <span
+            ref={tipRef}
             role="tooltip"
-            style={{ position: "fixed", width: TIP_WIDTH, ...pos }}
+            style={{
+              position: "fixed",
+              width: TIP_WIDTH,
+              left,
+              top: top ?? rect.bottom + GAP,
+              // One frame of hidden while the height is measured. Never seen:
+              // the layout effect resolves the real top before paint.
+              ...(top === null ? { visibility: "hidden" as const } : {}),
+            }}
             className="pointer-events-none z-[100] whitespace-pre-line rounded-md border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--foreground)] shadow-lg"
           >
             {text}
