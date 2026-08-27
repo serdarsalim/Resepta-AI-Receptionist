@@ -22,6 +22,7 @@ import {
   type ProviderMessage,
 } from "./lib/llm";
 import { resolveChatLlm } from "./lib/chatLlm";
+import { applyWalletDebit } from "./wallet";
 import {
   CHAT_AGENT_TEMPLATE_VERSION,
   MAX_REPLIES_PER_CUSTOMER_PER_HOUR,
@@ -351,6 +352,23 @@ export const recordTurn = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const at = Date.now();
+    // The org's price per AI reply (schema: orgs.chatRateMicroUsdPerTurn),
+    // resolved the way the voice meter resolves its rate — org override, then
+    // the platform default, then zero — and frozen onto the turn. Only a SENT
+    // turn is billed: shadow, skipped and error turns spend the platform's
+    // tokens but sell the org nothing.
+    const org = await ctx.db.get(args.orgId);
+    const rate =
+      args.status === "sent" && org
+        ? (org.chatRateMicroUsdPerTurn ??
+          Math.max(
+            0,
+            Math.round(
+              Number(await platformValue(ctx, "chatRateMicroUsdPerTurn")) || 0,
+            ),
+          ))
+        : 0;
+    const billedMicroUsd = args.status === "sent" ? rate : undefined;
     await ctx.db.insert("chatAgentTurns", {
       orgId: args.orgId,
       customerId: args.customerId,
@@ -365,6 +383,7 @@ export const recordTurn = internalMutation({
       inputTokens: args.inputTokens,
       outputTokens: args.outputTokens,
       costMicroUsd: args.costMicroUsd,
+      billedMicroUsd,
       latencyMs: args.latencyMs,
       error: args.error,
       at,
@@ -384,6 +403,7 @@ export const recordTurn = internalMutation({
         llmInputTokens: usage.llmInputTokens + args.inputTokens,
         llmOutputTokens: usage.llmOutputTokens + args.outputTokens,
         llmCostMicroUsd: usage.llmCostMicroUsd + args.costMicroUsd,
+        llmBilledMicroUsd: (usage.llmBilledMicroUsd ?? 0) + (billedMicroUsd ?? 0),
         updatedAt: at,
       });
     } else {
@@ -394,8 +414,14 @@ export const recordTurn = internalMutation({
         llmInputTokens: args.inputTokens,
         llmOutputTokens: args.outputTokens,
         llmCostMicroUsd: args.costMicroUsd,
+        llmBilledMicroUsd: billedMicroUsd ?? 0,
         updatedAt: at,
       });
+    }
+    // The prepaid drawdown, same mutation as the stamp (the meterCall rule,
+    // via the shared debit path). A rate of zero writes no debit.
+    if (org && (billedMicroUsd ?? 0) > 0 && org.billingMode === "prepaid") {
+      await applyWalletDebit(ctx, org, billedMicroUsd ?? 0);
     }
     return null;
   },
