@@ -1860,6 +1860,19 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_kind_language", ["kind", "language"]),
 
+  // The email/session sibling of platformTemplateTexts: the operator's
+  // override of DEFAULT_TEMPLATE_TEXTS for the locked kinds, one row per
+  // (kind, language), absent while the code default stands. Unlike the Cloud
+  // text, which waits at Meta for review, saving one of these propagates
+  // straight onto every org's template rows — no approval gates an email.
+  platformRichTexts: defineTable({
+    kind: v.string(),
+    language: v.string(),
+    subject: v.string(),
+    body: v.string(),
+    updatedAt: v.number(),
+  }).index("by_kind_language", ["kind", "language"]),
+
   numberRequests: defineTable({
     orgId: v.id("orgs"),
     storageId: v.id("_storage"),

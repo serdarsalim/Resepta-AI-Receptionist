@@ -27,6 +27,7 @@ import {
   mutation,
   query,
   type ActionCtx,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { requireOwner } from "./lib/orgAuth";
@@ -45,7 +46,13 @@ import {
   normalizeMetaStatus,
   toPositionalBody,
 } from "./lib/metaTemplate";
-import { DEFAULT_TEMPLATE_TEXTS, LOCKED_TEMPLATE_KINDS } from "./lib/templateTexts";
+import {
+  DEFAULT_TEMPLATE_TEXTS,
+  LOCKED_TEMPLATE_KINDS,
+  type TemplateKind,
+} from "./lib/templateTexts";
+import { resolveRichText } from "./lib/richText";
+import { isKnownToken } from "./lib/renderTokens";
 
 // The Cloud wording a (kind, language) registers RIGHT NOW: the operator's
 // stored override when one exists (platformTemplateTexts), the code constant
@@ -641,7 +648,6 @@ export const ensureStandardRows = internalMutation({
     // salon getting her reminder is everything. Found live on Bella: org
     // language en, customer base Turkish.
     for (const language of ["tr", "en", "de"]) {
-      const stock = DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en;
       for (const kind of STANDARD_CLOUD_KINDS) {
         const existing = rows.find(
           (row) => row.ruleId === undefined && row.kind === kind && row.language === language,
@@ -654,16 +660,17 @@ export const ensureStandardRows = internalMutation({
           });
           continue;
         }
-        // Seeded with the rich stock text: the row's body serves Evolution and
-        // email, while the Cloud registration reads CLOUD_TEMPLATE_TEXTS — see
-        // performSubmit.
+        // Seeded with the rich text as currently resolved (operator override
+        // or stock): the row's body serves Evolution and email, while the
+        // Cloud registration reads CLOUD_TEMPLATE_TEXTS — see performSubmit.
+        const text = await resolveRichText(ctx.db, kind, language);
         const id = await ctx.db.insert("waTemplates", {
           orgId: args.orgId,
           kind,
           language,
           status: "draft",
-          body: stock[kind].body,
-          subject: stock[kind].subject,
+          body: text.body,
+          subject: text.subject,
         });
         out.push({ templateId: id, kind: `${kind}/${language}`, status: "draft" });
       }
@@ -856,10 +863,19 @@ export const platformWording = query({
       defaultBody: v.string(),
       overridden: v.boolean(),
       stale: v.number(),
+      // The same message's email form: subject and rich body, served from
+      // every org's template rows (which save keeps in lockstep) rather than
+      // from Meta. No review, so no stale count — a save IS the rollout.
+      emailSubject: v.string(),
+      emailBody: v.string(),
+      emailDefaultSubject: v.string(),
+      emailDefaultBody: v.string(),
+      emailOverridden: v.boolean(),
     }),
   ),
   handler: async (ctx) => {
     await requirePlatformAdmin(ctx);
+    const richRows = await ctx.db.query("platformRichTexts").collect();
     // The fleet's kind-level rows, once: same population kindRowsAcrossOrgs
     // walks (wired WABA, kind-level row exists).
     const accounts = await ctx.db.query("waAccounts").collect();
@@ -887,6 +903,11 @@ export const platformWording = query({
       defaultBody: string;
       overridden: boolean;
       stale: number;
+      emailSubject: string;
+      emailBody: string;
+      emailDefaultSubject: string;
+      emailDefaultBody: string;
+      emailOverridden: boolean;
     }[] = [];
     for (const language of ["tr", "en", "de"]) {
       for (const kind of LOCKED_TEMPLATE_KINDS) {
@@ -894,6 +915,10 @@ export const platformWording = query({
         if (!defaultBody) continue;
         const body = await resolvePlatformBody(ctx, kind, language);
         const current = body ?? defaultBody;
+        const stock = (DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en)[kind];
+        const rich = richRows.find(
+          (row) => row.kind === kind && row.language === language,
+        );
         // Rows a resubmit would touch with NEW text: not pending (Meta locks
         // those), submittedBody known and different. Unknown rows (submitted
         // before submittedBody existed) don't light the button — the per-row
@@ -913,6 +938,11 @@ export const platformWording = query({
           defaultBody,
           overridden: body !== defaultBody,
           stale,
+          emailSubject: rich?.subject ?? stock.subject,
+          emailBody: rich?.body ?? stock.body,
+          emailDefaultSubject: stock.subject,
+          emailDefaultBody: stock.body,
+          emailOverridden: rich !== undefined,
         });
       }
     }
@@ -985,6 +1015,134 @@ export const clearPlatformWording = mutation({
       .unique();
     if (existing) await ctx.db.delete(existing._id);
     return null;
+  },
+});
+
+// ---- Email/session wording -----------------------------------------------
+// The rich sibling of the Cloud wording above. Same fleet doctrine, different
+// rollout physics: nothing reviews an email, so a save does not queue behind
+// Meta — it patches every org's template rows on the spot and returns how
+// many it touched. Send paths keep reading the org row they always read;
+// lockstep is maintained at write time, and seeding (registerStandardSet,
+// resetToDefaults, ensureTemplate) reads resolveRichText so a new org is
+// born with the operator's words, not the code's.
+
+// Every [token] in the text that no send could ever fill. Unknown tokens
+// render as literal text to the customer (renderTokens leaves them alone so
+// a salon's typo stays visible) — fine for one salon, unacceptable pushed to
+// the whole fleet.
+function unknownTokens(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(/\[([^\]\n]{1,32})\]/g)) {
+    const name = match[1];
+    if (!isKnownToken(name) && !out.includes(`[${name}]`)) out.push(`[${name}]`);
+  }
+  return out;
+}
+
+// Push the resolved email text of one (kind, language) onto every org's rows
+// of that kind — kind-level and per-rule alike, since the locked kinds'
+// per-rule rows are seeded copies the salon cannot fork. bodyHtml is cleared
+// the way resetToDefaults clears it: new plain wording under old HTML would
+// email one thing and preview another.
+async function propagateRichText(
+  ctx: MutationCtx,
+  kind: TemplateKind,
+  language: string,
+): Promise<number> {
+  const { subject, body } = await resolveRichText(ctx.db, kind, language);
+  let patched = 0;
+  for (const org of await ctx.db.query("orgs").collect()) {
+    const rows = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", org._id))
+      .collect();
+    for (const row of rows) {
+      if (row.kind !== kind || row.language !== language) continue;
+      await ctx.db.patch(row._id, { subject, body, bodyHtml: undefined });
+      patched++;
+    }
+  }
+  return patched;
+}
+
+export const setPlatformRichText = mutation({
+  args: {
+    kind: v.string(),
+    language: v.string(),
+    subject: v.string(),
+    body: v.string(),
+  },
+  // How many org template rows now carry the text — the editor's note says
+  // it, so "applied everywhere" is a number, not a claim.
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const kind = args.kind.trim() as TemplateKind;
+    const language = args.language.trim().toLowerCase();
+    if (!(LOCKED_TEMPLATE_KINDS as readonly string[]).includes(kind)) {
+      throw new Error(`not an editable kind: ${kind}`);
+    }
+    const stockLang = DEFAULT_TEMPLATE_TEXTS[language];
+    if (!stockLang) throw new Error(`no default wording for language: ${language}`);
+    const stock = stockLang[kind];
+    const subject = args.subject.trim();
+    const body = args.body.replace(/\r\n/g, "\n").trim();
+    if (!subject) throw new Error("subject is empty");
+    if (!body) throw new Error("body is empty");
+    if (subject.length > 200) {
+      throw new Error(`subject is ${subject.length} chars; keep it under 200`);
+    }
+    if (body.length > 4000) {
+      throw new Error(`body is ${body.length} chars; keep it under 4000`);
+    }
+    const unknown = unknownTokens(`${subject}\n${body}`);
+    if (unknown.length > 0) {
+      throw new Error(
+        `tokens nothing can fill, so they would reach customers as literal text: ${unknown.join(", ")}`,
+      );
+    }
+    const existing = await ctx.db
+      .query("platformRichTexts")
+      .withIndex("by_kind_language", (q) =>
+        q.eq("kind", kind).eq("language", language),
+      )
+      .unique();
+    // Saving the default back is a reset, not an override — same rule as the
+    // Cloud lane: a stored copy of the constant goes stale the day the
+    // constant moves.
+    if (subject === stock.subject && body === stock.body) {
+      if (existing) await ctx.db.delete(existing._id);
+    } else if (existing) {
+      await ctx.db.patch(existing._id, { subject, body, updatedAt: Date.now() });
+    } else {
+      await ctx.db.insert("platformRichTexts", {
+        kind,
+        language,
+        subject,
+        body,
+        updatedAt: Date.now(),
+      });
+    }
+    return await propagateRichText(ctx, kind, language);
+  },
+});
+
+export const clearPlatformRichText = mutation({
+  args: { kind: v.string(), language: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    await requirePlatformAdmin(ctx);
+    const kind = args.kind.trim() as TemplateKind;
+    const language = args.language.trim().toLowerCase();
+    const existing = await ctx.db
+      .query("platformRichTexts")
+      .withIndex("by_kind_language", (q) =>
+        q.eq("kind", kind).eq("language", language),
+      )
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+    return await propagateRichText(ctx, kind, language);
   },
 });
 

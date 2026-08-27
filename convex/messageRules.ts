@@ -132,6 +132,7 @@ import {
   type TemplateKind,
 } from "./lib/templateTexts";
 export { DEFAULT_TEMPLATE_TEXTS, TEMPLATE_KINDS, type TemplateKind };
+import { resolveRichText } from "./lib/richText";
 
 // What a new org starts with: the full lifecycle a well-run salon actually
 // wants — confirmation at booking, a day-before and a two-hour reminder, a
@@ -307,8 +308,9 @@ export const ensureTemplate = mutation({
       (t) => t.ruleId === undefined && t.kind === kind && t.language === language,
     );
     // No fallback row in this language — every non-Turkish org, since the
-    // founding seeds only spoke Turkish. Stock text beats an empty editor.
-    const stock = (DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en)[kind];
+    // founding seeds only spoke Turkish. The resolved platform text (operator
+    // override or stock) beats an empty editor.
+    const stock = await resolveRichText(ctx.db, kind, language);
     return await ctx.db.insert("waTemplates", {
       orgId,
       ruleId: args.ruleId,
@@ -344,15 +346,22 @@ export const resetToDefaults = mutation({
       .query("waTemplates")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
-    const stock = DEFAULT_TEMPLATE_TEXTS[org.language] ?? DEFAULT_TEMPLATE_TEXTS.en;
+    // "Defaults" means the platform's resolved text (operator override or
+    // stock), not the code constant: a reset must land on what a fresh org
+    // would be born with today.
     for (const template of templates) {
       if (template.ruleId !== undefined) {
         // Per-rule wording belonged to rules that no longer exist.
         await ctx.db.delete(template._id);
       } else if (template.kind !== "campaign" && template.language === org.language) {
-        const text = stock[template.kind as TemplateKind];
-        // bodyHtml cleared too: stock wording is plain text, and a reset that
-        // left old HTML behind would email one thing and preview another.
+        const text = await resolveRichText(
+          ctx.db,
+          template.kind as TemplateKind,
+          org.language,
+        );
+        // bodyHtml cleared too: the default wording is plain text, and a
+        // reset that left old HTML behind would email one thing and preview
+        // another.
         await ctx.db.patch(template._id, {
           body: text.body,
           subject: text.subject,
@@ -368,13 +377,14 @@ export const resetToDefaults = mutation({
           t.ruleId === undefined && t.kind === kind && t.language === org.language,
       );
       if (exists) continue;
+      const text = await resolveRichText(ctx.db, kind, org.language);
       await ctx.db.insert("waTemplates", {
         orgId,
         kind,
         language: org.language,
         status: "draft",
-        body: stock[kind].body,
-        subject: stock[kind].subject,
+        body: text.body,
+        subject: text.subject,
       });
     }
     await seedDefaultRules(ctx.db, orgId, org.messageChannel ?? "both");

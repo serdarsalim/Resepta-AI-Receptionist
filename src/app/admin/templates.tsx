@@ -63,6 +63,8 @@ function WordingSection() {
   const wording = useQuery(api.waTemplates.platformWording, {});
   const save = useMutation(api.waTemplates.setPlatformWording);
   const clear = useMutation(api.waTemplates.clearPlatformWording);
+  const saveEmail = useMutation(api.waTemplates.setPlatformRichText);
+  const clearEmail = useMutation(api.waTemplates.clearPlatformRichText);
   const resubmitAll = useAction(api.waTemplates.resubmitTemplateAll);
 
   const [language, setLanguage] = useState<(typeof LANGUAGES)[number]>("tr");
@@ -70,6 +72,12 @@ function WordingSection() {
   // texts stand behind approved templates that send while you type, so
   // nothing leaves the browser until Save.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // The email lane's buffer, same key, both halves of the text. Doubly
+  // buffered for a sharper reason than the Cloud lane: an email save is the
+  // rollout — it patches every org's rows the moment it lands.
+  const [emailDrafts, setEmailDrafts] = useState<
+    Record<string, { subject?: string; body?: string }>
+  >({});
   const [busy, setBusy] = useState<string | null>(null);
   // One note slot per (kind, language): save confirmations, validation
   // refusals, and per-org resubmit results all land next to the text they
@@ -87,7 +95,7 @@ function WordingSection() {
   return (
     <Section
       title="Message wording"
-      description="The Cloud text every business registers, one text per kind per language. Identical wording across the fleet is what keeps approval per WABA instead of per client. Saving stores the text for every FUTURE registration; already-registered templates keep their old text until you resubmit, which sends them back into Meta review while the approved version keeps delivering. If a new text is REJECTED, that kind stops sending for the affected business until it is fixed and re-approved, which is why rollout is per kind, not all at once. Review round-trips are the official edit flow; Meta caps edits per template (about ten per month), it does not punish them."
+      description="One message, two forms, both fleet facts. The top text is the WhatsApp Cloud template every business registers — identical wording across the fleet is what keeps approval per WABA instead of per client. Saving stores it for every FUTURE registration; already-registered templates keep their old text until you resubmit, which re-enters Meta review while the approved version keeps delivering. If a new text is REJECTED, that kind stops sending for the affected business until re-approved, which is why rollout is per kind. The email row beneath is what the same moment sends as an email (and over non-hosted WhatsApp numbers): subject plus body, no review anywhere, so saving it applies to every business instantly."
     >
       <div className="flex flex-wrap items-center gap-1.5 pb-3">
         {LANGUAGES.map((option) => (
@@ -118,6 +126,18 @@ function WordingSection() {
             const draft = drafts[key];
             const value = draft ?? row.body;
             const dirty = draft !== undefined && draft !== row.body;
+            const emailKey = `${key}/email`;
+            const emailDraft = emailDrafts[key];
+            const emailSubject = emailDraft?.subject ?? row.emailSubject;
+            const emailBody = emailDraft?.body ?? row.emailBody;
+            const emailDirty =
+              emailSubject !== row.emailSubject || emailBody !== row.emailBody;
+            const clearEmailDraft = () =>
+              setEmailDrafts((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+              });
             return (
               <div key={key}>
                 <div className="flex flex-wrap items-center gap-2">
@@ -263,6 +283,113 @@ function WordingSection() {
                 />
                 {notes[key] && (
                   <p className="mt-1 text-xs text-[var(--muted)]">{notes[key]}</p>
+                )}
+                {/* The email form of the same message. Its Save is the
+                    rollout: no review sits between this box and customers,
+                    so the note names how many rows it landed on. */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                    email
+                  </span>
+                  {row.emailOverridden && !emailDirty && (
+                    <span className="text-xs text-[var(--muted)]">
+                      edited from default
+                    </span>
+                  )}
+                  <span className="flex-1" />
+                  {row.emailOverridden && !emailDirty && (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => {
+                        setBusy(emailKey);
+                        note(emailKey, null);
+                        void clearEmail({ kind, language })
+                          .then((patched) => {
+                            clearEmailDraft();
+                            note(
+                              emailKey,
+                              `Back to the default, applied to ${patched} template rows.`,
+                            );
+                          })
+                          .catch((err) => note(emailKey, plainError(err)))
+                          .finally(() => setBusy(null));
+                      }}
+                      className="text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                  {emailDirty && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          clearEmailDraft();
+                          note(emailKey, null);
+                        }}
+                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      >
+                        Discard
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => {
+                          setBusy(emailKey);
+                          note(emailKey, null);
+                          void saveEmail({
+                            kind,
+                            language,
+                            subject: emailSubject,
+                            body: emailBody,
+                          })
+                            .then((patched) => {
+                              clearEmailDraft();
+                              note(
+                                emailKey,
+                                `Saved and applied to ${patched} template rows across the fleet.`,
+                              );
+                            })
+                            .catch((err) => note(emailKey, plainError(err)))
+                            .finally(() => setBusy(null));
+                        }}
+                        className="rounded-lg bg-[var(--accent,#2563eb)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {busy === emailKey ? "Applying…" : "Save"}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <input
+                  value={emailSubject}
+                  onChange={(e) =>
+                    setEmailDrafts((prev) => ({
+                      ...prev,
+                      [key]: { ...prev[key], subject: e.target.value },
+                    }))
+                  }
+                  aria-label={`${kind} email subject`}
+                  placeholder="Subject"
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm"
+                />
+                <textarea
+                  value={emailBody}
+                  rows={Math.max(3, emailBody.split("\n").length)}
+                  onChange={(e) =>
+                    setEmailDrafts((prev) => ({
+                      ...prev,
+                      [key]: { ...prev[key], body: e.target.value },
+                    }))
+                  }
+                  aria-label={`${kind} email body`}
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                />
+                {notes[emailKey] && (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {notes[emailKey]}
+                  </p>
                 )}
               </div>
             );

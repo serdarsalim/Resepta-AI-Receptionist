@@ -124,6 +124,15 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   toplam: "price",
 };
 
+// Whether a [token] name is one this renderer resolves. The platform desk
+// validates fleet-wide texts with it at save time: an unknown token stays
+// literal at render (see below), which is the right behavior for a salon's
+// typo and exactly wrong for wording that goes to every customer of every
+// business.
+export function isKnownToken(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ALIASES, name.trim().toLowerCase());
+}
+
 // Storage form (an array, so the editor can keep row order) → lookup form.
 // Blank values are dropped: an empty box means "no fallback", and keeping it
 // would make the token resolve to an empty string it was already resolving to.
