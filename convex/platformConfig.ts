@@ -24,6 +24,7 @@ import {
   type PlatformKey,
 } from "./lib/platformConfig";
 import { resolvePlatformHighPriority } from "./lib/voiceModels";
+import { resolveWaRateTable } from "./lib/waPricing";
 
 export const emailConfigValidator = v.object({
   apiKey: v.union(v.string(), v.null()),
@@ -77,6 +78,21 @@ export const status = query({
     // token rides (lib/platformConfig resolveWaAccount).
     whatsappAccessToken: v.union(v.string(), v.null()),
     voiceRateMicroUsdPerMinute: v.union(v.number(), v.null()),
+    // The rest of the price book: chat per-reply default, WhatsApp markup
+    // percent, and the effective per-country Meta rate table (defaults with
+    // the operator's waRateTable override already merged in — what a send
+    // would actually be priced at, so the console never shows a stale card).
+    chatRateMicroUsdPerTurn: v.union(v.number(), v.null()),
+    waMarkupPercent: v.union(v.number(), v.null()),
+    waRateTable: v.array(
+      v.object({
+        country: v.string(),
+        marketing: v.number(),
+        utility: v.number(),
+        authentication: v.number(),
+        overridden: v.boolean(),
+      }),
+    ),
     // What a new org is born as, and the welcome credit a prepaid birth
     // carries (lib/platformConfig defaultBillingMode / trialCreditUsd).
     defaultBillingMode: v.union(v.literal("invoice"), v.literal("prepaid")),
@@ -112,6 +128,17 @@ export const status = query({
     const waToken = await platformValue(ctx, "whatsappAccessToken");
     const stripeKey = await platformValue(ctx, "stripeSecretKey");
     const stripeWebhook = await platformValue(ctx, "stripeWebhookSecret");
+    // The effective rate card: defaults with the stored override merged in,
+    // plus which rows the operator actually touched — the console shows the
+    // prices sends are metered at, and marks which ones are edits.
+    const waOverrideRaw = row("waRateTable");
+    const waTable = resolveWaRateTable(waOverrideRaw);
+    let waOverridden = new Set<string>();
+    try {
+      waOverridden = new Set(Object.keys(JSON.parse(waOverrideRaw ?? "{}")));
+    } catch {
+      // an unparseable override changes no prices, so it marks no rows
+    }
     return {
       apiKey: config.apiKey ? maskSecret(config.apiKey) : null,
       domain: config.domain,
@@ -136,6 +163,20 @@ export const status = query({
       whatsappAccessToken: waToken ? maskSecret(waToken) : null,
       voiceRateMicroUsdPerMinute:
         Number(await platformValue(ctx, "voiceRateMicroUsdPerMinute")) || null,
+      chatRateMicroUsdPerTurn:
+        Number(await platformValue(ctx, "chatRateMicroUsdPerTurn")) || null,
+      waMarkupPercent:
+        Number(await platformValue(ctx, "waMarkupPercent")) || null,
+      // "other" last: it is the fallback bucket, not a market.
+      waRateTable: Object.entries(waTable)
+        .sort(([a], [b]) =>
+          a === "other" ? 1 : b === "other" ? -1 : a.localeCompare(b),
+        )
+        .map(([country, rates]) => ({
+          country,
+          ...rates,
+          overridden: waOverridden.has(country),
+        })),
       defaultBillingMode:
         (await platformValue(ctx, "defaultBillingMode")) === "prepaid"
           ? ("prepaid" as const)
@@ -190,6 +231,12 @@ const settableKey = v.union(
   // unset rather than blocking the operator from correcting it.
   v.literal("voiceHighPriority"),
   v.literal("voiceRateMicroUsdPerMinute"),
+  // The chat lane's default price per AI reply, the WhatsApp markup percent
+  // and the Meta rate-card override (lib/waPricing) — the rest of the price
+  // book, same read-side parsing rule as the voice rate.
+  v.literal("chatRateMicroUsdPerTurn"),
+  v.literal("waMarkupPercent"),
+  v.literal("waRateTable"),
   // What a new org is born as, and the prepaid welcome credit.
   v.literal("defaultBillingMode"),
   v.literal("trialCreditUsd"),

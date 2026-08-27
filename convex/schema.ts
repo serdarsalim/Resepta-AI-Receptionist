@@ -499,6 +499,19 @@ export default defineSchema({
     // stamp time (retell.recordCall) and frozen onto the row — changing it
     // never rewrites a past call.
     voiceRateMicroUsdPerMinute: v.optional(v.number()),
+    // What THIS org pays per AI chat reply, micro-USD — the chat lane's
+    // voiceRateMicroUsdPerMinute. Same resolution (org ?? platform default ??
+    // 0, read at stamp time in chatAgent.recordTurn and frozen onto the turn
+    // row), same "unset meters at zero" semantics, same operator-only /admin
+    // surface. Priced per SENT reply, not per token: tokens are the cost
+    // side (chatAgentTurns.costMicroUsd, never the org's business), replies
+    // are what the product sells.
+    chatRateMicroUsdPerTurn: v.optional(v.number()),
+    // Per-org override of the platform waMarkupPercent — what this org pays
+    // on top of Meta's own per-message rate for Cloud template sends. Unset =
+    // the platform default; an explicit 0 means pass-through, which is what
+    // an override means (the voiceRate rule).
+    waMarkupPercent: v.optional(v.number()),
     // Which phone lines this tenant may use, E.164, operator-set from /admin
     // only. Every tenant shares one Retell account and therefore one phone
     // number namespace (voiceProvisioning.stampDefaultRetellKey copies the
@@ -1752,6 +1765,16 @@ export default defineSchema({
     // sent/open counters on waTemplates. Email sends only; WhatsApp rows keep
     // identifying their template by templateName as they always have.
     templateId: v.optional(v.id("waTemplates")),
+    // The messaging meter's line items (lib/waPricing.ts), stamped where the
+    // send is confirmed (applySendResult) and only on Cloud TEMPLATE sends —
+    // the one kind of message Meta bills. Cost is Meta's per-message rate for
+    // the recipient's country and the template's landed category; billed is
+    // that plus the operator's markup, what the org actually pays. Frozen at
+    // send time like calls.billedMicroUsd: a rate-card edit never rewrites a
+    // sent message. Cost is margin data and never shown to the org, the
+    // calls.retellCostMicroUsd rule.
+    waCostMicroUsd: v.optional(v.number()),
+    billedMicroUsd: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"])
@@ -2141,6 +2164,12 @@ export default defineSchema({
     // What this turn cost in micro-USD, at the price table version current
     // when it ran. Snapshotted so a later price change never rewrites history.
     costMicroUsd: v.number(),
+    // What the ORG pays for this turn: its per-reply rate
+    // (orgs.chatRateMicroUsdPerTurn ?? platform default), frozen at stamp
+    // time. Only SENT turns carry one — shadow, skipped and error turns cost
+    // the platform tokens but sell the org nothing. costMicroUsd above stays
+    // the margin side and is never the org's business.
+    billedMicroUsd: v.optional(v.number()),
     latencyMs: v.optional(v.number()),
     error: v.optional(v.string()),
     at: v.number(),
@@ -2224,6 +2253,15 @@ export default defineSchema({
     // migrations.backfillSendCounts fills those in.
     emailSent: v.optional(v.number()),
     waSent: v.optional(v.number()),
+    // The priced side of the two AI/messaging lanes above, in micro-USD —
+    // what the org PAYS, next to what the platform spent. llmBilled is turns
+    // × the org's per-reply rate (chatAgent.recordTurn, sent turns only);
+    // waBilled/waCost are Cloud template sends at Meta's per-country card
+    // plus markup (messages.applySendResult via lib/waPricing). All optional
+    // because months predating the price book carry none, which reads as 0.
+    llmBilledMicroUsd: v.optional(v.number()),
+    waBilledMicroUsd: v.optional(v.number()),
+    waCostMicroUsd: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_org_month", ["orgId", "month"]),
 

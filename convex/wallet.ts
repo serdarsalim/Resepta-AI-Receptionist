@@ -15,7 +15,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { DEFAULT_PRODUCT_NAME, platformValue } from "./lib/platformConfig";
 import { queueOrgAlert } from "./lib/alerts";
@@ -102,6 +102,38 @@ export const overview = query({
     };
   },
 });
+
+// The one DEBIT path, shared by every metered lane — voice (retell.meterCall),
+// chat turns (chatAgent.recordTurn) and WhatsApp template sends
+// (messages.applySendResult) all draw down through here, in the same mutation
+// that stamps their line item, so the balance can never disagree with what it
+// paid for. The low/empty mails fire on the way down, once per descent —
+// their stamps clear on top-up (applyWalletCredit below), not on a new month.
+// Empty also stamps low: "running low" arriving after "ran out" reads as the
+// balance going backwards. Callers gate on billingMode === "prepaid"; an
+// invoice org's meter counts without ever reaching this.
+export async function applyWalletDebit(
+  ctx: MutationCtx,
+  org: Doc<"orgs">,
+  amountMicroUsd: number,
+): Promise<void> {
+  const after = (org.walletBalanceMicroUsd ?? 0) - Math.round(amountMicroUsd);
+  const crossedEmpty = after <= 0 && !org.walletAlertEmptyAt;
+  const crossedLow = after <= WALLET_LOW_MICRO_USD && !org.walletAlertLowAt;
+  await ctx.db.patch(org._id, {
+    walletBalanceMicroUsd: after,
+    ...(crossedLow || crossedEmpty ? { walletAlertLowAt: Date.now() } : {}),
+    ...(crossedEmpty ? { walletAlertEmptyAt: Date.now() } : {}),
+  });
+  if (crossedEmpty || crossedLow) {
+    await queueOrgAlert(ctx, {
+      orgId: org._id,
+      template: crossedEmpty ? "walletEmpty" : "walletLow",
+      who: org.name || "—",
+      detail: `$${(Math.max(after, 0) / 1_000_000).toFixed(2)}`,
+    });
+  }
+}
 
 // The one credit path. Stripe rows are idempotent on the session id because
 // Stripe retries webhooks until acknowledged, and a paid session must credit

@@ -99,6 +99,21 @@ export const PLATFORM_KEYS = {
   // exists only for exceptions (a market that needs its own price). Table-only:
   // pricing is an operator decision, not a deploy artifact.
   voiceRateMicroUsdPerMinute: null,
+  // The default price per AI chat reply, micro-USD as a string ("50000" =
+  // $0.05/reply). Same doctrine as the voice rate above: set once here, an
+  // org row exists only for exceptions, resolved org ?? this ?? 0 at stamp
+  // time (chatAgent.recordTurn). Table-only — pricing is an operator
+  // decision, not a deploy artifact.
+  chatRateMicroUsdPerTurn: null,
+  // Percent added on top of Meta's own per-message rate when a Cloud
+  // template send is billed to an org ("20" = Meta's price × 1.2). Unset or
+  // 0 = pass-through, the fair-per-country default. Per-org override lives
+  // on orgs.waMarkupPercent.
+  waMarkupPercent: null,
+  // JSON override of lib/waPricing DEFAULT_WA_RATES, merged row by row over
+  // the checked-in card so the operator tracks Meta's rate changes from
+  // /admin without a deploy. Same shape as the default table.
+  waRateTable: null,
   // The billing mode a NEW org is born with ("invoice" | "prepaid"). Stamped
   // onto orgs.billingMode at founding sign-in, never resolved at read time —
   // flipping this must not silently switch existing tenants to prepaid with a
