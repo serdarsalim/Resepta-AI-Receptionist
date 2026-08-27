@@ -1640,6 +1640,17 @@ export default defineSchema({
     // writes (an empty emoji arrives, and patching to undefined deletes the
     // field).
     reactionEmoji: v.optional(v.string()),
+    // The message this one QUOTED (WhatsApp's swipe-reply). Meta's webhook
+    // carries context.id, the wamid of the quoted message; without these a
+    // reply to a specific question rendered as a free-standing message and
+    // the thread lost the thing that made it an answer. The body is a
+    // SNAPSHOT taken at arrival, not a live join: what the customer saw
+    // themselves quoting is a fact about that moment, and a feed render must
+    // not pay a lookup per bubble for it. replyToWamid is kept beside it for
+    // a future scroll-to-original.
+    replyToWamid: v.optional(v.string()),
+    replyToBody: v.optional(v.string()),
+    replyToDirection: v.optional(v.union(v.literal("in"), v.literal("out"))),
     // When this should go out. Unset = send now. A row that carries one sits
     // at status "queued" until the cron reaches it, and can be cancelled up
     // to the moment it does.

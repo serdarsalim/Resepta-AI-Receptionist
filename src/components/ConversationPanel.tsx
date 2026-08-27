@@ -1248,6 +1248,33 @@ export function ConversationPanel({
                   imgClassName="mb-1 max-h-52 w-auto max-w-[15rem] rounded-lg object-contain"
                 />
               ) : null}
+              {/* The quote, when this was a WhatsApp swipe-reply: what the
+                  sender was answering, above their answer, exactly where
+                  WhatsApp itself draws it. The left bar is WhatsApp's own
+                  grammar for "this names another message" and is ported as-is
+                  (reuse-the-real-pattern beats the no-left-borders habit rule
+                  here; this is the one context where the bar MEANS something).
+                  Snapshot text from the row, no lookup (schema note). */}
+              {item.replyToDirection && (
+                <div
+                  className={`mb-1 rounded-md border-l-2 px-2 py-1 text-xs ${
+                    outbound
+                      ? "border-[var(--accent)] bg-black/5 dark:bg-white/10"
+                      : "border-[var(--accent)] bg-[var(--muted-bg)]"
+                  }`}
+                >
+                  {(item.replyToDirection === "out" || contactName) && (
+                    <p className="font-medium text-[var(--accent)]">
+                      {item.replyToDirection === "out"
+                        ? t("message.quoteYou")
+                        : contactName}
+                    </p>
+                  )}
+                  <p className="line-clamp-2 whitespace-pre-wrap text-[var(--muted)]">
+                    {item.replyToBody || t("message.quoteMedia")}
+                  </p>
+                </div>
+              )}
               {/* The sender's own markup, sanitised, but ONLY inside an open
                   thread. In a list a formatted email is a wall; the flattened
                   text below is what belongs there. */}

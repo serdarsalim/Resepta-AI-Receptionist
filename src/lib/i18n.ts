@@ -1165,6 +1165,8 @@ const dictionary = {
     en: "Leave empty to send now.",
     de: "Leer lassen, um sofort zu senden.",
   },
+  "message.quoteYou": { tr: "Siz", en: "You", de: "Sie" },
+  "message.quoteMedia": { tr: "Medya", en: "Media", de: "Medien" },
   "message.template": {
     tr: "Şablon mesajı",
     en: "Template message",

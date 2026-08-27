@@ -290,6 +290,11 @@ export async function logInboundRow(
     mediaFileName?: string;
     // Which lane carried it. Unset = cloud.
     lane?: "cloud" | "evolution";
+    // The quoted message, when this reply was a WhatsApp swipe-reply. The
+    // caller resolved the snapshot (webhook.ts); this just records it.
+    replyToWamid?: string;
+    replyToBody?: string;
+    replyToDirection?: "in" | "out";
   },
 ): Promise<Id<"messages">> {
   return await ctx.db.insert("messages", {
@@ -304,6 +309,9 @@ export async function logInboundRow(
     ...(args.mediaPending ? { mediaPending: true } : {}),
     ...(args.mediaContentType ? { mediaContentType: args.mediaContentType } : {}),
     ...(args.mediaFileName ? { mediaFileName: args.mediaFileName } : {}),
+    ...(args.replyToWamid ? { replyToWamid: args.replyToWamid } : {}),
+    ...(args.replyToBody !== undefined ? { replyToBody: args.replyToBody } : {}),
+    ...(args.replyToDirection ? { replyToDirection: args.replyToDirection } : {}),
   });
 }
 
@@ -411,6 +419,10 @@ const feedItem = v.object({
   // The emoji reacted to this message. Whose it is follows from direction —
   // on our outbound row it is the customer's, on their inbound row it is ours.
   reactionEmoji: v.optional(v.string()),
+  // The quoted message, when this was a WhatsApp swipe-reply. Snapshot
+  // fields (schema note) so the bubble can draw the quote without a lookup.
+  replyToBody: v.optional(v.string()),
+  replyToDirection: v.optional(v.union(v.literal("in"), v.literal("out"))),
   // Set while a send is waiting for its moment. The bubble counts down to it
   // and can be cancelled until the cron picks it up.
   scheduledFor: v.optional(v.number()),
@@ -496,6 +508,8 @@ export const feedForCustomer = query({
         mediaContentType: m.mediaContentType,
         mediaFileName: m.mediaFileName,
         reactionEmoji: m.reactionEmoji,
+        replyToBody: m.replyToBody,
+        replyToDirection: m.replyToDirection,
         scheduledFor: m.scheduledFor,
       })),
       ...calls.map((c) => ({

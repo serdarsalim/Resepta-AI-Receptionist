@@ -148,6 +148,11 @@ export const handleWhatsappEvent = internalMutation({
           const reactionPart = message.reaction as
             | { message_id?: string; emoji?: string }
             | undefined;
+          // A swipe-reply names what it answers: context.id is the wamid of
+          // the quoted message. Dropped for years at this exact spot, which is
+          // how an answer to "which time?" rendered as a free-standing "Bu
+          // tamam" with the question nowhere near it.
+          const contextPart = message.context as { id?: string } | undefined;
           await processInboundMessage(ctx, {
             orgId,
             phone,
@@ -162,6 +167,7 @@ export const handleWhatsappEvent = internalMutation({
             // future one) still names itself in the bubble instead of
             // arriving blank.
             messageType: type,
+            replyToWamid: contextPart?.id,
             reaction:
               type === "reaction" && reactionPart?.message_id
                 ? {
@@ -215,6 +221,9 @@ export async function processInboundMessage(
     // A reaction on one of OUR messages. Not a message of its own — see the
     // branch below.
     reaction?: { targetWamid: string; emoji: string };
+    // The wamid this message QUOTED (a swipe-reply). Resolved to a snapshot
+    // below so the row renders its quote without a per-bubble lookup.
+    replyToWamid?: string;
     // Unset = cloud, which is what the Meta caller passes by omission.
     lane?: "cloud" | "evolution";
   },
@@ -290,6 +299,28 @@ export async function processInboundMessage(
     return;
   }
 
+  // Resolve the quote BEFORE logging, so the row lands complete. A quoted
+  // message we never stored (sent from the shop's own handset, older than
+  // this lane) degrades to no quote rather than a broken one; the reply
+  // itself still lands whole.
+  let replyTo: { wamid: string; body: string; direction: "in" | "out" } | null = null;
+  if (args.replyToWamid) {
+    const quoted = await ctx.db
+      .query("messages")
+      .withIndex("by_wamid", (q) => q.eq("wamid", args.replyToWamid!))
+      .first();
+    if (quoted && quoted.orgId === orgId) {
+      replyTo = {
+        wamid: args.replyToWamid,
+        // The snapshot is for a two-line quote chip; 200 chars is more than
+        // it can show. A media-only quoted message has no body and the chip
+        // names the kind at render time from an empty string.
+        body: (quoted.body ?? "").slice(0, 200),
+        direction: quoted.direction,
+      };
+    }
+  }
+
   const loggedId = await logInboundRow(ctx, {
     orgId,
     customerId: contactId,
@@ -309,6 +340,13 @@ export async function processInboundMessage(
     mediaContentType: args.mediaContentType,
     mediaFileName: args.mediaFileName,
     lane: args.lane,
+    ...(replyTo
+      ? {
+          replyToWamid: replyTo.wamid,
+          replyToBody: replyTo.body,
+          replyToDirection: replyTo.direction,
+        }
+      : {}),
   });
   // Scheduled, not awaited: Meta retries a webhook that does not get a
   // fast 200, so two network round-trips inside this handler would
