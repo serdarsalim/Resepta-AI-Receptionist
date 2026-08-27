@@ -917,7 +917,7 @@ export function ConversationPanel({
         // the transcript on its 128px floor, and CLIPPED anything the card
         // itself could not fit with no way to reach it. The card is read once
         // and the transcript is read through, so the card is what scrolls away.
-        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${
+        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${attached ? "hidden" : ""} ${
           // Only the chat wears a plane of its own. The feed view renders calls
           // and email rows with their own edges, which want the card's white
           // under them.
@@ -1397,6 +1397,60 @@ export function ConversationPanel({
         })}
       </div>
 
+      {/* The staged file, where the thread was (Serdar, 2026-08-27: a
+          proper surface for sending files, WhatsApp Web's own pattern
+          rather than a global modal). The feed above is display:none, not
+          unmounted, so closing this returns the scroll where it was. The
+          composer below stays live as the caption field: body already
+          rides the send as the media caption. */}
+      {attached && (
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {attached.name}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAttached(null)}
+              aria-label={t("media.remove")}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center py-4">
+            {attached.fileName ? (
+              // A document has no pixels to preview; the card names what it
+              // is at a size that reads as "this is the thing being sent".
+              <div className="flex flex-col items-center gap-2 rounded-xl bg-[var(--card)] px-10 py-8 shadow-sm">
+                <span className="text-lg font-semibold">
+                  {mediaTypeLabel(attached.contentType, attached.fileName)}
+                </span>
+                <span className="max-w-56 truncate text-sm text-[var(--muted)]">
+                  {attached.name}
+                </span>
+              </div>
+            ) : attached.contentType?.startsWith("video/") ? (
+              <video
+                src={attached.url}
+                controls
+                className="max-h-full max-w-full rounded-xl"
+              />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={attached.url}
+                alt={attached.name}
+                className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
+              />
+            )}
+          </div>
+        </div>
+      )}
+
       {canCompose && agentChipState && (
         <AgentHandoverBar
           paused={agentChipState === "paused"}
@@ -1603,35 +1657,6 @@ export function ConversationPanel({
                 setAttaching(false);
               }}
             />
-          )}
-          {attached && (
-            <div className="flex items-center gap-2 px-3 pb-2">
-              {attached.fileName ? (
-                // Pointing an <img> at a PDF fails its load, and the composer
-                // would then show an empty square next to a file that is
-                // perfectly attached.
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-[var(--border)] bg-[var(--muted-bg)] text-[10px] font-semibold text-[var(--muted)]">
-                  {mediaTypeLabel(attached.contentType, attached.fileName)}
-                </span>
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={attached.url}
-                  alt=""
-                  className="h-10 w-10 shrink-0 rounded object-cover"
-                />
-              )}
-              <span className="min-w-0 flex-1 truncate text-xs text-[var(--muted)]">
-                {attached.name}
-              </span>
-              <button
-                type="button"
-                onClick={() => setAttached(null)}
-                className="rounded px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              >
-                {t("media.remove")}
-              </button>
-            </div>
           )}
           {sendError && (
             // Same rule as the bubbles: a known reason gets its sentence, an
