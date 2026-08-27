@@ -46,22 +46,52 @@ function plainError(err: unknown): string {
   return m ? m[1].trim() : msg;
 }
 
-// What the Preview tab fills tokens with: labelled slots, not fake data —
-// the preview's job is to show the shape of the sentence ("Merhaba ⟨name⟩"),
-// not to invent a customer. Same grammar as the salon editor's preview.
-const slot = (label: string) => `⟨${label}⟩`;
-const PREVIEW_VALUES: TokenValues = {
-  firstName: slot("name"),
-  businessName: slot("business"),
-  appointmentAt: slot("date"),
-  staffName: slot("staff"),
-  serviceName: slot("service"),
-  servicePriceList: slot("price list"),
-  price: slot("price"),
-  manageLink: slot("manage link"),
-  bookingLink: slot("booking link"),
-  phone: slot("phone"),
-  email: slot("email"),
+// What the previews fill tokens with: an invented customer and salon, per
+// language (Serdar, 2026-08-28: fake names over labelled slots, "so we see
+// how it'll look like for sure"). Hardcoded on purpose — the desk previews
+// the WORDING, and one stable pretend booking is easier to read against
+// than slots. Formats mirror what the send path really produces: dates as
+// lib/format writes them, the price list with the appended price.
+const PREVIEW_VALUES: Record<string, TokenValues> = {
+  tr: {
+    firstName: "Ayşe",
+    businessName: "Bella Kuaför",
+    appointmentAt: "3 Eylül Çarşamba 14:00",
+    staffName: "Elif",
+    serviceName: "• Saç kesimi",
+    servicePriceList: "• Saç kesimi — ₺350,00",
+    price: "₺350,00",
+    manageLink: "https://resepta.app/r/x7k2",
+    bookingLink: "https://resepta.app/b/bella",
+    phone: "+90 212 555 34 12",
+    email: "merhaba@bellakuafor.com",
+  },
+  en: {
+    firstName: "Emma",
+    businessName: "Bella Salon",
+    appointmentAt: "Wednesday, 3 September, 2:00 PM",
+    staffName: "Sophie",
+    serviceName: "• Haircut",
+    servicePriceList: "• Haircut — €35.00",
+    price: "€35.00",
+    manageLink: "https://resepta.app/r/x7k2",
+    bookingLink: "https://resepta.app/b/bella",
+    phone: "+353 1 555 0134",
+    email: "hello@bellasalon.com",
+  },
+  de: {
+    firstName: "Anna",
+    businessName: "Salon Bella",
+    appointmentAt: "Mittwoch, 3. September, 14:00",
+    staffName: "Lena",
+    serviceName: "• Haarschnitt",
+    servicePriceList: "• Haarschnitt — 35,00 €",
+    price: "35,00 €",
+    manageLink: "https://resepta.app/r/x7k2",
+    bookingLink: "https://resepta.app/b/bella",
+    phone: "+43 1 555 01 34",
+    email: "hallo@salonbella.at",
+  },
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -104,6 +134,12 @@ function WordingSection() {
   const [emailDrafts, setEmailDrafts] = useState<
     Record<string, { subject?: string; html?: string }>
   >({});
+  // Which form of the message each card shows (Serdar, 2026-08-28: tabs,
+  // "so we don't have to show the same template 2x"). Per card, because the
+  // operator compares one kind's two forms, not five kinds' same form.
+  // Unsaved edits survive a switch — they live in the draft maps — and the
+  // tab wears a dot while its lane holds any.
+  const [lanePick, setLanePick] = useState<Record<string, "whatsapp" | "email">>({});
   const [busy, setBusy] = useState<string | null>(null);
   // One note slot per (kind, language): save confirmations, validation
   // refusals, and per-org resubmit results all land next to the text they
@@ -152,6 +188,7 @@ function WordingSection() {
             const draft = drafts[key];
             const value = draft ?? row.body;
             const dirty = draft !== undefined && draft !== row.body;
+            const lane = lanePick[key] ?? "whatsapp";
             const emailKey = `${key}/email`;
             const emailDraft = emailDrafts[key];
             const emailSubject = emailDraft?.subject ?? row.emailSubject;
@@ -176,13 +213,13 @@ function WordingSection() {
             const emailPreview = (
               <div className="email-paper -m-3 flex flex-col">
                 <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
-                  {renderTokens(emailSubject, PREVIEW_VALUES) || "—"}
+                  {renderTokens(emailSubject, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en) || "—"}
                 </p>
                 <div
                   className="email-body-editor min-h-40 px-3 py-3 text-sm"
                   dangerouslySetInnerHTML={{
                     __html: sanitizeEmailHtml(
-                      renderTokens(emailHtml, PREVIEW_VALUES),
+                      renderTokens(emailHtml, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en),
                     ),
                   }}
                 />
@@ -206,11 +243,36 @@ function WordingSection() {
                   <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
                     {categoryFor(kind).toLowerCase()}
                   </span>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
-                    WhatsApp
+                  <span className="flex-1" />
+                  {/* One form at a time (Serdar, 2026-08-28): the lane
+                      toggle from the salon editor's preview. A lane holding
+                      unsaved edits wears a dot, so switching away never
+                      reads as losing them. */}
+                  <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
+                    {(["whatsapp", "email"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() =>
+                          setLanePick((prev) => ({ ...prev, [key]: option }))
+                        }
+                        className={`rounded-full px-2.5 py-1 transition-colors ${
+                          lane === option
+                            ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
+                            : "text-[var(--muted)] hover:text-[var(--foreground)]"
+                        }`}
+                      >
+                        {option === "whatsapp" ? "WhatsApp" : "Email"}
+                        {(option === "whatsapp" ? dirty : emailDirty) && (
+                          <span className="ml-1 text-amber-500">•</span>
+                        )}
+                      </button>
+                    ))}
                   </span>
+                </div>
+                {lane === "whatsapp" && (
+                <div className="px-1 sm:px-6">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {row.overridden && (
                     <span className="text-xs text-[var(--muted)]">
                       edited from default
@@ -335,24 +397,42 @@ function WordingSection() {
                     </button>
                   )}
                 </div>
-                <textarea
-                  value={value}
-                  rows={Math.max(3, value.split("\n").length)}
-                  onChange={(e) =>
-                    setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
-                  }
-                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-                />
-                {notes[key] && (
-                  <p className="mt-1 text-xs text-[var(--muted)]">{notes[key]}</p>
+                {/* Edit left, phone right (Serdar, 2026-08-28): the box you
+                    type in and what the customer's screen makes of it, level
+                    with each other. Stacked again on narrow screens. */}
+                <div className="grid grid-cols-1 gap-x-6 md:grid-cols-2">
+                  <div>
+                    <textarea
+                      value={value}
+                      // One spare row over the line count: the column is half
+                      // the card now, so lines wrap, and an exact-fit box
+                      // grows a scrollbar the moment one does.
+                      rows={Math.max(4, value.split("\n").length + 1)}
+                      onChange={(e) =>
+                        setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                      }
+                      className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
+                    />
+                    {notes[key] && (
+                      <p className="mt-1 text-xs text-[var(--muted)]">{notes[key]}</p>
+                    )}
+                  </div>
+                  {/* Tokens as labelled slots, WhatsApp's own bubble shape,
+                      live off the box beside it. */}
+                  <div className="mt-2 md:mt-1.5">
+                    <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+                      {renderTokens(value, PREVIEW_VALUES[language] ?? PREVIEW_VALUES.en)}
+                    </div>
+                  </div>
+                </div>
+                </div>
                 )}
+                {lane === "email" && (
+                <div className="max-w-4xl px-1 sm:px-6">
                 {/* The email form of the same message. Its Save is the
                     rollout: no review sits between this box and customers,
                     so the note names how many rows it landed on. */}
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
-                    Email
-                  </span>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {row.emailOverridden && !emailDirty && (
                     <span className="text-xs text-[var(--muted)]">
                       edited from default
@@ -469,6 +549,8 @@ function WordingSection() {
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     {notes[emailKey]}
                   </p>
+                )}
+                </div>
                 )}
               </div>
             );
@@ -711,6 +793,21 @@ function OrgRow({
                 the same cell above it. */}
             <div className="mt-1 overflow-x-auto">
               <table className="w-full text-sm">
+                {/* Named columns so the cells stop narrating themselves
+                    (Serdar, 2026-08-28): "submitted" lives up here once,
+                    the rows keep just the ago. */}
+                <thead>
+                  <tr className="text-left text-xs text-[var(--muted-strong)]">
+                    <th className="py-1.5 pr-3 font-medium">template</th>
+                    <th className="px-2 py-1.5 font-medium">lang</th>
+                    <th className="px-2 py-1.5 font-medium">name at Meta</th>
+                    <th className="px-2 py-1.5 font-medium">status</th>
+                    <th className="px-2 py-1.5 font-medium">category</th>
+                    <th className="px-2 py-1.5 font-medium">submitted</th>
+                    <th className="px-2 py-1.5" />
+                    <th className="py-1.5 pl-2" />
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-[var(--border)]">
                   {org.rows.map((row, index) => (
                     <tr key={row._id}>
@@ -736,9 +833,7 @@ function OrgRow({
                         {row.metaCategory ?? ""}
                       </td>
                       <td className="px-2 py-1.5 text-xs text-[var(--muted)]">
-                        {row.submittedAt !== null
-                          ? `submitted ${ago(row.submittedAt)} ago`
-                          : ""}
+                        {row.submittedAt !== null ? `${ago(row.submittedAt)} ago` : ""}
                       </td>
                       {/* Meta's rejection verdict in the open, in red, next
                           to the row it judges. The status DETAIL only when
