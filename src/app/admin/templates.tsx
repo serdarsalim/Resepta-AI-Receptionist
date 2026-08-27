@@ -206,7 +206,12 @@ function WordingSection() {
                       </button>
                     </>
                   )}
-                  {!dirty && (
+                  {/* Resting pages offer nothing: the button exists only
+                      while at least one registered template would receive
+                      NEW wording (Serdar, 2026-08-27). It appears on its own
+                      after a save, names how many businesses it will touch,
+                      and disappears when the fleet converges. */}
+                  {!dirty && row.stale > 0 && (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -242,7 +247,9 @@ function WordingSection() {
                       }}
                       className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
                     >
-                      {busy === key ? "Working…" : "Resubmit everywhere"}
+                      {busy === key
+                        ? "Working…"
+                        : `Resubmit everywhere (${row.stale})`}
                     </button>
                   )}
                 </div>
@@ -491,95 +498,111 @@ function OrgRow({
               </button>
               {note && <span className="text-xs text-[var(--muted)]">{note}</span>}
             </div>
-            <div className="mt-1 divide-y divide-[var(--border)]">
-              {org.rows.map((row) => (
-                <div
-                  key={row._id}
-                  className="flex flex-wrap items-center gap-2 py-1.5 text-sm"
-                >
-                  <span className="min-w-24 font-medium">{row.kind}</span>
-                  <span className="text-xs text-[var(--muted)]">{row.language}</span>
-                  <span className="font-mono text-xs text-[var(--muted)]">
-                    {row.metaName ?? "—"}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
-                  >
-                    {row.status}
-                  </span>
-                  {row.metaCategory && (
-                    <span className="text-xs text-[var(--muted)]">
-                      {row.metaCategory}
-                    </span>
-                  )}
-                  {row.submittedAt !== null && (
-                    <span className="text-xs text-[var(--muted)]">
-                      submitted {ago(row.submittedAt)} ago
-                    </span>
-                  )}
-                  {/* Meta's rejection verdict in the open, in red, next to
-                      the row it judges. The status DETAIL only when it says
-                      more than the pill already does — after a submission it
-                      is literally the word PENDING, and printing that in red
-                      beside an amber "pending" pill repeated the state and
-                      dressed it as an error. */}
-                  {row.metaRejectionReason ? (
-                    <span className="text-xs text-red-700 dark:text-red-400">
-                      {row.metaRejectionReason}
-                    </span>
-                  ) : row.metaStatusDetail &&
-                    row.metaStatusDetail.toLowerCase() !== row.status ? (
-                    <span className="text-xs text-[var(--muted)]">
-                      {row.metaStatusDetail}
-                    </span>
-                  ) : null}
-                  <span className="flex-1" />
-                  {/* Three resting states, matching what a click could DO.
-                      Pending: nothing — Meta locks a template while it
-                      reviews it, so the button says where things stand
-                      instead of inviting a doomed request. Approved and
-                      unchanged: nothing — identical text would re-enter
-                      review and burn an edit slot to change nothing
-                      (Serdar, 2026-08-27: "so i don't accidentally submit
-                      again"). Everything else submits. */}
-                  {row.status === "pending" ? (
-                    <span className="text-xs text-[var(--muted)]">
-                      in review
-                    </span>
-                  ) : row.status === "approved" && row.changed === false ? (
-                    <span className="text-xs text-[var(--muted)]">
-                      up to date
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy !== null || !org.hasWaba}
-                      onClick={() => {
-                        setBusy(row._id);
-                        void submitOne({ orgId: org.orgId, templateId: row._id })
-                          .then((r) =>
-                            setNote(
-                              r.ok
-                                ? `${row.kind}/${row.language}: submitted`
-                                : `${row.kind}/${row.language}: ${r.detail ?? r.reason ?? "failed"}`,
-                            ),
-                          )
-                          .catch((err) =>
-                            setNote(plainError(err)),
-                          )
-                          .finally(() => setBusy(null));
-                      }}
-                      className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-                    >
-                      {busy === row._id
-                        ? "Submitting…"
-                        : row.status === "approved"
-                          ? "Resubmit"
-                          : "Submit"}
-                    </button>
-                  )}
-                </div>
-              ))}
+            {/* A real table, not a wrapped flex line (Serdar, 2026-08-27:
+                "it looks super messy"): sixteen rows of drifting pills read
+                as noise, aligned columns read as one glance. The kind names
+                itself once per language group; every other cell sits under
+                the same cell above it. */}
+            <div className="mt-1 overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-[var(--border)]">
+                  {org.rows.map((row, index) => (
+                    <tr key={row._id}>
+                      <td className="w-32 py-1.5 pr-3 font-medium">
+                        {index === 0 || org.rows[index - 1].kind !== row.kind
+                          ? row.kind
+                          : null}
+                      </td>
+                      <td className="w-8 px-2 py-1.5 text-xs text-[var(--muted)]">
+                        {row.language}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-[var(--muted)]">
+                        {row.metaName ?? "—"}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[row.status] ?? STATUS_STYLE.draft}`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-[var(--muted)]">
+                        {row.metaCategory ?? ""}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-[var(--muted)]">
+                        {row.submittedAt !== null
+                          ? `submitted ${ago(row.submittedAt)} ago`
+                          : ""}
+                      </td>
+                      {/* Meta's rejection verdict in the open, in red, next
+                          to the row it judges. The status DETAIL only when
+                          it says more than the pill already does — after a
+                          submission it is literally the word PENDING, and
+                          printing that in red beside an amber "pending"
+                          pill repeated the state and dressed it as an
+                          error. */}
+                      <td className="px-2 py-1.5 text-xs">
+                        {row.metaRejectionReason ? (
+                          <span className="text-red-700 dark:text-red-400">
+                            {row.metaRejectionReason}
+                          </span>
+                        ) : row.metaStatusDetail &&
+                          row.metaStatusDetail.toLowerCase() !== row.status ? (
+                          <span className="text-[var(--muted)]">
+                            {row.metaStatusDetail}
+                          </span>
+                        ) : null}
+                      </td>
+                      {/* Three resting states, matching what a click could
+                          DO. Pending: nothing — Meta locks a template while
+                          it reviews it, so the cell says where things stand
+                          instead of inviting a doomed request. Approved and
+                          unchanged: nothing — identical text would re-enter
+                          review and burn an edit slot to change nothing
+                          (Serdar, 2026-08-27: "so i don't accidentally
+                          submit again"). Everything else submits. */}
+                      <td className="py-1.5 pl-2 text-right">
+                        {row.status === "pending" ? (
+                          <span className="text-xs text-[var(--muted)]">
+                            in review
+                          </span>
+                        ) : row.status === "approved" && row.changed === false ? (
+                          <span className="text-xs text-[var(--muted)]">
+                            up to date
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy !== null || !org.hasWaba}
+                            onClick={() => {
+                              setBusy(row._id);
+                              void submitOne({ orgId: org.orgId, templateId: row._id })
+                                .then((r) =>
+                                  setNote(
+                                    r.ok
+                                      ? `${row.kind}/${row.language}: submitted`
+                                      : `${row.kind}/${row.language}: ${r.detail ?? r.reason ?? "failed"}`,
+                                  ),
+                                )
+                                .catch((err) =>
+                                  setNote(plainError(err)),
+                                )
+                                .finally(() => setBusy(null));
+                            }}
+                            className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+                          >
+                            {busy === row._id
+                              ? "Submitting…"
+                              : row.status === "approved"
+                                ? "Resubmit"
+                                : "Submit"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </td>
         </tr>
