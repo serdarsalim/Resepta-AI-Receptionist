@@ -50,7 +50,11 @@ function dayStrip(timezone: string, fromMs: number): { date: string; ms: number 
   return out;
 }
 
-type Step = "service" | "time" | "details";
+// "fulfillment" exists only on the goods-only path: a basket with no
+// time-bound line books no chair, so instead of marching a towel through the
+// calendar the wizard asks how the order reaches its customer (pickup or
+// delivery) and then when — right away, or a chosen time on the same grid.
+type Step = "service" | "fulfillment" | "time" | "details";
 
 // The device remembers its owner. Written after a successful booking, read
 // back on the next visit, so a repeat customer meets their own name and
@@ -107,6 +111,12 @@ export default function BookingPage({
   const [lines, setLines] = useState<{ serviceId: Id<"services">; quantity: number }[]>([]);
   const [date, setDate] = useState<string | null>(null);
   const [startMs, setStartMs] = useState<number | null>(null);
+  // Goods-only answers. kind survives going back — a changed mind about the
+  // hour is not a changed mind about delivery — while asap and startMs
+  // invalidate each other: the order is for one moment, told one way.
+  const [kind, setKind] = useState<"pickup" | "delivery" | null>(null);
+  const [asap, setAsap] = useState(false);
+  const [address, setAddress] = useState("");
   // Read once at mount; the details step mounts and unmounts as the wizard
   // swaps screens, so the prefill has to live up here with the other fields.
   const [prefill] = useState(storedContact);
@@ -117,7 +127,12 @@ export default function BookingPage({
   const [query, setQuery] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ token?: string; startMs: number } | null>(null);
+  // startMs null = an ASAP order: there is no promised minute to print.
+  const [done, setDone] = useState<{
+    token?: string;
+    startMs: number | null;
+    goods: boolean;
+  } | null>(null);
 
   // Resolved against the published list every render rather than stored, so a
   // service the salon retires while someone has the page open drops out of the
@@ -135,6 +150,10 @@ export default function BookingPage({
     0,
   );
   const anyPriced = picked.some((row) => row.price !== undefined);
+  // The fork's condition: nothing in the basket books a chair. Derived every
+  // render like `picked` itself, so a service added late dissolves the fork.
+  const goodsOnly =
+    picked.length > 0 && picked.every((row) => row.durationMinutes === undefined);
   // The MAX lead across the selection, matching resolveLines on the server: a
   // colour needing a day's notice needs it whatever else rides along. Anything
   // else and the day strip would offer days the write refuses.
@@ -146,7 +165,7 @@ export default function BookingPage({
   const dateValue = date && date >= minDate ? date : minDate;
   const slots = useQuery(
     api.booking.slots,
-    page && lines.length > 0 && step !== "service"
+    page && lines.length > 0 && (step === "time" || step === "details")
       ? { slug, date: dateValue, serviceIds: lines.map((row) => row.serviceId) }
       : "skip",
   );
@@ -156,6 +175,7 @@ export default function BookingPage({
   // the write will refuse.
   const toggleLine = (serviceId: Id<"services">) => {
     setStartMs(null);
+    setAsap(false);
     setError(null);
     setLines((prev) =>
       prev.some((row) => row.serviceId === serviceId)
@@ -225,17 +245,28 @@ export default function BookingPage({
   }
 
   if (done) {
+    // An order confirms in order words: "you're booked!" over a towel is a
+    // category error, and an ASAP order has no promised minute to print —
+    // the how (pickup/delivery) plus "as soon as possible" is the whole fact.
+    const when = done.startMs === null ? t("booking.asap") : dateTimeLabel(done.startMs);
+    const kindLabel = kind
+      ? t(kind === "pickup" ? "booking.pickup" : "booking.delivery")
+      : "";
     return (
       <Shell title={page.orgName} logoUrl={page.logoUrl} language={pageLanguage}>
-        <p className="text-sm font-medium">{t("booking.booked")}</p>
-        <p className="mt-1 text-sm text-[var(--muted)]">{dateTimeLabel(done.startMs)}</p>
+        <p className="text-sm font-medium">
+          {t(done.goods ? "booking.ordered" : "booking.booked")}
+        </p>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {done.goods ? [kindLabel, when].filter(Boolean).join(" · ") : when}
+        </p>
         {done.token && (
           <p className="mt-4 text-sm">
             <a
               href={`/appt/${done.token}`}
               className="text-[var(--accent)] underline underline-offset-2"
             >
-              {t("booking.manageThis")}
+              {t(done.goods ? "booking.manageOrder" : "booking.manageThis")}
             </a>
           </p>
         )}
@@ -341,9 +372,20 @@ export default function BookingPage({
         : t("booking.itemCount").replace("{n}", String(picked.length));
   // Before a time is picked the duration is the whole answer; after, the time
   // leads and the duration stays, because "how long will I be there" does not
-  // stop mattering once you know when you are arriving.
-  const barMeta =
-    startMs !== null
+  // stop mattering once you know when you are arriving. A goods order has no
+  // duration to speak of; its meta is how it arrives and when — which also
+  // retires the trailing " · " a duration of zero used to leave behind.
+  const kindLabel = kind
+    ? t(kind === "pickup" ? "booking.pickup" : "booking.delivery")
+    : "";
+  const barMeta = goodsOnly
+    ? [
+        step === "time" || step === "details" ? kindLabel : "",
+        asap ? t("booking.asap") : startMs !== null ? dateTimeLabel(startMs) : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : startMs !== null
       ? `${dateTimeLabel(startMs)} · ${minutesLabel(totalMinutes)}`
       : minutesLabel(totalMinutes);
   // The lines are listed ONLY where they are not already on screen. On the
@@ -359,18 +401,26 @@ export default function BookingPage({
   // phone number.
   const basketFull = lines.length >= MAX_LINES_PER_BOOKING;
   const back =
-    step === "time"
+    step === "fulfillment"
       ? () => {
           setStep("service");
-          setStartMs(null);
           setError(null);
         }
-      : step === "details"
+      : step === "time"
         ? () => {
-            setStep("time");
+            setStep(goodsOnly ? "fulfillment" : "service");
+            setStartMs(null);
             setError(null);
           }
-        : undefined;
+        : step === "details"
+          ? () => {
+              // Backing out of details re-opens the WHEN question, so an ASAP
+              // answer goes with it — startMs is already null on that path.
+              setStep("time");
+              setAsap(false);
+              setError(null);
+            }
+          : undefined;
 
   return (
     <Shell
@@ -481,13 +531,29 @@ export default function BookingPage({
                   disabled={sending || !name.trim()}
                   className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-45"
                 >
-                  {sending ? t("common.saving") : t("booking.book")}
+                  {sending ? t("common.saving") : t(goodsOnly ? "booking.order" : "booking.book")}
                 </button>
               ) : (
                 <button
                   type="button"
-                  disabled={step === "service" ? picked.length === 0 : startMs === null}
-                  onClick={() => setStep(step === "service" ? "time" : "details")}
+                  disabled={
+                    step === "service"
+                      ? picked.length === 0
+                      : step === "fulfillment"
+                        ? kind === null
+                        : startMs === null
+                  }
+                  onClick={() =>
+                    setStep(
+                      step === "service"
+                        ? goodsOnly
+                          ? "fulfillment"
+                          : "time"
+                        : step === "fulfillment"
+                          ? "time"
+                          : "details",
+                    )
+                  }
                   className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-45"
                 >
                   {t("booking.continue")}
@@ -687,9 +753,77 @@ export default function BookingPage({
         </section>
       )}
 
+      {/* Goods only. One question, and the tap advances — the wizard's own
+          rule, back from the multi-select exception. The tick is a readout
+          here exactly as it is on the service rows. */}
+      {step === "fulfillment" && picked.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold">{t("booking.fulfillmentTitle")}</h2>
+          <div className="space-y-2">
+            {(["pickup", "delivery"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={kind === option}
+                onClick={() => {
+                  setKind(option);
+                  setError(null);
+                  setStep("time");
+                }}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3.5 text-left text-sm transition-colors ${
+                  kind === option
+                    ? "border-[var(--accent)] bg-[var(--accent)]/10"
+                    : "border-[var(--border)] hover:border-[var(--accent)]"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium">
+                    {t(option === "pickup" ? "booking.pickup" : "booking.delivery")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--muted)]">
+                    {t(option === "pickup" ? "booking.pickupHint" : "booking.deliveryHint")}
+                  </span>
+                </span>
+                <Tick on={kind === option} />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {step === "time" && picked.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold">{t("booking.pickTime")}</h2>
+          <h2 className="mb-3 text-sm font-semibold">
+            {t(goodsOnly ? "booking.whenTitle" : "booking.pickTime")}
+          </h2>
+          {/* The escape from the calendar. An order wanted "as soon as
+              possible" has no minute to pick, so the answer sits ABOVE the
+              day strip rather than inside it — and only where the goods carry
+              no lead time, because a cake needing a day's notice cannot be
+              promised right away (the server refuses exactly this). */}
+          {goodsOnly && leadMinutes === 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setAsap(true);
+                setStartMs(null);
+                setError(null);
+                setStep("details");
+              }}
+              className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-4 py-3 text-left text-sm font-medium transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              {t("booking.asap")}
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path
+                  d="M6 3l5 5-5 5"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
           <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {days.map((day) => {
               const picked = day.date === dateValue;
@@ -768,6 +902,7 @@ export default function BookingPage({
                         type="button"
                         onClick={() => {
                           setStartMs(ms);
+                          setAsap(false);
                           setError(null);
                           setStep("details");
                         }}
@@ -785,7 +920,7 @@ export default function BookingPage({
         </section>
       )}
 
-      {step === "details" && picked.length > 0 && startMs !== null && (
+      {step === "details" && picked.length > 0 && (startMs !== null || asap) && (
         <form
           id="booking-form"
           className="space-y-4"
@@ -809,11 +944,24 @@ export default function BookingPage({
                   ? { quantity: row.quantity }
                   : {}),
               })),
-              startMs,
+              // Absent on the ASAP path: the server stamps "now" itself, so
+              // the promise cannot go stale in the customer's hands.
+              ...(startMs !== null ? { startMs } : {}),
               name,
               phone,
               ...(email.trim() ? { email } : {}),
               ...(note.trim() ? { note } : {}),
+              ...(goodsOnly && kind
+                ? {
+                    fulfillment: {
+                      kind,
+                      ...(asap ? { asap: true } : {}),
+                      ...(kind === "delivery" && address.trim()
+                        ? { address: address.trim() }
+                        : {}),
+                    },
+                  }
+                : {}),
             });
             setSending(false);
             if (result.ok) {
@@ -829,7 +977,7 @@ export default function BookingPage({
               } catch {
                 // A full or blocked store costs the prefill, not the booking.
               }
-              setDone({ token: result.token, startMs });
+              setDone({ token: result.token, startMs, goods: goodsOnly });
             }
             else if (result.reason === "slot-taken") {
               // Someone got there first. Back to the grid — which is live —
@@ -884,6 +1032,26 @@ export default function BookingPage({
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("common.optional")}
             />
+            {/* Delivery only, and required there: an address is the one thing
+                a delivery cannot happen without. It lands on the ORDER
+                (appointments.fulfillment.address), never on the customer —
+                it is where this order goes, not who they are. */}
+            {goodsOnly && kind === "delivery" && (
+              <>
+                <label htmlFor="booking-address" className="text-sm sm:self-start sm:pt-2">
+                  {t("booking.address")}
+                </label>
+                <textarea
+                  id="booking-address"
+                  rows={2}
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder={t("booking.addressPlaceholder")}
+                  className="resize-none"
+                />
+              </>
+            )}
             {/* Last, and the only row whose control is taller than its label —
                 so it sits items-start against it rather than floating in the
                 middle of three lines of box. It lands as a note on the

@@ -1011,6 +1011,64 @@ const dictionary = {
     de: "Nachmittag",
   },
   "booking.evening": { tr: "Akşam", en: "Evening", de: "Abend" },
+  // The goods-only fork. A basket with no time-bound line books no chair, so
+  // instead of the calendar it is asked how the order reaches its customer —
+  // picked up or delivered — and then when: right away, or a chosen time.
+  "booking.fulfillmentTitle": {
+    tr: "Siparişinizi nasıl alırsınız?",
+    en: "How would you like to get your order?",
+    de: "Wie möchten Sie Ihre Bestellung erhalten?",
+  },
+  "booking.pickup": { tr: "Gel al", en: "Pickup", de: "Abholung" },
+  "booking.delivery": { tr: "Teslimat", en: "Delivery", de: "Lieferung" },
+  "booking.pickupHint": {
+    tr: "Siparişinizi gelip teslim alın",
+    en: "Come by and collect your order",
+    de: "Bestellung vor Ort abholen",
+  },
+  "booking.deliveryHint": {
+    tr: "Adresinize gönderelim",
+    en: "We bring it to your address",
+    de: "Wir liefern an Ihre Adresse",
+  },
+  // The goods time step's heading and its first option. ASAP books at the
+  // moment of ordering — no calendar involved — which is why it sits above
+  // the day strip rather than inside it.
+  "booking.whenTitle": {
+    tr: "Ne zaman olsun?",
+    en: "When would you like it?",
+    de: "Wann darf es sein?",
+  },
+  "booking.asap": {
+    tr: "En kısa sürede",
+    en: "As soon as possible",
+    de: "So bald wie möglich",
+  },
+  // Delivery only. The address is a fact about THIS order and lands on it,
+  // never on the customer record.
+  "booking.address": { tr: "Adres", en: "Address", de: "Adresse" },
+  "booking.addressPlaceholder": {
+    tr: "Teslimat adresiniz",
+    en: "Where should we deliver?",
+    de: "Wohin dürfen wir liefern?",
+  },
+  // Order wording for the goods-only lane. "Randevuyu al" over a towel is a
+  // category error — nothing was scheduled, something was ordered.
+  "booking.order": {
+    tr: "Siparişi ver",
+    en: "Place order",
+    de: "Bestellung aufgeben",
+  },
+  "booking.ordered": {
+    tr: "Siparişiniz alındı!",
+    en: "Order received!",
+    de: "Ihre Bestellung ist eingegangen!",
+  },
+  "booking.manageOrder": {
+    tr: "Siparişi görüntüle, değiştir veya iptal et",
+    en: "View, change or cancel this order",
+    de: "Bestellung ansehen, ändern oder stornieren",
+  },
   "booking.book": {
     tr: "Randevuyu al",
     en: "Book it",
