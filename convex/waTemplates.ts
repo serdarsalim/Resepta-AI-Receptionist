@@ -671,6 +671,7 @@ export const ensureStandardRows = internalMutation({
           status: "draft",
           body: text.body,
           subject: text.subject,
+          bodyHtml: text.bodyHtml,
         });
         out.push({ templateId: id, kind: `${kind}/${language}`, status: "draft" });
       }
@@ -868,6 +869,7 @@ export const platformWording = query({
       // from Meta. No review, so no stale count — a save IS the rollout.
       emailSubject: v.string(),
       emailBody: v.string(),
+      emailBodyHtml: v.optional(v.string()),
       emailDefaultSubject: v.string(),
       emailDefaultBody: v.string(),
       emailOverridden: v.boolean(),
@@ -905,6 +907,7 @@ export const platformWording = query({
       stale: number;
       emailSubject: string;
       emailBody: string;
+      emailBodyHtml?: string;
       emailDefaultSubject: string;
       emailDefaultBody: string;
       emailOverridden: boolean;
@@ -940,6 +943,7 @@ export const platformWording = query({
           stale,
           emailSubject: rich?.subject ?? stock.subject,
           emailBody: rich?.body ?? stock.body,
+          emailBodyHtml: rich?.bodyHtml,
           emailDefaultSubject: stock.subject,
           emailDefaultBody: stock.body,
           emailOverridden: rich !== undefined,
@@ -1042,15 +1046,16 @@ function unknownTokens(text: string): string[] {
 
 // Push the resolved email text of one (kind, language) onto every org's rows
 // of that kind — kind-level and per-rule alike, since the locked kinds'
-// per-rule rows are seeded copies the salon cannot fork. bodyHtml is cleared
-// the way resetToDefaults clears it: new plain wording under old HTML would
-// email one thing and preview another.
+// per-rule rows are seeded copies the salon cannot fork. bodyHtml rides
+// along: the operator's authored HTML when there is one, cleared otherwise —
+// new plain wording under old HTML would email one thing and preview
+// another.
 async function propagateRichText(
   ctx: MutationCtx,
   kind: TemplateKind,
   language: string,
 ): Promise<number> {
-  const { subject, body } = await resolveRichText(ctx.db, kind, language);
+  const { subject, body, bodyHtml } = await resolveRichText(ctx.db, kind, language);
   let patched = 0;
   for (const org of await ctx.db.query("orgs").collect()) {
     const rows = await ctx.db
@@ -1059,7 +1064,7 @@ async function propagateRichText(
       .collect();
     for (const row of rows) {
       if (row.kind !== kind || row.language !== language) continue;
-      await ctx.db.patch(row._id, { subject, body, bodyHtml: undefined });
+      await ctx.db.patch(row._id, { subject, body, bodyHtml });
       patched++;
     }
   }
@@ -1072,6 +1077,10 @@ export const setPlatformRichText = mutation({
     language: v.string(),
     subject: v.string(),
     body: v.string(),
+    // The WYSIWYG's authored HTML — what the email sends. body is its plain
+    // projection (derived client-side, same split RemindersView makes) and
+    // serves the session lane.
+    bodyHtml: v.optional(v.string()),
   },
   // How many org template rows now carry the text — the editor's note says
   // it, so "applied everywhere" is a number, not a claim.
@@ -1088,6 +1097,7 @@ export const setPlatformRichText = mutation({
     const stock = stockLang[kind];
     const subject = args.subject.trim();
     const body = args.body.replace(/\r\n/g, "\n").trim();
+    const bodyHtml = args.bodyHtml?.trim() || undefined;
     if (!subject) throw new Error("subject is empty");
     if (!body) throw new Error("body is empty");
     if (subject.length > 200) {
@@ -1096,7 +1106,15 @@ export const setPlatformRichText = mutation({
     if (body.length > 4000) {
       throw new Error(`body is ${body.length} chars; keep it under 4000`);
     }
-    const unknown = unknownTokens(`${subject}\n${body}`);
+    if (bodyHtml && bodyHtml.length > 32_000) {
+      throw new Error(
+        `the formatted body is ${bodyHtml.length} chars; keep it under 32000`,
+      );
+    }
+    // The HTML is scanned too: renderTokens runs over it at send time, and a
+    // typo'd token that only lives in the formatted half would still reach
+    // every inbox as bracket text.
+    const unknown = unknownTokens(`${subject}\n${body}\n${bodyHtml ?? ""}`);
     if (unknown.length > 0) {
       throw new Error(
         `tokens nothing can fill, so they would reach customers as literal text: ${unknown.join(", ")}`,
@@ -1109,18 +1127,24 @@ export const setPlatformRichText = mutation({
       )
       .unique();
     // Saving the default back is a reset, not an override — same rule as the
-    // Cloud lane: a stored copy of the constant goes stale the day the
-    // constant moves.
-    if (subject === stock.subject && body === stock.body) {
+    // Cloud lane. Only when no HTML was authored: formatting has no canonical
+    // default form to compare against, so an authored bodyHtml always stores.
+    if (subject === stock.subject && body === stock.body && !bodyHtml) {
       if (existing) await ctx.db.delete(existing._id);
     } else if (existing) {
-      await ctx.db.patch(existing._id, { subject, body, updatedAt: Date.now() });
+      await ctx.db.patch(existing._id, {
+        subject,
+        body,
+        bodyHtml,
+        updatedAt: Date.now(),
+      });
     } else {
       await ctx.db.insert("platformRichTexts", {
         kind,
         language,
         subject,
         body,
+        bodyHtml,
         updatedAt: Date.now(),
       });
     }

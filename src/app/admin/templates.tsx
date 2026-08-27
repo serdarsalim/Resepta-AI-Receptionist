@@ -12,6 +12,13 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { categoryFor } from "../../../convex/lib/metaTemplate";
+import {
+  renderTokens,
+  type TokenValues,
+} from "../../../convex/lib/renderTokens";
+import { EmailBodyEditor } from "@/components/EmailBodyEditor";
+import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
+import { plainToHtml, htmlToText } from "@/lib/emailText";
 import { Section, ago } from "./parts";
 import type { useSearch } from "@/lib/useTableState";
 
@@ -38,6 +45,24 @@ function plainError(err: unknown): string {
   const m = msg.match(/Uncaught Error:\s*([\s\S]*?)(?:\s+at handler|\n|$)/);
   return m ? m[1].trim() : msg;
 }
+
+// What the Preview tab fills tokens with: labelled slots, not fake data —
+// the preview's job is to show the shape of the sentence ("Merhaba ⟨name⟩"),
+// not to invent a customer. Same grammar as the salon editor's preview.
+const slot = (label: string) => `⟨${label}⟩`;
+const PREVIEW_VALUES: TokenValues = {
+  firstName: slot("name"),
+  businessName: slot("business"),
+  appointmentAt: slot("date"),
+  staffName: slot("staff"),
+  serviceName: slot("service"),
+  servicePriceList: slot("price list"),
+  price: slot("price"),
+  manageLink: slot("manage link"),
+  bookingLink: slot("booking link"),
+  phone: slot("phone"),
+  email: slot("email"),
+};
 
 const STATUS_STYLE: Record<string, string> = {
   approved:
@@ -72,11 +97,12 @@ function WordingSection() {
   // texts stand behind approved templates that send while you type, so
   // nothing leaves the browser until Save.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  // The email lane's buffer, same key, both halves of the text. Doubly
-  // buffered for a sharper reason than the Cloud lane: an email save is the
-  // rollout — it patches every org's rows the moment it lands.
+  // The email lane's buffer, same key: the subject and the WYSIWYG's HTML
+  // (the plain body derives from it at save). Doubly buffered for a sharper
+  // reason than the Cloud lane: an email save is the rollout — it patches
+  // every org's rows the moment it lands.
   const [emailDrafts, setEmailDrafts] = useState<
-    Record<string, { subject?: string; body?: string }>
+    Record<string, { subject?: string; html?: string }>
   >({});
   const [busy, setBusy] = useState<string | null>(null);
   // One note slot per (kind, language): save confirmations, validation
@@ -129,25 +155,61 @@ function WordingSection() {
             const emailKey = `${key}/email`;
             const emailDraft = emailDrafts[key];
             const emailSubject = emailDraft?.subject ?? row.emailSubject;
-            const emailBody = emailDraft?.body ?? row.emailBody;
+            // The WYSIWYG's projection pair: the HTML is what the email
+            // sends, the plain text (derived at save) is what the session
+            // lane sends. Stock texts are plain, so the editor seed lifts
+            // them with plainToHtml.
+            const emailBaseHtml =
+              row.emailBodyHtml ?? plainToHtml(row.emailBody);
+            const emailHtml = emailDraft?.html ?? emailBaseHtml;
             const emailDirty =
-              emailSubject !== row.emailSubject || emailBody !== row.emailBody;
+              emailSubject !== row.emailSubject || emailHtml !== emailBaseHtml;
             const clearEmailDraft = () =>
               setEmailDrafts((prev) => {
                 const next = { ...prev };
                 delete next[key];
                 return next;
               });
+            // What the customer's mail client will show, tokens rendered to
+            // labelled slots — a different VIEW of the body, hosted as the
+            // editor's own Preview tab (the RemindersView pattern).
+            const emailPreview = (
+              <div className="email-paper -m-3 flex flex-col">
+                <p className="border-b border-black/10 px-3 py-2 text-xs font-semibold">
+                  {renderTokens(emailSubject, PREVIEW_VALUES) || "—"}
+                </p>
+                <div
+                  className="email-body-editor min-h-40 px-3 py-3 text-sm"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeEmailHtml(
+                      renderTokens(emailHtml, PREVIEW_VALUES),
+                    ),
+                  }}
+                />
+              </div>
+            );
             return (
-              <div key={key}>
+              // A card per kind (Serdar, 2026-08-28: the flat wall of boxes
+              // "sucks badly"): the kind names the card once, and each lane
+              // wears its own chip and controls, so ten near-identical
+              // textareas become five messages with two forms each.
+              <div
+                key={key}
+                className="rounded-xl border border-[var(--border)] p-4"
+              >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">{kind}</span>
+                  <span className="text-sm font-semibold">{kind}</span>
                   {/* What this kind SUBMITS as (categoryFor, the same answer
                       the submission sends). What it LANDED as after review is
                       per business and lives in the matrix below — Meta may
                       recategorise, and the landed one is the billing. */}
                   <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
                     {categoryFor(kind).toLowerCase()}
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                    WhatsApp
                   </span>
                   {row.overridden && (
                     <span className="text-xs text-[var(--muted)]">
@@ -287,9 +349,9 @@ function WordingSection() {
                 {/* The email form of the same message. Its Save is the
                     rollout: no review sits between this box and customers,
                     so the note names how many rows it landed on. */}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                    email
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200">
+                    Email
                   </span>
                   {row.emailOverridden && !emailDirty && (
                     <span className="text-xs text-[var(--muted)]">
@@ -343,7 +405,11 @@ function WordingSection() {
                             kind,
                             language,
                             subject: emailSubject,
-                            body: emailBody,
+                            // Both projections of what the editor holds: the
+                            // HTML the email sends, the plain text the
+                            // session lane sends.
+                            body: htmlToText(emailHtml),
+                            bodyHtml: emailHtml,
                           })
                             .then((patched) => {
                               clearEmailDraft();
@@ -374,18 +440,31 @@ function WordingSection() {
                   placeholder="Subject"
                   className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm"
                 />
-                <textarea
-                  value={emailBody}
-                  rows={Math.max(3, emailBody.split("\n").length)}
-                  onChange={(e) =>
-                    setEmailDrafts((prev) => ({
-                      ...prev,
-                      [key]: { ...prev[key], body: e.target.value },
-                    }))
-                  }
-                  aria-label={`${kind} email body`}
-                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm"
-                />
+                <div className="mt-1.5">
+                  {/* The real email editor — Visual/HTML tabs plus the
+                      rendered Preview, the exact component the salon's rule
+                      editor uses, so what the desk shows is what the send
+                      builds. Variables dropdown off: it lists an ORG's
+                      contact fields, and the desk has no org. */}
+                  <EmailBodyEditor
+                    value={emailHtml}
+                    showVariables={false}
+                    previewPane={emailPreview}
+                    previewLabel="Preview"
+                    onLiveChange={(html) =>
+                      setEmailDrafts((prev) => ({
+                        ...prev,
+                        [key]: { ...prev[key], html },
+                      }))
+                    }
+                    onSave={(html) =>
+                      setEmailDrafts((prev) => ({
+                        ...prev,
+                        [key]: { ...prev[key], html },
+                      }))
+                    }
+                  />
+                </div>
                 {notes[emailKey] && (
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     {notes[emailKey]}

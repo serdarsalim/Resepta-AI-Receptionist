@@ -1870,6 +1870,10 @@ export default defineSchema({
     language: v.string(),
     subject: v.string(),
     body: v.string(),
+    // The authored HTML when the operator used the WYSIWYG — what the email
+    // actually sends (the send path prefers bodyHtml over body). body stays
+    // the plain projection the session lane sends, derived on save.
+    bodyHtml: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_kind_language", ["kind", "language"]),
 

@@ -17,7 +17,14 @@ export async function resolveRichText(
   db: GenericDatabaseReader<DataModel>,
   kind: TemplateKind,
   language: string,
-): Promise<{ subject: string; body: string; overridden: boolean }> {
+): Promise<{
+  subject: string;
+  body: string;
+  // Only when the operator authored formatting: the stock texts are plain,
+  // and the send path builds its HTML from body when this is absent.
+  bodyHtml: string | undefined;
+  overridden: boolean;
+}> {
   const stock = (DEFAULT_TEMPLATE_TEXTS[language] ?? DEFAULT_TEMPLATE_TEXTS.en)[
     kind
   ];
@@ -27,6 +34,18 @@ export async function resolveRichText(
       q.eq("kind", kind).eq("language", language),
     )
     .unique();
-  if (!row) return { subject: stock.subject, body: stock.body, overridden: false };
-  return { subject: row.subject, body: row.body, overridden: true };
+  if (!row) {
+    return {
+      subject: stock.subject,
+      body: stock.body,
+      bodyHtml: undefined,
+      overridden: false,
+    };
+  }
+  return {
+    subject: row.subject,
+    body: row.body,
+    bodyHtml: row.bodyHtml,
+    overridden: true,
+  };
 }

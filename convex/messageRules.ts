@@ -318,7 +318,7 @@ export const ensureTemplate = mutation({
       language,
       status: "draft",
       body: fallback?.body ?? stock.body,
-      bodyHtml: fallback?.bodyHtml,
+      bodyHtml: fallback ? fallback.bodyHtml : stock.bodyHtml,
       subject: fallback?.subject ?? stock.subject,
       bodyPreview: fallback?.bodyPreview,
     });
@@ -359,13 +359,13 @@ export const resetToDefaults = mutation({
           template.kind as TemplateKind,
           org.language,
         );
-        // bodyHtml cleared too: the default wording is plain text, and a
-        // reset that left old HTML behind would email one thing and preview
-        // another.
+        // bodyHtml lands on the platform's authored HTML or nothing: a reset
+        // that left the org's own old HTML behind would email one thing and
+        // preview another.
         await ctx.db.patch(template._id, {
           body: text.body,
           subject: text.subject,
-          bodyHtml: undefined,
+          bodyHtml: text.bodyHtml,
         });
       }
     }
@@ -385,6 +385,7 @@ export const resetToDefaults = mutation({
         status: "draft",
         body: text.body,
         subject: text.subject,
+        bodyHtml: text.bodyHtml,
       });
     }
     await seedDefaultRules(ctx.db, orgId, org.messageChannel ?? "both");

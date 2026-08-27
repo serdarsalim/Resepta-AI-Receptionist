@@ -25,6 +25,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
+import { plainToHtml, htmlToText } from "@/lib/emailText";
 import { useConfirm } from "./ConfirmDialog";
 import {
   DEFAULT_TEMPLATE_TEXTS,
@@ -299,38 +300,8 @@ const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
 // live preview. The legacy card above renders only for orgs the migration has
 // not reached and dies with the legacy fields.
 
-// The two projections of one authored email. plainToHtml lifts a legacy
-// plain-text body into the WYSIWYG editor; htmlToText derives the WhatsApp
-// text the send path uses from whatever the editor holds. Deriving on SAVE —
-// not at send time — keeps the backend blind to HTML parsing.
-function plainToHtml(text: string): string {
-  if (!text) return "";
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  return escaped
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br/>")}</p>`)
-    .join("");
-}
-
-function htmlToText(html: string): string {
-  const prepared = html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n")
-    .replace(/<li[^>]*>/gi, "• ");
-  // SSR guard: this only runs for real in the browser; the server render just
-  // needs to not crash before hydration.
-  if (typeof window === "undefined") {
-    return prepared
-      .replace(/<[^>]+>/g, "")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  }
-  const doc = new DOMParser().parseFromString(prepared, "text/html");
-  return (doc.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
-}
+// The two projections of one authored email — plainToHtml and htmlToText —
+// moved to lib/emailText when the fleet desk started making the same split.
 
 // A number that reads as part of the sentence until it is touched: no border,
 // no spinners, just an underline on hover saying "this is yours to change".
