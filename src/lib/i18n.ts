@@ -3997,6 +3997,19 @@ const dictionary = {
     en: "Something went wrong. Try again.",
     de: "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
   },
+  // The two boundaries (components/ErrorBoundary, app/error.tsx). Title only:
+  // the buttons under it carry the instruction.
+  "common.errorTitle": {
+    tr: "Bu ekran yüklenemedi",
+    en: "This screen didn't load",
+    de: "Diese Ansicht konnte nicht geladen werden",
+  },
+  "common.retry": { tr: "Tekrar dene", en: "Try again", de: "Erneut versuchen" },
+  "common.reload": {
+    tr: "Sayfayı yenile",
+    en: "Reload the page",
+    de: "Seite neu laden",
+  },
   "common.cancel": { tr: "Vazgeç", en: "Cancel", de: "Abbrechen" },
   "common.close": { tr: "Kapat", en: "Close", de: "Schließen" },
   "common.delete": { tr: "Sil", en: "Delete", de: "Löschen" },

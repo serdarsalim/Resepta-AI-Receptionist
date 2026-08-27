@@ -16,6 +16,7 @@ import { KnowledgeView } from "@/components/KnowledgeView";
 import { AccountView } from "@/components/AccountView";
 import { BillingView } from "@/components/BillingView";
 import { ContactView } from "@/components/ContactView";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { FeedFilter } from "@/components/ConversationPanel";
 
 // The signed-in application, lifted out of app/page.tsx so it can be pulled in
@@ -135,41 +136,51 @@ export function AppHome() {
       onOverrideBack={() => setContactId(null)}
       overrideContactId={contactId ?? undefined}
     >
-      {contactId ? (
-        <ContactView
-          // Keyed, so opening a second contact from the first one's feed
-          // remounts and re-reports rather than showing the previous name
-          // until the new query lands.
-          key={contactId}
-          customerId={contactId}
-          initialFilter={contactFilter}
-          initialItemId={contactItem}
-          onTitle={setContactName}
-          onOpenContact={openContact}
-        />
-      ) : (
-        <>
-          {tab === "appointments" && <AppointmentsView onOpenContact={openContact} />}
-          {tab === "customers" && <CustomersView onOpenContact={openContact} />}
-          {tab === "inbox" && <InboxView onOpenContact={openContact} />}
-          {tab === "voice" && <VoiceView />}
-          {/* Content the business maintains, not configuration: every agent
-              reads it and the booking page builds its slots from the service
-              half. Was the "services" tab until 2026-08-22. */}
-          {tab === "knowledge" && <KnowledgeView />}
-          {tab === "revenue" && <RevenueView />}
-          {tab === "messages" && <RemindersView />}
-          {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
-              all call this Business, and a salon owner does not think of the
-              salon as a workspace. */}
-          {/* The prepaid wallet — Stripe's success_url points here, so this
-              tab id is part of the checkout round trip (wallet.ts). */}
-          {tab === "billing" && <BillingView />}
-          {tab === "business" && <BusinessView />}
-          {/* Personal, not org config. Only the avatar menu routes here. */}
-          {tab === "account" && <AccountView />}
-        </>
-      )}
+      {/* Around the views only, never around the shell. A view that throws
+          leaves the sidebar, the tab strip and the workspace switcher
+          standing, which matters most in the case that put this here: when
+          the data behind a broken pane belongs to the workspace you are in,
+          the switcher is the way out of it. The shell's own queries fall
+          through to app/error.tsx. */}
+      <ErrorBoundary resetKeys={[activeOrgId, tab, contactId]}>
+        {contactId ? (
+          <ContactView
+            // Keyed, so opening a second contact from the first one's feed
+            // remounts and re-reports rather than showing the previous name
+            // until the new query lands.
+            key={contactId}
+            customerId={contactId}
+            initialFilter={contactFilter}
+            initialItemId={contactItem}
+            onTitle={setContactName}
+            onOpenContact={openContact}
+          />
+        ) : (
+          <>
+            {tab === "appointments" && (
+              <AppointmentsView onOpenContact={openContact} />
+            )}
+            {tab === "customers" && <CustomersView onOpenContact={openContact} />}
+            {tab === "inbox" && <InboxView onOpenContact={openContact} />}
+            {tab === "voice" && <VoiceView />}
+            {/* Content the business maintains, not configuration: every agent
+                reads it and the booking page builds its slots from the service
+                half. Was the "services" tab until 2026-08-22. */}
+            {tab === "knowledge" && <KnowledgeView />}
+            {tab === "revenue" && <RevenueView />}
+            {tab === "messages" && <RemindersView />}
+            {/* "business", not "workspace": Fresha, Booksy, Square and Treatwell
+                all call this Business, and a salon owner does not think of the
+                salon as a workspace. */}
+            {/* The prepaid wallet — Stripe's success_url points here, so this
+                tab id is part of the checkout round trip (wallet.ts). */}
+            {tab === "billing" && <BillingView />}
+            {tab === "business" && <BusinessView />}
+            {/* Personal, not org config. Only the avatar menu routes here. */}
+            {tab === "account" && <AccountView />}
+          </>
+        )}
+      </ErrorBoundary>
     </AppShell>
   );
 }
