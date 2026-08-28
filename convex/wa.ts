@@ -937,7 +937,24 @@ export const sendAppointmentMessage = internalAction({
       return null;
     }
 
-    const when = formatAppointmentTime(appointment.startAt, org.timezone, language);
+    // An ASAP goods order has no promised minute — startAt records when the
+    // order was PLACED (convex/booking.ts book), and a confirmation printing
+    // that minute back reads as a promise already broken ("your appointment
+    // at 15:32", sent at 15:33). The phrase is picked to sit in the [date]
+    // slot of each stock confirmation without breaking its grammar ("[date]
+    // için alındı", "booked for [date]", "für [date] gebucht"). Confirmation
+    // ONLY: the other kinds embed [date] in constructions a phrase cannot
+    // fill ("[date] tarihli", "am [date]"), and a reminder never fires for a
+    // start already in the past.
+    const ASAP_WHEN: Record<string, string> = {
+      tr: "en yakın zaman",
+      en: "the earliest possible time",
+      de: "den nächstmöglichen Zeitpunkt",
+    };
+    const when =
+      appointment.fulfillment?.asap && args.kind === "confirmation"
+        ? (ASAP_WHEN[language] ?? ASAP_WHEN.en)
+        : formatAppointmentTime(appointment.startAt, org.timezone, language);
     // The authored body, when the owner has written one — named tokens, same
     // vocabulary as the composer and campaigns. The positional bodyPreview
     // survives only as the fallback for rows nobody has authored yet; it is a
