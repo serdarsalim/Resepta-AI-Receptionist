@@ -56,6 +56,8 @@ function dayStrip(timezone: string, fromMs: number): { date: string; ms: number 
 // delivery) and then when — right away, or a chosen time on the same grid.
 type Step = "service" | "fulfillment" | "time" | "details";
 
+const ALL_MODES = ["pickup", "delivery"] as const;
+
 // The device remembers its owner. Written after a successful booking, read
 // back on the next visit, so a repeat customer meets their own name, number
 // and delivery address already filled in instead of a blank form. One key for
@@ -411,6 +413,15 @@ export default function BookingPage({
   // the real refusal arrived as a generic failure after they had typed their
   // phone number.
   const basketFull = lines.length >= MAX_LINES_PER_BOOKING;
+  // What this business actually does. Both-off is refused on save; if the data
+  // ever says otherwise, offering both beats a step with nothing on it.
+  const enabledModes = ALL_MODES.filter((mode) => page.fulfillment[mode]);
+  const offered = enabledModes.length > 0 ? enabledModes : [...ALL_MODES];
+  // A business with only one way to hand a good over never gets asked: a
+  // screen offering a choice between one option is a screen that asks
+  // nothing. The answer is still recorded — the salon reads "Gel al" on the
+  // order either way — it just costs the customer no tap.
+  const soleMode = offered.length === 1 ? offered[0] : null;
   const back =
     step === "fulfillment"
       ? () => {
@@ -419,7 +430,9 @@ export default function BookingPage({
         }
       : step === "time"
         ? () => {
-            setStep(goodsOnly ? "fulfillment" : "service");
+            // Past a skipped fulfillment step, back lands where the customer
+            // last chose something — the service list.
+            setStep(goodsOnly && !soleMode ? "fulfillment" : "service");
             setStartMs(null);
             setError(null);
           }
@@ -432,6 +445,19 @@ export default function BookingPage({
               setError(null);
             }
           : undefined;
+  // The bar's Continue. A function rather than an expression since the
+  // service step now has three destinations: the calendar for a visit, the
+  // fulfillment question for a goods order, or straight past it when the
+  // business only does one of pickup and delivery.
+  const advance = () => {
+    setError(null);
+    if (step === "service") {
+      if (!goodsOnly) return setStep("time");
+      if (soleMode) setKind(soleMode);
+      return setStep(soleMode ? "time" : "fulfillment");
+    }
+    setStep(step === "fulfillment" ? "time" : "details");
+  };
 
   return (
     <Shell
@@ -554,17 +580,7 @@ export default function BookingPage({
                         ? kind === null
                         : startMs === null
                   }
-                  onClick={() =>
-                    setStep(
-                      step === "service"
-                        ? goodsOnly
-                          ? "fulfillment"
-                          : "time"
-                        : step === "fulfillment"
-                          ? "time"
-                          : "details",
-                    )
-                  }
+                  onClick={advance}
                   className="rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-45"
                 >
                   {t("booking.continue")}
@@ -771,7 +787,7 @@ export default function BookingPage({
         <section>
           <h2 className="mb-3 text-sm font-semibold">{t("booking.fulfillmentTitle")}</h2>
           <div className="space-y-2">
-            {(["pickup", "delivery"] as const).map((option) => (
+            {offered.map((option) => (
               <button
                 key={option}
                 type="button"
@@ -1097,7 +1113,9 @@ export default function BookingPage({
                     ? t("booking.tooMany")
                     : error === "lead-time"
                       ? t("booking.leadTime")
-                      : t("forms.failed")}
+                      : error === "not-offered"
+                        ? t("booking.notOffered")
+                        : t("forms.failed")}
             </p>
           )}
         </form>

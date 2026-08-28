@@ -948,6 +948,20 @@ const dictionary = {
     en: "Shows a tab totalling completed appointments. Leave it off if you don't enter prices.",
     de: "Zeigt einen Tab mit der Summe abgeschlossener Termine. Lassen Sie ihn aus, wenn Sie keine Preise erfassen.",
   },
+  // The two ways a product order can reach a customer. Only shown to a
+  // business that sells products at all — a salon selling hours has nothing to
+  // hand over. Both on unless somebody says otherwise, and the last one cannot
+  // be switched off: a business offering neither cannot sell a product.
+  "settings.fulfillment": {
+    tr: "Ürün siparişleri",
+    en: "Product orders",
+    de: "Produktbestellungen",
+  },
+  "settings.fulfillmentHint": {
+    tr: "Ürünlerinizi müşterilerinizin nasıl alabileceği. Kapattığınız seçenek randevu sayfasında görünmez; ikisini birden kapatamazsınız. Saat gerektiren hizmetleri etkilemez.",
+    en: "How customers can get your products. An option you switch off disappears from your booking page; you can't switch off both. Time-bound services are unaffected.",
+    de: "Wie Ihre Kundschaft Ihre Produkte erhalten kann. Eine abgeschaltete Option verschwindet von Ihrer Buchungsseite; beide abschalten geht nicht. Zeitgebundene Leistungen bleiben unberührt.",
+  },
   "forms.title": { tr: "Form", en: "Form", de: "Formular" },
   "forms.name": { tr: "Adınız", en: "Your name", de: "Ihr Name" },
   "forms.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
@@ -1075,6 +1089,14 @@ const dictionary = {
     tr: "Siparişi görüntüle, değiştir veya iptal et",
     en: "View, change or cancel this order",
     de: "Bestellung ansehen, ändern oder stornieren",
+  },
+  // The race: the business switched pickup or delivery off while this page was
+  // open. Rare, and worth its own words — "something went wrong" over a choice
+  // the page itself offered reads as the product breaking.
+  "booking.notOffered": {
+    tr: "Bu teslim seçeneği artık sunulmuyor. Lütfen diğerini seçin.",
+    en: "That option isn't offered any more. Please pick the other one.",
+    de: "Diese Option wird nicht mehr angeboten. Bitte wählen Sie die andere.",
   },
   "booking.cancelOrder": {
     tr: "Siparişi iptal et",

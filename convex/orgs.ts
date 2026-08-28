@@ -64,6 +64,10 @@ export const current = query({
       bookingEnabled: v.optional(v.boolean()),
       revenueEnabled: v.optional(v.boolean()),
       priceDecimals: v.optional(v.boolean()),
+      // Unset means on for both — see the schema. The settings screen reads
+      // them through `?? true` so an unanswered org shows two live switches.
+      pickupEnabled: v.optional(v.boolean()),
+      deliveryEnabled: v.optional(v.boolean()),
       // Shows the Balance tab (prepaid only) — the wallet itself is
       // wallet.overview's answer, this is just "does the destination exist".
       billingMode: v.optional(
@@ -220,6 +224,8 @@ export const current = query({
         bookingEnabled: org.bookingEnabled,
         revenueEnabled: org.revenueEnabled,
         priceDecimals: org.priceDecimals,
+        pickupEnabled: org.pickupEnabled,
+        deliveryEnabled: org.deliveryEnabled,
         billingMode: org.billingMode,
         demoMode: org.demoMode,
         logoUrl: org.logoStorageId
@@ -325,6 +331,8 @@ export const update = mutation({
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
     priceDecimals: v.optional(v.boolean()),
+    pickupEnabled: v.optional(v.boolean()),
+    deliveryEnabled: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -376,6 +384,17 @@ export const update = mutation({
     }
     if (args.revenueEnabled !== undefined) patch.revenueEnabled = args.revenueEnabled;
     if (args.priceDecimals !== undefined) patch.priceDecimals = args.priceDecimals;
+    // Refused rather than shrugged at: a business offering neither pickup nor
+    // delivery cannot hand a good over at all, and the booking page would
+    // answer a product order with a step holding no options. Unset means on,
+    // so the check reads the INTENDED state, not just what this call carries.
+    if (args.pickupEnabled !== undefined || args.deliveryEnabled !== undefined) {
+      const pickup = args.pickupEnabled ?? org0?.pickupEnabled ?? true;
+      const delivery = args.deliveryEnabled ?? org0?.deliveryEnabled ?? true;
+      if (!pickup && !delivery) throw new Error("fulfillment-required");
+      if (args.pickupEnabled !== undefined) patch.pickupEnabled = args.pickupEnabled;
+      if (args.deliveryEnabled !== undefined) patch.deliveryEnabled = args.deliveryEnabled;
+    }
     if (args.inboundAddress !== undefined) {
       // Slugging and uniqueness both live in lib/inboundAddress, because the
       // admin console writes this field too and used to do neither.

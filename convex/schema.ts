@@ -248,6 +248,20 @@ export default defineSchema({
     // never fills in prices would otherwise get a nav item leading to three
     // zeroes, which reads as the app being broken rather than unused.
     revenueEnabled: v.optional(v.boolean()),
+    // How a GOODS order may reach its customer. Two switches rather than one,
+    // because the three real answers are not a spectrum: a salon sells shampoo
+    // over the counter (pickup only), a restaurant does both, and a ghost
+    // kitchen only delivers. Nothing here touches time-bound services — a
+    // haircut is fulfilled in the chair and has no mode to pick.
+    //
+    // UNSET MEANS ON, the opposite of bookingEnabled and deliberately so:
+    // that switch publishes something new, these NARROW something already
+    // live. Every org's booking page offers both today, so a default of off
+    // would silently break goods ordering everywhere the day it shipped.
+    // Both off is refused (orgs.update) — a business that offers neither
+    // cannot sell a good at all.
+    pickupEnabled: v.optional(v.boolean()),
+    deliveryEnabled: v.optional(v.boolean()),
     // The local part of this org's address on the shared inbound domain
     // (RESEND_INBOUND_DOMAIN): "guzellik" becomes guzellik@mail.example.com.
     // Routing an inbound email to an ORG happens on this, not on the domain,

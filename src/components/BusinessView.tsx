@@ -22,7 +22,7 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { CheckSwitch } from "./CheckSwitch";
-import { ROW_GRID, RowLabel } from "./RowLabel";
+import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue, OptionsEditor } from "./RecordField";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
@@ -89,6 +89,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
   { card: "general", key: "settings.revenueEnabled" },
+  { card: "general", key: "settings.fulfillment" },
   { card: "hours", key: "settings.hours" },
   { card: "hours", key: "settings.timezone" },
   { card: "hours", key: "settings.businessHours" },
@@ -347,6 +348,14 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   // sharing one public page.
   const [nameError, setNameError] = useState<string | null>(null);
   const [nameTick, setNameTick] = useState(0);
+  // Only to know whether this business sells GOODS at all. Pickup and delivery
+  // are questions about handing an object over, so a salon that sells nothing
+  // but hours should not be asked them — the rows below appear the day the
+  // first product is added and stay gone otherwise.
+  const services = useQuery(api.services.list, {});
+  const sellsGoods = (services ?? []).some(
+    (row) => row.durationMinutes === undefined,
+  );
 
   return (
     <Card title={t("settings.general")} disabled={!isOwner}>
@@ -373,7 +382,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               as five decisions. */}
           <input
             key={`name-${nameTick}-${settings.org.name}`}
-            className="sm:max-w-56"
+            className={`${FIELD} sm:max-w-56`}
             defaultValue={settings.org.name}
             onBlur={(e) => {
               const next = e.target.value;
@@ -475,7 +484,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 other salon, which reads as someone else's data. */}
             <input
               key={`inbound-${addressTick}`}
-              className="sm:max-w-56"
+              className={`${FIELD} sm:max-w-56`}
               defaultValue={settings.org.inboundAddress ?? ""}
               placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
               onBlur={(e) => {
@@ -533,7 +542,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               — the same wrong value under an immutable field would have
               needed operator surgery to fix. */}
           <select
-            className="sm:max-w-56"
+            className={`${FIELD} sm:max-w-56`}
             defaultValue={settings.org.language}
             onChange={(e) => {
               const el = e.target;
@@ -576,7 +585,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           />
           <div className="flex items-center gap-3">
             <select
-              className="w-full sm:max-w-56"
+              className={`${FIELD} w-full sm:max-w-56`}
               value={settings.org.industry ?? ""}
               onChange={(e) => {
                 const industry = e.target.value;
@@ -634,7 +643,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               screen reader would offer it as a currency. */}
           <div className="flex items-center gap-3">
             <select
-              className="w-full sm:max-w-56"
+              className={`${FIELD} w-full sm:max-w-56`}
               defaultValue={settings.org.currency}
               onChange={(e) => void update({ currency: e.target.value })}
             >
@@ -685,6 +694,45 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             hint={t("settings.bookingPageHint")}
           />
           <BookingRow />
+          {/* Under the booking page, because that is the surface these two
+              narrow — and only for a business that sells products, since
+              pickup and delivery are questions about handing an object over.
+
+              Two switches rather than a picker: the three real answers
+              (counter only, both, delivery only) are not points on a scale,
+              and a ghost kitchen that never opens its doors is as ordinary as
+              a salon that never leaves them. The last one on cannot be
+              switched off — a business offering neither has no way to sell a
+              product — so it disables rather than refusing after the tap. */}
+          {sellsGoods && (
+            <>
+              <RowLabel
+                label={t("settings.fulfillment")}
+                hint={t("settings.fulfillmentHint")}
+              />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {(
+                  [
+                    ["pickupEnabled", "booking.pickup", "deliveryEnabled"],
+                    ["deliveryEnabled", "booking.delivery", "pickupEnabled"],
+                  ] as const
+                ).map(([field, label, other]) => {
+                  const on = settings.org[field] ?? true;
+                  return (
+                    <span key={field} className="flex items-center gap-2">
+                      <Toggle
+                        checked={on}
+                        // Off is only allowed while the other one is on.
+                        disabled={on && !(settings.org[other] ?? true)}
+                        onChange={(next) => void update({ [field]: next })}
+                      />
+                      <span className="text-sm">{t(label)}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </Card>

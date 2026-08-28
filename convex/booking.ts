@@ -266,6 +266,12 @@ export const page = query({
       // False when the org never set opening hours — the page says "call us"
       // instead of drawing a slot grid it cannot honestly fill.
       hasHours: v.boolean(),
+      // How a goods order may reach its customer here. Published because the
+      // page must not offer delivery a business does not do, and because a
+      // business offering only ONE of them should never see a step asking to
+      // pick between one option. Resolved server-side (unset means on) so the
+      // page reads two plain booleans.
+      fulfillment: v.object({ pickup: v.boolean(), delivery: v.boolean() }),
     }),
     v.null(),
   ),
@@ -304,6 +310,10 @@ export const page = query({
           ...(service.price !== undefined ? { price: service.price } : {}),
         })),
       hasHours: hasBusinessHours(org.businessHours ?? {}),
+      fulfillment: {
+        pickup: org.pickupEnabled ?? true,
+        delivery: org.deliveryEnabled ?? true,
+      },
     };
   },
 });
@@ -565,6 +575,15 @@ export const book = mutation({
     // otherwise rather than refused: only a hand-crafted request can send one
     // alongside a service, and the booking is still valid without it.
     const fulfillment = duration === 0 ? args.fulfillment : undefined;
+    // The write holds the business's own answer, exactly as it holds opening
+    // hours: being offered by the page is not being bound by it, and this one
+    // is a promise in the business's voice — a delivery it does not do.
+    if (fulfillment?.kind === "pickup" && org.pickupEnabled === false) {
+      return { ok: false, reason: "not-offered" };
+    }
+    if (fulfillment?.kind === "delivery" && org.deliveryEnabled === false) {
+      return { ok: false, reason: "not-offered" };
+    }
     const asap = Boolean(fulfillment?.asap);
 
     const now = Date.now();
