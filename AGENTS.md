@@ -3357,3 +3357,48 @@ anything they act on. The prompt card below grew the common-denominator block:
 what EVERY agent shares regardless of language (hang-up rules, voicemail,
 turn-taking, tools, the analysis field), because "what is a new agent born
 able to do" had no answer anywhere an operator could read.
+
+## A towel stops booking a chair: goods orders got a fulfillment (2026-08-28)
+
+The booking page's wizard forks on a goods-only basket. Nothing in the basket
+books a chair, so instead of marching a towel through the calendar the page
+asks how the order reaches its customer — Gel al / Teslimat — and then when:
+"En kısa sürede" above the day strip, or a slot on the same grid as before.
+Mixed baskets keep the old flow untouched; the good rides along to the visit,
+which is correct. The fork's storage is `appointments.fulfillment`
+(`{kind: pickup|delivery, asap?, address?}`), only ever written on a basket
+whose duration sums to 0 — `booking.book` drops it silently otherwise.
+
+Facts the next reader should not re-derive:
+
+- ASAP means `startAt` records when the order was PLACED, not a promised
+  minute; the flag carries the promise. The server stamps `now` itself
+  (`startMs` became optional on `book`), skips the notice/open-hours/capacity
+  guards (all no-ops at duration 0 anyway), and still refuses ASAP against
+  `leadMinutes` — the page hides the button for the same reason.
+- Anything reading `startAt > Date.now()` to mean "still upcoming" is wrong
+  for an ASAP order — it is in the past the moment it exists. /appt/<token>
+  hit exactly this and now lets status alone decide for asap orders.
+  Rescheduling an ASAP order to a real minute clears the flag: startAt goes
+  back to meaning what it means everywhere else.
+- The delivery address is a snapshot on the ORDER, deliberately not a field
+  on `customers` — it is where this order goes, not who the person is.
+- Order surfaces speak order words: Siparişi ver / Siparişiniz alındı on the
+  page, Siparişi iptal et on /appt, a read-only Teslim row on the owner's
+  appointment sheet (through `listRange`'s `enrichedAppointment`). The
+  confirmation message renders [date] as "en yakın zaman" (per language) for
+  ASAP orders, confirmation kind ONLY — the phrase is chosen to sit in each
+  stock text's [date] slot without breaking its grammar, and the other kinds'
+  slots ("[date] tarihli", "am [date]") cannot take a phrase.
+- Still open, by choice: the stock texts still say "randevunuz" over an order
+  (a real order-confirmation template kind means Meta review machinery —
+  Serdar's call), and the voice/chat lanes book goods without asking
+  pickup/delivery; the field is ready when they learn to.
+
+The same day, the details form went phone-first (Telefon → Adınız → E-posta →
+Not) and learned device memory: a successful booking writes name/phone/email
+to localStorage (`resepta.bookingContact`, one key product-wide) and the next
+visit prefills, `PhoneInput` re-splitting the stored E.164 via a new
+`defaultValue` prop. Deliberately NOT a server lookup by phone: echoing a name
+back to whoever types a number is a doxxing endpoint. The server already
+dedupes by phone on submit; nothing needed to change there.
