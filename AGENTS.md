@@ -3390,15 +3390,32 @@ Facts the next reader should not re-derive:
   ASAP orders, confirmation kind ONLY — the phrase is chosen to sit in each
   stock text's [date] slot without breaking its grammar, and the other kinds'
   slots ("[date] tarihli", "am [date]") cannot take a phrase.
+- Delivery is a FIRST-CLASS mode, not a salon oddity (Serdar, 2026-08-28:
+  "resepta is a versatile app that will work for restaurants too"). Which
+  modes a business offers is `orgs.pickupEnabled` / `orgs.deliveryEnabled`,
+  and UNSET MEANS ON — the opposite of `bookingEnabled`, deliberately: that
+  switch publishes something new, these narrow something already live, so a
+  default of off would have broken goods ordering everywhere the day it
+  shipped. Both off is refused in `orgs.update`; the second switch disables
+  itself rather than refusing after the tap. `booking.page` resolves the pair
+  server-side and the page reads two plain booleans; `book` re-checks, because
+  offering delivery a business does not do is a promise in its voice.
+  A business offering only ONE mode never sees the fulfillment step — the
+  answer is still recorded, it just costs no tap (`soleMode` in the page).
+  The rows appear in Business → General only once the org sells a good.
 - Still open, by choice: the stock texts still say "randevunuz" over an order
   (a real order-confirmation template kind means Meta review machinery —
   Serdar's call), and the voice/chat lanes book goods without asking
-  pickup/delivery; the field is ready when they learn to.
+  pickup/delivery; the field is ready when they learn to. Both lanes book
+  through `retell.voiceBook`, so teaching them is one shared mutation change
+  plus prompt wording — and for voice, a spoken street address is the weak
+  link worth designing around rather than trusting a transcript.
 
 The same day, the details form went phone-first (Telefon → Adınız → E-posta →
 Not) and learned device memory: a successful booking writes name/phone/email
-to localStorage (`resepta.bookingContact`, one key product-wide) and the next
-visit prefills, `PhoneInput` re-splitting the stored E.164 via a new
+and the delivery address to localStorage (`resepta.bookingContact`, one key
+product-wide) and the next visit prefills, `PhoneInput` re-splitting the
+stored E.164 via a new
 `defaultValue` prop. Deliberately NOT a server lookup by phone: echoing a name
 back to whoever types a number is a doxxing endpoint. The server already
 dedupes by phone on submit; nothing needed to change there.
