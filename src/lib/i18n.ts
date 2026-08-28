@@ -2129,6 +2129,34 @@ const dictionary = {
     en: "No metered calls yet.",
     de: "Noch keine abgerechneten Anrufe.",
   },
+  // The chat/WhatsApp half of the meter (BillingView, convex/billing.ts
+  // messagingOverview). Same owner-only rule as the voice strip.
+  "aiBilling.title": {
+    tr: "Yapay zeka ve WhatsApp",
+    en: "AI & WhatsApp",
+    de: "KI & WhatsApp",
+  },
+  "aiBilling.hint": {
+    tr: "Yapay zeka, gönderilen yanıt başına ücretlendirilir. WhatsApp'ta yalnızca şablon mesajları ücretlidir — tutar alıcının ülkesine göre Meta tarifesiyle belirlenir; müşterinizin mesajına 24 saat içinde verilen yanıtlar ücretsizdir.",
+    en: "AI is billed per sent reply. On WhatsApp only template messages cost money — priced by the recipient's country at Meta's rates; replies within 24 hours of a customer's message are free.",
+    de: "KI wird pro gesendeter Antwort abgerechnet. Bei WhatsApp kosten nur Vorlagen-Nachrichten Geld — bepreist nach dem Land des Empfängers zu Meta-Tarifen; Antworten innerhalb von 24 Stunden auf eine Kundennachricht sind kostenlos.",
+  },
+  "aiBilling.rateLine": {
+    tr: "Yapay zeka yanıtı başına {rate}.",
+    en: "{rate} per AI reply.",
+    de: "{rate} pro KI-Antwort.",
+  },
+  "aiBilling.replies": {
+    tr: "YZ yanıtı",
+    en: "AI replies",
+    de: "KI-Antworten",
+  },
+  "aiBilling.waMessages": {
+    tr: "Şablon mesajı",
+    en: "Template messages",
+    de: "Vorlagen-Nachrichten",
+  },
+  "aiBilling.total": { tr: "Toplam", en: "Total", de: "Gesamt" },
   // The prepaid wallet (BillingView, prepaid orgs only). "Bakiye" over any
   // coined word: it is what every prepaid product in Türkiye calls this.
   "nav.billing": { tr: "Faturalama", en: "Billing", de: "Abrechnung" },

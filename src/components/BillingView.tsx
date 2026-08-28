@@ -221,6 +221,7 @@ export function BillingView() {
           </div>
         )}
       </Card>
+      <MessagingUsage />
       {/* The receipt trail. Demoted, not dropped: when a payment does not
           land this is the only place an owner can see whether it ever did. */}
       <Card>
@@ -374,6 +375,86 @@ function InvoiceBilling({
           </div>
         )}
       </Card>
+
+      <MessagingUsage />
     </div>
+  );
+}
+
+// The other two lanes on the same bill, own query so both billing modes can
+// mount it as-is. Absent entirely until there is either a rate to explain or
+// a month with billed activity: a salon whose agent is not priced and whose
+// sends are all free session replies has nothing to read here, and an empty
+// card would only ask a question the voice table already answered.
+function MessagingUsage() {
+  const { t, language } = useLanguage();
+  const data = useQuery(api.billing.messagingOverview, {});
+  if (!data) return null;
+  if (data.months.length === 0 && data.chatRateMicroUsdPerTurn <= 0) {
+    return null;
+  }
+  const usd = (m: number) => `$${(m / 1_000_000).toFixed(2)}`;
+  // Per-reply rates live below a cent ($0.05, $0.025); two forced decimals
+  // would round the price the org is actually paying.
+  const usdRate = (m: number) => `$${Number((m / 1_000_000).toFixed(4))}`;
+  return (
+    <Card>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium">{t("aiBilling.title")}</p>
+        <InfoTip text={t("aiBilling.hint")} />
+      </div>
+      {data.chatRateMicroUsdPerTurn > 0 && (
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          {t("aiBilling.rateLine").replace(
+            "{rate}",
+            usdRate(data.chatRateMicroUsdPerTurn),
+          )}
+        </p>
+      )}
+      {data.months.length > 0 && (
+        <div className="thin-scroll mt-2 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left text-xs">
+              <tr>
+                <th className="px-3 py-2 font-semibold">
+                  {t("voiceBilling.month")}
+                </th>
+                <th className="px-3 py-2 font-semibold">
+                  {t("aiBilling.replies")}
+                </th>
+                <th className="px-3 py-2 font-semibold">
+                  {t("aiBilling.waMessages")}
+                </th>
+                <th className="px-3 py-2 font-semibold">
+                  {t("aiBilling.total")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.months.map((m) => (
+                <tr
+                  key={m.month}
+                  className="border-t border-[var(--table-divider)] tabular-nums"
+                >
+                  <td className="px-3 py-2">{monthLabel(m.month, language)}</td>
+                  {/* count · amount in one cell: the count explains the
+                      amount, and four money columns would push Total off a
+                      phone screen. */}
+                  <td className="px-3 py-2">
+                    {m.chatReplies} · {usd(m.chatBilledMicroUsd)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {m.waMessages} · {usd(m.waBilledMicroUsd)}
+                  </td>
+                  <td className="px-3 py-2 font-medium">
+                    {usd(m.chatBilledMicroUsd + m.waBilledMicroUsd)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }

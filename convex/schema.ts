@@ -2262,6 +2262,12 @@ export default defineSchema({
     llmBilledMicroUsd: v.optional(v.number()),
     waBilledMicroUsd: v.optional(v.number()),
     waCostMicroUsd: v.optional(v.number()),
+    // How many units the billed amounts above bought — SENT AI replies and
+    // priced template sends. Kept apart from llmTurns/waSent deliberately:
+    // those count everything (shadow turns, free session replies), and a
+    // bill whose count × rate does not equal its amount is a support ticket.
+    llmBilledTurns: v.optional(v.number()),
+    waBilledCount: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_org_month", ["orgId", "month"]),
 

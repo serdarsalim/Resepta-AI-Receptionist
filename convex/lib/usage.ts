@@ -111,6 +111,7 @@ export async function recordSendUsage(
         ? {
             waBilledMicroUsd: (usage.waBilledMicroUsd ?? 0) + waBilledMicroUsd,
             waCostMicroUsd: (usage.waCostMicroUsd ?? 0) + waCostMicroUsd,
+            waBilledCount: (usage.waBilledCount ?? 0) + 1,
           }
         : {}),
       updatedAt: Date.now(),
@@ -124,7 +125,7 @@ export async function recordSendUsage(
       llmOutputTokens: 0,
       llmCostMicroUsd: 0,
       [field]: 1,
-      ...(billable ? { waBilledMicroUsd, waCostMicroUsd } : {}),
+      ...(billable ? { waBilledMicroUsd, waCostMicroUsd, waBilledCount: 1 } : {}),
       updatedAt: Date.now(),
     });
   }

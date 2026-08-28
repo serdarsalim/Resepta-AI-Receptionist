@@ -404,6 +404,8 @@ export const recordTurn = internalMutation({
         llmOutputTokens: usage.llmOutputTokens + args.outputTokens,
         llmCostMicroUsd: usage.llmCostMicroUsd + args.costMicroUsd,
         llmBilledMicroUsd: (usage.llmBilledMicroUsd ?? 0) + (billedMicroUsd ?? 0),
+        llmBilledTurns:
+          (usage.llmBilledTurns ?? 0) + (billedMicroUsd === undefined ? 0 : 1),
         updatedAt: at,
       });
     } else {
@@ -415,6 +417,7 @@ export const recordTurn = internalMutation({
         llmOutputTokens: args.outputTokens,
         llmCostMicroUsd: args.costMicroUsd,
         llmBilledMicroUsd: billedMicroUsd ?? 0,
+        llmBilledTurns: billedMicroUsd === undefined ? 0 : 1,
         updatedAt: at,
       });
     }

@@ -69,6 +69,70 @@ export const voiceOverview = query({
   },
 });
 
+// The chat/WhatsApp half of the same meter: what the AI agent's replies and
+// the org's template messages are costing them, at THEIR prices. Counts are
+// the billed units (usageMonthly.llmBilledTurns / waBilledCount), not the raw
+// traffic counters — a table whose count × rate disagrees with its amount is
+// a support ticket. Nothing here exposes llmCostMicroUsd or waCostMicroUsd:
+// the platform's own costs are margin data, the voiceCostMicroUsd rule.
+export const messagingOverview = query({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      // The per-reply rate this org meters at right now — shown so the bill
+      // is explainable, like the voice rate above.
+      chatRateMicroUsdPerTurn: v.number(),
+      months: v.array(
+        v.object({
+          month: v.string(),
+          chatReplies: v.number(),
+          chatBilledMicroUsd: v.number(),
+          waMessages: v.number(),
+          waBilledMicroUsd: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    const { orgId, role } = await requireOrg(ctx);
+    if (role !== "owner") return null;
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+    const rate =
+      org.chatRateMicroUsdPerTurn ??
+      Math.max(
+        0,
+        Math.round(
+          Number(await platformValue(ctx, "chatRateMicroUsdPerTurn")) || 0,
+        ),
+      );
+    const rows = await ctx.db
+      .query("usageMonthly")
+      .withIndex("by_org_month", (q) => q.eq("orgId", orgId))
+      .order("desc")
+      .take(24);
+    return {
+      chatRateMicroUsdPerTurn: rate,
+      months: rows
+        .filter(
+          (r) =>
+            (r.llmBilledTurns ?? 0) > 0 ||
+            (r.waBilledCount ?? 0) > 0 ||
+            (r.llmBilledMicroUsd ?? 0) > 0 ||
+            (r.waBilledMicroUsd ?? 0) > 0,
+        )
+        .map((r) => ({
+          month: r.month,
+          chatReplies: r.llmBilledTurns ?? 0,
+          chatBilledMicroUsd: r.llmBilledMicroUsd ?? 0,
+          waMessages: r.waBilledCount ?? 0,
+          waBilledMicroUsd: r.waBilledMicroUsd ?? 0,
+        })),
+    };
+  },
+});
+
 export const setVoiceBudget = mutation({
   args: {
     // null clears the budget, which also silences the 80/100% alert emails —
