@@ -554,13 +554,25 @@ export const pauseForCustomer = internalMutation({
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const who = conversationAgentMode(org, customer);
-    // The flag clears whatever the mode, and BEFORE the live check: it asks a
-    // different question from the pause. "This one needs a person" was
-    // answered the moment a person wrote in the thread — in suggest mode too,
-    // where the agent carries on drafting and only the amber note is stale.
+    // Two things happen whatever the mode, BEFORE the live check below,
+    // because both are about the human who just wrote rather than about who
+    // owns the thread.
+    //
+    // The flag goes: "this one needs a person" was answered the moment a
+    // person wrote in it.
     if (customer.agentFlaggedAt !== undefined) {
       await ctx.db.patch(args.customerId, { agentFlaggedAt: undefined });
     }
+    // And any draft still waiting goes with it. In suggest mode this is the
+    // common case, not an edge: a staff member reads the draft, decides they
+    // would rather say it their own way, and types. Leaving the proposal
+    // sitting above the composer afterwards would make answering a message
+    // cost two actions — the reply, and then tidying up the suggestion for a
+    // message that has already been handled.
+    //
+    // An accepted draft is claimed before its send reaches here, so this can
+    // never retire the one it is in the middle of sending.
+    await supersedePendingSuggestions(ctx, args.customerId);
     if (!args.force && who.effective !== "live") return null;
     if (who.override === "off" && customer.agentPausedAt !== undefined) return null;
     await ctx.db.patch(args.customerId, {

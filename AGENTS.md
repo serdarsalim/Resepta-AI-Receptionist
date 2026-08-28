@@ -3427,3 +3427,207 @@ stored E.164 via a new
 `defaultValue` prop. Deliberately NOT a server lookup by phone: echoing a name
 back to whoever types a number is a doxxing endpoint. The server already
 dedupes by phone on submit; nothing needed to change there.
+
+## The agent gets three gears, and the owner holds one of them (2026-08-29)
+
+The chat agent was one switch for a whole workspace and only the operator
+could reach it. A business either had an agent answering every customer by
+itself, or had nothing. That is now two questions with two owners, and a third
+asked per conversation.
+
+`orgs.chatAgentMode` (off/shadow/live) stays exactly where it was — /admin,
+operator-only — because it is also the **entitlement gate**. This is the whole
+reason the obvious design (extend that one union with "suggest" and let the
+owner write it) is wrong: the moment a tenant can write the field that means
+"do I have an agent", they can switch a paid feature on for themselves, and
+there is no other gate behind it. Shadow stays a fleet-QA state the tenant is
+never shown.
+
+`orgs.chatAgentBehavior` (off/suggest/live) is the owner's, in Settings →
+Messages, and is read ONLY when the mode above is "live".
+
+Facts the next reader should not re-derive:
+
+- **Unset behaviour means LIVE, not suggest**, and that is a migration
+  decision rather than a preference. Every org already in live is answering
+  customers today; defaulting them to drafts would have silenced a working
+  agent on deploy day with nobody told. New orgs get the careful default
+  another way — `platform.setChatAgentMode` stamps `suggest` the first time an
+  operator brings an org live, and only ever over an absence, so an owner who
+  has since chosen keeps their choice through any number of mode flips. This
+  is why "unset" means different things depending on when the org arrived; the
+  schema comment says so out loud rather than leaving it to be discovered.
+- **Precedence lives in exactly one leaf function**, `convex/lib/agentMode.ts`
+  → `conversationAgentMode()`. Four callers ask "who answers this
+  conversation": the webhook deciding whether to schedule, the turn deciding
+  whether to run, the thread UI drawing its control, and the takeover write.
+  Three copies of that rule is how those four start disagreeing about which
+  conversations the agent is in. It imports types and nothing else, on
+  purpose — a value imported across a cycle is `undefined` while the importing
+  module's top level runs, and a precedence rule resolving to undefined is an
+  agent that either goes mute or talks over a human.
+- **Off and shadow are CEILINGS, not defaults.** An override cannot lift them.
+  A per-conversation pin that could make a shadow org send would defeat the
+  point of shadow, and one that could make a non-entitled org answer would
+  defeat the gate.
+- **The per-conversation override is stored only when it DIFFERS from the
+  default, and cleared when it matches.** That is what buys inheritance with
+  no UI for it: there is no fourth "follow the business" pill to explain,
+  because choosing the value the business already has *is* following it. An
+  untouched thread moves when the owner changes the default; a decided one
+  keeps its decision; undoing costs one click.
+- It is a full mode and not a pause switch because **a default you can only
+  switch off is not one you can disagree with**. A business answering live
+  still has the awkward thread it wants drafted first, and one on drafts has
+  the regular it is happy to let run.
+- **`customers.agentPausedAt` stops deciding anything** and becomes the "since
+  when". It is still read exactly one way: a row stamped before
+  `agentModeOverride` existed has no override, so the resolver reads the stamp
+  as an implied "off". Without that shim every conversation a human had taken
+  over would have been handed back to the agent, silently, mid-repair, on
+  deploy day. Nothing else reads it.
+- **The turn row IS the draft queue.** No second table: `chatAgentTurns`
+  status "suggested" with `suggestionOutcome` UNSET is a pending draft, and
+  that absence is how the thread finds the one live one. A draft therefore
+  cannot exist without the tokens, tool calls and prompt version that produced
+  it sitting beside it. Retiring the previous pending draft happens inside
+  `recordTurn`, in the same transaction as the insert, so a thread can never
+  show two and nobody can send one written for a message already followed up.
+- **An edited send still records as "sent".** The acceptance rate asks "was
+  this worth sending", not "did the model get every word right" — a rate that
+  only counted untouched drafts would punish exactly the edit that made one
+  usable. It is a reading, not a feedback loop: nothing trains on it.
+- **The claim happens before the send, not after.** `sendSuggestion` flips the
+  outcome to "sent" in a serializable mutation first, so two staff on one
+  thread cannot both win; the loser is told the draft is gone rather than
+  sending it twice. On a send failure it releases the claim, or a WhatsApp
+  outage would quietly eat every draft it prevented.
+- **A staff reply takes the conversation over only when the agent was answering
+  LIVE.** In suggest a person is reading every draft already, so typing means
+  they are working the thread the way the mode intends — silencing the agent
+  there would turn "I sent one myself" into "the drafts stopped and nobody said
+  why". Two things happen regardless of mode, because they are about the human
+  who just wrote: the flag clears, and any pending draft is retired. Otherwise
+  answering a message in suggest mode costs two actions, the reply and then
+  tidying up a proposal for a message already handled.
+
+### The debounce is the load-bearing part
+
+`REPLY_DEBOUNCE_MS = 15_000`, in `lib/chatAgentTemplate.ts`. WhatsApp reports
+messages, reactions and delivery states and **never once reports that somebody
+is composing**, so there is nothing to wait on — this delay is the substitute
+for waiting until they stop typing. Every inbound schedules its own turn
+carrying its own message id, and a turn whose message is no longer the newest
+inbound stands down.
+
+It writes no row when it stands down, deliberately, exactly like `agent-off`:
+a sentence finished in a second thought is a normal way to type, not an event
+worth four entries in the flight recorder. Without the debounce, a customer
+sending one thought as four messages got four answers — and in suggest mode
+that is four drafts a human has to read and discard, which is the difference
+between the mode being usable and being a chore.
+
+The newest-inbound check reads the same 30 rows the prompt's history already
+needed; they were two separate `take(30)` calls on one index for one moment
+until they were hoisted into one.
+
+### Asking for a person stopped meaning "stop"
+
+Escalating used to pause the agent, always. So a customer who asked one thing
+the agent could not price lost the agent for *everything else too*, including
+the opening hours it knew perfectly well. That is now
+`orgs.chatAgentStopOnHandover`, and it defaults to **keep answering**: the
+agent says a person is needed, stamps `customers.agentFlaggedAt`, and carries
+on. Existing live orgs feel this change; it is the direction worth being wrong
+in, because silence is the more destructive of the two to get by accident.
+
+Two positive options in the UI, never a checkbox — both are real products a
+business might want, and phrasing one as the absence of the other makes the
+default look like the setting nobody got round to.
+
+Three things about the tool itself:
+
+- **It returns FACTS, never a sentence.** It used to return `note: "Tell the
+  customer the team will follow up."` and the model wrote that line verbatim
+  every single time. It now returns `{handedOver, keepAnswering,
+  alreadyFlagged}` and the wording is the model's job.
+- **Its description changes with the policy.** A description promising to hand
+  the conversation over, while the business has it set to keep answering,
+  would have the model writing goodbyes into a conversation it is about to
+  continue.
+- **The write happens in LIVE only.** In suggest there is nothing to stop and
+  nothing to flag — a human is reading every draft — and stamping there would
+  quietly switch off an agent nobody took over. When it does stop, it stops
+  with `force`, because the assistant asking for a human is a later and more
+  specific statement than whoever earlier pinned the thread to live; without
+  that, pinning a chat to live would silently mean "and it can never hand
+  over".
+
+`alreadyFlagged` rides into the tool result so the model is told plainly that
+it has already announced a colleague. That is the whole difference between
+flagging something once and nagging about it every turn. And the invitation to
+escalate "when you are unsure" is gone from both the tool description and the
+channel rules — a door that is always open, and the model walked through it on
+questions it could have answered. Template v7.
+
+The flag notifies nobody, deliberately. Staff read their own chats; it is an
+amber line on a surface somebody already has open.
+
+### The LLM seam had three things wrong (same day)
+
+Carried back from the Nudge port, which found them:
+
+- `claude-sonnet-5` was priced at **3/15 — Sonnet 4.6's rate**, inherited when
+  the model name changed and the numbers did not. Every Sonnet turn was
+  metered at 1.5x its real cost. Turns snapshot their own rate, so correcting
+  the table is forward-only and rewrote nothing. Correct rates as of
+  2026-08-28: opus-5 5/25, fable-5 10/50, sonnet-5 2/10, sonnet-4-6 3/15,
+  haiku-4-5 1/5, gpt-5.2 1.75/14. `PRICE_TABLE_VERSION` is 3.
+- **An unpriced model makes the budget cap a decoration.** An unknown model
+  meters at zero, zero never accumulates, and the cap never trips — behind a
+  confident $0.00. `isPricedModel` now says so in the /admin row that names
+  the model.
+- **`output_config.effort` was never set**, so every receptionist turn ran at
+  the API default of "high". It is now `"low"`. Thinking stays ON: disabling
+  it is *accepted* on Sonnet 5, but a model with thinking off sometimes writes
+  a tool call into its visible text instead of a `tool_use` block — the turn
+  succeeds, the tool never runs, nothing errors, and the customer is told
+  about a booking nobody made. This agent has seven tools. `budget_tokens` is
+  not the dial either; it is rejected with a 400 on the current models. And
+  `MAX_COMPLETION_TOKENS` went 1024 → 2048, because thinking tokens draw from
+  that same budget and 1024 is a reply truncated mid-sentence — one we would
+  still send.
+
+### Where the controls live, and why not elsewhere
+
+Nudge's standing rule applies in this direction too: **port the mechanisms and
+the hard-won facts, never port where a control lives.** Nudge is one
+deployment per tenant, so its Settings *is* its admin panel and it keeps the
+brief, the budget, the model and the turn log there. Resepta is one deployment
+serving many tenants. So: the owner sees three pills and a handover policy;
+the budget, the model, the turn log, the acceptance count and shadow stay
+operator-only behind /admin.
+
+The per-conversation control renders even when the business default is "off",
+because a control that vanishes at "off" cannot be used to switch a single
+conversation ON — which is half of what a per-conversation override is for. It
+renders nothing at all when the org has no agent, rather than a disabled
+control for a feature they do not have.
+
+`SegmentedControl` was extracted from BusinessView's field-source picker so
+the settings row and the thread strip cannot drift into looking like different
+decisions. A segmented control rather than a switch whenever **off is a state
+rather than the absence of the control**.
+
+The thread strip is ONE control. The bar it replaces was a status sentence
+*plus* a Take over button — two controls changing one state from opposite
+directions, where reading it meant working out which of the two you were being
+told. Its label says "in this chat", and that is load-bearing: without it the
+pills read as the business setting and somebody muting one awkward
+conversation would think they had switched the assistant off for everybody.
+The draft docks above the composer rather than at the end of the message list,
+because a draft is a proposal about the NEXT message and one you have to
+scroll to find is one you miss on a busy morning. Its textarea re-seeds on the
+draft's **identity, never its text** — keyed on the text, a model that produced
+the same sentence twice would silently throw away whatever the reader typed
+over it.
