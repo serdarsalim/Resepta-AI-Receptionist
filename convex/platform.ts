@@ -56,7 +56,7 @@ import {
   revokeMembership,
   setMemberRole,
 } from "./lib/members";
-import { DEFAULT_MONTHLY_BUDGET_MICRO_USD } from "./lib/llm";
+import { DEFAULT_MONTHLY_BUDGET_MICRO_USD, isPricedModel } from "./lib/llm";
 import {
   isVoiceModel,
   resolvePlatformHighPriority,
@@ -1204,6 +1204,11 @@ export const orgAssistant = query({
       llmKeyConfigured: v.boolean(),
       llmProvider: v.union(v.literal("anthropic"), v.literal("openai")),
       llmModel: v.string(),
+      // False when the resolved model has no row in the price table, which is
+      // the state where every turn meters at zero and the monthly budget stops
+      // capping anything. The panel has to say it — a confident $0.00 reads as
+      // "cheap", not "unmeasured".
+      llmModelPriced: v.boolean(),
       month: v.string(),
       usage: v.union(
         v.null(),
@@ -1268,6 +1273,7 @@ export const orgAssistant = query({
       llmKeyConfigured: Boolean(llm.apiKey),
       llmProvider: llm.provider,
       llmModel: llm.model,
+      llmModelPriced: isPricedModel(llm.model),
       month,
       usage: usage
         ? {
