@@ -57,16 +57,27 @@ function dayStrip(timezone: string, fromMs: number): { date: string; ms: number 
 type Step = "service" | "fulfillment" | "time" | "details";
 
 // The device remembers its owner. Written after a successful booking, read
-// back on the next visit, so a repeat customer meets their own name and
-// number already filled in instead of a blank form. One key for the whole
-// product rather than per salon — these are the customer's own details, the
-// same at every salon they book.
+// back on the next visit, so a repeat customer meets their own name, number
+// and delivery address already filled in instead of a blank form. One key for
+// the whole product rather than per business — these are the customer's own
+// details, the same wherever they order.
+//
+// The ADDRESS matters most here and is the reason this is not just a nicety:
+// a restaurant's regular orders weekly, and typing a street address on a
+// phone every time is the friction that sends them back to the phone call.
+// It lives only on their device — the customer record deliberately has no
+// address field, because an address is a fact about an order, not a person.
 //
 // Deliberately NOT a server lookup: a page that answers a typed phone number
 // with the matching name would hand anyone's identity to whoever types their
 // number. The server still matches by phone on submit; it just never echoes.
 const CONTACT_KEY = "resepta.bookingContact";
-type StoredContact = { name?: string; phone?: string; email?: string };
+type StoredContact = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+};
 function storedContact(): StoredContact {
   // Guarded: this also runs during prerender, where there is no storage.
   if (typeof window === "undefined") return {};
@@ -116,12 +127,12 @@ export default function BookingPage({
   // invalidate each other: the order is for one moment, told one way.
   const [kind, setKind] = useState<"pickup" | "delivery" | null>(null);
   const [asap, setAsap] = useState(false);
-  const [address, setAddress] = useState("");
   // Read once at mount; the details step mounts and unmounts as the wizard
   // swaps screens, so the prefill has to live up here with the other fields.
   const [prefill] = useState(storedContact);
   const [name, setName] = useState(prefill.name ?? "");
   const [email, setEmail] = useState(prefill.email ?? "");
+  const [address, setAddress] = useState(prefill.address ?? "");
   const [note, setNote] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -966,12 +977,19 @@ export default function BookingPage({
             setSending(false);
             if (result.ok) {
               try {
+                // A pickup order never asks for an address, and must not
+                // forget the one a previous delivery stored.
+                const keptAddress =
+                  kind === "delivery" && address.trim()
+                    ? address.trim()
+                    : prefill.address;
                 localStorage.setItem(
                   CONTACT_KEY,
                   JSON.stringify({
                     name: name.trim(),
                     phone,
                     ...(email.trim() ? { email: email.trim() } : {}),
+                    ...(keptAddress ? { address: keptAddress } : {}),
                   }),
                 );
               } catch {
