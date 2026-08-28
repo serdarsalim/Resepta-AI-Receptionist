@@ -2163,6 +2163,19 @@ export const voiceBook = internalMutation({
     // caller means; the chat agent passes "chat" so the appointment row says
     // honestly which lane wrote it (docs/chat-agent.md).
     source: v.optional(v.union(v.literal("voice"), v.literal("chat"))),
+    // How a GOODS order reaches its customer — the same field the booking page
+    // writes (schema appointments.fulfillment). Applied only when the matched
+    // lines are goods through and through; a visit is fulfilled in the chair
+    // and an agent that sends this alongside a haircut gets it dropped, not a
+    // refusal. ASAP is the caller's promise, not a time: pass startAt = now
+    // with asap set, exactly as the page does.
+    fulfillment: v.optional(
+      v.object({
+        kind: v.union(v.literal("pickup"), v.literal("delivery")),
+        asap: v.optional(v.boolean()),
+        address: v.optional(v.string()),
+      }),
+    ),
   },
   // The matched name goes back to the agent so it can read the booking back
   // to the caller in the salon's own vocabulary — and so a miss is visible to
@@ -2342,10 +2355,42 @@ export const voiceBook = internalMutation({
         throw new Error("slot-taken");
       }
     }
+    // Goods through and through, the same test classifyServices runs — and
+    // the same rule the booking page holds: a visit IS its own handover, so a
+    // fulfillment riding along with a haircut is dropped rather than refused.
+    const goodsOnly = lines.length > 0 && totalMinutes === 0;
+    const fulfillment = goodsOnly ? args.fulfillment : undefined;
+    if (fulfillment) {
+      // The business's own answer, checked where both agent lanes pass. An
+      // agent offering delivery a business does not do is a promise in that
+      // business's voice, and the model will happily make it if the prompt
+      // drifts. A sentence, not a slug: this reaches the agent verbatim.
+      const bookingOrg = await ctx.db.get(args.orgId);
+      const offered =
+        fulfillment.kind === "pickup"
+          ? (bookingOrg?.pickupEnabled ?? true)
+          : (bookingOrg?.deliveryEnabled ?? true);
+      if (!offered) {
+        throw new Error(
+          `not-offered: this business does not do ${fulfillment.kind} for products. Offer the other way, and never promise ${fulfillment.kind}.`,
+        );
+      }
+    }
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: args.orgId,
       customerId: customer._id,
       startAt: args.startAt,
+      ...(fulfillment
+        ? {
+            fulfillment: {
+              kind: fulfillment.kind,
+              ...(fulfillment.asap ? { asap: true } : {}),
+              ...(fulfillment.address?.trim()
+                ? { address: fulfillment.address.trim().slice(0, 500) }
+                : {}),
+            },
+          }
+        : {}),
       // The services' own durations win over anything the call reported: they
       // are what the salon says the work takes, and the block staff read.
       durationMinutes: totalMinutes ?? args.durationMinutes,

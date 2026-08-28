@@ -281,6 +281,15 @@ export const loadTurnContext = internalQuery({
         mode,
         currency: org.currency ?? "TRY",
         priceDecimals: org.priceDecimals ?? false,
+        // Product handover (schema orgs.pickupEnabled / deliveryEnabled).
+        // Unset means on, resolved here so the prompt reads plain booleans.
+        pickup: org.pickupEnabled ?? true,
+        delivery: org.deliveryEnabled ?? true,
+        // A service row with no duration is a GOOD — the schema's own rule.
+        // Read off the list already loaded above rather than a second query.
+        sellsGoods: services.some(
+          (row) => row.active && row.durationMinutes === undefined,
+        ),
       },
       customer: {
         _id: customer._id,
@@ -648,6 +657,9 @@ export const respond = internalAction({
       variables: context.variables,
       appointments: context.upcoming,
       recentCalls: context.recentCalls,
+      sellsGoods: context.org.sellsGoods,
+      pickup: context.org.pickup,
+      delivery: context.org.delivery,
     });
 
     // The skip verdict already refused a missing key; this narrows the type
@@ -944,31 +956,20 @@ async function executeTool(
     }
 
     if (name === "book_appointment") {
-      const startAt = parseLocalStart(String(input.start ?? ""), org.timezone);
       const customerName =
         String(input.name ?? "").trim() ||
         `${customer.firstName} ${customer.lastName ?? ""}`.trim();
-      if (Number.isNaN(startAt)) return { error: "missing-or-bad-start" };
       if (!customerName || customerName === customer.phone) {
         return { error: "missing-name", note: "Ask the customer for their name first." };
-      }
-      const now = Date.now();
-      if (startAt < now - 5 * 60_000) return { error: "start-is-in-the-past" };
-      if (startAt > now + 400 * 24 * 60 * 60_000) return { error: "start-is-too-far-ahead" };
-      const hours = org.businessHours;
-      if (hours && hasBusinessHours(hours) && !isWithinActiveWindow(startAt, org.timezone, hours)) {
-        return {
-          error: "outside-open-hours",
-          attempted: spokenOf(startAt),
-          ...openHoursForAgent(hours),
-          note: "The business is CLOSED then, so this was not booked. Offer the nearest time inside open_hours.",
-        };
       }
       // Plural now, with the same tolerance the voice handler has: a
       // model that packs "saç kesimi, sakal" into one entry gets it split
       // rather than matched against nothing. `service` stays accepted
       // because nothing stops an older conversation mid-flight from
       // having already been handed the previous tool shape.
+      //
+      // READ BEFORE THE CLOCK now, because whether this is a product order
+      // decides whether there is a time to check at all.
       const spokenServices = Array.isArray(input.services)
         ? input.services
             .flatMap((one) => String(one ?? "").split(","))
@@ -976,15 +977,70 @@ async function executeTool(
             .filter(Boolean)
         : undefined;
       const spokenService = String(input.service ?? "").trim() || undefined;
+      const spoken = spokenServices ?? (spokenService ? [spokenService] : []);
+      const now = Date.now();
+      const askedKind =
+        input.fulfillment === "pickup" || input.fulfillment === "delivery"
+          ? input.fulfillment
+          : undefined;
+      const askedAsap = input.asap === true;
+      const hasCalcom = Boolean(org.calcomApiKey && org.calcomEventTypeId);
+      // One classification, shared by both readers of it: cal.com routing (a
+      // goods-only order stays local) and the product-order path below. Only
+      // asked for when something actually turns on the answer.
+      const goodsOnly =
+        askedKind || askedAsap || hasCalcom
+          ? (
+              await ctx.runQuery(internal.retell.classifyServices, {
+                orgId: context.orgId,
+                spoken,
+              })
+            ).goodsOnly
+          : false;
+      if ((askedKind || askedAsap) && !goodsOnly) {
+        // The agent reached for the product path on a visit. Named rather
+        // than shrugged at: silently dropping it would book a haircut whose
+        // customer was just told it would be delivered.
+        return {
+          error: "not-a-product-order",
+          note: "pickup, delivery and asap are for PRODUCTS only. A service is done here at a booked time — confirm a time and call again without them.",
+        };
+      }
+      // ASAP has no time to check: the order is placed now and the business
+      // fills it as soon as it can, which is what the customer asked for.
+      // The booking page's own rule (convex/booking.ts), kept identical so
+      // one product does not answer the same request two ways. Lead time
+      // still binds — voiceBook refuses it with a sentence naming the item.
+      const startAt = askedAsap
+        ? now
+        : parseLocalStart(String(input.start ?? ""), org.timezone);
+      if (!askedAsap) {
+        if (Number.isNaN(startAt)) return { error: "missing-or-bad-start" };
+        if (startAt < now - 5 * 60_000) return { error: "start-is-in-the-past" };
+        if (startAt > now + 400 * 24 * 60 * 60_000) {
+          return { error: "start-is-too-far-ahead" };
+        }
+        const hours = org.businessHours;
+        if (
+          hours &&
+          hasBusinessHours(hours) &&
+          !isWithinActiveWindow(startAt, org.timezone, hours)
+        ) {
+          return {
+            error: "outside-open-hours",
+            attempted: spokenOf(startAt),
+            ...openHoursForAgent(hours),
+            note: "The business is CLOSED then, so this was not booked. Offer the nearest time inside open_hours.",
+          };
+        }
+      }
       let externalUid: string | undefined;
+      // The pair again rather than hasCalcom: this branch passes both to
+      // createBooking, and only the direct test narrows them off null.
       if (org.calcomApiKey && org.calcomEventTypeId) {
         // Same rule as the voice webhook: a goods-only order stays local.
         // cal.com has nothing zero-length, and an externalUid would skip
         // voiceBook's guards — lead time included.
-        const { goodsOnly } = await ctx.runQuery(internal.retell.classifyServices, {
-          orgId: context.orgId,
-          spoken: spokenServices ?? (spokenService ? [spokenService] : []),
-        });
         if (!goodsOnly) {
           const booking = await createBooking({
             apiKey: org.calcomApiKey,
@@ -1009,10 +1065,24 @@ async function executeTool(
           services: spokenServices,
           service: spokenService,
           source: "chat",
+          ...(askedKind
+            ? {
+                fulfillment: {
+                  kind: askedKind,
+                  ...(askedAsap ? { asap: true } : {}),
+                  ...(askedKind === "delivery" && String(input.address ?? "").trim()
+                    ? { address: String(input.address).trim() }
+                    : {}),
+                },
+              }
+            : {}),
         });
         return {
           booked: true,
-          spoken_time: spokenOf(startAt),
+          // An ASAP order has no promised minute, and handing the agent one
+          // is how it reads a time back that nobody agreed to.
+          ...(askedAsap ? { asap: true } : { spoken_time: spokenOf(startAt) }),
+          ...(askedKind ? { fulfillment: askedKind } : {}),
           service: booking.serviceName,
           // The whole visit, so the confirmation names everything booked and
           // a short list tells the agent the rest matched nothing.

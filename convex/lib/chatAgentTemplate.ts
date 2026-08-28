@@ -37,7 +37,14 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // (retell.applyVoiceContactValues): the identity trio plus the org's
 // agent-fillable contact fields, locked keys and staff-only fields refused in
 // the one place both lanes share. The adapter stops disclaiming the tool.
-export const CHAT_AGENT_TEMPLATE_VERSION = 5;
+// v6 (2026-08-28): product orders get their handover. book_appointment takes
+// fulfillment (pickup/delivery), asap and address, and `start` stops being
+// required — an ASAP order is placed now and has no minute to agree on. Only
+// ever honoured for a basket that is goods through and through; the server
+// says so rather than trusting the model (chatAgent book_appointment,
+// retell.voiceBook). Which modes a business offers rides in BUSINESS FACTS,
+// so the agent never offers a delivery the business does not do.
+export const CHAT_AGENT_TEMPLATE_VERSION = 6;
 
 // How many completion rounds one inbound message may chain (each tool round
 // is a completion). A booking is question → availability → confirm → book:
@@ -90,28 +97,43 @@ export function chatAgentTools(): LlmTool[] {
     {
       name: "book_appointment",
       description:
-        "Create the appointment for THIS customer, only after they confirmed everything they want done and the exact start time in so many words. Two services in one visit are ONE call listing both, never two calls.",
+        "Create the appointment or product order for THIS customer, only after they confirmed everything they want and — for a service — the exact start time in so many words. Two services in one visit are ONE call listing both, never two calls.",
       input_schema: {
         type: "object",
         properties: {
           start: {
             type: "string",
             description:
-              "Confirmed start of the whole visit, local time, YYYY-MM-DDTHH:MM. Do not add the services up yourself; the visit is one block and its length is worked out for you.",
+              "Confirmed start of the whole visit, local time, YYYY-MM-DDTHH:MM. Required for services. Omit only for a product order the customer wants as soon as possible (asap). Do not add the services up yourself; the visit is one block and its length is worked out for you.",
           },
           services: {
             type: "array",
             items: { type: "string" },
             description:
-              "Every service the customer asked for, in their own words. One entry for a single service, omitted if they named none.",
+              "Every service or product the customer asked for, in their own words. One entry for a single one, omitted if they named none.",
           },
           name: {
             type: "string",
             description:
               "Customer's full name — ask for it only when their record has none.",
           },
+          fulfillment: {
+            type: "string",
+            enum: ["pickup", "delivery"],
+            description:
+              "PRODUCTS ONLY: how the customer gets their order, once they have said which. Never send this for a service — a service happens here at its booked time.",
+          },
+          asap: {
+            type: "boolean",
+            description:
+              "PRODUCTS ONLY: true when the customer wants their order as soon as possible rather than at a set time. Then omit start — the order is placed now.",
+          },
+          address: {
+            type: "string",
+            description:
+              "Delivery address, exactly as the customer wrote it. Only with fulfillment=delivery, and ask for it before booking.",
+          },
         },
-        required: ["start"],
       },
     },
     {
@@ -211,6 +233,17 @@ export function chatAgentSystemPrompt(args: {
   // see docs/agent-core.md on one-way memory.
   appointments: { spoken: string; service?: string }[];
   recentCalls: { when: string; summary: string }[];
+  // Whether this business sells PRODUCTS at all (a service row with no
+  // duration). False for a salon selling nothing but hours, and then the
+  // product section below is not written: a prompt explaining how to sell
+  // things to a business that sells none is an invitation to invent some.
+  sellsGoods: boolean;
+  // Which ways it hands a product over. Facts, not preferences: the agent
+  // speaks in the business's voice, so offering a delivery it does not do is
+  // the business promising it. Services are unaffected — they are fulfilled
+  // in the chair.
+  pickup: boolean;
+  delivery: boolean;
 }): string {
   const languageNames: Record<string, string> = {
     tr: "Turkish",
@@ -245,6 +278,29 @@ export function chatAgentSystemPrompt(args: {
     if (args.closedDays?.length)
       lines.push(`- Closed on: ${args.closedDays.join(", ")}`);
   }
+
+  // Products, and how they get to people. Separate from BUSINESS FACTS above
+  // because it is a rule about a tool, not a fact to recite: the difference
+  // between a product and a service is the whole reason a towel should never
+  // be given an appointment slot.
+  const ways = [
+    args.pickup ? "collection in person" : "",
+    args.delivery ? "delivery" : "",
+  ].filter(Boolean);
+  if (args.sellsGoods) lines.push(
+    "",
+    "PRODUCTS (anything sold as a thing rather than a length of time)",
+    "- A product takes no appointment slot. Never ask a product buyer to choose an appointment time as if it were a service.",
+    ways.length === 2
+      ? "- Ask whether they want to collect it or have it delivered, then whether they want it as soon as possible or at a particular time."
+      : ways.length === 1
+        ? `- This business offers ${ways[0]} only — say so plainly if they ask for the other way, and never promise it. Ask whether they want it as soon as possible or at a particular time.`
+        : "- Ask when they would like it.",
+    ...(args.delivery
+      ? ["- For delivery, ask for the full address and pass it exactly as they wrote it."]
+      : []),
+    "- Call book_appointment with fulfillment, and with asap=true (and no start) when they want it as soon as possible. Never send fulfillment or asap for a service.",
+  );
 
   if (args.appointments.length || args.recentCalls.length) {
     lines.push("", "THIS CUSTOMER, beyond what the instructions carry");
