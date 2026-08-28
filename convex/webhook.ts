@@ -437,8 +437,14 @@ export async function processInboundMessage(
       Boolean(text.trim());
     if (agentEligible) {
       // Delayed, not immediate: a customer sending one thought as four
-      // messages schedules four turns, and only the one holding the newest
-      // inbound gets to answer (loadTurnContext's superseded check).
+      // messages schedules four turns, and only the last one answers
+      // (loadTurnContext's superseded check).
+      //
+      // The marker is stamped in the same mutation that schedules, and it is
+      // what the check reads — so a turn only ever stands down for a message
+      // that actually took over from it. Rows that reach the agent's eligible
+      // set are the only ones that move it.
+      await ctx.db.patch(contactId, { agentTurnScheduledFor: loggedId });
       await ctx.scheduler.runAfter(REPLY_DEBOUNCE_MS, internal.chatAgent.respond, {
         customerId: contactId,
         inboundMessageId: loggedId,

@@ -1348,15 +1348,17 @@ export const setChatAgentMode = mutation({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) throw new Error("no-such-org");
-    // Bringing an org live for the FIRST time sets its behaviour to drafts.
-    // Unset behaviour reads as "live" — it has to, so the orgs that predate
-    // the field keep answering — which would mean every newly-enabled org
-    // started auto-replying to customers before its owner had made a single
-    // choice. Stamping here puts the trust ramp where it belongs, at the
-    // start, and only ever writes over an absence: an owner who has since
-    // chosen keeps their choice through any number of mode flips.
+    // Bringing an org live sets its behaviour to drafts — but ONLY an org
+    // whose lifecycle has never been touched at all. Unset behaviour reads as
+    // "live", because the orgs that predate that field are answering
+    // customers today and must keep answering; stamping over it on any
+    // off→live flip would mean an operator toggling a long-live org off for
+    // ten minutes to look at a bad reply, and back on, silently demoting it
+    // to drafts nobody knows to read. `chatAgentMode === undefined` is the one
+    // state that means "never enabled", so it is the only one that stamps.
+    const neverEnabled = org.chatAgentMode === undefined;
     const behavior =
-      args.mode === "live" && org.chatAgentBehavior === undefined
+      args.mode === "live" && neverEnabled && org.chatAgentBehavior === undefined
         ? { chatAgentBehavior: "suggest" as const }
         : {};
     await ctx.db.patch(args.orgId, { chatAgentMode: args.mode, ...behavior });

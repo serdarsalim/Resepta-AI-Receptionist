@@ -2317,17 +2317,26 @@ function AgentThreadStrip({
               onClick={async () => {
                 setBusy(true);
                 setError(null);
-                const result = await onSend(text);
-                setBusy(false);
-                if (!result.ok) {
-                  // "already-decided" is the one refusal with a real story:
-                  // somebody else in this workspace sent or discarded it while
-                  // this tab was open.
-                  setError(
-                    result.reason === "already-decided"
-                      ? t("agent.draftGone")
-                      : (result.reason ?? "error"),
-                  );
+                try {
+                  const result = await onSend(text);
+                  if (!result.ok) {
+                    // "already-decided" is the one refusal with a real story:
+                    // somebody else in this workspace sent or discarded it
+                    // while this tab was open.
+                    setError(
+                      result.reason === "already-decided"
+                        ? t("agent.draftGone")
+                        : (result.reason ?? "error"),
+                    );
+                  }
+                } catch {
+                  // A thrown action — a dropped socket, a server error — used
+                  // to skip the reset below and leave both buttons disabled
+                  // for good, so the draft could be neither sent nor
+                  // dismissed without reloading the page.
+                  setError(t("common.error"));
+                } finally {
+                  setBusy(false);
                 }
               }}
               className="rounded-lg bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"

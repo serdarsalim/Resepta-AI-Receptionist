@@ -3631,3 +3631,71 @@ scroll to find is one you miss on a busy morning. Its textarea re-seeds on the
 draft's **identity, never its text** — keyed on the text, a model that produced
 the same sentence twice would silently throw away whatever the reader typed
 over it.
+
+### What an adversarial pass found, same day
+
+Eight defects, all with reproductions, all fixed. The four worth knowing about
+because the same shape will recur:
+
+- **"Newest inbound" is not "newest inbound that scheduled a turn".** The
+  debounce first compared the turn's message against the newest `direction:
+  "in"` row, and stand-downs write no row — so any inbound that logs a row
+  WITHOUT scheduling a turn silently killed the turn that was pending and put
+  nothing in its place. A voice note or photo (the webhook reads `text` from
+  `message.text.body` only; media goes to `mediaCaption`, so `text` is empty
+  and nothing schedules — but a row with body `[audio]` is written), a Confirm
+  or İPTAL tap (resolves an appointmentId, so the whole `if (!appointmentId)`
+  block containing the scheduler is skipped), and an inbound EMAIL on the same
+  customer all did it. Customer asks a question, sends a voice note four
+  seconds later, gets no answer and there is nothing in the flight recorder to
+  find. Fixed with `customers.agentTurnScheduledFor`, stamped in the same
+  mutation that schedules: the check now compares against what actually took
+  over from it. **The general shape: a guard that says "stand down, something
+  newer is handling this" must be reading the thing that IS handling it, not a
+  proxy that correlates most of the time.**
+- **A go-live stamp fired on every off→live flip.** `setChatAgentMode` stamped
+  `chatAgentBehavior: "suggest"` whenever behaviour was unset — which is
+  exactly the state of every org the `?? "live"` default exists to protect. An
+  operator toggling a long-live org off for ten minutes to look at a bad reply
+  and back on would have demoted it to drafts nobody knew to read. It now
+  stamps only when `chatAgentMode` itself was undefined, the one state that
+  means "never enabled".
+- **Accepting a draft could switch the agent off.** Drafts go out through
+  `wa.sendSession` — deliberately, so the session window and lane rules are the
+  ones already in force — and that path calls `pauseForCustomer`, which reads a
+  human sending into a LIVE thread as a takeover. A draft pending while the
+  thread reads live (staff hit the Answers pill, or the owner flipped the
+  business default) meant accepting it pinned that conversation Off, pills
+  jumping with no explanation. Two fixes, both worth keeping: a mode change
+  retires pending drafts, and `stateForCustomer` only offers a draft while the
+  thread is actually on drafts.
+- **Retiring the draft before the send destroyed it.** The first version put
+  `supersedePendingSuggestions` in `pauseForCustomer`, which runs BEFORE the
+  send and therefore before `session-window-closed`, `no-consent`,
+  `wa-not-configured` and Meta itself. Staff typing their own reply into a
+  thread whose 24h window had closed lost the message AND the draft AND the
+  flag. Moved to `messages.applySendResult`'s ok branch — the one place every
+  send path already reports, which is why the send-usage and open-rate counters
+  live there too. **Retire content on the branch that means it landed, never on
+  the branch that means somebody tried.**
+
+Three smaller ones: `releaseSuggestion` could restore a claim on top of a
+newer pending draft, leaving two pending with the thread rendering the stale
+one (it now supersedes instead, and `pendingSuggestionsFor` returns newest
+first); the draft's Send button had no `try/finally`, so a thrown action left
+both buttons disabled until remount; and a live turn had no freshness check
+between the debounce test and the send, so "merhaba" at t=0 and the real
+question at t=20s produced two replies, the first answering a thread that had
+moved on.
+
+And one that is worth its own paragraph, because it is the kind of hole a
+mechanical guarantee grows when a human is added to the loop. **The AI
+disclosure was bypassable in suggest mode.** The line is prepended
+mechanically when a draft is generated — never left to the model, because that
+would make compliance a probability — but a draft lands in a textarea, and a
+staff member who finds the sentence clumsy could delete it and send. The turn
+still recorded as the sent one, so `disclosed` became true forever and no
+message that customer ever received carried it. `claimSuggestion` now returns
+the line still owed and `sendSuggestion` re-prepends it when it is missing.
+The rule generalises: **anything the system guarantees mechanically has to be
+re-guaranteed at the point a human can edit it.**

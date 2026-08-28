@@ -12,6 +12,7 @@ import { requireOrg } from "./lib/orgAuth";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 import { recordSendUsage } from "./lib/usage";
+import { supersedePendingSuggestions } from "./lib/agentDrafts";
 
 const messageStatus = v.union(
   v.literal("queued"),
@@ -144,6 +145,16 @@ export const applySendResult = internalMutation({
       // below is here: one feeding site, and a row reaches this branch at most
       // once, so retries cannot inflate it.
       await recordSendUsage(ctx, message);
+      // A human answered this thread by hand, and it landed — so the
+      // assistant's pending draft for it is a proposal about a message that
+      // has been dealt with. Retiring it here rather than at the start of the
+      // send is the whole point: this branch means the customer actually
+      // received something, so a refused or failed send leaves the draft
+      // where it is. "session" is the composer's own kind; the assistant's
+      // live replies are "chat_agent" and must not retire themselves.
+      if (message.kind === "session" && message.customerId) {
+        await supersedePendingSuggestions(ctx, message.customerId);
+      }
       // The denominator of the template's open rate. Bumped HERE because this
       // is the one place every send path already reports, so the counter has a
       // single feeding site and cannot drift between the send path and the

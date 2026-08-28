@@ -1173,6 +1173,20 @@ export default defineSchema({
     // reads it and answers "already flagged", which is the whole difference
     // between flagging something once and nagging about it every turn.
     agentFlaggedAt: v.optional(v.number()),
+    // The inbound message the webhook most recently scheduled an agent turn
+    // for. The debounce compares against THIS, never against "the newest
+    // inbound row", and the difference is a customer's question going
+    // unanswered:
+    //
+    // Only some inbound rows schedule a turn. A voice note or a photo logs a
+    // row with a body like "[audio]" but carries no text for the agent to
+    // read; a Confirm tap resolves an appointment and never reaches the agent
+    // at all; an inbound EMAIL is a row on this same customer. Every one of
+    // those is "newer" than the question a turn is already pending for — so
+    // comparing against the newest row would have that turn stand down for a
+    // message that never scheduled a replacement, and stand-downs write no
+    // row. Nothing sent, nothing logged, nothing to find.
+    agentTurnScheduledFor: v.optional(v.id("messages")),
     // Mute — the ATTENTION switch, and only that. A muted customer stays fully
     // live: you can send to them, they still appear in search, their timeline
     // still records everything. What changes is that they stop asking for a

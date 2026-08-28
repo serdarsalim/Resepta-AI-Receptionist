@@ -7,11 +7,9 @@ import {
   mutation,
   query,
   type ActionCtx,
-  type MutationCtx,
-  type QueryCtx,
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { monthKey } from "./lib/usage";
 
@@ -36,6 +34,10 @@ import {
   disclosureLine,
 } from "./lib/chatAgentTemplate";
 import { conversationAgentMode, type SettableAgentMode } from "./lib/agentMode";
+import {
+  pendingSuggestionsFor,
+  supersedePendingSuggestions,
+} from "./lib/agentDrafts";
 import { builtinAgentVariables } from "./lib/agentVariables";
 import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
@@ -123,17 +125,24 @@ export const loadTurnContext = internalQuery({
       .order("desc")
       .take(30);
 
-    // The debounce (lib/chatAgentTemplate REPLY_DEBOUNCE_MS): every inbound
-    // scheduled its own turn, and only the one holding the newest inbound
-    // message may answer. The rest stand down here, before a single token is
-    // spent, and — like agent-off — write no row: a fragmented sentence is a
-    // normal way to type, not an event worth four entries in the flight
-    // recorder.
-    if (!skip && args.inboundMessageId) {
-      const newestInbound = rawMessages.find((m) => m.direction === "in");
-      if (newestInbound && newestInbound._id !== args.inboundMessageId) {
-        skip = "superseded";
-      }
+    // The debounce (lib/chatAgentTemplate REPLY_DEBOUNCE_MS): every eligible
+    // inbound scheduled its own turn, and only the last one to do so may
+    // answer. The rest stand down here, before a single token is spent, and —
+    // like agent-off — write no row: a fragmented sentence is a normal way to
+    // type, not an event worth four entries in the flight recorder.
+    //
+    // Compared against the marker the WEBHOOK stamps when it schedules, never
+    // against the newest inbound row. See customers.agentTurnScheduledFor:
+    // media, a Confirm tap and an inbound email all write newer inbound rows
+    // WITHOUT scheduling anything, so the newest-row test would retire a live
+    // turn in favour of nothing and say nothing about it.
+    if (
+      !skip &&
+      args.inboundMessageId &&
+      customer.agentTurnScheduledFor !== undefined &&
+      customer.agentTurnScheduledFor !== args.inboundMessageId
+    ) {
+      skip = "superseded";
     }
 
     // Which model, whose dialect, whose key — ONE resolution shared with the
@@ -380,37 +389,17 @@ export const loadTurnContext = internalQuery({
   },
 });
 
-// ── The draft queue ─────────────────────────────────────────────────────────
-// A pending draft is a "suggested" turn with no outcome yet. The turn row IS
-// the queue — no second table — so a draft cannot exist without the tokens,
-// tool calls and prompt version that produced it sitting beside it.
-
-// Every still-pending draft on this conversation, oldest first. Scoped by the
-// customer index and filtered in memory: a conversation's turns are bounded by
-// the rate limit, and there is no index worth adding for a list that is almost
-// always empty or one long.
-async function pendingSuggestionsFor(
-  ctx: { db: MutationCtx["db"] } | { db: QueryCtx["db"] },
-  customerId: Id<"customers">,
-): Promise<Doc<"chatAgentTurns">[]> {
-  const turns = await ctx.db
-    .query("chatAgentTurns")
-    .withIndex("by_customer_at", (q) => q.eq("customerId", customerId))
-    .order("desc")
-    .take(20);
-  return turns
-    .filter((t) => t.status === "suggested" && t.suggestionOutcome === undefined)
-    .reverse();
-}
-
-async function supersedePendingSuggestions(
-  ctx: MutationCtx,
-  customerId: Id<"customers">,
-): Promise<void> {
-  for (const turn of await pendingSuggestionsFor(ctx, customerId)) {
-    await ctx.db.patch(turn._id, { suggestionOutcome: "superseded" });
-  }
-}
+// Which inbound message the agent is currently meant to be answering, read
+// fresh. Cheap enough to ask twice a turn — once before spending tokens, once
+// before the reply leaves.
+export const currentTurnMessage = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.union(v.id("messages"), v.null()),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    return customer?.agentTurnScheduledFor ?? null;
+  },
+});
 
 // ── The flight recorder + ledger write (spec §5, §6) ────────────────────────
 // One mutation writes the turn AND bumps the month's counters, so the two can
@@ -554,25 +543,19 @@ export const pauseForCustomer = internalMutation({
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const who = conversationAgentMode(org, customer);
-    // Two things happen whatever the mode, BEFORE the live check below,
-    // because both are about the human who just wrote rather than about who
-    // owns the thread.
+    // The flag goes whatever the mode, and before the live check below: it
+    // asks a different question from the pause, and "this one needs a person"
+    // was answered the moment a person wrote in the thread.
     //
-    // The flag goes: "this one needs a person" was answered the moment a
-    // person wrote in it.
+    // The pending DRAFT is deliberately not touched here. This runs before
+    // the send, not after it — a closed session window, a missing consent, a
+    // Meta 5xx — and retiring the draft on the way past would mean a staff
+    // member whose message did not go out loses the fallback text too. The
+    // draft is retired from messages.applySendResult instead, where a send is
+    // known to have landed.
     if (customer.agentFlaggedAt !== undefined) {
       await ctx.db.patch(args.customerId, { agentFlaggedAt: undefined });
     }
-    // And any draft still waiting goes with it. In suggest mode this is the
-    // common case, not an edge: a staff member reads the draft, decides they
-    // would rather say it their own way, and types. Leaving the proposal
-    // sitting above the composer afterwards would make answering a message
-    // cost two actions — the reply, and then tidying up the suggestion for a
-    // message that has already been handled.
-    //
-    // An accepted draft is claimed before its send reaches here, so this can
-    // never retire the one it is in the middle of sending.
-    await supersedePendingSuggestions(ctx, args.customerId);
     if (!args.force && who.effective !== "live") return null;
     if (who.override === "off" && customer.agentPausedAt !== undefined) return null;
     await ctx.db.patch(args.customerId, {
@@ -631,6 +614,15 @@ export const setConversationMode = mutation({
     // The operator has the org off or in shadow. There is no control on screen
     // in that state, so reaching here is a stale client, not a choice.
     if (!who.settable) throw new Error("agent-not-enabled");
+    // Any draft waiting on this thread was written under the old arrangement,
+    // so it goes with it. Leaving one would also hand the takeover rule a
+    // contradiction to resolve: a draft accepted while the thread is set to
+    // "answers" sends through the composer's own path, which reads a human
+    // sending in a live thread as a takeover — and the pills a staff member
+    // had just set to Answers would flip themselves to Off.
+    if (args.mode !== who.effective) {
+      await supersedePendingSuggestions(ctx, args.customerId);
+    }
     const pin = args.mode !== who.orgDefault;
     await ctx.db.patch(args.customerId, {
       agentModeOverride: pin ? args.mode : undefined,
@@ -692,7 +684,16 @@ export const stateForCustomer = query({
     // Off means the org does not have the agent; shadow is a state the tenant
     // is deliberately not shown. Either way there is no control to draw.
     if (!who.settable) return null;
-    const pending = (await pendingSuggestionsFor(ctx, args.customerId))[0] ?? null;
+    // Drafts are surfaced only while this thread is actually on drafts. An
+    // owner flipping the business from "suggests" to "answers" leaves drafts
+    // pending across every open conversation, and offering one there would
+    // send it down the composer's path — which reads a human sending into a
+    // live thread as a takeover, silently pinning that conversation off.
+    // Their rows stay in the log; they just stop being on offer.
+    const pending =
+      who.effective === "suggest"
+        ? ((await pendingSuggestionsFor(ctx, args.customerId))[0] ?? null)
+        : null;
     return {
       orgDefault: who.orgDefault,
       override: who.override,
@@ -715,7 +716,10 @@ export const stateForCustomer = query({
 // and their click does nothing rather than sending the same message twice.
 export const claimSuggestion = internalMutation({
   args: { customerId: v.id("customers"), turnId: v.id("chatAgentTurns") },
-  returns: v.boolean(),
+  // The disclosure line this customer is still owed, or null when they have
+  // already had one. Returned from the claim rather than looked up separately
+  // so the check and the decision are the same transaction.
+  returns: v.object({ ok: v.boolean(), disclosure: v.union(v.string(), v.null()) }),
   handler: async (ctx, args) => {
     // Org-scoped even though it is internal, and even though the send it
     // precedes checks again: this runs FIRST and it WRITES. Without the check
@@ -723,14 +727,42 @@ export const claimSuggestion = internalMutation({
     // then fail, but their draft would be gone from their thread.
     const { orgId } = await requireOrg(ctx);
     const turn = await ctx.db.get(args.turnId);
+    const refused = { ok: false, disclosure: null };
     if (!turn || turn.orgId !== orgId || turn.customerId !== args.customerId) {
-      return false;
+      return refused;
     }
     if (turn.status !== "suggested" || turn.suggestionOutcome !== undefined) {
-      return false;
+      return refused;
     }
     await ctx.db.patch(args.turnId, { suggestionOutcome: "sent" });
-    return true;
+
+    // Whether this customer still has to be told they are talking to an
+    // assistant. The line is prepended mechanically when a draft is
+    // GENERATED, but a draft is a textarea — a staff member who finds the
+    // sentence clumsy can delete it and send, and the turn would then be
+    // recorded as the disclosed one. The obligation (WhatsApp's AI policy,
+    // EU AI Act Art. 50) would be discharged by a message that never carried
+    // it, once, permanently. So the send re-checks and re-prepends.
+    const customer = await ctx.db.get(args.customerId);
+    const org = customer ? await ctx.db.get(customer.orgId) : null;
+    if (!customer || !org) return { ok: true, disclosure: null };
+    const already = (
+      await ctx.db
+        .query("chatAgentTurns")
+        .withIndex("by_customer_at", (q) => q.eq("customerId", args.customerId))
+        .collect()
+    ).some(
+      (t) =>
+        t._id !== args.turnId &&
+        (t.status === "sent" ||
+          (t.status === "suggested" && t.suggestionOutcome === "sent")),
+    );
+    return {
+      ok: true,
+      disclosure: already
+        ? null
+        : disclosureLine(customer.language ?? org.language, org.name),
+    };
   },
 });
 
@@ -744,9 +776,18 @@ export const releaseSuggestion = internalMutation({
     const turn = await ctx.db.get(args.turnId);
     // Only ever undoes OUR claim. Nothing else writes "sent" onto a draft, so
     // this cannot resurrect one a person deliberately discarded.
-    if (turn?.status === "suggested" && turn.suggestionOutcome === "sent") {
-      await ctx.db.patch(args.turnId, { suggestionOutcome: undefined });
+    if (turn?.status !== "suggested" || turn.suggestionOutcome !== "sent") {
+      return null;
     }
+    // Unless the world moved while the send was in flight. A customer message
+    // arriving mid-send produces a newer draft, and restoring this one on top
+    // of it would leave TWO pending — with the thread showing whichever the
+    // list happened to hand it. The newer draft answers the newer message, so
+    // this one is simply late.
+    const newer = (await pendingSuggestionsFor(ctx, turn.customerId)).length > 0;
+    await ctx.db.patch(args.turnId, {
+      suggestionOutcome: newer ? "superseded" : undefined,
+    });
     return null;
   },
 });
@@ -796,10 +837,16 @@ export const sendSuggestion = action({
       customerId: args.customerId,
       turnId: args.turnId,
     });
-    if (!claimed) return { ok: false, reason: "already-decided" };
+    if (!claimed.ok) return { ok: false, reason: "already-decided" };
+    // Put the disclosure back if the reader took it out. It is the one part
+    // of the draft that is not theirs to edit away — see claimSuggestion.
+    const withDisclosure =
+      claimed.disclosure && !body.includes(claimed.disclosure)
+        ? `${claimed.disclosure}\n${body}`
+        : body;
     const sent = await ctx.runAction(api.wa.sendSession, {
       customerId: args.customerId,
-      body,
+      body: withDisclosure,
     });
     if (!sent.ok) {
       await ctx.runMutation(internal.chatAgent.releaseSuggestion, {
@@ -1122,6 +1169,33 @@ export const respond = internalAction({
     const paceRemaining = humanPaceMs - (Date.now() - started);
     if (paceRemaining > 0) {
       await new Promise((resolve) => setTimeout(resolve, paceRemaining));
+    }
+
+    // Last look before it becomes the customer's problem. The debounce test
+    // ran at context load, and everything since — the model round trip, the
+    // tool rounds, the human pacing above — is time the customer could have
+    // spent typing. Without this, "merhaba" at 15s gets its own useless reply
+    // at 24s while the real question, sent at 20s, gets a second one at 35s:
+    // two messages, the first answering a thread that had already moved on.
+    //
+    // A query rather than a guard inside the insert, so the residual window is
+    // one round trip instead of the twenty seconds it replaces. Worth being
+    // plain about: this narrows the race, it does not close it.
+    if (args.inboundMessageId) {
+      const current = await ctx.runQuery(internal.chatAgent.currentTurnMessage, {
+        customerId: args.customerId,
+      });
+      if (current && current !== args.inboundMessageId) {
+        await record({
+          status: "skipped",
+          reply: body,
+          toolCalls: toolLog,
+          inputTokens,
+          outputTokens,
+          error: "superseded-after-generation",
+        });
+        return null;
+      }
     }
 
     // Live: log the row, send on the resolved lane, land the outcome in the
