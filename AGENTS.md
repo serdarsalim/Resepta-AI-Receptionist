@@ -3403,13 +3403,21 @@ Facts the next reader should not re-derive:
   A business offering only ONE mode never sees the fulfillment step — the
   answer is still recorded, it just costs no tap (`soleMode` in the page).
   The rows appear in Business → General only once the org sells a good.
+- The CHAT lane learned it the same day (template v6): `book_appointment` took
+  `fulfillment`/`asap`/`address`, `start` stopped being required, and the
+  PRODUCTS section of the system prompt is written only for an org that sells
+  goods — and names only the modes it offers. The gate is the SERVER's, not
+  the model's: the handler classifies the order and answers
+  `not-a-product-order` for a service, and `voiceBook` drops a fulfillment
+  that arrives beside one. Chat needs no republish (tools are composed per
+  request), which is exactly why it went first.
 - Still open, by choice: the stock texts still say "randevunuz" over an order
   (a real order-confirmation template kind means Meta review machinery —
-  Serdar's call), and the voice/chat lanes book goods without asking
-  pickup/delivery; the field is ready when they learn to. Both lanes book
-  through `retell.voiceBook`, so teaching them is one shared mutation change
-  plus prompt wording — and for voice, a spoken street address is the weak
-  link worth designing around rather than trusting a transcript.
+  Serdar's call), and the VOICE lane still books goods without asking — it
+  shares `voiceBook`, so the mutation is already done, but the tool schema
+  lives at Retell and needs a republish. Design it before building: a spoken
+  street address is the weak link, and reading it back beats trusting a
+  transcript.
 
 The same day, the details form went phone-first (Telefon → Adınız → E-posta →
 Not) and learned device memory: a successful booking writes name/phone/email

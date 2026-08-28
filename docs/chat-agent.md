@@ -120,7 +120,15 @@ that `(orgId, customerId)`:
 - `check_availability(date)` — same data the voice lane serves: cal.com slots
   when connected, otherwise full-slot arithmetic from our own table
   (`retell.bookedBetween`) plus open hours.
-- `book_appointment(start, service?, name?)` — books for THIS customer's phone.
+- `book_appointment(start?, services?, name?, fulfillment?, asap?, address?)` —
+  books for THIS customer's phone. `fulfillment` (pickup/delivery), `asap` and
+  `address` are PRODUCT-only and the server says so: the handler classifies the
+  order and refuses `not-a-product-order` rather than trusting the model, and
+  `retell.voiceBook` drops a fulfillment that arrives beside a service. `asap`
+  is the one case with no `start` — the order is placed now, exactly as the
+  booking page does it — and the business's own pickup/delivery switches are
+  re-checked in `voiceBook`, because offering a delivery a business does not do
+  is a promise in that business's voice.
 - `my_appointments()` — this customer's upcoming appointments only.
 - `cancel_appointment` / `reschedule_appointment(start)` — refuse any
   appointment row not owned by this customer; cal.com is told first when an
