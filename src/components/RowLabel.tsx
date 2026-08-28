@@ -32,6 +32,17 @@ import { InfoTip } from "./InfoTip";
 export const ROW_GRID =
   "grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-[minmax(220px,260px)_minmax(0,24rem)] sm:items-start";
 
+// The compact control for these grids, matched to TimezoneSelect's trigger —
+// the one control on the Business page that was drawn deliberately rather than
+// inherited from the globals.css base, and the one Serdar pointed at and said
+// "like that" (2026-08-27). Same border-radius, same padding, same text size,
+// and the PAGE background rather than the card's, so the box reads as a well
+// in the card instead of a border floating on it. The base style stays as it
+// is for every other surface; rows opt in by adding this next to their width
+// cap.
+export const FIELD =
+  "rounded-md bg-[var(--background)] px-3 py-1.5 text-sm";
+
 export function RowLabel({ label, hint, hintPlacement }: { label: string; hint?: string; hintPlacement?: "above" | "below" }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-medium">
