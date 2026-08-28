@@ -41,10 +41,11 @@ import {
   timeValueToMinutes,
   weekdayNames,
 } from "@/lib/datetime";
-import { ROW_GRID, RowLabel } from "./RowLabel";
+import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
+import { SegmentedControl } from "./SegmentedControl";
 import { Sheet } from "./Sheet";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
@@ -2216,6 +2217,90 @@ function RulesCard({
 // "Message variables" card, which named the [booking_link] / [phone] tokens
 // rather than the things themselves and put a salon's own phone number
 // somewhere nobody would look for it.
+// The business's own answer to "what does the assistant do with an incoming
+// WhatsApp message" — the owner's half of the chat agent.
+//
+// It renders ONLY when the operator has brought this org's agent live
+// (orgs.chatAgentMode), because that field is the entitlement gate and a
+// control for a feature you do not have is worse than no control. Which is
+// also why the operator's own three states — and the budget, the model and
+// the turn log — are not here: a tenant sets behaviour, an operator owns the
+// switch and the bill.
+export function ChatAgentCard({
+  isOwner,
+  behavior,
+  stopOnHandover,
+  update,
+}: {
+  isOwner: boolean;
+  behavior: "off" | "suggest" | "live";
+  stopOnHandover: boolean;
+  update: (args: Record<string, unknown>) => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <Card title={t("settings.chatAgent")} disabled={!isOwner}>
+      <div className={ROW_GRID}>
+        <RowLabel
+          label={t("settings.chatAgent")}
+          hint={t("settings.chatAgentHint")}
+        />
+        <div>
+          <SegmentedControl
+            value={behavior}
+            disabled={!isOwner}
+            onChange={(mode) => update({ chatAgentBehavior: mode })}
+            segments={[
+              { id: "off", label: t("agent.mode.off"), hint: t("agent.mode.offHint") },
+              { id: "suggest", label: t("agent.mode.suggest"), hint: t("agent.mode.suggestHint") },
+              { id: "live", label: t("agent.mode.live"), hint: t("agent.mode.liveHint") },
+            ]}
+          />
+          {/* The chosen mode explained under the pills rather than in a
+              tooltip: these three differ in what reaches a CUSTOMER, which is
+              not a difference to make somebody hover to discover. */}
+          <p className="mt-1.5 text-xs text-[var(--muted)]">
+            {t(
+              behavior === "off"
+                ? "agent.mode.offHint"
+                : behavior === "suggest"
+                  ? "agent.mode.suggestHint"
+                  : "agent.mode.liveHint",
+            )}
+          </p>
+        </div>
+
+        {/* Only a business whose assistant actually replies has a handover
+            policy to set. On drafts a person reads every message already, so
+            "what happens when it needs a person" has no meaning. */}
+        {behavior === "live" && (
+          <>
+            <RowLabel
+              label={t("settings.chatAgentHandover")}
+              hint={t("settings.chatAgentHandoverHint")}
+            />
+            <SegmentedControl
+              value={stopOnHandover ? "stop" : "keep"}
+              disabled={!isOwner}
+              onChange={(next) =>
+                update({ chatAgentStopOnHandover: next === "stop" })
+              }
+              // Two POSITIVE options, not a checkbox. Both are real products a
+              // business might want, and phrasing one as the absence of the
+              // other ("don't stop") makes the default look like the setting
+              // nobody got round to.
+              segments={[
+                { id: "keep", label: t("settings.chatAgentKeepAnswering") },
+                { id: "stop", label: t("settings.chatAgentStop") },
+              ]}
+            />
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function BusinessHoursCard({
   isOwner,
   org,
@@ -2261,10 +2346,17 @@ export function BusinessHoursCard({
           label={t("settings.timezone")}
           hint={t("settings.timezoneHint")}
         />
-        <TimezoneSelect
-          value={org.timezone}
-          onChange={(zone) => update({ timezone: zone })}
-        />
+        {/* Capped like the General card's boxes: this trigger set the LOOK the
+            other fields adopted (FIELD in RowLabel), but it was still spanning
+            the full 24rem value column — the widest control on the page for a
+            single city name. The anchored panel sizes off the trigger, so the
+            dropdown narrows with it. */}
+        <div className="w-full sm:max-w-56">
+          <TimezoneSelect
+            value={org.timezone}
+            onChange={(zone) => update({ timezone: zone })}
+          />
+        </div>
         <RowLabel
           label={t("settings.businessHours")}
           hint={t("settings.businessHoursHint")}
@@ -2328,7 +2420,7 @@ export function BusinessHoursCard({
           <input
             type="time"
             aria-label={t("settings.openFrom")}
-            className="min-w-0 flex-1"
+            className={`${FIELD} min-w-0 flex-1`}
             defaultValue={
               hours.startMinute == null
                 ? ""
@@ -2344,7 +2436,7 @@ export function BusinessHoursCard({
           <input
             type="time"
             aria-label={t("settings.openTo")}
-            className="min-w-0 flex-1"
+            className={`${FIELD} min-w-0 flex-1`}
             defaultValue={
               hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)
             }
@@ -2483,6 +2575,7 @@ export function RemindersView() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const rulesData = useQuery(api.messageRules.list, {});
+  const updateOrg = useMutation(api.orgs.update);
 
   if (!settings || !rulesData)
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -2549,6 +2642,19 @@ export function RemindersView() {
             form above. The Cloud wording is platform text; a salon
             never meets Meta. */}
       </>
+
+      {/* Below the rules, above the phone: the rules card is what the salon
+          sends on its own schedule, this is what answers when somebody writes
+          back, and both are "what goes out on WhatsApp without me". Absent
+          entirely until an operator enables the agent. */}
+      {settings.org.chatAgentMode === "live" && (
+        <ChatAgentCard
+          isOwner={isOwner}
+          behavior={settings.org.chatAgentBehavior ?? "live"}
+          stopOnHandover={settings.org.chatAgentStopOnHandover ?? false}
+          update={(args) => void updateOrg(args)}
+        />
+      )}
 
       <ShopPhoneCard isOwner={isOwner} />
 

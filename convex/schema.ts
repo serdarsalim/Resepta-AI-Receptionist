@@ -492,14 +492,38 @@ export default defineSchema({
     // Nothing reads this to gate access: the same mutation suspends the org,
     // and suspension is the switch every send path already respects.
     deletingAt: v.optional(v.number()),
-    // Chat agent lifecycle (docs/chat-agent.md §5). Unset = off. "shadow"
-    // runs the full agent on real inbound and records the turn WITHOUT
-    // sending — the pre-launch QA state, the owner trust ramp and the canary
-    // in one value. "live" sends. Operator-set from /admin; going live
-    // without a week of shadow is possible and inadvisable.
+    // Chat agent LIFECYCLE — the operator's half. Unset = off. "shadow" runs
+    // the full agent on real inbound and records the turn WITHOUT sending —
+    // the pre-launch QA state and the canary, invisible to the tenant. "live"
+    // means entitled and running; how it then behaves is the owner's call,
+    // chatAgentBehavior below. Operator-set from /admin only, because this is
+    // also the entitlement gate: an org cannot switch a paid agent on for
+    // itself.
     chatAgentMode: v.optional(
       v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
     ),
+    // Chat agent BEHAVIOUR — the owner's half, and the only one they can set
+    // (orgs.update, Settings → Messages). Read ONLY when chatAgentMode is
+    // "live": off = the agent stays quiet, "suggest" = it drafts every reply
+    // for a human to send, edit or discard, "live" = it answers by itself.
+    //
+    // Unset means LIVE, not suggest. The field is younger than the orgs that
+    // predate it, and every one of those is answering customers today —
+    // defaulting them to drafts would silence a working agent on the day this
+    // shipped, and nobody would be told. New orgs get the careful default
+    // instead: platform.setChatAgentMode stamps "suggest" the first time an
+    // operator brings an org live, so the trust ramp is where it belongs, at
+    // the start.
+    chatAgentBehavior: v.optional(
+      v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+    ),
+    // What the agent does when it decides a person is needed. Unset/false: it
+    // says so once, flags the conversation, and KEEPS ANSWERING — not being
+    // able to quote a price is no reason to stop answering the opening hours.
+    // True: it says so once and goes silent, handing the whole conversation
+    // over. False is the default because silence is the more destructive of
+    // the two to get wrong by accident.
+    chatAgentStopOnHandover: v.optional(v.boolean()),
     // Per-org monthly LLM budget override, in micro-USD. Unset = the code
     // default (lib/llm.ts). A hard cap, not advisory: the turn that would
     // cross it is skipped with a "budget-exhausted" turn row and the agent
@@ -1118,11 +1142,37 @@ export default defineSchema({
     arrivedAt: v.optional(v.number()),
     // Chat-agent takeover (docs/chat-agent.md §5). Stamped when a human sends
     // a manual reply in this conversation (wa.sendSession) or when the agent
-    // escalates itself; while set, the agent is silent for this customer and
-    // a human owns the thread. Cleared from the conversation header to hand
-    // the thread back. Per CUSTOMER, not per org: taking over one
-    // conversation must not silence the agent for every other customer.
+    // escalates itself.
+    //
+    // It no longer DECIDES anything — agentModeOverride below does — but it is
+    // still read one way: a row stamped before that field existed has no
+    // override, and lib/agentMode.ts reads such a row as an override of "off"
+    // so conversations a human took over last week stay taken over. Past that
+    // it is display only: the "since when" under the thread's control.
     agentPausedAt: v.optional(v.number()),
+    // This conversation's disagreement with orgs.chatAgentBehavior. Unset =
+    // follow the business default, INCLUDING when that default later changes;
+    // set = this thread was decided deliberately and keeps its choice.
+    //
+    // Stored only when it differs from the default and cleared when it matches
+    // (chatAgent.setConversationMode), which is why there is no fourth
+    // "inherit" pill in the UI to explain — reverting is choosing the value
+    // the business already has.
+    //
+    // A full mode rather than a pause switch, because a default you can only
+    // switch off is not one you can disagree with: a business that answers
+    // live still has the awkward thread it wants drafted first, and one on
+    // drafts has the regular it is happy to let run.
+    agentModeOverride: v.optional(
+      v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+    ),
+    // When the agent said this conversation needs a person while STAYING in
+    // it (orgs.chatAgentStopOnHandover false — the default). Display only,
+    // never read to decide whether the agent runs; the agent that flags a
+    // thread keeps answering it. Also the repeat-suppressor: the escalate tool
+    // reads it and answers "already flagged", which is the whole difference
+    // between flagging something once and nagging about it every turn.
+    agentFlaggedAt: v.optional(v.number()),
     // Mute — the ATTENTION switch, and only that. A muted customer stays fully
     // live: you can send to them, they still appear in search, their timeline
     // still records everything. What changes is that they stop asking for a
@@ -2153,13 +2203,28 @@ export default defineSchema({
       v.literal("sent"),
       // Reply generated, deliberately not sent (org in shadow mode).
       v.literal("shadow"),
+      // Reply generated and offered to a human (suggest mode). This row IS
+      // the draft queue — there is no second table, and suggestionOutcome
+      // below is what turns a queue into a log.
+      v.literal("suggested"),
       // Turn refused before the model ran; `error` names the guard that
       // stopped it (rate-limited, budget-exhausted, llm-not-configured…).
       v.literal("skipped"),
       // The model or a tool failed; `error` carries the reason.
       v.literal("error"),
     ),
-    // The reply text as generated (shadow keeps it too — that is the point).
+    // What became of a "suggested" row. UNSET is the load-bearing state: it
+    // means this draft is still pending, and the thread finds the one live
+    // draft by that absence. "sent" covers accepted drafts whether or not the
+    // human edited the text first — the question the acceptance rate asks is
+    // "was this worth sending", not "did the model get every word right".
+    // "superseded" is written when a newer message arrives, so a draft
+    // answering a stale message can never be sent by someone who scrolled up.
+    suggestionOutcome: v.optional(
+      v.union(v.literal("sent"), v.literal("discarded"), v.literal("superseded")),
+    ),
+    // The reply text as generated (shadow and suggested keep it too — that is
+    // the point).
     reply: v.optional(v.string()),
     // JSON array of {name, args, result} — every tool round in order. A
     // string rather than v.any() so the row stays greppable and the shape is

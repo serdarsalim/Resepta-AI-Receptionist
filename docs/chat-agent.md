@@ -155,22 +155,69 @@ assembly reads only this customer's rows.
 - **Versioned template.** `convex/lib/chatAgentTemplate.ts`, key + version,
   the voice template's twin. Changing agent behaviour is a version bump; a
   turn records the version that produced it.
-- **Lifecycle per org: off → shadow → live** (`orgs.chatAgentMode`, unset =
-  off). Shadow generates and records but never sends — pre-launch QA, the
-  owner trust ramp, and canarying in one state. Operator-set from /admin.
+- **Two halves, two owners.** The operator owns the **lifecycle**
+  (`orgs.chatAgentMode`: off → shadow → live, unset = off, /admin only) —
+  which is also the entitlement gate, so a business cannot switch a paid agent
+  on for itself. Shadow generates and records but never sends and is invisible
+  to the tenant: pre-launch QA and canarying. The owner owns the **behaviour**
+  once live (`orgs.chatAgentBehavior`: off | suggest | live, Settings →
+  Messages). Unset behaviour reads as **live**, because the field is younger
+  than the orgs that predate it and defaulting those to drafts would silence a
+  working agent on deploy day; new orgs get the careful default instead —
+  `platform.setChatAgentMode` stamps `suggest` the first time an operator
+  brings an org live.
+- **Suggest is the trust ramp.** The full turn runs at full cost and stops one
+  step short of the customer: the row lands as `status: "suggested"` with no
+  `suggestionOutcome`, and that absence is how a thread finds its one live
+  draft. Staff edit it, send it, or discard it. An edited send still records
+  as `sent` — the acceptance rate asks "was this worth sending", not "did the
+  model get every word right". Nothing trains on it; it is a reading.
+- **Per conversation, the same three values** (`customers.agentModeOverride`,
+  unset = follow the business). Stored only when it differs from the default
+  and cleared when it matches, so there is no fourth "inherit" control to
+  explain: an untouched thread moves with the business, a decided one keeps
+  its decision, and undoing one costs a click. A full mode rather than a pause
+  switch, because a default you can only switch off is not one you can
+  disagree with. Precedence lives in exactly one leaf function,
+  `convex/lib/agentMode.ts` — shadow and off are operator ceilings no override
+  can lift.
+- **The debounce.** `REPLY_DEBOUNCE_MS` (15s): every inbound schedules its own
+  turn carrying its own message id, and a turn whose message is no longer the
+  newest inbound stands down writing no row. WhatsApp reports messages,
+  reactions and delivery states and never composition, so there is nothing to
+  wait on — this delay is the substitute, and it is what makes one thought
+  sent as four messages get one answer instead of four.
+- **Handover is a policy, not a per-message judgement**
+  (`orgs.chatAgentStopOnHandover`). False (default): the agent says a person
+  is needed, stamps `customers.agentFlaggedAt`, and keeps answering what it
+  can — not being able to quote a price is no reason to stop giving the
+  opening hours. True: it says so once and goes silent. False by default
+  because silence is the more destructive of the two to get wrong by accident.
+  The escalate tool returns FACTS (`handedOver`, `keepAnswering`,
+  `alreadyFlagged`), never a sentence to repeat, and it writes only in live —
+  in suggest a person is reading every draft already.
 - **Flight recorder.** Every turn writes a `chatAgentTurns` row: trigger
   message, tool calls with arguments and results, the reply, tokens, cost,
-  latency, model + template version, shadow/sent/skipped/error status. This is
-  the replay surface for "why did it say that", and the raw event under
-  metering (§6).
+  latency, model + template version, sent/shadow/suggested/skipped/error
+  status. This is the replay surface for "why did it say that", the raw event
+  under metering (§6), and — for suggested rows — the draft queue itself.
+  There is no second table: a draft cannot exist without the tokens, tool
+  calls and prompt version that produced it sitting beside it.
 - **Guardrails as data.** Per-customer reply rate limit (default 10/hour,
   checked against turns) and a per-org monthly token budget (soft default in
   code, override on the org). Exceeding either pauses the agent politely and
   flags the conversation.
-- **Kill chain.** Per conversation (staff reply = automatic takeover, stamped
-  `customers.agentPausedAt`; cleared from the conversation header), per org
-  (mode → off), platform-wide (`platformConfig.chatAgentDisabled = "true"`,
-  checked on every turn). Every operator flip lands in the org's activity log.
+- **Kill chain.** Per conversation (the three-way control above the composer;
+  a staff reply is an automatic takeover, but **only when the agent was
+  answering live** — in suggest a person is in the loop by definition, so
+  typing means they are working, not taking over). Then per org (behaviour →
+  off, or the operator's mode → off), then platform-wide
+  (`platformConfig.chatAgentDisabled = "true"`, checked on every turn). Every
+  operator flip lands in the org's activity log.
+  `customers.agentPausedAt` is now the "since when", not the decision; it is
+  read as an implied `off` override only for rows stamped before
+  `agentModeOverride` existed, so conversations taken over last week stay
+  taken over.
 - **Retention.** Turn rows carry customer text, so they join the org's data
   story: platform admin can prune, and org deletion takes them along.
 

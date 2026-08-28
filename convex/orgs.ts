@@ -77,12 +77,19 @@ export const current = query({
       demoMode: v.optional(v.boolean()),
       // Resolved URL for the uploaded logo (schema: orgs.logoStorageId).
       logoUrl: v.optional(v.string()),
-      // The chat agent's lifecycle state (docs/chat-agent.md §5). Read by the
-      // conversation panel for the takeover chip; WRITTEN only from platform
-      // admin — the owner sees the agent, the operator owns the switch.
+      // The chat agent's lifecycle state (docs/chat-agent.md §5). WRITTEN
+      // only from platform admin — this is the entitlement gate, so the owner
+      // sees the agent and the operator owns whether they have one.
       chatAgentMode: v.optional(
         v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
       ),
+      // How it behaves once they have one — the owner's half, settable from
+      // Settings → Messages (orgs.update). Unset reads as "live"; see the
+      // schema comment for why that and not "suggest".
+      chatAgentBehavior: v.optional(
+        v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+      ),
+      chatAgentStopOnHandover: v.optional(v.boolean()),
       // The domain half, from deployment env — the client needs it to show the
       // org a full address it can hand to a customer.
       inboundDomain: v.optional(v.string()),
@@ -232,6 +239,8 @@ export const current = query({
           ? ((await ctx.storage.getUrl(org.logoStorageId)) ?? undefined)
           : undefined,
         chatAgentMode: org.chatAgentMode,
+        chatAgentBehavior: org.chatAgentBehavior,
+        chatAgentStopOnHandover: org.chatAgentStopOnHandover,
         inboundDomain: mailConfig.domain ?? undefined,
         reminderOffsetsHours: org.reminderOffsetsHours ?? DEFAULT_REMINDER_OFFSETS,
         pausedReminderHours: org.pausedReminderHours ?? [],
@@ -333,6 +342,13 @@ export const update = mutation({
     priceDecimals: v.optional(v.boolean()),
     pickupEnabled: v.optional(v.boolean()),
     deliveryEnabled: v.optional(v.boolean()),
+    // The owner's half of the chat agent. chatAgentMode is deliberately NOT
+    // here: that one is the entitlement gate and stays operator-only, so a
+    // business can decide how its agent behaves but not whether it has one.
+    chatAgentBehavior: v.optional(
+      v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+    ),
+    chatAgentStopOnHandover: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -394,6 +410,23 @@ export const update = mutation({
       if (!pickup && !delivery) throw new Error("fulfillment-required");
       if (args.pickupEnabled !== undefined) patch.pickupEnabled = args.pickupEnabled;
       if (args.deliveryEnabled !== undefined) patch.deliveryEnabled = args.deliveryEnabled;
+    }
+    // Refused rather than silently stored when the operator has not brought
+    // this org's agent live: the control is not on screen in that state, so a
+    // call carrying it is a stale client, and a stored preference for a
+    // feature the org does not have would take effect the moment it did — a
+    // setting nobody remembers making.
+    if (args.chatAgentBehavior !== undefined) {
+      if ((org0?.chatAgentMode ?? "off") !== "live") {
+        throw new Error("agent-not-enabled");
+      }
+      patch.chatAgentBehavior = args.chatAgentBehavior;
+    }
+    if (args.chatAgentStopOnHandover !== undefined) {
+      if ((org0?.chatAgentMode ?? "off") !== "live") {
+        throw new Error("agent-not-enabled");
+      }
+      patch.chatAgentStopOnHandover = args.chatAgentStopOnHandover;
     }
     if (args.inboundAddress !== undefined) {
       // Slugging and uniqueness both live in lib/inboundAddress, because the

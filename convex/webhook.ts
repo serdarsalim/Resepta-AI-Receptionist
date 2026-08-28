@@ -8,6 +8,8 @@ import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { conversationAgentMode } from "./lib/agentMode";
+import { REPLY_DEBOUNCE_MS } from "./lib/chatAgentTemplate";
 
 // Meta's session window: one away-reply per window, not per message. Exported
 // because the email lane throttles its out-of-hours reply on the same clock —
@@ -423,23 +425,30 @@ export async function processInboundMessage(
     // correct. Guards repeat inside the action authoritatively; this check
     // only avoids scheduling work that would refuse itself.
     const contact = customer ?? (await ctx.db.get(contactId));
-    const agentMode = org?.chatAgentMode ?? "off";
+    // Who answers THIS conversation — the business default and any
+    // disagreement this thread has with it, from the one resolver.
+    const agentMode = org
+      ? conversationAgentMode(org, contact).effective
+      : "off";
     const agentEligible =
-      (agentMode === "live" || agentMode === "shadow") &&
+      agentMode !== "off" &&
       !org?.demoMode &&
       (org?.status ?? "active") !== "suspended" &&
-      contact?.agentPausedAt === undefined &&
       Boolean(text.trim());
     if (agentEligible) {
-      await ctx.scheduler.runAfter(0, internal.chatAgent.respond, {
+      // Delayed, not immediate: a customer sending one thought as four
+      // messages schedules four turns, and only the one holding the newest
+      // inbound gets to answer (loadTurnContext's superseded check).
+      await ctx.scheduler.runAfter(REPLY_DEBOUNCE_MS, internal.chatAgent.respond, {
         customerId: contactId,
         inboundMessageId: loggedId,
       });
     }
     // A LIVE agent answers at any hour, which supersedes "we're closed, book
-    // here". Shadow deliberately changes nothing the customer sees: the
-    // away-reply below still runs and the agent's would-be reply lands only
-    // in the flight recorder.
+    // here". The other modes deliberately change nothing the customer sees:
+    // shadow and suggest both leave the customer waiting on a person, so the
+    // away-reply below still runs and the agent's reply goes to the flight
+    // recorder or the staff member's draft box instead.
     if (agentMode === "live" && agentEligible) return;
     const hours = org?.businessHours ?? {};
     const now = Date.now();

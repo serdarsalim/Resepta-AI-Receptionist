@@ -3817,25 +3817,101 @@ const dictionary = {
     de: "\"{name}\" löschen?",
   },
 
-  // The chat-agent takeover chip above the composer (docs/chat-agent.md §5).
-  "agent.answering": {
-    tr: "Asistan yanıtlıyor",
-    en: "Assistant is answering",
-    de: "Assistent antwortet",
+  // The chat-agent strip above the composer (docs/chat-agent.md §5).
+  //
+  // The four keys that used to live here — answering / takeOver / paused /
+  // handBack — went with the bar they belonged to. That bar was a status
+  // sentence PLUS a Take over button, two controls for one state, and the
+  // words had to carry the difference between them. Three pills carry it
+  // instead, so what is left to translate is the three states themselves.
+  //
+  // The three modes. One vocabulary for both places they are chosen — the
+  // business default in Settings and the per-conversation control above the
+  // composer — because they are the same three states and two sets of words
+  // would read as two features.
+  "agent.mode.off": { tr: "Kapalı", en: "Off", de: "Aus" },
+  "agent.mode.suggest": { tr: "Öneriyor", en: "Suggests", de: "Schlägt vor" },
+  "agent.mode.live": { tr: "Yanıtlıyor", en: "Answers", de: "Antwortet" },
+  "agent.mode.offHint": {
+    tr: "Asistan bu sohbete hiç karışmaz.",
+    en: "The assistant does nothing here.",
+    de: "Der Assistent tut hier nichts.",
   },
-  "agent.takeOver": { tr: "Devral", en: "Take over", de: "Übernehmen" },
-  // No em dash, and no "the assistant is paused" either: the person icon and
-  // a button offering to hand the chat BACK already say the assistant is off.
-  // What the reader needs from the words is whose chat it is now.
-  "agent.paused": {
-    tr: "Sohbet sizde",
-    en: "This chat is yours",
-    de: "Dieser Chat gehört Ihnen",
+  "agent.mode.suggestHint": {
+    tr: "Her mesaj için yanıt taslağı hazırlar; göndermeden önce siz karar verirsiniz.",
+    en: "It drafts a reply to every message. Nothing is sent until you send it.",
+    de: "Er entwirft zu jeder Nachricht eine Antwort. Gesendet wird erst, wenn Sie senden.",
   },
-  "agent.handBack": {
-    tr: "Asistana geri ver",
-    en: "Hand back to assistant",
-    de: "An den Assistenten zurückgeben",
+  "agent.mode.liveHint": {
+    tr: "Müşteriye kendisi yanıt verir.",
+    en: "It replies to the customer by itself.",
+    de: "Er antwortet dem Kunden selbst.",
+  },
+  // "in this chat" is load-bearing. Without it the pills read as the business
+  // setting, and someone muting one awkward conversation would think they had
+  // switched the assistant off for everybody.
+  "agent.inThisChat": {
+    tr: "Bu sohbette asistan",
+    en: "Assistant in this chat",
+    de: "Assistent in diesem Chat",
+  },
+  // Said only when this conversation disagrees with the business default —
+  // otherwise every thread would carry a line explaining a setting nobody
+  // touched.
+  "agent.followingDefault": {
+    tr: "Yalnızca bu sohbet için",
+    en: "This chat only",
+    de: "Nur für diesen Chat",
+  },
+  "agent.needsPerson": {
+    tr: "Asistan bu sohbet için bir kişi gerektiğini söyledi",
+    en: "The assistant says this one needs a person",
+    de: "Der Assistent sagt, hier wird ein Mensch gebraucht",
+  },
+  // The draft card above the composer.
+  "agent.draft": { tr: "Asistanın taslağı", en: "Assistant's draft", de: "Entwurf des Assistenten" },
+  "agent.draftPrivate": {
+    tr: "Bunu yalnızca siz görüyorsunuz.",
+    en: "Only you can see this.",
+    de: "Das sehen nur Sie.",
+  },
+  "agent.draftSend": { tr: "Gönder", en: "Send", de: "Senden" },
+  "agent.draftDiscard": { tr: "At", en: "Discard", de: "Verwerfen" },
+  "agent.draftGone": {
+    tr: "Bu taslak artık geçerli değil — müşteri yeni bir mesaj gönderdi.",
+    en: "That draft is out of date — the customer has sent something newer.",
+    de: "Dieser Entwurf ist überholt — der Kunde hat inzwischen geschrieben.",
+  },
+
+  // Settings → Messages: the business default and the handover policy.
+  "settings.chatAgent": { tr: "WhatsApp asistanı", en: "WhatsApp assistant", de: "WhatsApp-Assistent" },
+  // "by default" is the whole reason this reads correctly: a heading that
+  // sounded absolute would make the per-conversation override look like a bug
+  // the first time somebody met one.
+  "settings.chatAgentHint": {
+    tr: "Gelen WhatsApp mesajlarında asistan ne yapsın — varsayılan olarak. Her sohbeti tek tek değiştirebilirsiniz.",
+    en: "What the assistant does with incoming WhatsApp messages, by default. Any single chat can be set differently.",
+    de: "Was der Assistent standardmäßig mit eingehenden WhatsApp-Nachrichten macht. Jeder Chat lässt sich einzeln anders einstellen.",
+  },
+  "settings.chatAgentHandover": {
+    tr: "Bir kişi gerektiğinde",
+    en: "When a person is needed",
+    de: "Wenn ein Mensch gebraucht wird",
+  },
+  "settings.chatAgentHandoverHint": {
+    tr: "Asistan yapamayacağı bir şeyle karşılaştığında sohbetten tamamen çekilsin mi, yoksa yanıtlayabildiklerini yanıtlamaya devam mı etsin?",
+    en: "When the assistant hits something it cannot do, should it leave the conversation entirely, or keep answering the parts it can?",
+    de: "Wenn der Assistent an etwas stößt, das er nicht kann: soll er das Gespräch ganz abgeben oder weiter beantworten, was er kann?",
+  },
+  "settings.chatAgentKeepAnswering": {
+    tr: "Yanıtlamaya devam etsin",
+    en: "Keep answering",
+    de: "Weiter antworten",
+  },
+  "settings.chatAgentStop": {
+    tr: "Sohbeti devretsin",
+    en: "Hand the chat over",
+    de: "Chat übergeben",
   },
 
   "fields.reorder": {

@@ -1198,6 +1198,12 @@ export const orgAssistant = query({
     v.object({
       mode: v.union(v.literal("off"), v.literal("shadow"), v.literal("live")),
       status: v.union(v.literal("active"), v.literal("suspended")),
+      // What the OWNER has the agent set to, inside the mode above. Read-only
+      // here: the operator owns whether they have an agent, the owner owns
+      // what it does, and a panel showing only the operator's half would read
+      // "live" over a business that has it drafting.
+      behavior: v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+      stopOnHandover: v.boolean(),
       budgetMicroUsd: v.union(v.number(), v.null()),
       defaultBudgetMicroUsd: v.number(),
       killSwitch: v.boolean(),
@@ -1219,11 +1225,25 @@ export const orgAssistant = query({
           llmCostMicroUsd: v.number(),
         }),
       ),
+      // How many drafts this org has DECIDED, and how many of those it sent.
+      // The trust ramp's only real number: an org sending most of what its
+      // assistant writes is ready to answer live, and one discarding most of
+      // them is telling you what its brief is missing. Over decided drafts
+      // only — a draft still sitting in a thread is not a verdict. Null until
+      // there is one to report, because "0%" and "nobody has looked yet" are
+      // different facts.
+      //
+      // Nothing trains on this. It is a reading, not a feedback loop.
+      acceptance: v.union(
+        v.null(),
+        v.object({ decided: v.number(), sent: v.number() }),
+      ),
       turns: v.array(
         v.object({
           at: v.number(),
           customerName: v.string(),
           status: v.string(),
+          suggestionOutcome: v.optional(v.string()),
           reply: v.optional(v.string()),
           toolCalls: v.optional(v.string()),
           model: v.string(),
@@ -1251,6 +1271,19 @@ export const orgAssistant = query({
       .withIndex("by_org_at", (q) => q.eq("orgId", args.orgId))
       .order("desc")
       .take(25);
+    // Over the same 25 the log shows, deliberately: a rate computed over the
+    // org's whole history would be answering a question about last spring
+    // while the panel underneath shows this week. What the operator wants to
+    // know is whether the drafts are landing NOW.
+    const decidedDrafts = turns.filter(
+      (t) => t.status === "suggested" && t.suggestionOutcome !== undefined,
+    );
+    const acceptance = decidedDrafts.length
+      ? {
+          decided: decidedDrafts.length,
+          sent: decidedDrafts.filter((t) => t.suggestionOutcome === "sent").length,
+        }
+      : null;
     // One read per distinct customer, not per turn — same shape as the notes
     // author resolution in messages.ts.
     const names = new Map<string, string>();
@@ -1267,6 +1300,8 @@ export const orgAssistant = query({
     return {
       mode: org.chatAgentMode ?? "off",
       status: org.status ?? "active",
+      behavior: org.chatAgentBehavior ?? "live",
+      stopOnHandover: org.chatAgentStopOnHandover ?? false,
       budgetMicroUsd: org.chatAgentMonthlyBudgetMicroUsd ?? null,
       defaultBudgetMicroUsd: DEFAULT_MONTHLY_BUDGET_MICRO_USD,
       killSwitch: (await platformValue(ctx, "chatAgentDisabled")) === "true",
@@ -1283,10 +1318,12 @@ export const orgAssistant = query({
             llmCostMicroUsd: usage.llmCostMicroUsd,
           }
         : null,
+      acceptance,
       turns: turns.map((t) => ({
         at: t.at,
         customerName: names.get(t.customerId) ?? "—",
         status: t.status,
+        suggestionOutcome: t.suggestionOutcome,
         reply: t.reply,
         toolCalls: t.toolCalls,
         model: t.model,
@@ -1311,7 +1348,18 @@ export const setChatAgentMode = mutation({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) throw new Error("no-such-org");
-    await ctx.db.patch(args.orgId, { chatAgentMode: args.mode });
+    // Bringing an org live for the FIRST time sets its behaviour to drafts.
+    // Unset behaviour reads as "live" — it has to, so the orgs that predate
+    // the field keep answering — which would mean every newly-enabled org
+    // started auto-replying to customers before its owner had made a single
+    // choice. Stamping here puts the trust ramp where it belongs, at the
+    // start, and only ever writes over an absence: an owner who has since
+    // chosen keeps their choice through any number of mode flips.
+    const behavior =
+      args.mode === "live" && org.chatAgentBehavior === undefined
+        ? { chatAgentBehavior: "suggest" as const }
+        : {};
+    await ctx.db.patch(args.orgId, { chatAgentMode: args.mode, ...behavior });
     await recordActivity(ctx, {
       orgId: args.orgId,
       kind: "settings_changed",

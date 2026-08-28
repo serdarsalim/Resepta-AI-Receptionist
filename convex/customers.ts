@@ -29,9 +29,15 @@ const customerFields = {
   attentionClearedAt: v.optional(v.number()),
   arrivedAt: v.optional(v.number()),
   mutedAt: v.optional(v.number()),
-  // Chat-agent takeover stamp (docs/chat-agent.md §5) — set means a human
-  // owns this conversation and the agent is silent in it.
+  // Chat-agent takeover stamp (docs/chat-agent.md §5) — when a human took
+  // this conversation over. Display only now; agentModeOverride decides.
   agentPausedAt: v.optional(v.number()),
+  // This conversation's own answer to off/suggest/live, when it disagrees
+  // with the business default, and the agent's "needs a person" flag.
+  agentModeOverride: v.optional(
+    v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
+  ),
+  agentFlaggedAt: v.optional(v.number()),
   // The three columns the warning above is about, found MISSING while adding
   // agentPausedAt: each is stamped by the message lanes (webhook.ts, wa.ts),
   // so a customer who wrote in or got an away-reply made every raw-doc read

@@ -1127,6 +1127,27 @@ export default function TenantPage() {
               </button>
             ))}
           </div>
+          {/* The owner's half, shown and not settable here. Bringing an org
+              live stamps "suggest" the first time, so a new org drafts until
+              its owner decides otherwise — and this row is where an operator
+              finds out that "live" does not mean the customers are being
+              answered yet. */}
+          {assistant.mode === "live" && (
+            <>
+              <div className="text-sm font-medium">Owner has it set to</div>
+              <div className="text-sm text-[var(--muted)]">
+                {assistant.behavior === "suggest"
+                  ? "suggest — it drafts, staff send"
+                  : assistant.behavior === "off"
+                    ? "off — the owner switched it off"
+                    : "answers customers directly"}
+                {assistant.behavior === "live" &&
+                  (assistant.stopOnHandover
+                    ? " · hands the chat over when a person is needed"
+                    : " · keeps answering when a person is needed")}
+              </div>
+            </>
+          )}
         </div>
         {/* Two facts, not four: cost and turns moved to Billing with the
             budget that caps them (Serdar, 2026-08-26). What is left is what
@@ -1151,6 +1172,23 @@ export default function TenantPage() {
               2026-08-27: too destructive to sit one click away). The flag
               itself survives — settable only by CLI now — so a set flag
               still explains itself here instead of skipping turns silently. */}
+          {/* The go-live signal. An org sending most of what its assistant
+              drafts is ready to answer customers directly; one discarding most
+              of them is telling you what the brief is missing. Nothing trains
+              on it — it is a reading, not a feedback loop. */}
+          {assistant.acceptance && (
+            <Fact label="Drafts sent">
+              <Pill
+                tone={
+                  assistant.acceptance.sent * 2 >= assistant.acceptance.decided
+                    ? "ok"
+                    : "muted"
+                }
+              >
+                {assistant.acceptance.sent} of {assistant.acceptance.decided} decided
+              </Pill>
+            </Fact>
+          )}
           {assistant.killSwitch && (
             <Fact label="Platform kill switch">
               <Pill tone="warn">On, every org stopped</Pill>
@@ -1172,14 +1210,19 @@ export default function TenantPage() {
                 <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 py-1 [&::-webkit-details-marker]:hidden">
                   <Pill
                     tone={
-                      turn.status === "sent"
+                      turn.status === "sent" ||
+                      turn.suggestionOutcome === "sent"
                         ? "ok"
                         : turn.status === "error"
                           ? "warn"
                           : "muted"
                     }
                   >
-                    {turn.status}
+                    {/* A draft's status alone says nothing worth knowing —
+                        what happened to it is the fact. */}
+                    {turn.status === "suggested"
+                      ? `draft → ${turn.suggestionOutcome ?? "pending"}`
+                      : turn.status}
                   </Pill>
                   <span className="font-medium">{turn.customerName}</span>
                   {turn.error && (

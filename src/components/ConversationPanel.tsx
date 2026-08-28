@@ -3,7 +3,9 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../convex/_generated/dataModel";
+import { SegmentedControl } from "./SegmentedControl";
 import { useConfirm } from "./ConfirmDialog";
 import { useToast } from "@/lib/ToastProvider";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -194,13 +196,14 @@ export function ConversationPanel({
   // orgs.current is already open app-wide, so this adds one cheap read.
   const settings = useQuery(api.orgs.current, {});
   const customerRecord = useQuery(api.customers.get, { customerId });
-  const setAgentPaused = useMutation(api.chatAgent.setPaused);
-  const agentChipState =
-    settings?.org.chatAgentMode === "live" && customerRecord
-      ? customerRecord.agentPausedAt !== undefined
-        ? ("paused" as const)
-        : ("answering" as const)
-      : null;
+  // The thread's mode and its pending draft in ONE read, so the pills and the
+  // draft under them can never come from two different moments. Null when the
+  // org has no agent — the strip renders nothing at all then, rather than a
+  // disabled control for a feature they do not have.
+  const agentState = useQuery(api.chatAgent.stateForCustomer, { customerId });
+  const setConversationMode = useMutation(api.chatAgent.setConversationMode);
+  const discardSuggestion = useMutation(api.chatAgent.discardSuggestion);
+  const sendSuggestion = useAction(api.chatAgent.sendSuggestion);
   const sendSession = useAction(api.wa.sendSession);
   const react = useAction(api.wa.reactToMessage);
   const markThreadRead = useMutation(api.wa.markThreadRead);
@@ -1451,15 +1454,23 @@ export function ConversationPanel({
         </div>
       )}
 
-      {canCompose && agentChipState && (
-        <AgentHandoverBar
-          paused={agentChipState === "paused"}
-          onToggle={() =>
-            void setAgentPaused({
-              customerId,
-              paused: agentChipState !== "paused",
-            })
-          }
+      {canCompose && agentState && (
+        <AgentThreadStrip
+          state={agentState}
+          onMode={(mode) => void setConversationMode({ customerId, mode })}
+          // Both re-read the draft at CLICK time rather than closing over the
+          // one that was there at render: a newer customer message can retire
+          // it between the two, and acting on the stale id would send a reply
+          // to a message that has been overtaken.
+          onSend={async (body) => {
+            const turnId = agentState.pending?.turnId;
+            if (!turnId) return { ok: false, reason: "already-decided" };
+            return await sendSuggestion({ customerId, turnId, body });
+          }}
+          onDiscard={() => {
+            const turnId = agentState.pending?.turnId;
+            if (turnId) void discardSuggestion({ customerId, turnId });
+          }}
         />
       )}
       {canCompose && (
@@ -2176,77 +2187,164 @@ function CallEntry({
 // Sending any manual message also takes over (stamped server-side in
 // wa.sendSession); this is how a thread is handed BACK, which no message can
 // express.
-function AgentHandoverBar({
-  paused,
-  onToggle,
+// The thread's agent strip: what the assistant is doing HERE, and the draft it
+// is holding, if any.
+//
+// It is ONE control. The first version of this bar was a status sentence plus
+// a Take over button, both changing the same state from opposite directions,
+// and reading it meant working out which of the two you were being told. Three
+// pills say the whole thing: where this conversation is, and what the other
+// two options would do.
+//
+// Docked above the composer rather than at the end of the message list,
+// because a draft is a proposal about the NEXT message — one you have to
+// scroll to find is one you miss on a busy morning.
+function AgentThreadStrip({
+  state,
+  onMode,
+  onSend,
+  onDiscard,
 }: {
-  paused: boolean;
-  onToggle: () => void;
+  state: NonNullable<FunctionReturnType<typeof api.chatAgent.stateForCustomer>>;
+  onMode: (mode: "off" | "suggest" | "live") => void;
+  onSend: (body: string) => Promise<{ ok: boolean; reason?: string }>;
+  onDiscard: () => void;
 }) {
   const { t } = useLanguage();
+  const pending = state.pending;
+  const [text, setText] = useState(pending?.reply ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Re-seeded on the DRAFT'S IDENTITY, never on its text. Keyed on the text, a
+  // model that produced the same sentence twice would silently throw away
+  // whatever the reader had typed over it.
+  const seededFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (pending && seededFor.current !== pending.turnId) {
+      seededFor.current = pending.turnId;
+      setText(pending.reply);
+      setError(null);
+    }
+    if (!pending) seededFor.current = null;
+  }, [pending]);
+
+  const live = state.effective === "live";
   return (
-    <div className="px-3 pt-3">
-      <div
-        className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 ${
-          paused
-            ? "border-[var(--border)] bg-[var(--muted-bg)]"
-            : // Accent-tinted, not emerald: emerald is the outbound bubble
-              // and a green bar directly above the composer read as one more
-              // message rather than as a piece of chrome.
-              "border-[var(--accent)]/30 bg-[var(--accent)]/[0.08]"
-        }`}
-      >
+    <div className="space-y-2 px-3 pt-3">
+      <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-2">
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-            paused
-              ? "bg-[var(--card)] text-[var(--muted)]"
-              : "bg-[var(--accent)]/15 text-[var(--accent)]"
+            live
+              ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+              : "bg-[var(--card)] text-[var(--muted)]"
           }`}
         >
-          {paused ? (
-            // A person. Whoever is reading this is the one answering now.
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          ) : (
-            // The same four-point spark the app already uses for automation
-            // (FeedIcon, the rules header), so the agent looks like itself
-            // everywhere rather than picking a new symbol per screen.
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
-              <path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
-            </svg>
-          )}
+          {/* The same four-point spark the app already uses for automation
+              (FeedIcon, the rules header), so the agent looks like itself
+              everywhere rather than picking a new symbol per screen. */}
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
+            <path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
+          </svg>
         </span>
-        {/* Label and pulse ride together in the flexible column, so the dot
-            hugs the words it qualifies. Left to fill on its own it drifted to
-            the far edge and sat against the button, where it reads as part of
-            the control rather than as the status being live. */}
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="min-w-0 truncate text-xs font-medium text-[var(--foreground)]">
-            {paused ? t("agent.paused") : t("agent.answering")}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 truncate text-xs font-medium text-[var(--foreground)]">
+              {t("agent.inThisChat")}
+            </span>
+            {/* Worth a pulse only while it is actually answering: "answering"
+                is a claim about right now, and a static label makes it read
+                like a setting somebody switched on once. */}
+            {live && (
+              <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              </span>
+            )}
           </span>
-          {/* Worth saying at all because "the assistant is answering" is a
-              claim about RIGHT NOW, and a static label makes it read like a
-              setting somebody switched on once. */}
-          {!paused && (
-            <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+          {/* Only when this thread disagrees with the business. Saying it on
+              every conversation would explain a setting nobody touched. */}
+          {state.override !== null && (
+            <span className="truncate text-[11px] text-[var(--muted)]">
+              {t("agent.followingDefault")}
             </span>
           )}
         </span>
-        <button
-          type="button"
-          onClick={onToggle}
-          // On its own surface rather than a bare text link: this is the
-          // switch, and the bar around it is the status. A borderless label
-          // opposite a sentence reads as the other half of the sentence.
-          className="shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-        >
-          {paused ? t("agent.handBack") : t("agent.takeOver")}
-        </button>
+        <SegmentedControl
+          size="sm"
+          value={state.effective}
+          onChange={onMode}
+          segments={[
+            { id: "off", label: t("agent.mode.off"), hint: t("agent.mode.offHint") },
+            { id: "suggest", label: t("agent.mode.suggest"), hint: t("agent.mode.suggestHint") },
+            { id: "live", label: t("agent.mode.live"), hint: t("agent.mode.liveHint") },
+          ]}
+        />
       </div>
+
+      {/* Flagged, not stopped: the assistant said this one needs a person and
+          carried on helping. Amber and quiet — nobody was paged, because reps
+          read their own chats and this is a state on a surface already open. */}
+      {state.flaggedAt !== undefined && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-2.5 py-1.5 text-xs text-[var(--foreground)]">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
+          <span className="min-w-0 truncate">{t("agent.needsPerson")}</span>
+        </div>
+      )}
+
+      {pending && (
+        <div className="rounded-xl border border-dashed border-[var(--accent)]/40 bg-[var(--accent)]/[0.05] p-2.5">
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <span className="text-xs font-medium text-[var(--foreground)]">
+              {t("agent.draft")}
+            </span>
+            <span className="text-[11px] text-[var(--muted)]">
+              {t("agent.draftPrivate")}
+            </span>
+          </div>
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            rows={3}
+            className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-sm"
+          />
+          {error && (
+            <p className="mt-1.5 text-[11px] text-red-500">{error}</p>
+          )}
+          <div className="mt-1.5 flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || !text.trim()}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                const result = await onSend(text);
+                setBusy(false);
+                if (!result.ok) {
+                  // "already-decided" is the one refusal with a real story:
+                  // somebody else in this workspace sent or discarded it while
+                  // this tab was open.
+                  setError(
+                    result.reason === "already-decided"
+                      ? t("agent.draftGone")
+                      : (result.reason ?? "error"),
+                  );
+                }
+              }}
+              className="rounded-lg bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {t("agent.draftSend")}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onDiscard}
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
+            >
+              {t("agent.draftDiscard")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
