@@ -645,7 +645,10 @@ export const book = mutation({
         .collect()
     ).filter(
       (row) =>
-        row.startAt > now &&
+        // An open ASAP order counts even though its startAt is already in the
+        // past (it records placement, not a promise) — without this the brake
+        // never sees ASAP orders and one phone could stack them unbounded.
+        (row.startAt > now || row.fulfillment?.asap) &&
         (row.status === "scheduled" || row.status === "confirmed"),
     );
     if (allUpcoming.length >= MAX_UPCOMING_PER_PHONE) {
