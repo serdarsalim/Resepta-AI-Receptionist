@@ -33,7 +33,12 @@ import {
   chatAgentTools,
   disclosureLine,
 } from "./lib/chatAgentTemplate";
-import { conversationAgentMode, type SettableAgentMode } from "./lib/agentMode";
+import {
+  agentAnswersCustomer,
+  conversationAgentMode,
+  type AgentMode,
+  type SettableAgentMode,
+} from "./lib/agentMode";
 import {
   pendingSuggestionsFor,
   supersedePendingSuggestions,
@@ -997,13 +1002,14 @@ export const respond = internalAction({
     // Blue-tick the customer's message and show "typing…" before the model
     // starts thinking (Serdar, 2026-08-27: "make the agent more human like").
     // One Meta call carries both, and the indicator holds until our reply
-    // lands (25s cap, far above any turn). Live cloud lane only: shadow must
-    // not promise a reply nobody sends, and Evolution's handset owns its own
-    // read state. Scheduled, not awaited, so the model round-trip and the
-    // receipt travel in parallel; a receipt that fails costs a grey tick,
-    // not the reply.
+    // lands (25s cap, far above any turn). Live cloud lane only: the tick and
+    // the dots are the customer's, so they may only appear where the customer
+    // is actually about to be answered — shadow and suggest must not promise a
+    // reply nobody is sending. Evolution's handset owns its own read state.
+    // Scheduled, not awaited, so the model round-trip and the receipt travel
+    // in parallel; a receipt that fails costs a grey tick, not the reply.
     if (
-      context.org.mode === "live" &&
+      agentAnswersCustomer(context.org.mode) &&
       context.lane !== "evolution" &&
       context.waAccount
     ) {
@@ -1318,7 +1324,11 @@ type TurnContext = {
     priceDecimals: boolean;
     calcomApiKey: string | null;
     calcomEventTypeId: string | null;
-    mode: string;
+    // The resolved mode for THIS conversation, not the org's lifecycle. Named
+    // rather than `string` so the questions asked of it (agentAnswersCustomer)
+    // and the literals compared against it are checked against the four that
+    // exist.
+    mode: AgentMode;
     stopOnHandover: boolean;
     currency: string;
     // Which ways this business hands a PRODUCT over (schema

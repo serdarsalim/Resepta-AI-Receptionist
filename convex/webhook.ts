@@ -8,7 +8,11 @@ import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
-import { conversationAgentMode } from "./lib/agentMode";
+import {
+  agentAnswersCustomer,
+  agentGenerates,
+  conversationAgentMode,
+} from "./lib/agentMode";
 import { REPLY_DEBOUNCE_MS } from "./lib/chatAgentTemplate";
 
 // Meta's session window: one away-reply per window, not per message. Exported
@@ -431,7 +435,7 @@ export async function processInboundMessage(
       ? conversationAgentMode(org, contact).effective
       : "off";
     const agentEligible =
-      agentMode !== "off" &&
+      agentGenerates(agentMode) &&
       !org?.demoMode &&
       (org?.status ?? "active") !== "suspended" &&
       Boolean(text.trim());
@@ -455,7 +459,7 @@ export async function processInboundMessage(
     // shadow and suggest both leave the customer waiting on a person, so the
     // away-reply below still runs and the agent's reply goes to the flight
     // recorder or the staff member's draft box instead.
-    if (agentMode === "live" && agentEligible) return;
+    if (agentAnswersCustomer(agentMode) && agentEligible) return;
     const hours = org?.businessHours ?? {};
     const now = Date.now();
     const alreadyReplied =
