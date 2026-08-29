@@ -52,7 +52,7 @@ import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/wa
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { isDemo } from "./demo";
-import { bulkRunGate } from "./bulkRuns";
+import { bulkRunGate, noteBulkItemResult } from "./bulkRuns";
 import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
@@ -417,6 +417,15 @@ export const reapStuck = internalMutation({
         nextAttemptAt: undefined,
         deadLetteredAt: Date.now(),
       });
+      // This reaper is the ONE terminal outcome that does not go through
+      // applySendResult — it patches the row itself — so a bulk run's item
+      // would never learn its message died here. Without this line a single
+      // dispatch action that never came back leaves its item "queued"
+      // forever, and the run it belongs to stays "running" for good: the
+      // progress bar stops, pause and stop stay lit, and nothing ever
+      // finishes it. Every other terminal path reports through
+      // applySendResult, which is why this was the easy one to miss.
+      await noteBulkItemResult(ctx, { ...message, error: "dispatch-timeout" }, false);
     }
     return null;
   },

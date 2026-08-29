@@ -323,7 +323,11 @@ export const fanOut = internalMutation({
           customerId,
           bulkRunId: args.runId,
           direction: "out",
-          kind: "bulk_wa",
+          // No lane prefix, which IS the marker: messages.channelOfMessage
+          // reads "email_" and "form_" as the two prefixed lanes and treats
+          // everything else as WhatsApp. Exactly parallel to campaigns'
+          // "campaign" / "email_campaign" pair below.
+          kind: "bulk",
           status: "queued",
           templateName: run.templateName,
           // {{3}} carries the whole authored line, which is what lets one
