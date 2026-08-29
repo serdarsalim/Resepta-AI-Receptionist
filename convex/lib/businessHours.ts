@@ -420,6 +420,21 @@ export function suggestFreeSlots(args: {
   // 10:00-16:00 on Saturday stops being offered its weekday morning.
   const win = windowForWeekday(hours, weekday);
   if (!win) return [];
+  // windowForWeekday's 00:00-24:00 means UNRESTRICTED, not open. That default
+  // is load-bearing for the permissive gates (isWithinActiveWindow, and the
+  // away-reply that leans on it), but this function does not gate anything —
+  // it produces times an agent READS ALOUD as concrete offers. A legacy org
+  // that picked its days and never typed a closing time has no bounds to
+  // suggest from, and without this bail it gets offered a 23:30 haircut.
+  //
+  // Only legacy orgs can reach it: the `days` shape requires both bounds on
+  // every entry, so a per-weekday org always has a real window.
+  if (
+    !(hours.days && hours.days.length > 0) &&
+    (hours.startMinute == null || hours.endMinute == null)
+  ) {
+    return [];
+  }
   const slotMs = 30 * 60_000;
   // A slot starting in five minutes is not an offer anyone can accept.
   const earliest = args.nowMs + 15 * 60_000;
