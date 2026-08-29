@@ -301,22 +301,60 @@ function BookingRow() {
               >
                 {nativeBookingUrl}
               </a>
+              {/* The glyph says copy; the word only said it in one language
+                  and took width from the URL, which is the thing on this line
+                  worth reading. The name survives as the tooltip and the
+                  accessible name, so nothing that could read the word before
+                  has lost it.
+
+                  Still a state, not a fire-and-forget: an icon that does not
+                  change leaves you wondering whether the click landed, so the
+                  sheet turns into a check for the same 1200ms the word used
+                  to. */}
               <button
                 type="button"
+                title={copied ? t("common.copied") : t("common.copy")}
+                aria-label={copied ? t("common.copied") : t("common.copy")}
                 onClick={() => {
                   void navigator.clipboard.writeText(nativeBookingUrl).then(() => {
                     setCopied(true);
                     setTimeout(() => setCopied(false), 1200);
                   });
                 }}
-                className="shrink-0 rounded-md px-1.5 py-0.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                className={`shrink-0 rounded-md p-1.5 transition-colors ${
+                  copied
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
               >
-                {copied ? t("common.copied") : t("common.copy")}
+                {copied ? <CopiedIcon /> : <CopyIcon />}
               </button>
             </>
           )}
         </div>
     </>
+  );
+}
+
+// Local, like every other icon in this app (SearchIcon in HelpCenter,
+// PencilIcon in RecordField). There is no icon module to add to, and one
+// caller does not make one.
+function CopyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+// The check switch's path at the same size, so the app's "yes, that happened"
+// mark is one shape.
+function CopiedIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
   );
 }
 
@@ -656,14 +694,26 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 </option>
               ))}
             </select>
-            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]">
-              <input
-                type="checkbox"
-                checked={settings.org.priceDecimals ?? false}
-                onChange={(e) => void update({ priceDecimals: e.target.checked })}
+            {/* Switch and inert words, the shape the pickup/delivery pair
+                uses further down. It was a native checkbox until 2026-08-29,
+                which made this card ask a yes/no question three different
+                ways on one screen — a checkbox here, pills below, a check
+                circle in the tables.
+
+                The word stops being a click target in the trade: a <label>
+                can adopt a native input, and cannot adopt a <button>. The
+                switch is 24px with its own accessible name, and no other
+                switch on this card ever had a clickable word. */}
+            <span className="flex shrink-0 items-center gap-2">
+              <CheckSwitch
+                on={settings.org.priceDecimals ?? false}
+                label={t("settings.priceDecimals")}
+                onChange={(next) => void update({ priceDecimals: next })}
               />
-              {t("settings.priceDecimals")}
-            </label>
+              <span className="text-sm text-[var(--muted)]">
+                {t("settings.priceDecimals")}
+              </span>
+            </span>
           </div>
           {/* Last on purpose: an opt-in extra, below the facts of the
               business. It follows currency because that is the unit the tab
