@@ -1499,6 +1499,63 @@ async function executeTool(
       };
     }
 
+    // The voice lane's startRefusal, ported. It lived there and not here, which
+    // meant the chat agent's reschedule wrote ANY instant it was handed — into
+    // the past, onto a closed day, straight through a holiday. One copy, used
+    // by both write branches, because two copies is how the second one ended up
+    // with none of the checks.
+    //
+    // `did` is the verb the agent repeats to the customer, so it has to match
+    // what was actually refused.
+    const refuseStart = async (
+      startAt: number,
+      did: "booked" | "moved",
+    ): Promise<Record<string, unknown> | null> => {
+      if (Number.isNaN(startAt)) return { error: "missing-or-bad-start" };
+      // Read here rather than closed over: the branches that call this each had
+      // their own `now`, and the guard runs at call time either way.
+      const now = Date.now();
+      if (startAt < now - 5 * 60_000) return { error: "start-is-in-the-past" };
+      if (startAt > now + 400 * 24 * 60 * 60_000) {
+        return { error: "start-is-too-far-ahead" };
+      }
+      const hours = org.businessHours;
+      const guardClosures = await ctx.runQuery(internal.closures.forOrg, {
+        orgId: context.orgId,
+      });
+      // Independent of hasBusinessHours, exactly as in the voice lane: an org
+      // with a holiday and no stated opening hours must still refuse the
+      // holiday.
+      const localAt = getLocalPartsSafe(startAt, org.timezone);
+      const shut = closureBlocks(
+        guardClosures,
+        localAt,
+        localAt.minutesOfDay,
+        localAt.minutesOfDay,
+      );
+      if (
+        shut ||
+        (hours &&
+          hasBusinessHours(hours) &&
+          !isWithinActiveWindow(startAt, org.timezone, hours, guardClosures))
+      ) {
+        return {
+          error: "outside-open-hours",
+          attempted: spokenOf(startAt),
+          ...openHoursForAgent(hours, {
+            closures: guardClosures,
+            todayIso: todayInZone(org.timezone),
+          }),
+          note:
+            `The business is CLOSED then, so this was not ${did}. Offer the` +
+            " nearest time inside open_hours, avoiding closed_times and" +
+            " upcoming_closures. If one of those names a reason, say it —" +
+            " going quiet about why reads as a fault.",
+        };
+      }
+      return null;
+    };
+
     if (name === "book_appointment") {
       const customerName =
         String(input.name ?? "").trim() ||
@@ -1590,45 +1647,8 @@ async function executeTool(
         ? now
         : parseLocalStart(String(input.start ?? ""), org.timezone);
       if (!askedAsap) {
-        if (Number.isNaN(startAt)) return { error: "missing-or-bad-start" };
-        if (startAt < now - 5 * 60_000) return { error: "start-is-in-the-past" };
-        if (startAt > now + 400 * 24 * 60 * 60_000) {
-          return { error: "start-is-too-far-ahead" };
-        }
-        const hours = org.businessHours;
-        const bookClosures = await ctx.runQuery(internal.closures.forOrg, {
-          orgId: context.orgId,
-        });
-        // Independent of hasBusinessHours, exactly as in the voice lane: an
-        // org with a holiday and no stated opening hours must still refuse the
-        // holiday.
-        const localAt = getLocalPartsSafe(startAt, org.timezone);
-        const shut = closureBlocks(
-          bookClosures,
-          localAt,
-          localAt.minutesOfDay,
-          localAt.minutesOfDay,
-        );
-        if (
-          shut ||
-          (hours &&
-            hasBusinessHours(hours) &&
-            !isWithinActiveWindow(startAt, org.timezone, hours, bookClosures))
-        ) {
-          return {
-            error: "outside-open-hours",
-            attempted: spokenOf(startAt),
-            ...openHoursForAgent(hours, {
-              closures: bookClosures,
-              todayIso: todayInZone(org.timezone),
-            }),
-            note:
-              "The business is CLOSED then, so this was not booked. Offer the" +
-              " nearest time inside open_hours, avoiding closed_times and" +
-              " upcoming_closures. If one of those names a reason, say it —" +
-              " going quiet about why reads as a fault.",
-          };
-        }
+        const refusal = await refuseStart(startAt, "booked");
+        if (refusal) return refusal;
       }
       let externalUid: string | undefined;
       // The pair again rather than hasCalcom: this branch passes both to
@@ -1727,7 +1747,8 @@ async function executeTool(
         return { cancelled: true };
       }
       const startAt = parseLocalStart(String(input.start ?? ""), org.timezone);
-      if (Number.isNaN(startAt)) return { error: "missing-or-bad-start" };
+      const refusal = await refuseStart(startAt, "moved");
+      if (refusal) return refusal;
       let newUid: string | undefined;
       if (found.externalUid && org.calcomApiKey) {
         const result = await rescheduleBooking({
