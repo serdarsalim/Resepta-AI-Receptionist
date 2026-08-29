@@ -435,8 +435,24 @@ function RunDetail({
 }) {
   const { t, language } = useLanguage();
   const detail = useQuery(api.bulkRuns.detail, { runId });
+  // The history is readable by everyone on the team — a member of staff should
+  // be able to see that four hundred people were called this morning. Changing
+  // a run is the owner's, the same line the composer draws. list and detail
+  // are requireOrg and setStatus is requireOwner, so without this the buttons
+  // render for staff and the mutation throws owner-only into a void: the pill
+  // still reads Running, nothing appears on screen, and the run keeps dialling
+  // while the person who pressed Stop believes it stopped.
+  const options = useQuery(api.bulkRuns.launchOptions, {});
   const setStatus = useMutation(api.bulkRuns.setStatus);
   const [confirm, confirmDialog] = useConfirm();
+  const [error, setError] = useState<string | null>(null);
+
+  // Second belt, and the reason the first one was needed: a bare void on a
+  // mutation that can refuse turns every future refusal into silence.
+  const move = (status: "running" | "paused" | "cancelled") => {
+    setError(null);
+    void setStatus({ runId, status }).catch(() => setError(t("bulk.errorGeneric")));
+  };
 
   if (detail === undefined) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
@@ -446,7 +462,11 @@ function RunDetail({
   }
 
   const { run, items } = detail;
-  const live = run.status === "running" || run.status === "paused";
+  // Undefined options means the role has not loaded. Withhold the controls
+  // rather than flashing them: a Stop button that appears and then vanishes is
+  // worse than one that arrives a moment late.
+  const live =
+    (run.status === "running" || run.status === "paused") && options?.isOwner === true;
 
   const stop = async () => {
     // Destructive, and said plainly: what is already ringing or already with
@@ -457,7 +477,7 @@ function RunDetail({
       confirmLabel: t("bulk.stop"),
       destructive: true,
     });
-    if (ok) await setStatus({ runId, status: "cancelled" });
+    if (ok) move("cancelled");
   };
 
   const pill =
@@ -481,7 +501,7 @@ function RunDetail({
               <button
                 type="button"
                 className={pill}
-                onClick={() => void setStatus({ runId, status: "paused" })}
+                onClick={() => move("paused")}
               >
                 {t("bulk.pause")}
               </button>
@@ -489,7 +509,7 @@ function RunDetail({
               <button
                 type="button"
                 className={pill}
-                onClick={() => void setStatus({ runId, status: "running" })}
+                onClick={() => move("running")}
               >
                 {t("bulk.resume")}
               </button>
@@ -504,6 +524,8 @@ function RunDetail({
           </span>
         )}
       </div>
+
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="rounded-lg bg-[var(--card)] p-4 shadow-[var(--card-shadow)]">
         <p className="text-sm font-medium">{run.label}</p>
