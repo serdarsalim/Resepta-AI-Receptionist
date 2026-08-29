@@ -1096,7 +1096,17 @@ export const respond = internalAction({
       return null;
     }
 
-    const openness = openHoursForAgent(context.org.businessHours);
+    // The shut hours reach the system prompt too, not only the tools: a
+    // customer who asks "are you open Sunday" is answered from the prompt, and
+    // an agent that only learns about the lunch break when a booking is
+    // refused has already told somebody it was free.
+    const promptClosures = await ctx.runQuery(internal.closures.forOrg, {
+      orgId: context.orgId,
+    });
+    const openness = openHoursForAgent(context.org.businessHours, {
+      closures: promptClosures,
+      todayIso: todayInZone(context.org.timezone),
+    });
     // Template v4: the adapter over the salon's own Talimat, with the shared
     // built-ins rendered for text. Services, team, knowledge, the clock and
     // the customer card all arrive through the substituted {{variables}} —
@@ -1373,12 +1383,19 @@ async function executeTool(
           startMs: Date.parse(startIso),
           endMs: Date.parse(endIso),
         });
-        const openness = openHoursForAgent(org.businessHours);
+        const closures = await ctx.runQuery(internal.closures.forOrg, {
+          orgId: context.orgId,
+        });
+        const openness = openHoursForAgent(org.businessHours, {
+          closures,
+          todayIso: today,
+        });
         const suggested = suggestFreeSlots({
           dayIso,
           tz: org.timezone,
           hours: org.businessHours,
           full: booked.full,
+          closures,
           nowMs: Date.now(),
         });
         // The customer asked for a SPECIFIC time: answer it here, as a fact,
@@ -1409,6 +1426,7 @@ async function executeTool(
             askedMs,
             org.timezone,
             org.businessHours ?? {},
+            closures,
           );
           const inPast = askedMs < Date.now();
           requestedTime = {
@@ -1562,16 +1580,26 @@ async function executeTool(
           return { error: "start-is-too-far-ahead" };
         }
         const hours = org.businessHours;
+        const bookClosures = await ctx.runQuery(internal.closures.forOrg, {
+          orgId: context.orgId,
+        });
         if (
           hours &&
           hasBusinessHours(hours) &&
-          !isWithinActiveWindow(startAt, org.timezone, hours)
+          !isWithinActiveWindow(startAt, org.timezone, hours, bookClosures)
         ) {
           return {
             error: "outside-open-hours",
             attempted: spokenOf(startAt),
-            ...openHoursForAgent(hours),
-            note: "The business is CLOSED then, so this was not booked. Offer the nearest time inside open_hours.",
+            ...openHoursForAgent(hours, {
+              closures: bookClosures,
+              todayIso: todayInZone(org.timezone),
+            }),
+            note:
+              "The business is CLOSED then, so this was not booked. Offer the" +
+              " nearest time inside open_hours, avoiding closed_times and" +
+              " upcoming_closures. If one of those names a reason, say it —" +
+              " going quiet about why reads as a fault.",
           };
         }
       }

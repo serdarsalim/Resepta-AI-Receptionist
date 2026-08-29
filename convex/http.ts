@@ -487,6 +487,13 @@ http.route({
     const callerPhone =
       normalisePhone(rawCallerPhone, dialCodeForTimezone(org.timezone)) ?? rawCallerPhone;
 
+    // Loaded once for the whole tool call, because startRefusal below is a
+    // synchronous closure and check_availability needs the same rows — two
+    // reads of one table inside one request that must agree with each other.
+    const closures = await ctx.runQuery(internal.closures.forOrg, {
+      orgId: org._id,
+    });
+
     // The three things an agent-supplied start has to survive before it becomes
     // a row. One copy, shared by both write branches, because it WAS written
     // twice and the second copy — reschedule_appointment — had none of the
@@ -525,7 +532,7 @@ http.route({
       if (
         openHours &&
         hasBusinessHours(openHours) &&
-        !isWithinActiveWindow(startAt, org.timezone, openHours)
+        !isWithinActiveWindow(startAt, org.timezone, openHours, closures)
       ) {
         // Speakable, not a bare code. An error the agent cannot act on becomes
         // "something went wrong" down the phone and ends a call that was one
@@ -534,11 +541,16 @@ http.route({
         return {
           error: "outside-open-hours",
           attempted: spokenDateTime(startAt, org.timezone, org.language),
-          ...openHoursForAgent(openHours),
+          ...openHoursForAgent(openHours, {
+            closures,
+            todayIso: todayInZone(org.timezone),
+          }),
           note:
             `The salon is CLOSED then, so this was not ${did}. Tell the caller` +
-            " and offer the nearest time inside open_hours on a day that is not" +
-            " in closed_days.",
+            " and offer the nearest time inside open_hours, on a day that is not" +
+            " in closed_days, avoiding closed_times and upcoming_closures. If" +
+            " one of those names a reason, say it — \"we're closed for the" +
+            " holiday that day\" is an answer; going quiet is not.",
         };
       }
       return null;
@@ -574,12 +586,16 @@ http.route({
           full: { startAt: number; durationMinutes: number | null }[];
         };
         const hours = org.businessHours ?? null;
-        const openness = openHoursForAgent(hours);
+        const openness = openHoursForAgent(hours, {
+          closures,
+          todayIso: today,
+        });
         const suggested = suggestFreeSlots({
           dayIso,
           tz: org.timezone,
           hours,
           full: booked.full,
+          closures,
           nowMs: Date.now(),
         });
         return respond({

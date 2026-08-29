@@ -9,7 +9,7 @@
 // — and a rule enforced in one of them is a rule the other two break.
 
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { loadClosures } from "./lib/closureRows";
 import { closureBlocks, getLocalPartsSafe } from "./lib/businessHours";
@@ -54,6 +54,37 @@ export const list = query({
         if (a.date && b.date) return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
         return (a.startMinute ?? 0) - (b.startMinute ?? 0);
       });
+  },
+});
+
+// The agents' door. They run as httpActions and internalActions with an org
+// already resolved from the provider's agent id, so they cannot go through
+// `list` (which resolves the org from the caller's session, and there is no
+// session on an inbound call).
+//
+// Returns the pure shape rather than documents: everything downstream of here
+// wants Closure, and handing back `_id` invites somebody to route an agent
+// through a mutation keyed on it.
+export const forOrg = internalQuery({
+  args: { orgId: v.id("orgs") },
+  returns: v.array(
+    v.object({
+      weekdays: v.optional(v.array(v.number())),
+      date: v.optional(v.string()),
+      startMinute: v.optional(v.number()),
+      endMinute: v.optional(v.number()),
+      reason: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await loadClosures(ctx, args.orgId);
+    return rows.map((row) => ({
+      weekdays: row.weekdays,
+      date: row.date,
+      startMinute: row.startMinute,
+      endMinute: row.endMinute,
+      reason: row.reason,
+    }));
   },
 });
 
