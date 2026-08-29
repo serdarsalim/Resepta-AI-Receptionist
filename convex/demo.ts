@@ -210,6 +210,16 @@ export const nightlyReset = internalMutation({
     const orgs = await ctx.db.query("orgs").take(500);
     for (const org of orgs) {
       if (!isDemo(org)) continue;
+      // A prospect demo (it has a demoProspects row) is NOT the showroom: it
+      // holds the prospect's own services under their own business name, and
+      // the whole point is that it survives until they call it. Rebuilding it
+      // into "Moda Hair Salon" overnight would be the reset destroying the
+      // demo it exists to protect.
+      const prospect = await ctx.db
+        .query("demoProspects")
+        .withIndex("by_org", (q) => q.eq("orgId", org._id))
+        .first();
+      if (prospect) continue;
       // The public showroom has one canonical English identity. Patching the
       // surviving org row here also migrates demos provisioned before the
       // English fixture existed.

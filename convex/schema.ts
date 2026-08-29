@@ -1549,6 +1549,32 @@ export default defineSchema({
     // Webhook resolution: metadata.phone_number_id → org.
     .index("by_phone_number_id", ["phoneNumberId"]),
 
+  // One prospect demo, keyed by the prospect's own mobile number.
+  //
+  // An org seeded from a prospect's public service list before they have
+  // signed in — or heard of us — reached through a SHARED demo line rather
+  // than a number of its own. The prospect is sent the demo on WhatsApp, so
+  // the number they will call from is known in advance; this row is what
+  // turns that caller id into the right org at ring time. One demo per
+  // phone, enforced at seed.
+  //
+  // demoMode on the org carries the send-safety boundary (see demo.ts); this
+  // row carries the second consequence: nightlyReset skips any demo org that
+  // has one, because a prospect demo holds the business's own data, and
+  // rebuilding it into the showroom fixture overnight would destroy exactly
+  // the thing the demo exists to show.
+  demoProspects: defineTable({
+    orgId: v.id("orgs"),
+    // E.164 — the number the prospect will call from. The routing key.
+    phone: v.string(),
+    // Where the seeded services came from, for re-scraping and the pitch.
+    siteUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_org", ["orgId"])
+    // Ring-time resolution on the shared demo line: caller id → prospect org.
+    .index("by_phone", ["phone"]),
+
   // One automated message the org sends, as a row: WHEN it fires (an anchor
   // plus an offset), on WHICH channel, and — via waTemplates.ruleId — what it
   // says. Confirmation, each reminder, the follow-up, the cancellation notice
@@ -1786,6 +1812,12 @@ export default defineSchema({
     // Set when this row belongs to a campaign, so a run can count its own
     // outcome without scanning every message the org ever sent.
     campaignId: v.optional(v.id("campaigns")),
+    // Set when this row belongs to a bulk run, the campaignId rule exactly.
+    // Read at CLAIM time as well as for counting: delivery.claimForRetry
+    // refuses a row whose run has been paused or cancelled, because a pause
+    // enforced only at enqueue time is decorative once the rows are already
+    // queued.
+    bulkRunId: v.optional(v.id("bulkRuns")),
     status: v.union(
       v.literal("queued"),
       v.literal("sent"),
@@ -1962,6 +1994,7 @@ export default defineSchema({
     // the one that would break is among them.
     .index("by_media", ["mediaStorageId"])
     .index("by_campaign", ["campaignId"])
+    .index("by_bulk_run", ["bulkRunId"])
     .index("by_wamid", ["wamid"])
     // Open-pixel hits. The token is the capability: the route carries no auth,
     // so resolving it must be an indexed point read, not a scan.
@@ -2008,6 +2041,159 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     createdBy: v.optional(v.id("users")),
   }).index("by_org", ["orgId"]),
+
+  // One run of a bulk action against a HAND-PICKED set of customers, fired
+  // from the selection in the Customers table.
+  //
+  // ── WHY THIS IS NOT campaigns ─────────────────────────────────────────────
+  //
+  // A campaign's audience is a PREDICATE (campaigns.segment) and its
+  // per-recipient state lives entirely on the messages rows found through
+  // messages.by_campaign. Both facts break on the call channel: a bulk call
+  // produces no message row, and produces no calls row either until Retell's
+  // webhook lands minutes later. There is no row on which a queued call, a
+  // ringing call, or a call we failed to place can exist. Once calls need
+  // their own item rows, email and WhatsApp have them too, and the thing that
+  // made a campaign a campaign is gone.
+  //
+  // Campaigns also has no paused and no cancelled (status is draft/sending/
+  // done) and nothing that clears its queued rows, and a run that is dialling
+  // real phones has to be stoppable.
+  //
+  // So this is a sibling, and campaigns is left alone. The code is borrowed
+  // heavily — fanOut's per-customer render, the OCC claim in markStarted, the
+  // paging loop — but the table is separate. Later a campaign could be
+  // re-expressed as a run whose recipients came from a segment; that door
+  // stays open and the reverse one never was.
+  bulkRuns: defineTable({
+    orgId: v.id("orgs"),
+    channel: v.union(
+      v.literal("email"),
+      v.literal("whatsapp"),
+      v.literal("call"),
+    ),
+    status: v.union(
+      v.literal("running"),
+      v.literal("paused"),
+      v.literal("cancelled"),
+      v.literal("done"),
+    ),
+    // What the history list shows as the run's name. Derived at creation from
+    // the subject, the first words of the body, or the agent's name — never
+    // typed. A run is picked out of the list by what it said and when, and
+    // asking for a title is a field nobody fills in honestly.
+    label: v.string(),
+
+    // ---- Message channels (email, whatsapp) ------------------------------
+    // The authored line, before per-recipient token rendering. Kept so the
+    // run detail can show what was written, not just what each person got.
+    body: v.optional(v.string()),
+    emailSubject: v.optional(v.string()),
+    // The WYSIWYG's HTML, when the composer produced any. Same rule the
+    // template rows follow: the send prefers html and body stays the plain
+    // projection.
+    emailHtml: v.optional(v.string()),
+    // The Meta template this run rides. Resolved ONCE at launch and frozen:
+    // an org that registers a different campaign template mid-run must not
+    // change what the second half of the run says.
+    templateName: v.optional(v.string()),
+
+    // ---- Call channel ----------------------------------------------------
+    retellAgentId: v.optional(v.string()),
+    // The caller id the run dials from, resolved once at launch for the same
+    // reason templateName is. Every tenant shares one Retell account, so
+    // re-resolving per call risks a different salon's line mid-run.
+    fromNumber: v.optional(v.string()),
+
+    // ---- Denormalised counters -------------------------------------------
+    //
+    // Patched at each terminal transition rather than recomputed. The history
+    // list is a reactive query over every run an org has ever fired, and
+    // collecting each run's items to count them (which is how nudge does it)
+    // turns one open tab into a scan of the whole item table on every change
+    // anywhere in it.
+    totalCount: v.number(),
+    doneCount: v.number(),
+    failedCount: v.number(),
+    skippedCount: v.number(),
+
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    createdBy: v.optional(v.id("users")),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_org_status", ["orgId", "status"])
+    // Status ACROSS orgs, for the stuck-call reaper. A cron has no org to
+    // scope to, and the messages.by_status_creation argument applies exactly:
+    // live runs are a handful at any moment while finished ones accumulate
+    // forever, so this index costs what is RUNNING rather than what exists.
+    .index("by_status", ["status"]),
+
+  // One recipient of one run, and for the call channel the queue row itself.
+  //
+  // The status vocabulary is deliberately wider than a message's, because it
+  // has to describe three different relationships to the work:
+  //
+  //   pending    not started
+  //   queued     a messages row exists; delivery.ts owns it from here
+  //   dialing    THE CALL IN FLIGHT, and the concurrency token — see
+  //              bulkRuns.claimNextCall. Exactly one per run may hold this.
+  //   done       finished, whatever the outcome was on the wire
+  //   failed     we could not place it / the provider refused it
+  //   skipped    never attempted, and WHY is in reason: no email address, no
+  //              consent, an unusable number. A bulk sender that quietly
+  //              drops rows is how "I sent it to everyone" becomes false.
+  //   cancelled  the run was stopped before this one's turn
+  bulkRunItems: defineTable({
+    runId: v.id("bulkRuns"),
+    // Denormalised from the run so a per-item read never has to fetch the
+    // parent to answer "whose is this".
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    // Display order, and the order the call queue dials in. Insertion order
+    // would serve — Convex appends _creationTime to every index — but a run
+    // detail that renumbers itself when a row is patched is confusing, and
+    // one number costs nothing.
+    position: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("queued"),
+      v.literal("dialing"),
+      v.literal("done"),
+      v.literal("failed"),
+      v.literal("skipped"),
+      v.literal("cancelled"),
+    ),
+    // Message channels: the row delivery.ts is carrying. The item's outcome
+    // is read THROUGH this rather than copied, so a retry that lands an hour
+    // later shows up without anything having to patch the item.
+    messageId: v.optional(v.id("messages")),
+    // Call channel. retellCallId is stamped the moment the POST returns and
+    // is how the call_ended webhook finds its way back to this row.
+    retellCallId: v.optional(v.string()),
+    dialedAt: v.optional(v.number()),
+    durationSec: v.optional(v.number()),
+    // Retell's disconnect code, copied off the calls row when the call ends.
+    // The run detail's "no answer" comes from here.
+    disconnectionReason: v.optional(v.string()),
+    attempts: v.optional(v.number()),
+    // Why this was skipped, or how placing it failed. Shown verbatim in the
+    // run detail.
+    reason: v.optional(v.string()),
+  })
+    .index("by_run", ["runId"])
+    // The claim's index. (runId, status) with _creationTime appended, so
+    // taking one ascending row of (run, "pending") is the next in line, and
+    // reading (run, "dialing") answers "is one already out" in one point
+    // lookup. Convex serialises the conflicting read/write here, which IS the
+    // whole concurrency control for sequential dialling.
+    .index("by_run_status", ["runId", "status"])
+    // Fan-out idempotency: an action that loops a mutation has no transaction
+    // spanning the pages, so a retried fan-out must be able to ask "does this
+    // customer already have an item in this run".
+    .index("by_run_customer", ["runId", "customerId"])
+    // The webhook's way home.
+    .index("by_retell_call", ["retellCallId"]),
 
   // Images the salon sends OUT — a price list, a before-and-after, the card
   // machine being broken today. Inbound images already land in Convex storage

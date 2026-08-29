@@ -42,6 +42,7 @@ import { maskSecret } from "./lib/connections";
 import { foundOrg } from "./lib/foundOrg";
 import { resolvePreset } from "./lib/industryPresetStore";
 import { seedPreset } from "./onboarding";
+import { seedDefaultRules } from "./messageRules";
 import { resolvePublicSlug } from "./lib/publicSlug";
 import { fileRegistrationDocument } from "./lib/numberDocument";
 import { assignInboundAddress } from "./lib/inboundAddress";
@@ -2628,6 +2629,104 @@ export const seedWorkspace = internalMutation({
       orgId,
     });
     return { orgId, slug: slug ?? null };
+  },
+});
+
+// seedWorkspace's outbound-sales sibling: a PROSPECT demo, born before the
+// prospect has signed in — or heard of us. Seeded from their public service
+// list, demoMode on so no send path can ever reach a provider, and registered
+// in demoProspects under the prospect's own mobile so the shared demo line
+// recognises them at ring time. No membership: nobody signs into this org;
+// its only doors are the demo line and the operator.
+//
+//   npx convex run platform:seedProspect \
+//     '{"name":"Kardem Güzellik","phone":"+905349744660",
+//       "siteUrl":"https://kardemguzellik.com",
+//       "services":[{"name":"Lazer epilasyon (seans)","price":150000}]}'
+//
+// Services come from the business's own published list — real, sourced
+// entries, prices in minor units. A price the business does not publish stays
+// absent, per the no-invented-prices rule.
+export const seedProspect = internalMutation({
+  args: {
+    name: v.string(),
+    // E.164. The number the prospect is reached on AND will call from.
+    phone: v.string(),
+    siteUrl: v.optional(v.string()),
+    language: v.optional(v.string()),
+    industry: v.optional(v.string()),
+    services: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          price: v.optional(v.number()),
+          durationMinutes: v.optional(v.number()),
+        }),
+      ),
+    ),
+  },
+  returns: v.id("orgs"),
+  handler: async (ctx, args) => {
+    const name = args.name.trim();
+    if (!name) throw new Error("name is required");
+    const phone = args.phone.trim();
+    if (!/^\+\d{8,15}$/.test(phone)) {
+      throw new Error("phone must be E.164, e.g. +905321234567");
+    }
+    const existing = await ctx.db
+      .query("demoProspects")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .first();
+    if (existing) {
+      throw new Error(
+        `${phone} already has a prospect demo (org ${existing.orgId})`,
+      );
+    }
+    const language = args.language?.trim() || "tr";
+    const preset = args.industry
+      ? await resolvePreset(ctx, args.industry)
+      : null;
+    if (args.industry && !preset) {
+      throw new Error(`unknown industry: ${args.industry}`);
+    }
+
+    // Direct insert on the demo.provision model, not foundOrg: a prospect
+    // demo must never carry billing that can decline a ring, never mint
+    // trial credit, and never see the onboarding wizard.
+    const orgId = await ctx.db.insert("orgs", {
+      name,
+      timezone: "Europe/Istanbul",
+      language,
+      currency: "TRY",
+      demoMode: true,
+      sendBookingConfirmation: true,
+      ...(args.industry ? { industry: args.industry } : {}),
+    });
+    await seedDefaultRules(ctx.db, orgId);
+    if (preset) await seedPreset(ctx, orgId, preset, language);
+    const scraped = args.services ?? [];
+    for (let i = 0; i < scraped.length; i++) {
+      const row = scraped[i];
+      const serviceName = row.name.trim();
+      if (!serviceName) continue;
+      await ctx.db.insert("services", {
+        orgId,
+        name: serviceName,
+        active: true,
+        order: i,
+        ...(row.price !== undefined ? { price: row.price } : {}),
+        ...(row.durationMinutes !== undefined
+          ? { durationMinutes: row.durationMinutes }
+          : {}),
+      });
+    }
+    await ctx.db.insert("demoProspects", {
+      orgId,
+      phone,
+      ...(args.siteUrl ? { siteUrl: args.siteUrl.trim() } : {}),
+      createdAt: Date.now(),
+    });
+    return orgId;
   },
 });
 
