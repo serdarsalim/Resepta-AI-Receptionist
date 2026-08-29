@@ -175,6 +175,14 @@ export const recordInbound = internalMutation({
     // hours decide when, the throttle stamps BEFORE scheduling so two retries
     // landing together cannot both send.
     const org = await ctx.db.get(args.orgId);
+    // Closures are deliberately NOT consulted here (2026-08-29). The away-reply
+    // means "nobody is here, do not wait up"; during a lunch break somebody IS
+    // here and will answer in forty minutes, so "we're closed" is a worse
+    // answer than the silence it replaces. It would also contradict itself:
+    // the throttle is one reply per session window, so a customer who wrote at
+    // 12:55 and got nothing would get "we're closed" at 13:15.
+    //
+    // Opening hours keep driving this. Closures drive what may be BOOKED.
     const hours = org?.businessHours ?? {};
     const customer = await ctx.db.get(customerId);
     const alreadyReplied =

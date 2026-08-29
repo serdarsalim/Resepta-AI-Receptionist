@@ -460,6 +460,14 @@ export async function processInboundMessage(
     // away-reply below still runs and the agent's reply goes to the flight
     // recorder or the staff member's draft box instead.
     if (agentAnswersCustomer(agentMode) && agentEligible) return;
+    // Closures are deliberately NOT consulted here (2026-08-29). The away-reply
+    // means "nobody is here, do not wait up"; during a lunch break somebody IS
+    // here and will answer in forty minutes, so "we're closed" is a worse
+    // answer than the silence it replaces. It would also contradict itself:
+    // the throttle is one reply per session window, so a customer who wrote at
+    // 12:55 and got nothing would get "we're closed" at 13:15.
+    //
+    // Opening hours keep driving this. Closures drive what may be BOOKED.
     const hours = org?.businessHours ?? {};
     const now = Date.now();
     const alreadyReplied =

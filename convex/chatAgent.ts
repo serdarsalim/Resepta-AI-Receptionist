@@ -46,6 +46,7 @@ import {
 import { builtinAgentVariables } from "./lib/agentVariables";
 import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
+  type ActiveWindow,
   hasBusinessHours,
   isWithinActiveWindow,
   localDayRangeUtc,
@@ -1330,7 +1331,11 @@ type TurnContext = {
     name: string;
     timezone: string;
     language: string;
-    businessHours: { activeDays?: number[]; startMinute?: number; endMinute?: number } | null;
+    // The WHOLE shape, `days` included. Narrowing it here silently dropped the
+    // per-weekday hours on the way into the tools, and windowForWeekday would
+    // then have fallen back to the legacy fields — a chat agent offering
+    // Saturday morning at a business that opens Saturday at ten.
+    businessHours: ActiveWindow | null;
     priceDecimals: boolean;
     calcomApiKey: string | null;
     calcomEventTypeId: string | null;
