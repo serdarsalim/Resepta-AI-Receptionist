@@ -13,6 +13,7 @@ import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 import { recordSendUsage } from "./lib/usage";
 import { supersedePendingSuggestions } from "./lib/agentDrafts";
+import { noteBulkItemResult } from "./bulkRuns";
 
 const messageStatus = v.union(
   v.literal("queued"),
@@ -170,6 +171,14 @@ export const applySendResult = internalMutation({
           });
         }
       }
+      // A bulk run's item is resolved HERE rather than when its row was
+      // enqueued, because a queued row is not a sent one and a run whose
+      // progress bar filled at fan-out would be lying for the next four
+      // hours. Same transaction as the patch above, the applyWalletDebit
+      // rule: a crash between the two would leave the run's counters
+      // describing a world that never existed. No-ops for every row that
+      // carries no bulkRunId, which is nearly all of them.
+      await noteBulkItemResult(ctx, message, true);
       return null;
     }
 
@@ -209,6 +218,10 @@ export const applySendResult = internalMutation({
       reason: args.error ?? "unknown",
       deadLettered,
     });
+    // Terminal, so the run may count it. Deliberately NOT in the retry branch
+    // above: a row still owed an attempt has not failed yet, and telling the
+    // run otherwise would finish it while messages were still going out.
+    await noteBulkItemResult(ctx, { ...message, error: args.error }, false);
     return null;
   },
 });

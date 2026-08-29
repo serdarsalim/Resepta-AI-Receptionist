@@ -15,6 +15,7 @@ import type * as appointments from "../appointments.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as booking from "../booking.js";
+import type * as bulkRuns from "../bulkRuns.js";
 import type * as calcom from "../calcom.js";
 import type * as calls from "../calls.js";
 import type * as campaigns from "../campaigns.js";
@@ -137,6 +138,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   billing: typeof billing;
   booking: typeof booking;
+  bulkRuns: typeof bulkRuns;
   calcom: typeof calcom;
   calls: typeof calls;
   campaigns: typeof campaigns;

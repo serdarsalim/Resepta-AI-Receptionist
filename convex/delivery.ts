@@ -52,6 +52,7 @@ import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/wa
 import { sendEvolutionText } from "./lib/evolution";
 import { loadEvolutionCreds } from "./lib/waLane";
 import { isDemo } from "./demo";
+import { bulkRunGate } from "./bulkRuns";
 import { EVOLUTION_NO_MEDIA } from "./lib/sendFailure";
 
 // Rows per tick. Each is a claim mutation plus a POST plus a result mutation,
@@ -121,6 +122,19 @@ export const claimForRetry = internalMutation({
       return { refused: "org-suspended" as const };
     }
     if (isDemo(org)) return { refused: "demo-org" as const };
+    // A bulk run that was paused or stopped after its rows were already
+    // queued. The check has to be HERE, at claim time, and not where the rows
+    // were written: by the time anybody reaches for the stop button the whole
+    // run is sitting in this queue, so a flag read only on the way in would be
+    // decorative.
+    //
+    // Paused deliberately returns null rather than a refusal. null means "not
+    // this tick" and leaves the row queued and due, so the run picks up where
+    // it left off when it resumes; reporting a refusal would fail the row and
+    // turn every pause into a cancel.
+    const bulk = await bulkRunGate(ctx, message);
+    if (bulk === "paused") return null;
+    if (bulk === "cancelled") return { refused: "bulk-cancelled" as const };
 
     const waAccount = await resolveWaAccount(
       ctx,

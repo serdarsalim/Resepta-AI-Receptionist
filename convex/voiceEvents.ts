@@ -301,6 +301,28 @@ export const process = internalAction({
 
       await ctx.runMutation(internal.voiceEvents.complete, { eventId });
       if (row.eventType === "call_ended") {
+        // The bulk call queue's continuation, and the ONLY thing that
+        // advances it in the normal case (convex/bulkRuns.ts). The queue dials
+        // strictly one at a time, and the item it is holding stays "dialing"
+        // until this line releases it — so a run whose calls end here is a run
+        // that keeps going, and one whose webhook never arrives waits for the
+        // reaper instead.
+        //
+        // call_ended rather than call_analyzed on purpose. Both events reach
+        // this handler, and call_ended already carries the duration and the
+        // disconnection reason the queue records; waiting for the analysis
+        // would insert one to three minutes of dead air between every call in
+        // the run, for a fact the queue does not use. The analysis still lands
+        // afterwards through recoverAnalysis below and enriches the calls row
+        // the item points at.
+        //
+        // Placed after complete() so a failure here cannot re-run the whole
+        // event; idempotent regardless, because enqueue dedupes on
+        // (call, eventType) and finishByCallId only ever moves a "dialing"
+        // row.
+        await ctx.runMutation(internal.bulkRuns.finishByCallId, {
+          retellCallId: row.retellCallId,
+        });
         await ctx.scheduler.runAfter(ANALYSIS_BACKOFF[0], internal.voiceEvents.recoverAnalysis, {
           orgId: row.orgId,
           retellAgentId: row.retellAgentId,

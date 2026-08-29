@@ -39,6 +39,21 @@ crons.interval("retry-failed-sends", { minutes: 1 }, internal.delivery.retryDue,
 // that returns nothing on a healthy deployment.
 crons.interval("reap-stuck-sends", { minutes: 10 }, internal.delivery.reapStuck, {});
 
+// The bulk call queue's safety net, and this deployment's first voice cron.
+//
+// The queue is driven by the call_ended webhook, so on a healthy run this does
+// nothing at all. It exists for the two ways the chain can break with nobody
+// watching: a webhook Retell never delivered, which leaves one item "dialing"
+// forever, and a deploy that killed the single scheduled action mid-chain,
+// which leaves a run with nothing in flight and pending items it will never
+// reach. Both look identical to the owner — a progress bar that stopped — and
+// neither produces an error anywhere.
+//
+// Five minutes against a twenty-minute stuck threshold, so a genuinely long
+// call is never cut off by it. One indexed read that returns nothing on a
+// deployment with no live runs.
+crons.interval("reap-stuck-bulk-calls", { minutes: 5 }, internal.bulkRuns.reapStuckCalls, {});
+
 // The showroom is a shared surface: whatever the last visitor did is what the
 // next one sees. Rebuilt from a fixed dataset overnight rather than asking
 // anyone to be careful with it. 02:00 UTC is the quiet hour for a Türkiye-first

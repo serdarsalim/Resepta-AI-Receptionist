@@ -2313,6 +2313,62 @@ export const testCall = action({
   },
 });
 
+// Sessionless twin of testCall, for the bulk call queue (convex/bulkRuns.ts).
+// Same rule as assignLineForOrg: internal only, and the public action above
+// must never grow an orgId argument.
+//
+// Deliberately thinner than testCall, because its caller has already done the
+// work testCall does for a human at a keyboard. bulkRuns resolves the
+// from-number ONCE per run and freezes it (a shared Retell account makes
+// re-resolving per call a way to change which salon's line the second half of
+// a run dials from), it checks lineUsable at launch, and it reads
+// beforeCallContext itself so it can treat a null as "stop the run" rather
+// than dialling anyway. So this function does one thing: place the call and
+// hand back the id.
+//
+// Everything downstream is unchanged: Retell's webhook writes the calls row
+// through retell.recordCall, which meters the minutes, freezes the rate and
+// draws down a prepaid wallet exactly as it does for a call somebody dialled
+// by hand. A bulk call is billed like any other call, and it must be.
+export const placeCall = internalAction({
+  args: {
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    fromNumber: v.string(),
+    toNumber: v.string(),
+    dynamicVariables: v.record(v.string(), v.string()),
+  },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    const context = (await ctx.runQuery(internal.agentTools.phoneAgentContext, {
+      orgId: args.orgId,
+    })) as { demoMode: boolean; apiKey: string | null };
+    // The showroom never rings a real phone, and a keyless org has nothing to
+    // ring one with. Both are thrown rather than returned quietly: the queue
+    // records the message on the item, and a run that silently placed nothing
+    // would look identical to one that worked.
+    if (context.demoMode) throw new Error("demo-org");
+    if (!context.apiKey) throw new Error("retell-not-configured");
+
+    const res = (await (
+      await call(context.apiKey, "POST", "v2/create-phone-call", {
+        from_number: args.fromNumber,
+        to_number: args.toNumber,
+        override_agent_id: args.retellAgentId,
+        ...(Object.keys(args.dynamicVariables).length > 0
+          ? { retell_llm_dynamic_variables: args.dynamicVariables }
+          : {}),
+      })
+    ).json()) as { call_id?: string };
+
+    // No call id means no way for the webhook to find its way back to the
+    // item, which would strand the queue on this row until the reaper. Better
+    // to fail it now, while the reason is still in hand.
+    if (!res.call_id) throw new Error("retell-no-call-id");
+    return res.call_id;
+  },
+});
+
 // ── Revoking a line from a tenant ────────────────────────────────────────────
 
 // An operator taking a phone line away from a business in /admin used to be an
