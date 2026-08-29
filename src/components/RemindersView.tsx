@@ -2345,6 +2345,21 @@ export function BusinessHoursCard({
     win: { startMinute: number; endMinute: number } | null,
   ) => writeWeek(week.map((row, index) => (index === day ? win : row)));
 
+  // The time inputs are UNCONTROLLED (defaultValue), which this counter exists
+  // to work around. A controlled <input type="time"> plus autosave-on-change
+  // fights the typist: every keystroke fires the mutation, React re-renders
+  // with the value the server has not acknowledged yet, and the field snaps
+  // back under the cursor. The card that shipped before this one used
+  // defaultValue for exactly that reason.
+  //
+  // Uncontrolled means the DOM keeps the user's edit and the server catches up
+  // — but it also means a write from ANYWHERE ELSE never reaches the field. So
+  // the two writes that are not the user typing into that very input — the
+  // day being switched on, and apply-to-all — bump this, and the key remounts
+  // the row so it re-reads. Keying on the VALUE instead would remount on every
+  // keystroke and take the focus with it.
+  const [bulkVersion, setBulkVersion] = useState(0);
+
   // The first open day, which is what "apply to all" copies from and what a
   // day being switched back on inherits — so turning Saturday on gives it the
   // week's hours rather than an empty pair nobody can submit.
@@ -2434,13 +2449,17 @@ export function BusinessHoursCard({
                   {dayNames[day]}
                 </button>
                 <input
+                  key={`from-${day}-${open}-${bulkVersion}`}
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openFrom")}`}
                   disabled={!open}
                   className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-                  value={win ? minutesToTimeValue(win.startMinute) : ""}
+                  defaultValue={win ? minutesToTimeValue(win.startMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
+                    // A half-typed or cleared time is not a window. Dropping it
+                    // leaves the last good value stored and the DOM showing
+                    // what is being typed, which is what uncontrolled buys.
                     if (minutes == null || !win) return;
                     patchDay(day, { ...win, startMinute: minutes });
                   }}
@@ -2449,11 +2468,12 @@ export function BusinessHoursCard({
                   {t("settings.openUntil")}
                 </span>
                 <input
+                  key={`to-${day}-${open}-${bulkVersion}`}
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openTo")}`}
                   disabled={!open}
                   className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-                  value={win ? minutesToTimeValue(win.endMinute) : ""}
+                  defaultValue={win ? minutesToTimeValue(win.endMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
                     if (minutes == null || !win) return;
@@ -2471,9 +2491,10 @@ export function BusinessHoursCard({
         {isOwner && (
           <button
             type="button"
-            onClick={() =>
-              writeWeek(week.map((row) => (row === null ? null : { ...template })))
-            }
+            onClick={() => {
+              writeWeek(week.map((row) => (row === null ? null : { ...template })));
+              setBulkVersion((n) => n + 1);
+            }}
             className="mt-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
           >
             {t("settings.copyToOpenDays")}
