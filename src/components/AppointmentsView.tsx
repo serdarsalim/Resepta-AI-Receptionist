@@ -356,6 +356,7 @@ export function AppointmentsView({
           anchor={anchor}
           rows={withOptimistic}
           businessHours={settings?.org.businessHours}
+          closures={closures}
           onOpenDay={(dayMs) => {
             setAnchor(dayMs);
             setView("day");

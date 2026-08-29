@@ -3,8 +3,10 @@
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
+  closuresOnDay,
   hasBusinessHours,
   windowForWeekday,
+  type Closure,
 } from "../../convex/lib/businessHours";
 import {
   addLocalDays,
@@ -71,6 +73,7 @@ export function MonthGrid({
   onOpenBlock,
   onDraftDay,
   businessHours,
+  closures,
 }: {
   anchor: number;
   rows: MonthRow[];
@@ -88,6 +91,8 @@ export function MonthGrid({
     endMinute?: number;
     days?: ({ startMinute: number; endMinute: number } | null)[];
   };
+  // Only whole-day closures reach the tint; see the cell below.
+  closures?: Closure[];
 }) {
   const { t, language } = useLanguage();
 
@@ -146,10 +151,29 @@ export function MonthGrid({
           // whichever shape the org's hours carry. Unset hours stay untinted:
           // nobody has said when this business is open, and a guessed default
           // would grey out a barber's Saturday.
-          const closed =
-            businessHours !== undefined &&
-            hasBusinessHours(businessHours) &&
-            windowForWeekday(businessHours, new Date(day).getDay()) === null;
+          const cell = new Date(day);
+          const weekday = cell.getDay();
+          const win =
+            businessHours !== undefined && hasBusinessHours(businessHours)
+              ? windowForWeekday(businessHours, weekday)
+              : undefined;
+          // A dated all-day closure greys the cell too. The week grid already
+          // shades a holiday; a month view that showed it as an ordinary open
+          // day was the same fact answered two ways one click apart.
+          //
+          // Only a closure covering the WHOLE open window counts here. A month
+          // cell has no room to say "shut between one and two", and greying a
+          // day the salon works most of would be worse than saying nothing.
+          const swallowed =
+            win !== undefined &&
+            win !== null &&
+            closuresOnDay(closures, {
+              y: cell.getFullYear(),
+              m0: cell.getMonth(),
+              d: cell.getDate(),
+              weekday,
+            }).some((c) => c.from <= win.startMinute && c.to >= win.endMinute);
+          const closed = win === null || swallowed;
           const bookings = byDay.get(day) ?? [];
           const shown = bookings.slice(0, MAX_PER_DAY);
           const hidden = bookings.length - shown.length;
