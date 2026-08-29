@@ -3538,6 +3538,11 @@ const dictionary = {
     en: "Time you are shut INSIDE your opening hours: a lunch break that repeats every week, or a single day off. These times stop being offered — on the booking page, and by both the phone and WhatsApp assistants. You can still book into them yourself from the calendar.",
     de: "Zeiten, in denen Sie INNERHALB Ihrer Öffnungszeiten geschlossen haben: eine Mittagspause jede Woche oder ein einzelner freier Tag. Diese Zeiten werden nicht mehr angeboten — weder auf der Buchungsseite noch von Telefon- und WhatsApp-Assistent. Sie selbst können im Kalender weiterhin dorthin buchen.",
   },
+  "closures.edit": {
+    tr: "Kapalı saati düzenle",
+    en: "Edit closure",
+    de: "Schließzeit bearbeiten",
+  },
   "closures.add": {
     tr: "Kapalı saat ekle",
     en: "Add closure",

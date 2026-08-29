@@ -197,13 +197,28 @@ function ClosureSheet({
   // The count of appointments already sitting inside this closure. Skipped
   // until the shape is valid, because the query normalises and would answer 0
   // for a half-typed row — a reassuring number that means nothing.
+  //
+  // WITHOUT `reason`, which the count never reads. convex/react keys a
+  // subscription on the serialised args, so leaving it in tore down the
+  // subscription and reopened it — collecting every appointment in the next
+  // ninety days — once per character typed into a free-text box.
+  const countArgs = {
+    weekdays: values.weekdays,
+    date: values.date,
+    startMinute: values.startMinute,
+    endMinute: values.endMinute,
+  };
   const inside = useQuery(
     api.closures.appointmentsInside,
-    ready ? values : "skip",
+    ready ? countArgs : "skip",
   );
 
   return (
-    <Sheet title={t("closures.add")} hint={t("closures.hint")} onClose={onClose}>
+    <Sheet
+      title={t(closure ? "closures.edit" : "closures.add")}
+      hint={t("closures.hint")}
+      onClose={onClose}
+    >
       <div className={ROW_GRID}>
         {/* The sheet ASKS which kind rather than stacking both forms — one
             gesture that could create two different things has to. The two
@@ -237,8 +252,12 @@ function ClosureSheet({
             kind === "weekly" ? "closures.kindWeeklyHint" : "closures.kindDateHint",
           )}
         />
+        {/* min-h matches the date input's box — FIELD's py-1.5 plus the 1px
+            border every input carries — so switching kind does not resize the
+            sheet under the pointer. The chips are borderless buttons at py-1
+            and come up six pixels short on their own. */}
         {kind === "weekly" ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex min-h-[34px] flex-wrap items-center gap-1.5">
             {[1, 2, 3, 4, 5, 6, 0].map((day) => {
               const on = weekdays.includes(day);
               return (
