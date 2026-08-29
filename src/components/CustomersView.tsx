@@ -548,8 +548,19 @@ export function CustomersView({
     setSelected((prev) => {
       const next = new Set(prev);
       const turnOn = !next.has(rows[index]._id);
-      const from = shift && anchor.current !== null ? Math.min(anchor.current, index) : index;
-      const to = shift && anchor.current !== null ? Math.max(anchor.current, index) : index;
+      // The anchor is an index into a list that changes underneath it: every
+      // funnel, every keystroke in the search box and every sort rebuilds
+      // `rows`. Tick row 90, filter down to 12, shift-click row 3, and the
+      // sweep runs to 90 through an array that ends at 11 — rows[i] is
+      // undefined and reading _id off it takes the tab down. Clamping is
+      // enough; the alternative, clearing the anchor whenever rows changes,
+      // costs an effect and a re-render on every keystroke to fix a case the
+      // person cannot see anyway.
+      const ceiling = rows.length - 1;
+      const raw = shift && anchor.current !== null ? anchor.current : index;
+      const other = Math.min(Math.max(raw, 0), ceiling);
+      const from = Math.min(other, index);
+      const to = Math.max(other, index);
       for (let i = from; i <= to; i++) {
         if (turnOn) next.add(rows[i]._id);
         else next.delete(rows[i]._id);

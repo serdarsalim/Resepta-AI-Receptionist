@@ -155,7 +155,13 @@ export function BulkComposer({
   })();
 
   const dialable = options?.agents.filter((agent) => agent.canDial) ?? [];
+  // options undefined means the gates have not loaded, and blocker answers
+  // null for a reason it has not checked yet. Sending then would reach the
+  // server's own refusal ladder and come back as an error toast — correct, but
+  // a button that looks live before anything has been verified is a button
+  // that invites the click.
   const ready =
+    Boolean(options) &&
     !blocker &&
     (channel === "call"
       ? Boolean(agentId)
