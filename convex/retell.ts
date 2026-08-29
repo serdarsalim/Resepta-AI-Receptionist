@@ -29,7 +29,12 @@ import { platformValue } from "./lib/platformConfig";
 import { resolvePlatformHighPriority, resolvePlatformVoiceModel } from "./lib/voiceModels";
 import { queueOrgAlert } from "./lib/alerts";
 import { applyWalletDebit } from "./wallet";
-import { getLocalPartsSafe, localWallTimeToUtcMs } from "./lib/businessHours";
+import {
+  closureBlocks,
+  getLocalPartsSafe,
+  localWallTimeToUtcMs,
+} from "./lib/businessHours";
+import { loadClosures } from "./lib/closureRows";
 import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
@@ -2353,6 +2358,38 @@ export const voiceBook = internalMutation({
         // The message is the tool result the agent reads back, so it names
         // the conflict in a way the agent can act on: offer another time.
         throw new Error("slot-taken");
+      }
+    }
+    // The closure test on the WHOLE SPAN, and here rather than in either
+    // agent's guard, because this mutation is where the real duration is
+    // finally known — both agents check the start instant before the services
+    // are resolved, so a 60-minute booking at 12:30 cleared their guard and
+    // ran half an hour into a 13:00 lunch break. The public booking page has
+    // always tested the span (booking.ts fitsOpenHours), and the two must not
+    // disagree about the same request.
+    //
+    // Goods (duration 0) are tested at their instant, the same rule
+    // fitsOpenHours holds: a closure is a locked door, not a busy chair.
+    {
+      const org = await ctx.db.get(args.orgId);
+      const closures = await loadClosures(ctx, args.orgId);
+      if (org && closures.length > 0) {
+        // Recomputed rather than reused: the capacity block above scopes its
+        // own `duration`, and this guard has to run for an externalUid booking
+        // too — cal.com holds the inventory, but it has never been told about
+        // a Resepta closure.
+        const span = totalMinutes ?? args.durationMinutes ?? 30;
+        const at = getLocalPartsSafe(args.startAt, org.timezone);
+        const shut = closureBlocks(
+          closures,
+          at,
+          at.minutesOfDay,
+          at.minutesOfDay + span,
+        );
+        // Same error the capacity guard throws: the agent's job either way is
+        // to offer another time, and the facts it needs to pick one already
+        // rode out with check_availability.
+        if (shut) throw new Error("slot-taken");
       }
     }
     // Goods through and through, the same test classifyServices runs — and
