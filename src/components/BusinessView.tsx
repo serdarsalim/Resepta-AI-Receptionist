@@ -20,7 +20,6 @@ import { Card } from "./Card";
 import { BusinessHoursCard } from "./RemindersView";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
-import { Toggle } from "./Toggle";
 import { CheckSwitch } from "./CheckSwitch";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
@@ -283,7 +282,11 @@ function BookingRow() {
             allowed to wrap took two lines and pushed the button onto a
             third. */}
         <div className="flex items-center gap-2">
-          <Toggle checked={bookingEnabled ?? false} onChange={toggle} />
+          <CheckSwitch
+            on={bookingEnabled ?? false}
+            label={t("settings.bookingPage")}
+            onChange={toggle}
+          />
           {/* Derived, and it STAYS derived — no field here. The address is
               the business name (lib/publicSlug); renaming the business is how
               you rename the page, and a second place to type it would be a
@@ -669,8 +672,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               as broken not unused. */}
           <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
           <span className="flex items-center">
-            <Toggle
-              checked={settings.org.revenueEnabled ?? false}
+            <CheckSwitch
+              on={settings.org.revenueEnabled ?? false}
+              label={t("settings.revenueEnabled")}
               onChange={(next) => void update({ revenueEnabled: next })}
             />
           </span>
@@ -720,8 +724,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                   const on = settings.org[field] ?? true;
                   return (
                     <span key={field} className="flex items-center gap-2">
-                      <Toggle
-                        checked={on}
+                      <CheckSwitch
+                        on={on}
+                        label={t(label)}
                         // Off is only allowed while the other one is on.
                         disabled={on && !(settings.org[other] ?? true)}
                         onChange={(next) => void update({ [field]: next })}
@@ -1230,7 +1235,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         for a value that cannot speak for itself — a bare "60"
                         needs "min" — and wrong for a switch, which is the one
                         control whose whole job is showing its own state. The
-                        Toggle carries the word as aria-label, so the name is
+                        switch carries the word as aria-label, so the name is
                         still there for anyone not reading the colour. */}
                     <CheckSwitch
                       on={service.active}
