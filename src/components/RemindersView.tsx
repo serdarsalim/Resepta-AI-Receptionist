@@ -21,6 +21,10 @@ import {
 // Same reason: the preview prints the date in the shape the send path prints
 // it, timezone and all, rather than a second date formatter's opinion.
 import { formatAppointmentTime } from "../../convex/lib/format";
+// The SAME normaliser the backend reads hours through. A client-side reading of
+// the legacy fields would be a second opinion about which days are open, and
+// the card would eventually show a week the booking page disagreed with.
+import { windowForWeekday } from "../../convex/lib/businessHours";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
@@ -2313,17 +2317,41 @@ export function BusinessHoursCard({
       activeDays?: number[];
       startMinute?: number;
       endMinute?: number;
+      days?: ({ startMinute: number; endMinute: number } | null)[];
     };
   };
   update: (args: Record<string, unknown>) => void;
 }) {
   const { t, language } = useLanguage();
-  const days = weekdayNames(language);
+  const dayNames = weekdayNames(language);
   const hours = org.businessHours ?? {};
-  const activeDays = hours.activeDays ?? [];
 
-  const patchHours = (next: Partial<NonNullable<typeof org.businessHours>>) =>
-    update({ businessHours: { ...hours, ...next } });
+  // Always seven entries to render against, whichever shape the org carries.
+  // windowForWeekday is the same normaliser the backend reads through, so the
+  // card cannot show a week the booking page disagrees with — which is what a
+  // second, client-side interpretation of the legacy fields would have bought.
+  const week = Array.from({ length: 7 }, (_, day) =>
+    windowForWeekday(hours, day),
+  );
+
+  // Every save writes the whole week. The legacy fields are left out on
+  // purpose: the first edit on this card is what migrates an org off them, and
+  // orgs.update carries `days` forward when a save does not mention it.
+  const writeWeek = (next: ({ startMinute: number; endMinute: number } | null)[]) =>
+    update({ businessHours: { ...hours, days: next } });
+
+  const patchDay = (
+    day: number,
+    win: { startMinute: number; endMinute: number } | null,
+  ) => writeWeek(week.map((row, index) => (index === day ? win : row)));
+
+  // The first open day, which is what "apply to all" copies from and what a
+  // day being switched back on inherits — so turning Saturday on gives it the
+  // week's hours rather than an empty pair nobody can submit.
+  const template = week.find((row) => row !== null) ?? {
+    startMinute: 9 * 60,
+    endMinute: 18 * 60,
+  };
 
   return (
     // Titled since Business became one page: the chip strip used to name this
@@ -2357,94 +2385,100 @@ export function BusinessHoursCard({
             onChange={(zone) => update({ timezone: zone })}
           />
         </div>
-        <RowLabel
-          label={t("settings.businessHours")}
-          hint={t("settings.businessHoursHint")}
-        />
-        <div className="flex flex-wrap gap-1.5">
-          {/* Shown Monday-first — the week as this market reads it — while
-              the STORED indices stay 0=Sunday, because that is what
-              Date.getDay() speaks and what the away-reply check compares. */}
-          {[1, 2, 3, 4, 5, 6, 0].map((index) => {
-            const label = days[index];
-            const active = activeDays.includes(index);
+      </div>
+
+      {/* NOT a ROW_GRID row (2026-08-29). The seven day chips and the one
+          open/close pair were what sized that grid's value column to 24rem,
+          and seven rows of weekday + switch + two times do not fit it. Rather
+          than widening the shared grid — which AGENTS.md forbids, because the
+          grid is the settings-page grammar and not this card's layout — the
+          week gets its own block below it, still label-left and value-right so
+          it reads as the same page.
+
+          Every day keeps BOTH time inputs whether it is open or shut, dimmed
+          and disabled when shut. Hiding them would resize the card under the
+          pointer on every toggle, and it would also throw away the hours you
+          are about to want back when you reopen Tuesday. */}
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <div className="mb-2">
+          <RowLabel
+            label={t("settings.businessHours")}
+            hint={t("settings.businessHoursHint")}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {/* Monday-first — the week as this market reads it — while the
+              STORED index stays 0=Sunday, because that is what Date.getDay()
+              speaks and what every guard downstream compares. */}
+          {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+            const win = week[day];
+            const open = win !== null;
             return (
-              <button
-                key={index}
-                type="button"
-                onClick={() =>
-                  patchHours({
-                    activeDays: active
-                      ? activeDays.filter((d) => d !== index)
-                      : [...activeDays, index].sort((a, b) => a - b),
-                  })
-                }
-                role="switch"
-                aria-checked={active}
-                // An open day is an ON state, so it wears what every other ON
-                // state in this app wears. Amber here read as a warning about
-                // Monday.
-                //
-                // No check inside, unlike the channel switches: seven chips
-                // have to hold ONE line inside a 24rem value column (the
-                // ROW_GRID note names this row as the reason that column is
-                // 24rem wide), and a 12px glyph plus its gap on every chip
-                // wraps the week onto two rows. Seven weekday names in order
-                // is not a control anyone mistakes for a row of tags, which
-                // is the confusion the check exists to prevent.
-                className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                  active
-                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {label}
-              </button>
+              <div key={day} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={open}
+                  aria-label={`${dayNames[day]} — ${t("settings.dayOpenAria")}`}
+                  onClick={() => patchDay(day, open ? null : { ...template })}
+                  // An open day is an ON state, so it wears what every other
+                  // ON state in this app wears. The name sits INSIDE the
+                  // switch, as it did when this was a chip, so the row starts
+                  // with the word you are looking for.
+                  className={`w-20 shrink-0 rounded-full px-3 py-1 text-left text-sm transition-colors sm:w-24 ${
+                    open
+                      ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {dayNames[day]}
+                </button>
+                <input
+                  type="time"
+                  aria-label={`${dayNames[day]} ${t("settings.openFrom")}`}
+                  disabled={!open}
+                  className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+                  value={win ? minutesToTimeValue(win.startMinute) : ""}
+                  onChange={(e) => {
+                    const minutes = timeValueToMinutes(e.target.value);
+                    if (minutes == null || !win) return;
+                    patchDay(day, { ...win, startMinute: minutes });
+                  }}
+                />
+                <span className="shrink-0 text-sm text-[var(--muted)]">
+                  {t("settings.openUntil")}
+                </span>
+                <input
+                  type="time"
+                  aria-label={`${dayNames[day]} ${t("settings.openTo")}`}
+                  disabled={!open}
+                  className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+                  value={win ? minutesToTimeValue(win.endMinute) : ""}
+                  onChange={(e) => {
+                    const minutes = timeValueToMinutes(e.target.value);
+                    if (minutes == null || !win) return;
+                    patchDay(day, { ...win, endMinute: minutes });
+                  }}
+                />
+              </div>
             );
           })}
         </div>
-
-        {/* ONE row, not two. Opening and closing are not two settings, they
-            are the two ends of one range, and giving each its own labelled row
-            made the reader parse a relationship the word "to" states outright.
-            It also cost the card a third of its height to say one thing.
-
-            Still two inputs, which is the rule ("split compound values into
-            two labelled inputs"): what that forbids is one box parsing two
-            syntaxes, not two boxes sharing a row. Each keeps its own accessible
-            name, since the visible label now covers the pair.
-
-            Phrased to match "Days you're open" directly above it. */}
-        <RowLabel label={t("settings.openHours")} />
-        <div className="flex items-center gap-2">
-          <input
-            type="time"
-            aria-label={t("settings.openFrom")}
-            className={`${FIELD} min-w-0 flex-1`}
-            defaultValue={
-              hours.startMinute == null
-                ? ""
-                : minutesToTimeValue(hours.startMinute)
+        {/* Most businesses are one pattern with one or two exceptions, so the
+            common case is typing the same pair seven times. Ghost, not
+            outlined: the card's own action slot belongs to Add closure below,
+            and one loud thing per screen is the budget. */}
+        {isOwner && (
+          <button
+            type="button"
+            onClick={() =>
+              writeWeek(week.map((row) => (row === null ? null : { ...template })))
             }
-            onChange={(e) =>
-              patchHours({ startMinute: timeValueToMinutes(e.target.value) })
-            }
-          />
-          <span className="shrink-0 text-sm text-[var(--muted)]">
-            {t("settings.openUntil")}
-          </span>
-          <input
-            type="time"
-            aria-label={t("settings.openTo")}
-            className={`${FIELD} min-w-0 flex-1`}
-            defaultValue={
-              hours.endMinute == null ? "" : minutesToTimeValue(hours.endMinute)
-            }
-            onChange={(e) =>
-              patchHours({ endMinute: timeValueToMinutes(e.target.value) })
-            }
-          />
-        </div>
+            className="mt-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+          >
+            {t("settings.copyToOpenDays")}
+          </button>
+        )}
       </div>
     </Card>
   );

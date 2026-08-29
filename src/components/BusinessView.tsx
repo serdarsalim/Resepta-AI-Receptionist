@@ -18,6 +18,7 @@ import {
 } from "@/lib/money";
 import { Card } from "./Card";
 import { BusinessHoursCard } from "./RemindersView";
+import { ClosuresCard } from "./ClosuresCard";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
 import { CheckSwitch } from "./CheckSwitch";
@@ -92,6 +93,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "hours", key: "settings.hours" },
   { card: "hours", key: "settings.timezone" },
   { card: "hours", key: "settings.businessHours" },
+  { card: "hours", key: "closures.title" },
   { card: "team", key: "staff.title" },
   { card: "team", key: "roster.bookable" },
   { card: "businesses", key: "share.title" },
@@ -216,6 +218,11 @@ export function BusinessView() {
           open. */}
       <div ref={(node) => void (cardRefs.current.hours = node)}>
         <HoursCard isOwner={isOwner} org={settings.org} />
+        {/* Directly under Hours, because a closure only means anything against
+            them: "shut 13:00-14:00" says nothing until you know the shop opens
+            at nine. Its own card rather than a section inside Hours — it holds
+            a list that grows, and Hours holds a fixed week. */}
+        <ClosuresCard isOwner={isOwner} />
       </div>
       <div ref={(node) => void (cardRefs.current.team = node)}>
         <PeopleCard isOwner={isOwner} />

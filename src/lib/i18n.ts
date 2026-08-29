@@ -3503,6 +3503,136 @@ const dictionary = {
     en: "to",
     de: "bis",
   },
+  // Per-weekday hours (2026-08-29). The seven day chips became seven rows the
+  // day a business could open at different times on different days, and the
+  // chip's on/off became this switch.
+  "settings.dayOpenAria": {
+    tr: "Bu gün açık",
+    en: "Open this day",
+    de: "An diesem Tag geöffnet",
+  },
+  // Most businesses have one pattern with one or two exceptions, so typing the
+  // same pair seven times is the common case this removes.
+  "settings.copyToOpenDays": {
+    tr: "Bu saatleri açık günlerin tümüne uygula",
+    en: "Apply these hours to every open day",
+    de: "Diese Zeiten auf alle geöffneten Tage anwenden",
+  },
+  "settings.closedDay": {
+    tr: "Kapalı",
+    en: "Closed",
+    de: "Geschlossen",
+  },
+
+  // ── Closures ──────────────────────────────────────────────────────────────
+  // Named for the SET, not its best-known member: the lunch break and the
+  // public holiday are one row shape, and calling the card "Lunch" or
+  // "Holidays" would name half of what it holds.
+  "closures.title": {
+    tr: "Kapalı saatler",
+    en: "Closures",
+    de: "Schließzeiten",
+  },
+  "closures.hint": {
+    tr: "Açık olduğunuz saatlerin İÇİNDE kapalı olduğunuz zamanlar: her hafta tekrarlayan öğle arası, ya da tek bir günlük tatil. Bu saatler randevuya kapatılır; sesli asistan ve WhatsApp asistanı da teklif etmez. Takvimde kendiniz yine de randevu yazabilirsiniz.",
+    en: "Time you are shut INSIDE your opening hours: a lunch break that repeats every week, or a single day off. These times stop being offered — on the booking page, and by both the phone and WhatsApp assistants. You can still book into them yourself from the calendar.",
+    de: "Zeiten, in denen Sie INNERHALB Ihrer Öffnungszeiten geschlossen haben: eine Mittagspause jede Woche oder ein einzelner freier Tag. Diese Zeiten werden nicht mehr angeboten — weder auf der Buchungsseite noch von Telefon- und WhatsApp-Assistent. Sie selbst können im Kalender weiterhin dorthin buchen.",
+  },
+  "closures.add": {
+    tr: "Kapalı saat ekle",
+    en: "Add closure",
+    de: "Schließzeit hinzufügen",
+  },
+  "closures.empty": {
+    tr: "Henüz kapalı saat yok.",
+    en: "No closures yet.",
+    de: "Noch keine Schließzeiten.",
+  },
+  // The sheet asks which kind before it shows a form, because one gesture that
+  // could create two different things has to ask rather than stack both.
+  "closures.kind": {
+    tr: "Ne tür?",
+    en: "What kind?",
+    de: "Welche Art?",
+  },
+  "closures.kindWeekly": {
+    tr: "Her hafta",
+    en: "Every week",
+    de: "Jede Woche",
+  },
+  "closures.kindWeeklyHint": {
+    tr: "Öğle arası gibi, seçtiğiniz günlerde tekrarlar.",
+    en: "A lunch break — repeats on the days you pick.",
+    de: "Eine Mittagspause — wiederholt sich an den gewählten Tagen.",
+  },
+  "closures.kindDate": {
+    tr: "Tek bir gün",
+    en: "One date",
+    de: "Ein einzelner Tag",
+  },
+  "closures.kindDateHint": {
+    tr: "Tatil ya da izin günü, yalnızca o tarihte.",
+    en: "A holiday or a day off, on that date only.",
+    de: "Ein Feiertag oder freier Tag, nur an diesem Datum.",
+  },
+  "closures.days": {
+    tr: "Günler",
+    en: "Days",
+    de: "Tage",
+  },
+  "closures.date": {
+    tr: "Tarih",
+    en: "Date",
+    de: "Datum",
+  },
+  "closures.allDay": {
+    tr: "Tüm gün",
+    en: "All day",
+    de: "Ganztägig",
+  },
+  "closures.reason": {
+    tr: "Açıklama",
+    en: "Reason",
+    de: "Grund",
+  },
+  // Reaches the agents for dated closures, so it is worth typing.
+  "closures.reasonHint": {
+    tr: "İsteğe bağlı. Yazarsanız asistanlar sebebi söyleyebilir: \"o gün bayram için kapalıyız\".",
+    en: "Optional. Given one, the assistants can say why: \"we're closed for the holiday that day\".",
+    de: "Optional. Damit können die Assistenten den Grund nennen: \"an dem Tag haben wir wegen des Feiertags geschlossen\".",
+  },
+  "closures.reasonPlaceholder": {
+    tr: "Öğle arası, bayram…",
+    en: "Lunch, holiday…",
+    de: "Mittagspause, Feiertag…",
+  },
+  "closures.everyWeekOn": {
+    tr: "Her hafta {days}",
+    en: "Every {days}",
+    de: "Jeden {days}",
+  },
+  // Shown in the sheet before saving. Nothing is moved or cancelled — this
+  // says what is already there and leaves the decision alone.
+  "closures.appointmentsInside": {
+    tr: "Bu saatlerde zaten {count} randevu var. Hiçbiri iptal edilmez veya taşınmaz.",
+    en: "There are already {count} appointments in this time. None are cancelled or moved.",
+    de: "In diesem Zeitraum gibt es bereits {count} Termine. Keiner wird abgesagt oder verschoben.",
+  },
+  "closures.removeConfirm": {
+    tr: "Bu kapalı saat kaldırılsın mı? O saatler yeniden randevuya açılır.",
+    en: "Remove this closure? Those times become bookable again.",
+    de: "Diese Schließzeit entfernen? Diese Zeiten werden wieder buchbar.",
+  },
+  "closures.errKind": {
+    tr: "Tekrarlayan bir kapanış için gün, tek seferlik için tarih seçin.",
+    en: "Pick days for a weekly closure, or a date for a one-off.",
+    de: "Wählen Sie Tage für eine wöchentliche Schließzeit oder ein Datum für einen Einzeltag.",
+  },
+  "closures.errWindow": {
+    tr: "Bitiş saati başlangıçtan sonra olmalı.",
+    en: "The end has to come after the start.",
+    de: "Das Ende muss nach dem Beginn liegen.",
+  },
   // The booking page was part of a card called "Message variables" until
   // 2026-08-14. The name described the [booking_link] token rather than the
   // thing itself. It lives in Business settings now and the token simply
