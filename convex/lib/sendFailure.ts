@@ -51,6 +51,13 @@ const LOCAL_REFUSALS = new Set([
   // definition — a demo row retried six times is six times the pointless work
   // and then a dead-letter alert about a send that was never going to happen.
   "demo-org",
+  // Somebody stopped the bulk run this row belonged to (convex/bulkRuns.ts).
+  // Nothing about that heals with time, and this file's catch-all is
+  // TRANSIENT — so without an entry here a cancelled run would keep every
+  // remaining row in the queue for four and a half hours and then raise a
+  // dead-letter alert per recipient, which is the loudest possible way to
+  // report that somebody pressed stop and it worked.
+  "bulk-cancelled",
   // The Evolution twin of wa-not-configured above, which was in this set while
   // this one was missing — so an org with no Evolution credentials had its rows
   // retried for hours instead of failing once, visibly.

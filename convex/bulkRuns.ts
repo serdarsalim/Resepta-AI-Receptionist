@@ -638,12 +638,16 @@ export async function noteBulkItemResult(
   // the reaper or a cancel already resolved the item must not un-resolve it.
   if (!item || item.status !== "queued") return;
 
+  // A row the delivery queue refused BECAUSE the run was stopped is not a
+  // failure of the send, and counting it as one would report a clean cancel
+  // as dozens of errors. It reads as cancelled and counts against nothing.
+  const cancelled = !ok && message.error === "bulk-cancelled";
   await ctx.db.patch(item._id, {
-    status: ok ? "done" : "failed",
-    reason: ok ? undefined : (message.error ?? "send-failed"),
+    status: cancelled ? "cancelled" : ok ? "done" : "failed",
+    reason: ok || cancelled ? undefined : (message.error ?? "send-failed"),
   });
   const run = await ctx.db.get(message.bulkRunId);
-  if (run) {
+  if (run && !cancelled) {
     await ctx.db.patch(run._id, {
       doneCount: run.doneCount + (ok ? 1 : 0),
       failedCount: run.failedCount + (ok ? 0 : 1),
