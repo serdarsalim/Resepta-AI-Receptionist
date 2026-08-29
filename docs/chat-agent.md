@@ -195,7 +195,11 @@ assembly reads only this customer's rows.
   because silence is the more destructive of the two to get wrong by accident.
   The escalate tool returns FACTS (`handedOver`, `keepAnswering`,
   `alreadyFlagged`), never a sentence to repeat, and it writes only in live —
-  in suggest a person is reading every draft already.
+  in suggest a person is reading every draft already. The policy is therefore
+  read as live-only too (`loadTurnContext` ANDs it with the mode), because the
+  tool's own DESCRIPTION changes with it: told "you stop replying in it" in a
+  mode where nothing stops, the model writes a goodbye into a conversation it
+  goes on drafting for.
 - **Flight recorder.** Every turn writes a `chatAgentTurns` row: trigger
   message, tool calls with arguments and results, the reply, tokens, cost,
   latency, model + template version, sent/shadow/suggested/skipped/error

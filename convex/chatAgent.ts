@@ -115,10 +115,10 @@ export const loadTurnContext = internalQuery({
     else if ((await platformValue(ctx, "chatAgentDisabled")) === "true")
       skip = "platform-kill-switch";
 
-    // The thread, newest first — read ONCE and used twice: for the debounce
-    // check here and for the prompt's history below. Two `take(30)` calls on
-    // the same index for the same rows is a read the turn pays for on every
-    // single message.
+    // The thread, newest first — read ONCE and used twice: for the
+    // human-answered check below and for the prompt's history after it. Two
+    // `take(30)` calls on the same index for the same rows is a read the turn
+    // pays for on every single message.
     const rawMessages = await ctx.db
       .query("messages")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -143,6 +143,48 @@ export const loadTurnContext = internalQuery({
       customer.agentTurnScheduledFor !== args.inboundMessageId
     ) {
       skip = "superseded";
+    }
+
+    // A HUMAN GOT THERE FIRST. Every turn sits for REPLY_DEBOUNCE_MS before it
+    // runs, and a staff member with the thread open can answer inside that
+    // window — reading the customer's message is, after all, what they were
+    // doing. Without this, the turn carries on and hands them a draft
+    // proposing an answer to the message they answered themselves twenty
+    // seconds ago: the same stale proposal messages.applySendResult retires,
+    // written a moment too late for it to catch.
+    //
+    // SUGGEST ONLY, and each of the other two for its own reason. LIVE is
+    // already handled — the composer's send pins the conversation off
+    // (pauseForCustomer) and the turn stops at "agent-off" above. SHADOW is
+    // deliberately left running: it sends nothing and offers nothing, so
+    // there is no stale proposal to prevent, and an org in shadow has humans
+    // answering EVERYTHING by hand — standing down whenever one of them is
+    // quick would eat the pre-launch corpus that is the whole point of it.
+    //
+    // "session" is the composer's own kind, the one applySendResult retires
+    // drafts on. The agent's own replies are "chat_agent" and an away-reply is
+    // a template send; neither is a person deciding to answer. A send SCHEDULED
+    // for later is skipped on the same terms the history below skips it: its
+    // row exists from the moment it is composed, and a message going out on
+    // Tuesday does not answer a question asked today.
+    //
+    // Scanned, not queried: rawMessages is already newest-first, so the rows
+    // BEFORE the inbound are exactly the ones that landed after it. A turn
+    // whose inbound has fallen out of that window is left alone — thirty
+    // messages on, the debounce above has the better answer.
+    if (!skip && mode === "suggest" && args.inboundMessageId) {
+      for (const m of rawMessages) {
+        if (m._id === args.inboundMessageId) break;
+        if (
+          m.direction === "out" &&
+          m.kind === "session" &&
+          m.status !== "failed" &&
+          !(m.scheduledFor && m.scheduledFor > now)
+        ) {
+          skip = "human-answered";
+          break;
+        }
+      }
     }
 
     // Which model, whose dialect, whose key — ONE resolution shared with the
@@ -334,7 +376,20 @@ export const loadTurnContext = internalQuery({
         // Whether asking for a person ENDS the agent's involvement in this
         // conversation or just marks it (schema orgs.chatAgentStopOnHandover).
         // Unset means keep answering.
-        stopOnHandover: org.chatAgentStopOnHandover ?? false,
+        //
+        // AND-ed with live, because only live can stop. The escalate tool
+        // writes nothing in shadow or suggest — a person is already reading
+        // everything the agent produces there — so a business set to "hand the
+        // chat over" would otherwise have the tool description promise the
+        // model it was leaving, the model write the goodbye, and the next
+        // customer message get drafted anyway. That is the exact failure the
+        // policy-dependent description exists to prevent, one mode over.
+        //
+        // Derived ONCE here because three things read it — the tool
+        // description, the branch that writes, and the fact the tool returns
+        // — and three copies of this AND is how they start telling the model
+        // three different stories.
+        stopOnHandover: mode === "live" && (org.chatAgentStopOnHandover ?? false),
         currency: org.currency ?? "TRY",
         priceDecimals: org.priceDecimals ?? false,
         // Product handover (schema orgs.pickupEnabled / deliveryEnabled).
@@ -1009,6 +1064,11 @@ export const respond = internalAction({
       // use. "agent-off" means the mode changed between scheduling and
       // running. "superseded" means the customer was still typing — the turn
       // the next fragment scheduled is the one that answers.
+      //
+      // "human-answered" is NOT one of them, though it stands down for much
+      // the same reason. It fires in suggest mode only, so it is rare — and it
+      // is the number that says whether drafts are reaching staff before staff
+      // reach the thread, which is the whole question suggest mode is asking.
       if (context.skip !== "agent-off" && context.skip !== "superseded") {
         await record({ status: "skipped", error: context.skip });
       }
@@ -1624,7 +1684,10 @@ async function executeTool(
       //
       // WRITES ONLY IN LIVE. In suggest there is nothing to stop and nothing
       // to flag — a person is reading every draft already — and stamping here
-      // would quietly switch off an agent nobody took over.
+      // would quietly switch off an agent nobody took over. context.org
+      // .stopOnHandover is already false outside live for the same reason, so
+      // what the model was TOLD this tool does (its description) and what it
+      // is told afterwards (keepAnswering below) match what actually happened.
       if (context.org.mode === "live") {
         if (context.org.stopOnHandover) {
           await ctx.runMutation(internal.chatAgent.pauseForCustomer, {
