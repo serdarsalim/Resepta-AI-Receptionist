@@ -563,9 +563,8 @@ export const setStatus = mutation({
     });
 
     if (args.status === "cancelled") {
-      // Sweep what has not started. Already-dialled and already-queued items
-      // are left alone — that is the dedup, and it is also the truth: those
-      // messages are with the provider.
+      // Sweep what has not started. An item already dialled is never touched
+      // — that is the dedup, and it is also the truth: that call happened.
       const pending = await ctx.db
         .query("bulkRunItems")
         .withIndex("by_run_status", (q) =>
@@ -574,6 +573,61 @@ export const setStatus = mutation({
         .take(MAX_RECIPIENTS);
       for (const item of pending) {
         await ctx.db.patch(item._id, { status: "cancelled" });
+      }
+    }
+
+    // ── Why the queued MESSAGE rows have to be touched too ─────────────────
+    //
+    // delivery.dueRetries reads the fifty oldest rows owed an attempt across
+    // the WHOLE deployment, ordered by nextAttemptAt. A run's rows all fan out
+    // within a second of each other, so five hundred of them sit at the front
+    // of that queue together.
+    //
+    // Refusing them at claim time is therefore not enough on its own. A
+    // refusal that leaves the row queued and still due — which is exactly what
+    // pausing wants — means every tick hands the batch the same fifty rows,
+    // refuses all fifty, and gets nowhere. Nothing else on the deployment
+    // sends while that lasts: not another salon's reminders, not an
+    // appointment confirmation. Pressing pause on one salon's run would stop
+    // outbound mail and WhatsApp for every tenant, indefinitely, with no error
+    // anywhere.
+    //
+    // So a pause PARKS the rows by clearing nextAttemptAt, which is precisely
+    // what that field already means (schema: "set only while a row is waiting
+    // to retry" — a row belonging to a paused run is not). Resume puts them
+    // back in the queue, and cancel resolves them outright rather than letting
+    // five hundred refusals grind through the fleet's batch ten minutes deep.
+    //
+    // Bounded by the run cap, so this is at most MAX_RECIPIENTS small patches
+    // in one transaction. The claim-time gate stays as the belt for anything
+    // already in flight when the button was pressed.
+    if (run.channel !== "call") {
+      const queued = await ctx.db
+        .query("bulkRunItems")
+        .withIndex("by_run_status", (q) =>
+          q.eq("runId", args.runId).eq("status", "queued"),
+        )
+        .take(MAX_RECIPIENTS);
+      for (const item of queued) {
+        if (!item.messageId) continue;
+        const message = await ctx.db.get(item.messageId);
+        if (!message || message.status !== "queued") continue;
+        if (args.status === "paused") {
+          await ctx.db.patch(item.messageId, { nextAttemptAt: undefined });
+        } else if (args.status === "running") {
+          await ctx.db.patch(item.messageId, { nextAttemptAt: Date.now() });
+        } else {
+          // Cancelled. The same terminal state the claim-time refusal would
+          // have produced, reached directly — and the item with it, so the run
+          // can settle instead of waiting on rows that will never be sent.
+          await ctx.db.patch(item.messageId, {
+            status: "failed",
+            error: "bulk-cancelled",
+            nextAttemptAt: undefined,
+            sendingAt: undefined,
+          });
+          await ctx.db.patch(item._id, { status: "cancelled" });
+        }
       }
     }
 
