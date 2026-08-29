@@ -128,7 +128,12 @@ that `(orgId, customerId)`:
   is the one case with no `start` — the order is placed now, exactly as the
   booking page does it — and the business's own pickup/delivery switches are
   re-checked in `voiceBook`, because offering a delivery a business does not do
-  is a promise in that business's voice.
+  is a promise in that business's voice. `asap` never travels alone: it is
+  stored INSIDE `appointments.fulfillment` and has nowhere to live without a
+  kind, so the handler fills one in where the business does only pickup or
+  only delivery and refuses `missing-fulfillment` where both are on offer.
+  Taken at face value it would tell the customer their order was being dealt
+  with right away and record nothing about how it reaches them.
 - `my_appointments()` — this customer's upcoming appointments only.
 - `cancel_appointment` / `reschedule_appointment(start)` — refuse any
   appointment row not owned by this customer; cal.com is told first when an

@@ -1321,6 +1321,12 @@ type TurnContext = {
     mode: string;
     stopOnHandover: boolean;
     currency: string;
+    // Which ways this business hands a PRODUCT over (schema
+    // orgs.pickupEnabled / deliveryEnabled), already resolved to plain
+    // booleans. Read by book_appointment, not just by the prompt: a shop that
+    // does exactly one of them needs no answer from the customer.
+    pickup: boolean;
+    delivery: boolean;
   };
   customer: {
     _id: Id<"customers">;
@@ -1500,6 +1506,37 @@ async function executeTool(
           note: "pickup, delivery and asap are for PRODUCTS only. A service is done here at a booked time — confirm a time and call again without them.",
         };
       }
+      // ASAP IS A PROPERTY OF A HANDOVER, not a flag of its own. It lives
+      // inside the appointment's `fulfillment` (schema
+      // appointments.fulfillment) and the booking page cannot express one
+      // without the other, because "as soon as we can" is a promise about
+      // getting the thing to somebody — there is no asap in the abstract.
+      //
+      // The tool spells the two as separate flat parameters, so the model can
+      // and does send asap alone. Taken at face value that writes an order
+      // with no handover recorded at all, while the reply tells the customer
+      // it is being dealt with right away: the promise reaches them and
+      // nothing behind the counter carries it.
+      //
+      // Inferred when the business does exactly one of the two — asking
+      // "collect or delivered?" on behalf of a shop that only collects is a
+      // question with one answer — and refused when both are on offer, where
+      // guessing would be choosing for the customer.
+      const kind =
+        askedKind ??
+        (!askedAsap
+          ? undefined
+          : org.pickup && !org.delivery
+            ? ("pickup" as const)
+            : org.delivery && !org.pickup
+              ? ("delivery" as const)
+              : undefined);
+      if (askedAsap && !kind) {
+        return {
+          error: "missing-fulfillment",
+          note: "An asap order still has to reach them somehow. Ask whether they want to collect it or have it delivered, then call again with fulfillment set.",
+        };
+      }
       // ASAP has no time to check: the order is placed now and the business
       // fills it as soon as it can, which is what the customer asked for.
       // The booking page's own rule (convex/booking.ts), kept identical so
@@ -1559,12 +1596,12 @@ async function executeTool(
           services: spokenServices,
           service: spokenService,
           source: "chat",
-          ...(askedKind
+          ...(kind
             ? {
                 fulfillment: {
-                  kind: askedKind,
+                  kind,
                   ...(askedAsap ? { asap: true } : {}),
-                  ...(askedKind === "delivery" && String(input.address ?? "").trim()
+                  ...(kind === "delivery" && String(input.address ?? "").trim()
                     ? { address: String(input.address).trim() }
                     : {}),
                 },
@@ -1576,7 +1613,10 @@ async function executeTool(
           // An ASAP order has no promised minute, and handing the agent one
           // is how it reads a time back that nobody agreed to.
           ...(askedAsap ? { asap: true } : { spoken_time: spokenOf(startAt) }),
-          ...(askedKind ? { fulfillment: askedKind } : {}),
+          // The RESOLVED way, not the asked one: where the shop does only
+          // pickup the model may never have named it, and it still has to
+          // read the right thing back rather than invent the other half.
+          ...(kind ? { fulfillment: kind } : {}),
           service: booking.serviceName,
           // The whole visit, so the confirmation names everything booked and
           // a short list tells the agent the rest matched nothing.

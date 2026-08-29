@@ -54,7 +54,15 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // would have the model writing goodbyes into a conversation it stays in. The
 // standing invitation to escalate "when you are unsure" is gone — a door that
 // is always open.
-export const CHAT_AGENT_TEMPLATE_VERSION = 7;
+// v8 (2026-08-29): two promises the mode could not keep. The escalation
+// description now follows the EFFECTIVE handover policy, which reads as
+// "keep answering" outside live mode — the tool writes nothing there, so a
+// business set to hand chats over was having the model say goodbye and then
+// draft the next message anyway. And asap now says it needs a fulfillment
+// beside it: asap lives inside the appointment's fulfillment and cannot be
+// recorded without one, so asap alone used to promise the customer a rush
+// order and write down nothing about how it reached them.
+export const CHAT_AGENT_TEMPLATE_VERSION = 8;
 
 // How many completion rounds one inbound message may chain (each tool round
 // is a completion). A booking is question → availability → confirm → book:
@@ -152,7 +160,7 @@ export function chatAgentTools(stopOnHandover: boolean): LlmTool[] {
           asap: {
             type: "boolean",
             description:
-              "PRODUCTS ONLY: true when the customer wants their order as soon as possible rather than at a set time. Then omit start — the order is placed now.",
+              "PRODUCTS ONLY: true when the customer wants their order as soon as possible rather than at a set time. Then omit start — the order is placed now. Send fulfillment with it: an order still has to reach them somehow, and asap on its own is refused unless this business only does it one way.",
           },
           address: {
             type: "string",
