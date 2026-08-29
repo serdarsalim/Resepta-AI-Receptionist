@@ -433,11 +433,44 @@ export default defineSchema({
     // (lib/businessHours.ts).
     businessHours: v.optional(
       v.object({
-        // 0=Sunday .. 6=Saturday. Empty/unset = every day.
+        // ── LEGACY single-window shape ────────────────────────────────────
+        // One open/close applying to every open day. Superseded by `days`
+        // below on 2026-08-29 and kept readable only so documents written
+        // before that still validate — Convex rejects a push whose schema
+        // cannot describe existing rows. Never write these again; read them
+        // only through windowForWeekday (lib/businessHours.ts), which folds
+        // both shapes into one answer so no caller has to know which it got.
+        //
+        // 0=Sunday .. 6=Saturday. Empty/unset = every day. That sentinel is
+        // INVERTED from the one `days` uses, which is the whole reason the
+        // normaliser exists: here "nothing said" means open, there it means
+        // closed.
         activeDays: v.optional(v.array(v.number())),
         // Minutes from local midnight.
         startMinute: v.optional(v.number()),
         endMinute: v.optional(v.number()),
+        // ── CURRENT per-weekday shape ─────────────────────────────────────
+        // Exactly seven entries, index 0=Sunday .. 6=Saturday, so the array
+        // position IS the weekday and a day can never go missing. `null` is a
+        // CLOSED day — which is what replaced activeDays: "open Tuesday" and
+        // "Tuesday 09:00-18:00" were two facts that could disagree, and one
+        // of them was redundant.
+        //
+        // A day carries ONE window. The lunch break is not a second window
+        // here; it is a recurring row in `closures`, because a business that
+        // shuts midday also shuts for holidays and the two wanted one
+        // mechanism rather than two half-mechanisms (Serdar, 2026-08-29).
+        days: v.optional(
+          v.array(
+            v.union(
+              v.null(),
+              v.object({
+                startMinute: v.number(),
+                endMinute: v.number(),
+              }),
+            ),
+          ),
+        ),
       }),
     ),
     // ── LEGACY away-reply fields ───────────────────────────────────────────
@@ -1313,6 +1346,54 @@ export default defineSchema({
     // two facts lived in unrelated tables and the UI showed them as two lists
     // that both called themselves "Ekip".
     userId: v.optional(v.id("users")),
+  }).index("by_org", ["orgId"]),
+
+  // Time the business is shut INSIDE its own opening hours. Two kinds of thing
+  // behind one row, because they are one question — "can somebody be booked
+  // then" — asked at two cadences:
+  //
+  //   - RECURRING: `weekdays` set. The lunch break. "13:00-14:00, Mon-Fri."
+  //   - DATED: `date` set. The holiday. "29 October, all day."
+  //
+  // Exactly one of the two is set; a row carrying both or neither applies to
+  // no day at all and is ignored rather than throwing, so a bad row can never
+  // take a salon's calendar down (closureAppliesToDay, lib/businessHours.ts).
+  //
+  // WHY NOT A SECOND WINDOW ON businessHours.days: a lunch break modelled as a
+  // gap between two windows gets you the lunch break and nothing else. This
+  // table costs the same and also holds the holiday, the day off and the
+  // afternoon the shop is booked for a private event — which is why the
+  // per-day hours stayed one window each (Serdar, 2026-08-29).
+  //
+  // WHAT IT IS NOT: quiet hours. A holiday must not suppress the reminders
+  // going out for the day AFTER it — see the two-vocabularies note at the head
+  // of lib/businessHours.ts. Nothing in the reminder lane reads this table.
+  //
+  // Deliberately NOT scoped to a staff member. Per-person time off needs
+  // per-person booking first, and that does not exist yet (booking.ts computes
+  // capacity as a headcount and never reads appointments.staffId).
+  closures: defineTable({
+    orgId: v.id("orgs"),
+    // 0=Sunday .. 6=Saturday. Non-empty means this is a recurring closure.
+    weekdays: v.optional(v.array(v.number())),
+    // Local civil date "YYYY-MM-DD" in the org's timezone — NOT an instant.
+    // A holiday is a date the business writes on its door, and storing it as
+    // ms would make it drift the moment anybody looked at it from another
+    // zone.
+    date: v.optional(v.string()),
+    // Minutes from local midnight, half-open [start, end) like every other
+    // window in this codebase. BOTH unset = the whole day, which is what a
+    // holiday almost always is; the sheet's "all day" switch writes exactly
+    // that rather than 0 and 1440, so "all day" survives an opening-hours
+    // change instead of freezing yesterday's clock into the row.
+    startMinute: v.optional(v.number()),
+    endMinute: v.optional(v.number()),
+    // What to call it. Optional because a lunch break needs no explanation,
+    // and shown to the OWNER on the calendar and in the list. It also reaches
+    // the phone and chat agents for dated closures, so they can say "we're
+    // closed for the holiday on the 29th" instead of going quiet — which is
+    // the difference between a closure that works and one that reads broken.
+    reason: v.optional(v.string()),
   }).index("by_org", ["orgId"]),
 
   appointments: defineTable({

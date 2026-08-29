@@ -16,12 +16,119 @@
 //     CUSTOMER. Drives reminder dispatch. A salon closed on Monday still wants
 //     Monday's reminders going out for Tuesday's appointments.
 
+// One day's open window. Half-open [startMinute, endMinute), minutes from
+// local midnight — the same convention isWithinActiveWindow has always used,
+// so 18:00 is CLOSED at an 18:00 close.
+export interface DayWindow {
+  startMinute: number;
+  endMinute: number;
+}
+
 export interface ActiveWindow {
+  // ── LEGACY. Read only through windowForWeekday; never write these. ───────
   // 0=Sunday .. 6=Saturday. Undefined or empty => every day is active.
   activeDays?: number[];
   // Minutes from local midnight. Undefined => no lower / upper bound.
   startMinute?: number;
   endMinute?: number;
+  // ── CURRENT. Seven entries, index 0=Sunday. null => closed that day. ─────
+  days?: (DayWindow | null)[];
+}
+
+// A shut period inside opening hours: recurring weekly (`weekdays`) or a
+// dated one-off (`date`). Both minute bounds unset means the whole day.
+// Mirrors the `closures` table; kept structural rather than importing Doc so
+// this module stays free of Convex imports — src/ imports it directly and a
+// Convex import here drags the server graph into the browser bundle.
+export interface Closure {
+  weekdays?: number[];
+  date?: string;
+  startMinute?: number;
+  endMinute?: number;
+  reason?: string;
+}
+
+// THE normaliser. Folds the legacy single-window shape and the per-weekday
+// shape into one answer so no caller has to know which one an org carries.
+// Returns null for a CLOSED day.
+//
+// The two shapes disagree about what silence means, which is the entire
+// hazard of this migration: legacy `activeDays: []` means open every day,
+// while `days` missing an entry means that day is shut. Every such decision
+// is made here, once.
+export function windowForWeekday(
+  w: ActiveWindow | null | undefined,
+  weekday: number,
+): DayWindow | null {
+  if (!w) return null;
+  // Non-empty only, matching hasBusinessHours: `days: []` is a half-finished
+  // write, not a declaration that the business never opens, so it falls
+  // through to whatever the legacy fields still say.
+  if (w.days && w.days.length > 0) {
+    // The array position IS the weekday. A short or ragged array (hand-written
+    // fixture, interrupted migration) reads as closed on the days it does not
+    // reach rather than falling back to the legacy fields for those days —
+    // mixing the two shapes within one org is where a silent guess is worst.
+    return w.days[weekday] ?? null;
+  }
+  if (w.activeDays && w.activeDays.length > 0 && !w.activeDays.includes(weekday)) {
+    return null;
+  }
+  // Unset bounds stay unrestricted, preserving the legacy contract that an org
+  // with no configuration is always "within" — hasBusinessHours, not this, is
+  // what tells the away-reply and the booking page that nobody has said when
+  // the salon is open.
+  return {
+    startMinute: w.startMinute ?? 0,
+    endMinute: w.endMinute ?? 24 * 60,
+  };
+}
+
+// The local civil date of `p`, as YYYY-MM-DD — the form `closures.date` is
+// stored in.
+export function isoDateOf(p: { y: number; m0: number; d: number }): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.y}-${pad(p.m0 + 1)}-${pad(p.d)}`;
+}
+
+// Does this closure say anything about this local day at all?
+//
+// A row with BOTH `date` and `weekdays`, or NEITHER, applies to no day. That
+// is deliberate: an ambiguous row must not block a business's whole calendar,
+// and a throw here would take down a cron tick over one bad document.
+function closureAppliesToDay(
+  c: Closure,
+  p: { y: number; m0: number; d: number; weekday: number },
+): boolean {
+  const dated = typeof c.date === "string" && c.date.length > 0;
+  const recurring = Array.isArray(c.weekdays) && c.weekdays.length > 0;
+  if (dated === recurring) return false;
+  if (dated) return c.date === isoDateOf(p);
+  return c.weekdays!.includes(p.weekday);
+}
+
+// Does any closure block the local-day range [fromMinute, toMinute)? Returns
+// the FIRST blocking row so callers can name it ("closed for Bayram"), or null.
+//
+// `toMinute` is exclusive, and a zero-length range (a good, which occupies
+// nobody) is treated as the instant `fromMinute` — otherwise an order placed
+// at exactly 13:00 would slip through a 13:00-14:00 lunch break on the
+// strict-inequality test below.
+export function closureBlocks(
+  closures: Closure[] | null | undefined,
+  p: { y: number; m0: number; d: number; weekday: number },
+  fromMinute: number,
+  toMinute: number,
+): Closure | null {
+  if (!closures || closures.length === 0) return null;
+  const end = Math.max(toMinute, fromMinute + 1);
+  for (const c of closures) {
+    if (!closureAppliesToDay(c, p)) continue;
+    const s = c.startMinute ?? 0;
+    const e = c.endMinute ?? 24 * 60;
+    if (fromMinute < e && end > s) return c;
+  }
+  return null;
 }
 
 // Compute the UTC ms for a given local wall time in `tz`. Resolves DST
@@ -113,17 +220,23 @@ export function getLocalPartsSafe(utcMs: number, tz: string | undefined): LocalP
 // no configuration is always "within". Callers that need the opposite default
 // (the away-reply, which must not fire when nobody has said when the salon is
 // open) check for configuration themselves — see hasBusinessHours.
+// `closures` is optional so the six existing call sites compile unchanged; a
+// caller that omits it gets opening-hours enforcement only. Every customer-
+// facing path passes it. The argument is a plain array rather than a ctx
+// because this module must stay import-free (see the Closure note above), so
+// fetching the rows is the caller's job.
 export function isWithinActiveWindow(
   utcMs: number,
   tz: string | undefined,
   w: ActiveWindow,
+  closures?: Closure[] | null,
 ): boolean {
   const p = getLocalPartsSafe(utcMs, tz);
-  if (w.activeDays && w.activeDays.length > 0 && !w.activeDays.includes(p.weekday)) {
-    return false;
-  }
-  if (w.startMinute != null && p.minutesOfDay < w.startMinute) return false;
-  if (w.endMinute != null && p.minutesOfDay >= w.endMinute) return false;
+  const win = windowForWeekday(w, p.weekday);
+  if (!win) return false;
+  if (p.minutesOfDay < win.startMinute) return false;
+  if (p.minutesOfDay >= win.endMinute) return false;
+  if (closureBlocks(closures, p, p.minutesOfDay, p.minutesOfDay)) return false;
   return true;
 }
 
@@ -132,7 +245,22 @@ export function isWithinActiveWindow(
 // Monday, so a default would send "we're closed" on the salon's busiest day.
 // An org that has not configured hours gets no away-reply at all — silence
 // beats a confidently wrong message.
+//
+// It MUST recognise the per-weekday shape. Callers split on this in opposite
+// directions — booking.ts:fitsOpenHours refuses every booking when it is
+// false, while the away-reply stays silent — so a stale implementation would
+// take the public booking page down and mute the auto-reply at the same time,
+// for every org, with no error anywhere.
+//
+// A `days` array counts as configured when ANY day carries a window. Seven
+// nulls is a business that has said it is never open, which is answerable
+// ("we're closed") and therefore configured; an empty or absent array is
+// nobody having said anything, which is not.
 export function hasBusinessHours(w: ActiveWindow): boolean {
+  // Non-empty only. An org carrying `days: []` alongside legacy fields is a
+  // half-finished write, and falling through to the legacy answer keeps it
+  // working rather than declaring it unconfigured.
+  if (w.days && w.days.length > 0) return true;
   return (
     (w.activeDays != null && w.activeDays.length > 0) ||
     w.startMinute != null ||
@@ -258,23 +386,31 @@ export function suggestFreeSlots(args: {
   // FULL blocks (capacity exhausted), not merely booked ones — same contract
   // as retell.bookedBetween.
   full: { startAt: number; durationMinutes: number | null }[];
+  // Recurring and dated closures for this org. Omitted means none — the same
+  // permissive default isWithinActiveWindow takes, and for the same reason.
+  closures?: Closure[] | null;
   nowMs: number;
 }): number[] {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.dayIso);
   const hours = args.hours;
-  if (!match || !hours || hours.startMinute == null || hours.endMinute == null) {
-    return [];
-  }
+  if (!match || !hours) return [];
   const [, y, m, d] = match;
-  const weekday = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).getUTCDay();
-  if (hours.activeDays && hours.activeDays.length > 0 && !hours.activeDays.includes(weekday)) {
-    return [];
-  }
+  const civil = { y: Number(y), m0: Number(m) - 1, d: Number(d) };
+  const weekday = new Date(Date.UTC(civil.y, civil.m0, civil.d)).getUTCDay();
+  // Both bounds come from the day's own window now, so a business open
+  // 10:00-16:00 on Saturday stops being offered its weekday morning.
+  const win = windowForWeekday(hours, weekday);
+  if (!win) return [];
   const slotMs = 30 * 60_000;
   // A slot starting in five minutes is not an offer anyone can accept.
   const earliest = args.nowMs + 15 * 60_000;
   const free: number[] = [];
-  for (let minute = hours.startMinute; minute + 30 <= hours.endMinute; minute += 30) {
+  for (let minute = win.startMinute; minute + 30 <= win.endMinute; minute += 30) {
+    // A slot the lunch break eats must never be read aloud. Checked on the
+    // whole 30-minute span, not the start: 12:45 runs into a 13:00 closure.
+    if (closureBlocks(args.closures, { ...civil, weekday }, minute, minute + 30)) {
+      continue;
+    }
     let startMs: number;
     try {
       startMs = localWallTimeToUtcMs(
@@ -299,28 +435,123 @@ export function suggestFreeSlots(args: {
   return [free[0], free[Math.floor((free.length - 1) / 2)], free[free.length - 1]];
 }
 
+const asClock = (minute: number) =>
+  `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+
+// How far ahead a dated closure is worth mentioning. Long enough to cover the
+// bank holiday somebody is ringing about, short enough that the agent is not
+// handed next spring.
+const CLOSURE_HORIZON_DAYS = 60;
+// And how many, so one org with a year of holidays typed in cannot crowd the
+// rest of the ring-time payload out.
+const MAX_CLOSURES_ANNOUNCED = 6;
+
+export interface AgentHoursFacts {
+  open_hours?: string;
+  closed_days?: string[];
+  closed_times?: string[];
+  upcoming_closures?: string[];
+}
+
 export function openHoursForAgent(
-  hours:
-    | { activeDays?: number[]; startMinute?: number; endMinute?: number }
-    | null
-    | undefined,
-): { open_hours?: string; closed_days?: string[] } {
+  hours: ActiveWindow | null | undefined,
+  opts?: {
+    closures?: Closure[] | null;
+    // Local civil date "YYYY-MM-DD" at the business, from todayInZone. Dated
+    // closures are only announced when this is supplied — without a today
+    // there is no way to tell a holiday that has passed from one that has not,
+    // and reciting last year's is worse than saying nothing.
+    todayIso?: string;
+  },
+): AgentHoursFacts {
   if (!hours) return {};
-  const asClock = (minute: number) =>
-    `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-  const out: { open_hours?: string; closed_days?: string[] } = {};
-  if (hours.startMinute !== undefined && hours.endMinute !== undefined) {
-    out.open_hours = `${asClock(hours.startMinute)}-${asClock(hours.endMinute)}`;
+  const out: AgentHoursFacts = {};
+
+  // Per-day windows, resolved through the one normaliser so a legacy org and a
+  // per-weekday org produce the same sentences.
+  const windows = WEEKDAY_NAMES.map((_, day) => windowForWeekday(hours, day));
+  const open = windows
+    .map((win, day) => ({ day, win }))
+    .filter((row): row is { day: number; win: DayWindow } => row.win !== null);
+
+  if (open.length > 0) {
+    const first = open[0].win;
+    const uniform = open.every(
+      (row) =>
+        row.win.startMinute === first.startMinute &&
+        row.win.endMinute === first.endMinute,
+    );
+    // One range while every open day agrees — the shape the prompts already
+    // quote, and the shape most businesses actually have. Only a business that
+    // really does differ pays the longer string.
+    out.open_hours = uniform
+      ? `${asClock(first.startMinute)}-${asClock(first.endMinute)}`
+      : open
+          .map(
+            (row) =>
+              `${WEEKDAY_NAMES[row.day]} ${asClock(row.win.startMinute)}-${asClock(row.win.endMinute)}`,
+          )
+          .join(", ");
   }
-  // Empty or absent activeDays means open every day (the schema's rule), so
-  // only a non-empty list closes anything. The agent needs the COMPLEMENT —
-  // the days it must not offer — because "we are open Mon-Sat" is a fact it
-  // has to invert under time pressure, and inverting it is how Sunday gets
-  // offered.
-  const days = hours.activeDays;
-  if (days && days.length > 0) {
-    const closed = WEEKDAY_NAMES.filter((_, day) => !days.includes(day));
-    if (closed.length > 0) out.closed_days = closed;
+
+  // The agent needs the COMPLEMENT — the days it must not offer — because "we
+  // are open Mon-Sat" is a fact it has to invert under time pressure, and
+  // inverting it is how Sunday gets offered.
+  const closedDays = WEEKDAY_NAMES.filter((_, day) => windows[day] === null);
+  // Suppressed when nothing is open at all: "closed every day" alongside no
+  // open_hours reads to a model as a business that does not exist, and the
+  // caller's own no-hours wording is the better answer there.
+  if (closedDays.length > 0 && open.length > 0) out.closed_days = closedDays;
+
+  const closures = opts?.closures ?? [];
+  const recurring = closures.filter(
+    (c) => Array.isArray(c.weekdays) && c.weekdays.length > 0 && !c.date,
+  );
+  if (recurring.length > 0) {
+    out.closed_times = recurring.map((c) => {
+      const when =
+        c.startMinute == null && c.endMinute == null
+          ? "all day"
+          : `${asClock(c.startMinute ?? 0)}-${asClock(c.endMinute ?? 24 * 60)}`;
+      const days = c
+        .weekdays!.slice()
+        .sort((a, b) => a - b)
+        .map((day) => WEEKDAY_NAMES[day])
+        .filter(Boolean)
+        .join(", ");
+      // The reason rides along when there is one: "lunch" lets the agent say
+      // why rather than just refusing a time it will not explain.
+      return `${when} on ${days}${c.reason ? ` (${c.reason})` : ""}`;
+    });
   }
+
+  const todayIso = opts?.todayIso;
+  if (todayIso && /^\d{4}-\d{2}-\d{2}$/.test(todayIso)) {
+    // String comparison is date comparison for YYYY-MM-DD, and it avoids
+    // parsing a civil date into an instant only to compare it back.
+    const horizon = new Date(`${todayIso}T00:00:00Z`);
+    horizon.setUTCDate(horizon.getUTCDate() + CLOSURE_HORIZON_DAYS);
+    const horizonIso = horizon.toISOString().slice(0, 10);
+    const dated = closures
+      .filter(
+        (c) =>
+          typeof c.date === "string" &&
+          !(Array.isArray(c.weekdays) && c.weekdays.length > 0) &&
+          c.date >= todayIso &&
+          c.date <= horizonIso,
+      )
+      .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))
+      .slice(0, MAX_CLOSURES_ANNOUNCED);
+    if (dated.length > 0) {
+      out.upcoming_closures = dated.map((c) => {
+        const when =
+          c.startMinute == null && c.endMinute == null
+            ? "all day"
+            : `${asClock(c.startMinute ?? 0)}-${asClock(c.endMinute ?? 24 * 60)}`;
+        return `${c.date} ${when}${c.reason ? ` (${c.reason})` : ""}`;
+      });
+    }
+  }
+
   return out;
 }
