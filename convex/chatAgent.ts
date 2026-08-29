@@ -47,6 +47,8 @@ import { builtinAgentVariables } from "./lib/agentVariables";
 import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
   type ActiveWindow,
+  closureBlocks,
+  getLocalPartsSafe,
   hasBusinessHours,
   isWithinActiveWindow,
   localDayRangeUtc,
@@ -1465,7 +1467,14 @@ async function executeTool(
           ...openness,
           note:
             "EVERY time inside open_hours is available unless it overlaps booked_slots" +
-            (openness.closed_days ? " or falls on closed_days" : "") +
+            (openness.closed_days ? ", falls on closed_days" : "") +
+            // Same correction as the voice lane: this sentence claims to list
+            // every exception, so it has to list the closures shipped beside
+            // it or it tells the model they do not matter.
+            (openness.closed_times ? ", falls inside closed_times" : "") +
+            (openness.upcoming_closures
+              ? ", or falls on a date in upcoming_closures"
+              : "") +
             ". " +
             (requestedTime
               ? "requested_time answers the customer's asked time; trust it. "
@@ -1590,10 +1599,21 @@ async function executeTool(
         const bookClosures = await ctx.runQuery(internal.closures.forOrg, {
           orgId: context.orgId,
         });
+        // Independent of hasBusinessHours, exactly as in the voice lane: an
+        // org with a holiday and no stated opening hours must still refuse the
+        // holiday.
+        const localAt = getLocalPartsSafe(startAt, org.timezone);
+        const shut = closureBlocks(
+          bookClosures,
+          localAt,
+          localAt.minutesOfDay,
+          localAt.minutesOfDay,
+        );
         if (
-          hours &&
-          hasBusinessHours(hours) &&
-          !isWithinActiveWindow(startAt, org.timezone, hours, bookClosures)
+          shut ||
+          (hours &&
+            hasBusinessHours(hours) &&
+            !isWithinActiveWindow(startAt, org.timezone, hours, bookClosures))
         ) {
           return {
             error: "outside-open-hours",

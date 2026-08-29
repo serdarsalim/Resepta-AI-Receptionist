@@ -189,10 +189,12 @@ export const appointmentsInside = query({
       // A cancelled appointment is not something the owner needs warning about.
       if (row.status === "cancelled") continue;
       const p = getLocalPartsSafe(row.startAt, org.timezone);
-      // Duration 0 is a GOOD — it occupies nobody and blocks nothing, so a
-      // closure does not conflict with it. Same rule the capacity guards use.
+      // Goods (duration 0) are COUNTED, unlike under the capacity guards. This
+      // number has to describe what the closure will actually stop, and
+      // fitsOpenHours refuses a good inside a closure — so skipping them here
+      // reported "0 appointments" for precisely the orders about to be
+      // blocked. closureBlocks reads a zero-length span as the start instant.
       const duration = row.durationMinutes ?? 30;
-      if (duration === 0) continue;
       if (
         closureBlocks(
           [closure],

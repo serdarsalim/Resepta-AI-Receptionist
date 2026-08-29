@@ -28,6 +28,8 @@ import {
   isWithinActiveWindow,
   localDayRangeUtc,
   parseLocalStart,
+  closureBlocks,
+  getLocalPartsSafe,
   suggestFreeSlots,
   todayInZone,
 } from "./lib/businessHours";
@@ -529,10 +531,22 @@ http.route({
       // wrong whichever calendar is holding the inventory — and refusing here
       // avoids creating a provider booking we would then have to undo.
       const openHours = org.businessHours;
+      // The closure test stands on its OWN, outside the hasBusinessHours
+      // conjunction. Inside it, an org that declared a holiday but never typed
+      // its opening hours had that holiday silently skipped — and "we never
+      // said when we open" is not a reason to book somebody on Bayram.
+      const localAt = getLocalPartsSafe(startAt, org.timezone);
+      const shut = closureBlocks(
+        closures,
+        localAt,
+        localAt.minutesOfDay,
+        localAt.minutesOfDay,
+      );
       if (
-        openHours &&
-        hasBusinessHours(openHours) &&
-        !isWithinActiveWindow(startAt, org.timezone, openHours, closures)
+        shut ||
+        (openHours &&
+          hasBusinessHours(openHours) &&
+          !isWithinActiveWindow(startAt, org.timezone, openHours, closures))
       ) {
         // Speakable, not a bare code. An error the agent cannot act on becomes
         // "something went wrong" down the phone and ends a call that was one
@@ -626,10 +640,19 @@ http.route({
               ? "Offer two or three of suggested_slots as concrete times." +
                 " Never answer by reciting the opening hours. "
               : "") +
-            "These times are FULL — every person is already busy. Everything" +
-            " else is free. Offer times that avoid them" +
+            "These times are FULL — every person is already busy. Offer times" +
+            " that avoid them" +
             (openness.open_hours ? ", stay inside open_hours" : "") +
             (openness.closed_days ? ", never offer a date on closed_days" : "") +
+            // The exception list has to name EVERY exception. It used to end
+            // "everything else is free", which flatly contradicted the
+            // closed_times and upcoming_closures shipped in this same payload
+            // — and an exhaustive-sounding sentence beats a field the model
+            // has to notice on its own.
+            (openness.closed_times ? ", never inside closed_times" : "") +
+            (openness.upcoming_closures
+              ? ", and never on a date in upcoming_closures"
+              : "") +
             ".",
         });
       }

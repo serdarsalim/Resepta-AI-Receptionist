@@ -126,6 +126,21 @@ export function closuresOnDay(
     .sort((a, b) => a.from - b.from);
 }
 
+// Has the business STATED a clock, as opposed to merely not restricting one?
+//
+// windowForWeekday answers 00:00-24:00 for a legacy org with no bounds, and
+// that is right for the gates asking "is this instant inside the window" — an
+// unset bound restricts nothing. It is wrong for anything that QUOTES the
+// window back: "we're open 00:00-24:00" is a sentence no business said, and
+// times generated across it get read down a phone as real offers.
+//
+// A `days` entry always carries both bounds, so only legacy orgs can fail this.
+export function hasClockBounds(w: ActiveWindow | null | undefined): boolean {
+  if (!w) return false;
+  if (w.days && w.days.length > 0) return true;
+  return w.startMinute != null && w.endMinute != null;
+}
+
 // Does any closure block the local-day range [fromMinute, toMinute)? Returns
 // the FIRST blocking row so callers can name it ("closed for Bayram"), or null.
 //
@@ -429,12 +444,7 @@ export function suggestFreeSlots(args: {
   //
   // Only legacy orgs can reach it: the `days` shape requires both bounds on
   // every entry, so a per-weekday org always has a real window.
-  if (
-    !(hours.days && hours.days.length > 0) &&
-    (hours.startMinute == null || hours.endMinute == null)
-  ) {
-    return [];
-  }
+  if (!hasClockBounds(hours)) return [];
   const slotMs = 30 * 60_000;
   // A slot starting in five minutes is not an offer anyone can accept.
   const earliest = args.nowMs + 15 * 60_000;
@@ -508,7 +518,9 @@ export function openHoursForAgent(
     .map((win, day) => ({ day, win }))
     .filter((row): row is { day: number; win: DayWindow } => row.win !== null);
 
-  if (open.length > 0) {
+  // Same reason suggestFreeSlots bails: an unset legacy bound is "unrestricted",
+  // and rendering it as a clock told callers the salon closes at 24:00.
+  if (open.length > 0 && hasClockBounds(hours)) {
     const first = open[0].win;
     const uniform = open.every(
       (row) =>
