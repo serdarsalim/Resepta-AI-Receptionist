@@ -636,6 +636,212 @@ const dictionary = {
   // sits on. Same reason VoiceView's first tab is "Agents" and not
   // "Voice agent".
   "customers.tabList": { tr: "Liste", en: "List", de: "Liste" },
+  "customers.hasEmail": {
+    tr: "E-postası var",
+    en: "Has email",
+    de: "Mit E-Mail",
+  },
+  "customers.noEmail": {
+    tr: "E-postası yok",
+    en: "No email",
+    de: "Ohne E-Mail",
+  },
+  "customers.selectAll": {
+    tr: "Görünen herkesi seç",
+    en: "Select everyone shown",
+    de: "Alle angezeigten auswählen",
+  },
+
+  // ── Bulk actions ────────────────────────────────────────────────────────
+  //
+  // The German column follows the house rules above: Sie throughout, Betrieb
+  // for the business, and DSGVO where the English says KVKK.
+  "bulk.title": { tr: "Toplu işlem", en: "Bulk", de: "Sammelaktion" },
+  "bulk.selected": {
+    tr: "{n} kişi seçildi",
+    en: "{n} selected",
+    de: "{n} ausgewählt",
+  },
+  "bulk.noConsentCount": {
+    tr: "{n} kişinin izni yok",
+    en: "{n} without consent",
+    de: "{n} ohne Einwilligung",
+  },
+  "bulk.clear": { tr: "Seçimi bırak", en: "Clear", de: "Aufheben" },
+  "bulk.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  "bulk.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
+  "bulk.call": { tr: "Ara", en: "Call", de: "Anrufen" },
+  "bulk.compose.email": {
+    tr: "Toplu e-posta",
+    en: "Bulk email",
+    de: "Sammel-E-Mail",
+  },
+  "bulk.compose.whatsapp": {
+    tr: "Toplu WhatsApp",
+    en: "Bulk WhatsApp",
+    de: "Sammel-WhatsApp",
+  },
+  "bulk.compose.call": {
+    tr: "Toplu arama",
+    en: "Bulk call",
+    de: "Sammelanruf",
+  },
+  "bulk.willReach": {
+    tr: "{n} kişiye gidecek",
+    en: "Goes to {n} people",
+    de: "Geht an {n} Personen",
+  },
+  "bulk.willSkip": {
+    tr: "· {n} kişi atlanacak",
+    en: "· {n} skipped",
+    de: "· {n} übersprungen",
+  },
+  "bulk.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
+  "bulk.body": { tr: "Mesaj", en: "Message", de: "Nachricht" },
+  "bulk.bodyHintEmail": {
+    tr: "Her kişi için ayrı ayrı doldurulur. [ad] yazarsanız kişinin adı gelir.",
+    en: "Filled in per person. Write [first_name] and each one sees their own.",
+    de: "Wird pro Person eingesetzt. [first_name] wird zum jeweiligen Vornamen.",
+  },
+  // The newline rule is not a style preference. Meta rejects a template body
+  // parameter containing a line break with error 132000, per recipient, so a
+  // message written in paragraphs fails the run one row at a time.
+  "bulk.bodyHintWa": {
+    tr: "Tek satır. WhatsApp şablonlarında satır sonu Meta tarafından reddedilir.",
+    en: "One line. Meta refuses a line break inside a WhatsApp template.",
+    de: "Eine Zeile. Meta lehnt Zeilenumbrüche in WhatsApp-Vorlagen ab.",
+  },
+  "bulk.previewFor": {
+    tr: "{name} şunu görecek:",
+    en: "{name} sees:",
+    de: "{name} sieht:",
+  },
+  "bulk.agent": { tr: "Asistan", en: "Agent", de: "Assistent" },
+  "bulk.pickAgent": { tr: "Seçin", en: "Pick one", de: "Auswählen" },
+  "bulk.callHint": {
+    tr: "Teker teker aranır. Bir görüşme bitmeden sonraki başlamaz.",
+    en: "Dialled one at a time. The next call waits for the current one to end.",
+    de: "Nacheinander. Der nächste Anruf beginnt erst nach dem laufenden.",
+  },
+  "bulk.confirmSend": {
+    tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
+    en: "Send to {n} people? This cannot be undone.",
+    de: "An {n} Personen senden? Das lässt sich nicht rückgängig machen.",
+  },
+  "bulk.confirmCall": {
+    tr: "{n} kişi aransın mı? Telefonlar gerçekten çalar.",
+    en: "Call {n} people? Their phones really ring.",
+    de: "{n} Personen anrufen? Die Telefone klingeln wirklich.",
+  },
+
+  // Gates. Every one of these renders as a line under a disabled button, so
+  // each names the thing to go and fix rather than restating the refusal.
+  "bulk.ownerOnly": {
+    tr: "Toplu işlemi yalnızca işletme sahibi başlatabilir.",
+    en: "Only the owner can start a bulk action.",
+    de: "Nur die Inhaberin oder der Inhaber kann eine Sammelaktion starten.",
+  },
+  "bulk.walletEmpty": {
+    tr: "Bakiye bitti. Yükleme yapmadan toplu gönderim başlamaz.",
+    en: "Your balance is empty. Top up before starting a bulk send.",
+    de: "Ihr Guthaben ist leer. Bitte vor dem Sammelversand aufladen.",
+  },
+  "bulk.noneEligible": {
+    tr: "Seçilenlerin hiçbirine bu kanaldan ulaşılamıyor.",
+    en: "None of the selected people can be reached on this channel.",
+    de: "Keine der ausgewählten Personen ist über diesen Kanal erreichbar.",
+  },
+  "bulk.tooMany": {
+    tr: "Tek seferde en fazla {n} kişi. Listeyi filtreleyip daraltın.",
+    en: "At most {n} people in one run. Filter the list down.",
+    de: "Höchstens {n} Personen pro Lauf. Bitte die Liste eingrenzen.",
+  },
+  "bulk.emailNotReady": {
+    tr: "E-posta kanalı kurulu değil.",
+    en: "The email lane is not set up.",
+    de: "Der E-Mail-Kanal ist nicht eingerichtet.",
+  },
+  "bulk.waNotReady": {
+    tr: "Bağlı bir WhatsApp numarası yok.",
+    en: "No WhatsApp number is connected.",
+    de: "Es ist keine WhatsApp-Nummer verbunden.",
+  },
+  // The one gate that is about Meta rather than about this app. Booking
+  // templates are approved for confirmations and reminders, not for a blast:
+  // sending one to people with no appointment is untrue, and it is what gets
+  // a template paused and a number's quality rating downgraded.
+  "bulk.waTemplatePending": {
+    tr: "Toplu mesaj şablonu Meta onayında. Onaylanınca burası kendiliğinden açılır.",
+    en: "The bulk template is waiting on Meta. This opens by itself once approved.",
+    de: "Die Sammelvorlage wartet auf Meta. Sobald sie freigegeben ist, öffnet sich das hier von selbst.",
+  },
+  "bulk.waTooMany": {
+    tr: "WhatsApp'ta tek seferde en fazla {n} kişi.",
+    en: "At most {n} people per WhatsApp run.",
+    de: "Höchstens {n} Personen pro WhatsApp-Lauf.",
+  },
+  "bulk.noDialableAgent": {
+    tr: "Arama yapabilecek bir asistan yok.",
+    en: "No agent has a line it can call from.",
+    de: "Kein Assistent hat eine Nummer zum Anrufen.",
+  },
+  "bulk.errorSuspended": {
+    tr: "İşletme askıya alınmış.",
+    en: "This business is suspended.",
+    de: "Dieser Betrieb ist gesperrt.",
+  },
+  "bulk.errorDemo": {
+    tr: "Demo çalışma alanından gerçek gönderim yapılmaz.",
+    en: "The demo workspace never sends anything for real.",
+    de: "Der Demo-Bereich versendet nie wirklich etwas.",
+  },
+  "bulk.errorGeneric": {
+    tr: "Başlatılamadı. Tekrar deneyin.",
+    en: "Could not start. Try again.",
+    de: "Start nicht möglich. Bitte erneut versuchen.",
+  },
+
+  // History
+  "bulk.noRuns": {
+    tr: "Henüz toplu işlem yapılmadı.",
+    en: "No bulk actions yet.",
+    de: "Noch keine Sammelaktionen.",
+  },
+  "bulk.backToRuns": { tr: "Geri", en: "Back", de: "Zurück" },
+  "bulk.statusRunning": { tr: "Sürüyor", en: "Running", de: "Läuft" },
+  "bulk.statusPaused": { tr: "Duraklatıldı", en: "Paused", de: "Pausiert" },
+  "bulk.statusCancelled": { tr: "Durduruldu", en: "Stopped", de: "Gestoppt" },
+  "bulk.statusDone": { tr: "Bitti", en: "Done", de: "Fertig" },
+  "bulk.counts": {
+    tr: "{done}/{total} tamam · {failed} hata · {skipped} atlandı",
+    en: "{done}/{total} done · {failed} failed · {skipped} skipped",
+    de: "{done}/{total} erledigt · {failed} fehlgeschlagen · {skipped} übersprungen",
+  },
+  "bulk.pause": { tr: "Duraklat", en: "Pause", de: "Pausieren" },
+  "bulk.resume": { tr: "Devam et", en: "Resume", de: "Fortsetzen" },
+  "bulk.stop": { tr: "Durdur", en: "Stop", de: "Stoppen" },
+  // Says plainly what a stop cannot undo. A call already ringing finishes and
+  // a message already with the provider lands; promising otherwise would be a
+  // promise the phone network does not keep.
+  "bulk.stopConfirm": {
+    tr: "Kalanlar iptal edilsin mi? Başlamış arama ve gönderimler geri alınamaz.",
+    en: "Cancel the rest? Calls already ringing and messages already sent cannot be recalled.",
+    de: "Den Rest abbrechen? Laufende Anrufe und bereits gesendete Nachrichten lassen sich nicht zurückholen.",
+  },
+  "bulk.skipNoConsent": { tr: "İzin yok", en: "No consent", de: "Keine Einwilligung" },
+  "bulk.skipNoEmail": { tr: "E-posta yok", en: "No email", de: "Keine E-Mail" },
+  "bulk.skipBadPhone": { tr: "Numara geçersiz", en: "Bad number", de: "Nummer ungültig" },
+  "bulk.skipOther": { tr: "Atlandı", en: "Skipped", de: "Übersprungen" },
+  "bulk.itemPending": { tr: "Sırada", en: "Waiting", de: "Wartet" },
+  "bulk.itemQueued": { tr: "Kuyrukta", en: "Queued", de: "In Warteschlange" },
+  "bulk.itemRinging": { tr: "Çalıyor", en: "Ringing", de: "Klingelt" },
+  "bulk.itemSent": { tr: "Gönderildi", en: "Sent", de: "Gesendet" },
+  "bulk.itemOpened": { tr: "Açıldı", en: "Opened", de: "Geöffnet" },
+  "bulk.itemReplied": { tr: "Yanıtladı", en: "Replied", de: "Geantwortet" },
+  "bulk.itemAnswered": { tr: "{s} sn görüştü", en: "Talked {s}s", de: "{s} s gesprochen" },
+  "bulk.itemNoAnswer": { tr: "Açmadı", en: "No answer", de: "Nicht abgenommen" },
+  "bulk.itemFailed": { tr: "Başarısız", en: "Failed", de: "Fehlgeschlagen" },
+  "bulk.itemCancelled": { tr: "İptal", en: "Cancelled", de: "Abgebrochen" },
   "customers.new": {
     tr: "Müşteri ekle",
     en: "Add customer",

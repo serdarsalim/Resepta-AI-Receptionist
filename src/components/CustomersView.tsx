@@ -18,6 +18,7 @@ import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
 import { FieldsCard } from "./BusinessView";
+import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
 
 // The list, and the definition of what the list HOLDS. Contact fields moved
 // here from the voice agent's strip on 2026-08-25 (Serdar: the app is for
@@ -36,7 +37,12 @@ import { FieldsCard } from "./BusinessView";
 // those columns, so the rule about rare actions fit the letter and missed the
 // point: this is a setup surface, and a setup surface inside a dropdown is not
 // findable by the person who needs it most.
-type CustomersSection = "list" | "fields";
+//
+// Bulk joins List and Fields rather than earning a sidebar door of its own
+// (Serdar, 2026-08-29). It acts on the selection made in the list one tab
+// over, and a history of what that selection did is not a destination anybody
+// navigates to cold.
+type CustomersSection = "list" | "fields" | "bulk";
 
 type Customer = FunctionReturnType<typeof api.customers.list>[number];
 type ContactField = Doc<"contactFields">;
@@ -59,6 +65,16 @@ const FIELD_PREFIX = "f:";
 // Consent is a stamp, not a value, so the funnel filters on these two.
 const CONSENT_ON = "yes";
 const CONSENT_OFF = "no";
+// The email column's own funnel reuses them: "has one" / "hasn't". It exists
+// for the bulk sender, who needs to see who a mail can actually reach before
+// picking a hundred people it will skip. Declared as filterOptions on the
+// column rather than as a new control, so it inherits the funnel, the amber
+// active count and the saved filter state every other column already has.
+const HAS_EMAIL = "yes";
+const NO_EMAIL = "no";
+// The tick column. Wide enough for a checkbox plus the table's px-3, and
+// counted into minWidth so the horizontal scroller knows about it.
+const SELECT_COL_W = 40;
 // A funnel on a free-text column is only useful while the value set is small.
 // Past this the checklist is longer than the table and search is the better
 // tool anyway.
@@ -206,6 +222,21 @@ export function CustomersView({
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
   const [section, setSection] = useState<CustomersSection>("list");
+  // Ticked rows, and the anchor a shift-click sweeps from. Both ported from
+  // RevenueView, which is this app's only prior multi-select and already
+  // settled the two decisions that matter: the anchor is an index into the
+  // VISIBLE list (the one the finger is actually travelling down), and the
+  // selection is an inclusion set of ids rather than an exclusion set.
+  //
+  // Inclusion works here because customers.list returns one plain array and a
+  // tick is an explicit id — a customer arriving mid-selection cannot disturb
+  // what is already ticked. Nudge inverts this, but it has to: its recipient
+  // list is a live segment that re-runs, so "everyone except these" is the
+  // only stable way to say it there.
+  const [selected, setSelected] = useState<ReadonlySet<Id<"customers">>>(new Set());
+  const anchor = useRef<number | null>(null);
+  // Which composer is open over the list, if any. Null is the resting state.
+  const [composing, setComposing] = useState<BulkChannel | null>(null);
   // Read here rather than taken as a prop, the same way VoiceView does it:
   // FieldsCard needs it, this is the only other caller, and threading a
   // permission down through AppShell for one card puts the answer somewhere
@@ -291,6 +322,7 @@ export function CustomersView({
   // "Blank" entry in the checklist carries.
   const filterValue = (customer: Customer, key: string): string => {
     if (key === "consent") return customer.consentAt ? CONSENT_ON : CONSENT_OFF;
+    if (key === "email") return customer.email ? HAS_EMAIL : NO_EMAIL;
     if (key.startsWith(FIELD_PREFIX)) {
       return customValue(customer, key.slice(FIELD_PREFIX.length));
     }
@@ -333,7 +365,20 @@ export function CustomersView({
     const rows = customers ?? [];
     const built: Column[] = [
       { key: "phone", label: t("customers.phone"), width: 165, sortable: true, numeric: true },
-      { key: "email", label: t("customers.email"), width: 210, sortable: true },
+      {
+        key: "email",
+        label: t("customers.email"),
+        width: 210,
+        sortable: true,
+        // Two options, always both offered, even when every customer has an
+        // address: unlike the text-column funnels below, this one is not a
+        // checklist of values that happen to be present. It answers a yes/no
+        // question, and a funnel that disappears once the answer is uniform
+        // is a control that vanishes exactly when it would have told you so.
+        filterOptions: [HAS_EMAIL, NO_EMAIL],
+        labelFor: (value) =>
+          value === HAS_EMAIL ? t("customers.hasEmail") : t("customers.noEmail"),
+      },
       { key: "added", label: t("customers.added"), width: 140, sortable: true, numeric: true },
       {
         // The key stays "lastActivity" while the label reads "Last reply":
@@ -487,9 +532,47 @@ export function CustomersView({
     URL.revokeObjectURL(url);
   };
 
+  // The selection universe is `rows`: what survived the funnels and the
+  // search, in the order shown. So "select all" means every row on screen,
+  // never every customer in the table — which is also the only honest
+  // promise available, because customers.list stops at 1000.
+  const picked = rows.filter((customer) => selected.has(customer._id));
+  const allSelected = rows.length > 0 && picked.length === rows.length;
+
+  // Changing a filter drops selections it hides, because `picked` is derived
+  // from the visible rows rather than kept alongside them. That is deliberate
+  // and it is RevenueView's rule too: the count on the bar always describes
+  // something the person can see, and a run that quietly included forty rows
+  // filtered away ten minutes ago is the worst outcome this feature has.
+  const toggleRow = (index: number, shift: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const turnOn = !next.has(rows[index]._id);
+      const from = shift && anchor.current !== null ? Math.min(anchor.current, index) : index;
+      const to = shift && anchor.current !== null ? Math.max(anchor.current, index) : index;
+      for (let i = from; i <= to; i++) {
+        if (turnOn) next.add(rows[i]._id);
+        else next.delete(rows[i]._id);
+      }
+      return next;
+    });
+    anchor.current = index;
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    anchor.current = null;
+  };
+
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(rows.map((customer) => customer._id)));
+    anchor.current = null;
+  };
+
   const hasCustomers = (customers?.length ?? 0) > 0;
   const widthOf = (column: Column) => table.widthFor(column.key, column.width);
-  const minWidth = 260 + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
+  const minWidth =
+    260 + SELECT_COL_W + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
   // The table's own controls, lifted out of the return so they can be mounted
   // in the card header on desktop and left out entirely on a phone, without
@@ -628,8 +711,23 @@ export function CustomersView({
               is Card's own header metric (p-4 with mb-3 under it) rather than
               a number picked to look right in one screenshot. */}
           <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-4">
-            {columnPicker}
-            {addButton}
+            {/* The verbs take the whole row while a selection stands. Columns
+                and Add customer are both about the LIST, and neither is what
+                anyone reaches for with twenty rows ticked; leaving them there
+                puts "Add customer" one slip away from "Call 20 people". */}
+            {picked.length > 0 ? (
+              <BulkBar
+                count={picked.length}
+                noConsent={picked.filter((c) => c.consentAt === undefined).length}
+                onCompose={setComposing}
+                onClear={clearSelection}
+              />
+            ) : (
+              <>
+                {columnPicker}
+                {addButton}
+              </>
+            )}
           </div>
           {/* The table scrolls sideways inside its own card. The page body
               never does.
@@ -645,6 +743,10 @@ export function CustomersView({
           <div className="thin-scroll overflow-x-auto overscroll-x-contain px-4 py-1">
             <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth }}>
               <colgroup>
+                {/* The tick column. Fixed and narrow, ahead of the pinned
+                    Name column, so the select-all in the header sits directly
+                    over the column it commands. */}
+                <col style={{ width: SELECT_COL_W }} />
                 {/* Name takes no width of its own: it absorbs whatever the
                     fixed columns leave, so a row never ends in a ghost gap. */}
                 <col />
@@ -654,6 +756,22 @@ export function CustomersView({
               </colgroup>
               <thead className="text-left">
                 <tr>
+                  {/* Not a Th: it carries no label, no sort and no resize
+                      handle, and giving it one would put a draggable,
+                      droppable column header around a checkbox. The border
+                      and padding are copied from Th so the hairline under the
+                      header runs unbroken across it. */}
+                  <th
+                    scope="col"
+                    className="border-b border-[var(--border)] px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      aria-label={t("customers.selectAll")}
+                    />
+                  </th>
                   <Th
                     label={t("customers.name")}
                     sortDir={table.sort.key === "name" ? table.sort.dir : null}
@@ -711,14 +829,14 @@ export function CustomersView({
                 {rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={visibleColumns.length + 1}
+                      colSpan={visibleColumns.length + 2}
                       className="px-3 py-6 text-[var(--muted)]"
                     >
                       {t("customers.noMatches")}
                     </td>
                   </tr>
                 )}
-                {rows.map((customer) => (
+                {rows.map((customer, index) => (
                   <tr
                     key={customer._id}
                     tabIndex={0}
@@ -728,6 +846,27 @@ export function CustomersView({
                     }}
                     className="cursor-pointer outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)]"
                   >
+                    {/* The whole row opens the contact, so the tick has to
+                        stop its click reaching it — NewMark's trick, and the
+                        reason the row can stay a full-width target. The cell
+                        swallows the click as well as the box: a finger that
+                        lands 3px off the checkbox meant to tick it, not to
+                        navigate away from the list it was ticking. */}
+                    <td
+                      className="px-3 py-2.5"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {/* onClick, not onChange: only the MouseEvent knows
+                          whether shift was held. readOnly keeps React from
+                          warning about a checked input with no onChange. */}
+                      <input
+                        type="checkbox"
+                        checked={selected.has(customer._id)}
+                        onClick={(event) => toggleRow(index, event.shiftKey)}
+                        readOnly
+                        aria-label={fullName(customer)}
+                      />
+                    </td>
                     <td className="px-3 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate">{fullName(customer)}</span>
@@ -781,6 +920,7 @@ export function CustomersView({
           [
             { id: "list" as const, label: t("customers.tabList") },
             { id: "fields" as const, label: t("fields.title") },
+            { id: "bulk" as const, label: t("bulk.title") },
           ] as { id: CustomersSection; label: string }[]
         ).map((entry) => (
           <button
@@ -799,8 +939,84 @@ export function CustomersView({
         ))}
       </div>
 
-      {section === "list" ? list : <FieldsCard isOwner={isOwner} />}
+      {section === "list" && list}
+      {section === "fields" && <FieldsCard isOwner={isOwner} />}
+      {section === "bulk" && <BulkRunsCard onOpenContact={onOpenContact} />}
+
+      {/* Mounted beside the list rather than inside it: the composer is a
+          drill-in over the whole tab (AGENTS: adding is a sheet you open),
+          and it closes back to the selection it was launched from, which is
+          why the tick set survives it. */}
+      {composing && (
+        <BulkComposer
+          channel={composing}
+          customers={picked}
+          onClose={() => setComposing(null)}
+          onSent={() => {
+            setComposing(null);
+            clearSelection();
+            setSection("bulk");
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// The verbs, and the count they act on. Three buttons and a way out, because
+// a bar that appears the moment something is ticked also has to say how to
+// make it go away.
+//
+// The consent line is not decoration. Under KVKK consent gates EVERYTHING,
+// reminders included, so a selection of forty with eleven unconsented is a
+// run that will reach twenty-nine people — and the moment to learn that is
+// before the composer, not in the run detail afterwards.
+function BulkBar({
+  count,
+  noConsent,
+  onCompose,
+  onClear,
+}: {
+  count: number;
+  noConsent: number;
+  onCompose: (channel: BulkChannel) => void;
+  onClear: () => void;
+}) {
+  const t = useT();
+  const verb =
+    "h-9 rounded-lg border border-[var(--border)] px-3 text-sm font-medium transition-colors hover:bg-[var(--row-hover-bg)]";
+  return (
+    <>
+      <span className="text-sm font-medium">
+        {t("bulk.selected").replace("{n}", String(count))}
+      </span>
+      {noConsent > 0 && (
+        <span
+          className="text-xs text-amber-600 dark:text-amber-500"
+          title={t("customers.cannotBeMessaged")}
+        >
+          {t("bulk.noConsentCount").replace("{n}", String(noConsent))}
+        </span>
+      )}
+      <span className="ml-auto flex flex-wrap items-center gap-2">
+        <button type="button" className={verb} onClick={() => onCompose("email")}>
+          {t("bulk.email")}
+        </button>
+        <button type="button" className={verb} onClick={() => onCompose("whatsapp")}>
+          {t("bulk.whatsapp")}
+        </button>
+        <button type="button" className={verb} onClick={() => onCompose("call")}>
+          {t("bulk.call")}
+        </button>
+        <button
+          type="button"
+          className="h-9 px-2 text-sm text-[var(--muted-strong)] transition-colors hover:text-[var(--foreground)]"
+          onClick={onClear}
+        >
+          {t("bulk.clear")}
+        </button>
+      </span>
+    </>
   );
 }
 
