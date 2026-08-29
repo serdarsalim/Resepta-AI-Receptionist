@@ -25,8 +25,11 @@ import {
   type DragGeometry,
 } from "@/lib/calendarDrag";
 import {
+  closuresOnDay,
   getLocalPartsSafe,
   localWallTimeToUtcMs,
+  windowForWeekday,
+  type Closure,
 } from "../../convex/lib/businessHours";
 import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
@@ -145,6 +148,11 @@ export function AppointmentsView({
     [yearStarts],
   );
   const settings = useQuery(api.orgs.current, {});
+  // Shading only — the grid never refuses a drop on a closure. A closure says
+  // what customers may be OFFERED; the owner putting somebody in the lunch
+  // hour on purpose is the whole reason the shading is a wash rather than a
+  // wall (docs/wwsd.md: the rule governs the offer, not the owner).
+  const closures = useQuery(api.closures.list, {});
   const setStatus = useMutation(api.appointments.setStatus);
   // An action, not a mutation: a move has to hear back from cal.com before our
   // own row moves. See convex/schedule.ts. Held here as well as in the booking
@@ -411,6 +419,7 @@ export function AppointmentsView({
           view={view}
           anchor={anchor}
           businessHours={settings?.org.businessHours}
+          closures={closures}
           timezone={settings?.org.timezone}
           provisional={provisional}
           onOpenBlock={(row, anchor) => {
@@ -999,6 +1008,7 @@ function Calendar({
   onDraft,
   onMove,
   businessHours,
+  closures,
   timezone,
 }: {
   appointments: CalendarAppointment[];
@@ -1023,7 +1033,11 @@ function Calendar({
     activeDays?: number[];
     startMinute?: number;
     endMinute?: number;
+    days?: ({ startMinute: number; endMinute: number } | null)[];
   };
+  // Shut time INSIDE the hours above, cut out of the open bands so the lunch
+  // break greys exactly like the evening does.
+  closures?: Closure[];
   // The BUSINESS's IANA zone — what the closed shading is computed in.
   timezone?: string;
 }) {
@@ -1267,7 +1281,6 @@ function Calendar({
   // complement of whatever overlaps.
   const closedBands = (day: number): { top: number; height: number }[] => {
     if (!businessHours) return [];
-    const { activeDays, startMinute, endMinute } = businessHours;
     const dayEndMs = day + DAY_MS;
     const open: { from: number; to: number }[] = [];
     const seen = new Set<string>();
@@ -1276,30 +1289,48 @@ function Calendar({
       const key = `${p.y}-${p.m0}-${p.d}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (activeDays && activeDays.length > 0 && !activeDays.includes(p.weekday)) {
-        continue;
-      }
-      const from = startMinute ?? 0;
-      const to = endMinute ?? 24 * 60;
-      try {
-        open.push({
-          from: localWallTimeToUtcMs(
-            p.y,
-            p.m0,
-            p.d,
-            Math.floor(from / 60),
-            from % 60,
-            timezone ?? "UTC",
-          ),
-          to: localWallTimeToUtcMs(
-            p.y,
-            p.m0,
-            p.d,
-            Math.floor(to / 60),
-            to % 60,
-            timezone ?? "UTC",
-          ),
+      // THIS weekday's window, through the same normaliser the booking page
+      // reads — a second client-side interpretation of the legacy fields is
+      // how the grid ends up shading a day the page will happily book.
+      const win = windowForWeekday(businessHours, p.weekday);
+      if (!win) continue;
+      // The day's open window, cut by every closure that lands on it. A lunch
+      // break therefore shades exactly like the evening does: the grid says
+      // "shut" in one visual language, and a second one for closures would
+      // make the reader learn which grey means what.
+      let segments: { from: number; to: number }[] = [
+        { from: win.startMinute, to: win.endMinute },
+      ];
+      for (const cut of closuresOnDay(closures, p)) {
+        segments = segments.flatMap((seg) => {
+          if (cut.to <= seg.from || cut.from >= seg.to) return [seg];
+          const kept: { from: number; to: number }[] = [];
+          if (seg.from < cut.from) kept.push({ from: seg.from, to: cut.from });
+          if (cut.to < seg.to) kept.push({ from: cut.to, to: seg.to });
+          return kept;
         });
+      }
+      try {
+        for (const seg of segments) {
+          open.push({
+            from: localWallTimeToUtcMs(
+              p.y,
+              p.m0,
+              p.d,
+              Math.floor(seg.from / 60),
+              seg.from % 60,
+              timezone ?? "UTC",
+            ),
+            to: localWallTimeToUtcMs(
+              p.y,
+              p.m0,
+              p.d,
+              Math.floor(seg.to / 60),
+              seg.to % 60,
+              timezone ?? "UTC",
+            ),
+          });
+        }
       } catch {
         // A malformed org timezone must not paint a confidently wrong grid.
         return [];

@@ -107,6 +107,25 @@ function closureAppliesToDay(
   return c.weekdays!.includes(p.weekday);
 }
 
+// The closures that say something about this local day, as plain minute
+// ranges — what the calendar needs to CUT the day's open window into the
+// segments it shades between. closureBlocks answers yes/no for one span; this
+// hands back the spans themselves.
+export function closuresOnDay(
+  closures: Closure[] | null | undefined,
+  p: { y: number; m0: number; d: number; weekday: number },
+): { from: number; to: number; reason?: string }[] {
+  if (!closures) return [];
+  return closures
+    .filter((c) => closureAppliesToDay(c, p))
+    .map((c) => ({
+      from: c.startMinute ?? 0,
+      to: c.endMinute ?? 24 * 60,
+      reason: c.reason,
+    }))
+    .sort((a, b) => a.from - b.from);
+}
+
 // Does any closure block the local-day range [fromMinute, toMinute)? Returns
 // the FIRST blocking row so callers can name it ("closed for Bayram"), or null.
 //

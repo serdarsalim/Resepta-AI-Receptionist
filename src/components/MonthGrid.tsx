@@ -3,6 +3,10 @@
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
+  hasBusinessHours,
+  windowForWeekday,
+} from "../../convex/lib/businessHours";
+import {
   addLocalDays,
   formatTime,
   startOfLocalDay,
@@ -78,7 +82,12 @@ export function MonthGrid({
   // Closed weekdays read as dead cells. Day-level only — a month answers
   // "which day", so open/close TIMES don't shade here. No timezone math
   // either: a cell is a civil date, and Monday is Monday in every zone.
-  businessHours?: { activeDays?: number[] };
+  businessHours?: {
+    activeDays?: number[];
+    startMinute?: number;
+    endMinute?: number;
+    days?: ({ startMinute: number; endMinute: number } | null)[];
+  };
 }) {
   const { t, language } = useLanguage();
 
@@ -132,11 +141,15 @@ export function MonthGrid({
         {days.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
           const isToday = day === today;
-          const activeDays = businessHours?.activeDays;
+          // Grey means CLOSED, and only closed — through the same normaliser
+          // the week grid and the booking page read, so a day off shows here
+          // whichever shape the org's hours carry. Unset hours stay untinted:
+          // nobody has said when this business is open, and a guessed default
+          // would grey out a barber's Saturday.
           const closed =
-            activeDays !== undefined &&
-            activeDays.length > 0 &&
-            !activeDays.includes(new Date(day).getDay());
+            businessHours !== undefined &&
+            hasBusinessHours(businessHours) &&
+            windowForWeekday(businessHours, new Date(day).getDay()) === null;
           const bookings = byDay.get(day) ?? [];
           const shown = bookings.slice(0, MAX_PER_DAY);
           const hidden = bookings.length - shown.length;
