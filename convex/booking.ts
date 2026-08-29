@@ -8,11 +8,15 @@ import { hasNoteText } from "./lib/noteBody";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import {
+  closureBlocks,
   getLocalPartsSafe,
   hasBusinessHours,
   isWithinActiveWindow,
   localWallTimeToUtcMs,
+  windowForWeekday,
+  type Closure,
 } from "./lib/businessHours";
+import { loadClosures } from "./lib/closureRows";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
 import { MAX_LINES_PER_BOOKING } from "./lib/bookingLimits";
@@ -218,17 +222,35 @@ function overlapCount(
 // checks only the start; a page that draws a slot grid can do better, and a
 // 50-minute treatment offered at 17:45 against an 18:00 close is a booking
 // the salon has to phone someone about.
+// A CLOSURE is checked here too, and on the whole span rather than the start:
+// a 60-minute service at 12:30 runs into a 13:00 lunch break, and the start
+// instant alone would wave it through.
 function fitsOpenHours(
   org: Doc<"orgs">,
   startMs: number,
   durationMinutes: number,
+  closures: Closure[],
 ): boolean {
   const hours = org.businessHours;
   if (!hours || !hasBusinessHours(hours)) return false;
   if (!isWithinActiveWindow(startMs, org.timezone, hours)) return false;
-  if (hours.endMinute != null) {
-    const parts = getLocalPartsSafe(startMs, org.timezone);
-    if (parts.minutesOfDay + durationMinutes > hours.endMinute) return false;
+  const parts = getLocalPartsSafe(startMs, org.timezone);
+  // The tail fit, against THIS weekday's close rather than one window for the
+  // whole week — a Saturday closing at 16:00 used to be measured against the
+  // weekday's 18:00 and let a 15:30 hour-long booking through.
+  const win = windowForWeekday(hours, parts.weekday);
+  if (!win) return false;
+  if (parts.minutesOfDay + durationMinutes > win.endMinute) return false;
+  // Goods (duration 0) are checked too. They occupy nobody, so the CAPACITY
+  // guards skip them — but a closure is not capacity, it is the shop being
+  // shut, and nobody hands over a cake through a locked door. Opening hours
+  // already refuse a good at 19:00 against an 18:00 close (isWithinActiveWindow
+  // above, which is duration-blind); a closure has to agree with that or the
+  // lunch hour becomes the one shut hour you can still order into.
+  // closureBlocks reads a zero-length range as the start instant, so 13:00
+  // collides with a 13:00-14:00 break and 12:00 does not.
+  if (closureBlocks(closures, parts, parts.minutesOfDay, parts.minutesOfDay + durationMinutes)) {
+    return false;
   }
   return true;
 }
@@ -349,16 +371,14 @@ async function freeStarts(
     const civil = { y: Number(y), m0: Number(m) - 1, d: Number(d) };
     // Weekday of a civil date is timezone-free arithmetic.
     const weekday = new Date(Date.UTC(civil.y, civil.m0, civil.d)).getUTCDay();
-    if (
-      hours.activeDays &&
-      hours.activeDays.length > 0 &&
-      !hours.activeDays.includes(weekday)
-    ) {
-      return [];
-    }
 
-    const openFrom = hours.startMinute ?? 0;
-    const openTo = hours.endMinute ?? 24 * 60;
+    // THIS weekday's window, through the one normaliser, so a legacy org and a
+    // per-weekday org walk the same loop and a closed day yields no slots at
+    // all rather than falling back to one window for the whole week.
+    const win = windowForWeekday(hours, weekday);
+    if (!win) return [];
+    const openFrom = win.startMinute;
+    const openTo = win.endMinute;
     const now = Date.now();
 
     // The day's UTC bounds, for the overlap read.
@@ -373,6 +393,10 @@ async function freeStarts(
     if (dayStartMs > now + MAX_AHEAD_MS) return [];
     const rows = await activeRowsAround(ctx, org._id, dayStartMs, dayEndMs);
     const capacity = await orgCapacity(ctx, org._id);
+    // Once per day, not once per candidate slot: the read is org-wide and the
+    // loop below runs it against every grid line.
+    const closures = await loadClosures(ctx, org._id);
+    const civilParts = { y: civil.y, m0: civil.m0, d: civil.d, weekday };
 
     const starts: number[] = [];
     // First grid line at or after opening — 09:15 opening offers 09:30, not
@@ -405,6 +429,13 @@ async function freeStarts(
         continue;
       }
       if (startMs < now + Math.max(MIN_NOTICE_MS, opts?.leadMs ?? 0)) continue;
+      // Checked on the SPAN, so a 60-minute service at 12:30 is withheld from
+      // a 13:00 lunch break rather than offered and then refused by the write
+      // guard — the grid and fitsOpenHours must agree, or the page offers a
+      // time that fails on submit. Unlike the two capacity guards below this
+      // one DOES bite a good: a closure is the shop being shut, not the chair
+      // being taken.
+      if (closureBlocks(closures, civilParts, minute, minute + duration)) continue;
       // Both guards are no-ops for goods (duration 0): overlapCount returns 0
       // and customerConflict returns null. A good is never crowded out and
       // never crowds — every in-hours grid line stays offerable.
@@ -611,7 +642,7 @@ export const book = mutation({
       if (startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
       // The write holds the invariant itself, exactly like the voice lane:
       // being offered by the slots query is not being bound by it.
-      if (!fitsOpenHours(org, startMs, duration)) {
+      if (!fitsOpenHours(org, startMs, duration, await loadClosures(ctx, org._id))) {
         return { ok: false, reason: "slot-taken" };
       }
     }
@@ -845,7 +876,7 @@ export const reschedule = mutation({
       };
     }
     if (args.startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
-    if (!fitsOpenHours(org, args.startMs, duration)) {
+    if (!fitsOpenHours(org, args.startMs, duration, await loadClosures(ctx, org._id))) {
       return { ok: false, reason: "slot-taken" };
     }
     const rows = await activeRowsAround(
