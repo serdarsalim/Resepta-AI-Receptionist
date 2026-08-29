@@ -62,7 +62,10 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // beside it: asap lives inside the appointment's fulfillment and cannot be
 // recorded without one, so asap alone used to promise the customer a rush
 // order and write down nothing about how it reached them.
-export const CHAT_AGENT_TEMPLATE_VERSION = 8;
+// v9: BUSINESS FACTS carries the closures too — the recurring break and the
+// dated holiday — because the two facts above it stopped being the whole story
+// the day a business could shut inside its own opening hours.
+export const CHAT_AGENT_TEMPLATE_VERSION = 9;
 
 // How many completion rounds one inbound message may chain (each tool round
 // is a completion). A booking is question → availability → confirm → book:
@@ -265,6 +268,12 @@ export function chatAgentSystemPrompt(args: {
   language: string;
   openHours?: string;
   closedDays?: string[];
+  // Shut time INSIDE the open hours: the recurring break and the dated
+  // holiday. Facts, not rules — a customer asking "are you open Thursday" is
+  // answered from the prompt, and an agent that only learns about the lunch
+  // break when its booking is refused has already said the slot was free.
+  closedTimes?: string[];
+  upcomingClosures?: string[];
   // The salon's own Talimat: the mirror of what their voice agent runs
   // (retellAgents.generalPrompt), or the code template when no mirror
   // exists. Variables still in {{braces}} — substitution happens here so the
@@ -323,11 +332,26 @@ export function chatAgentSystemPrompt(args: {
   // The two static facts the phone lane answers through a tool and a text
   // conversation should not have to: injected up front, the ring-time
   // philosophy applied to chat.
-  if (args.openHours || args.closedDays?.length) {
+  if (
+    args.openHours ||
+    args.closedDays?.length ||
+    args.closedTimes?.length ||
+    args.upcomingClosures?.length
+  ) {
     lines.push("", "BUSINESS FACTS");
     if (args.openHours) lines.push(`- Open hours: ${args.openHours}`);
     if (args.closedDays?.length)
       lines.push(`- Closed on: ${args.closedDays.join(", ")}`);
+    if (args.closedTimes?.length)
+      lines.push(`- Also closed every week: ${args.closedTimes.join("; ")}`);
+    if (args.upcomingClosures?.length)
+      lines.push(`- Closed on these dates: ${args.upcomingClosures.join("; ")}`);
+    if (args.closedTimes?.length || args.upcomingClosures?.length) {
+      lines.push(
+        "- Never offer a time inside those closed periods. If one names a" +
+          " reason, say it rather than only refusing.",
+      );
+    }
   }
 
   // Products, and how they get to people. Separate from BUSINESS FACTS above

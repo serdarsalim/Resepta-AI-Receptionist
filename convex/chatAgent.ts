@@ -1117,6 +1117,8 @@ export const respond = internalAction({
       language: context.customer.language,
       openHours: openness.open_hours,
       closedDays: openness.closed_days,
+      closedTimes: openness.closed_times,
+      upcomingClosures: openness.upcoming_closures,
       voicePrompt: context.voicePrompt,
       variables: context.variables,
       appointments: context.upcoming,

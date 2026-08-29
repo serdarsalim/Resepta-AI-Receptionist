@@ -24,7 +24,10 @@ import { formatAppointmentTime } from "../../convex/lib/format";
 // The SAME normaliser the backend reads hours through. A client-side reading of
 // the legacy fields would be a second opinion about which days are open, and
 // the card would eventually show a week the booking page disagreed with.
-import { windowForWeekday } from "../../convex/lib/businessHours";
+import {
+  hasBusinessHours,
+  windowForWeekday,
+} from "../../convex/lib/businessHours";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatMoney as formatMinorUnits } from "@/lib/money";
 import type { TranslationKey } from "@/lib/i18n";
@@ -2330,8 +2333,16 @@ export function BusinessHoursCard({
   // windowForWeekday is the same normaliser the backend reads through, so the
   // card cannot show a week the booking page disagrees with — which is what a
   // second, client-side interpretation of the legacy fields would have bought.
+  // An org that has configured NOTHING reads as seven closed days, not seven
+  // open ones. windowForWeekday answers 00:00-24:00 for {} because
+  // "unrestricted" is the right default for the gates that ask whether an
+  // instant is inside the window — but rendering that as the truth would show
+  // a brand-new salon open around the clock, and the first unrelated toggle
+  // would then SAVE it. hasBusinessHours is the same question the backend asks
+  // before it trusts any of this.
+  const configured = hasBusinessHours(hours);
   const week = Array.from({ length: 7 }, (_, day) =>
-    windowForWeekday(hours, day),
+    configured ? windowForWeekday(hours, day) : null,
   );
 
   // Every save writes the whole week. The legacy fields are left out on
@@ -2363,7 +2374,12 @@ export function BusinessHoursCard({
   // The first open day, which is what "apply to all" copies from and what a
   // day being switched back on inherits — so turning Saturday on gives it the
   // week's hours rather than an empty pair nobody can submit.
-  const template = week.find((row) => row !== null) ?? {
+  // Monday-first, matching the order the rows are READ in. Searching the
+  // Sunday-indexed array directly meant a salon open on Sunday handed its
+  // Sunday window to apply-to-all — the bottom row setting the whole week.
+  const template = [1, 2, 3, 4, 5, 6, 0]
+    .map((day) => week[day])
+    .find((row) => row !== null) ?? {
     startMinute: 9 * 60,
     endMinute: 18 * 60,
   };
@@ -2461,7 +2477,20 @@ export function BusinessHoursCard({
                     // leaves the last good value stored and the DOM showing
                     // what is being typed, which is what uncontrolled buys.
                     if (minutes == null || !win) return;
-                    patchDay(day, { ...win, startMinute: minutes });
+                    // Moving a day LATER means editing the opening first, and
+                    // orgs.update stores any window whose start is at or past
+                    // its end as a CLOSED day — so typing 19:00 over 09:00 on a
+                    // 09:00-18:00 day used to shut the day, blank both boxes
+                    // and flip the switch off, with nothing said. The closing
+                    // time gives way instead, and the row remounts to show it.
+                    patchDay(day, {
+                      startMinute: minutes,
+                      endMinute:
+                        minutes >= win.endMinute
+                          ? Math.min(24 * 60, minutes + 60)
+                          : win.endMinute,
+                    });
+                    if (minutes >= win.endMinute) setBulkVersion((n) => n + 1);
                   }}
                 />
                 <span className="shrink-0 text-sm text-[var(--muted)]">
@@ -2477,7 +2506,16 @@ export function BusinessHoursCard({
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
                     if (minutes == null || !win) return;
-                    patchDay(day, { ...win, endMinute: minutes });
+                    // The mirror of the opening box above: the opening gives
+                    // way rather than the day closing itself.
+                    patchDay(day, {
+                      startMinute:
+                        minutes <= win.startMinute
+                          ? Math.max(0, minutes - 60)
+                          : win.startMinute,
+                      endMinute: minutes,
+                    });
+                    if (minutes <= win.startMinute) setBulkVersion((n) => n + 1);
                   }}
                 />
               </div>
