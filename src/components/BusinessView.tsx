@@ -2149,9 +2149,16 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               </span>
 
               {/* Deactivated, never deleted: whoever left still did last
-                  month's work and those appointments must keep a name. */}
-              <Toggle
-                checked={Boolean(row.staffId && row.active)}
+                  month's work and those appointments must keep a name.
+
+                  CheckSwitch, not the iOS Toggle, because this is a boolean
+                  CELL under a column header — the same case the Services
+                  table's Active column solves the same way, twelve hundred
+                  lines up. It was the last table in the app still using the
+                  settings-row control, which put a stack of switches down a
+                  page that already has four of them above it. */}
+              <CheckSwitch
+                on={Boolean(row.staffId && row.active)}
                 label={t("roster.bookable")}
                 onChange={(next) =>
                   void guard(async () => {
