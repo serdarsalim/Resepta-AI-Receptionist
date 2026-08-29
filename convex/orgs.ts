@@ -116,6 +116,14 @@ export const current = query({
           activeDays: v.optional(v.array(v.number())),
           startMinute: v.optional(v.number()),
           endMinute: v.optional(v.number()),
+          days: v.optional(
+            v.array(
+              v.union(
+                v.null(),
+                v.object({ startMinute: v.number(), endMinute: v.number() }),
+              ),
+            ),
+          ),
         }),
       ),
       autoReplyEnabled: v.boolean(),
@@ -334,6 +342,14 @@ export const update = mutation({
         activeDays: v.optional(v.array(v.number())),
         startMinute: v.optional(v.number()),
         endMinute: v.optional(v.number()),
+        days: v.optional(
+          v.array(
+            v.union(
+              v.null(),
+              v.object({ startMinute: v.number(), endMinute: v.number() }),
+            ),
+          ),
+        ),
       }),
     ),
     autoReplyEnabled: v.optional(v.boolean()),
@@ -489,11 +505,32 @@ export const update = mutation({
     if (args.emailFrom !== undefined) patch.emailFrom = args.emailFrom.trim() || undefined;
     if (args.messageChannel !== undefined) patch.messageChannel = args.messageChannel;
     if (args.businessHours !== undefined) {
-      const { activeDays, startMinute, endMinute } = args.businessHours;
+      const { activeDays, startMinute, endMinute, days } = args.businessHours;
       const clampMinute = (m: number) =>
         Math.min(24 * 60, Math.max(0, Math.round(m)));
       const start = startMinute === undefined ? undefined : clampMinute(startMinute);
       const end = endMinute === undefined ? undefined : clampMinute(endMinute);
+      // Seven entries, always, whatever arrived. The array position IS the
+      // weekday downstream (windowForWeekday), so a short array would silently
+      // close the days it failed to reach — and a client that sends six is a
+      // bug, not a business that shut Saturday.
+      //
+      // A day whose start is at or after its end is stored CLOSED rather than
+      // dropped. That differs from the legacy pair above, which drops both
+      // bounds and falls back to open-all-day, and the difference is right:
+      // there, one bad pair would have closed the whole week; here it closes
+      // exactly the day somebody mistyped, which is visible in the row they
+      // just edited.
+      const normalisedDays =
+        days === undefined
+          ? undefined
+          : Array.from({ length: 7 }, (_, day) => {
+              const win = days[day];
+              if (!win) return null;
+              const s = clampMinute(win.startMinute);
+              const e = clampMinute(win.endMinute);
+              return s >= e ? null : { startMinute: s, endMinute: e };
+            });
       patch.businessHours = {
         // Dedupe and keep 0–6 only; an out-of-range weekday would silently mean
         // "closed forever" through isWithinActiveWindow.
@@ -507,6 +544,11 @@ export const update = mutation({
         // Dropping both is better than a config that reads "closed always".
         startMinute: start !== undefined && end !== undefined && start >= end ? undefined : start,
         endMinute: start !== undefined && end !== undefined && start >= end ? undefined : end,
+        // Carried forward when this save did not touch it, so editing the
+        // timezone does not silently wipe the week. The whole object is
+        // replaced on every save (patch.businessHours = {...}), which is why
+        // an unmentioned field has to be re-read rather than left out.
+        days: normalisedDays ?? org0?.businessHours?.days,
       };
     }
     if (args.autoReplyEnabled !== undefined) {
