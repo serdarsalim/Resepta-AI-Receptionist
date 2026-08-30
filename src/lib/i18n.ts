@@ -3757,10 +3757,22 @@ const dictionary = {
     en: "Blocked time",
     de: "Schließzeit",
   },
-  "closures.repeatWeekly": {
-    tr: "Her hafta tekrarla",
-    en: "Repeats every week",
-    de: "Wiederholt sich wöchentlich",
+  // The block sheet's recurrence chips: once on the drawn date, weekly on
+  // chosen days, or daily (weekdays 0-6 under the hood — not a new row shape).
+  "closures.once": {
+    tr: "Bir kez",
+    en: "Once",
+    de: "Einmalig",
+  },
+  "closures.everyWeek": {
+    tr: "Her hafta",
+    en: "Every week",
+    de: "Jede Woche",
+  },
+  "closures.everyDay": {
+    tr: "Her gün",
+    en: "Every day",
+    de: "Jeden Tag",
   },
   // The chip a blocked band wears on the grid when nobody typed a reason.
   "closures.blockLabel": {

@@ -128,7 +128,17 @@ export function BlockSheet({
   const [endMinute, setEndMinute] = useState<number | null>(
     draft.endMinute ?? 14 * 60,
   );
-  const [repeat, setRepeat] = useState((draft.weekdays?.length ?? 0) > 0);
+  // Once, weekly on chosen days, or daily. Daily is not a third row shape —
+  // it is weekdays [0..6], so a row saved as "every day" reopens as exactly
+  // that and the engine never learns a new word. A closure on a closed day
+  // blocks nothing, so "every day" is safe for a salon shut on Sundays.
+  const [cadence, setCadence] = useState<"once" | "weekly" | "daily">(
+    (draft.weekdays?.length ?? 0) === 7
+      ? "daily"
+      : draft.weekdays?.length
+        ? "weekly"
+        : "once",
+  );
   const [weekdays, setWeekdays] = useState<number[]>(
     draft.weekdays?.length ? draft.weekdays : [weekdayOf(draft.date)],
   );
@@ -136,15 +146,20 @@ export function BlockSheet({
   const [saving, setSaving] = useState(false);
 
   const values = {
-    weekdays: repeat ? weekdays : undefined,
-    date: repeat ? undefined : draft.date,
+    weekdays:
+      cadence === "daily"
+        ? [0, 1, 2, 3, 4, 5, 6]
+        : cadence === "weekly"
+          ? weekdays
+          : undefined,
+    date: cadence === "once" ? draft.date : undefined,
     startMinute: allDay ? undefined : startMinute ?? undefined,
     endMinute: allDay ? undefined : endMinute ?? undefined,
     reason: reason.trim() || undefined,
   };
 
   const ready =
-    (!repeat || weekdays.length > 0) &&
+    (cadence !== "weekly" || weekdays.length > 0) &&
     (allDay ||
       (startMinute != null && endMinute != null && startMinute < endMinute));
 
@@ -195,9 +210,9 @@ export function BlockSheet({
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-    // repeat swaps a prose line for a row of day chips, error and the count
+    // cadence swaps a prose line for a row of day chips, error and the count
     // line appear mid-edit: each one moves Save, so each re-measures.
-  }, [anchor, repeat, error, inside]);
+  }, [anchor, cadence, error, inside]);
 
   // Escape closes this sheet only — capture phase, stopped, so the calendar's
   // own key handling never sees it. Same pattern as AppointmentModal.
@@ -327,28 +342,39 @@ export function BlockSheet({
             />
           </div>
 
-          {/* One-off on the drawn date, until the repeat chip says otherwise.
-              Then the date line becomes the day chips — the same row answering
-              the same question at two cadences, like the table underneath. */}
+          {/* Google's recurrence choices as one chip row: once on the drawn
+              date, weekly on chosen days, or daily. Weekly unfolds its day
+              chips below; once keeps the date as prose beside the chips. */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={repeat}
-              onClick={() => setRepeat(!repeat)}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
-                repeat
-                  ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t("closures.repeatWeekly")}
-            </button>
-            {!repeat && (
+            <span className="flex gap-1.5">
+              {(["once", "weekly", "daily"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="switch"
+                  aria-checked={cadence === option}
+                  onClick={() => setCadence(option)}
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
+                    cadence === option
+                      ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {t(
+                    option === "once"
+                      ? "closures.once"
+                      : option === "weekly"
+                        ? "closures.everyWeek"
+                        : "closures.everyDay",
+                  )}
+                </button>
+              ))}
+            </span>
+            {cadence === "once" && (
               <span className="text-sm text-[var(--muted)]">{dateProse}</span>
             )}
           </div>
-          {repeat && (
+          {cadence === "weekly" && (
             <div className="flex flex-wrap items-center gap-1.5">
               {[1, 2, 3, 4, 5, 6, 0].map((day) => {
                 const on = weekdays.includes(day);
