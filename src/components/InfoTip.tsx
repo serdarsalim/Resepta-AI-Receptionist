@@ -118,6 +118,7 @@ export function ActionTip({
       <button
         ref={btnRef}
         type="button"
+        data-tip-trigger=""
         aria-label={label}
         aria-disabled={disabled}
         onMouseEnter={show}
@@ -232,9 +233,13 @@ export function InfoTip({
           : ""
       }`}
     >
+      {/* data-tip-trigger marks every tooltip button so Sheet's autofocus can
+          skip them: focusing one OPENS its tooltip, and a sheet whose header
+          carries a hint used to open covering its own form. */}
       <button
         ref={btnRef}
         type="button"
+        data-tip-trigger=""
         tabIndex={0}
         aria-label="More info"
         onFocus={show}

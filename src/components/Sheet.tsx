@@ -50,8 +50,14 @@ export function Sheet({
     window.addEventListener("keydown", onKey);
     // Focus lands inside the sheet so the first tab stays in it and a screen
     // reader starts where the sheet does. Once, on mount only.
+    //
+    // NEVER on a tooltip trigger: an InfoTip opens on focus, and the header's
+    // own (i) is the first button in the sheet — so a sheet with a hint opened
+    // with the tooltip already covering the form it was meant to explain.
     const preferred = panelRef.current?.querySelector<HTMLElement>("[data-sheet-autofocus]");
-    const fallback = panelRef.current?.querySelector<HTMLElement>("input, select, button");
+    const fallback = panelRef.current?.querySelector<HTMLElement>(
+      "input, select, button:not([data-tip-trigger])",
+    );
     (preferred ?? fallback)?.focus();
     return () => window.removeEventListener("keydown", onKey);
   }, []);
