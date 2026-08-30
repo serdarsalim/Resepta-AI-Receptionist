@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
-import { FIELD, RowLabel, ROW_GRID } from "./RowLabel";
+import { FIELD, RowLabel } from "./RowLabel";
 import { useConfirm } from "./ConfirmDialog";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
@@ -45,7 +45,9 @@ function whenLabel(
 
 export function ClosuresCard({ isOwner }: { isOwner: boolean }) {
   const { t, language } = useLanguage();
-  const dayNames = weekdayNames(language);
+  // Long names: "Every Monday, Tuesday" is prose, and prose does not
+  // abbreviate. A row closing five days is rare enough to be allowed to wrap.
+  const dayNames = weekdayNames(language, "long");
   const closures = useQuery(api.closures.list, {});
   const add = useMutation(api.closures.add);
   const update = useMutation(api.closures.update);
@@ -163,7 +165,9 @@ function ClosureSheet({
   onSave: (values: SaveValues) => Promise<void>;
 }) {
   const { t, language } = useLanguage();
-  const dayNames = weekdayNames(language);
+  // Long names, like the hours card's rows: these chips are the only text on
+  // their line, and "Pzt" saves space the stacked sheet no longer needs.
+  const dayNames = weekdayNames(language, "long");
   const [kind, setKind] = useState<Kind>(closure?.date ? "date" : "weekly");
   const [weekdays, setWeekdays] = useState<number[]>(closure?.weekdays ?? []);
   const [date, setDate] = useState(closure?.date ?? "");
@@ -219,127 +223,145 @@ function ClosureSheet({
       hint={t("closures.hint")}
       onClose={onClose}
     >
-      <div className={ROW_GRID}>
+      {/* Labels ABOVE their controls, not the settings pages' ROW_GRID. That
+          grid's 220-260px label column is sized for a 48rem card; inside this
+          max-w-md sheet it left ~170px for every control, which wrapped the
+          day chips into a ragged third of the sheet and squeezed the time
+          inputs into unreadable stubs. Stacked is also exactly what ROW_GRID
+          itself renders below sm, so the sheet reads the same on a phone and
+          a desktop. */}
+      <div className="flex flex-col gap-4">
         {/* The sheet ASKS which kind rather than stacking both forms — one
             gesture that could create two different things has to. The two
             options are one row of buttons, so switching does not change the
             sheet's height. */}
-        <RowLabel label={t("closures.kind")} />
-        <div className="flex gap-1.5">
-          {(["weekly", "date"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="switch"
-              aria-checked={kind === option}
-              onClick={() => setKind(option)}
-              className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                kind === option
-                  ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t(option === "weekly" ? "closures.kindWeekly" : "closures.kindDate")}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          <RowLabel label={t("closures.kind")} />
+          <div className="flex flex-wrap gap-1.5">
+            {(["weekly", "date"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="switch"
+                aria-checked={kind === option}
+                onClick={() => setKind(option)}
+                className={`rounded-full px-3 py-1 text-sm transition-colors ${
+                  kind === option
+                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {t(option === "weekly" ? "closures.kindWeekly" : "closures.kindDate")}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Both variants occupy ONE row in the same position, so the sheet does
             not resize under the pointer when the kind changes. */}
-        <RowLabel
-          label={t(kind === "weekly" ? "closures.days" : "closures.date")}
-          hint={t(
-            kind === "weekly" ? "closures.kindWeeklyHint" : "closures.kindDateHint",
-          )}
-        />
-        {/* min-h matches the date input's box — FIELD's py-1.5 plus the 1px
-            border every input carries — so switching kind does not resize the
-            sheet under the pointer. The chips are borderless buttons at py-1
-            and come up six pixels short on their own. */}
-        {kind === "weekly" ? (
-          <div className="flex min-h-[34px] flex-wrap items-center gap-1.5">
-            {[1, 2, 3, 4, 5, 6, 0].map((day) => {
-              const on = weekdays.includes(day);
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  role="switch"
-                  aria-checked={on}
-                  onClick={() =>
-                    setWeekdays(
+        <div className="flex flex-col gap-1.5">
+          <RowLabel
+            label={t(kind === "weekly" ? "closures.days" : "closures.date")}
+            hint={t(
+              kind === "weekly" ? "closures.kindWeeklyHint" : "closures.kindDateHint",
+            )}
+          />
+          {/* min-h matches the date input's box — FIELD's py-1.5 plus the 1px
+              border every input carries — so switching kind does not resize the
+              sheet under the pointer. The chips are borderless buttons at py-1
+              and come up six pixels short on their own. */}
+          {kind === "weekly" ? (
+            <div className="flex min-h-[34px] flex-wrap items-center gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 0].map((day) => {
+                const on = weekdays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    onClick={() =>
+                      setWeekdays(
+                        on
+                          ? weekdays.filter((d) => d !== day)
+                          : [...weekdays, day].sort((a, b) => a - b),
+                      )
+                    }
+                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
                       on
-                        ? weekdays.filter((d) => d !== day)
-                        : [...weekdays, day].sort((a, b) => a - b),
-                    )
-                  }
-                  className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                    on
-                      ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {dayNames[day]}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <input
-            type="date"
-            className={`${FIELD} w-full sm:max-w-56`}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        )}
-
-        <RowLabel label={t("closures.allDay")} />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={allDay}
-            onClick={() => setAllDay(!allDay)}
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              allDay
-                ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {t("closures.allDay")}
-          </button>
-          {/* Disabled rather than removed when all-day is on: the row keeps its
-              height, and the times you typed are still there when you turn it
-              back off. */}
-          <input
-            type="time"
-            aria-label={t("settings.openFrom")}
-            disabled={allDay}
-            className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-            value={startMinute == null ? "" : minutesToTimeValue(startMinute)}
-            onChange={(e) => setStartMinute(timeValueToMinutes(e.target.value) ?? null)}
-          />
-          <span className="shrink-0 text-sm text-[var(--muted)]">
-            {t("settings.openUntil")}
-          </span>
-          <input
-            type="time"
-            aria-label={t("settings.openTo")}
-            disabled={allDay}
-            className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-            value={endMinute == null ? "" : minutesToTimeValue(endMinute)}
-            onChange={(e) => setEndMinute(timeValueToMinutes(e.target.value) ?? null)}
-          />
+                        ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                    }`}
+                  >
+                    {dayNames[day]}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <input
+              type="date"
+              className={`${FIELD} w-full sm:max-w-56`}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          )}
         </div>
 
-        <RowLabel label={t("closures.reason")} hint={t("closures.reasonHint")} />
-        <input
-          type="text"
-          className={`${FIELD} w-full`}
-          placeholder={t("closures.reasonPlaceholder")}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
+        {/* Labelled "Hours", not "All day": the chip inside already says
+            "All day", and a row label repeating its own control read as a
+            stutter. */}
+        <div className="flex flex-col gap-1.5">
+          <RowLabel label={t("closures.window")} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allDay}
+              onClick={() => setAllDay(!allDay)}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
+                allDay
+                  ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {t("closures.allDay")}
+            </button>
+            {/* Disabled rather than removed when all-day is on: the row keeps
+                its height, and the times you typed are still there when you
+                turn it back off. */}
+            <input
+              type="time"
+              aria-label={t("settings.openFrom")}
+              disabled={allDay}
+              className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+              value={startMinute == null ? "" : minutesToTimeValue(startMinute)}
+              onChange={(e) => setStartMinute(timeValueToMinutes(e.target.value) ?? null)}
+            />
+            <span className="shrink-0 text-sm text-[var(--muted)]">
+              {t("settings.openUntil")}
+            </span>
+            <input
+              type="time"
+              aria-label={t("settings.openTo")}
+              disabled={allDay}
+              className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+              value={endMinute == null ? "" : minutesToTimeValue(endMinute)}
+              onChange={(e) => setEndMinute(timeValueToMinutes(e.target.value) ?? null)}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <RowLabel label={t("closures.reason")} hint={t("closures.reasonHint")} />
+          <input
+            type="text"
+            className={`${FIELD} w-full`}
+            placeholder={t("closures.reasonPlaceholder")}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* A STATE the reader has to act on, so it stays visible prose rather

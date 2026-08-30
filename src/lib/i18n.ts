@@ -3801,6 +3801,13 @@ const dictionary = {
     en: "All day",
     de: "Ganztägig",
   },
+  // Labels the window row as a whole. The all-day chip inside it used to
+  // double as the row label, which put the same words on screen twice.
+  "closures.window": {
+    tr: "Saatler",
+    en: "Hours",
+    de: "Uhrzeiten",
+  },
   "closures.reason": {
     tr: "Açıklama",
     en: "Reason",

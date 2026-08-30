@@ -153,9 +153,17 @@ export function fromDatetimeLocalValue(value: string): number {
 // convention that orgs.businessHours.activeDays uses. Read from Intl rather
 // than added as 21 dictionary keys: the names are already in every locale, and
 // a new UI language should not require someone to type "Çarşamba".
-export function weekdayNames(language: Language): string[] {
+//
+// "short" for the calendar grids, whose columns are as wide as a day cell;
+// "long" everywhere a name stands on its own — the hours rows, the closure
+// chips — where "Pzt" reads as an abbreviation you have to expand in your
+// head and the row has room for the word.
+export function weekdayNames(
+  language: Language,
+  style: "short" | "long" = "short",
+): string[] {
   const fmt = new Intl.DateTimeFormat(LOCALE[language], {
-    weekday: "short",
+    weekday: style,
     timeZone: "UTC",
   });
   // 2024-01-07 was a Sunday; walking seven days from it lands index 0 on Sunday.
