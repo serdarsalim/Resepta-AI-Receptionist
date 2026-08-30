@@ -2,6 +2,7 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -2326,7 +2327,12 @@ export function BusinessHoursCard({
   update: (args: Record<string, unknown>) => void;
 }) {
   const { t, language } = useLanguage();
-  const dayNames = weekdayNames(language);
+  // Written out — "Pazartesi", not "Pzt". The rows have the room, and the
+  // abbreviation made the one card an owner reads slowly ("when are we
+  // open?") the one place the day needed decoding. The grid below sizes the
+  // day column to the longest name of the CURRENT language, so no width
+  // constant has to be right for three languages at once.
+  const dayNames = weekdayNames(language, "long");
   const hours = org.businessHours ?? {};
 
   // Always seven entries to render against, whichever shape the org carries.
@@ -2437,7 +2443,12 @@ export function BusinessHoursCard({
             hint={t("settings.businessHoursHint")}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        {/* ONE grid for the week, not seven flex rows: the first column is
+            `auto`, so the day pills are all exactly as wide as the longest
+            name in whatever language is on — which is what lets the names be
+            written out instead of clamped to a `w-20` that fit "Pzt" and
+            nothing longer. */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
           {/* Monday-first — the week as this market reads it — while the
               STORED index stays 0=Sunday, because that is what Date.getDay()
               speaks and what every guard downstream compares. */}
@@ -2445,7 +2456,7 @@ export function BusinessHoursCard({
             const win = week[day];
             const open = win !== null;
             return (
-              <div key={day} className="flex items-center gap-2">
+              <Fragment key={day}>
                 <button
                   type="button"
                   role="switch"
@@ -2456,7 +2467,7 @@ export function BusinessHoursCard({
                   // ON state in this app wears. The name sits INSIDE the
                   // switch, as it did when this was a chip, so the row starts
                   // with the word you are looking for.
-                  className={`w-20 shrink-0 rounded-full px-3 py-1 text-left text-sm transition-colors sm:w-24 ${
+                  className={`rounded-full px-3 py-1 text-left text-sm transition-colors ${
                     open
                       ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
                       : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
@@ -2469,7 +2480,7 @@ export function BusinessHoursCard({
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openFrom")}`}
                   disabled={!open}
-                  className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+                  className={`${FIELD} w-full min-w-0 disabled:opacity-40`}
                   defaultValue={win ? minutesToTimeValue(win.startMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
@@ -2493,7 +2504,7 @@ export function BusinessHoursCard({
                     if (minutes >= win.endMinute) setBulkVersion((n) => n + 1);
                   }}
                 />
-                <span className="shrink-0 text-sm text-[var(--muted)]">
+                <span className="text-sm text-[var(--muted)]">
                   {t("settings.openUntil")}
                 </span>
                 <input
@@ -2501,7 +2512,7 @@ export function BusinessHoursCard({
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openTo")}`}
                   disabled={!open}
-                  className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
+                  className={`${FIELD} w-full min-w-0 disabled:opacity-40`}
                   defaultValue={win ? minutesToTimeValue(win.endMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
@@ -2518,7 +2529,7 @@ export function BusinessHoursCard({
                     if (minutes <= win.startMinute) setBulkVersion((n) => n + 1);
                   }}
                 />
-              </div>
+              </Fragment>
             );
           })}
         </div>
