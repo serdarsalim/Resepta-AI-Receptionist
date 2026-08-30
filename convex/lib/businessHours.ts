@@ -96,7 +96,10 @@ export function isoDateOf(p: { y: number; m0: number; d: number }): string {
 // A row with BOTH `date` and `weekdays`, or NEITHER, applies to no day. That
 // is deliberate: an ambiguous row must not block a business's whole calendar,
 // and a throw here would take down a cron tick over one bad document.
-function closureAppliesToDay(
+// Exported for the calendar, which pins an editable label chip on each
+// closure's band and so needs the ROWS on a day, not just the merged ranges
+// closuresOnDay answers with.
+export function closureAppliesToDay(
   c: Closure,
   p: { y: number; m0: number; d: number; weekday: number },
 ): boolean {

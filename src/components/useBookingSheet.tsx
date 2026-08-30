@@ -125,7 +125,12 @@ export function useBookingSheet({
     }
   };
 
-  const render = () =>
+  // `tabs` is the Appointment | Blocked-time row, passed by the calendar and
+  // shown on NEW drafts only: an existing booking is not half of a choice, and
+  // the contact record simply calls render() bare — it has no grid to draw
+  // blocks on. An argument rather than a hook input so the caller can build it
+  // from things (the block sheet's open/close) that live beside this hook.
+  const render = (tabs?: React.ReactNode) =>
     sheet ? (
       <AppointmentModal
         draft={sheet}
@@ -157,6 +162,7 @@ export function useBookingSheet({
             : undefined
         }
         anchor={anchor}
+        tabs={sheet.appointmentId ? undefined : tabs}
         onSubmit={(values) => void submit(values, false)}
         onForce={() => void submit(lastSubmit.current, true)}
       />

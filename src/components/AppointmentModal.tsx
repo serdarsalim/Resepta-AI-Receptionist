@@ -77,6 +77,7 @@ export function AppointmentModal({
   onClose,
   onOpenCustomer,
   anchor,
+  tabs,
 }: {
   draft: ModalDraft;
   services: {
@@ -110,6 +111,12 @@ export function AppointmentModal({
   // one, the sheet anchors beside it instead of taking the middle of the
   // window. Absent (or on a narrow window) it stays the sheet it was.
   anchor?: Rect;
+  // The Appointment | Blocked-time tabs, when this sheet was reached by
+  // drawing on the calendar (Google Calendar's Event | Task row). The caller
+  // owns the switch — picking the other tab swaps this sheet for the block
+  // one in the same spot. Absent everywhere else: an edit is not a choice,
+  // and a contact record has no grid to draw blocks on.
+  tabs?: React.ReactNode;
 }) {
   const { t, language } = useLanguage();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -443,8 +450,11 @@ export function AppointmentModal({
       >
         {/* No printed heading — Google's popup leads with the title field and
             lets the X carry "this is dismissible". The dialog still announces
-            itself through aria-label above. */}
-        <div className="mb-1 flex justify-end">
+            itself through aria-label above. The kind tabs, when the calendar
+            passed them, take the heading's spot: what this sheet IS is the
+            first question, same as Google's Event | Task row. */}
+        <div className={tabs ? "mb-1 flex items-start justify-between gap-2" : "mb-1 flex justify-end"}>
+          {tabs}
           <button
             type="button"
             aria-label={t("common.close")}

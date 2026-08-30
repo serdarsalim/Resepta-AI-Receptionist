@@ -3801,6 +3801,29 @@ const dictionary = {
     en: "All day",
     de: "Ganztägig",
   },
+  // The calendar quick-create tabs — Google Calendar's Event | Task row. One
+  // gesture on the grid, and the first row of the popup asks what you meant.
+  "calendar.tabAppointment": {
+    tr: "Randevu",
+    en: "Appointment",
+    de: "Termin",
+  },
+  "calendar.tabBlock": {
+    tr: "Kapalı saat",
+    en: "Blocked time",
+    de: "Schließzeit",
+  },
+  "closures.repeatWeekly": {
+    tr: "Her hafta tekrarla",
+    en: "Repeats every week",
+    de: "Wiederholt sich wöchentlich",
+  },
+  // The chip a blocked band wears on the grid when nobody typed a reason.
+  "closures.blockLabel": {
+    tr: "Kapalı",
+    en: "Closed",
+    de: "Geschlossen",
+  },
   // Labels the window row as a whole. The all-day chip inside it used to
   // double as the row label, which put the same words on screen twice.
   "closures.window": {

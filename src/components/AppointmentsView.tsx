@@ -25,14 +25,17 @@ import {
   type DragGeometry,
 } from "@/lib/calendarDrag";
 import {
+  closureAppliesToDay,
   closuresOnDay,
   getLocalPartsSafe,
+  isoDateOf,
   localWallTimeToUtcMs,
   windowForWeekday,
   type Closure,
 } from "../../convex/lib/businessHours";
 import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
+import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -58,6 +61,11 @@ type ViewMode = "day" | "week" | "month" | "year" | "list";
 // spans. Kept in calendar terms rather than pixels so it survives a scroll or
 // a resize, and the band is redrawn from it rather than frozen where it was.
 type SlotBand = { day: number; startMinute: number; endMinute: number };
+
+// A closure as the CALENDAR needs it: the businessHours shape plus the row id,
+// because the grid pins an editable label chip on every closure band and
+// editing has to name the row. Exactly what api.closures.list returns.
+type ClosureRow = Closure & { _id: Id<"closures"> };
 
 function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect();
@@ -148,6 +156,10 @@ export function AppointmentsView({
     [yearStarts],
   );
   const settings = useQuery(api.orgs.current, {});
+  // Closure writes are owner-only end to end (convex/closures.ts requires it),
+  // so for staff the chips are facts rather than doors and the kind tabs never
+  // appear — the same line the old settings card drew with isOwner.
+  const isOwner = settings !== undefined && settings.me.role !== "staff";
   // Shading only — the grid never refuses a drop on a closure. A closure says
   // what customers may be OFFERED; the owner putting somebody in the lunch
   // hour on purpose is the whole reason the shading is a wash rather than a
@@ -159,9 +171,40 @@ export function AppointmentsView({
   // sheet because a DRAG moves a block without ever opening the sheet.
   const moveBooking = useAction(api.schedule.move);
 
+  // The slot last drawn on the grid, kept so the kind tabs can hand the SAME
+  // slot to whichever sheet is chosen: switching to "blocked time" must not
+  // lose the time you drew.
+  const [lastDraft, setLastDraft] = useState<{
+    startAt: number;
+    durationMinutes: number;
+    anchor?: Rect;
+  } | null>(null);
+  // The block sheet's subject — a fresh draft from the grid, or a chip's row.
+  const [blockSheet, setBlockSheet] = useState<{
+    draft: BlockDraft;
+    anchor?: Rect;
+  } | null>(null);
+
   // The sheet owns its own state and every call behind Save; this view only
   // says when it opens and with what.
   const booking = useBookingSheet({ onOpenContact });
+
+  // The appointment tab's other half: the same drawn slot, projected ONCE into
+  // the business's civil terms — a closure is "13:00 in the salon", never a
+  // UTC instant — so the block sheet never touches a timezone.
+  const switchToBlock = () => {
+    if (!lastDraft || !settings) return;
+    const p = getLocalPartsSafe(lastDraft.startAt, settings.org.timezone);
+    booking.close();
+    setBlockSheet({
+      draft: {
+        date: isoDateOf(p),
+        startMinute: p.minutesOfDay,
+        endMinute: Math.min(24 * 60, p.minutesOfDay + lastDraft.durationMinutes),
+      },
+      anchor: lastDraft.anchor,
+    });
+  };
 
   // Optimistic positions, keyed by appointment. A drag paints here first and
   // the entry is dropped the moment the server agrees (the query row catches
@@ -171,23 +214,27 @@ export function AppointmentsView({
   >(new Map());
   const [moveError, setMoveError] = useState<string | undefined>();
   // The slot the open sheet was drawn against. Cleared the moment the sheet
-  // goes, so a dismissed booking leaves no ghost band behind on the grid.
+  // goes, so a dismissed booking leaves no ghost band behind on the grid —
+  // but only when NEITHER sheet has it: the kind tabs close one sheet to open
+  // the other, and the band has to stay lit across that swap.
   const [provisional, setProvisional] = useState<SlotBand | null>(null);
   useEffect(() => {
-    if (!booking.isOpen) setProvisional(null);
-  }, [booking.isOpen]);
+    if (!booking.isOpen && !blockSheet) setProvisional(null);
+  }, [booking.isOpen, blockSheet]);
 
   // D / W / M / Y / L switch views, T jumps to today. Bound because the menu
   // PRINTS these letters: a hint beside a shortcut that does nothing is worse
   // than no hint at all.
   //
-  // Skipped while typing, and while the booking sheet is open. Otherwise
-  // entering "Wednesday" in a note would walk the calendar through four views,
-  // and a customer named Deniz would jump you to the day grid on the D.
+  // Skipped while typing, and while EITHER sheet is open. Otherwise entering
+  // "Wednesday" in a note would walk the calendar through four views, a
+  // customer named Deniz would jump you to the day grid on the D — and the L
+  // in a block labelled "Lunch" flipped the whole calendar to the list view
+  // under the sheet being typed into.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (booking.isOpen) return;
+      if (booking.isOpen || blockSheet) return;
       const el = event.target as HTMLElement | null;
       if (
         el &&
@@ -206,7 +253,7 @@ export function AppointmentsView({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [booking.isOpen]);
+  }, [booking.isOpen, blockSheet]);
 
   const heading = useMemo(() => {
     const locale = localeFor(language);
@@ -366,10 +413,9 @@ export function AppointmentsView({
             // would be today's clock applied to a day in November; the working
             // morning is the honest default for a day nobody has named a time
             // in yet.
-            booking.open({
-              startAt: dayMs + DEFAULT_DAY_START * 3_600_000,
-              durationMinutes: DEFAULT_DURATION,
-            });
+            const startAt = dayMs + DEFAULT_DAY_START * 3_600_000;
+            setLastDraft({ startAt, durationMinutes: DEFAULT_DURATION });
+            booking.open({ startAt, durationMinutes: DEFAULT_DURATION });
           }}
           onOpenBlock={(id, anchorRect) => {
             const row = withOptimistic.find((r) => r._id === id);
@@ -447,8 +493,28 @@ export function AppointmentsView({
           }}
           onDraft={(startAt, durationMinutes, band, anchor) => {
             setProvisional(band);
+            setLastDraft({ startAt, durationMinutes, anchor });
             booking.open({ startAt, durationMinutes }, anchor);
           }}
+          onOpenClosure={
+            isOwner
+              ? (row, date, anchorRect) => {
+                  setBlockSheet({
+                    draft: {
+                      closureId: row._id,
+                      // A dated row edits its own date; a recurring one takes
+                      // the chip's day as the fallback for repeat-off.
+                      date: row.date ?? date,
+                      weekdays: row.weekdays,
+                      startMinute: row.startMinute,
+                      endMinute: row.endMinute,
+                      reason: row.reason,
+                    },
+                    anchor: anchorRect,
+                  });
+                }
+              : undefined
+          }
           onMove={async (row, startAt, durationMinutes) => {
             // Paint first, ask second. A drag that waits for a cal.com round
             // trip before moving reads as broken on any real connection.
@@ -543,7 +609,43 @@ export function AppointmentsView({
         </div>
       )}
 
-      {booking.render()}
+      {booking.render(
+        isOwner ? (
+          <SheetKindTabs
+            kind="appointment"
+            onKind={(kind) => {
+              if (kind === "block") switchToBlock();
+            }}
+          />
+        ) : undefined,
+      )}
+      {blockSheet && (
+        <BlockSheet
+          draft={blockSheet.draft}
+          anchor={blockSheet.anchor}
+          tabs={
+            // Tabs only on the sheet a grid gesture opened: an existing block
+            // is not half of a choice, so a chip's sheet has none.
+            blockSheet.draft.closureId === undefined && lastDraft ? (
+              <SheetKindTabs
+                kind="block"
+                onKind={(kind) => {
+                  if (kind !== "appointment" || !lastDraft) return;
+                  setBlockSheet(null);
+                  booking.open(
+                    {
+                      startAt: lastDraft.startAt,
+                      durationMinutes: lastDraft.durationMinutes,
+                    },
+                    lastDraft.anchor,
+                  );
+                }}
+              />
+            ) : undefined
+          }
+          onClose={() => setBlockSheet(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1011,6 +1113,7 @@ function Calendar({
   businessHours,
   closures,
   timezone,
+  onOpenClosure,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
@@ -1038,9 +1141,15 @@ function Calendar({
   };
   // Shut time INSIDE the hours above, cut out of the open bands so the lunch
   // break greys exactly like the evening does.
-  closures?: Closure[];
+  closures?: ClosureRow[];
   // The BUSINESS's IANA zone — what the closed shading is computed in.
   timezone?: string;
+  // Click on a closure's label chip: hand the row up (plus the chip's civil
+  // date, for recurring rows that need a repeat-off fallback) and let the
+  // parent open the block sheet. Absent for staff — closure writes are
+  // owner-only, and a chip that opens a sheet whose Save throws is a door
+  // painted on a wall.
+  onOpenClosure?: (row: ClosureRow, date: string, anchor: Rect) => void;
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -1359,6 +1468,61 @@ function Calendar({
     return bands;
   };
 
+  // Each closure's own band on this column, as a row to pin a label chip on.
+  // The SHADING stays closedBands' job — one grey for every kind of shut —
+  // this only adds the name tag that makes a block editable now that the
+  // settings card is gone. Same civil-date walk and the same projection as
+  // closedBands, so a chip can never sit beside a band it does not label.
+  const closureChips = (
+    day: number,
+  ): { row: ClosureRow; date: string; top: number }[] => {
+    if (!closures || closures.length === 0) return [];
+    const dayEndMs = day + DAY_MS;
+    const chips: { row: ClosureRow; date: string; top: number }[] = [];
+    const seen = new Set<string>();
+    for (const instant of [day, dayEndMs - 1]) {
+      const p = getLocalPartsSafe(instant, timezone);
+      const key = `${p.y}-${p.m0}-${p.d}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      for (const row of closures) {
+        if (!closureAppliesToDay(row, p)) continue;
+        const from = row.startMinute ?? 0;
+        const to = row.endMinute ?? 24 * 60;
+        try {
+          const fromMs = localWallTimeToUtcMs(
+            p.y,
+            p.m0,
+            p.d,
+            Math.floor(from / 60),
+            from % 60,
+            timezone ?? "UTC",
+          );
+          const toMs = localWallTimeToUtcMs(
+            p.y,
+            p.m0,
+            p.d,
+            Math.floor(to / 60),
+            to % 60,
+            timezone ?? "UTC",
+          );
+          const a = Math.max(fromMs, day);
+          if (Math.min(toMs, dayEndMs) <= a) continue;
+          chips.push({
+            row,
+            date: isoDateOf(p),
+            top: ((a - day) / 3_600_000) * HOUR_PX,
+          });
+        } catch {
+          // Same rule as closedBands: a malformed timezone paints nothing
+          // rather than something confidently wrong.
+          return [];
+        }
+      }
+    }
+    return chips;
+  };
+
   return (
     // The grid is a card, the plane around it is the page gradient. Everything
     // INSIDE stays exactly as it was — white paper with the closed hours
@@ -1532,6 +1696,34 @@ function Calendar({
                     style={{ top: band.top, height: band.height }}
                   />
                 ))}
+                {/* Each closure's name tag, pinned to the top of its band.
+                    The band itself stays inert grid — a salon books into its
+                    own lunch hour on purpose — so only the small chip is a
+                    target. For staff it renders as the plain fact it is. */}
+                {closureChips(column.day).map((chip, index) =>
+                  onOpenClosure ? (
+                    <button
+                      key={`${chip.row._id}:${index}`}
+                      type="button"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) =>
+                        onOpenClosure(chip.row, chip.date, rectOf(event.currentTarget))
+                      }
+                      className="absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      style={{ top: chip.top + 1 }}
+                    >
+                      {chip.row.reason || t("closures.blockLabel")}
+                    </button>
+                  ) : (
+                    <span
+                      key={`${chip.row._id}:${index}`}
+                      className="pointer-events-none absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight text-[var(--muted)]"
+                      style={{ top: chip.top + 1 }}
+                    >
+                      {chip.row.reason || t("closures.blockLabel")}
+                    </span>
+                  ),
+                )}
                 {/* The slot being drawn, the block being dragged, or the slot
                     the open sheet belongs to. The third case is what makes an
                     anchored sheet read as attached to the calendar instead of
