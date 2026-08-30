@@ -4,9 +4,9 @@
 // at two cadences. See the schema comment on the table for why this is not a
 // second window on businessHours.days.
 //
-// Validation lives here rather than in the client because three surfaces write
-// closures — the settings list, the calendar's drag, and eventually the agents
-// — and a rule enforced in one of them is a rule the other two break.
+// Validation lives here rather than in the client because more than one
+// surface writes closures — the calendar's block sheet today, the agents
+// eventually — and a rule enforced in one of them is a rule the others break.
 
 import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
@@ -30,8 +30,8 @@ const closureShape = v.object({
 });
 
 // Everything the org owns, recurring first and then dated by date ascending —
-// the order the settings list reads in, so the standing rules sit above the
-// diary of one-offs rather than interleaved with them by creation time.
+// a stable reading order (standing rules, then the diary of one-offs) for any
+// surface that prints them, rather than whatever creation time interleaves.
 export const list = query({
   args: {},
   returns: v.array(closureShape),

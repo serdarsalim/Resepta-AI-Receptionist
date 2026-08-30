@@ -3730,20 +3730,6 @@ const dictionary = {
     de: "Geschlossen",
   },
 
-  // ── Closures ──────────────────────────────────────────────────────────────
-  // Named for the SET, not its best-known member: the lunch break and the
-  // public holiday are one row shape, and calling the card "Lunch" or
-  // "Holidays" would name half of what it holds.
-  "closures.title": {
-    tr: "Kapalı saatler",
-    en: "Closures",
-    de: "Schließzeiten",
-  },
-  "closures.hint": {
-    tr: "Açık olduğunuz saatlerin İÇİNDE kapalı olduğunuz zamanlar: her hafta tekrarlayan öğle arası, ya da tek bir günlük tatil. Bu saatler randevuya kapatılır; sesli asistan ve WhatsApp asistanı da teklif etmez. Takvimde kendiniz yine de randevu yazabilirsiniz.",
-    en: "Time you are shut INSIDE your opening hours: a lunch break that repeats every week, or a single day off. These times stop being offered — on the booking page, and by both the phone and WhatsApp assistants. You can still book into them yourself from the calendar.",
-    de: "Zeiten, in denen Sie INNERHALB Ihrer Öffnungszeiten geschlossen haben: eine Mittagspause jede Woche oder ein einzelner freier Tag. Diese Zeiten werden nicht mehr angeboten — weder auf der Buchungsseite noch von Telefon- und WhatsApp-Assistent. Sie selbst können im Kalender weiterhin dorthin buchen.",
-  },
   "closures.edit": {
     tr: "Kapalı saati düzenle",
     en: "Edit closure",
@@ -3753,48 +3739,6 @@ const dictionary = {
     tr: "Kapalı saat ekle",
     en: "Add closure",
     de: "Schließzeit hinzufügen",
-  },
-  "closures.empty": {
-    tr: "Henüz kapalı saat yok.",
-    en: "No closures yet.",
-    de: "Noch keine Schließzeiten.",
-  },
-  // The sheet asks which kind before it shows a form, because one gesture that
-  // could create two different things has to ask rather than stack both.
-  "closures.kind": {
-    tr: "Ne tür?",
-    en: "What kind?",
-    de: "Welche Art?",
-  },
-  "closures.kindWeekly": {
-    tr: "Her hafta",
-    en: "Every week",
-    de: "Jede Woche",
-  },
-  "closures.kindWeeklyHint": {
-    tr: "Öğle arası gibi, seçtiğiniz günlerde tekrarlar.",
-    en: "A lunch break — repeats on the days you pick.",
-    de: "Eine Mittagspause — wiederholt sich an den gewählten Tagen.",
-  },
-  "closures.kindDate": {
-    tr: "Tek bir gün",
-    en: "One date",
-    de: "Ein einzelner Tag",
-  },
-  "closures.kindDateHint": {
-    tr: "Tatil ya da izin günü, yalnızca o tarihte.",
-    en: "A holiday or a day off, on that date only.",
-    de: "Ein Feiertag oder freier Tag, nur an diesem Datum.",
-  },
-  "closures.days": {
-    tr: "Günler",
-    en: "Days",
-    de: "Tage",
-  },
-  "closures.date": {
-    tr: "Tarih",
-    en: "Date",
-    de: "Datum",
   },
   "closures.allDay": {
     tr: "Tüm gün",
@@ -3824,33 +3768,15 @@ const dictionary = {
     en: "Closed",
     de: "Geschlossen",
   },
-  // Labels the window row as a whole. The all-day chip inside it used to
-  // double as the row label, which put the same words on screen twice.
-  "closures.window": {
-    tr: "Saatler",
-    en: "Hours",
-    de: "Uhrzeiten",
-  },
   "closures.reason": {
     tr: "Açıklama",
     en: "Reason",
     de: "Grund",
   },
-  // Reaches the agents for dated closures, so it is worth typing.
-  "closures.reasonHint": {
-    tr: "İsteğe bağlı. Yazarsanız asistanlar sebebi söyleyebilir: \"o gün bayram için kapalıyız\".",
-    en: "Optional. Given one, the assistants can say why: \"we're closed for the holiday that day\".",
-    de: "Optional. Damit können die Assistenten den Grund nennen: \"an dem Tag haben wir wegen des Feiertags geschlossen\".",
-  },
   "closures.reasonPlaceholder": {
     tr: "Öğle arası, bayram…",
     en: "Lunch, holiday…",
     de: "Mittagspause, Feiertag…",
-  },
-  "closures.everyWeekOn": {
-    tr: "Her hafta {days}",
-    en: "Every {days}",
-    de: "Jeden {days}",
   },
   // Shown in the sheet before saving. Nothing is moved or cancelled — this
   // says what is already there and leaves the decision alone.

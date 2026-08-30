@@ -2535,8 +2535,7 @@ export function BusinessHoursCard({
         </div>
         {/* Most businesses are one pattern with one or two exceptions, so the
             common case is typing the same pair seven times. Ghost, not
-            outlined: the card's own action slot belongs to Add closure below,
-            and one loud thing per screen is the budget. */}
+            outlined: one loud thing per screen is the budget. */}
         {isOwner && (
           <button
             type="button"
