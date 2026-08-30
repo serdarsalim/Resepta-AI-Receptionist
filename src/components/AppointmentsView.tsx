@@ -505,6 +505,7 @@ export function AppointmentsView({
                       // A dated row edits its own date; a recurring one takes
                       // the chip's day as the fallback for repeat-off.
                       date: row.date ?? date,
+                      endDate: row.endDate,
                       weekdays: row.weekdays,
                       startMinute: row.startMinute,
                       endMinute: row.endMinute,
@@ -1485,10 +1486,18 @@ function Calendar({
       const key = `${p.y}-${p.m0}-${p.d}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      // The chip's minute is clamped INTO the day's open window: an all-day
+      // holiday starts at midnight, and a label pinned there lives above the
+      // scroll where nobody ever sees it. Pinned to opening time instead, it
+      // sits exactly where the grid auto-scrolls to.
+      const win = windowForWeekday(businessHours ?? {}, p.weekday);
       for (const row of closures) {
         if (!closureAppliesToDay(row, p)) continue;
-        const from = row.startMinute ?? 0;
         const to = row.endMinute ?? 24 * 60;
+        const from = Math.min(
+          win ? Math.max(row.startMinute ?? 0, win.startMinute) : row.startMinute ?? 0,
+          to,
+        );
         try {
           const fromMs = localWallTimeToUtcMs(
             p.y,

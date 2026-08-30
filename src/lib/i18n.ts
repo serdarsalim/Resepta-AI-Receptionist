@@ -3774,6 +3774,17 @@ const dictionary = {
     en: "Every day",
     de: "Jeden Tag",
   },
+  // The optional last day of a one-off block — the ten-day holiday as one row.
+  "closures.lastDay": {
+    tr: "Son gün",
+    en: "Last day",
+    de: "Letzter Tag",
+  },
+  "closures.errRange": {
+    tr: "Bitiş tarihi başlangıçtan önce olamaz.",
+    en: "The last day can't come before the first.",
+    de: "Der letzte Tag kann nicht vor dem ersten liegen.",
+  },
   // The chip a blocked band wears on the grid when nobody typed a reason.
   "closures.blockLabel": {
     tr: "Kapalı",

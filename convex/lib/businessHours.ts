@@ -36,13 +36,15 @@ export interface ActiveWindow {
 }
 
 // A shut period inside opening hours: recurring weekly (`weekdays`) or a
-// dated one-off (`date`). Both minute bounds unset means the whole day.
+// dated one-off (`date`, through `endDate` inclusive when it spans days).
+// Both minute bounds unset means the whole day.
 // Mirrors the `closures` table; kept structural rather than importing Doc so
 // this module stays free of Convex imports — src/ imports it directly and a
 // Convex import here drags the server graph into the browser bundle.
 export interface Closure {
   weekdays?: number[];
   date?: string;
+  endDate?: string;
   startMinute?: number;
   endMinute?: number;
   reason?: string;
@@ -106,7 +108,12 @@ export function closureAppliesToDay(
   const dated = typeof c.date === "string" && c.date.length > 0;
   const recurring = Array.isArray(c.weekdays) && c.weekdays.length > 0;
   if (dated === recurring) return false;
-  if (dated) return c.date === isoDateOf(p);
+  if (dated) {
+    // String comparison IS date comparison for YYYY-MM-DD. endDate is the
+    // last blocked day inclusive; absent, the range is the one day.
+    const iso = isoDateOf(p);
+    return c.date! <= iso && iso <= (c.endDate ?? c.date!);
+  }
   return c.weekdays!.includes(p.weekday);
 }
 
@@ -586,7 +593,10 @@ export function openHoursForAgent(
         (c) =>
           typeof c.date === "string" &&
           !(Array.isArray(c.weekdays) && c.weekdays.length > 0) &&
-          c.date >= todayIso &&
+          // The LAST blocked day decides whether it is still news: a holiday
+          // that started yesterday and runs through next week must be
+          // announced mid-holiday, not only before it begins.
+          (c.endDate ?? c.date) >= todayIso &&
           c.date <= horizonIso,
       )
       .sort((a, b) => (a.date! < b.date! ? -1 : a.date! > b.date! ? 1 : 0))
@@ -597,7 +607,8 @@ export function openHoursForAgent(
           c.startMinute == null && c.endMinute == null
             ? "all day"
             : `${asClock(c.startMinute ?? 0)}-${asClock(c.endMinute ?? 24 * 60)}`;
-        return `${c.date} ${when}${c.reason ? ` (${c.reason})` : ""}`;
+        const span = c.endDate ? `${c.date} to ${c.endDate}` : c.date;
+        return `${span} ${when}${c.reason ? ` (${c.reason})` : ""}`;
       });
     }
   }

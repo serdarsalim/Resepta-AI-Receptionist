@@ -1381,6 +1381,11 @@ export default defineSchema({
     // ms would make it drift the moment anybody looked at it from another
     // zone.
     date: v.optional(v.string()),
+    // Last civil date of a dated closure, INCLUSIVE — "closed Sep 10 to 20"
+    // is one row, not eleven. Absent means the single day `date` names, which
+    // is every row written before ranges existed. Meaningful only WITH `date`;
+    // normalise drops it from recurring rows.
+    endDate: v.optional(v.string()),
     // Minutes from local midnight, half-open [start, end) like every other
     // window in this codebase. BOTH unset = the whole day, which is what a
     // holiday almost always is; the sheet's "all day" switch writes exactly

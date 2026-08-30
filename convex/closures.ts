@@ -24,6 +24,7 @@ const closureShape = v.object({
   _id: v.id("closures"),
   weekdays: v.optional(v.array(v.number())),
   date: v.optional(v.string()),
+  endDate: v.optional(v.string()),
   startMinute: v.optional(v.number()),
   endMinute: v.optional(v.number()),
   reason: v.optional(v.string()),
@@ -43,6 +44,7 @@ export const list = query({
         _id: row._id,
         weekdays: row.weekdays,
         date: row.date,
+        endDate: row.endDate,
         startMinute: row.startMinute,
         endMinute: row.endMinute,
         reason: row.reason,
@@ -71,6 +73,7 @@ export const forOrg = internalQuery({
     v.object({
       weekdays: v.optional(v.array(v.number())),
       date: v.optional(v.string()),
+      endDate: v.optional(v.string()),
       startMinute: v.optional(v.number()),
       endMinute: v.optional(v.number()),
       reason: v.optional(v.string()),
@@ -81,6 +84,7 @@ export const forOrg = internalQuery({
     return rows.map((row) => ({
       weekdays: row.weekdays,
       date: row.date,
+      endDate: row.endDate,
       startMinute: row.startMinute,
       endMinute: row.endMinute,
       reason: row.reason,
@@ -94,6 +98,7 @@ export const forOrg = internalQuery({
 function normalise(input: {
   weekdays?: number[];
   date?: string;
+  endDate?: string;
   startMinute?: number;
   endMinute?: number;
   reason?: string;
@@ -127,6 +132,20 @@ function normalise(input: {
     return { ok: false, reason: "closure-bad-date" };
   }
 
+  // The range's last day, inclusive. Only a dated row can carry one — on a
+  // recurring row it is dropped rather than refused, because it means
+  // nothing there and an agent sending both should not lose the whole write.
+  // Equal to `date` it is dropped too: that range is the single day the row
+  // already names, and storing it would make one fact wear two shapes.
+  let endDate = dated ? input.endDate?.trim() || undefined : undefined;
+  if (endDate !== undefined) {
+    if (!DATE_RE.test(endDate)) return { ok: false, reason: "closure-bad-date" };
+    if (endDate < input.date!.trim()) {
+      return { ok: false, reason: "closure-bad-range" };
+    }
+    if (endDate === input.date!.trim()) endDate = undefined;
+  }
+
   const reason = input.reason?.trim();
   return {
     ok: true,
@@ -139,6 +158,7 @@ function normalise(input: {
             .sort((a, b) => a - b)
         : undefined,
       date: dated ? input.date!.trim() : undefined,
+      endDate,
       startMinute: start,
       endMinute: end,
       reason: reason || undefined,
@@ -149,6 +169,7 @@ function normalise(input: {
 const writeArgs = {
   weekdays: v.optional(v.array(v.number())),
   date: v.optional(v.string()),
+  endDate: v.optional(v.string()),
   startMinute: v.optional(v.number()),
   endMinute: v.optional(v.number()),
   reason: v.optional(v.string()),
@@ -247,6 +268,7 @@ export const update = mutation({
     await ctx.db.patch(args.closureId, {
       weekdays: result.row.weekdays,
       date: result.row.date,
+      endDate: result.row.endDate,
       startMinute: result.row.startMinute,
       endMinute: result.row.endMinute,
       reason: result.row.reason,

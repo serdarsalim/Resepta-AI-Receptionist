@@ -45,6 +45,9 @@ export type BlockDraft = {
   // The civil date the sheet was opened from. A dated closure stores it; a
   // recurring one keeps it only as the fallback for switching repeat off.
   date: string;
+  // Last blocked day of a one-off, inclusive — the ten-day holiday as one
+  // row. Absent means the single day `date` names.
+  endDate?: string;
   weekdays?: number[];
   // Both absent = all day (the closures convention: unset bounds survive an
   // hours change, 00:00-24:00 would freeze a clock into the row).
@@ -142,6 +145,10 @@ export function BlockSheet({
   const [weekdays, setWeekdays] = useState<number[]>(
     draft.weekdays?.length ? draft.weekdays : [weekdayOf(draft.date)],
   );
+  // "" = the single drawn day. The input's min already refuses earlier dates;
+  // `ready` repeats the check because min is advice to a date picker, not a
+  // rule against a typed value.
+  const [endDate, setEndDate] = useState(draft.endDate ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -153,6 +160,7 @@ export function BlockSheet({
           ? weekdays
           : undefined,
     date: cadence === "once" ? draft.date : undefined,
+    endDate: cadence === "once" && endDate ? endDate : undefined,
     startMinute: allDay ? undefined : startMinute ?? undefined,
     endMinute: allDay ? undefined : endMinute ?? undefined,
     reason: reason.trim() || undefined,
@@ -160,6 +168,7 @@ export function BlockSheet({
 
   const ready =
     (cadence !== "weekly" || weekdays.length > 0) &&
+    (cadence !== "once" || !endDate || endDate >= draft.date) &&
     (allDay ||
       (startMinute != null && endMinute != null && startMinute < endMinute));
 
@@ -173,6 +182,7 @@ export function BlockSheet({
       ? {
           weekdays: values.weekdays,
           date: values.date,
+          endDate: values.endDate,
           startMinute: values.startMinute,
           endMinute: values.endMinute,
         }
@@ -238,7 +248,9 @@ export function BlockSheet({
       setError(
         raw.includes("closure-empty-window") || raw.includes("closure-partial-window")
           ? t("closures.errWindow")
-          : t("closures.errKind"),
+          : raw.includes("closure-bad-range")
+            ? t("closures.errRange")
+            : t("closures.errKind"),
       );
     } finally {
       setSaving(false);
@@ -370,8 +382,23 @@ export function BlockSheet({
                 </button>
               ))}
             </span>
+            {/* The drawn date as prose — the calendar is the picker for where
+                a block STARTS — plus an optional last day, so a ten-day
+                holiday is one block instead of ten. Left empty, the block is
+                the single day. */}
             {cadence === "once" && (
-              <span className="text-sm text-[var(--muted)]">{dateProse}</span>
+              <span className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+                {dateProse}
+                <span>{t("settings.openUntil")}</span>
+                <input
+                  type="date"
+                  aria-label={t("closures.lastDay")}
+                  className={FIELD}
+                  min={draft.date}
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </span>
             )}
           </div>
           {cadence === "weekly" && (
