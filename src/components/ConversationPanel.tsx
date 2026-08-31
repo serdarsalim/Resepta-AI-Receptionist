@@ -1511,16 +1511,16 @@ export function ConversationPanel({
               } else setSendError(result.reason ?? "error");
             }}
           >
-            {/* Why the pill below is dead, said above it where there is room to
-                say it. It spent its life as the placeholder, which is the one
-                place in a form that cannot hold a sentence: a placeholder gets
-                one line and no way to reach the rest, so at phone width it cut
-                off at "until the" and put a scrollbar on a disabled box — a
-                scrollbar for text the reader is not allowed to scroll. Out
-                here it just wraps. */}
-            {!composerLive && (
+            {/* Only the not-connected case earns a line of prose above the
+                pill: it tells the reader where to go (the Business tab). The
+                closed 24h window says itself in the placeholder — a fact the
+                reader cannot act on got a whole sentence of chrome, and
+                Serdar cut it (2026-08-31). The placeholder stays short enough
+                for one phone-width line; the template-only detail is what the
+                template button beside it is for. */}
+            {!composerLive && !waReady && (
               <p className="px-3 pb-1.5 text-xs text-[var(--muted)]">
-                {waReady ? t("contact.sessionClosed") : t("contact.waNotConnected")}
+                {t("contact.waNotConnected")}
               </p>
             )}
             {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and

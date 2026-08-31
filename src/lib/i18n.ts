@@ -3923,18 +3923,14 @@ const dictionary = {
     en: "WhatsApp not connected",
     de: "WhatsApp nicht verbunden",
   },
-  "contact.sessionClosed": {
-    tr: "24 saatlik pencere kapalı. Müşteri yazana kadar yalnızca şablon mesajı gönderilebilir.",
-    en: "The 24h window is closed. Only template messages until the customer writes.",
-    de: "Das 24-Stunden-Fenster ist geschlossen. Bis der Kunde schreibt, sind nur Vorlagennachrichten möglich.",
-  },
-  // What the disabled box itself says. A placeholder has one line and no way to
-  // scroll it, so the sentence above cannot live here: on a phone it clipped
-  // mid-word and grew a scrollbar nobody could use.
+  // What the disabled box itself says — the whole story now, since the prose
+  // line above the composer is gone (Serdar, 2026-08-31). Still one
+  // phone-width line: the two-sentence version clipped mid-word here once,
+  // which is why the fact stays this short.
   "contact.sessionClosedShort": {
-    tr: "Pencere kapalı",
-    en: "Window closed",
-    de: "Fenster geschlossen",
+    tr: "24 saatlik pencere kapalı",
+    en: "24h window closed",
+    de: "24-Stunden-Fenster geschlossen",
   },
 
   "services.title": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
