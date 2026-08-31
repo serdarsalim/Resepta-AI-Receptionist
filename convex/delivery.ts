@@ -217,6 +217,9 @@ export const claimForRetry = internalMutation({
         ? formatAppointmentTime(appointment.startAt, org.timezone, language)
         : undefined,
       appointmentId: message.appointmentId,
+      // A scheduled quote-reply keeps its quote at dispatch time — the row
+      // stored the wamid when the send was queued (wa.sendSession).
+      replyToWamid: message.replyToWamid,
     };
   },
 });
@@ -279,6 +282,7 @@ type RetryJob = {
   when?: string;
   appointmentId?: string;
   mediaLink?: string | null;
+  replyToWamid?: string;
 };
 
 // One re-send, routed by what the row is. Mirrors the three shapes the send
@@ -333,6 +337,7 @@ async function attempt(
       instance: job.evolution.instance,
       to: job.to,
       body: job.body,
+      quotedId: job.replyToWamid,
     });
     return sent.ok
       ? { ok: true, wamid: sent.messageId }
@@ -379,6 +384,7 @@ async function attempt(
     phoneNumberId: job.phoneNumberId,
     to: job.to,
     body: job.body,
+    contextMessageId: job.replyToWamid,
   });
 }
 

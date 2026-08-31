@@ -66,6 +66,14 @@ export const logOutQueued = internalMutation({
     // the template row whose counters this send feeds.
     trackingToken: v.optional(v.string()),
     templateId: v.optional(v.id("waTemplates")),
+    // Quote-reply (2026-08-31): the same snapshot shape the inbound path
+    // stores when a CUSTOMER swipe-replies, so the thread renders both
+    // directions with one block. The caller (wa.sendSession) resolved the
+    // quoted row and only passes these when the provider send will actually
+    // carry the context — a quote the customer never sees must not render.
+    replyToWamid: v.optional(v.string()),
+    replyToBody: v.optional(v.string()),
+    replyToDirection: v.optional(v.union(v.literal("in"), v.literal("out"))),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -88,6 +96,9 @@ export const logOutQueued = internalMutation({
       lane: args.lane,
       trackingToken: args.trackingToken,
       templateId: args.templateId,
+      ...(args.replyToWamid ? { replyToWamid: args.replyToWamid } : {}),
+      ...(args.replyToBody !== undefined ? { replyToBody: args.replyToBody } : {}),
+      ...(args.replyToDirection ? { replyToDirection: args.replyToDirection } : {}),
       status: "queued",
       // A row with no scheduledFor is being sent RIGHT NOW by the action that
       // just created it, so it is in flight from this moment. Stamping it here
@@ -447,6 +458,10 @@ const feedItem = v.object({
   // fields (schema note) so the bubble can draw the quote without a lookup.
   replyToBody: v.optional(v.string()),
   replyToDirection: v.optional(v.union(v.literal("in"), v.literal("out"))),
+  // Whether the row can BE quoted (it has a provider wamid to hand back).
+  // A boolean, not the wamid itself: the id is a provider handle the client
+  // has no business holding.
+  canQuote: v.optional(v.boolean()),
   // Set while a send is waiting for its moment. The bubble counts down to it
   // and can be cancelled until the cron picks it up.
   scheduledFor: v.optional(v.number()),
@@ -534,6 +549,7 @@ export const feedForCustomer = query({
         reactionEmoji: m.reactionEmoji,
         replyToBody: m.replyToBody,
         replyToDirection: m.replyToDirection,
+        canQuote: m.wamid !== undefined ? true : undefined,
         scheduledFor: m.scheduledFor,
       })),
       ...calls.map((c) => ({

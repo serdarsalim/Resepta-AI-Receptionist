@@ -44,13 +44,20 @@ export async function sendEvolutionText(args: {
   instance: string;
   to: string;
   body: string;
+  // The Baileys key id being replied to (quote-reply, 2026-08-31). Evolution
+  // renders the quoted bubble above the message, same as a phone swipe-reply.
+  quotedId?: string;
 }): Promise<EvolutionSendResult> {
   const url = `${trimBase(args.baseUrl)}/message/sendText/${encodeURIComponent(args.instance)}`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", apikey: args.apiKey },
-      body: JSON.stringify({ number: toEvolutionNumber(args.to), text: args.body }),
+      body: JSON.stringify({
+        number: toEvolutionNumber(args.to),
+        text: args.body,
+        ...(args.quotedId ? { quoted: { key: { id: args.quotedId } } } : {}),
+      }),
     });
     if (!res.ok) {
       let detail = "";

@@ -1464,6 +1464,7 @@ const dictionary = {
     de: "Leer lassen, um sofort zu senden.",
   },
   "message.quoteYou": { tr: "Siz", en: "You", de: "Sie" },
+  "message.reply": { tr: "Yanıtla", en: "Reply", de: "Antworten" },
   "message.quoteMedia": { tr: "Medya", en: "Media", de: "Medien" },
   "message.template": {
     tr: "Şablon mesajı",

@@ -249,6 +249,16 @@ export function ConversationPanel({
   // as the schedule row: closed by default, because most messages are words.
   const [attaching, setAttaching] = useState(false);
   const [attached, setAttached] = useState<AttachedFile | null>(null);
+  // Quote-reply (Serdar, 2026-08-31): the thread message the next send
+  // answers. A snapshot for the preview strip; the SEND carries only the id
+  // and the backend re-resolves, so an edit between pick and send can't make
+  // the strip and the customer's quote disagree. Text sends only — picking
+  // an attachment clears it, because the media lanes don't carry context.
+  const [replyTo, setReplyTo] = useState<{
+    id: string;
+    body: string;
+    direction: "in" | "out";
+  } | null>(null);
   // Grows with the message, capped, bottom-anchored — the extra lines push the
   // field upward the way WhatsApp Web does rather than pushing the thread down.
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -1461,6 +1471,32 @@ export function ConversationPanel({
                   </svg>
                 </EmojiPicker>
               )}
+            {/* Quote-reply (Serdar, 2026-08-31), both directions — replying
+                to your own earlier message is how a thread points at "that
+                offer from Tuesday". Only rows holding a provider id can be
+                quoted (canQuote): a quote the customer's phone can't render
+                is a quote we must not offer. Same hover treatment as react. */}
+            {canCompose && item.channel === "whatsapp" && item.canQuote && (
+              <button
+                type="button"
+                title={t("message.reply")}
+                aria-label={t("message.reply")}
+                onClick={() => {
+                  setReplyTo({
+                    id: item.id,
+                    body: item.body ?? "",
+                    direction: item.direction === "out" ? "out" : "in",
+                  });
+                  composerRef.current?.focus();
+                }}
+                className="mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] opacity-60 transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] sm:opacity-0 sm:group-hover:opacity-100"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                  <polyline points="9 17 4 12 9 7" />
+                  <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                </svg>
+              </button>
+            )}
             </div>
             </Fragment>
           );
@@ -1563,9 +1599,13 @@ export function ConversationPanel({
               // draft — it takes the ordinary path, and landing there
               // retires the pending draft anyway (applySendResult).
               const pendingNow = agentState?.pending;
+              // A quote-reply never rides the suggestion path: the draft was
+              // written to the thread, not to one message, and the quote is
+              // the sender's own explicit framing.
               const viaDraft =
                 pendingNow &&
                 !attached &&
+                !replyTo &&
                 !(when !== undefined && when > Date.now());
               const result = viaDraft
                 ? await sendSuggestion({
@@ -1582,6 +1622,9 @@ export function ConversationPanel({
                       ? { scheduledFor: when }
                       : {}),
                     ...(attached ? { mediaStorageId: attached.storageId } : {}),
+                    ...(replyTo && !attached
+                      ? { replyToId: replyTo.id as Id<"messages"> }
+                      : {}),
                   });
               setSending(false);
               if (result.ok) {
@@ -1590,12 +1633,44 @@ export function ConversationPanel({
                 setScheduling(false);
                 setAttached(null);
                 setAttaching(false);
+                setReplyTo(null);
               } else setSendError(result.reason ?? "error");
             }}
           >
             {/* No prose above the pill. Whatever disables the composer says
                 itself in the placeholder — a dead box explaining itself twice
                 is chrome, and Serdar cut both sentences (2026-08-31). */}
+            {/* The reply being quoted — WhatsApp's own composer strip: the
+                left accent bar naming the quoted message, ✕ to drop it. The
+                same grammar the bubble's quote block uses, so picking a
+                message and seeing it sent read as one thing. */}
+            {replyTo && (
+              <div className="mb-1 flex items-start gap-2 rounded-xl bg-[var(--chat-field)] px-3 py-2">
+                <div className="min-w-0 flex-1 rounded-md border-l-2 border-[var(--accent)] pl-2 text-xs">
+                  {(replyTo.direction === "out" || contactName) && (
+                    <p className="font-medium text-[var(--accent)]">
+                      {replyTo.direction === "out"
+                        ? t("message.quoteYou")
+                        : contactName}
+                    </p>
+                  )}
+                  <p className="line-clamp-2 whitespace-pre-wrap text-[var(--muted)]">
+                    {replyTo.body || t("message.quoteMedia")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  aria-label={t("common.cancel")}
+                  className="shrink-0 rounded-full p-1 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
             {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and
                 Send inside a single rounded surface rather than three controls
                 sharing a row. A chat composer should read as somewhere you
@@ -1716,6 +1791,9 @@ export function ConversationPanel({
               onPick={(asset) => {
                 setAttached(asset);
                 setAttaching(false);
+                // The media lanes carry no quote context — dropping the chip
+                // here keeps the strip honest about what will actually send.
+                setReplyTo(null);
               }}
             />
           )}

@@ -121,6 +121,10 @@ export async function sendWaCloudTemplate(args: {
 export function waCloudTextPayload(
   to: string,
   body: string,
+  // The wamid being replied to (quote-reply, 2026-08-31). Meta renders the
+  // quoted bubble above the message on the customer's phone — the same
+  // swipe-reply their own messages already carry inbound.
+  contextMessageId?: string,
 ): Record<string, unknown> {
   return {
     messaging_product: "whatsapp",
@@ -128,6 +132,7 @@ export function waCloudTextPayload(
     to,
     type: "text",
     text: { preview_url: true, body },
+    ...(contextMessageId ? { context: { message_id: contextMessageId } } : {}),
   };
 }
 
@@ -136,11 +141,12 @@ export async function sendWaCloudText(args: {
   phoneNumberId: string;
   to: string;
   body: string;
+  contextMessageId?: string;
 }): Promise<WaCloudSendResult> {
   return postWaCloud(
     args.accessToken,
     args.phoneNumberId,
-    waCloudTextPayload(args.to, args.body),
+    waCloudTextPayload(args.to, args.body, args.contextMessageId),
   );
 }
 

@@ -60,6 +60,11 @@ export const loadSessionContext = internalQuery({
     // document are different objects, not one object with a different link —
     // and the action doing the send has no db to ask what the file is.
     mediaStorageId: v.optional(v.id("_storage")),
+    // The message being quote-replied to (2026-08-31). Resolved here for the
+    // same reason as the asset: the send action has no db, and the row's
+    // wamid + a body snapshot are what both the provider payload and the
+    // thread's quote block need.
+    replyToId: v.optional(v.id("messages")),
   },
   returns: v.any(),
   handler: async (ctx, args) => {
@@ -98,6 +103,22 @@ export const loadSessionContext = internalQuery({
       asset: args.mediaStorageId
         ? await resolveAsset(ctx, orgId, args.mediaStorageId)
         : null,
+      // Null when the row is missing, another customer's, or has no wamid to
+      // hand the provider — the send then simply goes unquoted rather than
+      // failing, and no quote is stamped on the row (the thread must never
+      // show a quote the customer didn't get). Media rows snapshot their
+      // caption or nothing; the quote block renders its own media word.
+      replyTo: await (async () => {
+        if (!args.replyToId) return null;
+        const quoted = await ctx.db.get(args.replyToId);
+        if (!quoted || quoted.customerId !== args.customerId || !quoted.wamid)
+          return null;
+        return {
+          wamid: quoted.wamid,
+          body: quoted.body ?? "",
+          direction: quoted.direction as "in" | "out",
+        };
+      })(),
     };
   },
 });
@@ -143,6 +164,13 @@ export const sendSession = action({
     // message, because two notifications for one thought is how a salon's
     // thread becomes noise.
     mediaStorageId: v.optional(v.id("_storage")),
+    // Quote-reply (Serdar, 2026-08-31): the thread message this send answers.
+    // The customer sees the quoted bubble above the reply, same as a phone
+    // swipe-reply. Text sends only — a media send drops the quote silently
+    // (Meta accepts context on media, but the composer clears the reply chip
+    // when a file is attached, and the backend enforcing the same keeps the
+    // two honest).
+    replyToId: v.optional(v.id("messages")),
   },
   returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
   // Annotated explicitly: this handler calls internal.wa.* from the file that
@@ -158,9 +186,11 @@ export const sendSession = action({
     const context = await ctx.runQuery(internal.wa.loadSessionContext, {
       customerId: args.customerId,
       mediaStorageId: args.mediaStorageId,
+      replyToId: args.mediaStorageId ? undefined : args.replyToId,
     });
     if (!context) return { ok: false, reason: "not-found" };
-    const { customer, waAccount, org, evolution, contactFields, asset } = context;
+    const { customer, waAccount, org, evolution, contactFields, asset, replyTo } =
+      context;
     // Named a file we cannot account for. Refused rather than sent as a bare
     // link: the storage id comes from the client, and an asset that resolves
     // to nothing is either another org's or one that has been deleted.
@@ -237,6 +267,15 @@ export const sendSession = action({
       mediaContentType: asset?.contentType,
       mediaFileName: asset?.fileName ?? undefined,
       lane: lane ?? undefined,
+      // Stamped only when the provider payload will carry the context —
+      // loadSessionContext already returned null for a row it can't quote.
+      ...(replyTo
+        ? {
+            replyToWamid: replyTo.wamid,
+            replyToBody: replyTo.body,
+            replyToDirection: replyTo.direction,
+          }
+        : {}),
     });
     // Parked. The row is visible in the thread immediately, counting down,
     // which is the whole point: a scheduled message you cannot see is a
@@ -274,6 +313,7 @@ export const sendSession = action({
         instance: evolution.instance,
         to: customer.phone,
         body,
+        quotedId: replyTo?.wamid,
       });
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId,
@@ -331,6 +371,7 @@ export const sendSession = action({
             phoneNumberId: waAccount.phoneNumberId,
             to: customer.phone,
             body,
+            contextMessageId: replyTo?.wamid,
           });
     await ctx.runMutation(internal.messages.applySendResult, {
       messageId,
