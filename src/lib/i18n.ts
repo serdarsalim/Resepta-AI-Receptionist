@@ -4338,6 +4338,7 @@ const dictionary = {
   // row rather than two separate lists.
   "roster.person": { tr: "Üye", en: "Member", de: "Mitglied" },
   "roster.bookable": { tr: "Müsait", en: "Available", de: "Verfügbar" },
+  "roster.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "roster.access": { tr: "Erişim", en: "Access", de: "Zugriff" },
   "roster.noAccess": { tr: "Giriş yok", en: "No login", de: "Kein Zugang" },
   "roster.removeAccess": {

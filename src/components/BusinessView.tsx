@@ -1984,8 +1984,15 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
 // spent a paragraph of height on a row carrying two facts. Everything that
 // identifies somebody now reads across, and the two controls sit in their
 // columns beside it.
+//
+// Drag, name, available, email, access, menu. Email is its own COLUMN above
+// sm (Serdar, 2026-08-31) rather than trailing the name: two facts sharing a
+// cell gave every row a different name width and the eye nothing to scan
+// down. Available sits second, right after the name, because open-or-not is
+// the fact the owner checks most. Below sm the grid is off and email rides
+// with the name again — a phone row has no columns to keep aligned.
 const ROSTER_ROW =
-  "sm:grid sm:grid-cols-[1rem_minmax(0,1fr)_5rem_minmax(0,9rem)_1.75rem] sm:items-center sm:gap-3";
+  "sm:grid sm:grid-cols-[1rem_minmax(0,1fr)_5rem_minmax(0,1fr)_minmax(0,9rem)_1.75rem] sm:items-center sm:gap-3";
 
 const ACCESS_REMOVE = "remove";
 
@@ -2133,10 +2140,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
           <span />
           <span>{t("roster.person")}</span>
           <span>{t("roster.bookable")}</span>
+          <span>{t("roster.email")}</span>
           <span>{t("roster.access")}</span>
         </div>
 
-        <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+        {/* One rule under the header, none between rows: three short rows
+            don't need fences, and the aligned columns already carry the eye
+            across. */}
+        <ul className="border-t border-[var(--border)]">
           {activeRows.map((row) => (
             <li
               key={row.key}
@@ -2199,8 +2210,11 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 ) : (
                   <span className="truncate font-medium">{row.name}</span>
                 )}
+                {/* Below sm only — above it the email has its own column. */}
                 {row.email && (
-                  <span className="truncate text-xs text-[var(--muted)]">{row.email}</span>
+                  <span className="truncate text-xs text-[var(--muted)] sm:hidden">
+                    {row.email}
+                  </span>
                 )}
                 {row.isMe && (
                   <span className="text-xs text-[var(--muted)]">({t("team.you")})</span>
@@ -2234,6 +2248,13 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                   })
                 }
               />
+
+              {/* The email column's cell, rendered empty for a person without
+                  one so the row keeps its shape. Hidden below sm, where the
+                  email rides with the name instead. */}
+              <span className="hidden truncate text-xs text-[var(--muted)] sm:block">
+                {row.email}
+              </span>
 
               {row.userId ? (
                 <InlineEditValue
@@ -2331,6 +2352,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                   {pendingInvite.role === "staff" ? t("role.staff") : t("role.owner")}
                 </span>
               </span>
+              {/* Available and email cells, empty: the email above IS the
+                  invite's identity, so the column would only repeat it. */}
+              <span />
               <span />
               {isOwner && (
                 <button
