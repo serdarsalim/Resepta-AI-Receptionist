@@ -277,6 +277,7 @@ export function InboxView({
     // either moves.
     <div
       data-fills-pane
+      data-bleeds-right
       className="flex h-full w-full min-h-0 min-w-0 flex-col"
     >
       {/* Always two columns from lg, whether or not anything is open. It used
@@ -643,7 +644,7 @@ export function InboxView({
             shows — there is no second column there to be empty. */}
         {!active && (
           <section className="hidden min-h-0 min-w-0 flex-col lg:flex">
-            <div className="card-raised flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)]">
+            <div className="card-raised flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)] lg:rounded-r-none">
               <svg
                 width="28"
                 height="28"
@@ -668,7 +669,7 @@ export function InboxView({
           <section
             className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col`}
           >
-            <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-r-none">
             <ConversationPanel
               key={active.customerId}
               customerId={active.customerId}

@@ -359,6 +359,25 @@ thead {
   }
 }
 
+/* From lg up the conversation pane runs flush to the window's right edge,
+   the way WhatsApp Web's does (Serdar, 2026-08-31). A view opts in with
+   data-bleeds-right on its root; main then gives up its right padding AND
+   the reserved scrollbar track — safe, because a pane-filling view never
+   scrolls main, so the track was dead width there. Un-layered element+:has
+   so it outranks p-4 and .stable-gutter whatever the order.
+
+   Siblings main renders around the view (the demo-mode banner) get the old
+   inset back, or they would touch the window edge too. */
+@media (min-width: 64rem) {
+  main:has([data-bleeds-right]) {
+    padding-right: 0;
+    scrollbar-gutter: auto;
+  }
+  main:has([data-bleeds-right]) > :not([data-bleeds-right]) {
+    margin-right: 1rem;
+  }
+}
+
 /* Scrolls without showing a bar — for chip strips that read as swipeable
    rows, not as scroll regions. The day strip on the booking page wears it;
    a native horizontal bar under a row of chips reads as a broken element. */

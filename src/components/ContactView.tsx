@@ -201,7 +201,7 @@ export function ContactView({
     // edge — see AppShell's main. Declared here rather than by tab id because
     // the customers LIST behind it does not fill the pane, and both are the
     // same tab.
-    <div data-fills-pane className="flex h-full min-h-0 min-w-0 flex-col">
+    <div data-fills-pane data-bleeds-right className="flex h-full min-h-0 min-w-0 flex-col">
       {/* One row on a desktop: back, who, the filter pills. Two on a phone with
           the conversation open, because that is the one combination that does
           not fit — back, name, dot, pills and the pane swap together ask for
@@ -473,7 +473,7 @@ export function ContactView({
             The card leads the column with nothing above it, so its top edge
             lines up with the record card's. */}
         <section
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex`}
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex lg:rounded-r-none`}
         >
           <ConversationPanel
             customerId={customerId}
