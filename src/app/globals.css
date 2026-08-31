@@ -556,6 +556,17 @@ thead {
      both themes. It cannot be --card (that IS the dark paper) and it cannot be
      --muted-bg (identical to --card in dark). */
   --chat-field: #ffffff;
+  /* The bubbles, in WhatsApp's own values rather than the app palette
+     (Serdar, 2026-08-31: "as close as possible to the speech bubbles").
+     emerald-100 was a step minty and a step pale next to the real #d9fdd3,
+     and the whole thread read washed out for it. Ink and stamp are
+     WhatsApp's too — near-black text, the exact grey of its timestamps —
+     because the bubble is quoting another app's design language and a
+     paraphrase is what looked weak. */
+  --chat-in: #ffffff;
+  --chat-out: #d9fdd3;
+  --chat-ink: #111b21;
+  --chat-stamp: #667781;
 }
 .chat-wallpaper {
   background-color: var(--chat-paper);
@@ -597,6 +608,14 @@ thead {
      paper under light text. */
   --chat-paper: #0f0f0f;
   --chat-field: #242424;
+  /* Dark keeps the app's neutral greys for the inbound side (WhatsApp's own
+     #202c33 has a blue cast that clashes with this app's neutral dark) and
+     takes WhatsApp's true dark green for ours — the one colour that makes a
+     dark thread read as WhatsApp at a glance. */
+  --chat-in: #242424;
+  --chat-out: #005c4b;
+  --chat-ink: #e9edef;
+  --chat-stamp: #98a4ab;
 }
 .dark .chat-wallpaper {
   background-image: none;

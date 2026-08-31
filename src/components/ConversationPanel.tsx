@@ -1191,7 +1191,10 @@ export function ConversationPanel({
               formatDayHeading(thread[index - 1].at, language) !==
                 formatDayHeading(item.at, language)) ? (
               <li key={`day-${item.id}`} className="flex list-none justify-center py-1.5">
-                <span className="rounded-md bg-[var(--muted-bg)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--muted)]">
+                {/* WhatsApp's date pill: a lifted chip with the bubble's own
+                    shadow, not a grey wash — the wash disappeared into the
+                    wallpaper. */}
+                <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
                   {formatDayHeading(item.at, language)}
                 </span>
               </li>
@@ -1230,10 +1233,14 @@ export function ConversationPanel({
               // able to sit under the bubble and be measured against the same
               // 78%), and ml-auto went with it — the row is reversed for our
               // own messages, which right-aligns the whole group.
-              className={`flex w-fit max-w-full items-end gap-2 rounded-2xl px-2.5 py-2 text-sm shadow-[var(--bubble-shadow)] ${
+              // WhatsApp's bubble, in its own numbers (2026-08-31): ~8px
+              // radius, not the app's soft 16 — the big radius plus pastel
+              // green is what read as weak — tight padding, near-black ink
+              // on the WhatsApp greens and whites the tokens now carry.
+              className={`flex w-fit max-w-full items-end gap-2 rounded-lg px-2.5 py-1.5 text-sm leading-[19px] text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
-                  ? "self-end rounded-br-sm bg-emerald-100 dark:bg-emerald-900/30"
-                  : "rounded-bl-sm bg-[var(--card)]"
+                  ? "self-end rounded-br-sm bg-[var(--chat-out)]"
+                  : "rounded-bl-sm bg-[var(--chat-in)]"
               } ${
                 // A send that never left keeps its side and its colour and
                 // wears a red ring instead. Recolouring the whole bubble made
@@ -1337,12 +1344,12 @@ export function ConversationPanel({
                 // already shows the image, and printing "Şablon mesajı"
                 // under it called a photo a template in the customer's own
                 // thread.
-                <p className="text-[var(--muted)]">{t("message.template")}</p>
+                <p className="text-[var(--chat-stamp)]">{t("message.template")}</p>
               )}
               </div>
               <p
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-[10.5px] ${
-                  failed ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-[11px] ${
+                  failed ? "text-red-600 dark:text-red-400" : "text-[var(--chat-stamp)]"
                 }`}
               >
                 {/* Time only — the day band above already said the date. Full
