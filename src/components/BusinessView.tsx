@@ -2398,11 +2398,21 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         )}
 
         {showDeactivated && deactivated.length > 0 && (
-          <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+          // The same grid as the roster above, so a former member's name and
+          // email stand in the same columns they held while active — and the
+          // same rule: one line over the list, no fences between rows. The
+          // last two tracks are one actions cell here, because restore and
+          // remove are a pair and the 1.75rem menu column holds one icon.
+          <ul className="border-t border-[var(--border)]">
             {deactivated.map((row) => (
-              <li key={row.key} className="group flex items-center gap-3 py-1.5 text-sm">
+              <li key={row.key} className={`group flex items-center gap-3 py-1.5 text-sm ${ROSTER_ROW}`}>
+                <span className="hidden sm:block" />
                 <span className="min-w-0 flex-1 truncate">{row.name}</span>
-
+                <span className="hidden sm:block" />
+                <span className="hidden truncate text-xs text-[var(--muted)] sm:block">
+                  {row.email}
+                </span>
+                <span className="flex items-center justify-end gap-1 sm:col-span-2">
                 <ActionTip
                   label={t("roster.restore").replace("{name}", row.name)}
                   onClick={() =>
@@ -2439,6 +2449,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 >
                   ✕
                 </ActionTip>
+                </span>
               </li>
             ))}
           </ul>
