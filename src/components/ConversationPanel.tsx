@@ -128,10 +128,13 @@ function DeliveryTicks({ status, label }: { status: string; label: string }) {
   // crosses the first one's arm — the interlock is what makes it read as
   // WhatsApp rather than as two checkmarks. The box grows from 12 to 16 when
   // the second tick lands, nudging the stamp left exactly as WhatsApp does.
+  // Endpoints keep a stroke-cap's margin inside the box — the first cut of
+  // this glyph put the right tip at the viewBox edge and its round cap was
+  // clipped flat.
   return (
     <svg
-      width={double ? 16 : 12}
-      height="11"
+      width={double ? 14.5 : 10.9}
+      height="10"
       viewBox={double ? "0 0 16 11" : "0 0 12 11"}
       fill="none"
       stroke="currentColor"
@@ -146,8 +149,8 @@ function DeliveryTicks({ status, label }: { status: string; label: string }) {
       className={read ? "text-[#53bdeb]" : ""}
     >
       <title>{label}</title>
-      <path d="M1.2 6.2 4.2 9.2 11.2 1" />
-      {double && <path d="M5.8 6.2 8.8 9.2 15.8 1" />}
+      <path d="M1 6.4 3.8 9.2 10.6 1.2" />
+      {double && <path d="M5.4 6.4 8.2 9.2 15 1.2" />}
     </svg>
   );
 }
