@@ -9,7 +9,7 @@ import type { Rect } from "@/lib/anchoredSheet";
 import type { ModalDraft } from "./AppointmentModal";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
-import { Toggle } from "./Toggle";
+import { CheckSwitch } from "./CheckSwitch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
@@ -429,17 +429,21 @@ export function ContactView({
                     : undefined
                 }
               >
-                <Toggle
-                  size="sm"
-                  checked={customer.consentAt !== undefined}
+                {/* CheckSwitch, not the iOS Toggle (Serdar, 2026-08-31):
+                    the check circle is this app's yes/no control everywhere
+                    else, and CheckSwitch's own note listed this footer among
+                    "the parts that have not been converted yet". Converted. */}
+                <CheckSwitch
+                  label={t("customers.consentShort")}
+                  on={customer.consentAt !== undefined}
                   onChange={(next) => void updateCustomer({ customerId, consent: next })}
                 />
               </span>
               <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
               <span className="flex items-center">
-                <Toggle
-                  size="sm"
-                  checked={customer.mutedAt !== undefined}
+                <CheckSwitch
+                  label={t("customers.mute")}
+                  on={customer.mutedAt !== undefined}
                   onChange={(next) => void setMuted({ customerId, muted: next })}
                 />
               </span>

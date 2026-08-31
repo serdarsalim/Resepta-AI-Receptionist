@@ -14,8 +14,9 @@
 // the note on the voice table said as much before the switch: two controls
 // answering the same yes/no question should not be two different shapes.
 //
-// The iOS Toggle survives on Account, Contact and the voice agent detail. Not
-// a principle, just the parts that have not been converted yet.
+// The iOS Toggle survives on Account and the voice agent detail. Not a
+// principle, just the parts that have not been converted yet — the contact
+// record's Consent/Mute footer converted 2026-08-31.
 export function CheckSwitch({
   on,
   label,
