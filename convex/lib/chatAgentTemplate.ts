@@ -78,21 +78,21 @@ export const MAX_TOOL_ROUNDS = 4;
 // customers from an agent that answers faster than anyone can read.
 export const MAX_REPLIES_PER_CUSTOMER_PER_HOUR = 10;
 
-// How long a turn waits before it runs, so that a customer texting one thought
-// across four messages gets one answer to the thought.
+// How long a LIVE reply sits on screen before it goes to the customer — the
+// owner's window to cancel or take it over. The wait used to live on the
+// OTHER side: every turn slept 15s before generating, coalescing a thought
+// typed as four fragments into one answer, and the owner saw nothing until
+// the reply had already gone. Serdar moved the wait (2026-08-31): turns run
+// the moment a message lands, the draft is on screen immediately, and these
+// 15 seconds are now the grace between "generated" and "sent".
 //
-// WhatsApp reports messages, reactions and delivery states, and never once
-// reports that somebody is composing — so there is nothing to wait ON. This
-// delay is the substitute. Every inbound schedules its own turn carrying its
-// own message id, and a turn whose message is no longer the newest inbound
-// stands down without a word: the turn that the last fragment scheduled is the
-// one that answers, and it can see all four.
-//
-// 15s is long enough to cover a sentence finished in a second thought and
-// short enough that a person who sent one complete question does not think
-// they were ignored. It is also the reason suggest mode is usable at all: a
-// draft per fragment is four drafts a human has to read and discard.
-export const REPLY_DEBOUNCE_MS = 15_000;
+// The fragment problem this replaces is still covered, just later: a newer
+// inbound supersedes the pending reply (recordTurn retires it in the same
+// transaction that records the newer turn), and the newer turn — which can
+// see all the fragments — starts its own grace. The cost of the move is a
+// generation per fragment instead of one per thought; the owner seeing every
+// draft the moment it exists is what that buys.
+export const AUTO_SEND_GRACE_MS = 15_000;
 
 // The one line WhatsApp's 2026 AI policy and EU AI Act Article 50 both
 // require, prepended mechanically to the agent's FIRST message to a customer

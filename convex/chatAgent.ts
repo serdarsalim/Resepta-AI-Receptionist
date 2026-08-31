@@ -26,6 +26,7 @@ import {
 import { resolveChatLlm } from "./lib/chatLlm";
 import { applyWalletDebit } from "./wallet";
 import {
+  AUTO_SEND_GRACE_MS,
   CHAT_AGENT_TEMPLATE_VERSION,
   MAX_REPLIES_PER_CUSTOMER_PER_HOUR,
   MAX_TOOL_ROUNDS,
@@ -133,11 +134,12 @@ export const loadTurnContext = internalQuery({
       .order("desc")
       .take(30);
 
-    // The debounce (lib/chatAgentTemplate REPLY_DEBOUNCE_MS): every eligible
-    // inbound scheduled its own turn, and only the last one to do so may
-    // answer. The rest stand down here, before a single token is spent, and —
-    // like agent-off — write no row: a fragmented sentence is a normal way to
-    // type, not an event worth four entries in the flight recorder.
+    // The freshness check: every eligible inbound schedules its own turn (at
+    // zero delay since 2026-08-31), and only the last one to do so may
+    // answer. A turn that finds a newer marker stands down here, before a
+    // single token is spent, and — like agent-off — writes no row: a
+    // fragmented sentence is a normal way to type, not an event worth four
+    // entries in the flight recorder.
     //
     // Compared against the marker the WEBHOOK stamps when it schedules, never
     // against the newest inbound row. See customers.agentTurnScheduledFor:
@@ -153,13 +155,13 @@ export const loadTurnContext = internalQuery({
       skip = "superseded";
     }
 
-    // A HUMAN GOT THERE FIRST. Every turn sits for REPLY_DEBOUNCE_MS before it
-    // runs, and a staff member with the thread open can answer inside that
-    // window — reading the customer's message is, after all, what they were
-    // doing. Without this, the turn carries on and hands them a draft
-    // proposing an answer to the message they answered themselves twenty
-    // seconds ago: the same stale proposal messages.applySendResult retires,
-    // written a moment too late for it to catch.
+    // A HUMAN GOT THERE FIRST. A staff member with the thread open can answer
+    // in the seconds the model spends thinking — reading the customer's
+    // message is, after all, what they were doing. Without this, the turn
+    // carries on and hands them a draft proposing an answer to the message
+    // they answered themselves moments ago: the same stale proposal
+    // messages.applySendResult retires, written a moment too late for it to
+    // catch.
     //
     // SUGGEST ONLY, and each of the other two for its own reason. LIVE is
     // already handled — the composer's send pins the conversation off
@@ -492,8 +494,12 @@ export const recordTurn = internalMutation({
     latencyMs: v.optional(v.number()),
     error: v.optional(v.string()),
     month: v.string(),
+    // Set on a LIVE turn: when fireAutoSend will send this reply unless a
+    // person or a newer message stops it.
+    autoSendAt: v.optional(v.number()),
   },
-  returns: v.null(),
+  // The inserted turn's id, so the live path can schedule its own fire.
+  returns: v.id("chatAgentTurns"),
   handler: async (ctx, args) => {
     const at = Date.now();
     // The org's price per AI reply (schema: orgs.chatRateMicroUsdPerTurn),
@@ -521,7 +527,7 @@ export const recordTurn = internalMutation({
     // a draft answering a stale message, and a stale draft that looks current
     // is worse than none.
     await supersedePendingSuggestions(ctx, args.customerId);
-    await ctx.db.insert("chatAgentTurns", {
+    const turnId = await ctx.db.insert("chatAgentTurns", {
       orgId: args.orgId,
       customerId: args.customerId,
       inboundMessageId: args.inboundMessageId,
@@ -538,11 +544,12 @@ export const recordTurn = internalMutation({
       billedMicroUsd,
       latencyMs: args.latencyMs,
       error: args.error,
+      autoSendAt: args.autoSendAt,
       at,
     });
     // Nothing consumed, nothing counted — a skipped turn must not creep the
     // month toward its own budget cap.
-    if (args.inputTokens === 0 && args.outputTokens === 0) return null;
+    if (args.inputTokens === 0 && args.outputTokens === 0) return turnId;
     const usage = await ctx.db
       .query("usageMonthly")
       .withIndex("by_org_month", (q) =>
@@ -578,7 +585,7 @@ export const recordTurn = internalMutation({
     if (org && (billedMicroUsd ?? 0) > 0 && org.billingMode === "prepaid") {
       await applyWalletDebit(ctx, org, billedMicroUsd ?? 0);
     }
-    return null;
+    return turnId;
   },
 });
 
@@ -733,6 +740,9 @@ export const stateForCustomer = query({
           turnId: v.id("chatAgentTurns"),
           reply: v.string(),
           at: v.number(),
+          // Present on a live thread's pending reply: the moment it fires
+          // unless somebody cancels. The composer counts down to it.
+          autoSendAt: v.optional(v.number()),
         }),
       ),
     }),
@@ -747,16 +757,27 @@ export const stateForCustomer = query({
     // Off means the org does not have the agent; shadow is a state the tenant
     // is deliberately not shown. Either way there is no control to draw.
     if (!who.settable) return null;
-    // Drafts are surfaced only while this thread is actually on drafts. An
-    // owner flipping the business from "suggests" to "answers" leaves drafts
-    // pending across every open conversation, and offering one there would
-    // send it down the composer's path — which reads a human sending into a
-    // live thread as a takeover, silently pinning that conversation off.
-    // Their rows stay in the log; they just stop being on offer.
+    // Drafts surface on suggest threads AND live ones — a live thread's
+    // pending row is the reply counting down to its own send, and hiding it
+    // was the whole complaint (Serdar, 2026-08-31: "auto responses should
+    // show in the ui immediately"). Only "off" hides them: with the agent
+    // off there is no draft anybody should act on, and the rows stay in the
+    // log. Sending one from a live thread goes down the composer's accept
+    // path, whose takeover pin is visible in the pills — a deliberate click,
+    // not the silent flip the old guard protected against.
+    //
+    // A live pending whose autoSendAt slipped into the past without firing —
+    // a mid-deploy loss of the scheduled job — is offered WITHOUT the
+    // deadline: a countdown stuck at zero claims a send that is not coming,
+    // while a plain draft is simply true.
     const pending =
-      who.effective === "suggest"
+      who.effective !== "off"
         ? ((await pendingSuggestionsFor(ctx, args.customerId))[0] ?? null)
         : null;
+    const autoSendAt =
+      pending?.autoSendAt !== undefined && pending.autoSendAt > Date.now() - 2_000
+        ? pending.autoSendAt
+        : undefined;
     return {
       orgDefault: who.orgDefault,
       override: who.override,
@@ -766,7 +787,7 @@ export const stateForCustomer = query({
       flaggedAt: customer.agentFlaggedAt,
       pending:
         pending && pending.reply
-          ? { turnId: pending._id, reply: pending.reply, at: pending.at }
+          ? { turnId: pending._id, reply: pending.reply, at: pending.at, autoSendAt }
           : null,
     };
   },
@@ -1042,6 +1063,7 @@ export const respond = internalAction({
       inputTokens?: number;
       outputTokens?: number;
       error?: string;
+      autoSendAt?: number;
     }) =>
       ctx.runMutation(internal.chatAgent.recordTurn, {
         orgId: context.orgId,
@@ -1065,6 +1087,7 @@ export const respond = internalAction({
         latencyMs: Date.now() - started,
         error: fields.error,
         month: context.month,
+        autoSendAt: fields.autoSendAt,
       });
 
     if (context.skip) {
@@ -1214,54 +1237,16 @@ export const respond = internalAction({
       return null;
     }
 
-    // Suggest: the same turn, the same cost, stopping one step short of the
-    // customer. The row lands as a pending draft and the thread picks it up;
-    // recordTurn has already retired whatever was pending before it, in the
-    // same transaction, so there is exactly one.
+    // Last look before the reply lands anywhere. The freshness test ran at
+    // context load, and everything since — the model round trip, the tool
+    // rounds — is time the customer could have spent typing. Without this a
+    // slow turn for "merhaba" could record AFTER the fast turn for the real
+    // question and retire the fresh draft in favour of the stale one
+    // (recordTurn supersedes whatever is pending, whoever writes last).
     //
-    // No human pacing here and no typing indicator above — both exist to make
-    // a machine's reply feel like a person's, and there is a person.
-    if (context.org.mode === "suggest") {
-      await record({
-        status: "suggested",
-        reply: body,
-        toolCalls: toolLog,
-        inputTokens,
-        outputTokens,
-      });
-      return null;
-    }
-
-    // A person reads, then types. The model often answers a one-line
-    // question in under two seconds, and an instant reply reads as the
-    // machine it is — so the send waits until the turn has taken as long as
-    // a human plausibly would: a beat to read plus typing time scaled to the
-    // reply, capped where patience runs out. The model's own latency counts
-    // toward it, so slow turns wait nothing extra and the ceiling stays what
-    // it always was.
-    //
-    // Both parts jittered (Serdar, 2026-08-28): the fixed 1500ms floor meant
-    // every short exchange replied at exactly the same beat, and a metronome
-    // is its own tell. The reading beat lands anywhere in 1–4.5s, typing
-    // speed drifts ±20% around 35ms a character.
-    const readMs = 1000 + Math.random() * 3500;
-    const typeMs = body.length * 35 * (0.8 + Math.random() * 0.4);
-    const humanPaceMs = Math.min(9000, readMs + typeMs);
-    const paceRemaining = humanPaceMs - (Date.now() - started);
-    if (paceRemaining > 0) {
-      await new Promise((resolve) => setTimeout(resolve, paceRemaining));
-    }
-
-    // Last look before it becomes the customer's problem. The debounce test
-    // ran at context load, and everything since — the model round trip, the
-    // tool rounds, the human pacing above — is time the customer could have
-    // spent typing. Without this, "merhaba" at 15s gets its own useless reply
-    // at 24s while the real question, sent at 20s, gets a second one at 35s:
-    // two messages, the first answering a thread that had already moved on.
-    //
-    // A query rather than a guard inside the insert, so the residual window is
-    // one round trip instead of the twenty seconds it replaces. Worth being
-    // plain about: this narrows the race, it does not close it.
+    // A query rather than a guard inside the insert, so the residual window
+    // is one round trip. Worth being plain about: this narrows the race, it
+    // does not close it.
     if (args.inboundMessageId) {
       const current = await ctx.runQuery(internal.chatAgent.currentTurnMessage, {
         customerId: args.customerId,
@@ -1279,30 +1264,236 @@ export const respond = internalAction({
       }
     }
 
-    // Live: log the row, send on the resolved lane, land the outcome in the
-    // one place send outcomes are decided.
+    // Suggest: the same turn, the same cost, stopping one step short of the
+    // customer. The row lands as a pending draft and the thread picks it up;
+    // recordTurn has already retired whatever was pending before it, in the
+    // same transaction, so there is exactly one.
+    //
+    // No typing indicator above — it exists to make a machine's reply feel
+    // like a person's, and there is a person.
+    if (context.org.mode === "suggest") {
+      await record({
+        status: "suggested",
+        reply: body,
+        toolCalls: toolLog,
+        inputTokens,
+        outputTokens,
+      });
+      return null;
+    }
+
+    // Live: the reply goes on screen NOW and to the customer in
+    // AUTO_SEND_GRACE_MS, and the gap belongs to the owner — cancel, edit, or
+    // let it fire (Serdar, 2026-08-31). The grace replaced the jittered
+    // "human pacing" sleep: fifteen seconds on top of real model latency
+    // varies plenty on its own, and unlike the sleep it buys something.
+    //
+    // Recorded as "suggested" + autoSendAt rather than a status of its own:
+    // a pending live reply IS a draft — same queue, same supersede rules,
+    // same discard — with a deadline attached. The fire is a durable
+    // scheduled job, not a sleep in this action, so a deploy mid-grace
+    // delays nothing and loses nothing.
+    const turnId = await record({
+      status: "suggested",
+      reply: body,
+      toolCalls: toolLog,
+      inputTokens,
+      outputTokens,
+      autoSendAt: Date.now() + AUTO_SEND_GRACE_MS,
+    });
+    await ctx.scheduler.runAfter(AUTO_SEND_GRACE_MS, internal.chatAgent.fireAutoSend, {
+      turnId,
+      customerId: args.customerId,
+    });
+    return null;
+  },
+});
+
+// ── The live reply's fuse ───────────────────────────────────────────────────
+
+// Claim the pending auto-send, exactly once. Everything that should stop the
+// send already expressed itself as suggestionOutcome: a newer inbound's turn
+// wrote "superseded", a human's own reply wrote "superseded"
+// (messages.applySendResult), a cancel cleared autoSendAt, a discard wrote
+// "discarded". So the claim is one test: still pending, still fused.
+export const claimAutoSend = internalMutation({
+  args: { turnId: v.id("chatAgentTurns") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      orgId: v.id("orgs"),
+      customerId: v.id("customers"),
+      body: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const turn = await ctx.db.get(args.turnId);
+    if (
+      !turn ||
+      turn.status !== "suggested" ||
+      turn.suggestionOutcome !== undefined ||
+      turn.autoSendAt === undefined ||
+      !turn.reply
+    ) {
+      return null;
+    }
+    await ctx.db.patch(args.turnId, { suggestionOutcome: "sent" });
+    return { orgId: turn.orgId, customerId: turn.customerId, body: turn.reply };
+  },
+});
+
+// The ledger's second half for an auto-sent turn. recordTurn ran at
+// generation time with status "suggested" and billed nothing; the send is
+// what the org pays for, so the bill lands here, when it happened — the same
+// rate resolution recordTurn uses, the same usage row, the same wallet.
+export const applyAutoSendOutcome = internalMutation({
+  args: {
+    turnId: v.id("chatAgentTurns"),
+    messageId: v.id("messages"),
+    ok: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const turn = await ctx.db.get(args.turnId);
+    if (!turn) return null;
+    if (!args.ok) {
+      // The send failed, so nothing arrived and the text is still the best
+      // anybody has. Back to a plain pending draft (fuse removed) for the
+      // owner to send by hand — unless the thread has already moved on to a
+      // newer draft, in which case this one is simply late. The mirror of
+      // releaseSuggestion.
+      const newer = (await pendingSuggestionsFor(ctx, turn.customerId)).some(
+        (t) => t._id !== args.turnId,
+      );
+      await ctx.db.patch(args.turnId, {
+        suggestionOutcome: newer ? "superseded" : undefined,
+        autoSendAt: undefined,
+        error: args.reason ?? "send-failed",
+      });
+      return null;
+    }
+    const org = await ctx.db.get(turn.orgId);
+    const rate = org
+      ? (org.chatRateMicroUsdPerTurn ??
+        Math.max(
+          0,
+          Math.round(
+            Number(await platformValue(ctx, "chatRateMicroUsdPerTurn")) || 0,
+          ),
+        ))
+      : 0;
+    await ctx.db.patch(args.turnId, {
+      status: "sent",
+      sentMessageId: args.messageId,
+      billedMicroUsd: rate,
+    });
+    const month = monthKey(Date.now(), org?.timezone ?? "UTC");
+    const usage = await ctx.db
+      .query("usageMonthly")
+      .withIndex("by_org_month", (q) =>
+        q.eq("orgId", turn.orgId).eq("month", month),
+      )
+      .unique();
+    if (usage) {
+      await ctx.db.patch(usage._id, {
+        llmBilledMicroUsd: (usage.llmBilledMicroUsd ?? 0) + rate,
+        llmBilledTurns: (usage.llmBilledTurns ?? 0) + 1,
+        updatedAt: Date.now(),
+      });
+    }
+    if (org && rate > 0 && org.billingMode === "prepaid") {
+      await applyWalletDebit(ctx, org, rate);
+    }
+    return null;
+  },
+});
+
+// The send half of a fired fuse, resolved without a session: the fire runs
+// from the scheduler, where wa.loadSessionContext's requireOrg has nobody to
+// ask. Same resolution, internal trust — the customerId came from our own
+// scheduled job, not a client.
+export const loadAutoSendContext = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer) return null;
+    const org = await ctx.db.get(customer.orgId);
+    if (!org || (org.status ?? "active") === "suspended") return null;
+    const waAccount = await ctx.db
+      .query("waAccounts")
+      .withIndex("by_org", (q) => q.eq("orgId", customer.orgId))
+      .unique()
+      .then((row) => resolveWaAccount(ctx, row));
+    const evolution = await loadEvolutionCreds(
+      ctx,
+      customer.orgId,
+      org.evolutionInstance,
+    );
+    const available = laneAvailability({
+      org,
+      waAccount,
+      evolutionConfigured: Boolean(evolution),
+    });
+    return {
+      phone: customer.phone,
+      lane: laneForReply(available, customer),
+      waAccount,
+      evolution,
+    };
+  },
+});
+
+// The scheduled send itself. Runs AUTO_SEND_GRACE_MS after the reply was
+// generated; the claim above decides whether the world still wants it.
+//
+// The lane is resolved fresh rather than carried from the turn: credentials
+// rotate, and the refetch costs one query and can never be stale.
+// Deliberately NOT wa.sendSession: that path is a human's send — it renders
+// tokens, pins the thread off as a takeover, and refuses shut session
+// windows. The agent's reply is none of those; it is answering a message
+// that just arrived, on the same terms the old inline live send did.
+export const fireAutoSend = internalAction({
+  args: { turnId: v.id("chatAgentTurns"), customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const claimed = await ctx.runMutation(internal.chatAgent.claimAutoSend, {
+      turnId: args.turnId,
+    });
+    if (!claimed) return null;
+    const context = (await ctx.runQuery(internal.chatAgent.loadAutoSendContext, {
+      customerId: args.customerId,
+    })) as {
+      phone: string;
+      lane: "cloud" | "evolution" | null;
+      waAccount: { accessToken: string; phoneNumberId: string } | null;
+      evolution: { baseUrl: string; apiKey: string; instance: string } | null;
+    } | null;
+    if (!context) return null;
+    const { phone, lane, waAccount, evolution } = context;
     const messageId = (await ctx.runMutation(internal.messages.logOutQueued, {
-      orgId: context.orgId,
+      orgId: claimed.orgId,
       customerId: args.customerId,
       kind: "chat_agent",
-      body,
-      lane: context.lane ?? undefined,
+      body: claimed.body,
+      lane: lane ?? undefined,
     })) as Id<"messages">;
     const sent =
-      context.lane === "evolution" && context.evolution
+      lane === "evolution" && evolution
         ? await sendEvolutionText({
-            baseUrl: context.evolution.baseUrl,
-            apiKey: context.evolution.apiKey,
-            instance: context.evolution.instance,
-            to: context.customer.phone,
-            body,
+            baseUrl: evolution.baseUrl,
+            apiKey: evolution.apiKey,
+            instance: evolution.instance,
+            to: phone,
+            body: claimed.body,
           }).then((r) => ({ ok: r.ok, wamid: r.ok ? r.messageId : undefined, reason: r.ok ? undefined : r.reason }))
-        : context.waAccount
+        : waAccount
           ? await sendWaCloudText({
-              accessToken: context.waAccount.accessToken,
-              phoneNumberId: context.waAccount.phoneNumberId,
-              to: context.customer.phone,
-              body,
+              accessToken: waAccount.accessToken,
+              phoneNumberId: waAccount.phoneNumberId,
+              to: phone,
+              body: claimed.body,
             }).then((r) => ({ ok: r.ok, wamid: r.ok ? r.wamid : undefined, reason: r.ok ? undefined : r.reason }))
           : { ok: false as const, wamid: undefined, reason: "wa-not-configured" };
     await ctx.runMutation(internal.messages.applySendResult, {
@@ -1311,15 +1502,37 @@ export const respond = internalAction({
       wamid: sent.wamid,
       error: sent.reason,
     });
-    await record({
-      status: sent.ok ? "sent" : "error",
-      reply: body,
-      toolCalls: toolLog,
-      sentMessageId: messageId,
-      inputTokens,
-      outputTokens,
-      error: sent.ok ? undefined : (sent.reason ?? "send-failed"),
+    await ctx.runMutation(internal.chatAgent.applyAutoSendOutcome, {
+      turnId: args.turnId,
+      messageId,
+      ok: sent.ok,
+      reason: sent.reason,
     });
+    return null;
+  },
+});
+
+// The owner's hand on the fuse. Clearing autoSendAt turns the counting-down
+// reply into an ordinary pending draft — still in the composer, still
+// sendable through the accept path, no longer going anywhere on its own.
+// Called from the Cancel control and from the composer's first keystroke:
+// an edited reply must never fire in its unedited form.
+export const cancelAutoSend = mutation({
+  args: { customerId: v.id("customers"), turnId: v.id("chatAgentTurns") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const turn = await ctx.db.get(args.turnId);
+    if (!turn || turn.orgId !== orgId || turn.customerId !== args.customerId) {
+      throw new Error("not-found");
+    }
+    if (
+      turn.status === "suggested" &&
+      turn.suggestionOutcome === undefined &&
+      turn.autoSendAt !== undefined
+    ) {
+      await ctx.db.patch(args.turnId, { autoSendAt: undefined });
+    }
     return null;
   },
 });

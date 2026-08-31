@@ -80,6 +80,9 @@ const STATUS_KEY: Record<string, TranslationKey> = {
 const ERROR_KEY: Record<string, TranslationKey> = {
   "wa-not-configured": "error.wa-not-configured",
   "no-consent": "error.no-consent",
+  // The pending draft was sent or retired by someone (or something) else
+  // between reading it and pressing Send.
+  "already-decided": "agent.draftGone",
   "session-window-closed": "error.session-window-closed",
   "no-template": "error.no-template",
   "missing-phone": "error.missing-phone",
@@ -203,6 +206,7 @@ export function ConversationPanel({
   const agentState = useQuery(api.chatAgent.stateForCustomer, { customerId });
   const setConversationMode = useMutation(api.chatAgent.setConversationMode);
   const discardSuggestion = useMutation(api.chatAgent.discardSuggestion);
+  const cancelAutoSend = useMutation(api.chatAgent.cancelAutoSend);
   const sendSuggestion = useAction(api.chatAgent.sendSuggestion);
   const sendSession = useAction(api.wa.sendSession);
   const react = useAction(api.wa.reactToMessage);
@@ -454,6 +458,39 @@ export function ConversationPanel({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
   }, [draft, filter]);
+
+  // The assistant's draft lands IN the composer — there is no second box
+  // (Serdar, 2026-08-31). Seeded on the draft's identity, never its text,
+  // and only into space the reader has not claimed: an empty box, or the
+  // previous draft left untouched. Whatever they typed themselves outranks
+  // whatever the model produced.
+  //
+  // The reverse edge matters as much: when the pending draft goes away and
+  // the composer still holds its unedited text, the text goes with it — it
+  // was auto-sent, superseded or discarded elsewhere, and a box still
+  // offering it would invite sending it twice.
+  const pendingDraft = agentState?.pending ?? null;
+  const seededTurn = useRef<string | null>(null);
+  const seededText = useRef<string>("");
+  const defusedTurn = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingDraft) {
+      if (seededTurn.current === pendingDraft.turnId) return;
+      seededTurn.current = pendingDraft.turnId;
+      setDraft((current) => {
+        const untouched = !current.trim() || current === seededText.current;
+        seededText.current = pendingDraft.reply;
+        return untouched ? pendingDraft.reply : current;
+      });
+    } else {
+      seededTurn.current = null;
+      if (seededText.current) {
+        const wasSeeded = seededText.current;
+        seededText.current = "";
+        setDraft((current) => (current === wasSeeded ? "" : current));
+      }
+    }
+  }, [pendingDraft]);
 
   // Restore the index's position once a routed detail has navigated back.
   // rAF because the rows have to be laid out before a scrollTop means anything.
@@ -1460,16 +1497,19 @@ export function ConversationPanel({
           onMode={(mode) => void setConversationMode({ customerId, mode })}
           // Both re-read the draft at CLICK time rather than closing over the
           // one that was there at render: a newer customer message can retire
-          // it between the two, and acting on the stale id would send a reply
-          // to a message that has been overtaken.
-          onSend={async (body) => {
-            const turnId = agentState.pending?.turnId;
-            if (!turnId) return { ok: false, reason: "already-decided" };
-            return await sendSuggestion({ customerId, turnId, body });
-          }}
+          // it between the two, and acting on the stale id would act on a
+          // draft that has been overtaken.
           onDiscard={() => {
-            const turnId = agentState.pending?.turnId;
-            if (turnId) void discardSuggestion({ customerId, turnId });
+            const p = agentState.pending;
+            if (!p) return;
+            void discardSuggestion({ customerId, turnId: p.turnId });
+            // The composer gives the text back only if it is still the
+            // untouched draft; an edit means the reader has taken it over.
+            setDraft((current) => (current === p.reply ? "" : current));
+          }}
+          onStopAutoSend={() => {
+            const p = agentState.pending;
+            if (p?.autoSendAt) void cancelAutoSend({ customerId, turnId: p.turnId });
           }}
         />
       )}
@@ -1491,16 +1531,33 @@ export function ConversationPanel({
               setSending(true);
               setSendError(null);
               const when = scheduleAt ? fromDatetimeLocalValue(scheduleAt) : undefined;
-              const result = await sendSession({
-                customerId,
-                body,
-                // A moment already past is someone finishing a thought late,
-                // not a request to time-travel — send it now.
-                ...(when !== undefined && when > Date.now()
-                  ? { scheduledFor: when }
-                  : {}),
-                ...(attached ? { mediaStorageId: attached.storageId } : {}),
-              });
+              // While a draft is pending, Send IS the accept: the text goes
+              // through the suggestion path, which claims the draft so two
+              // people cannot send it twice and the acceptance rate stays
+              // honest about edits. A scheduled or media send is not the
+              // draft — it takes the ordinary path, and landing there
+              // retires the pending draft anyway (applySendResult).
+              const pendingNow = agentState?.pending;
+              const viaDraft =
+                pendingNow &&
+                !attached &&
+                !(when !== undefined && when > Date.now());
+              const result = viaDraft
+                ? await sendSuggestion({
+                    customerId,
+                    turnId: pendingNow.turnId,
+                    body,
+                  })
+                : await sendSession({
+                    customerId,
+                    body,
+                    // A moment already past is someone finishing a thought late,
+                    // not a request to time-travel — send it now.
+                    ...(when !== undefined && when > Date.now()
+                      ? { scheduledFor: when }
+                      : {}),
+                    ...(attached ? { mediaStorageId: attached.storageId } : {}),
+                  });
               setSending(false);
               if (result.ok) {
                 setDraft("");
@@ -1511,18 +1568,9 @@ export function ConversationPanel({
               } else setSendError(result.reason ?? "error");
             }}
           >
-            {/* Only the not-connected case earns a line of prose above the
-                pill: it tells the reader where to go (the Business tab). The
-                closed 24h window says itself in the placeholder — a fact the
-                reader cannot act on got a whole sentence of chrome, and
-                Serdar cut it (2026-08-31). The placeholder stays short enough
-                for one phone-width line; the template-only detail is what the
-                template button beside it is for. */}
-            {!composerLive && !waReady && (
-              <p className="px-3 pb-1.5 text-xs text-[var(--muted)]">
-                {t("contact.waNotConnected")}
-              </p>
-            )}
+            {/* No prose above the pill. Whatever disables the composer says
+                itself in the placeholder — a dead box explaining itself twice
+                is chrome, and Serdar cut both sentences (2026-08-31). */}
             {/* One pill, WhatsApp's shape and Nudge's: the field, the clock and
                 Send inside a single rounded surface rather than three controls
                 sharing a row. A chat composer should read as somewhere you
@@ -1542,7 +1590,18 @@ export function ConversationPanel({
             <textarea
               ref={composerRef}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                // The first keystroke defuses a counting-down reply: an
+                // edited reply must never fire in its unedited form. The ref
+                // keeps it to one call per draft; Stop stays available for
+                // defusing without touching the text.
+                const p = agentState?.pending;
+                if (p?.autoSendAt && defusedTurn.current !== p.turnId) {
+                  defusedTurn.current = p.turnId;
+                  void cancelAutoSend({ customerId, turnId: p.turnId });
+                }
+              }}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter breaks the line — what every chat
                 // app trains people to expect. Without it a two-line message
@@ -2202,32 +2261,16 @@ function CallEntry({
 function AgentThreadStrip({
   state,
   onMode,
-  onSend,
   onDiscard,
+  onStopAutoSend,
 }: {
   state: NonNullable<FunctionReturnType<typeof api.chatAgent.stateForCustomer>>;
   onMode: (mode: "off" | "suggest" | "live") => void;
-  onSend: (body: string) => Promise<{ ok: boolean; reason?: string }>;
   onDiscard: () => void;
+  onStopAutoSend: () => void;
 }) {
   const { t } = useLanguage();
   const pending = state.pending;
-  const [text, setText] = useState(pending?.reply ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Re-seeded on the DRAFT'S IDENTITY, never on its text. Keyed on the text, a
-  // model that produced the same sentence twice would silently throw away
-  // whatever the reader had typed over it.
-  const seededFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (pending && seededFor.current !== pending.turnId) {
-      seededFor.current = pending.turnId;
-      setText(pending.reply);
-      setError(null);
-    }
-    if (!pending) seededFor.current = null;
-  }, [pending]);
-
   const live = state.effective === "live";
   return (
     <div className="space-y-2 px-3 pt-3">
@@ -2261,13 +2304,9 @@ function AgentThreadStrip({
               </span>
             )}
           </span>
-          {/* Only when this thread disagrees with the business. Saying it on
-              every conversation would explain a setting nobody touched. */}
-          {state.override !== null && (
-            <span className="truncate text-[11px] text-[var(--muted)]">
-              {t("agent.followingDefault")}
-            </span>
-          )}
+          {/* No "This chat only" subtitle. "In this chat" is already in the
+              title, so the line restated the header one row down and cost
+              the strip a second line of height (Serdar, 2026-08-31). */}
         </span>
         <SegmentedControl
           size="sm"
@@ -2291,69 +2330,70 @@ function AgentThreadStrip({
         </div>
       )}
 
+      {/* The draft itself lives in the COMPOSER now, not in a card of its
+          own (Serdar, 2026-08-31: "i want the suggestion directly in the
+          chat editor"). This line only says what the composer is holding.
+          Two states, two colours the app already speaks: amber while a live
+          reply counts down to its own send — amber is "about to happen" —
+          and the accent dash once it is an ordinary draft waiting on a
+          person. Stop defuses without discarding; At throws the text away. */}
       {pending && (
-        <div className="rounded-xl border border-dashed border-[var(--accent)]/40 bg-[var(--accent)]/[0.05] p-2.5">
-          <div className="mb-1.5 flex items-baseline gap-2">
-            <span className="text-xs font-medium text-[var(--foreground)]">
-              {t("agent.draft")}
-            </span>
-            <span className="text-[11px] text-[var(--muted)]">
-              {t("agent.draftPrivate")}
-            </span>
-          </div>
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            rows={3}
-            className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 text-sm"
-          />
-          {error && (
-            <p className="mt-1.5 text-[11px] text-red-500">{error}</p>
+        <div
+          className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${
+            pending.autoSendAt
+              ? "border-amber-500/30 bg-amber-500/[0.08]"
+              : "border-dashed border-[var(--accent)]/40 bg-[var(--accent)]/[0.05]"
+          }`}
+        >
+          {pending.autoSendAt ? (
+            <>
+              <AutoSendCountdown deadline={pending.autoSendAt} />
+              <button
+                type="button"
+                onClick={onStopAutoSend}
+                className="shrink-0 rounded-lg px-2 py-0.5 font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+              >
+                {t("agent.autoSendStop")}
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
+                {t("agent.draft")}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--muted)]">
+                {t("agent.draftPrivate")}
+              </span>
+              <button
+                type="button"
+                onClick={onDiscard}
+                className="shrink-0 rounded-lg px-2 py-0.5 font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+              >
+                {t("agent.draftDiscard")}
+              </button>
+            </>
           )}
-          <div className="mt-1.5 flex items-center gap-2">
-            <button
-              type="button"
-              disabled={busy || !text.trim()}
-              onClick={async () => {
-                setBusy(true);
-                setError(null);
-                try {
-                  const result = await onSend(text);
-                  if (!result.ok) {
-                    // "already-decided" is the one refusal with a real story:
-                    // somebody else in this workspace sent or discarded it
-                    // while this tab was open.
-                    setError(
-                      result.reason === "already-decided"
-                        ? t("agent.draftGone")
-                        : (result.reason ?? "error"),
-                    );
-                  }
-                } catch {
-                  // A thrown action — a dropped socket, a server error — used
-                  // to skip the reset below and leave both buttons disabled
-                  // for good, so the draft could be neither sent nor
-                  // dismissed without reloading the page.
-                  setError(t("common.error"));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-              className="rounded-lg bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {t("agent.draftSend")}
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onDiscard}
-              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)] disabled:opacity-50"
-            >
-              {t("agent.draftDiscard")}
-            </button>
-          </div>
         </div>
       )}
     </div>
+  );
+}
+
+// The seconds until a live reply fires, ticking in place. Separate component
+// so the half-second interval re-renders this one line, not the whole strip.
+function AutoSendCountdown({ deadline }: { deadline: number }) {
+  const { t } = useLanguage();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, []);
+  const s = Math.max(0, Math.ceil((deadline - now) / 1000));
+  return (
+    <span className="min-w-0 flex-1 truncate font-medium tabular-nums text-[var(--foreground)]">
+      {s > 0
+        ? t("agent.autoSendIn").replace("{s}", String(s))
+        : t("agent.autoSendNow")}
+    </span>
   );
 }

@@ -3907,17 +3907,6 @@ const dictionary = {
     de: "Nachricht schreiben…",
   },
   "contact.send": { tr: "Gönder", en: "Send", de: "Senden" },
-  // The explanation. It reads as a line above the composer, not inside it —
-  // see contact.sessionClosedShort.
-  // The WhatsApp tab shows on every org now, so the composer has to answer for
-  // one with no number connected. Names the fix and where it lives — "not
-  // configured" tells somebody a fact about the software; this tells them what
-  // to go and do.
-  "contact.waNotConnected": {
-    tr: "WhatsApp numarası bağlı değil. Bağlamak için İşletme sekmesine gidin.",
-    en: "No WhatsApp number connected. Connect one in the Business tab.",
-    de: "Keine WhatsApp-Nummer verbunden. Im Tab \u201eBetrieb\u201c verbinden.",
-  },
   "contact.waNotConnectedShort": {
     tr: "WhatsApp bağlı değil",
     en: "WhatsApp not connected",
@@ -4196,14 +4185,6 @@ const dictionary = {
     en: "Assistant in this chat",
     de: "Assistent in diesem Chat",
   },
-  // Said only when this conversation disagrees with the business default —
-  // otherwise every thread would carry a line explaining a setting nobody
-  // touched.
-  "agent.followingDefault": {
-    tr: "Yalnızca bu sohbet için",
-    en: "This chat only",
-    de: "Nur für diesen Chat",
-  },
   "agent.needsPerson": {
     tr: "Asistan bu sohbet için bir kişi gerektiğini söyledi",
     en: "The assistant says this one needs a person",
@@ -4216,13 +4197,25 @@ const dictionary = {
     en: "Only you can see this.",
     de: "Das sehen nur Sie.",
   },
-  "agent.draftSend": { tr: "Gönder", en: "Send", de: "Senden" },
   "agent.draftDiscard": { tr: "At", en: "Discard", de: "Verwerfen" },
   "agent.draftGone": {
     tr: "Bu taslak artık geçerli değil — müşteri yeni bir mesaj gönderdi.",
     en: "That draft is out of date — the customer has sent something newer.",
     de: "Dieser Entwurf ist überholt — der Kunde hat inzwischen geschrieben.",
   },
+  // The live reply counting down in the composer. {s} is whole seconds.
+  "agent.autoSendIn": {
+    tr: "{s} saniye içinde gönderilecek",
+    en: "Sends in {s}s",
+    de: "Sendet in {s} s",
+  },
+  "agent.autoSendNow": {
+    tr: "Gönderiliyor…",
+    en: "Sending…",
+    de: "Wird gesendet…",
+  },
+  // Stops the countdown, keeps the text as an editable draft.
+  "agent.autoSendStop": { tr: "Durdur", en: "Stop", de: "Stoppen" },
 
   // Settings → Messages: the business default and the handover policy.
   "settings.chatAgent": { tr: "WhatsApp asistanı", en: "WhatsApp assistant", de: "WhatsApp-Assistent" },

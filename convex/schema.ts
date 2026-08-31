@@ -2509,6 +2509,12 @@ export default defineSchema({
     suggestionOutcome: v.optional(
       v.union(v.literal("sent"), v.literal("discarded"), v.literal("superseded")),
     ),
+    // When a LIVE reply will fire (chatAgent.fireAutoSend), set at generation
+    // time: the reply is on the owner's screen counting down, and this is the
+    // deadline the countdown shows. A live pending row is "suggested" +
+    // autoSendAt; cancelling clears the field and leaves an ordinary draft.
+    // Absent on suggest-mode drafts, which never fire on their own.
+    autoSendAt: v.optional(v.number()),
     // The reply text as generated (shadow and suggested keep it too — that is
     // the point).
     reply: v.optional(v.string()),

@@ -186,12 +186,16 @@ assembly reads only this customer's rows.
   disagree with. Precedence lives in exactly one leaf function,
   `convex/lib/agentMode.ts` — shadow and off are operator ceilings no override
   can lift.
-- **The debounce.** `REPLY_DEBOUNCE_MS` (15s): every inbound schedules its own
-  turn carrying its own message id, and a turn whose message is no longer the
-  newest inbound stands down writing no row. WhatsApp reports messages,
-  reactions and delivery states and never composition, so there is nothing to
-  wait on — this delay is the substitute, and it is what makes one thought
-  sent as four messages get one answer instead of four.
+- **The grace window.** `AUTO_SEND_GRACE_MS` (15s), since 2026-08-31 — the
+  wait moved from before generation to before send. Every inbound schedules
+  its turn immediately; a turn whose message is no longer the newest inbound
+  stands down writing no row, so one thought sent as four messages still gets
+  one answer (the last fragment's turn sees all four). In suggest mode the
+  draft is on the owner's screen the moment it exists. In live mode the reply
+  is recorded as a pending draft with `autoSendAt`, shown counting down in
+  the composer, and `fireAutoSend` (a durable scheduled job) sends it when
+  the window closes — unless the owner cancelled, typed (which defuses it),
+  a colleague replied, or a newer customer message superseded it.
 - **Handover is a policy, not a per-message judgement**
   (`orgs.chatAgentStopOnHandover`). False (default): the agent says a person
   is needed, stamps `customers.agentFlaggedAt`, and keeps answering what it

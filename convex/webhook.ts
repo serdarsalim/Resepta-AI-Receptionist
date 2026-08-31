@@ -13,7 +13,6 @@ import {
   agentGenerates,
   conversationAgentMode,
 } from "./lib/agentMode";
-import { REPLY_DEBOUNCE_MS } from "./lib/chatAgentTemplate";
 
 // Meta's session window: one away-reply per window, not per message. Exported
 // because the email lane throttles its out-of-hours reply on the same clock —
@@ -119,13 +118,20 @@ export const handleWhatsappEvent = internalMutation({
           if (!from) continue;
           // Meta reports `from` without the leading +; our store is E.164.
           const phone = from.startsWith("+") ? from : `+${from}`;
-          const buttonPayload = (message.button as { payload?: string } | undefined)
-            ?.payload;
-          const interactivePayload = (
+          // Both button shapes carry the id AND the words on the button; the
+          // id drives the confirm/cancel machinery, the words are what the
+          // thread shows.
+          const button = message.button as
+            | { payload?: string; text?: string }
+            | undefined;
+          const buttonPayload = button?.payload;
+          const buttonReply = (
             message.interactive as
-              | { button_reply?: { id?: string } }
+              | { button_reply?: { id?: string; title?: string } }
               | undefined
-          )?.button_reply?.id;
+          )?.button_reply;
+          const interactivePayload = buttonReply?.id;
+          const buttonLabel = button?.text ?? buttonReply?.title;
           // Every attachment Meta delivers shares one shape: an id that is a
           // HANDLE rather than the file, an optional caption the sender typed
           // beside it, and — for a document — the filename they picked.
@@ -164,6 +170,7 @@ export const handleWhatsappEvent = internalMutation({
             phone,
             text: (message.text as { body?: string } | undefined)?.body ?? "",
             payload: buttonPayload ?? interactivePayload ?? "",
+            buttonLabel,
             wamid: message.id as string | undefined,
             mediaId: part?.id,
             mediaCaption: part?.caption,
@@ -208,6 +215,10 @@ export async function processInboundMessage(
     phone: string;
     text: string;
     payload: string;
+    // What the tapped button SAID ("İptal", "Onayla") — the words the
+    // customer chose, as against the machine id in `payload`. This is what
+    // the thread shows; the payload never is.
+    buttonLabel?: string;
     wamid?: string;
     // Any attachment: photo, voice note, video, document, sticker. One shape
     // because Meta uses one shape — only the key it hangs under differs, and
@@ -334,8 +345,13 @@ export async function processInboundMessage(
     // the body. Failing all three, a type we cannot fetch names itself —
     // otherwise a shared location lands as an empty bubble, which renders as
     // "template message" and tells the salon a lie about what happened.
+    //
+    // The button LABEL, never its payload: "cancel:<appointment id>" in a
+    // bubble reads as a glitch, and what the customer actually did was tap a
+    // button that said "İptal" (Serdar, 2026-08-31). The payload keeps doing
+    // its job below — naming the exact appointment — it just never renders.
     body:
-      payload ||
+      args.buttonLabel ||
       text ||
       media?.caption ||
       (!media && args.messageType && args.messageType !== "text"
@@ -440,16 +456,19 @@ export async function processInboundMessage(
       (org?.status ?? "active") !== "suspended" &&
       Boolean(text.trim());
     if (agentEligible) {
-      // Delayed, not immediate: a customer sending one thought as four
-      // messages schedules four turns, and only the last one answers
-      // (loadTurnContext's superseded check).
+      // Immediate, since 2026-08-31: the wait that coalesced fragmented
+      // thoughts moved to the SEND side (AUTO_SEND_GRACE_MS), so the owner
+      // sees the draft the moment it exists. A customer sending one thought
+      // as four messages still gets one answer — each fragment's turn
+      // supersedes the last (loadTurnContext's check at load, recordTurn's
+      // retire at record).
       //
       // The marker is stamped in the same mutation that schedules, and it is
       // what the check reads — so a turn only ever stands down for a message
       // that actually took over from it. Rows that reach the agent's eligible
       // set are the only ones that move it.
       await ctx.db.patch(contactId, { agentTurnScheduledFor: loggedId });
-      await ctx.scheduler.runAfter(REPLY_DEBOUNCE_MS, internal.chatAgent.respond, {
+      await ctx.scheduler.runAfter(0, internal.chatAgent.respond, {
         customerId: contactId,
         inboundMessageId: loggedId,
       });
