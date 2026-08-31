@@ -548,6 +548,7 @@ function ShellHeader({
   onOverrideBack,
   overrideContactId,
   onOpenMenu,
+  flush,
 }: {
   titleKey: TranslationKey;
   // A record opened ON TOP of a tab, naming itself here instead of letting the
@@ -567,6 +568,10 @@ function ShellHeader({
   // depend on a child under it handing elements or closures back up.
   overrideContactId?: Id<"customers">;
   onOpenMenu: () => void;
+  // True on the views whose cards run the 8px frame (data-bleeds-right):
+  // the header's padding follows them via .gutter-flush (globals), so the
+  // title row and the cards under it agree on where the edges are.
+  flush?: boolean;
 }) {
   const { t } = useLanguage();
   const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
@@ -599,7 +604,9 @@ function ShellHeader({
     // from Customers to Reminders jumped the card and its Add button 13px up
     // the screen. The floor is the search box's own height plus this padding,
     // so tabs that have one are unchanged and the rest stop shifting.
-    <header className="gutter-align flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3">
+    <header
+      className={`gutter-align ${flush ? "gutter-flush" : ""} flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3`}
+    >
       <div
         className={`group/title flex min-w-0 items-center gap-1.5 ${
           expanded ? "hidden sm:flex" : "flex"
@@ -1863,6 +1870,9 @@ export function AppShell({
             onOverrideBack={onOverrideBack}
             overrideContactId={overrideContactId}
             onOpenMenu={() => setMobileOpen(true)}
+            // The same condition that puts data-bleeds-right on the views:
+            // a contact record showing (any tab), or the inbox.
+            flush={Boolean(overrideContactId) || tab === "inbox"}
           />
           {/* Nudge's rule for the bottom edge, ported: a view whose cards scroll
             INSIDE themselves has no content end to breathe after, so padding
