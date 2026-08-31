@@ -1606,12 +1606,15 @@ deals; we sell services, and an appointment is the thing a customer bought.
   number is a thing the owner can go and do, and a channel hidden until it works
   is a channel nobody discovers.
 - **So the composer has to answer for an unconnected org.** `waReady` (a
-  connected Cloud number OR the Evolution lane) kills the composer and puts
-  `contact.waNotConnected` above it — which NAMES the fix and where it lives
-  rather than saying "not configured". Optimistic while the settings query is in
-  flight: a false sentence that corrects itself is worse than a control that is
-  briefly live. Not connected outranks the 24h window in that line — there is no
-  point telling somebody to wait for a reply on a channel they cannot send on.
+  connected Cloud number OR the Evolution lane) kills the composer, and the
+  dead pill says why in its own PLACEHOLDER (`contact.waNotConnectedShort`,
+  `contact.sessionClosedShort`) — the prose lines that used to sit above it
+  were cut on 2026-08-31 (Serdar: "I don't want unnecessary things"). A dead
+  box explaining itself twice is chrome; the placeholder is one line and the
+  whole story. Optimistic while the settings query is in flight: a false
+  sentence that corrects itself is worse than a control that is briefly live.
+  Not connected outranks the 24h window — there is no point telling somebody
+  to wait for a reply on a channel they cannot send on.
   - This was a real hole before the pill changed: the tab was unreachable except
     through All, where it quietly offered a Send that came back
     `wa-not-configured`.
@@ -3511,21 +3514,34 @@ Facts the next reader should not re-derive:
   answering a message in suggest mode costs two actions, the reply and then
   tidying up a proposal for a message already handled.
 
-### The debounce is the load-bearing part
+### The grace window is the load-bearing part
 
-`REPLY_DEBOUNCE_MS = 15_000`, in `lib/chatAgentTemplate.ts`. WhatsApp reports
-messages, reactions and delivery states and **never once reports that somebody
-is composing**, so there is nothing to wait on — this delay is the substitute
-for waiting until they stop typing. Every inbound schedules its own turn
-carrying its own message id, and a turn whose message is no longer the newest
-inbound stands down.
+`AUTO_SEND_GRACE_MS = 15_000`, in `lib/chatAgentTemplate.ts`. It used to be a
+debounce on the OTHER side — every turn slept fifteen seconds before
+generating, coalescing a thought typed as four fragments into one answer —
+and the owner saw nothing until the reply had already gone. Serdar moved the
+wait (2026-08-31): the webhook schedules `respond` at zero delay, the draft
+is on screen the moment it exists, and the fifteen seconds now sit between
+"generated" and "sent" on live threads, counted down in the composer where
+Stop, a keystroke, a colleague's reply or a newer customer message can all
+defuse it (`fireAutoSend`, a durable scheduled job, never a sleep).
 
-It writes no row when it stands down, deliberately, exactly like `agent-off`:
-a sentence finished in a second thought is a normal way to type, not an event
-worth four entries in the flight recorder. Without the debounce, a customer
-sending one thought as four messages got four answers — and in suggest mode
-that is four drafts a human has to read and discard, which is the difference
-between the mode being usable and being a chore.
+The fragment problem is still covered, just later: every inbound schedules
+its own turn carrying its own message id, a turn whose message is no longer
+the newest stands down (at load, and again after generation), and `recordTurn`
+retires whatever draft was pending in the same transaction it records the
+newer one. A stood-down turn writes no row, deliberately, exactly like
+`agent-off`: a sentence finished in a second thought is a normal way to type,
+not an event worth four entries in the flight recorder. The cost of the move
+is a generation per fragment instead of one per thought; the owner seeing
+every draft immediately is what that buys.
+
+A live pending reply is a `chatAgentTurns` row with status "suggested" AND
+`autoSendAt` — the same queue, supersede rules and discard as a suggest-mode
+draft, with a fuse attached. Billing for an auto-sent turn lands at fire
+time (`applyAutoSendOutcome`), not at record time, because the send is what
+the org pays for; a failed fire falls back to a plain pending draft rather
+than eating the text.
 
 The newest-inbound check reads the same 30 rows the prompt's history already
 needed; they were two separate `take(30)` calls on one index for one moment
