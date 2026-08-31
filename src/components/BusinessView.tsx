@@ -2398,11 +2398,11 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         )}
 
         {showDeactivated && deactivated.length > 0 && (
-          // Names flowing inline, each with its two actions attached. Former
-          // members are history, not a roster — they earn a shelf, not a
-          // table (Serdar, 2026-08-31, after two rounds of trying to make
-          // them one).
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+          // One name per line, its two actions right beside it. Former
+          // members are history, not a roster — no columns, no fences, no
+          // hover states (Serdar, 2026-08-31, after two rounds of trying to
+          // make them a table).
+          <div className="flex flex-col items-start gap-1 pt-1">
             {deactivated.map((row) => (
               <span key={row.key} className="flex items-center text-sm text-[var(--muted)]">
                 <span className="truncate">{row.name}</span>
