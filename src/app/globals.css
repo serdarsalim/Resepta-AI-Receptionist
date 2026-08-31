@@ -373,22 +373,37 @@ thead {
   --pane-inline: max(1rem, calc((100% - 56rem) / 2));
 }
 
-/* From lg up the conversation pane runs flush to the window's right edge,
+/* From lg up the conversation pane runs NEARLY to the window's right edge,
    the way WhatsApp Web's does (Serdar, 2026-08-31). A view opts in with
-   data-bleeds-right on its root; main then gives up its right padding AND
-   the reserved scrollbar track — safe, because a pane-filling view never
-   scrolls main, so the track was dead width there. Un-layered element+:has
-   so it outranks p-4 and .stable-gutter whatever the order.
+   data-bleeds-right on its root; main then trades its 1rem right padding
+   for 0.5rem — the same 8px the gap between the two cards spends, so the
+   card floats with one breath on both sides and its right corners stay
+   round (fully flush squared them off, and Serdar wanted them back) — and
+   gives up the reserved scrollbar track, safe because a pane-filling view
+   never scrolls main, so the track was dead width there. Un-layered
+   element+:has so it outranks p-4 and .stable-gutter whatever the order.
 
    Siblings main renders around the view (the demo-mode banner) get the old
-   inset back, or they would touch the window edge too. */
+   inset back, or they would sit closer to the edge than everything else. */
 @media (min-width: 64rem) {
   main:has([data-bleeds-right]) {
-    padding-right: 0;
+    padding-right: 0.5rem;
     scrollbar-gutter: auto;
   }
   main:has([data-bleeds-right]) > :not([data-bleeds-right]) {
-    margin-right: 1rem;
+    margin-right: 0.5rem;
+  }
+}
+
+/* On a phone the same two views run edge to edge instead: sideways padding
+   there was spending scarce width framing cards that scroll internally
+   anyway (same call as Nudge, Serdar, 2026-08-31). Scoped to
+   data-bleeds-right, not data-fills-pane — the calendar also fills the pane
+   and keeps its frame. */
+@media (max-width: 39.99rem) {
+  main:has([data-bleeds-right]) {
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 

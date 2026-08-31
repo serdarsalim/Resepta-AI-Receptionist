@@ -452,7 +452,7 @@ export function ContactView({
             The card leads the column with nothing above it, so its top edge
             lines up with the record card's. */}
         <section
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex lg:rounded-r-none`}
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex`}
         >
           <ConversationPanel
             customerId={customerId}
