@@ -37,6 +37,13 @@ import type { FeedFilter } from "@/components/ConversationPanel";
 export function AppHome() {
   const [tab, setTabState] = useState<TabId>("appointments");
   const [contactId, setContactId] = useState<Id<"customers"> | null>(null);
+  // Which tab the open contact belongs to — the one that was active when it
+  // opened (Serdar, 2026-08-31). A record no longer closes on every tab
+  // switch: glancing at the calendar mid-conversation used to cost the whole
+  // drill-in, and coming back to the Inbox landed on the list instead of the
+  // person you were talking to. The record now hides while another tab is
+  // showing and comes back with its tab.
+  const [contactTab, setContactTab] = useState<TabId | null>(null);
   // The open contact's name, so the SHELL header can carry it instead of the
   // tab underneath. Reported up by ContactView, which is the only thing that
   // queries the customer — duplicating that query here to fill in a heading
@@ -81,6 +88,7 @@ export function AppHome() {
     // would fight a contact deep-linked into a fresh load.
     if (selectionOrgId !== null) {
       setContactId(null);
+      setContactTab(null);
       setContactName("");
       setContactFilter(undefined);
       setContactItem(undefined);
@@ -96,6 +104,7 @@ export function AppHome() {
     setContactFilter(channel);
     setContactItem(itemId);
     setContactId(id);
+    setContactTab(tab);
   };
 
   // The tab lives in the URL, so a refresh comes back where you were and a
@@ -113,9 +122,12 @@ export function AppHome() {
     if (next) setTabState(next);
   }, []);
 
-  // Switching tabs always leaves the contact page, it belongs to Customers.
+  // Switching AWAY keeps the record parked under its tab (see contactTab).
+  // Re-clicking the tab you are already on is still the way back to its
+  // list: that click has no other meaning, and it preserves the old escape
+  // hatch for anyone trained on it.
   const setTab = (next: TabId) => {
-    setContactId(null);
+    if (next === tab) setContactId(null);
     setTabState(next);
     window.localStorage.setItem(TAB_STORAGE_KEY, next);
     // replaceState, not push: the tab strip is not history. Filling the back
@@ -131,10 +143,14 @@ export function AppHome() {
       tab={tab}
       onTab={setTab}
       // Undefined, not "", while nothing is open — the shell falls back to the
-      // tab's own title. An empty string is a title that says nothing.
-      overrideTitle={contactId ? contactName : undefined}
+      // tab's own title. An empty string is a title that says nothing. A
+      // record parked under ANOTHER tab counts as not open: the header must
+      // name the tab being looked at, not the contact waiting behind it.
+      overrideTitle={contactId && tab === contactTab ? contactName : undefined}
       onOverrideBack={() => setContactId(null)}
-      overrideContactId={contactId ?? undefined}
+      overrideContactId={
+        contactId && tab === contactTab ? contactId : undefined
+      }
     >
       {/* Around the views only, never around the shell. A view that throws
           leaves the sidebar, the tab strip and the workspace switcher
@@ -143,7 +159,7 @@ export function AppHome() {
           the switcher is the way out of it. The shell's own queries fall
           through to app/error.tsx. */}
       <ErrorBoundary resetKeys={[activeOrgId, tab, contactId]}>
-        {contactId ? (
+        {contactId && tab === contactTab ? (
           <ContactView
             // Keyed, so opening a second contact from the first one's feed
             // remounts and re-reports rather than showing the previous name
