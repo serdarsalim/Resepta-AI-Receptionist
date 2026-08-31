@@ -546,10 +546,6 @@ function ShellHeader({
   onOverrideBack,
   overrideContactId,
   onOpenMenu,
-  name,
-  email,
-  remoteTheme,
-  onOpenAccount,
 }: {
   titleKey: TranslationKey;
   // A record opened ON TOP of a tab, naming itself here instead of letting the
@@ -569,10 +565,6 @@ function ShellHeader({
   // depend on a child under it handing elements or closures back up.
   overrideContactId?: Id<"customers">;
   onOpenMenu: () => void;
-  name?: string;
-  email?: string;
-  remoteTheme?: Theme;
-  onOpenAccount: () => void;
 }) {
   const { t } = useLanguage();
   const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
@@ -700,17 +692,11 @@ function ShellHeader({
             )}
           </div>
         )}
-        {/* Phones only. On desktop this lives in the sidebar footer, and two
-            avatars on one screen would be two answers to "where is my
-            account". The phone has no sidebar showing, so it keeps one. */}
-        <span className="md:hidden">
-          <UserMenu
-            name={name}
-            email={email}
-            remoteTheme={remoteTheme}
-            onOpenAccount={onOpenAccount}
-          />
-        </span>
+        {/* No avatar here, on any width (Serdar, 2026-08-31). The phone used
+            to keep one on the reasoning that no sidebar was showing — but the
+            drawer carries the same profile row, so the header avatar was a
+            second answer to "where is my account", one tap apart from the
+            first. */}
       </div>
     </header>
   );
@@ -1832,10 +1818,6 @@ export function AppShell({
             onOverrideBack={onOverrideBack}
             overrideContactId={overrideContactId}
             onOpenMenu={() => setMobileOpen(true)}
-            name={settings?.me.name}
-            email={settings?.me.email}
-            remoteTheme={settings?.me.themePreference}
-            onOpenAccount={() => onTab("account")}
           />
           {/* Nudge's rule for the bottom edge, ported: a view whose cards scroll
             INSIDE themselves has no content end to breathe after, so padding
