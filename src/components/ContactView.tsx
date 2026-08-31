@@ -713,15 +713,18 @@ function CustomerAppointments({
         </button>
       </div>
 
-      <div className="mt-2 space-y-2">
-        {appointments === undefined && (
-          <p className="text-xs text-[var(--muted)]">{t("common.loading")}</p>
-        )}
-        {upcoming.map(card)}
-        {appointments !== undefined && upcoming.length === 0 && (
-          <p className="text-xs text-[var(--muted)]">{t("appointments.noUpcoming")}</p>
-        )}
-      </div>
+      {/* Nothing upcoming says nothing (Serdar, 2026-08-31): the empty state
+          sentence restated what the absence of cards already shows, in the
+          one card that had no other prose. Gated so an empty section spends
+          no height either. */}
+      {(appointments === undefined || upcoming.length > 0) && (
+        <div className="mt-2 space-y-2">
+          {appointments === undefined && (
+            <p className="text-xs text-[var(--muted)]">{t("common.loading")}</p>
+          )}
+          {upcoming.map(card)}
+        </div>
+      )}
 
       {past.length > 0 && (
         <div className="mt-2">

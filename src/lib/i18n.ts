@@ -557,11 +557,6 @@ const dictionary = {
   // The record card's appointments block (Nudge's deal block, in a salon's
   // terms). The count rides the heading, and the visits that are over sit
   // behind a disclosure rather than pushing the record off the screen.
-  "appointments.noUpcoming": {
-    tr: "Yaklaşan randevu yok",
-    en: "No upcoming appointments",
-    de: "Keine bevorstehenden Termine",
-  },
   "appointments.showPast": {
     tr: "{n} geçmiş randevuyu göster",
     en: "Show {n} past",
