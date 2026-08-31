@@ -14,6 +14,7 @@ import {
 } from "@/lib/datetime";
 import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
 import { FIELD } from "./RowLabel";
+import { CheckSwitch } from "./CheckSwitch";
 import { useConfirm } from "./ConfirmDialog";
 
 // The calendar's OTHER kind of thing to draw: time the business is shut inside
@@ -319,115 +320,120 @@ export function BlockSheet({
             onChange={(e) => setReason(e.target.value)}
           />
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={allDay}
-              onClick={() => setAllDay(!allDay)}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
-                allDay
-                  ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t("closures.allDay")}
-            </button>
-            {/* Disabled rather than removed when all-day is on: the row keeps
-                its height and the typed times survive the round trip. */}
-            <input
-              type="time"
-              aria-label={t("settings.openFrom")}
-              disabled={allDay}
-              className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-              value={startMinute == null ? "" : minutesToTimeValue(startMinute)}
-              onChange={(e) => setStartMinute(timeValueToMinutes(e.target.value) ?? null)}
-            />
-            <span className="shrink-0 text-sm text-[var(--muted)]">
-              {t("settings.openUntil")}
+          {/* All day is the check with its word — the shape the Business
+              card's settings rows already use. It was a pill, and a pill next
+              to two time inputs read as a state label, not a control (Serdar,
+              2026-08-31). While it is on the time inputs GO rather than sit
+              greyed beside it: "all day" and a dimmed 13:00–14:00 in one row
+              is the sheet claiming both at once. The typed times still
+              survive the round trip in state; min-h keeps the row's height
+              when the inputs come and go. */}
+          <div className="flex min-h-8 items-center gap-3">
+            <span className="flex shrink-0 items-center gap-2">
+              <CheckSwitch
+                on={allDay}
+                label={t("closures.allDay")}
+                onChange={setAllDay}
+              />
+              <span className="text-sm text-[var(--muted)]">
+                {t("closures.allDay")}
+              </span>
             </span>
-            <input
-              type="time"
-              aria-label={t("settings.openTo")}
-              disabled={allDay}
-              className={`${FIELD} min-w-0 flex-1 disabled:opacity-40`}
-              value={endMinute == null ? "" : minutesToTimeValue(endMinute)}
-              onChange={(e) => setEndMinute(timeValueToMinutes(e.target.value) ?? null)}
-            />
+            {!allDay && (
+              <>
+                <input
+                  type="time"
+                  aria-label={t("settings.openFrom")}
+                  className={`${FIELD} min-w-0 flex-1`}
+                  value={startMinute == null ? "" : minutesToTimeValue(startMinute)}
+                  onChange={(e) => setStartMinute(timeValueToMinutes(e.target.value) ?? null)}
+                />
+                <span className="shrink-0 text-sm text-[var(--muted)]">
+                  {t("settings.openUntil")}
+                </span>
+                <input
+                  type="time"
+                  aria-label={t("settings.openTo")}
+                  className={`${FIELD} min-w-0 flex-1`}
+                  value={endMinute == null ? "" : minutesToTimeValue(endMinute)}
+                  onChange={(e) => setEndMinute(timeValueToMinutes(e.target.value) ?? null)}
+                />
+              </>
+            )}
           </div>
 
           {/* Google's recurrence choices as one chip row: once on the drawn
-              date, weekly on chosen days, or daily. Weekly unfolds its day
-              chips below; once keeps the date as prose beside the chips. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="flex gap-1.5">
-              {(["once", "weekly", "daily"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="switch"
-                  aria-checked={cadence === option}
-                  onClick={() => setCadence(option)}
-                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
-                    cadence === option
-                      ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {t(
-                    option === "once"
-                      ? "closures.once"
-                      : option === "weekly"
-                        ? "closures.everyWeek"
-                        : "closures.everyDay",
-                  )}
-                </button>
-              ))}
-            </span>
-            {/* The drawn date as prose — the calendar is the picker for where
-                a block STARTS — plus an optional last day, so a ten-day
-                holiday is one block instead of ten. Left empty, the block is
-                the single day. */}
-            {cadence === "once" && (
-              <span className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
-                {dateProse}
-                <span>{t("settings.openUntil")}</span>
-                <input
-                  type="date"
-                  aria-label={t("closures.lastDay")}
-                  className={FIELD}
-                  min={draft.date}
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </span>
-            )}
+              date, weekly on chosen days, or daily. These stay pills because
+              they are a segmented choice — exactly one is ever on — unlike
+              the yes/no marks above and below. */}
+          <div className="flex gap-1.5">
+            {(["once", "weekly", "daily"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="switch"
+                aria-checked={cadence === option}
+                onClick={() => setCadence(option)}
+                className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors ${
+                  cadence === option
+                    ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {t(
+                  option === "once"
+                    ? "closures.once"
+                    : option === "weekly"
+                      ? "closures.everyWeek"
+                      : "closures.everyDay",
+                )}
+              </button>
+            ))}
           </div>
+          {/* The drawn date as prose — the calendar is the picker for where a
+              block STARTS — plus an optional last day, so a ten-day holiday
+              is one block instead of ten. Left empty, the block is the single
+              day. One row, always: the input sizes to its content instead of
+              grabbing the sheet's width and wrapping under the prose. */}
+          {cadence === "once" && (
+            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <span className="whitespace-nowrap">{dateProse}</span>
+              <span>{t("settings.openUntil")}</span>
+              <input
+                type="date"
+                aria-label={t("closures.lastDay")}
+                className={`${FIELD} min-w-0`}
+                min={draft.date}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          )}
+          {/* The weekdays as a check list, one day per row — the same mark
+              the rest of the app answers yes/no with. They were pills, and a
+              row of seven where three are lit read as decoration, not as
+              seven independent switches (Serdar, 2026-08-31). */}
           {cadence === "weekly" && (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="space-y-1.5">
               {[1, 2, 3, 4, 5, 6, 0].map((day) => {
                 const on = weekdays.includes(day);
                 return (
-                  <button
-                    key={day}
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    onClick={() =>
-                      setWeekdays(
-                        on
-                          ? weekdays.filter((d) => d !== day)
-                          : [...weekdays, day].sort((a, b) => a - b),
-                      )
-                    }
-                    className={`rounded-full px-3 py-1 text-sm transition-colors ${
-                      on
-                        ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                        : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                    }`}
-                  >
-                    {dayNames[day]}
-                  </button>
+                  <div key={day} className="flex items-center gap-2">
+                    <CheckSwitch
+                      on={on}
+                      label={dayNames[day]}
+                      onChange={(next) =>
+                        setWeekdays(
+                          next
+                            ? [...weekdays, day].sort((a, b) => a - b)
+                            : weekdays.filter((d) => d !== day),
+                        )
+                      }
+                    />
+                    <span className="text-sm text-[var(--muted)]">
+                      {dayNames[day]}
+                    </span>
+                  </div>
                 );
               })}
             </div>
