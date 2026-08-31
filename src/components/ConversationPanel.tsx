@@ -1368,10 +1368,10 @@ export function ConversationPanel({
               )}
               </div>
               <p
-                // text-xs, not 11px: WhatsApp's stamp measures 0.75rem
-                // exactly (12.75px live against 11 ours, 2026-08-31), and
-                // the too-small stamp was the visible size mismatch.
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-xs ${
+                // 11px, deliberately SMALLER than WhatsApp's 12.75px stamp:
+                // tried at their size (2026-08-31) and reverted the same day
+                // — Serdar kept the quieter stamp.
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-[11px] ${
                   failed ? "text-red-600 dark:text-red-400" : "text-[var(--chat-stamp)]"
                 }`}
               >
