@@ -1558,7 +1558,7 @@ function Calendar({
     // Chips that land on the same hour stack instead of overprinting: an
     // all-day holiday and a lunch block both clamp to opening time, and two
     // labels drawn at one `top` smear into a single unreadable word.
-    const CHIP_H = 18;
+    const CHIP_H = 22;
     chips.sort((a, b) => a.top - b.top);
     for (let i = 1; i < chips.length; i++) {
       if (chips[i].top < chips[i - 1].top + CHIP_H) {
@@ -1743,8 +1743,11 @@ function Calendar({
                 ))}
                 {/* Each closure's name tag, pinned to the top of its band.
                     The band itself stays inert grid — a salon books into its
-                    own lunch hour on purpose — so only the small chip is a
-                    target. For staff it renders as the plain fact it is. */}
+                    own lunch hour on purpose — so the chip and the band's
+                    click both lead to the block. Foreground and medium, the
+                    same voice as an appointment chip: this is the block's
+                    NAME, and at ten muted pixels it whispered (Serdar,
+                    2026-08-31: stop the defensive colours). */}
                 {closureChips(column.day).map((chip, index) =>
                   onOpenClosure ? (
                     <button
@@ -1754,7 +1757,7 @@ function Calendar({
                       onClick={(event) =>
                         onOpenClosure(chip.row, chip.date, rectOf(event.currentTarget))
                       }
-                      className="absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                      className="absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-xs font-medium leading-tight text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
                       style={{ top: chip.top + 1 }}
                     >
                       {chip.row.reason || t("closures.blockLabel")}
@@ -1762,7 +1765,7 @@ function Calendar({
                   ) : (
                     <span
                       key={`${chip.row._id}:${index}`}
-                      className="pointer-events-none absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight text-[var(--muted)]"
+                      className="pointer-events-none absolute left-1 z-10 max-w-[calc(100%-8px)] truncate rounded px-1 py-0.5 text-left text-xs font-medium leading-tight text-[var(--foreground)]"
                       style={{ top: chip.top + 1 }}
                     >
                       {chip.row.reason || t("closures.blockLabel")}
