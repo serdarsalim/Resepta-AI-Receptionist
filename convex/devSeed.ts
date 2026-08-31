@@ -426,6 +426,137 @@ export const seed = internalMutation({
   },
 });
 
+// Two WhatsApp conversations worth LOOKING at, on a named org — every bubble
+// state the thread can draw, in Turkish, so the chat pane can be judged
+// against real-looking traffic instead of an empty state (Serdar,
+// 2026-08-31). Dedicated preview customers rather than rows on real ones, so
+// clearing them is deleting two contacts. Idempotent per customer: a thread
+// already seeded is left alone. Run with:
+//
+//   npx convex run devSeed:seedWhatsappThreads '{"orgId":"<org id>"}'
+export const seedWhatsappThreads = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const now = Date.now();
+    const HOUR = 60 * 60 * 1000;
+    const DAY = 24 * HOUR;
+    let inserted = 0;
+
+    type Spec = {
+      dir: "in" | "out";
+      kind: string;
+      body: string;
+      at: number;
+      status: "sent" | "delivered" | "read" | "received";
+      templateName?: string;
+      reactionEmoji?: string;
+      quoteOf?: number; // index of the earlier spec this one swipe-replies to
+    };
+
+    const seedThread = async (
+      person: { firstName: string; lastName: string; phone: string },
+      specs: Spec[],
+    ) => {
+      let customer = await ctx.db
+        .query("customers")
+        .withIndex("by_org_phone", (q) =>
+          q.eq("orgId", args.orgId).eq("phone", person.phone),
+        )
+        .unique();
+      if (!customer) {
+        const id = await ctx.db.insert("customers", {
+          orgId: args.orgId,
+          firstName: person.firstName,
+          lastName: person.lastName,
+          phone: person.phone,
+          language: "tr",
+          consentAt: now - 30 * DAY,
+        });
+        customer = await ctx.db.get(id);
+      }
+      if (!customer) return;
+      const existing = await ctx.db
+        .query("messages")
+        .withIndex("by_customer", (q) => q.eq("customerId", customer!._id))
+        .take(50);
+      if (existing.some((m) => m.wamid?.startsWith("wamid.wa-seed"))) return;
+
+      const wamids: string[] = [];
+      let lastInboundAt = customer.lastInboundAt;
+      for (const [index, spec] of specs.entries()) {
+        const wamid = `wamid.wa-seed.${person.phone}.${index}`;
+        wamids.push(wamid);
+        const quoted = spec.quoteOf !== undefined ? specs[spec.quoteOf] : null;
+        await ctx.db.insert("messages", {
+          orgId: args.orgId,
+          customerId: customer._id,
+          direction: spec.dir,
+          kind: spec.kind,
+          body: spec.body,
+          templateName: spec.templateName,
+          occurredAt: spec.at,
+          status: spec.status,
+          wamid,
+          lane: "cloud",
+          ...(spec.reactionEmoji ? { reactionEmoji: spec.reactionEmoji } : {}),
+          ...(quoted
+            ? {
+                replyToWamid: wamids[spec.quoteOf!],
+                replyToBody: quoted.body.slice(0, 200),
+                replyToDirection: quoted.dir,
+              }
+            : {}),
+        });
+        inserted++;
+        if (spec.dir === "in") lastInboundAt = spec.at;
+      }
+      // The window the newest inbound opened, so the composer is LIVE on the
+      // seeded thread rather than parked on "24h window closed".
+      await ctx.db.patch(customer._id, {
+        lastInboundAt,
+        lastInboundLane: "cloud",
+      });
+    };
+
+    // Elif: the long thread — questions both ways, a template confirmation,
+    // a button-label reply quoting it, an agent bubble, reactions on both
+    // sides, an emoji-only message, and read/delivered ticks throughout.
+    await seedThread(
+      { firstName: "Elif", lastName: "Yılmaz", phone: "+905301118292" },
+      [
+        { dir: "in", kind: "reply", body: "Merhaba, saç boyası ve kesim için fiyat alabilir miyim?", at: now - 2 * DAY - 3 * HOUR, status: "received" },
+        { dir: "out", kind: "session", body: "Merhaba Elif Hanım! Boya ve kesim birlikte 1.450 TL. Cumartesi için yerimiz var, ister misiniz?", at: now - 2 * DAY - 3 * HOUR + 2 * 60_000, status: "read" },
+        { dir: "in", kind: "reply", body: "Cumartesi 14:00 olur mu?", at: now - 2 * DAY - 3 * HOUR + 5 * 60_000, status: "received", reactionEmoji: "👍" },
+        { dir: "out", kind: "session", body: "Ayarladım! Cumartesi 14.00'te bekliyoruz 💇‍♀️", at: now - 2 * DAY - 3 * HOUR + 6 * 60_000, status: "read" },
+        { dir: "out", kind: "confirmation", templateName: "appointment_confirmation", body: "Merhaba Elif! Bella randevunuzu hatırlatır: Cumartesi 14:00 · Saç boyası + kesim. Gelemeyecekseniz bu mesajı yanıtlamanız yeterli.", at: now - DAY - 8 * HOUR, status: "delivered" },
+        { dir: "in", kind: "reply", body: "Onayla", at: now - DAY - 7 * HOUR, status: "received", quoteOf: 4 },
+        { dir: "out", kind: "chat_agent", body: "Teşekkürler Elif Hanım, randevunuz onaylandı. Değişiklik olursa yazmanız yeterli 😊", at: now - DAY - 7 * HOUR + 60_000, status: "read" },
+        { dir: "in", kind: "reply", body: "Bir de kaş alımı ekleyebilir miyiz?", at: now - 25 * 60_000, status: "received" },
+        { dir: "out", kind: "session", body: "Tabii, not ettim. Süre 15 dakika uzayacak, uygun mudur?", at: now - 24 * 60_000, status: "read", reactionEmoji: "👍" },
+        { dir: "in", kind: "reply", body: "🙏", at: now - 20 * 60_000, status: "received" },
+      ],
+    );
+
+    // Murat: the short thread — a reminder, the İptal button, a rebook, and
+    // a just-sent reply still on its single grey tick.
+    await seedThread(
+      { firstName: "Murat", lastName: "Aydın", phone: "+905327764311" },
+      [
+        { dir: "out", kind: "reminder_24h", templateName: "appointment_reminder", body: "Merhaba Murat! Yarın 11:00 saç + sakal randevunuzu hatırlatırız.", at: now - 3 * DAY - 2 * HOUR, status: "delivered" },
+        { dir: "in", kind: "reply", body: "İptal", at: now - 3 * DAY - HOUR, status: "received", quoteOf: 0 },
+        { dir: "out", kind: "session", body: "Anladım, iptal ettim. Yeni bir gün isterseniz buradayım.", at: now - 3 * DAY - HOUR + 2 * 60_000, status: "delivered" },
+        { dir: "in", kind: "reply", body: "Merhaba, yarın öğleden sonra boş var mı?", at: now - 2 * HOUR, status: "received" },
+        { dir: "out", kind: "session", body: "Yarın 15:30 uygun, ayırayım mı?", at: now - 2 * HOUR + 3 * 60_000, status: "sent" },
+      ],
+    );
+
+    return inserted;
+  },
+});
+
 // Dev housekeeping. wa.ts used to write a failed row for EVERY send while
 // WhatsApp was unconfigured, so a deployment that has been running unconnected
 // accumulates one red line per reminder per customer — a conversation history
