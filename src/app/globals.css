@@ -387,10 +387,15 @@ thead {
    inset back, or they would sit closer to the edge than everything else. */
 @media (min-width: 64rem) {
   main:has([data-bleeds-right]) {
+    /* The LEFT edge takes the same 0.5rem (Serdar, 2026-08-31): list, gap
+       and thread float with one even breath, instead of a wide left margin
+       against a tight right one. */
+    padding-left: 0.5rem;
     padding-right: 0.5rem;
     scrollbar-gutter: auto;
   }
   main:has([data-bleeds-right]) > :not([data-bleeds-right]) {
+    margin-left: 0.5rem;
     margin-right: 0.5rem;
   }
 }
