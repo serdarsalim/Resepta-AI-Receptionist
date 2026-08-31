@@ -328,18 +328,14 @@ export function BlockSheet({
               is the sheet claiming both at once. The typed times still
               survive the round trip in state; min-h keeps the row's height
               when the inputs come and go. */}
+          {/* Times first, all-day after — Google's order: the concrete case
+              leads, the exception trails it. The empty spacer holds the
+              check in place when the inputs go, so the control you just
+              clicked never jumps out from under the cursor. */}
           <div className="flex min-h-8 items-center gap-3">
-            <span className="flex shrink-0 items-center gap-2">
-              <CheckSwitch
-                on={allDay}
-                label={t("closures.allDay")}
-                onChange={setAllDay}
-              />
-              <span className="text-sm text-[var(--muted)]">
-                {t("closures.allDay")}
-              </span>
-            </span>
-            {!allDay && (
+            {allDay ? (
+              <span className="min-w-0 flex-1" />
+            ) : (
               <>
                 <input
                   type="time"
@@ -348,7 +344,7 @@ export function BlockSheet({
                   value={startMinute == null ? "" : minutesToTimeValue(startMinute)}
                   onChange={(e) => setStartMinute(timeValueToMinutes(e.target.value) ?? null)}
                 />
-                <span className="shrink-0 text-sm text-[var(--muted)]">
+                <span className="shrink-0 text-sm">
                   {t("settings.openUntil")}
                 </span>
                 <input
@@ -360,6 +356,14 @@ export function BlockSheet({
                 />
               </>
             )}
+            <span className="flex shrink-0 items-center gap-2">
+              <CheckSwitch
+                on={allDay}
+                label={t("closures.allDay")}
+                onChange={setAllDay}
+              />
+              <span className="text-sm">{t("closures.allDay")}</span>
+            </span>
           </div>
 
           {/* Google's recurrence choices as one chip row: once on the drawn
@@ -396,7 +400,7 @@ export function BlockSheet({
               day. One row, always: the input sizes to its content instead of
               grabbing the sheet's width and wrapping under the prose. */}
           {cadence === "once" && (
-            <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+            <div className="flex items-center gap-2 text-sm">
               <span className="whitespace-nowrap">{dateProse}</span>
               <span>{t("settings.openUntil")}</span>
               <input
@@ -430,9 +434,7 @@ export function BlockSheet({
                         )
                       }
                     />
-                    <span className="text-sm text-[var(--muted)]">
-                      {dayNames[day]}
-                    </span>
+                    <span className="text-sm">{dayNames[day]}</span>
                   </div>
                 );
               })}
