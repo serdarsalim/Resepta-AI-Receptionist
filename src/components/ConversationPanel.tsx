@@ -2256,41 +2256,42 @@ function AgentThreadStrip({
   const pending = state.pending;
   const live = state.effective === "live";
   return (
-    <div className="space-y-2 px-[var(--pane-inline)] pt-3">
-      <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-2">
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-            live
-              ? "bg-[var(--accent)]/15 text-[var(--accent)]"
-              : "bg-[var(--card)] text-[var(--muted)]"
+    <div className="space-y-2 px-[var(--pane-inline)] pt-2">
+      {/* A caption line, not a card (Serdar, 2026-08-31: "more out of the
+          way but still easily seeable"). At rest this row is a SETTING, and
+          a bordered, filled box with a badged icon gave a setting the same
+          visual rank as the composer under it. The bare spark plus a small
+          label keeps it findable — the accent spark and the pulse still say
+          "answering right now" at a glance — while the two amber strips
+          below keep their boxes, because a flag and a countdown are events,
+          and events are what deserve the weight. */}
+      <div className="flex items-center gap-2 px-1.5">
+        {/* The same four-point spark the app already uses for automation
+            (FeedIcon, the rules header), so the agent looks like itself
+            everywhere rather than picking a new symbol per screen. */}
+        <svg
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          className={`h-3.5 w-3.5 shrink-0 ${
+            live ? "text-[var(--accent)]" : "text-[var(--muted)]"
           }`}
+          aria-hidden
         >
-          {/* The same four-point spark the app already uses for automation
-              (FeedIcon, the rules header), so the agent looks like itself
-              everywhere rather than picking a new symbol per screen. */}
-          <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden>
-            <path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
-          </svg>
+          <path d="M12 2l1.9 5.6L19.5 9.5 13.9 11.4 12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2z" />
+        </svg>
+        <span className="min-w-0 truncate text-[11px] font-medium text-[var(--muted-strong)]">
+          {t("agent.inThisChat")}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex items-center gap-1.5">
-            <span className="min-w-0 truncate text-xs font-medium text-[var(--foreground)]">
-              {t("agent.inThisChat")}
-            </span>
-            {/* Worth a pulse only while it is actually answering: "answering"
-                is a claim about right now, and a static label makes it read
-                like a setting somebody switched on once. */}
-            {live && (
-              <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-              </span>
-            )}
+        {/* Worth a pulse only while it is actually answering: "answering"
+            is a claim about right now, and a static label makes it read
+            like a setting somebody switched on once. */}
+        {live && (
+          <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-60" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
           </span>
-          {/* No "This chat only" subtitle. "In this chat" is already in the
-              title, so the line restated the header one row down and cost
-              the strip a second line of height (Serdar, 2026-08-31). */}
-        </span>
+        )}
+        <span className="min-w-0 flex-1" />
         <SegmentedControl
           size="sm"
           value={state.effective}
