@@ -1254,7 +1254,10 @@ export function ConversationPanel({
               // radius, not the app's soft 16 — the big radius plus pastel
               // green is what read as weak — tight padding, near-black ink
               // on the WhatsApp greens and whites the tokens now carry.
-              className={`flex w-fit max-w-full items-end gap-2 rounded-lg px-2.5 py-1.5 text-sm leading-[19px] text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
+              // No leading override: text-sm's own line-height IS WhatsApp's
+              // — measured 21.25px on both, live (2026-08-31). The 19px this
+              // carried was ~2px tighter than the real thing.
+              className={`flex w-fit max-w-full items-end gap-2 rounded-lg px-2.5 py-1.5 text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
                   ? "self-end rounded-br-sm bg-[var(--chat-out)]"
                   : "rounded-bl-sm bg-[var(--chat-in)]"
@@ -1365,7 +1368,10 @@ export function ConversationPanel({
               )}
               </div>
               <p
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-[11px] ${
+                // text-xs, not 11px: WhatsApp's stamp measures 0.75rem
+                // exactly (12.75px live against 11 ours, 2026-08-31), and
+                // the too-small stamp was the visible size mismatch.
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap pb-0.5 text-xs ${
                   failed ? "text-red-600 dark:text-red-400" : "text-[var(--chat-stamp)]"
                 }`}
               >
