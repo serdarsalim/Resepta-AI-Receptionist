@@ -15,6 +15,8 @@ import { signOutDestination } from "@/lib/hosts";
 import { OperatorBanner } from "./OperatorBanner";
 import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
+import { useHeaderPanesSlot, HeaderPanesProvider } from "@/lib/HeaderPanes";
+import { FeedIcon } from "./FeedIcon";
 import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
 
@@ -568,6 +570,7 @@ function ShellHeader({
 }) {
   const { t } = useLanguage();
   const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
+  const panes = useHeaderPanesSlot();
   const [expanded, setExpanded] = useState(false);
   const searchRef = useRef<HTMLInputElement | null>(null);
   // The search wrapper, handed to CustomerJump so its list lines up with the
@@ -634,6 +637,47 @@ function ShellHeader({
       <div
         className={`flex items-center gap-2 ${expanded ? "min-w-0 flex-1 sm:flex-none" : ""}`}
       >
+        {/* The contact page's pane switcher, on the title line where the
+            words-in-a-band version used to spend a row (see HeaderPanes).
+            Only below lg — from lg the record and the conversation share the
+            screen and the card's own pills do the filtering. Gone while the
+            phone search is expanded: the box takes the row, same deal the
+            title accepts. */}
+        {panes && !expanded && (
+          <div className="flex shrink-0 items-center gap-0.5 lg:hidden">
+            <button
+              type="button"
+              onClick={() => panes.select("record")}
+              aria-label={t("fields.title")}
+              aria-pressed={panes.active === "record"}
+              className={`rounded-md p-1.5 transition-colors ${
+                panes.active === "record"
+                  ? "bg-[var(--accent)]/10 text-[var(--accent)]"
+                  : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-3.9 3.6-6.5 8-6.5s8 2.6 8 6.5" />
+              </svg>
+            </button>
+            {(["call", "whatsapp", "email", "note"] as const).map((target) => (
+              <button
+                key={target}
+                type="button"
+                onClick={() => panes.select(target)}
+                aria-pressed={panes.active === target}
+                className={`rounded-md p-1.5 transition-colors ${
+                  panes.active === target
+                    ? "bg-[var(--accent)]/10"
+                    : "hover:bg-[var(--muted-bg)]"
+                }`}
+              >
+                <FeedIcon type={target} size={16} />
+              </button>
+            ))}
+          </div>
+        )}
         {placeholder && !expanded && (
           <button
             type="button"
@@ -1605,6 +1649,7 @@ export function AppShell({
     // Above both the header and the views: the box is rendered up here, the
     // filtering happens down there, so the query has to sit over the pair.
     <HeaderSearchProvider>
+    <HeaderPanesProvider>
       <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
         {/* Fixed overlay, so it costs the layout nothing and renders on every
           screen rather than only the one the operator arrived on. The
@@ -1887,6 +1932,7 @@ export function AppShell({
           </nav>
         </div>
       </div>
+    </HeaderPanesProvider>
     </HeaderSearchProvider>
   );
 }

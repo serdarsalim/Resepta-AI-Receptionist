@@ -19,6 +19,7 @@ import { PhoneField } from "./PhoneField";
 import { DEFAULT_DURATION } from "@/lib/calendarDrag";
 import { useBookingSheet } from "./useBookingSheet";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
+import { useHeaderPanes, type HeaderPaneTarget } from "@/lib/HeaderPanes";
 import { rememberCustomer } from "@/lib/recentCustomers";
 
 type CustomerAppointment = FunctionReturnType<
@@ -160,6 +161,28 @@ export function ContactView({
   );
   const search = useHeaderSearch(t("common.search"), jumpToCustomer);
 
+  // The phone header's pane switcher (see HeaderPanes): a person glyph for
+  // the record, the channel glyphs for the conversation. Selecting a channel
+  // swaps the pane AND filters to it; re-selecting the open one clears back
+  // to the merged feed, the same gesture the card's own pills use. Stable
+  // callback, per the hook's contract.
+  const selectPane = useCallback((target: HeaderPaneTarget) => {
+    if (target === "record") {
+      setMobilePane("record");
+      return;
+    }
+    setMobilePane("conversation");
+    setFilter((prev) => (prev === target ? "all" : target));
+  }, []);
+  useHeaderPanes(
+    mobilePane === "record"
+      ? "record"
+      : filter === "call" || filter === "whatsapp" || filter === "email" || filter === "note"
+        ? filter
+        : null,
+    selectPane,
+  );
+
   // Feed the recents list at the point of OPENING, whatever route opened this
   // page — that's what makes recents useful on their very first use.
   const recentName = customer
@@ -202,56 +225,12 @@ export function ContactView({
     // the customers LIST behind it does not fill the pane, and both are the
     // same tab.
     <div data-fills-pane data-bleeds-right className="flex h-full min-h-0 min-w-0 flex-col">
-      {/* One row on a desktop: back, who, the filter pills. Two on a phone with
-          the conversation open, because that is the one combination that does
-          not fit — back, name, dot, pills and the pane swap together ask for
-          ~560px of a 454px row. Everything but the name is shrink-0, so the
-          name paid the whole difference and rendered at zero width: the header
-          of a customer record with no customer in it.
-
-          flex-wrap alone would not have moved anything. The name is min-w-0, so
-          the browser shrinks it to nothing before it considers a second line —
-          the overflow reads as "fits" right up until it doesn't. The pills take
-          w-full below lg to claim a line outright, and order-last so the break
-          lands before them rather than before the pane swap. */}
-      {/* Only the pane switcher is left, and it is phone-only: back arrow and
-          name now live in the SHELL header (AppHome passes them), and the
-          needs-a-look dot moved into the record card's flags, where Consent
-          and Mute already are and where it finally gets a label. On desktop
-          this row does not exist at all. */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 lg:hidden">
-        {/* The pills moved INTO the conversation card (see the panel's
-            `header` below), so this line is now only the page's title: back,
-            who, and whether they need a look. */}
-        {/* Always ml-auto now. It used to give the margin up whenever the pills
-            were showing, because the two were sharing one line and fighting for
-            it; the pills have their own line below lg, so there is nothing left
-            to yield to. */}
-        <div className="ml-auto flex shrink-0 items-center gap-1 lg:hidden">
-          {(
-            [
-              ["record", "fields.title"],
-              ["conversation", "nav.inbox"],
-            ] as const
-          ).map(([pane, key]) => (
-            <button
-              key={pane}
-              type="button"
-              onClick={() => setMobilePane(pane)}
-              aria-pressed={mobilePane === pane}
-              // Ghost, no border, and the same font weight in both states so
-              // picking a pane never nudges its neighbour sideways.
-              className={`rounded-md px-2.5 py-1 text-sm font-medium transition-colors ${
-                mobilePane === pane
-                  ? "bg-[var(--accent)]/10 text-[var(--accent)]"
-                  : "text-[var(--muted-strong)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t(key)}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* No switcher row of its own any more (Serdar, 2026-08-31): the
+          record/conversation swap rides the SHELL header's title line as
+          glyphs — a person for the record, the channel icons for the
+          conversation — via the HeaderPanes slot claimed above. The words
+          ("Contact fields | Inbox") spent a band under the title to say less
+          than the icons say, in a language the pills already taught. */}
 
       {/* 40/60 split, each column its own scroll region (WhatsApp Web / HubSpot
           dual-scroll): the record scrolls left, the conversation scrolls right,
@@ -498,11 +477,16 @@ export function ContactView({
             // `mobilePane === "conversation" ? "flex" : "hidden"` to stop a
             // filter showing over a feed nobody was looking at; inside the
             // pane, the pane's own visibility already says that.
+            // max-lg:hidden: below lg the header's glyph switcher IS the
+            // filter row (HeaderPanes), and two rows of the same pills one
+            // above the other answered the same question twice. The Inbox
+            // keeps its pills at every width — it claims no header slot.
             header={
               <FeedFilterPills
                 customerId={customerId}
                 value={filter}
                 onChange={setFilter}
+                className="max-lg:hidden"
               />
             }
           />
