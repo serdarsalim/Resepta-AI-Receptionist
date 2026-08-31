@@ -40,10 +40,19 @@ const CANCEL_WORDS = [
   "nein", "storno", "stornieren", "absagen", // de
 ];
 
-function intentOf(text: string): "confirm" | "cancel" | null {
-  const norm = text.trim().toLowerCase();
-  if (CONFIRM_WORDS.some((w) => norm === w || norm.startsWith(w + " "))) return "confirm";
-  if (CANCEL_WORDS.some((w) => norm === w || norm.startsWith(w + " "))) return "cancel";
+// `bareOnly` is the agent boundary. The prefix match exists for orgs where
+// nobody else will read the message — there, "ok thanks" confirming beats
+// silence. An org running an agent is the opposite case: "Tamam saat 14
+// olsun" is a RESCHEDULE that happens to open with a confirm word, and the
+// prefix match confirming the old slot instead (Bella, 2026-08-31) is the
+// agent going mute at the exact moment it was needed. With an agent in the
+// conversation, only the bare word — trailing punctuation aside — is
+// unambiguous enough to shortcut it.
+function intentOf(text: string, bareOnly: boolean): "confirm" | "cancel" | null {
+  const norm = text.trim().toLowerCase().replace(/[.!?…]+$/, "");
+  const hit = (w: string) => norm === w || (!bareOnly && norm.startsWith(w + " "));
+  if (CONFIRM_WORDS.some(hit)) return "confirm";
+  if (CANCEL_WORDS.some(hit)) return "cancel";
   return null;
 }
 
@@ -410,6 +419,23 @@ export async function processInboundMessage(
     detail: tap ? undefined : text || undefined,
   });
 
+  // Who answers this conversation, resolved BEFORE the typed-text match
+  // below, because it is one of the match's inputs: an eligible agent narrows
+  // intentOf to bare words. Guards repeat inside the action authoritatively;
+  // this check only avoids scheduling work that would refuse itself.
+  const org = await ctx.db.get(orgId);
+  const contact = customer ?? (await ctx.db.get(contactId));
+  // The business default and any disagreement this thread has with it, from
+  // the one resolver.
+  const agentMode = org
+    ? conversationAgentMode(org, contact).effective
+    : "off";
+  const agentEligible =
+    agentGenerates(agentMode) &&
+    !org?.demoMode &&
+    (org?.status ?? "active") !== "suspended" &&
+    Boolean(text.trim());
+
   // A button payload names its exact appointment; typed text falls
   // back to the customer's next upcoming one.
   const match = /^(confirm|cancel):(.+)$/.exec(payload);
@@ -419,7 +445,7 @@ export async function processInboundMessage(
     intent = match[1] as "confirm" | "cancel";
     appointmentId = match[2] as Id<"appointments">;
   } else if (customer) {
-    intent = intentOf(text);
+    intent = intentOf(text, agentEligible);
     if (intent) {
       const appointments = await ctx.db
         .query("appointments")
@@ -438,23 +464,10 @@ export async function processInboundMessage(
   // a robot on the one channel where the customer thinks they are
   // talking to the salon. The owner alert above already fired either way.
   if (!appointmentId) {
-    const org = await ctx.db.get(orgId);
     // The chat agent (docs/chat-agent.md §2): anything non-deterministic is
     // its job when the org runs one. Buttons and bare EVET/İPTAL never reach
     // here — the deterministic paths above are cheaper, safer and already
-    // correct. Guards repeat inside the action authoritatively; this check
-    // only avoids scheduling work that would refuse itself.
-    const contact = customer ?? (await ctx.db.get(contactId));
-    // Who answers THIS conversation — the business default and any
-    // disagreement this thread has with it, from the one resolver.
-    const agentMode = org
-      ? conversationAgentMode(org, contact).effective
-      : "off";
-    const agentEligible =
-      agentGenerates(agentMode) &&
-      !org?.demoMode &&
-      (org?.status ?? "active") !== "suspended" &&
-      Boolean(text.trim());
+    // correct.
     if (agentEligible) {
       // Immediate, since 2026-08-31: the wait that coalesced fragmented
       // thoughts moved to the SEND side (AUTO_SEND_GRACE_MS), so the owner

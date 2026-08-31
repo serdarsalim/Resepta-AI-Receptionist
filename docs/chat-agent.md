@@ -57,7 +57,10 @@ to the away-reply:
 
 1. Button payloads and bare EVET/İPTAL keep their existing deterministic
    handling. The agent NEVER handles a confirm/cancel tap — those paths are
-   cheaper, safer and already correct.
+   cheaper, safer and already correct. Bare means bare: with an eligible
+   agent, a sentence that merely OPENS with a confirm word ("Tamam saat 14
+   olsun" is a reschedule, not a confirmation) goes to the agent; the old
+   prefix match survives only for orgs with no agent to read it.
 2. If nothing deterministic matched and the org's agent is **live**, the agent
    action is scheduled (`ctx.scheduler.runAfter(0, …)`, same pattern as the
    away-reply). The away-reply is suppressed for live orgs — the agent answers
