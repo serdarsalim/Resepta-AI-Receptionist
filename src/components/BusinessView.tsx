@@ -2400,28 +2400,44 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         {showDeactivated && deactivated.length > 0 && (
           // The same grid as the roster above, so a former member's name and
           // email stand in the same columns they held while active — and the
-          // same rule: one line over the list, no fences between rows. The
-          // last two tracks are one actions cell here, because restore and
-          // remove are a pair and the 1.75rem menu column holds one icon.
+          // same rule: one line over the list, no fences between rows.
+          // Restore sits in the AVAILABLE track, an arrow pointing at the
+          // active list above: under that header the gesture reads as "make
+          // available again", and next to the name it is reachable without
+          // crossing the whole row. Remove keeps the menu track, where the
+          // active rows keep their archive — the destructive one stays the
+          // far reach on both lists.
           <ul className="border-t border-[var(--border)]">
             {deactivated.map((row) => (
               <li key={row.key} className={`group flex items-center gap-3 py-1.5 text-sm ${ROSTER_ROW}`}>
                 <span className="hidden sm:block" />
                 <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                <span className="hidden sm:block" />
-                <span className="hidden truncate text-xs text-[var(--muted)] sm:block">
-                  {row.email}
-                </span>
-                <span className="flex items-center justify-end gap-1 sm:col-span-2">
                 <ActionTip
                   label={t("roster.restore").replace("{name}", row.name)}
                   onClick={() =>
                     void guard(() => setActive({ staffId: row.staffId!, active: true }))
                   }
-                  className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                  className="justify-self-start opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
-                  ↺
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 19V5" />
+                    <path d="m5 12 7-7 7 7" />
+                  </svg>
                 </ActionTip>
+                <span className="hidden truncate text-xs text-[var(--muted)] sm:block">
+                  {row.email}
+                </span>
+                <span className="hidden sm:block" />
 
                 {/* The one place a member is destroyed, and only after they
                     are already out of the booking flow. The confirmation says
@@ -2449,7 +2465,6 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 >
                   ✕
                 </ActionTip>
-                </span>
               </li>
             ))}
           </ul>
