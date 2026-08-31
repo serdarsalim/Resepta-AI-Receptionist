@@ -3840,6 +3840,14 @@ const dictionary = {
     en: "The end has to come after the start.",
     de: "Das Ende muss nach dem Beginn liegen.",
   },
+  // closures.add refuses a block whose every minute an existing block already
+  // covers — the row would change nothing. Clicking the shaded band opens the
+  // existing block instead.
+  "closures.errCovered": {
+    tr: "Bu saatler zaten kapalı.",
+    en: "This time is already blocked.",
+    de: "Diese Zeit ist bereits blockiert.",
+  },
   // The booking page was part of a card called "Message variables" until
   // 2026-08-14. The name described the [booking_link] token rather than the
   // thing itself. It lives in Business settings now and the token simply

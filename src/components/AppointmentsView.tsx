@@ -1351,6 +1351,32 @@ function Calendar({
     const { startAt, durationMinutes } = dragResult(current, current.day, DEFAULT_DURATION);
     if (current.kind === "create" || !current.row) {
       const anchorRect = rectOfDrawnSlot();
+      // A plain click on a blocked band means "this block", not "book here":
+      // the label chip was the only way to reopen a block, and at ten pixels
+      // tall nobody found it — owners kept drawing fresh blocks on top of the
+      // one they could not select. DRAGGING over a block still draws a slot,
+      // so booking into the lunch hour on purpose keeps working (the wash-not-
+      // wall rule governs the offer, not the owner).
+      if (
+        current.kind === "create" &&
+        !current.moved &&
+        onOpenClosure &&
+        closures &&
+        anchorRect
+      ) {
+        const p = getLocalPartsSafe(startAt, timezone);
+        const hit = closures.find(
+          (row) =>
+            closureAppliesToDay(row, p) &&
+            p.minutesOfDay >= (row.startMinute ?? 0) &&
+            p.minutesOfDay < (row.endMinute ?? 24 * 60),
+        );
+        if (hit) {
+          setDrag(null);
+          onOpenClosure(hit, isoDateOf(p), anchorRect);
+          return;
+        }
+      }
       setDrag(null);
       // The band shows the BOOKING, not the gesture. A click is a gesture with
       // no height at all, and dragResult turns it into a default-length
@@ -1527,6 +1553,16 @@ function Calendar({
           // rather than something confidently wrong.
           return [];
         }
+      }
+    }
+    // Chips that land on the same hour stack instead of overprinting: an
+    // all-day holiday and a lunch block both clamp to opening time, and two
+    // labels drawn at one `top` smear into a single unreadable word.
+    const CHIP_H = 18;
+    chips.sort((a, b) => a.top - b.top);
+    for (let i = 1; i < chips.length; i++) {
+      if (chips[i].top < chips[i - 1].top + CHIP_H) {
+        chips[i] = { ...chips[i], top: chips[i - 1].top + CHIP_H };
       }
     }
     return chips;

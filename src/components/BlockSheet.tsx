@@ -250,7 +250,9 @@ export function BlockSheet({
           ? t("closures.errWindow")
           : raw.includes("closure-bad-range")
             ? t("closures.errRange")
-            : t("closures.errKind"),
+            : raw.includes("closure-covered")
+              ? t("closures.errCovered")
+              : t("closures.errKind"),
       );
     } finally {
       setSaving(false);

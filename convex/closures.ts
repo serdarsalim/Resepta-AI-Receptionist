@@ -166,6 +166,54 @@ function normalise(input: {
   };
 }
 
+// Whether `existing` already blocks every minute `next` would block — i.e.
+// the new row is pure duplication. Saving it anyway is how the calendar ended
+// up with identical blocks stacked on one lunch hour, each hiding the chip of
+// the one under it. Partial overlaps stay legal: extending a break by drawing
+// a wider block over it is a thing an owner means to do.
+type ClosureShape = {
+  weekdays?: number[];
+  date?: string;
+  endDate?: string;
+  startMinute?: number;
+  endMinute?: number;
+};
+
+function coveredBy(next: ClosureShape, existing: ClosureShape): boolean {
+  const winCovered =
+    (existing.startMinute ?? 0) <= (next.startMinute ?? 0) &&
+    (next.endMinute ?? 24 * 60) <= (existing.endMinute ?? 24 * 60);
+  if (!winCovered) return false;
+  const nextDated = typeof next.date === "string" && next.date.length > 0;
+  const existingDated =
+    typeof existing.date === "string" && existing.date.length > 0;
+  if (nextDated && existingDated) {
+    // String comparison IS date comparison for YYYY-MM-DD; endDate inclusive.
+    return (
+      existing.date! <= next.date! &&
+      (next.endDate ?? next.date!) <= (existing.endDate ?? existing.date!)
+    );
+  }
+  if (nextDated && !existingDated) {
+    // A dated row hides inside a recurring one only if every civil day of its
+    // range falls on a recurring weekday. Seven days visit every weekday, so
+    // the walk never needs to go further than that.
+    const start = new Date(`${next.date!}T00:00:00Z`).getTime();
+    const lastIso = next.endDate ?? next.date!;
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(start + i * 24 * 60 * 60_000);
+      if (day.toISOString().slice(0, 10) > lastIso) break;
+      if (!existing.weekdays!.includes(day.getUTCDay())) return false;
+    }
+    return true;
+  }
+  if (!nextDated && !existingDated) {
+    return next.weekdays!.every((d) => existing.weekdays!.includes(d));
+  }
+  // A recurring row repeats forever; no dated row can cover it.
+  return false;
+}
+
 const writeArgs = {
   weekdays: v.optional(v.array(v.number())),
   date: v.optional(v.string()),
@@ -246,6 +294,13 @@ export const add = mutation({
     if (result.row.weekdays && result.row.weekdays.length === 0) {
       throw new Error("closure-kind-required");
     }
+    // Blocking time that is already blocked stores a row that changes nothing
+    // and clutters the calendar with stacked chips — refused, so the sheet can
+    // say so instead of silently succeeding.
+    const rows = await loadClosures(ctx, orgId);
+    if (rows.some((row) => coveredBy(result.row, row))) {
+      throw new Error("closure-covered");
+    }
     return await ctx.db.insert("closures", { orgId, ...result.row });
   },
 });
@@ -261,6 +316,16 @@ export const update = mutation({
     if (!result.ok) throw new Error(result.reason);
     if (result.row.weekdays && result.row.weekdays.length === 0) {
       throw new Error("closure-kind-required");
+    }
+    // Same rule as `add`, minus the row being edited: shrinking a block into
+    // the shadow of another one leaves a no-op row behind.
+    const rows = await loadClosures(ctx, orgId);
+    if (
+      rows.some(
+        (other) => other._id !== args.closureId && coveredBy(result.row, other),
+      )
+    ) {
+      throw new Error("closure-covered");
     }
     // Replaced whole rather than merged: a row that switches from recurring to
     // dated must LOSE its weekdays, and a patch of only the fields that
