@@ -121,25 +121,33 @@ function DeliveryTicks({ status, label }: { status: string; label: string }) {
   }
   if (status !== "sent" && status !== "delivered" && status !== "read") return null;
   const read = status === "read";
+  const double = status !== "sent";
+  // WhatsApp's own tick geometry (Serdar, 2026-08-31: ours read flat next to
+  // it): the long arm runs nearly the glyph's whole height, the short arm is
+  // a stub, and the second tick is the SAME check shifted right so its stub
+  // crosses the first one's arm — the interlock is what makes it read as
+  // WhatsApp rather than as two checkmarks. The box grows from 12 to 16 when
+  // the second tick lands, nudging the stamp left exactly as WhatsApp does.
   return (
     <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
+      width={double ? 16 : 12}
+      height="11"
+      viewBox={double ? "0 0 16 11" : "0 0 12 11"}
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.2"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-label={label}
       // Blue only once it has been READ. Delivered stays the muted colour it
       // inherits, so "they have seen it" is the one state that changes hue —
-      // which is the only one the salon actually acts on.
-      className={read ? "text-sky-500" : ""}
+      // which is the only one the salon actually acts on. WhatsApp's exact
+      // blue, both themes — the bubble is already quoting their palette.
+      className={read ? "text-[#53bdeb]" : ""}
     >
       <title>{label}</title>
-      <path d="M2 12.5 7 17.5 12 11.5" />
-      {status !== "sent" && <path d="M11 15.5 12.5 17 18 10.5" />}
+      <path d="M1.2 6.2 4.2 9.2 11.2 1" />
+      {double && <path d="M5.8 6.2 8.8 9.2 15.8 1" />}
     </svg>
   );
 }
@@ -1526,7 +1534,10 @@ export function ConversationPanel({
             // conversation ended — the composer is part of the chat surface,
             // not a footer under it. The feed view keeps card-white, because
             // its thread does too.
-            className="px-[var(--pane-inline)] py-3"
+            // pt-1 under the agent strip (Serdar, 2026-08-31): strip and
+            // composer are one control cluster, and the resting pt-3 read
+            // as a gap between two unrelated cards.
+            className={`px-[var(--pane-inline)] pb-3 ${agentState ? "pt-1" : "pt-3"}`}
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
