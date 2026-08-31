@@ -1587,6 +1587,37 @@ export function ConversationPanel({
                     : "bg-[var(--muted-bg)]"
               } ${composerLive ? "" : "opacity-60"}`}
             >
+            {/* One + instead of three icons (Serdar, 2026-08-31): a row of
+                emoji, photo and clock ate the field's width, and every one
+                of them is the same kind of thing — something added to the
+                message that is not typing. WhatsApp's own grammar, position
+                included: + on the pill's left edge, the field in the middle,
+                the plane on the right. */}
+            <ComposerPlusMenu
+              disabled={!composerLive || sending}
+              active={attaching || Boolean(attached) || scheduling || Boolean(scheduleAt)}
+              onPickEmoji={(emoji) => {
+                // At the cursor, not appended: someone who went back to fix a
+                // word and then reached for an emoji means it to land there.
+                const field = composerRef.current;
+                if (!field) {
+                  setDraft((prev) => prev + emoji);
+                  return;
+                }
+                const at = field.selectionStart ?? field.value.length;
+                const end = field.selectionEnd ?? at;
+                setDraft(field.value.slice(0, at) + emoji + field.value.slice(end));
+                // Restored after React has painted the new value, or the
+                // caret snaps to the end of the box and the next emoji lands
+                // somewhere the writer did not ask for.
+                requestAnimationFrame(() => {
+                  field.focus();
+                  field.setSelectionRange(at + emoji.length, at + emoji.length);
+                });
+              }}
+              onAttach={() => setAttaching((prev) => !prev)}
+              onSchedule={() => setScheduling((prev) => !prev)}
+            />
             <textarea
               ref={composerRef}
               value={draft}
@@ -1620,37 +1651,6 @@ export function ConversationPanel({
               }
               disabled={!composerLive || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
-            />
-            {/* One + instead of three icons (Serdar, 2026-08-31): a row of
-                emoji, photo and clock ate the field's width, and every one
-                of them is the same kind of thing — something added to the
-                message that is not typing. WhatsApp's own grammar: + opens
-                a drop-up, the field keeps the room. It rides the row's
-                items-end with Send, same as the icons it replaced. */}
-            <ComposerPlusMenu
-              disabled={!composerLive || sending}
-              active={attaching || Boolean(attached) || scheduling || Boolean(scheduleAt)}
-              onPickEmoji={(emoji) => {
-                // At the cursor, not appended: someone who went back to fix a
-                // word and then reached for an emoji means it to land there.
-                const field = composerRef.current;
-                if (!field) {
-                  setDraft((prev) => prev + emoji);
-                  return;
-                }
-                const at = field.selectionStart ?? field.value.length;
-                const end = field.selectionEnd ?? at;
-                setDraft(field.value.slice(0, at) + emoji + field.value.slice(end));
-                // Restored after React has painted the new value, or the
-                // caret snaps to the end of the box and the next emoji lands
-                // somewhere the writer did not ask for.
-                requestAnimationFrame(() => {
-                  field.focus();
-                  field.setSelectionRange(at + emoji.length, at + emoji.length);
-                });
-              }}
-              onAttach={() => setAttaching((prev) => !prev)}
-              onSchedule={() => setScheduling((prev) => !prev)}
             />
             {/* A circle with a plane, not the word: WhatsApp's grammar again —
                 in a pill that already reads as chat, a labeled button is the
