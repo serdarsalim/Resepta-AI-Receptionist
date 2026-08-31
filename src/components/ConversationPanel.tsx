@@ -1634,11 +1634,17 @@ export function ConversationPanel({
                 form. Emoji first, because it is the one that edits the text
                 rather than adding something beside it — and because it is
                 where every other composer in this app already keeps it
-                (CampaignsView, RemindersView, EmailBodyEditor). */}
+                (CampaignsView, RemindersView, EmailBodyEditor).
+
+                No self-center on any of the three: the row is items-end, so
+                they ride the bottom edge WITH Send. Centered, a multi-line
+                draft left the icons floating mid-pill while Send stayed
+                down — four controls in one toolbar drifting apart
+                (Serdar, 2026-08-31). */}
             <EmojiPicker
               title={t("editor.insertEmoji")}
               disabled={!composerLive || sending}
-              className="shrink-0 self-center rounded-full p-2 text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
+              className="shrink-0 rounded-full p-2 text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
               onPick={(emoji) => {
                 // At the cursor, not appended: someone who went back to fix a
                 // word and then reached for an emoji means it to land there.
@@ -1671,7 +1677,7 @@ export function ConversationPanel({
               aria-label={t("media.attach")}
               aria-pressed={attaching}
               disabled={!composerLive || sending}
-              className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
+              className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
                 attaching || attached
                   ? "text-[var(--accent)]"
                   : "text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -1689,7 +1695,7 @@ export function ConversationPanel({
               aria-label={t("message.scheduleAt")}
               aria-pressed={scheduling}
               disabled={!composerLive || sending}
-              className={`shrink-0 self-center rounded-full p-2 transition-colors disabled:opacity-50 ${
+              className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
                 scheduling || scheduleAt
                   ? "text-[var(--accent)]"
                   : "text-[var(--muted)] hover:text-[var(--foreground)]"
