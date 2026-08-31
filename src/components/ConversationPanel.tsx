@@ -1652,12 +1652,19 @@ export function ConversationPanel({
               onAttach={() => setAttaching((prev) => !prev)}
               onSchedule={() => setScheduling((prev) => !prev)}
             />
+            {/* A circle with a plane, not the word: WhatsApp's grammar again —
+                in a pill that already reads as chat, a labeled button is the
+                one piece still speaking form. The word survives as the
+                aria-label. */}
             <button
               type="submit"
+              aria-label={t("contact.send")}
               disabled={!composerLive || sending || (!draft.trim() && !attached)}
-              className="shrink-0 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="shrink-0 rounded-full bg-[var(--accent)] p-2 text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-40"
             >
-              {t("contact.send")}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
+              </svg>
             </button>
             </div>
           </form>
