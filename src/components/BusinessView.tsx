@@ -2398,26 +2398,19 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         )}
 
         {showDeactivated && deactivated.length > 0 && (
-          // The same grid as the roster above, so a former member's name and
-          // email stand in the same columns they held while active — and the
-          // same rule: one line over the list, no fences between rows.
-          // Restore sits in the AVAILABLE track, an arrow pointing at the
-          // active list above: under that header the gesture reads as "make
-          // available again", and next to the name it is reachable without
-          // crossing the whole row. Remove keeps the menu track, where the
-          // active rows keep their archive — the destructive one stays the
-          // far reach on both lists.
-          <ul className="border-t border-[var(--border)]">
+          // Names flowing inline, each with its two actions attached. Former
+          // members are history, not a roster — they earn a shelf, not a
+          // table (Serdar, 2026-08-31, after two rounds of trying to make
+          // them one).
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
             {deactivated.map((row) => (
-              <li key={row.key} className={`group flex items-center gap-3 py-1.5 text-sm ${ROSTER_ROW}`}>
-                <span className="hidden sm:block" />
-                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+              <span key={row.key} className="flex items-center text-sm text-[var(--muted)]">
+                <span className="truncate">{row.name}</span>
                 <ActionTip
                   label={t("roster.restore").replace("{name}", row.name)}
                   onClick={() =>
                     void guard(() => setActive({ staffId: row.staffId!, active: true }))
                   }
-                  className="justify-self-start opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <svg
                     width="15"
@@ -2434,15 +2427,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                     <path d="m5 12 7-7 7 7" />
                   </svg>
                 </ActionTip>
-                <span className="hidden truncate text-xs text-[var(--muted)] sm:block">
-                  {row.email}
-                </span>
-                <span className="hidden sm:block" />
-
-                {/* The one place a member is destroyed, and only after they
-                    are already out of the booking flow. The confirmation says
-                    what history it costs, because that is the part that
-                    cannot be taken back. */}
+                {/* The one place a member is destroyed. The confirmation says
+                    what history it costs, because that part can't be taken
+                    back. */}
                 <ActionTip
                   label={(row.hasAppointments
                     ? t("roster.removeWithHistory")
@@ -2461,13 +2448,13 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                       await guard(() => removeStaff({ staffId: row.staffId! }));
                     })();
                   }}
-                  className="opacity-0 hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                  className="hover:text-red-600"
                 >
                   ✕
                 </ActionTip>
-              </li>
+              </span>
             ))}
-          </ul>
+          </div>
         )}
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
