@@ -207,7 +207,6 @@ export function ConversationPanel({
   // disabled control for a feature they do not have.
   const agentState = useQuery(api.chatAgent.stateForCustomer, { customerId });
   const setConversationMode = useMutation(api.chatAgent.setConversationMode);
-  const discardSuggestion = useMutation(api.chatAgent.discardSuggestion);
   const cancelAutoSend = useMutation(api.chatAgent.cancelAutoSend);
   const sendSuggestion = useAction(api.chatAgent.sendSuggestion);
   const sendSession = useAction(api.wa.sendSession);
@@ -1504,18 +1503,10 @@ export function ConversationPanel({
         <AgentThreadStrip
           state={agentState}
           onMode={(mode) => void setConversationMode({ customerId, mode })}
-          // Both re-read the draft at CLICK time rather than closing over the
+          // Re-reads the draft at CLICK time rather than closing over the
           // one that was there at render: a newer customer message can retire
           // it between the two, and acting on the stale id would act on a
           // draft that has been overtaken.
-          onDiscard={() => {
-            const p = agentState.pending;
-            if (!p) return;
-            void discardSuggestion({ customerId, turnId: p.turnId });
-            // The composer gives the text back only if it is still the
-            // untouched draft; an edit means the reader has taken it over.
-            setDraft((current) => (current === p.reply ? "" : current));
-          }}
           onStopAutoSend={() => {
             const p = agentState.pending;
             if (p?.autoSendAt) void cancelAutoSend({ customerId, turnId: p.turnId });
@@ -2229,12 +2220,10 @@ function CallEntry({
 function AgentThreadStrip({
   state,
   onMode,
-  onDiscard,
   onStopAutoSend,
 }: {
   state: NonNullable<FunctionReturnType<typeof api.chatAgent.stateForCustomer>>;
   onMode: (mode: "off" | "suggest" | "live") => void;
-  onDiscard: () => void;
   onStopAutoSend: () => void;
 }) {
   const { t } = useLanguage();
@@ -2300,47 +2289,23 @@ function AgentThreadStrip({
 
       {/* The draft itself lives in the COMPOSER now, not in a card of its
           own (Serdar, 2026-08-31: "i want the suggestion directly in the
-          chat editor"). This line only says what the composer is holding.
-          Two states, two colours the app already speaks: amber while a live
-          reply counts down to its own send — amber is "about to happen" —
-          and the accent dash once it is an ordinary draft waiting on a
-          person. Stop defuses without discarding; At throws the text away. */}
-      {pending && (
-        <div
-          className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-xs ${
-            pending.autoSendAt
-              ? "border-amber-500/30 bg-amber-500/[0.08]"
-              : "border-dashed border-[var(--accent)]/40 bg-[var(--accent)]/[0.05]"
-          }`}
-        >
-          {pending.autoSendAt ? (
-            <>
-              <AutoSendCountdown deadline={pending.autoSendAt} />
-              <button
-                type="button"
-                onClick={onStopAutoSend}
-                className="shrink-0 rounded-lg px-2 py-0.5 font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-              >
-                {t("agent.autoSendStop")}
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
-                {t("agent.draft")}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--muted)]">
-                {t("agent.draftPrivate")}
-              </span>
-              <button
-                type="button"
-                onClick={onDiscard}
-                className="shrink-0 rounded-lg px-2 py-0.5 font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
-              >
-                {t("agent.draftDiscard")}
-              </button>
-            </>
-          )}
+          chat editor") — and an ordinary draft gets NO line at all: the text
+          sitting in the box already says everything a banner would, and the
+          "Assistant's draft / Discard" strip above it was the same fact
+          twice (Serdar, 2026-08-31). Clearing or rewriting the box is the
+          discard. Only a live reply counting down to its own send still
+          earns a line, in amber — "about to happen" — because that state is
+          invisible from the text alone and Stop has to live somewhere. */}
+      {pending?.autoSendAt && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-2.5 py-1.5 text-xs">
+          <AutoSendCountdown deadline={pending.autoSendAt} />
+          <button
+            type="button"
+            onClick={onStopAutoSend}
+            className="shrink-0 rounded-lg px-2 py-0.5 font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+          >
+            {t("agent.autoSendStop")}
+          </button>
         </div>
       )}
     </div>

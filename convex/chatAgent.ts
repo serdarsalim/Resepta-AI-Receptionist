@@ -70,6 +70,7 @@ import { laneAvailability, laneForReply, loadEvolutionCreds } from "./lib/waLane
 import { sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
 import { nextUpcomingOf } from "./appointments";
+import { rulesForOrg } from "./messageRules";
 import {
   applyVoiceContactValues,
   contactUpdateFailure,
@@ -315,6 +316,17 @@ export const loadTurnContext = internalQuery({
       .order("desc")
       .take(3);
 
+    // Whether an automation already speaks for the booking events. A live
+    // rule on the booking or cancellation trigger sends its own WhatsApp
+    // message the moment the tool writes the row (appointments.
+    // scheduleLifecycleMessages, runAfter 0) — the action reads this pair to
+    // stand down instead of texting the customer the same news twice.
+    const rules = await rulesForOrg(ctx, customer.orgId);
+    const automations = {
+      booking: rules.some((r) => r.trigger === "booking" && !r.paused),
+      cancellation: rules.some((r) => r.trigger === "cancellation" && !r.paused),
+    };
+
     // Continuity (spec §1): the customer's calls ride into the prompt, so a
     // reply to a voice booking's confirmation knows about the call.
     const language = customer.language ?? org.language;
@@ -375,6 +387,7 @@ export const loadTurnContext = internalQuery({
     return {
       skip,
       orgId: customer.orgId,
+      automations,
       org: {
         name: org.name,
         timezone: org.timezone,
@@ -1262,6 +1275,41 @@ export const respond = internalAction({
         });
         return null;
       }
+    }
+
+    // THE AUTOMATION ALREADY ANSWERED. A successful book, cancel or
+    // reschedule fires the org's lifecycle rules from the mutation itself
+    // (appointments.scheduleLifecycleMessages) — the customer's WhatsApp
+    // confirmation is on its way before this reply even exists. The model's
+    // own text after a booking is an echo of that confirmation, so where a
+    // live rule covers the event the agent stands down: no draft to approve
+    // in suggest, no second message in live. Recorded, not silent — the
+    // flight recorder keeps the reply it would have sent. Shadow returned
+    // above untouched: it sends nothing, so it has nothing to duplicate,
+    // and the pre-launch corpus stays whole.
+    const automationAnswered = toolLog.some((call) => {
+      const result = call.result as Record<string, unknown> | null;
+      if (!result || typeof result !== "object") return false;
+      if (call.name === "book_appointment" && result.booked === true)
+        return context.automations.booking;
+      // A reschedule re-fires the BOOKING trigger (markRescheduled sends the
+      // confirmation again at the new time), so it reads the same switch.
+      if (call.name === "reschedule_appointment" && result.rescheduled === true)
+        return context.automations.booking;
+      if (call.name === "cancel_appointment" && result.cancelled === true)
+        return context.automations.cancellation;
+      return false;
+    });
+    if (automationAnswered) {
+      await record({
+        status: "skipped",
+        reply: body,
+        toolCalls: toolLog,
+        inputTokens,
+        outputTokens,
+        error: "automation-answered",
+      });
+      return null;
     }
 
     // Suggest: the same turn, the same cost, stopping one step short of the

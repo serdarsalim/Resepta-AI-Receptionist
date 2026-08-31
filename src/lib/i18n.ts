@@ -4193,14 +4193,7 @@ const dictionary = {
     en: "The assistant says this one needs a person",
     de: "Der Assistent sagt, hier wird ein Mensch gebraucht",
   },
-  // The draft card above the composer.
-  "agent.draft": { tr: "Asistanın taslağı", en: "Assistant's draft", de: "Entwurf des Assistenten" },
-  "agent.draftPrivate": {
-    tr: "Bunu yalnızca siz görüyorsunuz.",
-    en: "Only you can see this.",
-    de: "Das sehen nur Sie.",
-  },
-  "agent.draftDiscard": { tr: "At", en: "Discard", de: "Verwerfen" },
+  // The toast when Send finds the draft already retired under it.
   "agent.draftGone": {
     tr: "Bu taslak artık geçerli değil — müşteri yeni bir mesaj gönderdi.",
     en: "That draft is out of date — the customer has sent something newer.",
