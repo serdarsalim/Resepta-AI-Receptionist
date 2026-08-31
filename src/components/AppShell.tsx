@@ -1621,11 +1621,9 @@ export function AppShell({
     <HeaderSearchProvider>
       <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
         {/* Fixed overlay, so it costs the layout nothing and renders on every
-          screen rather than only the one the operator arrived on. */}
-        <OperatorBanner />
-        {/* Same treatment, same reason. Only one of the two can be showing at
-          once in practice: an operator impersonating an org is not someone who
-          was just invited to it. */}
+          screen rather than only the one the operator arrived on. The
+          acting-as chip (OperatorBanner) used to float here too; it lives in
+          the sidebar under Admin now. */}
         <WorkspaceInviteBanner />
         {/* Drawer backdrop. Stays mounted so it fades rather than snaps, and
           keeps pointer-events off while closed so it never eats a tap. */}
@@ -1773,6 +1771,10 @@ export function AppShell({
                   )}
                 </a>
               )}
+              {/* The acting-as chip, right under the door it was entered
+                through. Self-gating: renders nothing unless the operator is
+                inside someone else's org. */}
+              <OperatorBanner collapsed={showCollapsed} />
             </div>
 
             {/* Who is signed in, at the bottom corner — where a decade of
