@@ -40,7 +40,12 @@ import { EmojiPicker } from "./EmojiPicker";
 // resolved pixel value: nothing sets a root font-size, and Serdar's Chrome
 // runs 17px, where a hardcoded 25px would be out. Keep in step with the
 // threadRef div's padding; they are one column.
-const FEED_COL_PAD = "pl-4 pr-[calc(1rem+9px)]";
+//
+// --pane-inline (globals' .pane-measure, on the panel root) IS that column's
+// padding now: 1rem on a normal pane, wider on a big monitor so content
+// keeps a reading measure instead of stretching wall to wall.
+const FEED_COL_PAD =
+  "pl-[var(--pane-inline)] pr-[calc(var(--pane-inline)+9px)]";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import type { Search } from "@/lib/useTableState";
@@ -680,7 +685,7 @@ export function ConversationPanel({
   ) : null;
 
   return (
-    <div className={`flex min-h-0 flex-col ${surface} ${className ?? ""}`}>
+    <div className={`pane-measure flex min-h-0 flex-col ${surface} ${className ?? ""}`}>
       {header && (
         // h-11 px-3 matches the list card's header across the gap. It sits on
         // the card's white rather than the thread's tinted plane: this row is
@@ -958,7 +963,7 @@ export function ConversationPanel({
         // the transcript on its 128px floor, and CLIPPED anything the card
         // itself could not fit with no way to reach it. The card is read once
         // and the transcript is read through, so the card is what scrolls away.
-        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto p-4 ${attached ? "hidden" : ""} ${
+        className={`thin-scroll stable-gutter min-h-0 flex-1 overflow-y-auto px-[var(--pane-inline)] py-4 ${attached ? "hidden" : ""} ${
           // Only the chat wears a plane of its own. The feed view renders calls
           // and email rows with their own edges, which want the card's white
           // under them.
@@ -1452,7 +1457,7 @@ export function ConversationPanel({
           composer below stays live as the caption field: body already
           rides the send as the media caption. */}
       {attached && (
-        <div className="flex min-h-0 flex-1 flex-col p-4">
+        <div className="flex min-h-0 flex-1 flex-col px-[var(--pane-inline)] py-4">
           <div className="flex shrink-0 items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
               {attached.name}
@@ -1521,7 +1526,7 @@ export function ConversationPanel({
             // conversation ended — the composer is part of the chat surface,
             // not a footer under it. The feed view keeps card-white, because
             // its thread does too.
-            className="p-3"
+            className="px-[var(--pane-inline)] py-3"
             onSubmit={async (event) => {
               event.preventDefault();
               const body = draft.trim();
@@ -1669,7 +1674,7 @@ export function ConversationPanel({
             </div>
           </form>
           {scheduling && (
-            <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
+            <div className="flex flex-wrap items-center gap-2 px-[var(--pane-inline)] pb-2">
               <input
                 type="datetime-local"
                 value={scheduleAt}
@@ -1697,7 +1702,7 @@ export function ConversationPanel({
           {sendError && (
             // Same rule as the bubbles: a known reason gets its sentence, an
             // unknown one falls back to plain "not sent" rather than the slug.
-            <p className="px-3 pb-2 text-xs text-red-600 dark:text-red-400">
+            <p className="px-[var(--pane-inline)] pb-2 text-xs text-red-600 dark:text-red-400">
               {t(ERROR_KEY[sendError] ?? "message.failed")}
             </p>
           )}
@@ -1769,7 +1774,7 @@ function MediaStrip({
   };
 
   return (
-    <div className="px-3 pb-2">
+    <div className="px-[var(--pane-inline)] pb-2">
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {assets?.map(
           (asset) =>
@@ -2237,7 +2242,7 @@ function AgentThreadStrip({
   const pending = state.pending;
   const live = state.effective === "live";
   return (
-    <div className="space-y-2 px-3 pt-3">
+    <div className="space-y-2 px-[var(--pane-inline)] pt-3">
       <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-2.5 py-2">
         <span
           className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${

@@ -359,6 +359,20 @@ thead {
   }
 }
 
+/* The conversation pane's reading measure (Serdar, 2026-08-31): on a very
+   wide pane — the right column on a big monitor — bubbles, feed rows, an
+   open email, the call log and the composer must not stretch wall to wall.
+   One variable carries the column: it resolves to 1rem (the padding these
+   surfaces always wore) until the pane passes ~56rem of content, then grows
+   so a 56rem column stays centered. Declared on the panel root and read by
+   every horizontal pad inside (ConversationPanel), so the thread, composer,
+   header and error strips stay one column at every width. The percentage
+   resolves per element against the pane itself — no JS measuring, no
+   breakpoint that lies when the pane is narrow on a wide window. */
+.pane-measure {
+  --pane-inline: max(1rem, calc((100% - 56rem) / 2));
+}
+
 /* From lg up the conversation pane runs flush to the window's right edge,
    the way WhatsApp Web's does (Serdar, 2026-08-31). A view opts in with
    data-bleeds-right on its root; main then gives up its right padding AND
