@@ -167,11 +167,22 @@ export function BlockSheet({
     reason: reason.trim() || undefined,
   };
 
+  // An inverted range disables Save, but disabling alone reads as a dead
+  // button — the sheet says why, in the same line a server rejection would
+  // use, before the click that can never happen.
+  const timesInverted =
+    !allDay && startMinute != null && endMinute != null && startMinute >= endMinute;
+  const datesInverted = cadence === "once" && !!endDate && endDate < draft.date;
+  const rangeError = timesInverted
+    ? t("closures.errWindow")
+    : datesInverted
+      ? t("closures.errRange")
+      : null;
+
   const ready =
     (cadence !== "weekly" || weekdays.length > 0) &&
-    (cadence !== "once" || !endDate || endDate >= draft.date) &&
-    (allDay ||
-      (startMinute != null && endMinute != null && startMinute < endMinute));
+    !datesInverted &&
+    (allDay || (startMinute != null && endMinute != null && !timesInverted));
 
   // How many bookings already sit inside this block — said before Save, never
   // acted on. WITHOUT `reason`: the count never reads it, and convex/react
@@ -223,7 +234,7 @@ export function BlockSheet({
     return () => window.removeEventListener("resize", measure);
     // cadence swaps a prose line for a row of day chips, error and the count
     // line appear mid-edit: each one moves Save, so each re-measures.
-  }, [anchor, cadence, error, inside]);
+  }, [anchor, cadence, error, rangeError, inside]);
 
   // Escape closes this sheet only — capture phase, stopped, so the calendar's
   // own key handling never sees it. Same pattern as AppointmentModal.
@@ -445,11 +456,10 @@ export function BlockSheet({
         {/* A state to act on, so visible prose rather than a tip. Reserved
             either way, so the footer does not jump when the count lands. */}
         <p className="mt-3 min-h-5 text-sm text-[var(--muted)]">
-          {error
-            ? error
-            : inside !== undefined && inside > 0
+          {rangeError ?? error ??
+            (inside !== undefined && inside > 0
               ? t("closures.appointmentsInside").replace("{count}", String(inside))
-              : ""}
+              : "")}
         </p>
 
         <div className="mt-3 flex items-center justify-between gap-2">
@@ -474,7 +484,7 @@ export function BlockSheet({
             type="button"
             disabled={!ready || saving}
             onClick={() => void save()}
-            className="btn-primary"
+            className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {t("common.save")}
           </button>
