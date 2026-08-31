@@ -3724,6 +3724,23 @@ const dictionary = {
     en: "Apply these hours to every open day",
     de: "Diese Zeiten auf alle geöffneten Tage anwenden",
   },
+  // The inline form of copyToOpenDays, sitting ON the row it copies from —
+  // the row is the context, so the label can drop it.
+  "settings.applyToAll": {
+    tr: "Tümüne uygula",
+    en: "Apply to all",
+    de: "Auf alle anwenden",
+  },
+  "settings.copyToOpenDaysConfirm": {
+    tr: "Bu saatler tüm açık günlere uygulansın mı?",
+    en: "Apply these hours to every open day?",
+    de: "Diese Zeiten auf alle geöffneten Tage anwenden?",
+  },
+  "settings.copyToOpenDaysNote": {
+    tr: "Kapalı günler kapalı kalır.",
+    en: "Closed days stay closed.",
+    de: "Geschlossene Tage bleiben geschlossen.",
+  },
   "settings.closedDay": {
     tr: "Kapalı",
     en: "Closed",

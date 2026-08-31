@@ -53,6 +53,7 @@ import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
+import { CheckSwitch } from "./CheckSwitch";
 import { SegmentedControl } from "./SegmentedControl";
 import { Sheet } from "./Sheet";
 
@@ -2383,11 +2384,26 @@ export function BusinessHoursCard({
   // Monday-first, matching the order the rows are READ in. Searching the
   // Sunday-indexed array directly meant a salon open on Sunday handed its
   // Sunday window to apply-to-all — the bottom row setting the whole week.
-  const template = [1, 2, 3, 4, 5, 6, 0]
-    .map((day) => week[day])
-    .find((row) => row !== null) ?? {
-    startMinute: 9 * 60,
-    endMinute: 18 * 60,
+  const templateDay = [1, 2, 3, 4, 5, 6, 0].find((day) => week[day] !== null);
+  const template =
+    (templateDay !== undefined ? week[templateDay] : null) ?? {
+      startMinute: 9 * 60,
+      endMinute: 18 * 60,
+    };
+
+  // Behind a confirmation, because it rewrites six rows from one and the
+  // gesture is a single click sitting right next to the time inputs.
+  const [confirm, confirmDialog] = useConfirm();
+  const applyToAll = async () => {
+    const ok = await confirm({
+      title: t("settings.copyToOpenDaysConfirm"),
+      body: t("settings.copyToOpenDaysNote"),
+      confirmLabel: t("settings.applyToAll"),
+      destructive: false,
+    });
+    if (!ok) return;
+    writeWeek(week.map((row) => (row === null ? null : { ...template })));
+    setBulkVersion((n) => n + 1);
   };
 
   return (
@@ -2443,12 +2459,16 @@ export function BusinessHoursCard({
             hint={t("settings.businessHoursHint")}
           />
         </div>
-        {/* ONE grid for the week, not seven flex rows: the first column is
-            `auto`, so the day pills are all exactly as wide as the longest
-            name in whatever language is on — which is what lets the names be
-            written out instead of clamped to a `w-20` that fit "Pzt" and
-            nothing longer. */}
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5">
+        {/* ONE grid for the week, not seven flex rows: the day column is
+            `auto`, so every row's name lines up at the width of the longest
+            name in whatever language is on. The time columns are CAPPED at
+            10rem above sm — a time input stretched across a 48rem card was
+            mostly empty box — and the last track takes what remains, which
+            is where the template row parks its Apply-to-all. Below sm the
+            times go back to sharing the width and that track disappears,
+            along with the inline button (the full-sentence one below the
+            grid serves the phone). */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1.5 sm:grid-cols-[auto_10rem_auto_10rem_minmax(0,1fr)] sm:gap-x-4">
           {/* Monday-first — the week as this market reads it — while the
               STORED index stays 0=Sunday, because that is what Date.getDay()
               speaks and what every guard downstream compares. */}
@@ -2457,24 +2477,24 @@ export function BusinessHoursCard({
             const open = win !== null;
             return (
               <Fragment key={day}>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={open}
-                  aria-label={`${dayNames[day]} — ${t("settings.dayOpenAria")}`}
-                  onClick={() => patchDay(day, open ? null : { ...template })}
-                  // An open day is an ON state, so it wears what every other
-                  // ON state in this app wears. The name sits INSIDE the
-                  // switch, as it did when this was a chip, so the row starts
-                  // with the word you are looking for.
-                  className={`rounded-full px-3 py-1 text-left text-sm transition-colors ${
-                    open
-                      ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                      : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {dayNames[day]}
-                </button>
+                {/* CheckSwitch + plain name, not the clickable pill it used
+                    to be: a pill at the start of a form row reads as a label
+                    wearing a highlight, and nothing about it says it can be
+                    pressed. The check is the app's one yes/no control (see
+                    CheckSwitch's own note), and the name goes back to being
+                    a word. */}
+                <span className="flex items-center gap-2.5">
+                  <CheckSwitch
+                    on={open}
+                    label={`${dayNames[day]} — ${t("settings.dayOpenAria")}`}
+                    onChange={() => patchDay(day, open ? null : { ...template })}
+                  />
+                  <span
+                    className={`text-sm ${open ? "" : "text-[var(--muted)]"}`}
+                  >
+                    {dayNames[day]}
+                  </span>
+                </span>
                 <input
                   key={`from-${day}-${open}-${bulkVersion}`}
                   type="time"
@@ -2529,25 +2549,41 @@ export function BusinessHoursCard({
                     if (minutes <= win.startMinute) setBulkVersion((n) => n + 1);
                   }}
                 />
+                {/* The fifth cell every sm row must fill so the grid stays
+                    aligned; only the TEMPLATE row puts anything in it. The
+                    button rides the row it copies FROM, because "apply these
+                    hours" is only clear when you can see which hours. */}
+                <span className="hidden sm:block">
+                  {isOwner && day === templateDay && (
+                    <button
+                      type="button"
+                      onClick={() => void applyToAll()}
+                      className="whitespace-nowrap text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+                    >
+                      {t("settings.applyToAll")}
+                    </button>
+                  )}
+                </span>
               </Fragment>
             );
           })}
         </div>
         {/* Most businesses are one pattern with one or two exceptions, so the
-            common case is typing the same pair seven times. Ghost, not
-            outlined: one loud thing per screen is the budget. */}
+            common case is typing the same pair seven times. This is the
+            inline button's phone form: below sm the row has no spare track,
+            and down here the label carries the context the row placement
+            carried. Ghost, not outlined — one loud thing per screen is the
+            budget. */}
         {isOwner && (
           <button
             type="button"
-            onClick={() => {
-              writeWeek(week.map((row) => (row === null ? null : { ...template })));
-              setBulkVersion((n) => n + 1);
-            }}
-            className="mt-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+            onClick={() => void applyToAll()}
+            className="mt-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)] sm:hidden"
           >
             {t("settings.copyToOpenDays")}
           </button>
         )}
+        {confirmDialog}
       </div>
     </Card>
   );
