@@ -49,7 +49,15 @@ const CANCEL_WORDS = [
 // conversation, only the bare word — trailing punctuation aside — is
 // unambiguous enough to shortcut it.
 function intentOf(text: string, bareOnly: boolean): "confirm" | "cancel" | null {
-  const norm = text.trim().toLowerCase().replace(/[.!?…]+$/, "");
+  // U+0307 stripped because "İptal".toLowerCase() is "i" plus a combining
+  // dot, which never equalled "iptal" — the capitalised Turkish cancel, the
+  // single likeliest thing a customer types, silently missed this list until
+  // 2026-08-31.
+  const norm = text
+    .trim()
+    .toLowerCase()
+    .replace(/\u0307/g, "")
+    .replace(/[.!?…]+$/, "");
   const hit = (w: string) => norm === w || (!bareOnly && norm.startsWith(w + " "));
   if (CONFIRM_WORDS.some(hit)) return "confirm";
   if (CANCEL_WORDS.some(hit)) return "cancel";
