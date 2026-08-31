@@ -3907,6 +3907,9 @@ const dictionary = {
     de: "Nachricht schreiben…",
   },
   "contact.send": { tr: "Gönder", en: "Send", de: "Senden" },
+  // The composer's + button: everything added to a message that is not
+  // typing (emoji, photo, scheduled send), as a drop-up.
+  "contact.composerMore": { tr: "Ekle", en: "Add", de: "Hinzufügen" },
   "contact.waNotConnectedShort": {
     tr: "WhatsApp bağlı değil",
     en: "WhatsApp not connected",

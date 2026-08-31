@@ -2,6 +2,8 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
 import { api } from "../../convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -1628,24 +1630,16 @@ export function ConversationPanel({
               disabled={!composerLive || sending}
               className="max-h-32 min-h-[2.25rem] flex-1 resize-none self-center overflow-y-auto border-0 bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-100"
             />
-            {/* Inside the same pill as the clock: all three are secondary
-                actions on the message you are writing, and giving any of them
-                its own surface outside the pill turns a chat box back into a
-                form. Emoji first, because it is the one that edits the text
-                rather than adding something beside it — and because it is
-                where every other composer in this app already keeps it
-                (CampaignsView, RemindersView, EmailBodyEditor).
-
-                No self-center on any of the three: the row is items-end, so
-                they ride the bottom edge WITH Send. Centered, a multi-line
-                draft left the icons floating mid-pill while Send stayed
-                down — four controls in one toolbar drifting apart
-                (Serdar, 2026-08-31). */}
-            <EmojiPicker
-              title={t("editor.insertEmoji")}
+            {/* One + instead of three icons (Serdar, 2026-08-31): a row of
+                emoji, photo and clock ate the field's width, and every one
+                of them is the same kind of thing — something added to the
+                message that is not typing. WhatsApp's own grammar: + opens
+                a drop-up, the field keeps the room. It rides the row's
+                items-end with Send, same as the icons it replaced. */}
+            <ComposerPlusMenu
               disabled={!composerLive || sending}
-              className="shrink-0 rounded-full p-2 text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:opacity-50"
-              onPick={(emoji) => {
+              active={attaching || Boolean(attached) || scheduling || Boolean(scheduleAt)}
+              onPickEmoji={(emoji) => {
                 // At the cursor, not appended: someone who went back to fix a
                 // word and then reached for an emoji means it to land there.
                 const field = composerRef.current;
@@ -1664,48 +1658,9 @@ export function ConversationPanel({
                   field.setSelectionRange(at + emoji.length, at + emoji.length);
                 });
               }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
-                <path d="M9 9.5h.01M15 9.5h.01" />
-              </svg>
-            </EmojiPicker>
-            <button
-              type="button"
-              onClick={() => setAttaching((prev) => !prev)}
-              aria-label={t("media.attach")}
-              aria-pressed={attaching}
-              disabled={!composerLive || sending}
-              className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
-                attaching || attached
-                  ? "text-[var(--accent)]"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="M21 15l-5-5L5 21" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => setScheduling((prev) => !prev)}
-              aria-label={t("message.scheduleAt")}
-              aria-pressed={scheduling}
-              disabled={!composerLive || sending}
-              className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
-                scheduling || scheduleAt
-                  ? "text-[var(--accent)]"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            </button>
+              onAttach={() => setAttaching((prev) => !prev)}
+              onSchedule={() => setScheduling((prev) => !prev)}
+            />
             <button
               type="submit"
               disabled={!composerLive || sending || (!draft.trim() && !attached)}
@@ -2408,5 +2363,198 @@ function AutoSendCountdown({ deadline }: { deadline: number }) {
         ? t("agent.autoSendIn").replace("{s}", String(s))
         : t("agent.autoSendNow")}
     </span>
+  );
+}
+
+// The composer's +: one trigger for everything that is not typing — emoji, a
+// photo, a scheduled send — in a drop-up, WhatsApp's own attach grammar.
+// Choosing Emoji swaps the panel's CONTENT to the emoji grid rather than
+// opening a second popover: two floating panels racing each other's
+// outside-click handlers is how the pick landed after the panel had already
+// unmounted. Same portal contract as EmojiPicker: fixed, body-portaled,
+// closed on outside mousedown, Escape and any scroll outside the panel.
+const PLUS_MENU_W = 208;
+const PLUS_MENU_H = 128;
+const PLUS_EMOJI_W = 320;
+const PLUS_EMOJI_H = 400;
+
+function ComposerPlusMenu({
+  disabled,
+  active,
+  onPickEmoji,
+  onAttach,
+  onSchedule,
+}: {
+  disabled?: boolean;
+  // A chosen attachment or a set schedule keeps the + accent-coloured while
+  // the menu is shut — the state its rows opened is still in force.
+  active: boolean;
+  onPickEmoji: (emoji: string) => void;
+  onAttach: () => void;
+  onSchedule: () => void;
+}) {
+  const { t } = useLanguage();
+  const [panel, setPanel] = useState<{
+    view: "menu" | "emoji";
+    top: number;
+    left: number;
+  } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Drop-UP: bottom edge pinned above the button, flipping below only when
+  // the viewport leaves no room, clamped on the right so the emoji grid
+  // never runs off screen next to Send.
+  const placed = (view: "menu" | "emoji") => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    const w = view === "menu" ? PLUS_MENU_W : PLUS_EMOJI_W;
+    const h = view === "menu" ? PLUS_MENU_H : PLUS_EMOJI_H;
+    const up = r.top - h - 6 >= 8;
+    return {
+      view,
+      top: up ? r.top - h - 6 : Math.min(r.bottom + 6, window.innerHeight - h - 8),
+      left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)),
+    };
+  };
+
+  useEffect(() => {
+    if (!panel) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !btnRef.current?.contains(target)) {
+        setPanel(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPanel(null);
+    };
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      setPanel(null);
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [panel]);
+
+  const dark =
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark");
+
+  const row =
+    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]";
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        aria-label={t("contact.composerMore")}
+        aria-expanded={panel !== null}
+        disabled={disabled}
+        onClick={() => setPanel(panel ? null : placed("menu"))}
+        className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
+          active || panel
+            ? "text-[var(--accent)]"
+            : "text-[var(--muted)] hover:text-[var(--foreground)]"
+        }`}
+      >
+        {/* Rotates to a ✕ while open — the one motion WhatsApp's + makes,
+            a state change rather than a hover, so it stays inside the
+            nothing-shifts rule. */}
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          className={`transition-transform duration-150 ${panel ? "rotate-45" : ""}`}
+          aria-hidden
+        >
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+      {panel &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ position: "fixed", top: panel.top, left: panel.left, zIndex: 60 }}
+            className={
+              panel.view === "menu"
+                ? "w-[208px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
+                : undefined
+            }
+          >
+            {panel.view === "menu" ? (
+              <>
+                <button
+                  type="button"
+                  className={row}
+                  onClick={() => setPanel(placed("emoji"))}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]" aria-hidden>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+                    <path d="M9 9.5h.01M15 9.5h.01" />
+                  </svg>
+                  {t("editor.insertEmoji")}
+                </button>
+                <button
+                  type="button"
+                  className={row}
+                  onClick={() => {
+                    setPanel(null);
+                    onAttach();
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]" aria-hidden>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                  {t("media.attach")}
+                </button>
+                <button
+                  type="button"
+                  className={row}
+                  onClick={() => {
+                    setPanel(null);
+                    onSchedule();
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]" aria-hidden>
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                  {t("message.scheduleAt")}
+                </button>
+              </>
+            ) : (
+              <Picker
+                onEmojiClick={(d: EmojiClickData) => {
+                  onPickEmoji(d.emoji);
+                  setPanel(null);
+                }}
+                theme={dark ? Theme.DARK : Theme.LIGHT}
+                emojiStyle={EmojiStyle.NATIVE}
+                lazyLoadEmojis
+                width={PLUS_EMOJI_W}
+                height={PLUS_EMOJI_H}
+                previewConfig={{ showPreview: false }}
+              />
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
