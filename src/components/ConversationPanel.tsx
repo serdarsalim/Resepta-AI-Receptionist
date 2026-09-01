@@ -1470,9 +1470,16 @@ export function ConversationPanel({
                 height of a thread where people mostly answer with one. */}
             {item.reactionEmoji && (
               <span
+                // On a phone the pill joins the tap-summoned controls
+                // (actionsFor, Serdar 2026-09-01): a thread where half the
+                // lines wear a pill was the same visual noise as the
+                // permanent icons. Desktop keeps it always on — there it is
+                // one pill on a wide pane, and hiding a reaction the
+                // customer actually sent behind a hover would be hiding
+                // content, not chrome.
                 className={`z-10 -mt-2 w-fit rounded-full border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[13px] leading-none shadow-sm ${
                   outbound ? "mr-2 self-end" : "ml-2"
-                }`}
+                } ${actionsFor === item.id ? "" : "hidden sm:block"}`}
                 // Whose emoji it is follows from the side it hangs on, but a
                 // screen reader has no sides.
                 title={(outbound && contactName) || undefined}
