@@ -49,7 +49,7 @@ const FEED_COL_PAD =
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { FeedIcon, type Channel } from "./FeedIcon";
 import type { Search } from "@/lib/useTableState";
-import { normalizeSubject, stripReplyPrefixes } from "../../convex/lib/emailInbound";
+import { stripReplyPrefixes } from "../../convex/lib/emailInbound";
 import { hardenEmailLinks, sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import {
   bodyIsHtml,
@@ -57,11 +57,7 @@ import {
   noteText,
   plainToHtml,
 } from "../../convex/lib/noteBody";
-import {
-  quoteFreeSnippet,
-  splitQuotedHtml,
-  splitQuotedText,
-} from "../../convex/lib/emailQuote";
+import { splitQuotedHtml, splitQuotedText } from "../../convex/lib/emailQuote";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -281,13 +277,11 @@ export function ConversationPanel({
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  // Which thread the email tab has open (null = the list). Owned HERE rather
-  // than inside the list so the header can carry back-arrow + subject on the
-  // same line as Reply, which is also what prefills the composer.
-  const [openThread, setOpenThread] = useState<{
-    key: string;
-    subject: string;
-  } | null>(null);
+  // Email card the deep link scrolls to (routed from the All index). One-shot.
+  // There is no open-thread state any more: since 2026-09-01 the email tab is
+  // a flat card timeline with nothing to navigate into (see the card list
+  // below for the why).
+  const [focusEmailId, setFocusEmailId] = useState<string | null>(null);
   // The call tab mirrors the email tab: a list you scan, then one call you
   // read. Same navigation, so learning one teaches the other.
   const [openCallId, setOpenCallId] = useState<string | null>(null);
@@ -319,78 +313,26 @@ export function ConversationPanel({
   // bottom. Notes don't: nobody is having a conversation with themselves, so
   // that tab stays newest-first with its composer at the top, next to where
   // the note it writes will land.
-  // Chat order is for a conversation you are HAVING: WhatsApp, and an email
-  // thread you have opened. The indexes — All, the call list, notes — read
-  // newest-first, because you are scanning them rather than talking.
-  // Chat order is for a conversation you are HAVING: WhatsApp, and an email
-  // thread you have opened.
-  //
-  // The thread spent one afternoon as Gmail's flush rows (Nudge's shape) and
-  // came back (Serdar, 2026-08-17). Every other thing you can open in this pane
-  // is a bubble — WhatsApp, and now notes — so mail arriving as a table made
-  // the email tab the one place the app changed grammar on you. The known cost
-  // is that the newest message sits at the BOTTOM: in a long exchange the mail
-  // that decides what you do next is the one you have to scroll to. The pane
-  // opens pinned there, which is what makes that survivable.
-  const chatOrder = filter === "whatsapp" || (filter === "email" && !!openThread);
-
-  // Email groups into conversations by normalized subject — "Re: Randevunuz"
-  // and "Randevunuz" are one exchange however many clients prefixed it. The
-  // same helper the server uses, so both agree on what a thread is.
-  // Typed loosely on purpose: the feed is a union and only the message variant
-  // carries a subject, but this only ever runs over the email filter, where
-  // every row is one.
-  const threadKeyOf = (item: (typeof visible)[number]) =>
-    normalizeSubject(
-      ("emailSubject" in item ? item.emailSubject : undefined) ?? "",
-    );
-  const emailThreads =
-    filter === "email"
-      ? Array.from(
-          visible.reduce((acc, item) => {
-            const key = threadKeyOf(item);
-            const found = acc.get(key);
-            // `visible` is newest-first, so the FIRST row of a key is the
-            // latest — that is the one whose subject and date the list shows.
-            if (found) found.count += 1;
-            else
-              acc.set(key, {
-                key,
-                subject:
-                  ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
-                  t("email.noSubject"),
-                at: item.at,
-                // The new content only. A row reading "On Mon 17 Aug, Barber
-                // wrote:" is describing the mail BEFORE this one.
-                snippet: quoteFreeSnippet(
-                  ("body" in item ? item.body : undefined) ?? "",
-                ),
-                inbound:
-                  ("direction" in item ? item.direction : undefined) === "in",
-                count: 1,
-              });
-            return acc;
-          }, new Map<string, {
-            key: string;
-            subject: string;
-            at: number;
-            snippet: string;
-            inbound: boolean;
-            count: number;
-          }>()).values(),
-        )
-      : [];
+  // Chat order is for a conversation you are HAVING: WhatsApp. The indexes —
+  // All, the call list, notes — read newest-first, because you are scanning
+  // them rather than talking. Email is newest-first too, as CARDS: this tab
+  // has been three things now — Gmail's flush rows, then bubbles in chat
+  // order (2026-08-17: "everything you can open in this pane is a bubble"),
+  // and since 2026-09-01 a flat card timeline, ported from Nudge the day it
+  // shipped there (Serdar: "apply the same to randevu"). What the card model
+  // fixes over both: the newest mail is at the TOP with its body already
+  // showing (the bubbles' known cost was scrolling to it), and there is no
+  // thread to navigate into at all. The subject-grouped thread UI went with
+  // it — grouping was a display guess; the server's normalizeSubject keeps
+  // its real job (binding inbound mail to a customer) untouched.
+  const chatOrder = filter === "whatsapp";
 
   const openCall =
     filter === "call" && openCallId
       ? visible.find((item) => item.id === openCallId)
       : undefined;
 
-  const inScope = openThread
-    ? visible.filter((item) => threadKeyOf(item) === openThread.key)
-    : openCall
-      ? [openCall]
-      : visible;
+  const inScope = openCall ? [openCall] : visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
 
   // ---- Reading a thread you are already in --------------------------------
@@ -451,13 +393,26 @@ export function ConversationPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thread.length, customerId, filter, chatOrder]);
 
-  // Leaving the tab closes the thread. Coming back to a stale detail view of a
+  // Leaving the tab closes the detail. Coming back to a stale detail view of a
   // conversation you navigated away from reads as the app losing its place.
   useEffect(() => {
-    if (filter !== "email") setOpenThread(null);
     if (filter !== "call") setOpenCallId(null);
     setOpenRows(new Set());
   }, [filter]);
+  // The routed email card scrolls into view once the tab has rendered it.
+  // rAF, not a plain call: the filter switch and this state land in the same
+  // render, so the card isn't in the DOM until the frame after. One-shot —
+  // cleared immediately so a later manual scroll isn't yanked back.
+  useEffect(() => {
+    if (filter !== "email" || focusEmailId === null) return;
+    const container = threadRef.current;
+    requestAnimationFrame(() => {
+      container
+        ?.querySelector(`[data-email-id="${focusEmailId}"]`)
+        ?.scrollIntoView({ block: "start" });
+    });
+    setFocusEmailId(null);
+  }, [filter, focusEmailId]);
 
   // The deep link, applied once and never again: the reader's back arrow sets
   // openCallId to null, and an effect that kept re-deriving from the prop
@@ -479,10 +434,8 @@ export function ConversationPanel({
       return;
     }
     if (item.channel === "email") {
-      setOpenThread({
-        key: normalizeSubject(item.emailSubject ?? ""),
-        subject: item.emailSubject?.trim() || t("email.noSubject"),
-      });
+      // No thread to open — the flat timeline scrolls to the card instead.
+      setFocusEmailId(item.id);
     }
   }, [initialItemId, feed, t]);
 
@@ -664,11 +617,16 @@ export function ConversationPanel({
     })();
   };
 
+  // Email takes the chat PAPER without the doodles (chat-plain): its timeline
+  // is cards, and a card separates from the paper by fill exactly the way a
+  // bubble does — the ground is what makes the cards read as cards. The
+  // doodles stay chat-only; they are set dressing for a conversation, and
+  // mail is not one.
   const surface =
     filter === "whatsapp" || (filter === "call" && !!openCall)
       ? "chat-wallpaper"
-      : chatOrder
-        ? "bg-[var(--thread-bg)]"
+      : filter === "email"
+        ? "chat-wallpaper chat-plain"
         : "";
 
   // The action the open tab offers while nothing is expanded. Every tab's
@@ -679,15 +637,13 @@ export function ConversationPanel({
     <button
       type="button"
       onClick={() => {
-        setEmailSubject(
-          openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
-        );
+        setEmailSubject("");
         setComposing(true);
       }}
       className="flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
     >
       <FeedIcon type="email" size={14} tinted={false} />
-      {openThread ? t("email.reply") : t("email.compose")}
+      {t("email.compose")}
     </button>
   ) : filter === "call" && canPlaceCall ? (
     <button
@@ -728,15 +684,8 @@ export function ConversationPanel({
           Nudge's — the old full-width footer bar spent a whole row on one
           action. This is the slot the notes composer occupies below; each
           tab owns what goes here. */}
-      {filter === "email" && (composing || openThread || !header) && (
-        // The header wears whatever plane the thing below it wears. Over the
-        // INDEX that is the card's white, because the index is flush rows on
-        // white. Over an open thread it is the tinted plane — left white it cut
-        // a bright band across the top of the card and the tint started
-        // abruptly under it, which read as two panes stacked rather than one
-        // conversation with a heading. Same rule the takeover chip and the
-        // composer already follow.
-        <div className={`shrink-0 pt-3 ${FEED_COL_PAD} ${chatOrder ? "pb-2" : ""}`}>
+      {filter === "email" && (composing || !header) && (
+        <div className={`shrink-0 pt-3 ${FEED_COL_PAD}`}>
           {composing ? (
             // Explicitly white, not transparent. The header around it takes the
             // thread's tinted plane, and a composer that inherits it reads as a
@@ -796,54 +745,24 @@ export function ConversationPanel({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              {openThread && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenThread(null);
-                      // Back means "where I came FROM". Arriving here from the
-                      // All index and being dropped into the email list is the
-                      // app deciding you meant something you didn't.
-                      if (returnScrollTop !== null) onFilterChange?.("all");
-                    }}
-                    aria-label={t("common.back")}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M19 12H5" />
-                      <path d="m12 19-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <h3 className="min-w-0 truncate text-sm font-semibold">
-                    {openThread.subject}
-                  </h3>
-                </>
-              )}
-              {/* Only when the pane has no header row to carry it. Reply
-                  prefills the thread's subject so the customer's client keeps
-                  the exchange together; the server threads on the same
-                  normalized key, so "Re:" here is for THEIR inbox, not ours.
-                  Stripped before prepending, or replying to a reply gives
-                  "Re: Re: Saç boyası hakkında soru". Kept in step with the
-                  copy in `tabAction` above. */}
-              {!header && (
+            // Only when the pane has no header row to carry it. Compose only:
+            // Reply lives on each card now, where it prefills that email's
+            // own subject.
+            !header && (
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setEmailSubject(
-                      openThread ? `Re: ${stripReplyPrefixes(openThread.subject)}` : "",
-                    );
+                    setEmailSubject("");
                     setComposing(true);
                   }}
                   className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
                 >
                   <FeedIcon type="email" size={14} tinted={false} />
-                  {openThread ? t("email.reply") : t("email.compose")}
+                  {t("email.compose")}
                 </button>
-              )}
-            </div>
+              </div>
+            )
           )}
         </div>
       )}
@@ -1014,42 +933,45 @@ export function ConversationPanel({
                 : t("messages.none")}
           </p>
         )}
-        {/* Email index: one row per conversation, flush like a mail client
-            rather than a stack of bubbles. Bubbles are for a chat you are
-            having; a mailbox is something you scan. */}
-        {filter === "email" && !openThread &&
-          emailThreads.map((entry) => (
-            <button
-              key={entry.key}
-              type="button"
-              onClick={() => setOpenThread({ key: entry.key, subject: entry.subject })}
-              className="-mx-4 flex w-[calc(100%+2rem)] items-start gap-2 border-b border-[var(--border)] px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
-            >
-              <FeedIcon type="email" size={13} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  {/* Unanswered inbound reads heavier, the same weight rule the
-                      inbox list uses for a conversation awaiting a reply. */}
-                  <span className={`min-w-0 truncate text-sm ${entry.inbound ? "font-semibold" : ""}`}>
-                    {entry.subject}
-                  </span>
-                  {entry.count > 1 && (
-                    <span className="shrink-0 rounded-full bg-[var(--muted-bg)] px-1.5 text-[11px] text-[var(--muted)]">
-                      {entry.count}
-                    </span>
-                  )}
-                </span>
-                {entry.snippet && (
-                  <span className="block truncate text-xs text-[var(--muted)]">
-                    {entry.snippet}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 text-xs text-[var(--muted)]">
-                {formatDateTime(entry.at, language)}
-              </span>
-            </button>
-          ))}
+        {/* Email timeline: one CARD per email, newest first, on the plain
+            chat paper — the HubSpot model, ported from Nudge (2026-09-01,
+            Serdar: "apply the same to randevu"). This tab has now been three
+            things: flush thread rows, bubbles in chat order, and this. The
+            card model beats both at the same job — the newest mail is at the
+            top with its body already showing, nothing to navigate into, and
+            no subject-grouping guess deciding what "one conversation" is.
+            The server's normalizeSubject keeps its real job (binding inbound
+            mail to a customer); the UI just stopped borrowing it. */}
+        {filter === "email" && (
+          <EmailCards
+            items={visible
+              .filter((item) => item.channel === "email")
+              .map((item) => ({
+                id: item.id,
+                at: item.at,
+                subject:
+                  ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
+                  t("email.noSubject"),
+                html: "emailHtml" in item ? item.emailHtml : undefined,
+                body: "body" in item ? item.body : undefined,
+                inbound:
+                  ("direction" in item ? item.direction : undefined) === "in",
+                status: "status" in item ? item.status : undefined,
+                error: "error" in item ? item.error : undefined,
+                scheduledFor:
+                  "scheduledFor" in item ? item.scheduledFor : undefined,
+              }))}
+            contactName={contactName}
+            focusId={focusEmailId}
+            onReply={(subject) => {
+              setEmailSubject(`Re: ${stripReplyPrefixes(subject)}`);
+              setComposing(true);
+            }}
+            onCancel={(id) =>
+              void cancelScheduled({ messageId: id as Id<"messages"> })
+            }
+          />
+        )}
         {/* Call index: flush rows like the email tab. A call is not a chat
             bubble — it is a record with a summary, a transcript and a
             recording, and scanning "what happened" beats reading four cards. */}
@@ -1132,12 +1054,9 @@ export function ConversationPanel({
                     onClick={() => {
                       if (item.channel === "email") {
                         setReturnScrollTop(threadRef.current?.scrollTop ?? 0);
-                        setOpenThread({
-                          key: threadKeyOf(item),
-                          subject:
-                            ("emailSubject" in item ? item.emailSubject : undefined)?.trim() ||
-                            t("email.noSubject"),
-                        });
+                        // A scroll target, not a navigation: the email tab is
+                        // a flat card timeline now.
+                        setFocusEmailId(item.id);
                         onFilterChange?.("email");
                         return;
                       }
@@ -1198,7 +1117,7 @@ export function ConversationPanel({
             );
           })}
         {filter === "all" ||
-        (filter === "email" && !openThread) ||
+        filter === "email" ||
         (filter === "call" && !openCall)
           ? null
           : thread.map((item, index) => {
@@ -1372,20 +1291,10 @@ export function ConversationPanel({
                   </p>
                 </div>
               )}
-              {/* The sender's own markup, sanitised, but ONLY inside an open
-                  thread. In a list a formatted email is a wall; the flattened
-                  text below is what belongs there. */}
-              {item.emailHtml && openThread ? (
-                <QuotedEmailBody html={item.emailHtml} />
-              ) : item.body ? (
-                // Only mail gets split. Quoting is an email convention, and a
-                // WhatsApp message that happens to start a line with ">" is
-                // somebody typing an arrow.
-                item.channel === "email" ? (
-                  <QuotedPlainBody text={item.body} />
-                ) : (
-                  <p className="whitespace-pre-wrap">{item.body}</p>
-                )
+              {/* Email never reaches this loop any more (its tab renders
+                  EmailCards), so a bubble body is always WhatsApp text. */}
+              {item.body ? (
+                <p className="whitespace-pre-wrap">{item.body}</p>
               ) : item.mediaUrl || item.mediaPending || item.mediaContentType ? null : (
                 // Template sends store no body (the text lives in Meta's
                 // approved template), so the bubble would otherwise be blank.
@@ -2015,6 +1924,264 @@ function MediaStrip({
       )}
       {error && (
         <p className="pt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Email cards ──────────────────────────────────────────────────────────────
+// One card per email on the plain chat paper, ported from Nudge 2026-09-01.
+// A card separates from the paper by FILL, the way a bubble does; the full
+// subject is the headline and WRAPS (truncating it is the HubSpot defect the
+// design exists to fix); the body shows up to a clamp with the quote-collapse
+// the bubbles already had; Reply prefills the composer with THIS email's
+// subject. No threading: grouping by subject was a display guess, and the
+// server's normalizeSubject keeps its real job (inbound binding) untouched.
+
+type EmailCardItem = {
+  id: string;
+  at: number;
+  subject: string;
+  html?: string;
+  body?: string;
+  inbound: boolean;
+  status?: string;
+  error?: string;
+  scheduledFor?: number;
+};
+
+// How many cards mount per slab. The data is already whole (one feed query);
+// the slab is about not mounting dozens of HTML bodies in one commit.
+const EMAIL_PAGE = 20;
+// ~11 lines of text-sm prose plus the paper's padding. Pixels, not a line
+// clamp: email bodies are arbitrary HTML, which -webkit-line-clamp can't cut.
+const EMAIL_CLAMP_PX = 240;
+
+function EmailCards({
+  items,
+  contactName,
+  focusId,
+  onReply,
+  onCancel,
+}: {
+  // Newest-first (feed order), email rows only.
+  items: EmailCardItem[];
+  contactName?: string | null;
+  // Card the parent is about to scroll to (deep link / All-index routing).
+  // Read once at mount so the first slab reaches it — scrollIntoView on a
+  // card outside the slab is a silent no-op.
+  focusId?: string | null;
+  onReply: (subject: string) => void;
+  onCancel: (id: string) => void;
+}) {
+  const { t, language } = useLanguage();
+  const [shown, setShown] = useState(() => {
+    const focusIdx = focusId ? items.findIndex((x) => x.id === focusId) : -1;
+    return Math.max(EMAIL_PAGE, focusIdx + EMAIL_PAGE);
+  });
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const hasMore = shown < items.length;
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting))
+          setShown((n) => n + EMAIL_PAGE);
+      },
+      { rootMargin: "600px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, shown]);
+  if (items.length === 0) return null;
+  const slab = items.slice(0, shown);
+  return (
+    <div className="space-y-2">
+      {slab.map((m, idx) => {
+        // Day separators as WhatsApp's own date pill — a flat text label
+        // disappeared into the paper. Cards then carry only a time.
+        const sep =
+          idx === 0 ||
+          formatDayHeading(slab[idx - 1].at, language) !==
+            formatDayHeading(m.at, language) ? (
+            <div className="flex justify-center py-1.5">
+              <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
+                {formatDayHeading(m.at, language)}
+              </span>
+            </div>
+          ) : null;
+        const failed = m.status === "failed";
+        const errorKey = m.error ? ERROR_KEY[m.error] : undefined;
+        // Reply only on mail that actually moved — answering a queued,
+        // parked or failed send of your own is not a thing.
+        const canReply =
+          m.inbound ||
+          (m.scheduledFor === undefined && !failed && m.status !== "queued");
+        return (
+          <Fragment key={m.id}>
+            {sep}
+            <div
+              data-email-id={m.id}
+              className="scroll-mt-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 shadow-[var(--bubble-shadow)]"
+            >
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-sm font-semibold leading-snug">
+                    {m.subject}
+                  </p>
+                  <p className="mt-0.5 text-xs">
+                    {/* People, not directions: the customer's name emerald on
+                        their mail, "You" plain on ours. */}
+                    <span
+                      className={
+                        m.inbound
+                          ? "font-medium text-emerald-700 dark:text-emerald-400"
+                          : "text-[var(--muted)]"
+                      }
+                    >
+                      {m.inbound
+                        ? contactName || t("appointments.customer")
+                        : t("message.quoteYou")}
+                    </span>
+                    {failed && (
+                      <span className="text-[var(--muted)]">
+                        {" · "}
+                        <span className="font-medium text-red-600 dark:text-red-400">
+                          {t("message.failed")}
+                        </span>
+                        {errorKey && <> · {t(errorKey)}</>}
+                      </span>
+                    )}
+                    {!failed && m.status === "queued" && (
+                      <span className="text-[var(--muted)]"> · {t("message.queued")}</span>
+                    )}
+                  </p>
+                </div>
+                <span
+                  className="shrink-0 text-xs text-[var(--muted)]"
+                  title={formatDateTime(m.at, language)}
+                >
+                  {formatTime(m.at, language)}
+                </span>
+              </div>
+              <div className="pt-2">
+                <ClampedEmailContent
+                  html={m.html}
+                  body={m.body}
+                  fallback={t("message.template")}
+                />
+                {(m.scheduledFor !== undefined || canReply) && (
+                  <div className="mt-2 flex items-center justify-end gap-3 text-xs">
+                    {/* A parked send says WHEN, and offers the only action
+                        that still matters. */}
+                    {m.scheduledFor !== undefined && (
+                      <>
+                        <span className="text-[var(--muted)]">
+                          {formatDateTime(m.scheduledFor, language)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onCancel(m.id)}
+                          className="text-[var(--muted)] transition-colors hover:text-red-600 dark:hover:text-red-400"
+                        >
+                          {t("common.cancel")}
+                        </button>
+                      </>
+                    )}
+                    {canReply && (
+                      <button
+                        type="button"
+                        onClick={() => onReply(m.subject)}
+                        className="flex items-center gap-1 font-medium text-[var(--accent)] hover:underline"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <polyline points="9 17 4 12 9 7" />
+                          <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                        </svg>
+                        {t("email.reply")}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Fragment>
+        );
+      })}
+      {hasMore && (
+        // Invisible-ish tail sentinel — crossing it (600px early) mounts the
+        // next slab, so the seam is never seen.
+        <div ref={sentinelRef} aria-hidden className="h-px" />
+      )}
+    </div>
+  );
+}
+
+// The card's body: clamped with a fade until expanded. Overflow is MEASURED
+// (scrollHeight against the clamp, re-checked by a ResizeObserver as images
+// decode and as the quote-collapse opens), never guessed from length — an
+// unconditional "Show more" under an email that fits whole is a dead button
+// on most cards. The clamp applies from the first paint so a long email
+// never flashes full-height; on a short one it simply never binds.
+function ClampedEmailContent({
+  html,
+  body,
+  fallback,
+}: {
+  html?: string;
+  body?: string;
+  fallback: string;
+}) {
+  const { t } = useLanguage();
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const check = () => setOverflows(el.scrollHeight > EMAIL_CLAMP_PX + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [html, body]);
+  const clamped = !expanded;
+  return (
+    <div>
+      <div
+        className="relative overflow-hidden"
+        style={clamped ? { maxHeight: EMAIL_CLAMP_PX } : undefined}
+      >
+        <div ref={innerRef}>
+          {html ? (
+            <QuotedEmailBody html={html} />
+          ) : body ? (
+            <div className="text-sm">
+              <QuotedPlainBody text={body} />
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--chat-stamp)]">{fallback}</p>
+          )}
+        </div>
+        {clamped && overflows && (
+          // The fade matches what it covers: EmailBody paints white paper in
+          // both themes, plain text sits straight on the card's chat-field.
+          <div
+            className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 rounded-b-md bg-gradient-to-t to-transparent ${
+              html ? "from-white" : "from-[var(--chat-field)]"
+            }`}
+          />
+        )}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs font-medium text-[var(--accent)] hover:underline"
+        >
+          {expanded ? t("email.showLess") : t("email.showMore")}
+        </button>
       )}
     </div>
   );

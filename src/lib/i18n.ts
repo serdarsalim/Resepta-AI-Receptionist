@@ -1016,6 +1016,10 @@ const dictionary = {
     de: "Zitierten Text anzeigen",
   },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
+  // The clamp on a long email card — measured overflow only, so most cards
+  // never show it.
+  "email.showMore": { tr: "Devamını göster", en: "Show more", de: "Mehr anzeigen" },
+  "email.showLess": { tr: "Daha az göster", en: "Show less", de: "Weniger anzeigen" },
   "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
   "email.bodyPlaceholder": {
     tr: "Mesajınızı yazın…",

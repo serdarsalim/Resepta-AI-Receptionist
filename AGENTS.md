@@ -3715,3 +3715,48 @@ message that customer ever received carried it. `claimSuggestion` now returns
 the line still owed and `sendSuggestion` re-prepends it when it is missing.
 The rule generalises: **anything the system guarantees mechanically has to be
 re-guaranteed at the point a human can edit it.**
+
+## Email is a flat card timeline; the bubbles and the thread list both retire (2026-09-01)
+
+Ported from Nudge the day it shipped there (Serdar: "apply the same to randevu
+app too"). The email tab has now been three things: Gmail-style flush thread
+rows, then bubbles in chat order (2026-08-17 — "everything you can open in
+this pane is a bubble"), and now one CARD per email, newest first, on the chat
+paper without its doodles (`.chat-wallpaper.chat-plain`, a modifier so the
+dark tokens keep scoping). **This supersedes the 2026-08-17 bubbles decision**;
+what the card model fixes over both predecessors is that the newest mail sits
+at the top with its body already showing, and there is nothing to navigate
+into at all.
+
+- **The subject-grouped thread UI is deleted, not restyled.** `openThread`,
+  `threadKeyOf` and the `emailThreads` reducer are gone. Grouping by
+  normalized subject was a display guess (threading needs Message-ID/
+  References headers, which nothing stores); a CRM timeline's job is to be a
+  trustworthy log, and a wrong grouping is worse than no grouping — HubSpot
+  never threads for the same reason. `normalizeSubject` keeps its REAL job
+  untouched: binding inbound mail to a customer, server-side.
+- **The card**: full subject wrapping (truncation is the HubSpot defect the
+  design fixes), customer's name emerald on their mail / "You" on ours,
+  time-only stamp under day PILLS (WhatsApp's own date chip), body behind a
+  MEASURED 240px clamp (`ClampedEmailContent` — scrollHeight vs the clamp,
+  re-checked by ResizeObserver as images decode and the quote-collapse opens;
+  never guessed from length, so short emails get no dead Show-more). The
+  quote-collapse `•••` (`QuotedEmailBody`/`QuotedPlainBody`) rides inside the
+  card and pairs naturally with per-email cards: each card shows only its new
+  content. The clamp's fade matches what it covers — `from-white` over the
+  email-paper, `from-[var(--chat-field)]` over plain text on the card.
+- **Reply is per card** and prefills `Re: ${stripReplyPrefixes(subject)}` —
+  that Re: is for the CUSTOMER's inbox; ours no longer threads. The header
+  action is always Compose. Reply hides on failed/queued/parked sends; a
+  parked send shows its stamp + Cancel in the card footer instead.
+- **Routing is a scroll, not a navigation**: the All index and the deep link
+  set `focusEmailId`, the tab renders, an rAF scrolls to `[data-email-id]`.
+  The card list reads `focusId` once at mount so its first slab (20 cards,
+  IntersectionObserver sentinel 600px early) covers a routed card deeper than
+  the slab — scrollIntoView on an unmounted card is a silent no-op.
+- The bubble loop no longer has email branches (`emailHtml`/`QuotedPlainBody`
+  there were dead the moment email stopped reaching it); `--thread-bg` as an
+  email surface went with them.
+- Verified in the browser on Bella: cards, date pills, `•••`, Reply prefill
+  (single Re:), Compose from the header. i18n grew `email.showMore`/
+  `email.showLess` (tr/en/de).

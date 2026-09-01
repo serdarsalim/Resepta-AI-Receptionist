@@ -664,6 +664,14 @@ thead {
      renders it crisp on retina and small enough to read as texture. */
   background-size: 380px auto;
 }
+/* The email timeline's ground: the chat PAPER without the doodles (Serdar,
+   2026-09-01, ported from Nudge the same day — "just use a beige bg instead
+   of the whatsapp bg"). A modifier on .chat-wallpaper rather than a bare
+   background-color utility so the surface stays one system with the chat;
+   cards and date pills on this ground keep reading --chat-field. */
+.chat-wallpaper.chat-plain {
+  background-image: none;
+}
 /* Dark drops the pattern entirely — Serdar's call in Nudge, after seeing it
    both ways. Not a porting problem: a dark tile derived from the same source
    read as busy at every gain that was visible at all. The texture's job is to
