@@ -254,6 +254,13 @@ export function ConversationPanel({
   // and the backend re-resolves, so an edit between pick and send can't make
   // the strip and the customer's quote disagree. Text sends only — picking
   // an attachment clears it, because the media lanes don't carry context.
+  // Which message's react/reply controls are showing on a TOUCH screen —
+  // tap the bubble to summon them, tap again (or tap another bubble) to put
+  // them away. Phones have no hover, and the always-on fallback meant every
+  // single line in a thread wore two grey icons (Serdar, 2026-09-01: the
+  // permanent icons were the noise). Desktop never reads this state: at sm+
+  // the same controls stay hover-revealed.
+  const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<{
     id: string;
     body: string;
@@ -1267,6 +1274,14 @@ export function ConversationPanel({
               // No leading override: text-sm's own line-height IS WhatsApp's
               // — measured 21.25px on both, live (2026-08-31). The 19px this
               // carried was ~2px tighter than the real thing.
+              // The tap that summons the touch controls beside this bubble.
+              // On the bubble, not the row: the row spans the pane, and a tap
+              // on empty wallpaper should not sprout icons. Desktop clicks
+              // land here too and toggle the same state, which is invisible
+              // there — the sm+ rules below keep the controls hover-only.
+              onClick={() =>
+                setActionsFor((current) => (current === item.id ? null : item.id))
+              }
               className={`w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
                   ? "self-end rounded-br-sm bg-[var(--chat-out)]"
@@ -1469,16 +1484,24 @@ export function ConversationPanel({
             {/* Reacting is the cheapest honest answer a busy salon has, and it
                 is only offered on the customer's own lines: one emoji field per
                 message, and reacting to ourselves would overwrite theirs.
-                Quiet-but-present on a phone, hover-revealed on a pointer — the
-                staff reading this are on their phones half the time, and a
-                control that only exists on hover does not exist there. */}
+                Hover-revealed on a pointer; on a phone, revealed by tapping
+                the bubble (actionsFor) — the always-visible fallback put two
+                grey icons on every line of the thread, which read as noise,
+                not as controls. pointer-events dies with the opacity so an
+                invisible button can't eat the tap meant for the bubble. */}
             {canCompose &&
               item.channel === "whatsapp" &&
               item.direction === "in" && (
                 <EmojiPicker
                   title={t("message.react")}
-                  className="mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] opacity-60 transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] sm:opacity-0 sm:group-hover:opacity-100"
+                  className={`mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+                    actionsFor === item.id
+                      ? "opacity-60"
+                      : "pointer-events-none opacity-0"
+                  } sm:pointer-events-auto sm:opacity-0 sm:group-hover:opacity-100`}
                   onPick={async (emoji) => {
+                    // The job is done; the summoned icons leave with it.
+                    setActionsFor(null);
                     setSendError(null);
                     const result = await react({
                       messageId: item.id as Id<"messages">,
@@ -1516,6 +1539,7 @@ export function ConversationPanel({
                 title={t("message.reply")}
                 aria-label={t("message.reply")}
                 onClick={() => {
+                  setActionsFor(null);
                   setReplyTo({
                     id: item.id,
                     body: item.body ?? "",
@@ -1523,7 +1547,11 @@ export function ConversationPanel({
                   });
                   composerRef.current?.focus();
                 }}
-                className="mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] opacity-60 transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] sm:opacity-0 sm:group-hover:opacity-100"
+                className={`mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
+                  actionsFor === item.id
+                    ? "opacity-60"
+                    : "pointer-events-none opacity-0"
+                } sm:pointer-events-auto sm:opacity-0 sm:group-hover:opacity-100`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
                   <polyline points="9 17 4 12 9 7" />
