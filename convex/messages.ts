@@ -38,6 +38,8 @@ export const logOutQueued = internalMutation({
     // The {{1}}..{{n}} values, in order. Stored so a retry replays the same
     // words rather than rebuilding them from data that may have moved.
     templateParams: v.optional(v.array(v.string())),
+    // The quick-reply labels as the customer will see them (schema note).
+    buttonLabels: v.optional(v.array(v.string())),
     body: v.optional(v.string()),
     // Email lane only. Carried here rather than patched afterwards so the row
     // is complete the moment it appears in the feed — a bubble that renders
@@ -86,6 +88,7 @@ export const logOutQueued = internalMutation({
       kind: args.kind,
       templateName: args.templateName,
       templateParams: args.templateParams,
+      buttonLabels: args.buttonLabels,
       body: args.body,
       emailSubject: args.emailSubject,
       emailFrom: args.emailFrom,
@@ -497,14 +500,13 @@ export const feedForCustomer = query({
     // pane that asked. Nothing crosses the boundary either way.
     if (!customer || customer.orgId !== orgId) return [];
 
-    // The quick-reply labels a template send carried, resolved ONCE the way
-    // the send resolved them (wa.ts: customer.language ?? org.language) —
-    // labels are a pure function of language, so no per-row template lookup.
-    // A customer whose language changed since an old send would relabel that
-    // old bubble, which is accepted: storing the labels per row buys nothing
-    // for the three fixed pairs that exist.
+    // Fallback labels for rows that predate buttonLabels (stamped at send
+    // since 2026-09-01), resolved the way those sends resolved their language
+    // (wa.ts: customer.language ?? org.language). Only history reads this —
+    // every new send stores the words it actually put on the customer's
+    // screen.
     const org = await ctx.db.get(orgId);
-    const quickReplyLabels = buttonLabelsFor(
+    const legacyQuickReplyLabels = buttonLabelsFor(
       customer.language ?? org?.language ?? "en",
     );
 
@@ -571,18 +573,20 @@ export const feedForCustomer = query({
         replyToDirection: m.replyToDirection,
         canQuote: m.wamid !== undefined ? true : undefined,
         scheduledFor: m.scheduledFor,
-        // templateName is the proof a Cloud template actually went out —
-        // Evolution and freeform session sends never set it (Evolution gets
-        // the typed reply hint appended to its body instead of buttons). The
-        // stored kind can carry an offset suffix ("reminder_24h"); buttonsFor
-        // speaks base kinds.
+        // The stamp when the row carries one; the derivation only for rows
+        // that predate it. templateName is the proof a Cloud template
+        // actually went out — Evolution and freeform session sends never set
+        // it (Evolution gets the typed reply hint appended to its body
+        // instead of buttons). The stored kind can carry an offset suffix
+        // ("reminder_24h"); buttonsFor speaks base kinds.
         buttons:
-          m.direction === "out" &&
+          m.buttonLabels ??
+          (m.direction === "out" &&
           m.templateName !== undefined &&
           m.lane !== "evolution" &&
           buttonsFor(m.kind.replace(/_\d+h$/, ""))
-            ? quickReplyLabels
-            : undefined,
+            ? legacyQuickReplyLabels
+            : undefined),
       })),
       ...calls.map((c) => ({
         id: c._id as string,

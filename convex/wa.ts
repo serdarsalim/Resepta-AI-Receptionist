@@ -33,7 +33,7 @@ import {
 import { isOrgSetupFailure } from "./lib/alerts";
 import { outOfHoursMessage } from "./lib/awayReply";
 import { renderTokens, tokenDefaults } from "./lib/renderTokens";
-import { defaultForKey } from "./lib/metaTemplate";
+import { buttonLabelsFor, buttonsFor, defaultForKey } from "./lib/metaTemplate";
 import { sendEvolutionText } from "./lib/evolution";
 import {
   evolutionReplyHint,
@@ -1127,6 +1127,13 @@ export const sendAppointmentMessage = internalAction({
         kind: messageKind,
         templateName: contentTemplate?.metaName,
         templateParams: bodyParams,
+        // The demo simulates the Cloud lane, so its rows carry what a real
+        // send would have stamped — gated the same way (a template actually
+        // named, a kind that attaches buttons).
+        buttonLabels:
+          contentTemplate?.metaName && buttonsFor(args.kind)
+            ? buttonLabelsFor(language)
+            : undefined,
         body,
       });
       await ctx.runMutation(internal.demo.landSimulated, {
@@ -1227,6 +1234,14 @@ export const sendAppointmentMessage = internalAction({
         kind: messageKind,
         templateName: cloudTemplate.metaName,
         templateParams: bodyParams,
+        // Stamped in the language of the template that is going out — the
+        // exact words Meta will draw under the customer's copy. buttonsFor
+        // mirrors the send below, which passes the two payloads on every
+        // lifecycle kind; the gate keeps the stamp honest if a button-less
+        // kind ever routes through here.
+        buttonLabels: buttonsFor(args.kind)
+          ? buttonLabelsFor(cloudTemplate.language)
+          : undefined,
         body,
       });
       const result = await sendWaCloudTemplate({

@@ -1814,6 +1814,14 @@ export default defineSchema({
     // reconstructing them later from the appointment and the org means a
     // rename or a reschedule silently changes what the second attempt says.
     templateParams: v.optional(v.array(v.string())),
+    // The quick-reply labels this send put on the customer's screen (confirm
+    // first, cancel second — the payload order the send passes and webhook.ts
+    // parses back). Stamped at send time for the templateParams reason
+    // exactly: the labels follow the customer's language, and deriving them
+    // at read time means changing that language silently relabels what an old
+    // bubble claims the customer was offered. Rows predating the field derive
+    // (messages.feedForCustomer fallback).
+    buttonLabels: v.optional(v.array(v.string())),
     // Set when this row belongs to a campaign, so a run can count its own
     // outcome without scanning every message the org ever sent.
     campaignId: v.optional(v.id("campaigns")),
