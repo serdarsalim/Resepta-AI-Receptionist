@@ -35,6 +35,12 @@ import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { plainToHtml, htmlToText } from "@/lib/emailText";
 import { previewSampleValues } from "@/lib/previewSamples";
+import {
+  buttonLabelsFor,
+  buttonsFor,
+  cloudBodyFor,
+} from "../../convex/lib/metaTemplate";
+import { evolutionReplyHint } from "../../convex/lib/waLane";
 import { useConfirm } from "./ConfirmDialog";
 import {
   DEFAULT_TEMPLATE_TEXTS,
@@ -299,8 +305,22 @@ const KIND_FOR_TRIGGER: Record<RuleTrigger, string> = {
 // a single wired lane shows itself with nothing to click. Both faces fill
 // their tokens from the sample booking, so the owner reads the message a
 // customer will read, not syntax.
+//
+// The WhatsApp face shows what the org's LANE will actually deliver
+// (2026-09-01 — the preview used to show the rich body on every lane, which
+// on a Cloud org is text Meta never sends and cannot even register, minus the
+// quick replies every lifecycle send carries; Serdar spotted the buttons on
+// his phone and couldn't find them anywhere in the app's templates):
+//   cloud   — the platform Cloud text (lib/metaTemplate CLOUD_TEMPLATE_TEXTS)
+//             plus the confirm/cancel quick replies, drawn the way WhatsApp
+//             draws them, under the bubble.
+//   session — the rich body plus the typed reply-hint line the Evolution send
+//             appends in place of buttons (Baileys never delivers them).
 function LockedPreview({
   lanes,
+  kind,
+  language,
+  waLane,
   subject,
   body,
   bodyHtml,
@@ -308,6 +328,14 @@ function LockedPreview({
   orgName,
 }: {
   lanes: ("email" | "whatsapp")[];
+  // The template kind ("confirmation") — picks the Cloud platform text and
+  // whether the send attaches quick replies (lib/metaTemplate buttonsFor).
+  kind: string;
+  // The ORG's message language (customer-facing), not the UI language.
+  language: string;
+  // Which lane a WhatsApp send would actually take for this org — Cloud wins
+  // whenever it exists (lib/waLane rule 2). null = nothing wired.
+  waLane: "cloud" | "session" | null;
   subject: string;
   body: string;
   bodyHtml?: string;
@@ -316,6 +344,18 @@ function LockedPreview({
 }) {
   const { t } = useLanguage();
   const [pick, setPick] = useState<"email" | "whatsapp" | null>(null);
+  // The Cloud lane sends Meta's stored copy of the platform text, never the
+  // rich body — [service] lists and links can't even be registered. A kind
+  // with no Cloud text (the away reply) is a session message on every lane.
+  const cloudBody = waLane === "cloud" ? cloudBodyFor(kind, language) : null;
+  const waButtons =
+    cloudBody && buttonsFor(kind) ? buttonLabelsFor(language) : null;
+  const waBody = cloudBody
+    ? renderTokens(cloudBody, values)
+    : renderTokens(body, values) +
+      (waLane === "session" && buttonsFor(kind)
+        ? `\n\n${evolutionReplyHint(language)}`
+        : "");
   // Nothing wired yet: still show both faces — the owner is reading words a
   // channel the operator will connect later is going to carry.
   const shown: ("email" | "whatsapp")[] =
@@ -365,8 +405,36 @@ function LockedPreview({
           </div>
         </div>
       ) : (
-        <div className="max-w-[90%] whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
-          {renderTokens(body, values)}
+        <div className="max-w-[90%] space-y-0.5">
+          <div className="whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
+            {waBody}
+          </div>
+          {/* The quick replies, the way WhatsApp draws them: separate white
+              rows under the bubble, reply arrow, tappable green. These are
+              part of the approved template — the exact rows the customer's
+              phone shows. */}
+          {waButtons?.map((label) => (
+            <div
+              key={label}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-white py-2 text-sm font-medium text-emerald-700 dark:bg-white/10 dark:text-emerald-300"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <polyline points="9 17 4 12 9 7" />
+                <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+              </svg>
+              {label}
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -983,14 +1051,17 @@ function AddRuleSheet({
   org,
   emailEnabled,
   waConnected,
+  evolutionEnabled,
   onAdd,
   onSaveExisting,
   onClose,
 }: {
   // What the org has wired, so the locked preview shows the channel faces a
-  // send could actually take.
+  // send could actually take — and WHICH WhatsApp lane, since the Cloud and
+  // shop-phone lanes deliver different words (see LockedPreview).
   emailEnabled: boolean;
   waConnected: boolean;
+  evolutionEnabled: boolean;
   rules: RuleRowData[];
   // The org's kind-level fallback rows, so the sheet shows the wording this
   // business will actually get rather than the shipped stock text they may
@@ -1268,8 +1339,15 @@ function AddRuleSheet({
                 <LockedPreview
                   lanes={[
                     ...(emailEnabled ? (["email"] as const) : []),
-                    ...(waConnected ? (["whatsapp"] as const) : []),
+                    ...(waConnected || evolutionEnabled
+                      ? (["whatsapp"] as const)
+                      : []),
                   ]}
+                  kind={KIND_FOR_TRIGGER[trigger]}
+                  language={org.language}
+                  waLane={
+                    waConnected ? "cloud" : evolutionEnabled ? "session" : null
+                  }
                   subject={draft.subject}
                   body={htmlToText(draft.html)}
                   bodyHtml={draft.html}
@@ -1713,10 +1791,14 @@ function RulesCard({
       subject: lockedSource?.subject || lockedStock.subject,
     };
     // The lanes this rule could actually travel — RuleEditor's own rule: the
-    // rule's channel narrowed by what the org has wired.
+    // rule's channel narrowed by what the org has wired. The shop phone
+    // counts: an Evolution-only org's WhatsApp face was invisible here, and
+    // its wording (rich body + typed reply hint) is exactly what an owner
+    // would want to read before trusting the rule.
     const lockedLanes: ("email" | "whatsapp")[] = [];
     if (opened.channel !== "whatsapp" && emailEnabled) lockedLanes.push("email");
-    if (opened.channel !== "email" && waConnected) lockedLanes.push("whatsapp");
+    if (opened.channel !== "email" && (waConnected || evolutionEnabled))
+      lockedLanes.push("whatsapp");
     // Every channel, always (Serdar, 2026-08-28: "not showing them is
     // stupid") — a wired one is a switch, an unwired one sits greyed with
     // the reason in its tooltip. An empty Kanal row read as a broken page.
@@ -1929,6 +2011,11 @@ function RulesCard({
               </div>
               <LockedPreview
                 lanes={lockedLanes}
+                kind={openedKind}
+                language={org.language}
+                waLane={
+                  waConnected ? "cloud" : evolutionEnabled ? "session" : null
+                }
                 subject={lockedText.subject}
                 body={lockedText.body}
                 bodyHtml={lockedText.bodyHtml}
@@ -2198,6 +2285,7 @@ function RulesCard({
           org={org}
           emailEnabled={emailEnabled}
           waConnected={waConnected}
+          evolutionEnabled={evolutionEnabled}
           onAdd={(trigger, offsetHours, text) =>
             void doAdd(trigger, offsetHours, text)
           }
