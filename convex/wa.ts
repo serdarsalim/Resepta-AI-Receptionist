@@ -940,6 +940,11 @@ export const sendAppointmentMessage = internalAction({
             // template's tokens the moment those two rows differ — which is
             // the whole point of the fallback above.
             metaParams: metaSource.metaParams as string[] | undefined,
+            // The registered body itself, for the honest stamp below: what
+            // Meta DELIVERS is this text with the params filled, never the
+            // rich body.
+            submittedBody: metaSource.submittedBody as string | undefined,
+            bodyPreview: metaSource.bodyPreview as string | undefined,
           }
         : undefined;
 
@@ -1113,6 +1118,36 @@ export const sendAppointmentMessage = internalAction({
             .replace(/\{\{3\}\}/g, when)
         : undefined;
 
+    // What the customer's PHONE will actually show for a Cloud template send:
+    // the REGISTERED body with the very params this send carries. Never the
+    // rich body — that one keeps [pricelist] and [manage_link] for Evolution
+    // and email, while the Cloud lane's registered texts deliberately drop
+    // them (the buttons are the manage link's job, lib/metaTemplate). Stamping
+    // the rich body on Cloud rows made the thread show a manage URL and a
+    // price list the phone never received (Serdar, 2026-09-01) — the bubble
+    // must tell the truth about what went out, the same frozen-snapshot rule
+    // Nudge's wa_cloud lane follows. submittedBody is named tokens in
+    // metaParams order; bodyPreview is the hand-registered positional
+    // fallback ({{1}} first name, {{2}} business, {{3}} date+time), which the
+    // fallback bodyParams triple matches by construction.
+    const deliveredBody = (() => {
+      if (!cloudTemplate) return body;
+      if (cloudTemplate.submittedBody && cloudTemplate.metaParams?.length) {
+        let out = cloudTemplate.submittedBody;
+        cloudTemplate.metaParams.forEach((key, i) => {
+          out = out.split(`[${key}]`).join(bodyParams[i] ?? "-");
+        });
+        return out;
+      }
+      if (cloudTemplate.bodyPreview) {
+        return cloudTemplate.bodyPreview.replace(
+          /\{\{(\d+)\}\}/g,
+          (_, n: string) => bodyParams[Number(n) - 1] ?? "-",
+        );
+      }
+      return body;
+    })();
+
     // ---- Demo org: nothing leaves the building.
     //
     // Checked BEFORE the waAccount test, not after: the demo org deliberately
@@ -1134,7 +1169,9 @@ export const sendAppointmentMessage = internalAction({
           contentTemplate?.metaName && buttonsFor(args.kind)
             ? buttonLabelsFor(language)
             : undefined,
-        body,
+        // The same honest stamp as the real Cloud branch — the demo's rows
+        // carry what a real send would have.
+        body: deliveredBody,
       });
       await ctx.runMutation(internal.demo.landSimulated, {
         messageId,
@@ -1242,7 +1279,7 @@ export const sendAppointmentMessage = internalAction({
         buttonLabels: buttonsFor(args.kind)
           ? buttonLabelsFor(cloudTemplate.language)
           : undefined,
-        body,
+        body: deliveredBody,
       });
       const result = await sendWaCloudTemplate({
         accessToken: waAccount.accessToken,

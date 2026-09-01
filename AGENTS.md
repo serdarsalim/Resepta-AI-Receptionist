@@ -3792,3 +3792,32 @@ CallCards' mount).
 - i18n grew `calls.details` / `calls.hideDetails` (tr/en/de).
 - Verified on Bella: four inbound-call cards with Turkish summaries, Details
   unfolding Gender + the transcript (grey caller, green agent), day pills.
+
+## A Cloud row's bubble now shows what the phone received (2026-09-01)
+
+Serdar, reading a confirmation bubble in the thread: "why do i see the url
+and this text — i don't see that stuff in whatsapp." He was right both ways:
+the app's bubble carried the RICH body ([pricelist] bullets and the
+[manage_link] paragraph) while the phone got the registered Cloud text, which
+deliberately drops both (lib/metaTemplate: the platform-owned
+CLOUD_TEMPLATE_TEXTS carry no link — the confirm/cancel buttons are the
+manage link's job, and UNSENDABLE tokens can't register anyway). The
+DIVERGENCE is by design; STAMPING the rich body on the Cloud row was the bug
+— the thread showed a URL and prices the customer never received, and the
+recent template-bubble work ("show the buttons the customer saw") had fixed
+only the button half of that honesty.
+
+- `sendAppointmentMessage` now stamps `deliveredBody` on Cloud rows: the
+  registered body filled with the very `bodyParams` the send carries.
+  `submittedBody` (named tokens, metaParams order) is the primary source;
+  `bodyPreview` ({{1}}/{{2}}/{{3}}, hand-registered rows) the fallback —
+  whose positional triple matches the fallback bodyParams by construction —
+  and a row with neither keeps today's rich body rather than going blank.
+  The demo branch stamps the same thing ("its rows carry what a real send
+  would have"). Evolution and email keep the rich body untouched — those
+  lanes really do send it.
+- Same frozen-snapshot rule as Nudge's wa_cloud lane ("the timeline never
+  lies about what went out", 2026-08-07 there).
+- FORWARD-ONLY: rows already written keep the rich body. They carry
+  templateName + templateParams, so a backfill is possible if the lie in old
+  history ever matters; not built unasked.
