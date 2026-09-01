@@ -1016,6 +1016,13 @@ const dictionary = {
     de: "Zitierten Text anzeigen",
   },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
+  // The call card's expander: collected values + transcript unfold in place.
+  "calls.details": { tr: "Ayrıntılar", en: "Details", de: "Details" },
+  "calls.hideDetails": {
+    tr: "Ayrıntıları gizle",
+    en: "Hide details",
+    de: "Details ausblenden",
+  },
   // The clamp on a long email card — measured overflow only, so most cards
   // never show it.
   "email.showMore": { tr: "Devamını göster", en: "Show more", de: "Mehr anzeigen" },

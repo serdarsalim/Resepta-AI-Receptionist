@@ -3760,3 +3760,35 @@ into at all.
 - Verified in the browser on Bella: cards, date pills, `•••`, Reply prefill
   (single Re:), Compose from the header. i18n grew `email.showMore`/
   `email.showLess` (tr/en/de).
+
+## Calls take the card treatment too (2026-09-01)
+
+Same-day follow-up to the email cards, again ported from Nudge on Serdar's
+ask ("apply the call cards to randevu too"). The call tab's flush rows and
+the open-call detail navigation are both gone: one CARD per call, newest
+first, on the plain paper (`chat-plain`), day pills saying the date, each
+card carrying direction + duration + time, the recording player
+(`preload="none"` — a history of recordings must not fetch every stream on
+tab entry), the summary, and the ended-line. **Details** unfolds the
+collected values + transcript IN the card; a deep link / All-index route
+scrolls to the card and pre-expands it (`focusCallId`, read once at
+CallCards' mount).
+
+- **The "no outcome pill" decision (2026-08-25) stands** — the summary is the
+  outcome; the card header says only direction and duration.
+- **The transcript sits straight on the card with the CALLER bubble retinted
+  grey** (`[--chat-field:#f0f0f0]` / dark `#3a3a3a` on a wrapper). Its bubble
+  is `--chat-field`, invisible on this `--chat-field` card; Nudge tried a
+  paper inset first and Serdar rejected it on sight — it matched the page
+  ground exactly and read as a hole punched through the card. The var
+  override keeps `CallTranscript` untouched for Voice → Calls.
+- **Deleted**: `openCallId`, the back-arrow header, the call index rows, and
+  `CallEntry` whole (its non-detail form was already unreachable — the
+  bubble map only ever saw calls via the open-call path). A
+  `channel === "call"` early-return SURVIVES in the bubble map purely to
+  narrow the union for the code below it; removing it is a type error, not a
+  cleanup. `CollectedList` is exported from CallDetail.tsx now; `CallDetail`
+  itself remains for Voice → Calls.
+- i18n grew `calls.details` / `calls.hideDetails` (tr/en/de).
+- Verified on Bella: four inbound-call cards with Turkish summaries, Details
+  unfolding Gender + the transcript (grey caller, green agent), day pills.

@@ -300,7 +300,10 @@ function formatCollected(
   return String(value);
 }
 
-function CollectedList({ values }: { values: Record<string, unknown> }) {
+// Exported since 2026-09-01: the conversation pane's call CARDS render the
+// collected values directly on the card (no artefact box of their own), so
+// they need the list without the rest of CallDetail.
+export function CollectedList({ values }: { values: Record<string, unknown> }) {
   const { t } = useLanguage();
   const rows = Object.entries(values)
     .filter(([, value]) => !isEmpty(value))

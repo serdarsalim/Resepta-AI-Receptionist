@@ -21,12 +21,7 @@ import {
   fromDatetimeLocalValue,
   localeFor,
 } from "@/lib/datetime";
-import {
-  CallDetail,
-  CallOutcomePill,
-  CallTranscript,
-  humanizeCallEnd,
-} from "./CallDetail";
+import { CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { EmojiPicker } from "./EmojiPicker";
@@ -282,9 +277,11 @@ export function ConversationPanel({
   // a flat card timeline with nothing to navigate into (see the card list
   // below for the why).
   const [focusEmailId, setFocusEmailId] = useState<string | null>(null);
-  // The call tab mirrors the email tab: a list you scan, then one call you
-  // read. Same navigation, so learning one teaches the other.
-  const [openCallId, setOpenCallId] = useState<string | null>(null);
+  // Call card the routed navigation scrolls to — the calls twin of
+  // focusEmailId, and it also pre-expands that card (the person deep-linked
+  // here for THAT call's transcript). There is no open-call detail any more:
+  // calls became a flat card timeline the same day email did.
+  const [focusCallId, setFocusCallId] = useState<string | null>(null);
   // Where the All index was standing when a row jumped to its channel. The
   // back arrow returns HERE, not to the top of a list the reader never chose.
   const [returnScrollTop, setReturnScrollTop] = useState<number | null>(null);
@@ -327,12 +324,7 @@ export function ConversationPanel({
   // its real job (binding inbound mail to a customer) untouched.
   const chatOrder = filter === "whatsapp";
 
-  const openCall =
-    filter === "call" && openCallId
-      ? visible.find((item) => item.id === openCallId)
-      : undefined;
-
-  const inScope = openCall ? [openCall] : visible;
+  const inScope = visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
 
   // ---- Reading a thread you are already in --------------------------------
@@ -396,7 +388,6 @@ export function ConversationPanel({
   // Leaving the tab closes the detail. Coming back to a stale detail view of a
   // conversation you navigated away from reads as the app losing its place.
   useEffect(() => {
-    if (filter !== "call") setOpenCallId(null);
     setOpenRows(new Set());
   }, [filter]);
   // The routed email card scrolls into view once the tab has rendered it.
@@ -413,12 +404,20 @@ export function ConversationPanel({
     });
     setFocusEmailId(null);
   }, [filter, focusEmailId]);
+  useEffect(() => {
+    if (filter !== "call" || focusCallId === null) return;
+    const container = threadRef.current;
+    requestAnimationFrame(() => {
+      container
+        ?.querySelector(`[data-call-id="${focusCallId}"]`)
+        ?.scrollIntoView({ block: "start" });
+    });
+    setFocusCallId(null);
+  }, [filter, focusCallId]);
 
-  // The deep link, applied once and never again: the reader's back arrow sets
-  // openCallId to null, and an effect that kept re-deriving from the prop
-  // would shove them straight back into the call they just left. Declared
-  // AFTER the tab-change reset above so a mount carrying both runs in the
-  // order that ends with the item open.
+  // The deep link, applied once and never again. Declared AFTER the
+  // tab-change reset above so a mount carrying both runs in the order that
+  // ends with the item in view.
   //
   // WhatsApp and notes are deliberately absent. Those tabs are a thread with
   // the newest message already at the bottom, so there is nothing to open —
@@ -430,7 +429,8 @@ export function ConversationPanel({
     if (!item) return;
     deepLinked.current = true;
     if (item.channel === "call") {
-      setOpenCallId(item.id);
+      // A scroll target that also pre-expands the card — see CallCards.
+      setFocusCallId(item.id);
       return;
     }
     if (item.channel === "email") {
@@ -623,9 +623,9 @@ export function ConversationPanel({
   // doodles stay chat-only; they are set dressing for a conversation, and
   // mail is not one.
   const surface =
-    filter === "whatsapp" || (filter === "call" && !!openCall)
+    filter === "whatsapp"
       ? "chat-wallpaper"
-      : filter === "email"
+      : filter === "email" || filter === "call"
         ? "chat-wallpaper chat-plain"
         : "";
 
@@ -766,44 +766,10 @@ export function ConversationPanel({
           )}
         </div>
       )}
-      {/* Call tab header, the email tab's shape: the list needs no chrome, an
-          open call gets back-arrow + outcome + when. There is no compose here
-          on purpose — placing a call is Retell's job, not a button in a
-          conversation pane. */}
-      {/* The call tab's header, the email tab's shape: the LIST gets only Place
-          call, an open call adds back-arrow + when. It used to render only for
-          an open call, which put the one control you reach for after reading
-          "customer did not answer" one navigation away from the row that said
-          so. */}
-      {filter === "call" && (openCall || (canPlaceCall && !header)) && (
+      {/* Call tab header: Place call and nothing else — the cards below
+          carry everything a call produced. */}
+      {filter === "call" && canPlaceCall && !header && (
         <div className={`flex shrink-0 items-center gap-2 pt-3 ${FEED_COL_PAD}`}>
-          {openCall && (
-          <button
-            type="button"
-            onClick={() => {
-              setOpenCallId(null);
-              if (returnScrollTop !== null) onFilterChange?.("all");
-            }}
-            aria-label={t("common.back")}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-          </button>
-          )}
-          {/* The outcome pill was here too, printing the same raw
-              `call_successful` boolean as the index did. Gone for the same
-              reason: the summary is directly below it and says more. */}
-          {/* With the weekday: this heading names one moment and nothing else
-              on the screen says which day of the week it was, so a bare date
-              made the reader count back to find out. */}
-          {openCall && (
-            <h3 className="min-w-0 truncate text-sm font-semibold">
-              {formatDateTimeWithWeekday(openCall.at, language)}
-            </h3>
-          )}
           {canPlaceCall && !header && (
             <button
               type="button"
@@ -972,47 +938,39 @@ export function ConversationPanel({
             }
           />
         )}
-        {/* Call index: flush rows like the email tab. A call is not a chat
-            bubble — it is a record with a summary, a transcript and a
-            recording, and scanning "what happened" beats reading four cards. */}
-        {filter === "call" && !openCall &&
-          thread.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setOpenCallId(item.id)}
-              className="-mx-4 flex w-[calc(100%+2rem)] items-start gap-2 border-b border-[var(--border)] px-4 py-2.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
-            >
-              <FeedIcon type="call" size={13} />
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-sm">
-                    {("direction" in item ? item.direction : undefined) === "in"
-                      ? t("calls.inbound")
-                      : t("calls.outbound")}
-                  </span>
-                  {/* No outcome pill here. It rendered Retell's raw
-                      `call_successful` boolean, so every row read "true" or
-                      "false" — and even spelled out it is the provider's guess
-                      about a call the owner can read the summary of on the
-                      same line. The summary is the outcome. */}
-                  {"durationSec" in item && item.durationSec !== undefined && (
-                    <span className="text-xs text-[var(--muted)]">
-                      {formatDuration(item.durationSec)}
-                    </span>
-                  )}
-                </span>
-                {"summary" in item && item.summary && (
-                  <span className="block truncate text-xs text-[var(--muted)]">
-                    {item.summary}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 text-xs text-[var(--muted)]">
-                {formatDateTime(item.at, language)}
-              </span>
-            </button>
-          ))}
+        {/* Call timeline: one CARD per call, newest first, on the plain
+            paper — the same exercise the email tab went through, ported from
+            Nudge the same day (2026-09-01, Serdar: "apply the call cards to
+            randevu too"). The flush rows and the open-call detail are both
+            gone: a card carries the direction, the player and the summary at
+            rest, and Details unfolds the collected values + transcript IN the
+            card. The "no outcome pill" decision (2026-08-25) stands — the
+            summary is the outcome. */}
+        {filter === "call" && (
+          <CallCards
+            items={visible
+              .filter((item) => item.channel === "call")
+              .map((item) => ({
+                id: item.id,
+                at: item.at,
+                inbound:
+                  ("direction" in item ? item.direction : undefined) === "in",
+                durationSec:
+                  "durationSec" in item ? item.durationSec : undefined,
+                summary: "summary" in item ? item.summary : undefined,
+                transcript: "transcript" in item ? item.transcript : undefined,
+                recordingUrl:
+                  "recordingUrl" in item ? item.recordingUrl : undefined,
+                collected: "collected" in item ? item.collected : undefined,
+                disconnectionReason:
+                  "disconnectionReason" in item
+                    ? item.disconnectionReason
+                    : undefined,
+              }))}
+            contactName={contactName}
+            focusId={focusCallId}
+          />
+        )}
         {/* THE ACTIVITY INDEX. All is not a merged chat — it is the record of
             everything that happened, one line each, oldest concern first:
             "what has gone on with this customer". Bubbles are for a single
@@ -1062,7 +1020,8 @@ export function ConversationPanel({
                       }
                       if (item.channel === "call") {
                         setReturnScrollTop(threadRef.current?.scrollTop ?? 0);
-                        setOpenCallId(item.id);
+                        // A scroll target that pre-expands the card.
+                        setFocusCallId(item.id);
                         onFilterChange?.("call");
                         return;
                       }
@@ -1116,20 +1075,12 @@ export function ConversationPanel({
               </Fragment>
             );
           })}
-        {filter === "all" ||
-        filter === "email" ||
-        (filter === "call" && !openCall)
+        {filter === "all" || filter === "email" || filter === "call"
           ? null
           : thread.map((item, index) => {
-          if (item.channel === "call")
-            return (
-              <CallEntry
-                key={item.id}
-                item={item}
-                detail={filter === "call"}
-                contactName={contactName}
-              />
-            );
+          // Calls never reach this loop (their tab renders CallCards above);
+          // the branch survives to NARROW the union for the bubble code below.
+          if (item.channel === "call") return null;
           if (item.channel === "note") return <NoteEntry key={item.id} item={item} />;
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
@@ -1929,6 +1880,160 @@ function MediaStrip({
   );
 }
 
+// ── Call cards ───────────────────────────────────────────────────────────────
+// One card per call on the plain chat paper, ported from Nudge 2026-09-01 —
+// the same exercise the email tab went through. A card carries the direction,
+// the player and the summary at rest; Details unfolds the collected values +
+// the transcript IN the card. No outcome pill, per the 2026-08-25 decision:
+// the summary is the outcome.
+
+type CallCardItem = {
+  id: string;
+  at: number;
+  inbound: boolean;
+  durationSec?: number;
+  summary?: string;
+  transcript?: string;
+  recordingUrl?: string;
+  collected?: Record<string, unknown>;
+  disconnectionReason?: string;
+};
+
+function CallCards({
+  items,
+  contactName,
+  focusId,
+}: {
+  // Newest-first (feed order), call rows only.
+  items: CallCardItem[];
+  contactName?: string | null;
+  // Card the parent is about to scroll to (deep link / All-index routing).
+  // Read once at mount: a routed card starts EXPANDED — the person came for
+  // that call's transcript, not for its existence.
+  focusId?: string | null;
+}) {
+  const { t, language } = useLanguage();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(
+    () => new Set(focusId ? [focusId] : []),
+  );
+  if (items.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {items.map((c, idx) => {
+        // Day separators as the chat's own date pill (same as the email
+        // cards); cards then carry only a time.
+        const sep =
+          idx === 0 ||
+          formatDayHeading(items[idx - 1].at, language) !==
+            formatDayHeading(c.at, language) ? (
+            <div className="flex justify-center py-1.5">
+              <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
+                {formatDayHeading(c.at, language)}
+              </span>
+            </div>
+          ) : null;
+        const ended = humanizeCallEnd(c.disconnectionReason, t);
+        const hasCollected =
+          !!c.collected && Object.keys(c.collected).length > 0;
+        const expanded = expandedIds.has(c.id);
+        // A missed call with nothing collected and no transcript gets no dead
+        // button — blank over zero.
+        const hasDetails = !!c.transcript || hasCollected;
+        return (
+          <Fragment key={c.id}>
+            {sep}
+            <div
+              data-call-id={c.id}
+              className="scroll-mt-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 text-sm shadow-[var(--bubble-shadow)]"
+            >
+              <div className="flex items-center gap-2 text-xs">
+                <FeedIcon type="call" size={13} />
+                <span className="font-medium">
+                  {c.inbound ? t("calls.inbound") : t("calls.outbound")}
+                </span>
+                {c.durationSec !== undefined && (
+                  <span className="text-[var(--muted)]">
+                    {formatDuration(c.durationSec)}
+                  </span>
+                )}
+                <span
+                  className="ml-auto shrink-0 text-[var(--muted)]"
+                  title={formatDateTime(c.at, language)}
+                >
+                  {formatTime(c.at, language)}
+                </span>
+              </div>
+              {/* The player at rest — "show play and the summary card" is the
+                  brief. preload="none": a history of recordings must not
+                  fetch every audio stream on tab entry. */}
+              {c.recordingUrl && (
+                <audio
+                  controls
+                  preload="none"
+                  src={c.recordingUrl}
+                  className="mt-2 h-9 w-full"
+                />
+              )}
+              {c.summary && (
+                <p className="mt-2 whitespace-pre-wrap text-xs">{c.summary}</p>
+              )}
+              {/* On an answered call a footnote; on a missed one the only
+                  line there is. */}
+              {ended && (
+                <p className="mt-2 text-xs text-[var(--muted)]">{ended}</p>
+              )}
+              {expanded && (
+                <>
+                  {hasCollected && (
+                    <div className="mt-2">
+                      <CollectedList values={c.collected!} />
+                    </div>
+                  )}
+                  {/* The transcript straight on the card, with the CALLER
+                      bubble retinted grey: it is --chat-field, invisible on
+                      this --chat-field card. A paper inset was tried first in
+                      Nudge and rejected — it matched the page ground exactly
+                      and read as a hole punched through the card. Grey-other-
+                      party-on-white is what every messenger does outside its
+                      own wallpaper; the var override keeps CallTranscript
+                      untouched for Voice → Calls. */}
+                  {c.transcript && (
+                    <div className="mt-3 [--chat-field:#f0f0f0] dark:[--chat-field:#3a3a3a]">
+                      <CallTranscript
+                        flow
+                        transcript={c.transcript}
+                        contactName={contactName}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              {hasDetails && (
+                <div className="mt-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(c.id)) next.delete(c.id);
+                        else next.add(c.id);
+                        return next;
+                      })
+                    }
+                    className="font-medium text-[var(--accent)] hover:underline"
+                  >
+                    {expanded ? t("calls.hideDetails") : t("calls.details")}
+                  </button>
+                </div>
+              )}
+            </div>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Email cards ──────────────────────────────────────────────────────────────
 // One card per email on the plain chat paper, ported from Nudge 2026-09-01.
 // A card separates from the paper by FILL, the way a bubble does; the full
@@ -2436,133 +2541,6 @@ function NoteEntry({
     </li>
   );
 }
-
-// A call is a full-width card, not a chat bubble — it carries a summary, a
-// transcript, and a recording, none of which fit the bubble rhythm.
-//
-// `detail` is the same card opened deliberately from the call tab rather than
-// scrolled past in the mixed feed: transcript open, recording playable in
-// place, and no repeat of what the pane header already says.
-function CallEntry({
-  item,
-  detail = false,
-  contactName,
-}: {
-  detail?: boolean;
-  // Labels the human side of the transcript when the card is opened.
-  contactName?: string | null;
-  item: {
-    at: number;
-    direction?: "in" | "out";
-    durationSec?: number;
-    outcome?: string;
-    summary?: string;
-    transcript?: string;
-    recordingUrl?: string;
-    collected?: Record<string, unknown>;
-    disconnectionReason?: string;
-  };
-}) {
-  const { t, language } = useLanguage();
-  const duration =
-    item.durationSec !== undefined ? formatDuration(item.durationSec) : null;
-  const ended = humanizeCallEnd(item.disconnectionReason, t);
-
-  // Opened deliberately: the full record, identical to what Voice → Calls
-  // shows. In the mixed feed it stays a summary card — a chat transcript
-  // inline would bury every message after it.
-  if (detail) {
-    return (
-      // No card of its own (Serdar, 2026-08-17). It wore a rounded, bordered,
-      // tinted box INSIDE the conversation panel's card — a frame drawn around
-      // the only thing the frame already contained. Borders belong to
-      // containers, and the pane is the container; the two blocks that are
-      // really containers (the collected values and the transcript, which
-      // scrolls) keep their own edges and now read as the only boxes here.
-      //
-      // Natural height, scrolled by the pane — see the threadRef div above.
-      <div className="text-sm">
-        {/* No duration line here at all (Serdar, 2026-08-17). The player reads
-            "0:00 / 1:34" and the list row you arrived from carries the length
-            too, so on the opened card it was a third copy of the same number
-            sitting above everything else. */}
-        <CallDetail flow call={item} contactName={contactName} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-sm">
-      {/* The mixed feed's card says direction and time itself; the call tab's
-          pane header already says both, which is why the opened form above
-          doesn't repeat them. */}
-      <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-        <FeedIcon type="call" size={13} />
-        <span>{item.direction === "in" ? t("calls.inbound") : t("calls.outbound")}</span>
-        <span>{formatDateTime(item.at, language)}</span>
-        {duration && <span>· {duration}</span>}
-        <CallOutcomePill outcome={item.outcome} />
-      </div>
-      {/* Summary, or the reason it ended when there was no conversation to
-          summarize. A missed call used to render as an empty card. */}
-      {item.summary ? (
-        <p className="mt-1">{item.summary}</p>
-      ) : (
-        ended && <p className="mt-1 text-xs text-[var(--muted)]">{ended}</p>
-      )}
-      {item.recordingUrl && (
-        <a
-          href={item.recordingUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 inline-block text-xs text-[var(--accent)] hover:underline"
-        >
-          {t("calls.recording")}
-        </a>
-      )}
-      {item.transcript && (
-        // Collapsed here, where an open transcript would bury everything after
-        // it. Opening the Calls filter is the way to read one properly.
-        <details className="mt-1">
-          <summary className="cursor-pointer text-xs text-[var(--muted)]">
-            {t("calls.transcript")}
-          </summary>
-          <div className="mt-1.5">
-            <CallTranscript transcript={item.transcript} contactName={contactName} />
-          </div>
-        </details>
-      )}
-    </div>
-  );
-}
-
-// Who owns this chat right now, and the one control that changes it.
-//
-// The takeover chip (docs/chat-agent.md §5). It was a line of grey text with
-// a text button floated opposite, which is what a status line looks like when
-// nobody has decided whether it is a status or a control. It is both: the
-// answer to "is a robot talking to my customer" and the switch that stops it,
-// which is the single most consequential toggle on this screen.
-//
-// So it is a BAR, and the two states are told apart by colour and icon before
-// a word is read — the whole point being that a salon owner glancing at a
-// thread should know who is holding it without parsing a sentence.
-//
-// Sending any manual message also takes over (stamped server-side in
-// wa.sendSession); this is how a thread is handed BACK, which no message can
-// express.
-// The thread's agent strip: what the assistant is doing HERE, and the draft it
-// is holding, if any.
-//
-// It is ONE control. The first version of this bar was a status sentence plus
-// a Take over button, both changing the same state from opposite directions,
-// and reading it meant working out which of the two you were being told. Three
-// pills say the whole thing: where this conversation is, and what the other
-// two options would do.
-//
-// Docked above the composer rather than at the end of the message list,
-// because a draft is a proposal about the NEXT message — one you have to
-// scroll to find is one you miss on a busy morning.
 function AgentThreadStrip({
   state,
   onMode,
