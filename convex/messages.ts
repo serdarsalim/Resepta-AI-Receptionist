@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { buttonsFor, buttonLabelsFor } from "./lib/metaTemplate";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 import { recordSendUsage } from "./lib/usage";
@@ -465,6 +466,14 @@ const feedItem = v.object({
   // Set while a send is waiting for its moment. The bubble counts down to it
   // and can be cancelled until the cron picks it up.
   scheduledFor: v.optional(v.number()),
+  // The quick-reply labels this send put under the customer's copy of the
+  // message (confirm first, cancel second — the payload order wa.ts sends and
+  // webhook.ts parses back). In the CUSTOMER's language, not the panel's:
+  // these are the words that were actually on their screen, and translating
+  // them for the salon would show buttons the customer never saw. Present
+  // only on cloud template rows whose kind attaches buttons; the panel draws
+  // them under the bubble the way WhatsApp itself does.
+  buttons: v.optional(v.array(v.string())),
   // Note-only.
   authorName: v.optional(v.string()),
   editedAt: v.optional(v.number()),
@@ -487,6 +496,17 @@ export const feedForCustomer = query({
     // no error boundary above it takes down the whole app rather than the one
     // pane that asked. Nothing crosses the boundary either way.
     if (!customer || customer.orgId !== orgId) return [];
+
+    // The quick-reply labels a template send carried, resolved ONCE the way
+    // the send resolved them (wa.ts: customer.language ?? org.language) —
+    // labels are a pure function of language, so no per-row template lookup.
+    // A customer whose language changed since an old send would relabel that
+    // old bubble, which is accepted: storing the labels per row buys nothing
+    // for the three fixed pairs that exist.
+    const org = await ctx.db.get(orgId);
+    const quickReplyLabels = buttonLabelsFor(
+      customer.language ?? org?.language ?? "en",
+    );
 
     const messages = (
       await ctx.db
@@ -551,6 +571,18 @@ export const feedForCustomer = query({
         replyToDirection: m.replyToDirection,
         canQuote: m.wamid !== undefined ? true : undefined,
         scheduledFor: m.scheduledFor,
+        // templateName is the proof a Cloud template actually went out —
+        // Evolution and freeform session sends never set it (Evolution gets
+        // the typed reply hint appended to its body instead of buttons). The
+        // stored kind can carry an offset suffix ("reminder_24h"); buttonsFor
+        // speaks base kinds.
+        buttons:
+          m.direction === "out" &&
+          m.templateName !== undefined &&
+          m.lane !== "evolution" &&
+          buttonsFor(m.kind.replace(/_\d+h$/, ""))
+            ? quickReplyLabels
+            : undefined,
       })),
       ...calls.map((c) => ({
         id: c._id as string,

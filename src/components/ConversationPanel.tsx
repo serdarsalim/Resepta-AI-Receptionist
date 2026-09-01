@@ -1267,7 +1267,7 @@ export function ConversationPanel({
               // No leading override: text-sm's own line-height IS WhatsApp's
               // — measured 21.25px on both, live (2026-08-31). The 19px this
               // carried was ~2px tighter than the real thing.
-              className={`flex w-fit max-w-full items-end gap-2 rounded-lg px-2.5 py-1.5 text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
+              className={`w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
                   ? "self-end rounded-br-sm bg-[var(--chat-out)]"
                   : "rounded-bl-sm bg-[var(--chat-in)]"
@@ -1278,6 +1278,11 @@ export function ConversationPanel({
                 failed ? "opacity-70 ring-1 ring-red-400/50" : ""
               }`}
             >
+              {/* The text row is its own flex box rather than the bubble
+                  itself being one, because a template send's quick-reply rows
+                  (below) have to span the bubble edge to edge, under the
+                  padding, the way WhatsApp draws them. */}
+              <div className="flex items-end gap-2 px-2.5 py-1.5">
               {/* min-w-0 so a long unbroken word wraps instead of shoving the
                   stamp out of the bubble. */}
               <div className="min-w-0">
@@ -1414,6 +1419,35 @@ export function ConversationPanel({
                   </>
                 )}
               </p>
+              </div>
+              {/* The quick replies a template send carried, drawn the way the
+                  customer's own WhatsApp draws them: full-width rows inside
+                  the same bubble, a hairline between each, the reply arrow
+                  and WhatsApp's green. NOT buttons here — they were buttons
+                  on the customer's phone, and this is the record of what they
+                  were offered, so the salon can read a bare "Onaylıyorum"
+                  reply as a tap and not a non sequitur. */}
+              {item.buttons?.map((label) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-center gap-1.5 border-t border-black/10 px-4 py-1.5 font-medium text-[#008069] dark:border-white/10 dark:text-[#00a884]"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h10a6 6 0 0 1 6 6v1" />
+                  </svg>
+                  {label}
+                </div>
+              ))}
             </div>
             {/* The reaction, hung off the bubble's bottom corner the way
                 WhatsApp hangs it. Pulled up into the bubble's edge rather than
