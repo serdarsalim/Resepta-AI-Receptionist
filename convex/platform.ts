@@ -609,7 +609,25 @@ export const orgDetail = query({
     await requirePlatformAdmin(ctx);
     const org = await ctx.db.get(args.orgId);
     if (!org) return null;
-    const [wa, agents, voiceEvents, voiceProvisioning, memberships, invites] =
+    // Open events only, by status range, never the org's newest N. The
+    // recency scan read 200 rows with their full provider payloads on every
+    // execution and re-ran on every write any call produced — 200 MB of
+    // database bandwidth in ten days of one operator looking at this page.
+    // Each of these four ranges is empty on a healthy org, so the page costs
+    // what it shows.
+    const openEvents = (
+      await Promise.all(
+        (["queued", "processing", "retrying", "failed"] as const).map((status) =>
+          ctx.db
+            .query("voiceEvents")
+            .withIndex("by_org_status", (q) =>
+              q.eq("orgId", args.orgId).eq("status", status),
+            )
+            .take(SCAN_CAP),
+        ),
+      )
+    ).flat();
+    const [wa, agents, voiceProvisioning, memberships, invites] =
       await Promise.all([
       ctx.db
         .query("waAccounts")
@@ -619,11 +637,6 @@ export const orgDetail = query({
         .query("retellAgents")
         .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
         .collect(),
-      ctx.db
-        .query("voiceEvents")
-        .withIndex("by_org_received", (q) => q.eq("orgId", args.orgId))
-        .order("desc")
-        .take(SCAN_CAP),
       ctx.db
         .query("voiceAgentProvisioning")
         .withIndex("by_org_updated", (q) => q.eq("orgId", args.orgId))
@@ -707,10 +720,15 @@ export const orgDetail = query({
           }
         : null,
       agents: agents.map((a) => {
-        const ownEvents = voiceEvents.filter(
+        const ownEvents = openEvents.filter(
           (event) => event.retellAgentId === a.retellAgentId,
         );
-        const latestFailure = ownEvents.find((event) => event.status === "failed");
+        // Newest failure first. The ranges come back in index order, which is
+        // by status and then by id, so the sort is what the old recency scan
+        // gave for free.
+        const latestFailure = ownEvents
+          .filter((event) => event.status === "failed")
+          .sort((x, y) => y.receivedAt - x.receivedAt)[0];
         return {
           retellAgentId: a.retellAgentId,
           name: a.name ?? null,

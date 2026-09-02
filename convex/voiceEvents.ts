@@ -14,6 +14,10 @@ import { VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 
 const PROCESS_BACKOFF = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
 const ANALYSIS_BACKOFF = [2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
+// How many open (failed / retrying / processing) rows `health` will read per
+// status. A number, not a signal: past it the card says "needs attention"
+// either way, and the operator's org page is where the individual rows are.
+const HEALTH_CAP = 100;
 
 type StoredEvent = {
   _id: Id<"voiceEvents">;
@@ -127,12 +131,20 @@ export const complete = internalMutation({
     const row = await ctx.db.get(eventId);
     if (!row) return null;
     const now = Date.now();
+    // The payload goes with the status. It is Retell's whole webhook body —
+    // transcript, analysis, cost — and once processed every fact in it lives
+    // on the calls row. Kept, it made this table the heaviest thing on the
+    // deployment to READ: `health` and the operator's org page both scan an
+    // agent's recent events, and each re-run of those live queries pulled 200
+    // full transcripts back off disk for the sake of a status column. A row
+    // that fails keeps its payload, because a retry has to replay it.
     await ctx.db.patch(eventId, {
       status: "processed",
       processedAt: now,
       processingAt: undefined,
       nextAttemptAt: undefined,
       error: undefined,
+      payload: null,
     });
     // The provider may deliver its analysis after our recovery window. A real
     // analyzed event supersedes that earlier warning for the same call.
@@ -151,6 +163,7 @@ export const complete = internalMutation({
           processingAt: undefined,
           nextAttemptAt: undefined,
           error: undefined,
+          payload: null,
         });
       }
     }
@@ -508,20 +521,32 @@ export const health = query({
   ),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
-    const [agents, events] = await Promise.all([
-      ctx.db.query("retellAgents").withIndex("by_org", (q) => q.eq("orgId", orgId)).collect(),
-      ctx.db
-        .query("voiceEvents")
-        .withIndex("by_org_received", (q) => q.eq("orgId", orgId))
-        .order("desc")
-        .take(200),
-    ]);
+    const agents = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    // Only the rows that can change the answer. This used to read the org's
+    // 200 newest events whatever their state, which meant two things at once:
+    // every execution carried 200 provider payloads, and the subscription
+    // re-ran on every one of the three or four writes each call produces,
+    // because each of them landed inside that window. On a healthy
+    // deployment these three ranges are EMPTY, so the query reads the agents
+    // and nothing else, and a call being processed normally touches only the
+    // "processing" range for the seconds it is in flight.
+    const open = (
+      await Promise.all(
+        (["failed", "retrying", "processing"] as const).map((status) =>
+          ctx.db
+            .query("voiceEvents")
+            .withIndex("by_org_status", (q) => q.eq("orgId", orgId).eq("status", status))
+            .take(HEALTH_CAP),
+        ),
+      )
+    ).flat();
     return agents.map((agent) => {
-      const own = events.filter((event) => event.retellAgentId === agent.retellAgentId);
+      const own = open.filter((event) => event.retellAgentId === agent.retellAgentId);
       const failed = own.filter((event) => event.status === "failed").length;
-      const retrying = own.filter(
-        (event) => event.status === "retrying" || event.status === "processing",
-      ).length;
+      const retrying = own.length - failed;
       return {
         retellAgentId: agent.retellAgentId,
         runtimeConnected: agent.runtimeConnectedAt !== undefined,
@@ -530,5 +555,34 @@ export const health = query({
         failed,
       };
     });
+  },
+});
+
+// One-off, and safe to re-run: null the payload on every event that is already
+// processed. `complete` has done this on the way through since 2026-09-03;
+// this is for the rows that were processed before it did. Pages itself
+// through the table 50 rows at a time — the rows it is here to shrink are the
+// heavy ones, so a page is kept well under the transaction's read budget.
+//
+//   npx convex run voiceEvents:stripProcessedPayloads --prod
+export const stripProcessedPayloads = internalMutation({
+  args: { cursor: v.optional(v.string()) },
+  returns: v.object({ stripped: v.number(), done: v.boolean() }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("voiceEvents")
+      .paginate({ cursor: args.cursor ?? null, numItems: 50 });
+    let stripped = 0;
+    for (const row of page.page) {
+      if (row.status !== "processed" || row.payload === null) continue;
+      await ctx.db.patch(row._id, { payload: null });
+      stripped += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.voiceEvents.stripProcessedPayloads, {
+        cursor: page.continueCursor,
+      });
+    }
+    return { stripped, done: page.isDone };
   },
 });
