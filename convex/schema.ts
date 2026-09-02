@@ -917,6 +917,14 @@ export default defineSchema({
     // happened. Cleared by the next signature that does verify.
     signatureRejectedAt: v.optional(v.number()),
     signatureRejectedRoute: v.optional(v.string()),
+    // Per-agent call counters, bumped by retell.recordCall when it INSERTS a
+    // calls row (the analysis event patches the same row and must not count
+    // twice). retell.agentCallStats used to derive these by collecting every
+    // call the org ever had, transcripts included, on each execution, and
+    // re-ran on every call write. Backfilled once by
+    // retell:backfillCallCounters.
+    callCount: v.optional(v.number()),
+    lastCallStartedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"])

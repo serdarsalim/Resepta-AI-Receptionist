@@ -3821,3 +3821,61 @@ only the button half of that honesty.
 - FORWARD-ONLY: rows already written keep the rich body. They carry
   templateName + templateParams, so a backfill is possible if the lie in old
   history ever matters; not built unasked.
+
+## Bandwidth: a live query pays per re-run, not per row (audited 2026-09-03)
+
+The deployment had read 1.14 GB of database bandwidth in ten days with one
+tester on it. The usage page's per-function breakdown (team settings →
+Usage → Database I/O — Insights does NOT catch this class, every single
+execution was under its thresholds) put 90% of it on six functions:
+
+| function | 10-day I/O | what it did |
+| --- | --- | --- |
+| voiceEvents.health | 337 MB | 200 newest voice events, each carrying the full Retell webhook body, re-run on every event write |
+| messages.inboxUnseenCount | 276 MB | the org's 500 newest messages + 200 newest calls, grouped by customer, from the always-mounted shell |
+| platform.orgDetail | 202 MB | the same 200-event payload scan, on the operator's page |
+| messages.conversations | 97 MB | the same 700-row scan, from the Inbox |
+| customers.get / customers.list | 101 MB | the same scan again, to draw one dot |
+| platform.fleet | 42 MB | eight tables at a 2,000-row cap, invalidated by any write anywhere |
+
+The shape behind all of them: a subscription whose read set is O(org) re-ran
+on every write that landed inside it, and the rows it re-read carry email
+HTML, call transcripts and provider payloads. Cost = clients × writes × rows,
+which is quadratic on a busy day. Nudge hit the same thing at 37 GB in one
+day on a 1k WhatsApp blast (its AGENTS.md, 2026-09-02).
+
+**Three rules now hold, and the write paths carry them:**
+
+1. **A processed voice event has no payload.** `voiceEvents.complete` nulls
+   it; every fact in it is on the calls row. A failed row keeps its body so a
+   retry can replay it. `health` and `orgDetail` read `by_org_status` ranges
+   (failed / retrying / processing, plus queued on the operator page), which
+   are empty on a healthy org. `voiceEvents:stripProcessedPayloads` is the
+   one-off for rows processed before this.
+2. **The inbox reads `customers.thread`, never the messages table.**
+   [`lib/thread.ts`](convex/lib/thread.ts) owns the summary (newest entry,
+   newest inbound/outbound/failure, latest entry per channel — every field a
+   max over `at`, so one fold serves an insert and a rebuild alike). **Any
+   mutation that inserts a `messages` or `calls` row calls `noteMessage` /
+   `noteCall`; any that fails a row, fills a call's analysis, attaches media
+   or deletes a scheduled row calls `recomputeThread`.** Same standing as
+   `syncAppointmentSchedule`. `conversations`, `inboxUnseenCount`,
+   `markAllConversationsRead`, `inboxPin`, `customers.list` and
+   `customers.get` walk `by_org_thread_last` / `by_org_thread_inbound` and
+   read exactly the customers they show. `threads:backfill` rebuilds every
+   row and is idempotent — run it if a write path is ever found to have
+   skipped its call.
+3. **Per-agent call figures are counters.** `retellAgents.callCount` and
+   `lastCallStartedAt`, bumped by `recordCall` on the INSERT only; "today"
+   is a `by_org_started` range. `retell:backfillCallCounters` seeds them.
+
+Left alone, knowingly: `platform.fleet` (operator-only, 42 MB, reads the
+whole fleet by design — the fix is a per-org health row kept by triggers, not
+worth it before there is a fleet); the four every-minute crons (57K of the
+117K function calls, negligible I/O — function calls are not the constraint);
+`orgs.current`, subscribed 17 times per client but deduplicated by the Convex
+client to one subscription and 11 MB total.
+
+How to check next time: the usage page's Database I/O breakdown by function,
+not Insights, not the logs. If a query's total is out of proportion to what
+its screen shows, ask what its read set is and what writes land inside it.

@@ -537,6 +537,10 @@ export const myNumbers = query({
 // history is bounded and this renders on one Phone agent section, not a hot
 // path. Rows older than the retellAgentId stamp have no agent and count
 // nowhere.
+// A day of one salon's calls, with room. Past it the "today" figure is stale
+// by a few and the Voice card is not the place anyone counts them anyway.
+const TODAY_CALLS_CAP = 500;
+
 export const agentCallStats = query({
   args: {},
   returns: v.record(
@@ -554,18 +558,29 @@ export const agentCallStats = query({
     const now = Date.now();
     const local = getLocalPartsSafe(now, tz);
     const dayStart = localWallTimeToUtcMs(local.y, local.m0, local.d, 0, 0, tz);
-    const rows = await ctx.db
-      .query("calls")
+    const agents = await ctx.db
+      .query("retellAgents")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    // Today's calls through the index range, and the lifetime figures off the
+    // agent row (schema: retellAgents.callCount). This used to collect every
+    // call the org ever had — transcripts and all — to count them, and re-ran
+    // on every call write for as long as the Voice tab was open. Its cost now
+    // tracks a day's calls rather than a salon's history.
+    const today = await ctx.db
+      .query("calls")
+      .withIndex("by_org_started", (q) =>
+        q.eq("orgId", orgId).gte("startedAt", dayStart),
+      )
+      .take(TODAY_CALLS_CAP);
     const stats: Record<string, { today: number; total: number; lastAt: number | null }> =
       {};
-    for (const row of rows) {
-      if (!row.retellAgentId) continue;
-      const s = (stats[row.retellAgentId] ??= { today: 0, total: 0, lastAt: null });
-      s.total += 1;
-      if (row.startedAt >= dayStart) s.today += 1;
-      if (s.lastAt === null || row.startedAt > s.lastAt) s.lastAt = row.startedAt;
+    for (const agent of agents) {
+      stats[agent.retellAgentId] = {
+        today: today.filter((row) => row.retellAgentId === agent.retellAgentId).length,
+        total: agent.callCount ?? 0,
+        lastAt: agent.lastCallStartedAt ?? null,
+      };
     }
     return stats;
   },
@@ -3216,6 +3231,13 @@ export const recordCall = internalMutation({
     });
     const call = await ctx.db.get(callId);
     if (call) await noteCall(ctx, call);
+    // The Voice card's lifetime figures (agentCallStats). On the insert only:
+    // the call_analyzed event patches this same row above and returns before
+    // reaching here, so one call is one count.
+    await ctx.db.patch(agent._id, {
+      callCount: (agent.callCount ?? 0) + 1,
+      lastCallStartedAt: Math.max(agent.lastCallStartedAt ?? 0, args.startedAt),
+    });
     return null;
   },
 });
@@ -3252,5 +3274,57 @@ export const clearAgentInboundNumber = internalMutation({
       }
     }
     return null;
+  },
+});
+
+// One pass over the calls table to seed retellAgents.callCount and
+// lastCallStartedAt for calls recorded before recordCall kept them. Pages
+// itself through the table carrying the running totals as an argument, then
+// writes every agent's figures at the end — one read of each call, no index
+// added for a job that runs once. Safe to re-run: it SETS, never adds.
+//
+//   npx convex run retell:backfillCallCounters --prod
+export const backfillCallCounters = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    acc: v.optional(
+      v.record(v.string(), v.object({ count: v.number(), lastAt: v.number() })),
+    ),
+  },
+  returns: v.object({ agentsWritten: v.number(), done: v.boolean() }),
+  handler: async (ctx, args) => {
+    const acc: Record<string, { count: number; lastAt: number }> = { ...(args.acc ?? {}) };
+    const page = await ctx.db
+      .query("calls")
+      .paginate({ cursor: args.cursor ?? null, numItems: 200 });
+    for (const row of page.page) {
+      if (!row.retellAgentId) continue;
+      const current = acc[row.retellAgentId] ?? { count: 0, lastAt: 0 };
+      acc[row.retellAgentId] = {
+        count: current.count + 1,
+        lastAt: Math.max(current.lastAt, row.startedAt),
+      };
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.retell.backfillCallCounters, {
+        cursor: page.continueCursor,
+        acc,
+      });
+      return { agentsWritten: 0, done: false };
+    }
+    let agentsWritten = 0;
+    for (const [retellAgentId, figures] of Object.entries(acc)) {
+      const agent = await ctx.db
+        .query("retellAgents")
+        .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+        .unique();
+      if (!agent) continue;
+      await ctx.db.patch(agent._id, {
+        callCount: figures.count,
+        lastCallStartedAt: figures.lastAt,
+      });
+      agentsWritten += 1;
+    }
+    return { agentsWritten, done: true };
   },
 });
