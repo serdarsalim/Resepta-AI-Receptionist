@@ -38,6 +38,7 @@
 // contacted is the highest-regret thing this product can do, and KVKK does
 // not grade on whether the button was small. Do not add a bypass.
 
+import { noteMessageById } from "./lib/thread";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -370,6 +371,7 @@ export const fanOut = internalMutation({
           nextAttemptAt: Date.now(),
         });
       }
+      await noteMessageById(ctx, messageId);
 
       await ctx.db.insert("bulkRunItems", {
         runId: args.runId,

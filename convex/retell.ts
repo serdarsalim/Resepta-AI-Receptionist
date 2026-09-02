@@ -24,6 +24,7 @@ import {
 import { serviceKey } from "./services";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { noteCall, recomputeThread } from "./lib/thread";
 import { monthKey } from "./lib/usage";
 import { platformValue } from "./lib/platformConfig";
 import { resolvePlatformHighPriority, resolvePlatformVoiceModel } from "./lib/voiceModels";
@@ -3149,6 +3150,8 @@ export const recordCall = internalMutation({
             : undefined,
         ...(await meterCall(ctx, agent.orgId, existing, args, existing.startedAt)),
       });
+      // The analysis fills the summary the inbox row previews.
+      if (existing.customerId) await recomputeThread(ctx, existing.customerId);
       return null;
     }
     // A caller the salon has never seen is the normal case, not the edge: it is
@@ -3191,7 +3194,7 @@ export const recordCall = internalMutation({
         });
       }
     }
-    await ctx.db.insert("calls", {
+    const callId = await ctx.db.insert("calls", {
       orgId: agent.orgId,
       customerId,
       direction,
@@ -3211,6 +3214,8 @@ export const recordCall = internalMutation({
       disconnectionReason: args.disconnectionReason,
       ...(await meterCall(ctx, agent.orgId, null, args, args.startedAt)),
     });
+    const call = await ctx.db.get(callId);
+    if (call) await noteCall(ctx, call);
     return null;
   },
 });

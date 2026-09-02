@@ -36,6 +36,7 @@
 // case, and the difference is worth understanding: a claimed row that never
 // reported back may have been delivered, so it is failed rather than retried.
 
+import { recomputeThread } from "./lib/thread";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -423,6 +424,7 @@ export const reapStuck = internalMutation({
         nextAttemptAt: undefined,
         deadLetteredAt: Date.now(),
       });
+      if (message.customerId) await recomputeThread(ctx, message.customerId);
       // This reaper is the ONE terminal outcome that does not go through
       // applySendResult — it patches the row itself — so a bulk run's item
       // would never learn its message died here. Without this line a single

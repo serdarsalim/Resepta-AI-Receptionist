@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { threadValidator } from "./lib/thread";
 
 // Multi-org invariant (see AGENTS.md): every app table carries orgId and every
 // index used by app queries starts with it. `orgs` and the auth tables are the
@@ -1232,9 +1233,19 @@ export default defineSchema({
     // someone silently revoked their consent, which is exactly the sort of
     // quiet state change KVKK punishes.
     mutedAt: v.optional(v.number()),
+    // The conversation summary the inbox list, its badge and the Contacts dot
+    // read INSTEAD of scanning messages. Kept by the write paths; lib/thread.ts
+    // has the rule, and the two indexes below are its readers. Absent until
+    // the first entry lands (or threads:backfill runs).
+    thread: v.optional(threadValidator),
   })
     .index("by_org", ["orgId"])
-    .index("by_org_phone", ["orgId", "phone"]),
+    .index("by_org_phone", ["orgId", "phone"])
+    // The inbox list, newest conversation first. thread.lastAt is unset on a
+    // customer nobody has talked to, and a range over gt 0 leaves them out.
+    .index("by_org_thread_last", ["orgId", "thread.lastAt"])
+    // The unread badge: conversations whose newest inbound clears a floor.
+    .index("by_org_thread_inbound", ["orgId", "thread.lastInboundAt"]),
 
   // Org-defined contact fields (the SMALL core of Nudge's Fields registry —
   // no value maps, no variable keys, no sync scoping). Per-vertical custom

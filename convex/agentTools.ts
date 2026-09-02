@@ -27,6 +27,7 @@ import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { clampOffset, sortRules } from "./messageRules";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
+import { noteCall, noteMessageById } from "./lib/thread";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -872,6 +873,8 @@ export const logActivity = internalMutation({
           summary: e.body?.trim() || undefined,
           transcript: e.transcript?.trim() || undefined,
         });
+        const call = await ctx.db.get(id);
+        if (call) await noteCall(ctx, call);
         calls.push(id);
         continue;
       }
@@ -910,6 +913,7 @@ export const logActivity = internalMutation({
             }
           : {}),
       });
+      await noteMessageById(ctx, id);
       messages.push(id);
     }
 

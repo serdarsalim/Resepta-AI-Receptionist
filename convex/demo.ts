@@ -35,6 +35,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { seedDefaultRules } from "./messageRules";
+import { noteMessageById } from "./lib/thread";
 
 // Roughly how often a simulated outbound draws a reply. Not 100%: a demo where
 // every customer answers reads as a toy. Not 0: the inbox is half the product.
@@ -142,7 +143,7 @@ export const landReply = internalMutation({
     if (!customer || customer.orgId !== args.orgId) return null;
 
     const body = REPLIES[Math.floor(hashUnit(`${args.messageId}body`) * REPLIES.length)];
-    await ctx.db.insert("messages", {
+    const replyId = await ctx.db.insert("messages", {
       orgId: args.orgId,
       customerId: args.customerId,
       direction: "in",
@@ -150,6 +151,7 @@ export const landReply = internalMutation({
       body,
       status: "received",
     });
+    await noteMessageById(ctx, replyId);
     // Opens the 24h window, exactly as a real inbound would — so the composer
     // in the demo is live rather than greyed out, which is the part a prospect
     // most wants to try.

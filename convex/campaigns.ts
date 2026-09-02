@@ -28,6 +28,7 @@
 // that gets a WABA banned, and it is enforced twice — once when the segment is
 // built and once by the send path itself. Do not add a bypass.
 
+import { noteMessageById } from "./lib/thread";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -365,7 +366,7 @@ export const fanOut = internalMutation({
       if (!line) continue;
 
       if (args.templateName) {
-        await ctx.db.insert("messages", {
+        const waId = await ctx.db.insert("messages", {
           orgId: campaign.orgId,
           customerId,
           campaignId: args.campaignId,
@@ -383,6 +384,7 @@ export const fanOut = internalMutation({
           body: line,
           nextAttemptAt: Date.now(),
         });
+        await noteMessageById(ctx, waId);
         created += 1;
       }
 
@@ -398,7 +400,7 @@ export const fanOut = internalMutation({
         const subject = subjectTemplate
           ? renderTokens(subjectTemplate, tokenValues)
           : "";
-        await ctx.db.insert("messages", {
+        const emailId = await ctx.db.insert("messages", {
           orgId: campaign.orgId,
           customerId,
           campaignId: args.campaignId,
@@ -411,6 +413,7 @@ export const fanOut = internalMutation({
           trackingToken: crypto.randomUUID(),
           nextAttemptAt: Date.now(),
         });
+        await noteMessageById(ctx, emailId);
         created += 1;
       }
     }

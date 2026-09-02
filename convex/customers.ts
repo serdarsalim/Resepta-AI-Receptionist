@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
-import { conversationEntries, summariseEntries, type ConversationEntry } from "./messages";
+import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
 
 // The row as stored. Built from a plain field map so the list validator can
@@ -53,11 +53,12 @@ const customerFields = {
   // validator throw took the whole tab down, which is how a one-field drift
   // presented as "the app crashes on this person's profile".
   lastReadReceiptWamid: v.optional(v.string()),
+  // The conversation summary the write paths keep (lib/thread.ts). Read here
+  // for the dot; the inbox reads it through its own indexes.
+  thread: v.optional(threadValidator),
 };
 
-// Only the LIST carries the dot. Resolving it costs a scan of the org's recent
-// messages, which is the right price for the one screen that draws a dot per
-// row and the wrong one for reading a single record that never shows it.
+// The row plus the dot, which both the list and the record page carry.
 const customerRow = v.object({
   ...customerFields,
   // Resolved server-side rather than shipped as three raw timestamps for the
@@ -72,16 +73,17 @@ const customerRow = v.object({
 // The second half is not redundant: a voice booking creates a customer and no
 // message at all, so an inbox-only dot leaves the arrivals most worth noticing
 // invisible everywhere.
-function resolveAttention(
-  customer: Doc<"customers">,
-  byCustomer: Map<string, ConversationEntry[]>,
-): boolean {
+function resolveAttention(customer: Doc<"customers">): boolean {
   // Mute answers first, and answers for every caller: the table, the record
   // page, and anything else that ever asks. A muted customer cannot light the
   // dot, which is the whole of what mute means.
   if (customer.mutedAt) return false;
-  const entries = byCustomer.get(customer._id);
-  const messageAttentionAt = entries ? summariseEntries(entries).attentionAt : 0;
+  // From the row's own summary, so the Contacts table costs the customers it
+  // shows and nothing more. It used to scan the org's 700 newest messages
+  // and calls per execution to answer this for each row.
+  const messageAttentionAt = customer.thread
+    ? summariseThread(customer.thread).attentionAt
+    : 0;
   const wants = Math.max(messageAttentionAt, customer.arrivedAt ?? 0);
   return wants > 0 && wants > (customer.attentionClearedAt ?? 0);
 }
@@ -97,8 +99,7 @@ export const get = query({
     // question the table does — and answer it the same way, through
     // resolveAttention, rather than by looking at two of the three timestamps
     // and guessing at the third.
-    const byCustomer = await conversationEntries(ctx, orgId);
-    return { ...customer, needsAttention: resolveAttention(customer, byCustomer) };
+    return { ...customer, needsAttention: resolveAttention(customer) };
   },
 });
 
@@ -174,7 +175,6 @@ export const list = query({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(1000);
-    const byCustomer = await conversationEntries(ctx, orgId);
     // mutedAt ships raw and the table decides where muted rows land. Nudge
     // sinks them server-side, through a second query and a by_muted index,
     // because its Contacts table is paginated: a muted row can only sort late
@@ -184,7 +184,7 @@ export const list = query({
     // thrown away on arrival. One place decides, and it is the sort.
     return rows.map((row) => ({
       ...row,
-      needsAttention: resolveAttention(row, byCustomer),
+      needsAttention: resolveAttention(row),
     }));
   },
 });

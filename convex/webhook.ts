@@ -3,6 +3,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
+import { noteMessageById } from "./lib/thread";
 import { nextUpcomingOf, scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
@@ -695,7 +696,7 @@ export const handleEvolutionEvent = internalMutation({
             .unique();
           if (seen) continue;
         }
-        await ctx.db.insert("messages", {
+        const staffReplyId = await ctx.db.insert("messages", {
           orgId: org._id,
           customerId: customer._id,
           direction: "out",
@@ -709,6 +710,7 @@ export const handleEvolutionEvent = internalMutation({
           status: "sent",
           lane: "evolution",
         });
+        await noteMessageById(ctx, staffReplyId);
         continue;
       }
 

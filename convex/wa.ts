@@ -20,6 +20,7 @@ import {
 } from "./lib/email";
 import { appointmentIcs } from "./lib/ics";
 import { resolveWaAccount } from "./lib/platformConfig";
+import { recomputeThread } from "./lib/thread";
 import {
   fetchWaMedia,
   markWaCloudRead,
@@ -1766,6 +1767,8 @@ export const cancelScheduled = mutation({
     // telling the salon a message was stopped when the customer has it.
     if (row.scheduledFor === undefined || row.status !== "queued") return null;
     await ctx.db.delete(args.messageId);
+    // It may have been the newest entry the inbox row was previewing.
+    if (row.customerId) await recomputeThread(ctx, row.customerId);
     return null;
   },
 });

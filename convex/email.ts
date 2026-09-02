@@ -18,6 +18,7 @@ import {
   splitName,
 } from "./lib/emailInbound";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { noteMessageById } from "./lib/thread";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { outOfHoursMessage } from "./lib/awayReply";
 import { resolvePublicPhone } from "./lib/publicPhone";
@@ -115,7 +116,7 @@ export const recordInbound = internalMutation({
       });
     }
 
-    await ctx.db.insert("messages", {
+    const inboundId = await ctx.db.insert("messages", {
       orgId: args.orgId,
       customerId,
       direction: "in",
@@ -131,6 +132,7 @@ export const recordInbound = internalMutation({
       // subject the customer actually sent, "Re:" and all.
       emailSubject: args.subject,
     });
+    await noteMessageById(ctx, inboundId);
 
     // Reply attribution, latest-outbound-wins (Nudge's contract): credit this
     // reply to the newest tracked email the customer was sent in the past 30

@@ -15,6 +15,19 @@ import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 import { recordSendUsage } from "./lib/usage";
 import { supersedePendingSuggestions } from "./lib/agentDrafts";
 import { noteBulkItemResult } from "./bulkRuns";
+import {
+  channel,
+  channelOfMessage,
+  neverLeftSilently,
+  noteMessageById,
+  recomputeThread,
+  summariseThread,
+  type Channel,
+} from "./lib/thread";
+
+// The channel helpers moved to lib/thread.ts (a leaf the summary writers can
+// import). Re-exported so agentReports and friends keep importing from here.
+export { channel, channelOfMessage, type Channel } from "./lib/thread";
 
 const messageStatus = v.union(
   v.literal("queued"),
@@ -24,6 +37,15 @@ const messageStatus = v.union(
   v.literal("read"),
   v.literal("received"),
 );
+
+// How many conversations the inbox list shows. Bounded by rows shown, not by
+// messages scanned: the list reads customers.thread through an index, so this
+// is the only number that decides what an execution costs.
+const INBOX_CAP = 200;
+// How many candidate conversations the unread badge (and mark-all-read) will
+// consider. Only customers whose newest inbound clears the read floor are in
+// the range at all, so on any normal day this is a handful of rows.
+const UNSEEN_CAP = 500;
 
 
 // ---- Internal plumbing (send action + webhook) ----
@@ -80,7 +102,7 @@ export const logOutQueued = internalMutation({
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
-    return await ctx.db.insert("messages", {
+    const id = await ctx.db.insert("messages", {
       orgId: args.orgId,
       customerId: args.customerId,
       appointmentId: args.appointmentId,
@@ -111,6 +133,8 @@ export const logOutQueued = internalMutation({
       // forever with nothing owed and nothing watching it.
       ...(args.scheduledFor === undefined ? { sendingAt: Date.now() } : {}),
     });
+    await noteMessageById(ctx, id);
+    return id;
   },
 });
 
@@ -223,6 +247,11 @@ export const applySendResult = internalMutation({
       sendingAt: undefined,
       ...(deadLettered ? { deadLetteredAt: Date.now() } : {}),
     });
+    // The failure changes what the inbox row says (and a no-consent refusal
+    // removes the entry from the thread altogether), so the summary is
+    // rebuilt. The sent branch above does not need this: a queued row is
+    // already counted as an outbound entry the moment it is inserted.
+    if (message.customerId) await recomputeThread(ctx, message.customerId);
 
     const customer = message.customerId ? await ctx.db.get(message.customerId) : null;
     await alertFailedSend(ctx, {
@@ -308,6 +337,8 @@ export async function applyWamidStatus(
     await ctx.db.patch(message._id, { status });
   } else if (status === "failed") {
     await ctx.db.patch(message._id, { status: "failed", error });
+    // delivered/read change nothing the summary shows; a failure does.
+    if (message.customerId) await recomputeThread(ctx, message.customerId);
   }
 }
 
@@ -336,7 +367,7 @@ export async function logInboundRow(
     replyToDirection?: "in" | "out";
   },
 ): Promise<Id<"messages">> {
-  return await ctx.db.insert("messages", {
+  const id = await ctx.db.insert("messages", {
     orgId: args.orgId,
     customerId: args.customerId,
     direction: "in",
@@ -352,6 +383,8 @@ export async function logInboundRow(
     ...(args.replyToBody !== undefined ? { replyToBody: args.replyToBody } : {}),
     ...(args.replyToDirection ? { replyToDirection: args.replyToDirection } : {}),
   });
+  await noteMessageById(ctx, id);
+  return id;
 }
 
 // The file, once the action has it. Clears the pending flag in the same write,
@@ -368,11 +401,16 @@ export const attachMedia = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) return null;
     await ctx.db.patch(args.messageId, {
       mediaStorageId: args.storageId,
       mediaPending: undefined,
       ...(args.contentType ? { mediaContentType: args.contentType } : {}),
     });
+    // The row may be the one the inbox previews, and the type decides whether
+    // that preview says "Photo" or "Voice message".
+    if (message.customerId) await recomputeThread(ctx, message.customerId);
     return null;
   },
 });
@@ -385,27 +423,14 @@ export const attachMedia = internalMutation({
 // transcripts and recordings, so the merge happens here on read rather than by
 // forcing calls into `messages`.
 
-export const channel = v.union(
-  v.literal("whatsapp"),
-  v.literal("email"),
-  v.literal("call"),
-);
-
-export type Channel = "whatsapp" | "email" | "call";
+// `channel`, `Channel` and channelOfMessage are defined in lib/thread.ts and
+// re-exported at the top of this file.
 
 // Where a row came from. `form` is an INTAKE, not a channel: somebody filled
 // in a page, which is not something the salon can reach them back on. It
 // therefore lives here and in feedChannel, never in the `channel` union that
 // the inbox's "reachable on" strip reads — same rule as notes.
 export type FeedSource = Channel | "form" | "note";
-
-// The email lane logs under `email_<kind>` (see wa.ts) and the form lane under
-// `form_<kind>` — the prefix IS the marker. Everything else rode WhatsApp.
-export function channelOfMessage(kind: string): Channel | "form" {
-  if (kind.startsWith("email_")) return "email";
-  if (kind.startsWith("form_")) return "form";
-  return "whatsapp";
-}
 
 // What a feed row can be, which is wider than what a channel can be: a note is
 // a row here but it is not something a customer can be reached on. The narrow
@@ -616,153 +641,6 @@ export const feedForCustomer = query({
   },
 });
 
-// ---- The shared half of the inbox --------------------------------------------
-//
-// The inbox list and the sidebar's dot ask the same question of the same 500
-// messages. They used to ask it twice: the badge ran the whole conversations
-// query and threw away everything but a boolean. The scan and the per-row
-// reasoning live here now, and each caller reads only what it needs from the
-// customers table on top.
-
-export type ConversationEntry = {
-  // The messages or calls row this entry came from, stringified — the same id
-  // feedForCustomer hands the contact feed, which is what lets the inbox open
-  // the exact mail or call a row is previewing instead of the channel's list.
-  id: string;
-  // The inbox list's own strip, which answers "how can I reach this person" —
-  // so a form intake counts as one more thing that happened, not as a way
-  // back to them. Narrowed at the push below.
-  channel: Channel | "form";
-  at: number;
-  direction: "in" | "out";
-  body?: string;
-  // What the attachment IS, when the entry has one. Carried so a preview can
-  // say "Voice message" for a row whose whole content is a recording — with
-  // no body at all such a row previewed as "template message", which named
-  // the one thing it definitely was not.
-  mediaContentType?: string;
-  mediaFileName?: string;
-  failed: boolean;
-};
-
-// The expensive half: one window over messages and calls, grouped by customer.
-// Nothing from the customers table is touched here.
-// A row that never left the building because this customer has no consent.
-//
-// The failed row used to be written and shown on the reasoning that a
-// per-customer refusal belongs in that customer's thread rather than in the
-// owner's inbox at 06:00. Half of that still holds — it must not alert — but
-// the thread was the wrong home for it. Consent is one fact, and it is already
-// on the card as a toggle you can see and flip; the thread turned it into a
-// red row per reminder per customer, forever, in a surface whose job is to
-// show what a customer was actually told. Nothing was told. Nothing shows.
-//
-// Sibling case, deliberately left alone for now: `no-email-address`, which is
-// the same kind of fact and gets the same treatment the day it is as visible
-// on the card as consent is.
-function neverLeftSilently(message: { status: string; error?: string }): boolean {
-  return message.status === "failed" && message.error === "no-consent";
-}
-
-export async function conversationEntries(
-  ctx: QueryCtx,
-  orgId: Id<"orgs">,
-): Promise<Map<string, ConversationEntry[]>> {
-  const messages = await ctx.db
-    .query("messages")
-    .withIndex("by_org", (q) => q.eq("orgId", orgId))
-    .order("desc")
-    .take(500);
-  const calls = await ctx.db
-    .query("calls")
-    .withIndex("by_org", (q) => q.eq("orgId", orgId))
-    .order("desc")
-    .take(200);
-
-  const byCustomer = new Map<string, ConversationEntry[]>();
-  const push = (customerId: string | undefined, entry: ConversationEntry) => {
-    if (!customerId) return;
-    const bucket = byCustomer.get(customerId) ?? [];
-    bucket.push(entry);
-    byCustomer.set(customerId, bucket);
-  };
-  for (const m of messages) {
-    if (neverLeftSilently(m)) continue;
-    push(m.customerId, {
-      id: m._id,
-      channel: channelOfMessage(m.kind),
-      at: m.occurredAt ?? m._creationTime,
-      direction: m.direction,
-      body: m.body,
-      mediaContentType: m.mediaContentType,
-      mediaFileName: m.mediaFileName,
-      failed: m.status === "failed",
-    });
-  }
-  for (const c of calls) {
-    push(c.customerId, {
-      id: c._id,
-      channel: "call",
-      at: c.startedAt,
-      direction: c.direction === "inbound" ? "in" : "out",
-      body: c.summary,
-      failed: false,
-    });
-  }
-  return byCustomer;
-}
-
-type ConversationSummary = {
-  last: ConversationEntry;
-  awaitingChannels: Channel[];
-  hasFailed: boolean;
-  // The newest moment that WANTS attention: an unanswered inbound, or a failed
-  // send. Zero when nothing in this conversation ever asks for a look.
-  //
-  // This is what a dismissal gets compared against, and getting it wrong is
-  // what made the dot un-clearable: comparing the dismissal to the row's last
-  // ACTIVITY meant any later message, even one the salon itself sent, dragged
-  // a months-old failure back into view. Failure included, same clock.
-  attentionAt: number;
-  // Newest entry in each direction, 0 when there is none. The inbox row's
-  // marker is decided entirely by these two: an inbound newer than my last
-  // visit is what "they wrote while I was away" means, and a pin is spent the
-  // moment an outbound lands after it. Derived here rather than stored on the
-  // customer, because the entries are already loaded and already sorted.
-  lastInboundAt: number;
-  lastOutboundAt: number;
-};
-
-// Everything the entries alone decide. Sorts in place; the caller owns the
-// array.
-export function summariseEntries(entries: ConversationEntry[]): ConversationSummary {
-  entries.sort((a, b) => b.at - a.at);
-  // Per channel, only the LATEST entry decides — an old unanswered reply that
-  // was since answered on that channel is not still waiting.
-  const awaitingChannels: Channel[] = [];
-  let attentionAt = 0;
-  for (const ch of ["whatsapp", "email", "call"] as const) {
-    const latest = entries.find((e) => e.channel === ch);
-    if (latest?.direction === "in") {
-      awaitingChannels.push(ch);
-      attentionAt = Math.max(attentionAt, latest.at);
-    }
-  }
-  // Newest first, so the first failure found is the newest one.
-  const newestFailure = entries.find((e) => e.failed);
-  if (newestFailure) attentionAt = Math.max(attentionAt, newestFailure.at);
-  return {
-    last: entries[0],
-    awaitingChannels,
-    hasFailed: newestFailure !== undefined,
-    attentionAt,
-    // Already sorted newest-first, so the first match in each direction is the
-    // newest one.
-    lastInboundAt: entries.find((e) => e.direction === "in")?.at ?? 0,
-    lastOutboundAt: entries.find((e) => e.direction === "out")?.at ?? 0,
-  };
-}
-
 // The sidebar's Inbox dot: mail that arrived since I last had the tab OPEN.
 //
 // It reads inboxSeenAt, while the grey row markers read inboxLeftAt, and the
@@ -781,24 +659,24 @@ export const inboxUnseenCount = query({
     const { user, orgId } = await requireOrg(ctx);
     const visit = await inboxVisit(ctx, orgId, user._id);
     const floor = inboxReadFloor(visit, user);
-    const byCustomer = await conversationEntries(ctx, orgId);
+    // Only customers whose newest inbound clears the floor — an index range
+    // over the summary, not a scan of the org's messages. This subscription
+    // is open in the shell for as long as the app is, so what it reads is what
+    // every message write in the org costs every open client. It used to be
+    // 700 rows, with email bodies and call transcripts on them.
+    const candidates = await ctx.db
+      .query("customers")
+      .withIndex("by_org_thread_inbound", (q) =>
+        q.eq("orgId", orgId).gt("thread.lastInboundAt", floor),
+      )
+      .take(UNSEEN_CAP);
     let count = 0;
-    for (const [customerId, entries] of byCustomer) {
-      const { lastInboundAt } = summariseEntries(entries);
-      // The floor settles most rows for free; only the ones that clear it are
-      // worth a point lookup. Nothing inbound can ever be new.
-      if (lastInboundAt <= floor) continue;
-      const customer = await ctx.db.get(customerId as Id<"customers">);
-      if (!customer) continue;
+    for (const customer of candidates) {
+      const lastInboundAt = customer.thread?.lastInboundAt ?? 0;
       // A muted customer is not in the inbox at all, so counting them here
       // would leave a badge pointing at rows that aren't there.
       if (customer.mutedAt) continue;
-      const readAt = await inboxReadAt(
-        ctx,
-        orgId,
-        user._id,
-        customerId as Id<"customers">,
-      );
+      const readAt = await inboxReadAt(ctx, orgId, user._id, customer._id);
       if (lastInboundAt > readAt) count += 1;
     }
     return count;
@@ -941,15 +819,19 @@ export const markAllConversationsRead = mutation({
   returns: v.null(),
   handler: async (ctx) => {
     const { user, orgId } = await requireOrg(ctx);
-    const byCustomer = await conversationEntries(ctx, orgId);
     const visit = await inboxVisit(ctx, orgId, user._id);
     const readFloor = inboxReadFloor(visit, user);
     const now = Date.now();
-    for (const [customerId, entries] of byCustomer) {
-      const customer = await ctx.db.get(customerId as Id<"customers">);
-      if (!customer || customer.mutedAt) continue;
-      const summary = summariseEntries(entries);
-      if (summary.lastInboundAt <= readFloor) continue;
+    // The same range the badge counts, so this clears exactly what it shows.
+    const candidates = await ctx.db
+      .query("customers")
+      .withIndex("by_org_thread_inbound", (q) =>
+        q.eq("orgId", orgId).gt("thread.lastInboundAt", readFloor),
+      )
+      .take(UNSEEN_CAP);
+    for (const customer of candidates) {
+      if (customer.mutedAt) continue;
+      const summary = { lastInboundAt: customer.thread?.lastInboundAt ?? 0 };
       const existing = await ctx.db
         .query("inboxReads")
         .withIndex("by_org_user_customer", (q) =>
@@ -980,11 +862,9 @@ export const markAllConversationsRead = mutation({
 // inside `conversations`; the contact record needs it for a single customer,
 // because the pin toggle now sits beside that person's name.
 //
-// It pays for the whole org's entries to answer about one row, and that is
-// deliberate: the SPENT rule (a pin older than the newest outbound has been
-// paid) lives in summariseEntries, and a cheaper read that skipped it would
-// let the record page show a pin the inbox had already retired. Two surfaces
-// disagreeing about one pin is worse than a read the record page makes once.
+// The SPENT rule (a pin older than the newest outbound has been paid) reads
+// the same customers.thread.lastOutboundAt the inbox list reads, so the two
+// surfaces cannot disagree about one pin.
 export const inboxPin = query({
   args: { customerId: v.id("customers") },
   returns: v.boolean(),
@@ -1003,9 +883,7 @@ export const inboxPin = query({
       .unique();
     // No row is the common case and it settles without touching the feed.
     if (!pin) return false;
-    const byCustomer = await conversationEntries(ctx, orgId);
-    const entries = byCustomer.get(args.customerId);
-    return pin.pinnedAt > (entries ? summariseEntries(entries).lastOutboundAt : 0);
+    return pin.pinnedAt > (customer.thread?.lastOutboundAt ?? 0);
   },
 });
 
@@ -1098,7 +976,6 @@ export const conversations = query({
   ),
   handler: async (ctx) => {
     const { user, orgId } = await requireOrg(ctx);
-    const byCustomer = await conversationEntries(ctx, orgId);
     const visit = await inboxVisit(ctx, orgId, user._id);
     const readFloor = inboxReadFloor(visit, user);
     // Read whole: unpinning deletes, so this holds only live pins.
@@ -1112,48 +989,63 @@ export const conversations = query({
       pins.map((p) => [p.customerId as string, p.pinnedAt]),
     );
 
+    // The newest conversations, straight off the customer rows. Each row
+    // carries its own summary (customers.thread, kept by the write paths —
+    // lib/thread.ts), so this reads exactly the rows it shows and re-runs
+    // only when one of them changes. It used to group the org's 500 newest
+    // messages and 200 newest calls on every execution, and re-ran on every
+    // message write in the org for every client with the Inbox open.
+    const rows = await ctx.db
+      .query("customers")
+      .withIndex("by_org_thread_last", (q) =>
+        q.eq("orgId", orgId).gt("thread.lastAt", 0),
+      )
+      .order("desc")
+      .take(INBOX_CAP);
+
     const out = [];
-    for (const [customerId, entries] of byCustomer) {
-      const customer = await ctx.db.get(customerId as Id<"customers">);
-      if (!customer) continue;
+    for (const customer of rows) {
+      const thread = customer.thread;
+      if (!thread) continue;
       // Muted contacts leave the inbox entirely. The conversation stays whole
       // and readable from the contact record, which is where you go when you
       // actually want to look; what mute buys is that it stops arriving here
       // unasked. Dropping the row rather than only dimming its dot is the
       // point: a quiet row in a list of forty is still forty rows to read.
       if (customer.mutedAt) continue;
-      const summary = summariseEntries(entries);
+      const { awaitingChannels } = summariseThread(thread);
       // NEW = they wrote since I last opened THIS conversation. Floored, so a
       // conversation nobody ever opened is only new if it moved after the
       // baseline. The floor test is free and short-circuits the point lookup,
       // so only rows that clear it cost a read.
       const unseen =
-        summary.lastInboundAt > readFloor &&
-        summary.lastInboundAt >
+        thread.lastInboundAt > readFloor &&
+        thread.lastInboundAt >
           (await inboxReadAt(ctx, orgId, user._id, customer._id));
       out.push({
         customerId: customer._id,
         name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
         phone: customer.phone,
         email: customer.email,
-        lastAt: summary.last.at,
-        lastBody: summary.last.body,
-        lastMediaContentType: summary.last.mediaContentType,
-        lastMediaFileName: summary.last.mediaFileName,
-        lastDirection: summary.last.direction,
-        lastChannel: summary.last.channel,
-        lastId: summary.last.id,
-        lastFailed: summary.last.failed,
-        awaitingReply: summary.awaitingChannels.length > 0,
-        lastInboundAt: summary.lastInboundAt,
+        lastAt: thread.lastAt,
+        lastBody: thread.lastBody,
+        lastMediaContentType: thread.lastMediaContentType,
+        lastMediaFileName: thread.lastMediaFileName,
+        lastDirection: thread.lastDirection,
+        lastChannel: thread.lastChannel,
+        lastId: thread.lastId,
+        lastFailed: thread.lastFailed,
+        awaitingReply: awaitingChannels.length > 0,
+        lastInboundAt: thread.lastInboundAt,
         unseen,
         // A pin older than the newest outbound is SPENT: you pinned the debt
         // and then paid it. That is how replying clears a pin without the send
         // path ever hearing about pins.
-        pinned: (pinnedAtByCustomer.get(customer._id) ?? 0) > summary.lastOutboundAt,
+        pinned: (pinnedAtByCustomer.get(customer._id) ?? 0) > thread.lastOutboundAt,
       });
     }
-    return out.sort((a, b) => b.lastAt - a.lastAt);
+    // The index walked newest-first, so the rows are already in inbox order.
+    return out;
   },
 });
 

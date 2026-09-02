@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
+import { recomputeThread } from "./lib/thread";
 
 // Dev-only demo data: 20 English salon customers, services, a week of
 // appointments in both directions, and a believable message history. Run
@@ -415,6 +416,9 @@ export const seed = internalMutation({
           callCount++;
         }
       }
+      // Seeds write rows directly, so the summary the inbox reads is rebuilt
+      // here rather than by each insert (lib/thread.ts).
+      await recomputeThread(ctx, customerId);
     }
 
     return {
@@ -519,6 +523,7 @@ export const seedWhatsappThreads = internalMutation({
         lastInboundAt,
         lastInboundLane: "cloud",
       });
+      await recomputeThread(ctx, customer._id);
     };
 
     // Elif: the long thread — questions both ways, a template confirmation,
