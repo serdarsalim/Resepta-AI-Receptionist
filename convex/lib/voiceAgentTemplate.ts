@@ -76,7 +76,7 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 export const VOICE_AGENT_TEMPLATE_VERSION = 13;
 
 // Voicemail handling, learned from Nudge's implementation rather than from the
-// provider's docs (its AGENTS.md, 2026-08-25 session 2, where every claim
+// provider's docs (its docs/journal/2026-08.md → 2026-08-25 session 2, where every claim
 // below was verified against the live API).
 //
 // THERE IS NO BOOLEAN. The PRESENCE of voicemail_option is what arms

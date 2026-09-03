@@ -278,7 +278,7 @@ without re-deriving it.
   Meta, currently pending on Meta's side). The growth axis: it gates hosted
   number count and messaging tiers, which the shared-WABA template play
   depends on. Display name must move before verification completes
-  (AGENTS.md documents the three-step dance and the PIN).
+  (`subsystems.md` → "Wiring a Meta Cloud number" documents the three-step dance and the PIN).
 - **Voice-note recording** in the composer (playback shipped; recording is
   the missing half, and it is why audio stayed out of the media library when
   video went in, 2026-08-27).

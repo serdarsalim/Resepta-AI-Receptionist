@@ -76,7 +76,8 @@ provider account from becoming visible to another.
 
 ## Read before changing the app
 
-- [`AGENTS.md`](AGENTS.md): invariants, current IA and product decisions.
+- [`AGENTS.md`](AGENTS.md): the rules — invariants, conventions, design rules, landmines. Loaded into every agent session.
+- [`docs/subsystems.md`](docs/subsystems.md): the current IA and how each part works as built. [`docs/journal/`](docs/journal/README.md): dated session write-ups.
 - [`docs/wwsd.md`](docs/wwsd.md): the design decision model.
 - [`docs/product-spec.md`](docs/product-spec.md): current product scope and
   shipped-state summary.

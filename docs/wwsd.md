@@ -14,7 +14,8 @@ rule written only in a repo is a rule the next project won't inherit.
 
 ## Resepta-specific decisions
 
-Those live in [`../AGENTS.md`](../AGENTS.md) (org scoping, current IA and
-implementation invariants) and [`product-spec.md`](product-spec.md) (current
+Those live in [`../AGENTS.md`](../AGENTS.md) (the rules: org scoping,
+conventions, design rules, landmines), [`subsystems.md`](subsystems.md) (the
+current IA and how each part works as built) and [`product-spec.md`](product-spec.md) (current
 scope and shipped-state inventory). Phone-agent work also requires
 [`phone-agent.md`](phone-agent.md), the architecture and operator runbook.
