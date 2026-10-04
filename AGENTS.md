@@ -887,3 +887,24 @@ client to one subscription and 11 MB total.
 How to check next time: the usage page's Database I/O breakdown by function,
 not Insights, not the logs. If a query's total is out of proportion to what
 its screen shows, ask what its read set is and what writes land inside it.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->
+
+## 2026-10-04: Convex agent guidance (Serdar)
+
+Installed the official Convex AI files and project-local skills for Codex and
+Claude Code at Serdar's request. Keep vendor guidance in its managed section;
+project-specific architecture, wrappers, development and deployment rules take
+precedence over generic examples. Refresh with `npx convex ai-files update`.
