@@ -1415,16 +1415,29 @@ its response engine, delete the agent, delete the engine. The number is
 unbound, never released — releasing is the irreversible half, and an unbound
 number is immediately reusable by the next business.
 
-**`ORG_TABLES` in `convex/platform.ts` is hand-maintained.** One arrow per
-org-scoped table, each reading through the index that starts with `orgId`. Add
-a line when you add a table; forgetting leaves rows (and storage blobs) that
-outlive their business and that nothing can find, because the org row they were
-keyed by is gone. It is written as literal arrows rather than a loop over table
-names on purpose: the literal is what types each row, so `storageId` narrows
-and the compiler notices the day a table gains a blob.
+**`ORG_TABLES` in `convex/platform.ts` lists every org-scoped table, and the
+compiler checks that it does** (since 2026-10-13). One arrow per table whose
+rows carry a required `orgId`, each reading through an index that starts with
+`orgId`. `OrgScopedTable` derives that set from the schema's own types, and
+`PurgeCoversEveryOrgTable` fails the typecheck, naming the table, when a table
+with an `orgId` has no line. Forgetting used to leave rows (and storage blobs)
+that outlive their business and that nothing can find, because the org row they
+were keyed by is gone: `bulkRuns`, `bulkRunItems`, `closures` and
+`demoProspects` all did. `users` is not on the list: its `orgId` is optional, a
+person's active workspace rather than ownership. It is written as literal
+arrows rather than a loop over table names on purpose: the literal is what
+types each row, so `storageId` narrows and the compiler notices the day a table
+gains a blob.
 
-**The purge is a scheduled job, not a transaction.** `PURGE_BUDGET` rows per
-step, then it reschedules; the org row goes last. `orgs.deletingAt` marks the
+**The purge is a scheduled job, not a transaction.** A step iterates the tables
+in order and stops after `PURGE_BUDGET` rows, or sooner when
+`lib/txBudget.nearTransactionLimit` says the transaction is near a limit (a
+message can carry a megabyte of email HTML), then reschedules; the org row goes
+last, on a pass that finds nothing. Every row is checked against the org before
+it is deleted, and a mismatch stops the job with `purge-org-mismatch` rather
+than delete another business's row. Files go with their rows: inbound media
+(`messages.mediaStorageId`), library images (`mediaAssets.storageId`), number
+documents (`numberRequests.storageId`) and the logo. `orgs.deletingAt` marks the
 row, drops it from the fleet list, and gates `purgeOrgStep` — a step that finds
 no mark returns without touching anything, which is what stops a stray schedule
 from eating a live salon. Suspension is set at the same moment, because that is

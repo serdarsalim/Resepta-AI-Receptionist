@@ -35,6 +35,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
+import { nearTransactionLimit as spent } from "./lib/txBudget";
 import { planToken } from "./lib/planToken";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import {
@@ -126,39 +127,10 @@ type Source = {
   ) => Promise<"done" | "more">;
 };
 
-// Rows cleared per pass, under the transaction limits checked below. Small
-// enough that a pass is quick and rarely collides with live traffic on the
-// same customer; the sweep reschedules itself straight away.
+// Rows cleared per pass, under the transaction limits lib/txBudget checks.
+// Small enough that a pass is quick and rarely collides with live traffic on
+// the same customer; the sweep reschedules itself straight away.
 const ROWS_PER_PASS = 200;
-const MB = 1024 * 1024;
-
-// Whether this transaction is close enough to a limit to stop and hand over
-// to the next pass. Checked after every row because rows vary from a 200-byte
-// pin to a message carrying a megabyte of email HTML. Writes are judged only
-// in the sweep: a query has none to spend.
-async function spent(ctx: QueryCtx, writes: boolean): Promise<boolean> {
-  let metrics;
-  try {
-    metrics = await ctx.meta.getTransactionMetrics();
-  } catch {
-    // A backend without the metrics call. Stop early rather than gamble: the
-    // row cap alone then decides, at a size any limit allows.
-    return true;
-  }
-  if (
-    metrics.bytesRead.remaining < 6 * MB ||
-    metrics.documentsRead.remaining < 500 ||
-    metrics.databaseQueries.remaining < 100
-  ) {
-    return true;
-  }
-  return (
-    writes &&
-    (metrics.documentsWritten.remaining < 200 ||
-      metrics.bytesWritten.remaining < 2 * MB ||
-      metrics.functionsScheduled.remaining < 10)
-  );
-}
 
 // One footprint entry. Typed per table by inference from `rows`, so `clear`
 // sees the real document; the closures erase the table type for the list.

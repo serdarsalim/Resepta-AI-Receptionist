@@ -58,6 +58,7 @@ import {
   setMemberRole,
 } from "./lib/members";
 import { DEFAULT_MONTHLY_BUDGET_MICRO_USD, isPricedModel } from "./lib/llm";
+import { nearTransactionLimit } from "./lib/txBudget";
 import {
   isVoiceModel,
   resolvePlatformHighPriority,
@@ -2161,59 +2162,89 @@ export const setOrgStatus = mutation({
 //   the demo org refuses outright.
 const PURGE_BUDGET = 400;
 
-// Every table that carries an orgId, each read through the index that starts
-// with one. Hand-maintained, like the search index on the Business page — add
-// a line when you add a table, and the cost of forgetting is rows that outlive
-// their business.
-//
-// Written as one arrow per table rather than a loop over table names, because
-// the literal is what gives each row its REAL type: `storageId` narrows, and
-// the day a table gains a blob the compiler is the thing that notices. A
-// generic version needs a cast, and a cast here is a silent leak of files
-// nobody can see any more.
-type OrgRowReader = (
-  ctx: MutationCtx,
-  orgId: Id<"orgs">,
-  limit: number,
-) => Promise<Doc<TableNames>[]>;
+// Every table whose rows carry a required orgId, worked out by the compiler
+// from the schema's own types rather than remembered. `users` is not one: its
+// orgId is optional, a person's ACTIVE workspace rather than ownership, and a
+// person can work in other businesses; lib/orgAuth falls through a pointer at
+// a business that no longer exists.
+type OrgScopedTable = {
+  [T in TableNames]: Doc<T> extends { orgId: Id<"orgs"> } ? T : never;
+}[TableNames];
 
-const ORG_TABLES: { table: string; read: OrgRowReader }[] = [
-  { table: "messages", read: (ctx, orgId, n) => ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "calls", read: (ctx, orgId, n) => ctx.db.query("calls").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "voiceEvents", read: (ctx, orgId, n) => ctx.db.query("voiceEvents").withIndex("by_org_event_key", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "chatAgentTurns", read: (ctx, orgId, n) => ctx.db.query("chatAgentTurns").withIndex("by_org_at", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "activityLog", read: (ctx, orgId, n) => ctx.db.query("activityLog").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "agentActions", read: (ctx, orgId, n) => ctx.db.query("agentActions").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "appointments", read: (ctx, orgId, n) => ctx.db.query("appointments").withIndex("by_org_start", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "customers", read: (ctx, orgId, n) => ctx.db.query("customers").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "notes", read: (ctx, orgId, n) => ctx.db.query("notes").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "inboxReads", read: (ctx, orgId, n) => ctx.db.query("inboxReads").withIndex("by_org_user_customer", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "inboxPins", read: (ctx, orgId, n) => ctx.db.query("inboxPins").withIndex("by_org_user", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "inboxVisits", read: (ctx, orgId, n) => ctx.db.query("inboxVisits").withIndex("by_org_user", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "campaigns", read: (ctx, orgId, n) => ctx.db.query("campaigns").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "mediaAssets", read: (ctx, orgId, n) => ctx.db.query("mediaAssets").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "numberRequests", read: (ctx, orgId, n) => ctx.db.query("numberRequests").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "knowledge", read: (ctx, orgId, n) => ctx.db.query("knowledge").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "services", read: (ctx, orgId, n) => ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "contactFields", read: (ctx, orgId, n) => ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "staff", read: (ctx, orgId, n) => ctx.db.query("staff").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "messageRules", read: (ctx, orgId, n) => ctx.db.query("messageRules").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "waTemplates", read: (ctx, orgId, n) => ctx.db.query("waTemplates").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "waAccounts", read: (ctx, orgId, n) => ctx.db.query("waAccounts").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "retellAgents", read: (ctx, orgId, n) => ctx.db.query("retellAgents").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "agentLines", read: (ctx, orgId, n) => ctx.db.query("agentLines").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "voiceAgentVariables", read: (ctx, orgId, n) => ctx.db.query("voiceAgentVariables").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "voiceAgentProvisioning", read: (ctx, orgId, n) => ctx.db.query("voiceAgentProvisioning").withIndex("by_org_updated", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "mcpConnections", read: (ctx, orgId, n) => ctx.db.query("mcpConnections").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "connections", read: (ctx, orgId, n) => ctx.db.query("connections").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "walletTopups", read: (ctx, orgId, n) => ctx.db.query("walletTopups").withIndex("by_org_at", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "usageMonthly", read: (ctx, orgId, n) => ctx.db.query("usageMonthly").withIndex("by_org_month", (q) => q.eq("orgId", orgId)).take(n) },
-  { table: "invites", read: (ctx, orgId, n) => ctx.db.query("invites").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
+type PurgeEntry = {
+  [T in OrgScopedTable]: {
+    table: T;
+    // This business's rows, through an index whose first field is orgId.
+    // Iterated rather than taken in a batch: rows range from a read mark to a
+    // message holding a megabyte of email HTML, so the step checks its
+    // transaction budget after each one (lib/txBudget).
+    rows: (ctx: MutationCtx, orgId: Id<"orgs">) => AsyncIterable<Doc<T>>;
+  };
+}[OrgScopedTable];
+
+// One line per org-scoped table, in the order a step empties them: what hangs
+// off a customer or a run before the customer or the run. Literal per table
+// rather than a loop over names, because the literal is what types each row:
+// `storageId` narrows, so the day a table gains a blob the compiler is the
+// thing that notices. A generic version needs a cast, and a cast here is a
+// silent leak of files nobody can see any more.
+//
+// Completeness is checked by the compiler too (PurgeCoversEveryOrgTable
+// below): a table added to the schema with an orgId and no line here fails
+// the typecheck, naming itself. Before that check, bulkRuns, bulkRunItems,
+// closures and demoProspects all outlived the businesses they belonged to.
+const ORG_TABLES = [
+  { table: "messages", rows: (ctx, orgId) => ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "calls", rows: (ctx, orgId) => ctx.db.query("calls").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "voiceEvents", rows: (ctx, orgId) => ctx.db.query("voiceEvents").withIndex("by_org_event_key", (q) => q.eq("orgId", orgId)) },
+  { table: "chatAgentTurns", rows: (ctx, orgId) => ctx.db.query("chatAgentTurns").withIndex("by_org_at", (q) => q.eq("orgId", orgId)) },
+  { table: "activityLog", rows: (ctx, orgId) => ctx.db.query("activityLog").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "agentActions", rows: (ctx, orgId) => ctx.db.query("agentActions").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "appointments", rows: (ctx, orgId) => ctx.db.query("appointments").withIndex("by_org_start", (q) => q.eq("orgId", orgId)) },
+  // A run's items before the run, and both before the customers they name.
+  { table: "bulkRunItems", rows: (ctx, orgId) => ctx.db.query("bulkRunItems").withIndex("by_org_customer", (q) => q.eq("orgId", orgId)) },
+  { table: "bulkRuns", rows: (ctx, orgId) => ctx.db.query("bulkRuns").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "customers", rows: (ctx, orgId) => ctx.db.query("customers").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "notes", rows: (ctx, orgId) => ctx.db.query("notes").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "inboxReads", rows: (ctx, orgId) => ctx.db.query("inboxReads").withIndex("by_org_user_customer", (q) => q.eq("orgId", orgId)) },
+  { table: "inboxPins", rows: (ctx, orgId) => ctx.db.query("inboxPins").withIndex("by_org_user", (q) => q.eq("orgId", orgId)) },
+  { table: "inboxVisits", rows: (ctx, orgId) => ctx.db.query("inboxVisits").withIndex("by_org_user", (q) => q.eq("orgId", orgId)) },
+  { table: "campaigns", rows: (ctx, orgId) => ctx.db.query("campaigns").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "mediaAssets", rows: (ctx, orgId) => ctx.db.query("mediaAssets").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "numberRequests", rows: (ctx, orgId) => ctx.db.query("numberRequests").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "knowledge", rows: (ctx, orgId) => ctx.db.query("knowledge").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "services", rows: (ctx, orgId) => ctx.db.query("services").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "contactFields", rows: (ctx, orgId) => ctx.db.query("contactFields").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "staff", rows: (ctx, orgId) => ctx.db.query("staff").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "closures", rows: (ctx, orgId) => ctx.db.query("closures").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "messageRules", rows: (ctx, orgId) => ctx.db.query("messageRules").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "waTemplates", rows: (ctx, orgId) => ctx.db.query("waTemplates").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "waAccounts", rows: (ctx, orgId) => ctx.db.query("waAccounts").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "retellAgents", rows: (ctx, orgId) => ctx.db.query("retellAgents").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "agentLines", rows: (ctx, orgId) => ctx.db.query("agentLines").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "voiceAgentVariables", rows: (ctx, orgId) => ctx.db.query("voiceAgentVariables").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "voiceAgentProvisioning", rows: (ctx, orgId) => ctx.db.query("voiceAgentProvisioning").withIndex("by_org_updated", (q) => q.eq("orgId", orgId)) },
+  { table: "mcpConnections", rows: (ctx, orgId) => ctx.db.query("mcpConnections").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "connections", rows: (ctx, orgId) => ctx.db.query("connections").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "walletTopups", rows: (ctx, orgId) => ctx.db.query("walletTopups").withIndex("by_org_at", (q) => q.eq("orgId", orgId)) },
+  { table: "usageMonthly", rows: (ctx, orgId) => ctx.db.query("usageMonthly").withIndex("by_org_month", (q) => q.eq("orgId", orgId)) },
+  // A prospect's row on the demo line. The showroom itself refuses deletion,
+  // but a prospect business set up for a pitch is an ordinary org.
+  { table: "demoProspects", rows: (ctx, orgId) => ctx.db.query("demoProspects").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "invites", rows: (ctx, orgId) => ctx.db.query("invites").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   // LAST of the org-scoped tables. While a membership survives, the people who
   // worked here still resolve into this org (lib/orgAuth), so the app keeps
   // rendering a business whose data is being carried out of the room.
-  { table: "memberships", read: (ctx, orgId, n) => ctx.db.query("memberships").withIndex("by_org", (q) => q.eq("orgId", orgId)).take(n) },
-];
+  { table: "memberships", rows: (ctx, orgId) => ctx.db.query("memberships").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+] satisfies readonly PurgeEntry[];
+
+// The compiler's half of "add a line when you add a table". Resolves to never
+// while every org-scoped table has a line above; otherwise the typecheck fails
+// here with the missing table's name.
+type AssertNever<T extends never> = T;
+export type PurgeCoversEveryOrgTable = AssertNever<
+  Exclude<OrgScopedTable, (typeof ORG_TABLES)[number]["table"]>
+>;
 
 // What the operator is about to destroy, and the refusals, in one read. A
 // query rather than the first half of the mutation: the provider teardown runs
@@ -2269,14 +2300,25 @@ export const purgeOrgStep = internalMutation({
     // future caller that skipped the confirmation — from eating a live salon.
     if (org.deletingAt === undefined) return null;
 
-    let budget = PURGE_BUDGET;
-    for (const entry of ORG_TABLES) {
-      if (budget <= 0) break;
-      const rows = await entry.read(ctx, args.orgId, budget);
-      for (const row of rows) {
+    let deleted = 0;
+    let stopped = false;
+    tables: for (const entry of ORG_TABLES) {
+      const rows: AsyncIterable<Doc<OrgScopedTable>> = entry.rows(ctx, args.orgId);
+      for await (const row of rows) {
+        // Every row is checked against the business being deleted before
+        // anything is done to it. The index range already guarantees it, so
+        // a mismatch means something is badly wrong; the step stops loudly
+        // rather than delete a row of another business, or skip it and come
+        // back to it forever.
+        if (row.orgId !== args.orgId) {
+          console.error(`purgeOrgStep: ${entry.table} row of another org in this org's range`);
+          throw new Error("purge-org-mismatch");
+        }
         // The blob columns, narrowed by the union rather than looked up by
         // name: a file left in storage is invisible from every screen and
-        // still counts against the deployment.
+        // still counts against the deployment. A library image an outbound
+        // message shows is deleted twice, once per row; the second finds
+        // nothing.
         if ("storageId" in row) {
           await ctx.storage.delete(row.storageId).catch(() => {});
         }
@@ -2284,11 +2326,15 @@ export const purgeOrgStep = internalMutation({
           await ctx.storage.delete(row.mediaStorageId).catch(() => {});
         }
         await ctx.db.delete(row._id);
+        deleted += 1;
+        if (deleted >= PURGE_BUDGET || (await nearTransactionLimit(ctx, true))) {
+          stopped = true;
+          break tables;
+        }
       }
-      budget -= rows.length;
     }
 
-    if (budget < PURGE_BUDGET) {
+    if (stopped || deleted > 0) {
       // Something was deleted, so there may be more. Straight back in — the
       // job is the only writer left on these tables.
       await ctx.scheduler.runAfter(0, internal.platform.purgeOrgStep, {

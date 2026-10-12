@@ -57,7 +57,9 @@ is still the first one a reader meets.
 
 **Every table except `orgs` and the auth tables carries `orgId`, and every query
 filters by it.** There is no cross-org read path. When you add a table, add
-`orgId` and an index starting with it. When you add a query/mutation, resolve the
+`orgId` and an index starting with it, and a line in `ORG_TABLES`
+(`convex/platform.ts`) so deleting the business deletes its rows; the typecheck
+fails, naming the table, until you do. When you add a query/mutation, resolve the
 caller's org via `requireOrg(ctx)` (convex/lib/orgAuth.ts) and scope every read
 and write to it. An unscoped query is a data leak between businesses, not a
 style issue.
