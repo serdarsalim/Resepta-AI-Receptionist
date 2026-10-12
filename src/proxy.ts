@@ -23,11 +23,13 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // when the functions behind it are public; making one reachable without
 // checking that is how a tenancy boundary gets deleted by a routing change.
 //
-// /privacy and /terms clear that bar the easy way: they call no Convex
-// functions at all. Their content is static prose from src/lib/legal.ts. They
-// have to be public for a harder reason than politeness, though. Google's OAuth
-// consent screen and Meta's app review both fetch these URLs anonymously, and a
-// redirect to /signin reads to them as a missing policy.
+// /privacy and /terms clear it the easy way. Their prose is static, from
+// src/lib/legal.ts, and the one Convex function they call,
+// platformConfig.legalContact, returns the contact address the operator chose
+// to publish on them and nothing else: no tenant, no customer, no other
+// setting. They have to be public for a harder reason than politeness, though.
+// Google's OAuth consent screen and Meta's app review both fetch these URLs
+// anonymously, and a redirect to /signin reads to them as a missing policy.
 //
 // `/` was on this list while it was the landing page for anyone signed out. It
 // came off on 2026-08-24, when marketing moved to its own repo at the apex and

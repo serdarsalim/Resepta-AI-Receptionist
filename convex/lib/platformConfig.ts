@@ -132,6 +132,13 @@ export const PLATFORM_KEYS = {
   // the webhook secret verifies checkout.session.completed (/stripe/webhook).
   stripeSecretKey: "STRIPE_SECRET_KEY",
   stripeWebhookSecret: "STRIPE_WEBHOOK_SECRET",
+  // The address the public legal pages (/privacy, /terms) give for questions,
+  // data requests and closing an account. Table-only, set from /admin →
+  // Platform → Legal pages, and read on every page request
+  // (platformConfig.legalContact), so a change reaches the pages without a
+  // deploy. Unset = the pages leave out every sentence that asks the reader
+  // to write to us, rather than promise an answer with no address to ask at.
+  legalContactEmail: null,
 } as const;
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;

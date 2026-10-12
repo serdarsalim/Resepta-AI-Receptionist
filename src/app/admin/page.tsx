@@ -793,6 +793,25 @@ export default function AdminPage() {
             />
           </Section>
 
+          {/* The address /privacy and /terms give for questions, KVKK
+              requests and closing an account. Read by those pages on every
+              request (platformConfig.legalContact), so saving here changes
+              them at once. Empty is a real state, not a missing field: the
+              pages then leave out every sentence asking people to write to
+              us, rather than promise an answer nobody can ask for. */}
+          <Section
+            title="Legal pages"
+            description="What the public privacy policy and terms of service print about how to reach us."
+          >
+            <Row
+              label="Contact email"
+              hint="Printed on /privacy and /terms as the address for questions, data requests and closing an account. The pages read it on every visit. Empty = they leave out every sentence that asks people to write to us."
+              current={mail.legalContactEmail}
+              placeholder="Not set"
+              onSave={(value) => setConfig({ key: "legalContactEmail", value })}
+            />
+          </Section>
+
           {/* The platform-wide kill switch card lived here until 2026-08-27
               (Serdar: "very destructive and i don't see where i'd use it").
               The chatAgentDisabled flag and its gate in the agent stay — a

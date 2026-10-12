@@ -18,12 +18,15 @@
 // document becomes false.
 import type { Language } from "./i18n";
 
-// MUST be set before these pages are submitted to Google Cloud branding or
-// Meta app review. Left empty rather than filled with a plausible-looking
-// address: a privacy policy naming a mailbox nobody reads is worse than one
-// that visibly still needs an address. The contact section omits the line when
-// this is empty instead of rendering a dead mailto.
-export const LEGAL_CONTACT_EMAIL = "";
+// Where a sentence names our contact address. The address itself is NOT in
+// this file: it is an operator setting (/admin → Platform → Legal pages) that
+// the pages read on every request (src/lib/legalContact.ts), because a
+// constant here needed a deploy to change and sat empty. LegalDocument turns
+// the token into a mailto link, and leaves out any paragraph or bullet holding
+// it while no address is set: each such sentence asks the reader to write to
+// us, and a policy must not ask for mail it gives no address for. Put the
+// token only in a paragraph that can go whole, and never in a heading.
+export const CONTACT_TOKEN = "{contact}";
 
 export type LegalSection = {
   heading: string;

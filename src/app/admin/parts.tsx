@@ -509,6 +509,7 @@ const FIELD_SAVE_ERRORS: Record<string, string> = {
   "no-such-org": "This business no longer exists.",
   "no-platform-token":
     "Set the platform token first (fleet page, WhatsApp section) — clearing this now would leave the number with nothing to authenticate as.",
+  "bad-email": "That doesn't look like an email address.",
 };
 
 function fieldSaveError(error: unknown): string {

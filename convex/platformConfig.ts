@@ -47,6 +47,18 @@ export const webhookSecret = internalQuery({
   handler: async (ctx) => await inboundWebhookSecret(ctx),
 });
 
+// The contact address the public legal pages print (src/app/privacy, /terms,
+// read on every request). PUBLIC and unauthenticated on purpose, the only
+// platformConfig read that is: the pages are fetched anonymously (Google's and
+// Meta's reviewers, a customer exercising a KVKK right), and the value exists
+// to be published. It reads its one key through the index and nothing else, so
+// no other row can leave through it.
+export const legalContact = query({
+  args: {},
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx) => await platformValue(ctx, "legalContactEmail"),
+});
+
 // What the console may show: set-or-not, a tail for the key, the domain in
 // full. Never the key itself — same rule as lib/connections maskSecret, and
 // for the same reason: one compromised operator session must not equal the
@@ -101,6 +113,9 @@ export const status = query({
     // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
     stripeSecretKey: v.union(v.string(), v.null()),
     stripeWebhookSecret: v.union(v.string(), v.null()),
+    // The public legal pages' contact address, plain: it exists to be
+    // published (see legalContact below).
+    legalContactEmail: v.union(v.string(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
     // deployment still configured the old way.
@@ -186,6 +201,7 @@ export const status = query({
         Number(await platformValue(ctx, "trialCreditUsd")) || null,
       stripeSecretKey: stripeKey ? maskSecret(stripeKey) : null,
       stripeWebhookSecret: stripeWebhook ? maskSecret(stripeWebhook) : null,
+      legalContactEmail: row("legalContactEmail"),
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
@@ -244,7 +260,37 @@ const settableKey = v.union(
   // The prepaid wallet's Stripe account (wallet.ts, /stripe/webhook).
   v.literal("stripeSecretKey"),
   v.literal("stripeWebhookSecret"),
+  // The public legal pages' contact address. Checked below: a typo here is
+  // printed on the privacy policy as the place to send KVKK requests.
+  v.literal("legalContactEmail"),
 );
+
+// Deliberately loose: something@something.tld with no spaces. The address is
+// for a person to read and write to, so anything shaped like one is accepted;
+// the check exists to stop a half-pasted value, not to police the format.
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// What a non-empty value is stored as, shared by `set` and `setFromCli` so the
+// terminal cannot write what the console would refuse. Throws on a value the
+// key cannot hold.
+function cleanedValue(key: PlatformKey, value: string): string {
+  // The domain is an address suffix, not a URL. Operators paste
+  // "https://mail.example.com/" often enough that accepting it and then
+  // building noreply@https://... is worse than fixing it here.
+  if (key === "resendInboundDomain") {
+    return value.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+  }
+  // The contact address arrives copied from a mail client as often as typed,
+  // so a leading "mailto:" goes the same way. Whatever is left is printed on
+  // the privacy policy as the place to send KVKK requests, so it must at
+  // least look like an address.
+  if (key === "legalContactEmail") {
+    const email = value.replace(/^mailto:/i, "").toLowerCase();
+    if (!EMAIL_SHAPE.test(email)) throw new Error("bad-email");
+    return email;
+  }
+  return value;
+}
 
 // One key at a time, so a form that submits every field cannot blank the three
 // the operator did not touch — the same absent-vs-empty problem platform.ts
@@ -266,13 +312,7 @@ export const set = mutation({
       if (existing) await ctx.db.delete(existing._id);
       return null;
     }
-    // The domain is an address suffix, not a URL. Operators paste
-    // "https://mail.example.com/" often enough that accepting it and then
-    // building noreply@https://... is worse than fixing it here.
-    const cleaned =
-      args.key === "resendInboundDomain"
-        ? value.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase()
-        : value;
+    const cleaned = cleanedValue(args.key, value);
     if (existing) {
       await ctx.db.patch(existing._id, {
         value: cleaned,
@@ -391,10 +431,15 @@ export const setFromCli = internalMutation({
       if (existing) await ctx.db.delete(existing._id);
       return null;
     }
+    const cleaned = cleanedValue(args.key, value);
     if (existing) {
-      await ctx.db.patch(existing._id, { value, updatedAt: Date.now() });
+      await ctx.db.patch(existing._id, { value: cleaned, updatedAt: Date.now() });
     } else {
-      await ctx.db.insert("platformConfig", { key: args.key, value, updatedAt: Date.now() });
+      await ctx.db.insert("platformConfig", {
+        key: args.key,
+        value: cleaned,
+        updatedAt: Date.now(),
+      });
     }
     return null;
   },
