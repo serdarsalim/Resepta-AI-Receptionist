@@ -65,7 +65,12 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // v9: BUSINESS FACTS carries the closures too — the recurring break and the
 // dated holiday — because the two facts above it stopped being the whole story
 // the day a business could shut inside its own opening hours.
-export const CHAT_AGENT_TEMPLATE_VERSION = 9;
+// v10 (2026-10-13): cancel_appointment and reschedule_appointment name their
+// appointment by `appointment_start`, the start my_appointments gave. They
+// used to act on whatever was next when they ran, so a repeated cancel
+// cancelled the appointment after the one meant, and "book Wednesday, cancel
+// Friday" cancelled the new Wednesday. A repeat now finds it already done.
+export const CHAT_AGENT_TEMPLATE_VERSION = 10;
 
 // How many completion rounds one inbound message may chain (each tool round
 // is a completion). A booking is question → availability → confirm → book:
@@ -176,28 +181,43 @@ export function chatAgentTools(stopOnHandover: boolean): LlmTool[] {
     {
       name: "my_appointments",
       description:
-        "This customer's own upcoming appointments. Use before discussing, moving or cancelling anything.",
+        "This customer's own next appointment, with its appointment_start. Use before discussing, moving or cancelling anything.",
       input_schema: { type: "object", properties: {} },
     },
     {
       name: "cancel_appointment",
       description:
-        "Cancel this customer's next upcoming appointment, only after naming it and getting explicit confirmation.",
-      input_schema: { type: "object", properties: {} },
+        "Cancel this customer's appointment that starts at appointment_start, only after naming it and getting explicit confirmation.",
+      input_schema: {
+        type: "object",
+        properties: {
+          appointment_start: {
+            type: "string",
+            description:
+              "The appointment_start my_appointments gave for the appointment to cancel, exactly as given.",
+          },
+        },
+        required: ["appointment_start"],
+      },
     },
     {
       name: "reschedule_appointment",
       description:
-        "Move this customer's next upcoming appointment, only after they confirmed the new exact start time.",
+        "Move this customer's appointment that starts at appointment_start, only after they confirmed the new exact start time.",
       input_schema: {
         type: "object",
         properties: {
+          appointment_start: {
+            type: "string",
+            description:
+              "The appointment_start my_appointments gave for the appointment to move, exactly as given.",
+          },
           start: {
             type: "string",
             description: "Confirmed new start, local time, YYYY-MM-DDTHH:MM.",
           },
         },
-        required: ["start"],
+        required: ["appointment_start", "start"],
       },
     },
     {

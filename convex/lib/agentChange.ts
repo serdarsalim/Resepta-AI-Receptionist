@@ -176,15 +176,16 @@ export const agentIntentValidator = v.union(
   }),
   v.object({
     kind: v.literal("move"),
-    appointmentId: v.id("appointments"),
-    // When it started when the draft was written. Approval refuses if this
-    // no longer holds: the appointment changed in between.
+    // Which appointment: the customer's own open one starting at `from`, the
+    // start the assistant read back. The id is a note of which row that was
+    // when the draft was written; the target is always found by `from`.
+    appointmentId: v.optional(v.id("appointments")),
     from: v.number(),
     to: v.number(),
   }),
   v.object({
     kind: v.literal("cancel"),
-    appointmentId: v.id("appointments"),
+    appointmentId: v.optional(v.id("appointments")),
     from: v.number(),
   }),
   v.object({

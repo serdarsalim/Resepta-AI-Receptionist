@@ -25,6 +25,7 @@ import {
   isWithinActiveWindow,
   judgeRequestedTime,
   localDayRangeUtc,
+  localMinuteIso,
   parseLocalStart,
   closureBlocks,
   getLocalPartsSafe,
@@ -358,6 +359,12 @@ async function retellGuard(
   return { ok: true, payload, agentId, orgId: String(auth.orgId) };
 }
 
+// How long after a change an engine without appointment_start (template < 14)
+// is refused another one: long enough to cover a provider retry and a caller
+// repeating "yes", short enough that a real second change later in a long
+// call still goes through, against the next appointment as it always did.
+const LEGACY_REPEAT_MS = 3 * 60_000;
+
 // The same booking asked for twice is one booking (retell.voiceBook): the
 // agent is told so, rather than reading a second confirmation as news.
 const ALREADY_BOOKED_NOTE =
@@ -541,7 +548,8 @@ http.route({
     const nearestFree = async (a: {
       at: number;
       services?: string[];
-      appointmentId?: Id<"appointments">;
+      // A move: the start of the caller's appointment being moved.
+      moving?: number;
     }): Promise<{ nearest_free?: string[] }> => {
       if (!Number.isFinite(a.at)) return {};
       const who = await callerOfCall();
@@ -549,7 +557,7 @@ http.route({
         orgId: org._id,
         at: a.at,
         ...(who.customerId ? { customerId: who.customerId } : {}),
-        ...(a.appointmentId ? { appointmentId: a.appointmentId } : {}),
+        ...(a.moving !== undefined ? { moving: a.moving } : {}),
         ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
       });
       return near.length > 0
@@ -944,19 +952,21 @@ http.route({
       });
     }
 
-    // Everything below addresses an appointment the caller already has. The
-    // only one reachable is the CALLER'S OWN next one: who from the call leg
-    // (callerOfCall), which one from agentAppointments.ownNext. No tool here
-    // takes an appointment, a customer or a phone from the model. The write
-    // re-checks that it is still theirs, still next and still at the time the
-    // agent named, re-runs the booking page's calendar rules for a move at the
+    // Everything below addresses an appointment the caller already has: WHO
+    // from the call leg (callerOfCall), WHICH from the start the agent read
+    // back (`appointment_start`, as find_appointment gave it). No tool here
+    // takes a customer, a phone or an appointment id from the model. The
+    // write acts only on the caller's own open appointment at exactly that
+    // minute, re-runs the booking page's calendar rules for a move at the
     // moment of the change, and stops at six changes a day (lib/agentChange).
+    // A repeat (a provider retry, a second "yes") finds the appointment
+    // already cancelled or already moved and answers so, rather than acting
+    // on the one after it.
     //
-    // cal.com is told BEFORE our status moves: it owns the slot inventory, the
-    // salon's Google Calendar and the notification emails, and a local-only
-    // write leaves the salon holding a slot for someone who is not coming. A
-    // walk-in typed in by hand has no externalUid and so has nothing on
-    // cal.com to move — that branch stays local by design.
+    // cal.com is told BEFORE our status moves (agentAppointments
+    // .writeOwnChange): it owns the slot inventory, the salon's Google
+    // Calendar and the notification emails. A walk-in typed in by hand has no
+    // externalUid and so has nothing on cal.com to move.
     if (
       name === "find_appointment" ||
       name === "cancel_appointment" ||
@@ -974,39 +984,73 @@ http.route({
       const next = own?.next ?? null;
       const spokenOf = (at: number) =>
         spokenDateTime(at, org.timezone, org.language);
+      // Whether this agent's tools carry appointment_start (template v14 on).
+      // Tool answers reach every engine, so nothing here may tell an older
+      // one to pass a parameter its tools do not have.
+      const namesStart = (context.agent.templateVersion ?? 0) >= 14;
 
       // Lets the agent name the appointment before acting on it, instead of
       // cancelling whatever happens to be next for a caller with two bookings.
-      // A caller with more than one is told plainly that only this one can be
-      // changed here, rather than finding out when the wrong one moves.
       if (name === "find_appointment") {
         if (!own || !next) return respond({ found: false });
+        const later =
+          own.later > 0
+            ? `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this one can be moved or cancelled on this call.`
+            : "";
         return respond({
           found: true,
           spoken_time: spokenOf(next.startAt),
+          ...(namesStart
+            ? { appointment_start: localMinuteIso(next.startAt, org.timezone) }
+            : {}),
           ...(next.services.length > 0 ? { services: next.services } : {}),
-          ...(own.later > 0
+          ...(own.later > 0 ? { later_appointments: own.later } : {}),
+          ...(namesStart || later
             ? {
-                later_appointments: own.later,
-                note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this one can be moved or cancelled on this call.`,
+                note: [
+                  later,
+                  namesStart
+                    ? "To move or cancel it, pass appointment_start exactly as given here."
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
               }
             : {}),
         });
       }
-      if (!own || !next || !who.customerId) {
+      if (!own || !who.customerId) {
         return respond({ error: "no-upcoming-appointment" });
       }
-      if (next.externalUid && !org.calcomApiKey) {
-        // The booking lives on a calendar we can no longer reach. Saying so
-        // beats moving our row and letting the two drift apart.
-        return respond({ error: "no-calendar-connected" });
+
+      // WHICH appointment. The one the agent read back, by its start. An
+      // engine published before appointment_start (template < 14) can only
+      // mean "the next one", so it gets that, but never straight after a
+      // change: a provider retry or a second "yes" would otherwise land on
+      // the appointment after the one just changed (review, same day).
+      const named =
+        typeof args.appointment_start === "string"
+          ? parseLocalStart(args.appointment_start, org.timezone)
+          : Number.NaN;
+      let from: number;
+      if (Number.isFinite(named)) {
+        from = named;
+      } else if (namesStart) {
+        return respond({
+          error: "missing-appointment-start",
+          note: "Call find_appointment, name the appointment it returns, get a clear yes, then call this again with its appointment_start.",
+        });
+      } else {
+        if (!next) return respond({ error: "no-upcoming-appointment" });
+        if (own.lastChangeAt !== null && Date.now() - own.lastChangeAt < LEGACY_REPEAT_MS) {
+          return respond({
+            error: "just-changed",
+            note: "Something was just changed for this caller, so nothing more is changed on this call. If they need another change, tell them a colleague will be in touch about it.",
+          });
+        }
+        from = next.startAt;
       }
-      const target = {
-        orgId: org._id,
-        customerId: who.customerId,
-        appointmentId: next.appointmentId,
-        from: next.startAt,
-      };
+      const target = { orgId: org._id, customerId: who.customerId, from };
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
       // A change the agent cannot make, answered so it can say what happens
@@ -1017,14 +1061,14 @@ http.route({
         const known = isChangeRefusal(reason) ? reason : "calendar-error";
         const near =
           at !== undefined && isTimeRefusal(known)
-            ? await nearestFree({ at, appointmentId: next.appointmentId })
+            ? await nearestFree({ at, moving: from })
             : {};
         if (known === "too-many-changes" || known === "calendar-error") {
           await queueOrgAlert(ctx, {
             orgId: org._id,
             template: did === "cancelled" ? "cancelNeedsPerson" : "moveNeedsPerson",
             who: own.customerName,
-            detail: formatAppointmentTime(next.startAt, org.timezone, org.language),
+            detail: formatAppointmentTime(from, org.timezone, org.language),
           });
         }
         return respond({
@@ -1050,7 +1094,6 @@ http.route({
       const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
         writeOwnChange(ctx, {
           target,
-          externalUid: next.externalUid,
           calcomApiKey: org.calcomApiKey ?? undefined,
           change,
           via: "phone",
@@ -1061,7 +1104,13 @@ http.route({
         if (!done.ok) return await refuse(done.reason, done.providerError);
         return respond({
           cancelled: true,
-          spoken_time: spokenOf(next.startAt),
+          spoken_time: spokenOf(from),
+          ...(done.noop
+            ? {
+                already_cancelled: true,
+                note: "It was already cancelled; nothing else was changed. Tell the caller it is cancelled, once.",
+              }
+            : {}),
           ...(done.notified ? { confirmation_sent: true } : {}),
         });
       }
@@ -1082,15 +1131,8 @@ http.route({
         return respond({
           ...refusal,
           ...(refusal.error === "outside-open-hours"
-            ? await nearestFree({ at: startAt, appointmentId: next.appointmentId })
+            ? await nearestFree({ at: startAt, moving: from })
             : {}),
-        });
-      }
-      if (startAt === next.startAt) {
-        return respond({
-          rescheduled: false,
-          spoken_time: spokenOf(startAt),
-          note: "That is the time it is already booked for. Tell the caller it stays as it is.",
         });
       }
       const done = await write({ kind: "move", to: startAt });
@@ -1098,6 +1140,12 @@ http.route({
       return respond({
         rescheduled: true,
         spoken_time: spokenOf(startAt),
+        ...(done.noop
+          ? {
+              already_moved: true,
+              note: "It is already booked at that time; nothing else was changed. Tell the caller, once.",
+            }
+          : {}),
         ...(done.notified ? { confirmation_sent: true } : {}),
       });
     }

@@ -55,7 +55,9 @@ import {
   isWithinActiveWindow,
   judgeRequestedTime,
   localDayRangeUtc,
+  localMinuteIso,
   openHoursForAgent,
+  sameMinute,
   parseLocalStart,
   suggestFreeSlots,
   todayInZone,
@@ -1201,29 +1203,16 @@ async function applyIntents(
       if (result.booked !== true) return fail(String(result.error ?? "book-failed"));
       continue;
     }
-    // The appointment the draft was written about, and nothing else: still
-    // this customer's next one, still at the time the draft named.
+    // The appointment the draft was written about, and nothing else: the
+    // customer's own open one at the start the draft named. The write finds
+    // it by that start and refuses if it is gone.
     const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
       orgId: context.orgId,
       customerId,
     });
-    const next = own.next;
-    if (
-      !next ||
-      next.appointmentId !== intent.appointmentId ||
-      next.startAt !== intent.from
-    ) {
-      return fail("appointment-changed");
-    }
     if (own.changesToday >= CHANGES_PER_DAY) return fail("too-many-changes");
     const done = await writeOwnChange(ctx, {
-      target: {
-        orgId: context.orgId,
-        customerId,
-        appointmentId: intent.appointmentId,
-        from: intent.from,
-      },
-      externalUid: next.externalUid,
+      target: { orgId: context.orgId, customerId, from: intent.from },
       calcomApiKey: org.calcomApiKey ?? undefined,
       change: intent.kind === "cancel" ? { kind: "cancel" } : { kind: "move", to: intent.to },
       via: "chat",
@@ -1955,14 +1944,15 @@ async function executeTool(
   const nearestFree = async (a: {
     at: number;
     services?: string[];
-    appointmentId?: Id<"appointments">;
+    // A move: the start of the customer's appointment being moved.
+    moving?: number;
   }): Promise<{ nearest_free?: string[] }> => {
     if (!Number.isFinite(a.at)) return {};
     const near: number[] = await ctx.runQuery(internal.retell.nearestFreeTimes, {
       orgId: context.orgId,
       at: a.at,
       customerId: customer._id,
-      ...(a.appointmentId ? { appointmentId: a.appointmentId } : {}),
+      ...(a.moving !== undefined ? { moving: a.moving } : {}),
       ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
     });
     return near.length > 0 ? { nearest_free: near.map((ms) => spokenOf(ms)) } : {};
@@ -2266,10 +2256,11 @@ async function executeTool(
       return typeof made.error === "string" ? await bookingRefused(made.error) : made;
     }
 
-    // Existing appointments: the customer's OWN next one only, through the
-    // module the phone agent uses too (agentAppointments.ts), so both lanes
-    // apply one rule about whose appointment they may touch, what a move must
-    // clear at the moment of the change, and the daily cap.
+    // Existing appointments, through the module the phone agent uses too
+    // (agentAppointments.ts), so both lanes apply one rule about whose
+    // appointment they may touch, which one (the start the assistant read
+    // back from my_appointments, exactly), what a move must clear at the
+    // moment of the change, and the daily cap.
     if (name === "my_appointments") {
       const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
         orgId: context.orgId,
@@ -2280,33 +2271,37 @@ async function executeTool(
         found: true,
         next: {
           spoken_time: spokenOf(own.next.startAt),
+          appointment_start: localMinuteIso(own.next.startAt, org.timezone),
           service: own.next.services.join(", ") || undefined,
         },
-        ...(own.later > 0
-          ? {
-              later_appointments: own.later,
-              note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this next one can be moved or cancelled here.`,
-            }
-          : {}),
+        ...(own.later > 0 ? { later_appointments: own.later } : {}),
+        note:
+          (own.later > 0
+            ? `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this next one can be moved or cancelled here. `
+            : "") +
+          "To move or cancel it, pass its appointment_start exactly as given here.",
       };
     }
 
     if (name === "cancel_appointment" || name === "reschedule_appointment") {
+      // WHICH: the start the assistant read back, never "whatever is next
+      // now". A repeat then finds the appointment already cancelled or moved
+      // and says so, instead of acting on the one after it (review, same day).
+      const from =
+        typeof input.appointment_start === "string"
+          ? parseLocalStart(input.appointment_start, org.timezone)
+          : Number.NaN;
+      if (!Number.isFinite(from)) {
+        return {
+          error: "missing-appointment-start",
+          note: "Call my_appointments, name the appointment it returns, get a clear yes, then call this again with its appointment_start.",
+        };
+      }
       const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
         orgId: context.orgId,
         customerId: customer._id,
       });
-      const next = own.next;
-      if (!next) return { error: "no-upcoming-appointment" };
-      if (next.externalUid && !org.calcomApiKey) {
-        return { error: "no-calendar-connected" };
-      }
-      const target = {
-        orgId: context.orgId,
-        customerId: customer._id,
-        appointmentId: next.appointmentId,
-        from: next.startAt,
-      };
+      const target = { orgId: context.orgId, customerId: customer._id, from };
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
       // A change the assistant cannot make, answered as a fact it can act on.
@@ -2320,7 +2315,7 @@ async function executeTool(
         const known = isChangeRefusal(reason) ? reason : "calendar-error";
         const near =
           at !== undefined && isTimeRefusal(known)
-            ? await nearestFree({ at, appointmentId: next.appointmentId })
+            ? await nearestFree({ at, moving: from })
             : {};
         return {
           [outcome]: false,
@@ -2347,7 +2342,6 @@ async function executeTool(
       const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
         writeOwnChange(ctx, {
           target,
-          externalUid: next.externalUid,
           calcomApiKey: org.calcomApiKey ?? undefined,
           change,
           via: "chat",
@@ -2355,10 +2349,13 @@ async function executeTool(
 
       if (name === "cancel_appointment") {
         if (dry) {
-          dry({ kind: "cancel", appointmentId: next.appointmentId, from: next.startAt });
+          // There must be an open appointment of theirs at that start.
+          const at = await ctx.runQuery(internal.agentAppointments.ownAt, target);
+          if (!at) return await refuse("appointment-changed");
+          dry({ kind: "cancel", appointmentId: at.appointmentId, from });
           return {
             cancelled: true,
-            spoken_time: spokenOf(next.startAt),
+            spoken_time: spokenOf(from),
             ...(context.automations.cancellation
               ? { note: AUTOMATION_SPEAKS.cancellation }
               : {}),
@@ -2368,7 +2365,13 @@ async function executeTool(
         if (!done.ok) return await refuse(done.reason, done.providerError);
         return {
           cancelled: true,
-          spoken_time: spokenOf(next.startAt),
+          spoken_time: spokenOf(from),
+          ...(done.noop
+            ? {
+                already_cancelled: true,
+                note: "It was already cancelled; nothing else was changed. Tell the customer it is cancelled, once.",
+              }
+            : {}),
           ...(done.notified ? { confirmation_sent: true } : {}),
         };
       }
@@ -2382,15 +2385,8 @@ async function executeTool(
         return {
           ...refusal,
           ...(refusal.error === "outside-open-hours"
-            ? await nearestFree({ at: startAt, appointmentId: next.appointmentId })
+            ? await nearestFree({ at: startAt, moving: from })
             : {}),
-        };
-      }
-      if (startAt === next.startAt) {
-        return {
-          rescheduled: false,
-          spoken_time: spokenOf(startAt),
-          note: "That is the time it is already booked for. Tell the customer it stays as it is.",
         };
       }
       if (dry) {
@@ -2400,18 +2396,24 @@ async function executeTool(
           to: startAt,
         });
         if (!check.ok) return await refuse(check.reason, undefined, startAt);
-        dry({
-          kind: "move",
-          appointmentId: next.appointmentId,
-          from: next.startAt,
-          to: startAt,
-        });
+        if (!check.noop) {
+          const at = await ctx.runQuery(internal.agentAppointments.ownAt, target);
+          dry({
+            kind: "move",
+            ...(at ? { appointmentId: at.appointmentId } : {}),
+            from,
+            to: startAt,
+          });
+        }
         return {
           rescheduled: true,
           spoken_time: spokenOf(startAt),
+          ...(check.noop ? { already_moved: true } : {}),
           // A move re-sends the booking confirmation (markRescheduled), so
           // it reads the booking switch.
-          ...(context.automations.booking ? { note: AUTOMATION_SPEAKS.booking } : {}),
+          ...(context.automations.booking && !check.noop
+            ? { note: AUTOMATION_SPEAKS.booking }
+            : {}),
         };
       }
       const done = await write({ kind: "move", to: startAt });
@@ -2419,6 +2421,12 @@ async function executeTool(
       return {
         rescheduled: true,
         spoken_time: spokenOf(startAt),
+        ...(done.noop
+          ? {
+              already_moved: true,
+              note: "It is already booked at that time; nothing else was changed. Tell the customer, once.",
+            }
+          : {}),
         ...(done.notified ? { confirmation_sent: true } : {}),
       };
     }
@@ -2527,15 +2535,26 @@ const WRITE_TOOLS = new Set([
 
 // One change per target, the model's last word winning: moving the same
 // appointment twice in one turn is one move, a cancel after a move is a
-// cancel, and two saves are one save. Without this, approval would make the
-// first and then refuse the second as "appointment-changed".
+// cancel, and two saves are one save. Targets are named by their start
+// (`from`), so that is what is compared. A move or cancel of a booking this
+// same draft makes is folded into the booking: cancelling it drops both,
+// moving it moves the booking, so sending never books and unbooks in one go.
 function addIntent(list: AgentIntent[], intent: AgentIntent): void {
   if (intent.kind === "move" || intent.kind === "cancel") {
+    const drafted = list.findIndex(
+      (prior) => prior.kind === "book" && !prior.asap && sameMinute(prior.start, intent.from),
+    );
+    if (drafted >= 0) {
+      const booking = list[drafted];
+      if (intent.kind === "cancel") list.splice(drafted, 1);
+      else if (booking.kind === "book") booking.start = intent.to;
+      return;
+    }
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const prior = list[i];
       if (
         (prior.kind === "move" || prior.kind === "cancel") &&
-        prior.appointmentId === intent.appointmentId
+        sameMinute(prior.from, intent.from)
       ) {
         list.splice(i, 1);
       }

@@ -35,6 +35,7 @@ import {
   getLocalPartsSafe,
   localWallTimeToUtcMs,
   nearestStarts,
+  sameMinute,
   todayInZone,
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
@@ -2777,8 +2778,9 @@ export const nearestFreeTimes = internalQuery({
     orgId: v.id("orgs"),
     at: v.number(),
     customerId: v.optional(v.id("customers")),
-    // A move: its own length, its own lead time, and it never blocks itself.
-    appointmentId: v.optional(v.id("appointments")),
+    // A move: the start of the customer's own appointment being moved, which
+    // lends its length and lead time and never blocks itself.
+    moving: v.optional(v.number()),
     services: v.optional(v.array(v.string())),
   },
   returns: v.array(v.number()),
@@ -2788,9 +2790,20 @@ export const nearestFreeTimes = internalQuery({
     let duration = 30;
     let leadMs = 0;
     let ignoreId: Id<"appointments"> | undefined;
-    if (args.appointmentId) {
-      const appointment = await ctx.db.get(args.appointmentId);
-      if (!appointment || appointment.orgId !== args.orgId) return [];
+    if (args.moving !== undefined && args.customerId) {
+      const moving = args.moving;
+      const appointment = (
+        await ctx.db
+          .query("appointments")
+          .withIndex("by_customer", (q) => q.eq("customerId", args.customerId!))
+          .collect()
+      ).find(
+        (row) =>
+          row.orgId === args.orgId &&
+          sameMinute(row.startAt, moving) &&
+          (row.status === "scheduled" || row.status === "confirmed"),
+      );
+      if (!appointment) return [];
       duration = durationOf(appointment);
       leadMs = await goodsLeadMs(ctx, appointment);
       ignoreId = appointment._id;

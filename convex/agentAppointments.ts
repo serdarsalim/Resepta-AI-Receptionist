@@ -6,14 +6,19 @@
 //
 // Three rules live here and nowhere else.
 //
-// 1. WHOSE. Every function takes the org and the customer the CHANNEL
-//    resolved: the call leg on the phone, the conversation on WhatsApp. Never
-//    anything the model said. The only appointment reachable is that
-//    customer's own NEXT open one in that org, and the write re-reads it: it
-//    must still belong to them, still be open, still be their next one and
-//    still start when the agent said (`from`). Otherwise the answer is
-//    "appointment-changed" and the agent looks again, rather than moving
-//    whatever happens to be next by the time the write lands.
+// 1. WHOSE, AND WHICH. Every function takes the org and the customer the
+//    CHANNEL resolved: the call leg on the phone, the conversation on
+//    WhatsApp. Never anything the model said about identity. WHICH
+//    appointment is the one the agent read back: its wall-clock start
+//    (`from`), as find_appointment / my_appointments gave it. The write acts
+//    only on this customer's own open appointment at exactly that minute, in
+//    this org; there is none, it is "appointment-changed" and nothing moves.
+//    It used to act on whatever was NEXT when the write landed, so a repeated
+//    cancel (a provider retry, a second "yes") cancelled the appointment
+//    after the one meant, and "book Wednesday, then cancel Friday" cancelled
+//    the new Wednesday (review, same day). A repeat is now a no-op answer:
+//    the appointment at `from` is already cancelled, or already moved to
+//    `to`, and the agent is told so.
 //
 // 2. THE CALENDAR AT THE MOMENT OF THE CHANGE. A move re-runs the booking
 //    page's own rules (booking.ts) in the same transaction that writes it:
@@ -24,8 +29,8 @@
 //    past and fell inside opening hours, so a move could land on a full slot.
 //
 // 3. SIX A DAY. customers.agentChangesAt counts every change an assistant
-//    makes for this customer (lib/agentChange.ts). A move or a cancel past it
-//    is refused; a booking is counted (retell.voiceBook) and never refused.
+//    makes for this customer (lib/agentChange.ts). Past it, moves, cancels
+//    and (retell.bookingProblem) new bookings are refused and handed over.
 //
 // A provider-owned booking (an externalUid with cal.com connected) belongs to
 // the parked cal.com lane: cal.com is told FIRST and holds the inventory. The
@@ -39,6 +44,7 @@ import {
   internalMutation,
   internalQuery,
   type ActionCtx,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -62,6 +68,7 @@ import {
   closureBlocks,
   getLocalPartsSafe,
   hasBusinessHours,
+  sameMinute,
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
 import { customerConflict } from "./lib/overlap";
@@ -141,8 +148,12 @@ const ownNextValidator = v.object({
   // Open appointments after the next one: out of the agents' reach, said so
   // to the customer rather than discovered by them.
   later: v.number(),
-  // Changes an assistant made for this customer in the trailing day.
+  // Changes an assistant made for this customer in the trailing day, and
+  // the newest one: an engine published before appointment_start existed
+  // (template < 14) can only name "the next one", and is refused straight
+  // after a change rather than handed the appointment after it.
   changesToday: v.number(),
+  lastChangeAt: v.union(v.number(), v.null()),
   // For the team's "needs a person" email, so it names who.
   customerName: v.string(),
 });
@@ -157,7 +168,13 @@ export const ownNext = internalQuery({
   handler: async (ctx, args) => {
     const customer = await customerIn(ctx, args.orgId, args.customerId);
     if (!customer) {
-      return { next: null, later: 0, changesToday: 0, customerName: "" };
+      return {
+        next: null,
+        later: 0,
+        changesToday: 0,
+        lastChangeAt: null,
+        customerName: "",
+      };
     }
     const now = Date.now();
     const rows = await upcomingOf(ctx, customer, now);
@@ -174,6 +191,7 @@ export const ownNext = internalQuery({
         : null,
       later: Math.max(0, rows.length - 1),
       changesToday: changesToday(customer.agentChangesAt, now),
+      lastChangeAt: Math.max(0, ...(customer.agentChangesAt ?? [])) || null,
       customerName:
         [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
         customer.phone,
@@ -183,7 +201,27 @@ export const ownNext = internalQuery({
 
 type Target =
   | { ok: true; customer: Doc<"customers">; appointment: Doc<"appointments"> }
-  | { ok: false; reason: ChangeRefusal };
+  | {
+      ok: false;
+      reason: ChangeRefusal;
+      // What sits at `from` and `to` when the target is not there: how a
+      // repeated cancel or move is told apart from one that came too late.
+      cancelledAtFrom?: boolean;
+      openAtTo?: boolean;
+    };
+
+// This customer's rows in this org that start in `at`'s minute.
+async function rowsAt(
+  ctx: ReadCtx,
+  customer: Doc<"customers">,
+  at: number,
+): Promise<Doc<"appointments">[]> {
+  const rows = await ctx.db
+    .query("appointments")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .collect();
+  return rows.filter((row) => row.orgId === customer.orgId && sameMinute(row.startAt, at));
+}
 
 // Rule 1 and rule 3. `strict` is everything but a provider-confirmed write,
 // whose caller already ran these checks before cal.com acted.
@@ -192,28 +230,31 @@ async function ownTarget(
   args: {
     orgId: Id<"orgs">;
     customerId: Id<"customers">;
-    appointmentId: Id<"appointments">;
     from: number;
+    // A move's destination, so a repeated move can be recognised.
+    to?: number;
   },
   now: number,
   strict: boolean,
 ): Promise<Target> {
   const customer = await customerIn(ctx, args.orgId, args.customerId);
   if (!customer) return { ok: false, reason: "not-found" };
-  const appointment = await ctx.db.get(args.appointmentId);
-  if (
-    !appointment ||
-    appointment.orgId !== args.orgId ||
-    appointment.customerId !== customer._id
-  ) {
-    return { ok: false, reason: "not-found" };
+  const atFrom = await rowsAt(ctx, customer, args.from);
+  const appointment = atFrom.find(
+    (row) => OPEN.includes(row.status) && (!strict || row.startAt > now),
+  );
+  if (!appointment) {
+    const openAtTo =
+      args.to !== undefined &&
+      (await rowsAt(ctx, customer, args.to)).some((row) => OPEN.includes(row.status));
+    return {
+      ok: false,
+      reason: "appointment-changed",
+      cancelledAtFrom: atFrom.some((row) => row.status === "cancelled"),
+      openAtTo,
+    };
   }
-  if (!strict) return { ok: true, customer, appointment };
-  const next = (await upcomingOf(ctx, customer, now))[0];
-  if (!next || next._id !== appointment._id || appointment.startAt !== args.from) {
-    return { ok: false, reason: "appointment-changed" };
-  }
-  if (changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
+  if (strict && changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
     return { ok: false, reason: "too-many-changes" };
   }
   return { ok: true, customer, appointment };
@@ -269,9 +310,7 @@ async function moveRefusal(
 const targetArgs = {
   orgId: v.id("orgs"),
   customerId: v.id("customers"),
-  appointmentId: v.id("appointments"),
-  // When the agent was told this appointment starts. A mismatch means it
-  // moved since, and the agent is talking about a time that is not booked.
+  // The appointment's start as the agent read it back: which one, exactly.
   from: v.number(),
 };
 
@@ -281,21 +320,31 @@ const changeResult = v.union(
     // A message from the business's own rules went to the customer about
     // this change. The chat agent stands down on it, and only on it.
     notified: v.optional(v.boolean()),
+    // Nothing to do: a repeat of a change already made (the appointment at
+    // `from` is already cancelled, or already moved to `to`).
+    noop: v.optional(v.boolean()),
   }),
   v.object({ ok: v.literal(false), reason: v.string() }),
 );
 
-// Everything a move would have to clear, writing nothing. For a dry run (a
-// suggested chat reply records the move instead of making it) and for the
-// cal.com lane, which must know a move is allowed BEFORE telling cal.com.
-// For a provider-owned booking the capacity half is cal.com's to answer.
+export type ChangeResult =
+  | { ok: true; notified?: boolean; noop?: boolean }
+  | { ok: false; reason: string };
+
+// Everything a move would have to clear, writing nothing: the cal.com lane
+// must know a move is allowed BEFORE telling cal.com. For a provider-owned
+// booking the capacity half is cal.com's to answer.
 export const checkMove = internalQuery({
   args: { ...targetArgs, to: v.number() },
   returns: changeResult,
   handler: async (ctx, args) => {
     const now = Date.now();
     const target = await ownTarget(ctx, args, now, true);
-    if (!target.ok) return target;
+    if (!target.ok) {
+      return target.openAtTo
+        ? { ok: true as const, noop: true }
+        : { ok: false as const, reason: target.reason };
+    }
     const org = await ctx.db.get(args.orgId);
     if (!org) return { ok: false as const, reason: "not-found" };
     const refusal = await moveRefusal(
@@ -311,121 +360,165 @@ export const checkMove = internalQuery({
 });
 
 // The move, judged and written in ONE transaction, so nothing can take the
-// slot between the check and the write.
+// slot between the check and the write. A plain function so a drafted reply's
+// changes can run several of these in one transaction (chatAgent); moveOwn
+// below is its mutation for the live tools.
+export async function moveOwnTx(
+  ctx: MutationCtx,
+  args: {
+    orgId: Id<"orgs">;
+    customerId: Id<"customers">;
+    from: number;
+    to: number;
+    // cal.com's new uid: its reschedule mints a fresh booking.
+    externalUid?: string;
+    // cal.com already moved it; see the header.
+    providerConfirmed?: boolean;
+  },
+): Promise<ChangeResult> {
+  const now = Date.now();
+  const confirmed = args.providerConfirmed === true;
+  const target = await ownTarget(ctx, args, now, !confirmed);
+  if (!target.ok) {
+    // Already where it was asked to go: a repeat, nothing more to do.
+    return target.openAtTo
+      ? { ok: true, noop: true }
+      : { ok: false, reason: target.reason };
+  }
+  const { customer, appointment } = target;
+  if (sameMinute(appointment.startAt, args.to)) return { ok: true, noop: true };
+  if (!confirmed) {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return { ok: false, reason: "not-found" };
+    // A cal.com booking moved without telling cal.com is the fork this
+    // module exists to prevent. The lanes never do it; this makes sure.
+    if (providerOwned(appointment, org)) return { ok: false, reason: "calendar-error" };
+    const refusal = await moveRefusal(ctx, org, appointment, args.to, now, false);
+    if (refusal) return { ok: false, reason: refusal };
+  }
+  const sent = await rescheduleAppointment(ctx, appointment, {
+    startAt: args.to,
+    externalUid: args.externalUid,
+  });
+  await ctx.db.patch(customer._id, {
+    agentChangesAt: withChange(customer.agentChangesAt, now),
+  });
+  return { ok: true, notified: sent > 0 };
+}
+
+export async function cancelOwnTx(
+  ctx: MutationCtx,
+  args: {
+    orgId: Id<"orgs">;
+    customerId: Id<"customers">;
+    from: number;
+    providerConfirmed?: boolean;
+  },
+): Promise<ChangeResult> {
+  const now = Date.now();
+  const confirmed = args.providerConfirmed === true;
+  const target = await ownTarget(ctx, args, now, !confirmed);
+  if (!target.ok) {
+    // Already cancelled: a repeat, nothing more to do, and never the
+    // appointment after it.
+    return target.cancelledAtFrom
+      ? { ok: true, noop: true }
+      : { ok: false, reason: target.reason };
+  }
+  const { customer, appointment } = target;
+  if (!confirmed) {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return { ok: false, reason: "not-found" };
+    if (providerOwned(appointment, org)) return { ok: false, reason: "calendar-error" };
+  }
+  // No actor: the customer cancelled, through their assistant. That is
+  // exactly the cancellation the team's booking-cancelled alert is for.
+  const sent = await cancelAppointment(ctx, appointment);
+  // The feed row cancelAppointment writes only for a cancel started inside
+  // the salon. An assistant's cancel deserves its own answer to "who
+  // cancelled this?", the same row a booking and a move leave.
+  await recordActivity(ctx, {
+    orgId: appointment.orgId,
+    kind: "appointment_status",
+    customerId: appointment.customerId,
+    appointmentId: appointment._id,
+    detail: statusChange(appointment.status, "cancelled"),
+  });
+  await ctx.db.patch(customer._id, {
+    agentChangesAt: withChange(customer.agentChangesAt, now),
+  });
+  return { ok: true, notified: sent > 0 };
+}
+
 export const moveOwn = internalMutation({
   args: {
     ...targetArgs,
     to: v.number(),
-    // cal.com's new uid: its reschedule mints a fresh booking.
     externalUid: v.optional(v.string()),
-    // cal.com already moved it; see the header.
     providerConfirmed: v.optional(v.boolean()),
   },
   returns: changeResult,
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const confirmed = args.providerConfirmed === true;
-    const target = await ownTarget(ctx, args, now, !confirmed);
-    if (!target.ok) return target;
-    const { customer, appointment } = target;
-    // A cancelled row is never brought back by a move, cal.com or not:
-    // rescheduleAppointment writes status "scheduled".
-    if (!OPEN.includes(appointment.status)) {
-      return { ok: false as const, reason: "appointment-changed" };
-    }
-    if (!confirmed) {
-      const org = await ctx.db.get(args.orgId);
-      if (!org) return { ok: false as const, reason: "not-found" };
-      // A cal.com booking moved without telling cal.com is the fork this
-      // module exists to prevent. The lanes never do it; this makes sure.
-      if (providerOwned(appointment, org)) {
-        return { ok: false as const, reason: "calendar-error" };
-      }
-      const refusal = await moveRefusal(ctx, org, appointment, args.to, now, false);
-      if (refusal) return { ok: false as const, reason: refusal };
-    }
-    const sent = await rescheduleAppointment(ctx, appointment, {
-      startAt: args.to,
-      externalUid: args.externalUid,
-    });
-    await ctx.db.patch(customer._id, {
-      agentChangesAt: withChange(customer.agentChangesAt, now),
-    });
-    return { ok: true as const, notified: sent > 0 };
-  },
+  handler: async (ctx, args) => await moveOwnTx(ctx, args),
 });
 
 export const cancelOwn = internalMutation({
   args: { ...targetArgs, providerConfirmed: v.optional(v.boolean()) },
   returns: changeResult,
+  handler: async (ctx, args) => await cancelOwnTx(ctx, args),
+});
+
+// The customer's own open appointment at a wall-clock start, for the cal.com
+// lane (its uid) and for a move's nearest free times (its length).
+export const ownAt = internalQuery({
+  args: targetArgs,
+  returns: v.union(
+    v.null(),
+    v.object({
+      appointmentId: v.id("appointments"),
+      startAt: v.number(),
+      externalUid: v.optional(v.string()),
+    }),
+  ),
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const confirmed = args.providerConfirmed === true;
-    const target = await ownTarget(ctx, args, now, !confirmed);
-    if (!target.ok) return target;
-    const { customer, appointment } = target;
-    if (!confirmed) {
-      const org = await ctx.db.get(args.orgId);
-      if (!org) return { ok: false as const, reason: "not-found" };
-      if (providerOwned(appointment, org)) {
-        return { ok: false as const, reason: "calendar-error" };
-      }
-    }
-    // No actor: the customer cancelled, through their assistant. That is
-    // exactly the cancellation the team's booking-cancelled alert is for.
-    const sent = await cancelAppointment(ctx, appointment);
-    // The feed row cancelAppointment writes only for a cancel started inside
-    // the salon. An assistant's cancel deserves its own answer to "who
-    // cancelled this?", the same row a booking and a move leave.
-    if (appointment.status !== "cancelled") {
-      await recordActivity(ctx, {
-        orgId: appointment.orgId,
-        kind: "appointment_status",
-        customerId: appointment.customerId,
-        appointmentId: appointment._id,
-        detail: statusChange(appointment.status, "cancelled"),
-      });
-    }
-    await ctx.db.patch(customer._id, {
-      agentChangesAt: withChange(customer.agentChangesAt, now),
-    });
-    return { ok: true as const, notified: sent > 0 };
+    const customer = await customerIn(ctx, args.orgId, args.customerId);
+    if (!customer) return null;
+    const open = (await rowsAt(ctx, customer, args.from)).find((row) =>
+      OPEN.includes(row.status),
+    );
+    return open
+      ? {
+          appointmentId: open._id,
+          startAt: open.startAt,
+          ...(open.externalUid ? { externalUid: open.externalUid } : {}),
+        }
+      : null;
   },
 });
 
 // The write half of a move or a cancel, from an action: cal.com first when it
 // holds the booking (checkMove before a move, so cal.com is never told about
 // a move we would refuse), then the transaction that re-checks everything.
-// Shared by the phone agent, the chat agent's live tools and the approval of
-// a drafted change, so the order of those steps exists once.
-//
-// `externalUid` is the booking's, from ownNext; the caller passes the org's
-// cal.com key only when cal.com is connected.
-type ChangeOutcome =
-  | { ok: true; notified?: boolean }
-  | { ok: false; reason: string; providerError?: string };
-
+// Shared by the phone agent's and the chat agent's live tools, so the order
+// of those steps exists once.
 export async function writeOwnChange(
   ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
   a: {
-    target: {
-      orgId: Id<"orgs">;
-      customerId: Id<"customers">;
-      appointmentId: Id<"appointments">;
-      from: number;
-    };
-    externalUid: string | undefined;
+    target: { orgId: Id<"orgs">; customerId: Id<"customers">; from: number };
+    // The org's cal.com key, only when cal.com is connected.
     calcomApiKey: string | undefined;
     change: { kind: "cancel" } | { kind: "move"; to: number };
     // Who asked, for cal.com's own record of the change.
     via: "phone" | "chat";
   },
-): Promise<ChangeOutcome> {
+): Promise<ChangeResult & { providerError?: string }> {
+  const found: { appointmentId: Id<"appointments">; externalUid?: string } | null =
+    await ctx.runQuery(internal.agentAppointments.ownAt, a.target);
+  const externalUid = found?.externalUid;
   // A booking cal.com holds, on a calendar no longer connected: saying so
   // beats changing our row and letting the two drift apart.
-  if (a.externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
+  if (externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
   const apiKey = a.calcomApiKey;
-  const uid = a.externalUid && apiKey ? a.externalUid : undefined;
+  const uid = externalUid && apiKey ? externalUid : undefined;
   if (a.change.kind === "cancel") {
     if (uid && apiKey) {
       const told = await cancelBooking({
@@ -435,20 +528,20 @@ export async function writeOwnChange(
       });
       if (!told.ok) return { ok: false, reason: "calendar-error", providerError: told.reason };
     }
-    const done: ChangeOutcome = await ctx.runMutation(
-      internal.agentAppointments.cancelOwn,
-      { ...a.target, ...(uid ? { providerConfirmed: true } : {}) },
-    );
+    const done: ChangeResult = await ctx.runMutation(internal.agentAppointments.cancelOwn, {
+      ...a.target,
+      ...(uid ? { providerConfirmed: true } : {}),
+    });
     return done;
   }
   const to = a.change.to;
   let newUid: string | undefined;
   if (uid && apiKey) {
-    const check: ChangeOutcome = await ctx.runQuery(
-      internal.agentAppointments.checkMove,
-      { ...a.target, to },
-    );
-    if (!check.ok) return check;
+    const check: ChangeResult = await ctx.runQuery(internal.agentAppointments.checkMove, {
+      ...a.target,
+      to,
+    });
+    if (!check.ok || check.noop) return check;
     const told = await rescheduleBooking({
       apiKey,
       uid,
@@ -459,14 +552,11 @@ export async function writeOwnChange(
     // cal.com minted a new booking; carry its uid or the next cancel 404s.
     newUid = told.uid;
   }
-  const done: ChangeOutcome = await ctx.runMutation(
-    internal.agentAppointments.moveOwn,
-    {
-      ...a.target,
-      to,
-      ...(newUid ? { externalUid: newUid } : {}),
-      ...(uid ? { providerConfirmed: true } : {}),
-    },
-  );
+  const done: ChangeResult = await ctx.runMutation(internal.agentAppointments.moveOwn, {
+    ...a.target,
+    to,
+    ...(newUid ? { externalUid: newUid } : {}),
+    ...(uid ? { providerConfirmed: true } : {}),
+  });
   return done;
 }

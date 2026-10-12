@@ -650,16 +650,21 @@ minted inside the value memo re-triggers every effect that lists it in deps
 — the header search's claiming effect ran per keystroke and its cleanup
 wiped the query.
 
-## The assistants touch only the customer's own next appointment (2026-10-13)
+## The assistants touch only the customer's own appointments (2026-10-13)
 
 Both agents (phone and WhatsApp) find, move and cancel through
 [`convex/agentAppointments.ts`](convex/agentAppointments.ts). Ported from
 Nudge's `meetingTools.ts`; do not grow a second path.
 
 - **Whose comes from the channel**, the call leg or the conversation, never a
-  tool argument. The only reachable appointment is that customer's next open
-  one in that org, and the write re-reads it: still theirs, still next, still
-  at the time the agent named (`from`), else `appointment-changed`.
+  tool argument. **Which comes from what the agent read back**: cancel and
+  reschedule take `appointment_start`, the start find_appointment /
+  my_appointments gave, and act only on the customer's own open appointment
+  at exactly that minute in that org, else `appointment-changed`. Never
+  "whatever is next now": a repeat finds it already cancelled or moved and is
+  a no-op answer. A voice engine older than template v14 has no
+  `appointment_start`; it keeps "the next one" but is refused for three
+  minutes after any change.
 - **A move is judged in the transaction that writes it**, with the booking
   page's own helpers exported from `booking.ts`: the span fits that day's
   hours, no closure, capacity with the row not blocking itself, no clash with

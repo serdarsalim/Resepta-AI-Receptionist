@@ -454,6 +454,21 @@ export function judgeRequestedTime(args: {
   };
 }
 
+// An instant as the business's wall clock, YYYY-MM-DDTHH:MM: the format the
+// agents' tools take a start in (parseLocalStart reads it back), so an
+// appointment the agent was shown can be named back exactly (2026-10-13).
+export function localMinuteIso(utcMs: number, tz: string): string {
+  const p = getLocalPartsSafe(utcMs, tz);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.y}-${pad(p.m0 + 1)}-${pad(p.d)}T${pad(p.hour)}:${pad(p.minutesOfDay % 60)}`;
+}
+
+// Two instants in the same minute: how an appointment named by its wall-clock
+// start is matched to its row, whose startAt may carry seconds.
+export function sameMinute(a: number, b: number): boolean {
+  return Math.floor(a / 60_000) === Math.floor(b / 60_000);
+}
+
 // The week as people say it, Monday first, over the 0=Sunday storage index.
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const weekRank = (day: number) => (day + 6) % 7;

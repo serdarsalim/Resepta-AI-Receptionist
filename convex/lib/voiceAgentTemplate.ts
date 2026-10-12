@@ -97,7 +97,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 //     recogniser's vocabulary (lib/boostedKeywords, Nudge 3379705e and
 //     61788709). Not a template field, since they are per business, but
 //     syncTemplate carries them, and so does every other publish that writes
-//     the agent doc.
+//     the agent doc;
+//   - cancel_appointment and reschedule_appointment name their appointment by
+//     `appointment_start`, the start find_appointment gave (review fix, same
+//     day). They acted on whatever was next when they ran, so a provider
+//     retry or a second "yes" cancelled the appointment after the one meant.
+//     /retell/functions reads templateVersion to know which engines carry it,
+//     and an older one keeps "the next one" with a guard after each change.
 // None of the new wording names a tool. Tool answers are served live to every
 // template version, and descriptions arrive with the tools they describe, so
 // neither can promise a tool an older agent lacks (Nudge ba2d956a).
@@ -629,31 +635,46 @@ export function appointmentReceptionistTemplate(args: {
     customTool(
       args.site,
       "find_appointment",
-      "Find the caller's next appointment before discussing, cancelling or moving it.",
+      "Find the caller's next appointment, with its appointment_start, before discussing, cancelling or moving it.",
       empty,
       holding.find,
     ),
     customTool(
       args.site,
       "cancel_appointment",
-      "Cancel the next appointment only after naming it and receiving explicit confirmation.",
-      empty,
+      "Cancel the caller's appointment that starts at appointment_start, only after naming it and receiving explicit confirmation.",
+      {
+        type: "object",
+        properties: {
+          appointment_start: {
+            type: "string",
+            description:
+              "The appointment_start find_appointment gave for the appointment to cancel, exactly as given.",
+          },
+        },
+        required: ["appointment_start"],
+      },
       holding.cancel,
     ),
     customTool(
       args.site,
       "reschedule_appointment",
-      "Move the next appointment only after the caller confirms the new exact start time.",
+      "Move the caller's appointment that starts at appointment_start, only after the caller confirms the new exact start time.",
       {
         type: "object",
         properties: {
+          appointment_start: {
+            type: "string",
+            description:
+              "The appointment_start find_appointment gave for the appointment to move, exactly as given.",
+          },
           start: {
             type: "string",
             description:
               "Confirmed new start as the local time at the business: YYYY-MM-DDTHH:MM, 24-hour, no time zone and no Z, like 2026-10-14T15:00. Never converted to UTC.",
           },
         },
-        required: ["start"],
+        required: ["appointment_start", "start"],
       },
       holding.move,
     ),
