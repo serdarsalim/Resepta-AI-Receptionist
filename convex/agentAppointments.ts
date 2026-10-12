@@ -148,11 +148,11 @@ const ownNextValidator = v.object({
   // Open appointments after the next one: out of the agents' reach, said so
   // to the customer rather than discovered by them.
   later: v.number(),
-  // Changes an assistant made for this customer in the trailing day, and
-  // the newest one: an engine published before appointment_start existed
-  // (template < 14) can only name "the next one", and is refused straight
-  // after a change rather than handed the appointment after it.
-  changesToday: v.number(),
+  // The newest change an assistant made for this customer: an engine
+  // published before appointment_start existed (template < 14) can only name
+  // "the next one", and is refused straight after a change rather than
+  // handed the appointment after it. The daily cap is not read from here:
+  // it is judged with the change itself, after a repeat is recognised.
   lastChangeAt: v.union(v.number(), v.null()),
   // For the team's "needs a person" email, so it names who.
   customerName: v.string(),
@@ -171,7 +171,6 @@ export const ownNext = internalQuery({
       return {
         next: null,
         later: 0,
-        changesToday: 0,
         lastChangeAt: null,
         customerName: "",
       };
@@ -190,7 +189,6 @@ export const ownNext = internalQuery({
           }
         : null,
       later: Math.max(0, rows.length - 1),
-      changesToday: changesToday(customer.agentChangesAt, now),
       lastChangeAt: Math.max(0, ...(customer.agentChangesAt ?? [])) || null,
       customerName:
         [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim() ||
@@ -223,8 +221,11 @@ async function rowsAt(
   return rows.filter((row) => row.orgId === customer.orgId && sameMinute(row.startAt, at));
 }
 
-// Rule 1 and rule 3. `strict` is everything but a provider-confirmed write,
-// whose caller already ran these checks before cal.com acted.
+// Rule 1 and rule 3, in that order: a repeat (nothing open at `from` any
+// more) is recognised before the cap is counted, so a provider retry or a
+// second "yes" is answered "already done" and never meets the cap. `strict`
+// is everything but a provider-confirmed write, whose caller already ran
+// these checks (checkChange) before cal.com acted.
 async function ownTarget(
   ctx: ReadCtx,
   args: {
@@ -331,19 +332,26 @@ export type ChangeResult =
   | { ok: true; notified?: boolean; noop?: boolean }
   | { ok: false; reason: string };
 
-// Everything a move would have to clear, writing nothing: the cal.com lane
-// must know a move is allowed BEFORE telling cal.com. For a provider-owned
-// booking the capacity half is cal.com's to answer.
-export const checkMove = internalQuery({
-  args: { ...targetArgs, to: v.number() },
+// Everything a change would have to clear, writing nothing: the cal.com
+// lane must know a cancel or a move is allowed BEFORE telling cal.com, and a
+// repeat is answered as done before the cap is asked (2026-10-13). For a
+// provider-owned booking the capacity half of a move is cal.com's to answer.
+// `to` absent means a cancel.
+export const checkChange = internalQuery({
+  args: { ...targetArgs, to: v.optional(v.number()) },
   returns: changeResult,
   handler: async (ctx, args) => {
     const now = Date.now();
     const target = await ownTarget(ctx, args, now, true);
     if (!target.ok) {
-      return target.openAtTo
+      const repeat = args.to === undefined ? target.cancelledAtFrom : target.openAtTo;
+      return repeat
         ? { ok: true as const, noop: true }
         : { ok: false as const, reason: target.reason };
+    }
+    if (args.to === undefined) return { ok: true as const };
+    if (sameMinute(target.appointment.startAt, args.to)) {
+      return { ok: true as const, noop: true };
     }
     const org = await ctx.db.get(args.orgId);
     if (!org) return { ok: false as const, reason: "not-found" };
@@ -496,10 +504,12 @@ export const ownAt = internalQuery({
 });
 
 // The write half of a move or a cancel, from an action: cal.com first when it
-// holds the booking (checkMove before a move, so cal.com is never told about
-// a move we would refuse), then the transaction that re-checks everything.
-// Shared by the phone agent's and the chat agent's live tools, so the order
-// of those steps exists once.
+// holds the booking (checkChange before it, so cal.com is never told about a
+// change we would refuse, and a repeat is answered without asking it), then
+// the transaction that re-checks everything. Shared by the phone agent's and
+// the chat agent's live tools, so the order of those steps exists once. The
+// daily cap is judged in here, never before: a lane that counted it first
+// refused a repeat at the cap instead of answering "already done".
 export async function writeOwnChange(
   ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
   a: {
@@ -519,6 +529,13 @@ export async function writeOwnChange(
   if (externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
   const apiKey = a.calcomApiKey;
   const uid = externalUid && apiKey ? externalUid : undefined;
+  if (uid) {
+    const check: ChangeResult = await ctx.runQuery(internal.agentAppointments.checkChange, {
+      ...a.target,
+      ...(a.change.kind === "move" ? { to: a.change.to } : {}),
+    });
+    if (!check.ok || check.noop) return check;
+  }
   if (a.change.kind === "cancel") {
     if (uid && apiKey) {
       const told = await cancelBooking({
@@ -537,11 +554,6 @@ export async function writeOwnChange(
   const to = a.change.to;
   let newUid: string | undefined;
   if (uid && apiKey) {
-    const check: ChangeResult = await ctx.runQuery(internal.agentAppointments.checkMove, {
-      ...a.target,
-      to,
-    });
-    if (!check.ok || check.noop) return check;
     const told = await rescheduleBooking({
       apiKey,
       uid,

@@ -39,7 +39,6 @@ import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
 import {
-  CHANGES_PER_DAY,
   NEAREST_FREE_NOTE,
   changeRefusalNote,
   isChangeRefusal,
@@ -1132,8 +1131,9 @@ http.route({
             (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         });
       };
-      // The cap answers first, before cal.com is asked anything.
-      if (own.changesToday >= CHANGES_PER_DAY) return await refuse("too-many-changes");
+      // The daily cap is judged with the change (writeOwnChange), after a
+      // repeat is recognised: a retry at the cap is "already done", not a
+      // handover, and cal.com still hears nothing a refusal would undo.
       const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
         writeOwnChange(ctx, {
           target,

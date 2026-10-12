@@ -82,7 +82,6 @@ import {
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 import { answerOrEmpty } from "./lib/nonAnswer";
 import {
-  CHANGES_PER_DAY,
   NEAREST_FREE_NOTE,
   agentIntentValidator,
   approvalFailureOf,
@@ -2241,10 +2240,6 @@ async function executeTool(
           note: "Call my_appointments, name the appointment it returns, get a clear yes, then call this again with its appointment_start.",
         };
       }
-      const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
-        orgId: context.orgId,
-        customerId: customer._id,
-      });
       const target = { orgId: context.orgId, customerId: customer._id, from };
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
@@ -2279,10 +2274,9 @@ async function executeTool(
             (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         };
       };
-      // The cap answers first, before cal.com is asked anything. Asked in a
-      // dry run too: a draft must not promise a change its approval will
-      // refuse for a reason the draft could already see.
-      if (own.changesToday >= CHANGES_PER_DAY) return await refuse("too-many-changes");
+      // The daily cap is judged with the change, live (writeOwnChange) and
+      // in a draft's dry run alike, after a repeat is recognised: a repeat
+      // at the cap is "already done", never a handover.
       const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
         writeOwnChange(ctx, {
           target,

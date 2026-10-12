@@ -726,6 +726,9 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   all count. Past the sixth the assistants refuse moves, cancels AND new
   bookings, and the manage page refuses moves; a customer's own cancel is
   counted and never refused (Serdar's call via the coordinator, 2026-10-13).
+  The cap is judged with the change, AFTER a repeat is recognised: a retry
+  or a second "yes" is answered "already done" and never meets it. Never
+  pre-check it in a lane; before cal.com is told, `checkChange` asks both.
   On the phone the team is emailed (`bookNeedsPerson`/`moveNeedsPerson`/
   `cancelNeedsPerson`, failed-send switch) because the agent promised a
   colleague; in chat the agent is told to call `escalate_to_staff`, which
