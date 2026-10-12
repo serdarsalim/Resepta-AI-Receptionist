@@ -1215,6 +1215,15 @@ export default defineSchema({
     // reads it and answers "already flagged", which is the whole difference
     // between flagging something once and nagging about it every turn.
     agentFlaggedAt: v.optional(v.number()),
+    // When an assistant (phone or WhatsApp) booked, moved or cancelled an
+    // appointment for this customer, over roughly the last day: the counter
+    // behind the daily change cap (lib/agentChange.ts, Nudge's six a day).
+    // Trimmed to the trailing 24 hours and at most 20 entries on every write,
+    // so it never grows. A move or cancel past the cap is refused and handed
+    // to a person; a booking is counted and never refused. Only the
+    // assistants write it, never staff: the cap stops a talked-round agent
+    // churning a diary, not the salon managing its own.
+    agentChangesAt: v.optional(v.array(v.number())),
     // The inbound message the webhook most recently scheduled an agent turn
     // for. The debounce compares against THIS, never against "the newest
     // inbound row", and the difference is a customer's question going

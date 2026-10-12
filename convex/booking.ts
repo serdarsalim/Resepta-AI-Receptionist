@@ -163,7 +163,7 @@ async function orgBySlug(ctx: ReadCtx, rawSlug: string): Promise<Doc<"orgs"> | n
 
 // How many can be worked at once — active roster, floor 1. The same number
 // retell.voiceBook and retell.bookedBetween compute, for the same reason.
-async function orgCapacity(
+export async function orgCapacity(
   ctx: ReadCtx,
   orgId: Id<"orgs">,
 ): Promise<number> {
@@ -177,7 +177,7 @@ async function orgCapacity(
 // Bookings that could overlap a candidate window. Reaches a day back because
 // an appointment STARTS in the index range but a long one from yesterday can
 // still be running — the same one-day margin voiceBook uses.
-async function activeRowsAround(
+export async function activeRowsAround(
   ctx: ReadCtx,
   orgId: Id<"orgs">,
   fromMs: number,
@@ -197,7 +197,7 @@ async function activeRowsAround(
   );
 }
 
-function overlapCount(
+export function overlapCount(
   rows: Doc<"appointments">[],
   startMs: number,
   durationMinutes: number,
@@ -225,7 +225,7 @@ function overlapCount(
 // A CLOSURE is checked here too, and on the whole span rather than the start:
 // a 60-minute service at 12:30 runs into a 13:00 lunch break, and the start
 // instant alone would wave it through.
-function fitsOpenHours(
+export function fitsOpenHours(
   org: Doc<"orgs">,
   startMs: number,
   durationMinutes: number,
@@ -528,7 +528,7 @@ export const slotsForToken = query({
 // is made in the chair. Read from the live service rather than snapshotted,
 // because "how much warning does the baker need" is a fact about the baker
 // today, not about the order's history.
-async function goodsLeadMs(
+export async function goodsLeadMs(
   ctx: ReadCtx,
   appointment: Doc<"appointments">,
 ): Promise<number> {

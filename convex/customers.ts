@@ -38,6 +38,8 @@ const customerFields = {
     v.union(v.literal("off"), v.literal("suggest"), v.literal("live")),
   ),
   agentFlaggedAt: v.optional(v.number()),
+  // The assistants' daily change cap counter (schema customers.agentChangesAt).
+  agentChangesAt: v.optional(v.array(v.number())),
   agentTurnScheduledFor: v.optional(v.id("messages")),
   // The three columns the warning above is about, found MISSING while adding
   // agentPausedAt: each is stamped by the message lanes (webhook.ts, wa.ts),

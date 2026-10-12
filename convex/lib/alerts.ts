@@ -113,6 +113,8 @@ export type AlertTemplate =
   | "failedNoText"
   | "failedOther"
   | "failedCalendarCancel"
+  | "moveNeedsPerson"
+  | "cancelNeedsPerson"
   | "newContact"
   | "newBooking"
   | "bookingCancelled"
@@ -130,6 +132,8 @@ export const alertTemplateValidator = v.union(
   v.literal("failedNoText"),
   v.literal("failedOther"),
   v.literal("failedCalendarCancel"),
+  v.literal("moveNeedsPerson"),
+  v.literal("cancelNeedsPerson"),
   v.literal("newContact"),
   v.literal("newBooking"),
   v.literal("bookingCancelled"),
@@ -377,6 +381,39 @@ const ALERT_COPY: Record<
       tr: "{who} randevusunu WhatsApp'tan iptal etti, ancak iptal cal.com takviminize işlenemedi. Saat hâlâ dolu görünüyor — takvimden elle silmeniz gerekiyor. Bildirilen hata: {detail}",
       en: "{who} cancelled their appointment on WhatsApp, but the cancellation did not reach your cal.com calendar. The slot still looks booked — remove it by hand. The error was: {detail}",
       de: "{who} hat den Termin über WhatsApp storniert, die Stornierung hat Ihren cal.com-Kalender aber nicht erreicht. Der Termin gilt weiter als gebucht — bitte manuell löschen. Fehlermeldung: {detail}",
+    },
+  },
+  // The phone agent told a caller "a colleague will be in touch" about their
+  // appointment, because it could not make the change itself: the day's
+  // change cap was spent (lib/agentChange.ts) or the calendar refused. The
+  // promise needs an owner, and nobody is reading a live call. Rides the
+  // failed-send switch for failedCalendarCancel's reason: the customer
+  // reached us and something did not land. {detail} is the appointment's
+  // time, in the org's language.
+  moveNeedsPerson: {
+    kind: "failed-send",
+    subject: {
+      tr: "{who} randevusunu taşımak istedi",
+      en: "{who} wants to move their appointment",
+      de: "{who} möchte den Termin verschieben",
+    },
+    body: {
+      tr: "{who}, {detail} randevusunu telefonda taşımak istedi. Asistan bunu kendisi yapamadı ve ekipten birinin döneceğini söyledi. Müşteriye ulaşıp yeni saati birlikte belirleyin.",
+      en: "{who} called to move their appointment on {detail}. The assistant could not make the change itself and said someone from the team would get back to them. Please contact them to agree a new time.",
+      de: "{who} hat angerufen, um den Termin am {detail} zu verschieben. Der Assistent konnte das nicht selbst erledigen und hat gesagt, dass sich jemand aus dem Team meldet. Bitte nehmen Sie Kontakt auf und vereinbaren Sie eine neue Zeit.",
+    },
+  },
+  cancelNeedsPerson: {
+    kind: "failed-send",
+    subject: {
+      tr: "{who} randevusunu iptal etmek istedi",
+      en: "{who} wants to cancel their appointment",
+      de: "{who} möchte den Termin absagen",
+    },
+    body: {
+      tr: "{who}, {detail} randevusunu telefonda iptal etmek istedi. Asistan bunu kendisi yapamadı ve ekipten birinin döneceğini söyledi. Randevu hâlâ takvimde; müşteriye ulaşıp iptali tamamlayın.",
+      en: "{who} called to cancel their appointment on {detail}. The assistant could not make the change itself and said someone from the team would get back to them. The appointment is still in your calendar, so please contact them and cancel it.",
+      de: "{who} hat angerufen, um den Termin am {detail} abzusagen. Der Assistent konnte das nicht selbst erledigen und hat gesagt, dass sich jemand aus dem Team meldet. Der Termin steht noch im Kalender. Bitte nehmen Sie Kontakt auf und sagen Sie ihn ab.",
     },
   },
 };

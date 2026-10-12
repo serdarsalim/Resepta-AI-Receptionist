@@ -137,10 +137,17 @@ that `(orgId, customerId)`:
   only delivery and refuses `missing-fulfillment` where both are on offer.
   Taken at face value it would tell the customer their order was being dealt
   with right away and record nothing about how it reaches them.
-- `my_appointments()` — this customer's upcoming appointments only.
-- `cancel_appointment` / `reschedule_appointment(start)` — refuse any
-  appointment row not owned by this customer; cal.com is told first when an
-  `externalUid` exists, exactly like the voice tools in `convex/http.ts`.
+- `my_appointments()` — this customer's next appointment, and how many more
+  they have after it.
+- `cancel_appointment` / `reschedule_appointment(start)` — act only on this
+  customer's own NEXT open appointment, through `convex/agentAppointments.ts`,
+  the module the voice tools use too (2026-10-13). The write re-checks it is
+  still theirs, still next and still at the time the agent named; a move is
+  judged against the booking page's rules (span in the day's hours,
+  closures, capacity, the customer's other bookings, lead time) in the same
+  transaction that writes it; and six changes a day per customer is the cap,
+  past which the tool tells the model to hand over through
+  `escalate_to_staff`. cal.com is told first when an `externalUid` exists.
 - `escalate_to_staff(reason)` — stamps the conversation for takeover and stops
   the agent; the attention dot does the rest.
 

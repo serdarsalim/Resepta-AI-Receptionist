@@ -538,36 +538,47 @@ export const markCancelled = internalMutation({
   handler: async (ctx, args) => {
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment) return null;
-    const wasCancelled = appointment.status === "cancelled";
-    await ctx.db.patch(args.appointmentId, { status: "cancelled" });
-    await syncAppointmentSchedule(ctx, args.appointmentId);
-    // cal.com can deliver the same cancellation more than once (the push we
-    // initiated comes straight back as a webhook); the notice must not.
-    if (!wasCancelled) {
-      // actor present = somebody inside the salon started this cancellation
-      // (the cal.com push carries their name back here); their own act must
-      // not email them. Absent means the customer or cal.com did it, and the
-      // booking-cancelled alert is exactly for that.
-      await scheduleLifecycleMessages(
-        ctx,
-        appointment.orgId,
-        args.appointmentId,
-        "cancellation",
-        { suppressOwnerAlert: args.actor !== undefined },
-      );
-      if (args.actor !== undefined) {
-        await recordActivity(ctx, {
-          orgId: appointment.orgId,
-          kind: "appointment_status",
-          customerId: appointment.customerId,
-          appointmentId: args.appointmentId,
-          detail: statusChange(appointment.status, "cancelled"),
-        });
-      }
-    }
+    await cancelAppointment(ctx, appointment, args.actor);
     return null;
   },
 });
+
+// The cancellation write itself, shared by markCancelled and the assistants'
+// own cancel (agentAppointments.cancelOwn), so a cancel by phone, by chat and
+// by cal.com's echo all retire the reminders and tell the same people.
+export async function cancelAppointment(
+  ctx: MutationCtx,
+  appointment: Doc<"appointments">,
+  actor?: string,
+): Promise<void> {
+  const wasCancelled = appointment.status === "cancelled";
+  await ctx.db.patch(appointment._id, { status: "cancelled" });
+  await syncAppointmentSchedule(ctx, appointment._id);
+  // cal.com can deliver the same cancellation more than once (the push we
+  // initiated comes straight back as a webhook); the notice must not.
+  if (!wasCancelled) {
+    // actor present = somebody inside the salon started this cancellation
+    // (the cal.com push carries their name back here); their own act must
+    // not email them. Absent means the customer or cal.com did it, and the
+    // booking-cancelled alert is exactly for that.
+    await scheduleLifecycleMessages(
+      ctx,
+      appointment.orgId,
+      appointment._id,
+      "cancellation",
+      { suppressOwnerAlert: actor !== undefined },
+    );
+    if (actor !== undefined) {
+      await recordActivity(ctx, {
+        orgId: appointment.orgId,
+        kind: "appointment_status",
+        customerId: appointment.customerId,
+        appointmentId: appointment._id,
+        detail: statusChange(appointment.status, "cancelled"),
+      });
+    }
+  }
+}
 
 // externalUid moves because cal.com's reschedule mints a new booking and
 // retires the uid we were holding.
@@ -582,38 +593,50 @@ export const markRescheduled = internalMutation({
   handler: async (ctx, args) => {
     const appointment = await ctx.db.get(args.appointmentId);
     if (!appointment) return null;
-    await ctx.db.patch(args.appointmentId, {
-      startAt: args.startAt,
-      // A new time invalidates the reminders already sent for the old one.
-      status: "scheduled",
-      reminderSentOffsets: [],
-      confirmationSentAt: undefined,
-      // The re-confirmation's invite must outrank the one already in the
-      // customer's mailbox (schema: icsSequence).
-      icsSequence: (appointment.icsSequence ?? 0) + 1,
-      ...(args.durationMinutes !== undefined
-        ? { durationMinutes: args.durationMinutes }
-        : {}),
-      ...(args.externalUid ? { externalUid: args.externalUid } : {}),
-    });
-    // New time, cleared offsets — every reminder is owed again from scratch.
-    await syncAppointmentSchedule(ctx, args.appointmentId);
-    const org = await ctx.db.get(appointment.orgId);
-    await recordActivity(ctx, {
-      orgId: appointment.orgId,
-      kind: "appointment_moved",
-      customerId: appointment.customerId,
-      appointmentId: args.appointmentId,
-      // Rendered in the org's own timezone and language: a reader checking who
-      // moved a booking wants the time the salon works in, not a UTC stamp.
-      detail: org
-        ? formatAppointmentTime(args.startAt, org.timezone, org.language)
-        : undefined,
-    });
-    await scheduleConfirmationIfConfigured(ctx, appointment.orgId, args.appointmentId);
+    await rescheduleAppointment(ctx, appointment, args);
     return null;
   },
 });
+
+// The move write itself, shared by markRescheduled and the assistants' own
+// move (agentAppointments.moveOwn). It checks nothing: every caller decided
+// the new time is allowed before it got here, and each decides differently
+// (cal.com's word, the booking page's rules at the moment of the change).
+export async function rescheduleAppointment(
+  ctx: MutationCtx,
+  appointment: Doc<"appointments">,
+  args: { startAt: number; durationMinutes?: number; externalUid?: string },
+): Promise<void> {
+  await ctx.db.patch(appointment._id, {
+    startAt: args.startAt,
+    // A new time invalidates the reminders already sent for the old one.
+    status: "scheduled",
+    reminderSentOffsets: [],
+    confirmationSentAt: undefined,
+    // The re-confirmation's invite must outrank the one already in the
+    // customer's mailbox (schema: icsSequence).
+    icsSequence: (appointment.icsSequence ?? 0) + 1,
+    ...(args.durationMinutes !== undefined
+      ? { durationMinutes: args.durationMinutes }
+      : {}),
+    ...(args.externalUid ? { externalUid: args.externalUid } : {}),
+  });
+  // New time, cleared offsets — every reminder is owed again from scratch.
+  await syncAppointmentSchedule(ctx, appointment._id);
+  const org = await ctx.db.get(appointment.orgId);
+  await recordActivity(ctx, {
+    orgId: appointment.orgId,
+    kind: "appointment_moved",
+    customerId: appointment.customerId,
+    appointmentId: appointment._id,
+    // Rendered in the org's own timezone and language: a reader checking who
+    // moved a booking wants the time the salon works in, not a UTC stamp.
+    detail: org
+      ? formatAppointmentTime(args.startAt, org.timezone, org.language)
+      : undefined,
+  });
+  await scheduleConfirmationIfConfigured(ctx, appointment.orgId, appointment._id);
+}
 
 export function nextUpcomingOf(
   appointments: Doc<"appointments">[],

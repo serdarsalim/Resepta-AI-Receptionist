@@ -77,6 +77,11 @@ import {
   contactUpdateResult,
 } from "./retell";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import {
+  CHANGES_PER_DAY,
+  changeRefusalNote,
+  isChangeRefusal,
+} from "./lib/agentChange";
 
 // The WhatsApp chat agent's runtime (docs/chat-agent.md). One inbound
 // customer message → one TURN: guards, context, a bounded tool loop against
@@ -951,40 +956,6 @@ export const sendSuggestion = action({
       });
     }
     return sent;
-  },
-});
-
-// ── Tool lookups the action needs mid-loop ──────────────────────────────────
-
-// Fresh at execution time, not from the turn's opening context: a booking the
-// agent itself just made must be visible to the cancel that follows it.
-export const nextForCustomer = internalQuery({
-  args: { customerId: v.id("customers") },
-  returns: v.union(
-    v.null(),
-    v.object({
-      appointmentId: v.id("appointments"),
-      externalUid: v.optional(v.string()),
-      startAt: v.number(),
-      service: v.optional(v.string()),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    const appointments = await ctx.db
-      .query("appointments")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .collect();
-    const next = nextUpcomingOf(appointments, Date.now(), [
-      "scheduled",
-      "confirmed",
-    ]);
-    if (!next) return null;
-    return {
-      appointmentId: next._id,
-      externalUid: next.externalUid,
-      startAt: next.startAt,
-      service: next.items?.map((i) => i.name).join(", ") || undefined,
-    };
   },
 });
 
@@ -1973,59 +1944,137 @@ async function executeTool(
       }
     }
 
+    // Existing appointments: the customer's OWN next one only, through the
+    // module the phone agent uses too (agentAppointments.ts), so both lanes
+    // apply one rule about whose appointment they may touch, what a move must
+    // clear at the moment of the change, and the daily cap.
     if (name === "my_appointments") {
-      const next = await ctx.runQuery(internal.chatAgent.nextForCustomer, {
+      const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
+        orgId: context.orgId,
         customerId: customer._id,
       });
-      return next
-        ? {
-            found: true,
-            next: { spoken_time: spokenOf(next.startAt), service: next.service },
-          }
-        : { found: false };
+      if (!own.next) return { found: false };
+      return {
+        found: true,
+        next: {
+          spoken_time: spokenOf(own.next.startAt),
+          service: own.next.services.join(", ") || undefined,
+        },
+        ...(own.later > 0
+          ? {
+              later_appointments: own.later,
+              note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this next one can be moved or cancelled here; a person from the team can change the others.`,
+            }
+          : {}),
+      };
     }
 
     if (name === "cancel_appointment" || name === "reschedule_appointment") {
-      const found = await ctx.runQuery(internal.chatAgent.nextForCustomer, {
+      const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
+        orgId: context.orgId,
         customerId: customer._id,
       });
-      if (!found) return { error: "no-upcoming-appointment" };
-      if (found.externalUid && !org.calcomApiKey) {
+      const next = own.next;
+      if (!next) return { error: "no-upcoming-appointment" };
+      if (next.externalUid && !org.calcomApiKey) {
         return { error: "no-calendar-connected" };
       }
+      const target = {
+        orgId: context.orgId,
+        customerId: customer._id,
+        appointmentId: next.appointmentId,
+        from: next.startAt,
+      };
+      const calcomKey = org.calcomApiKey;
+      const providerUid =
+        next.externalUid && calcomKey ? next.externalUid : undefined;
+      const did = name === "cancel_appointment" ? "cancelled" : "moved";
+      const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
+      // A change the assistant cannot make, answered as a fact it can act on.
+      // "A person will take care of it" goes through escalate_to_staff, so
+      // the business's own handover setting decides what that means here.
+      const refuse = async (
+        reason: string,
+        extra?: Record<string, unknown>,
+      ): Promise<Record<string, unknown>> => {
+        const known = isChangeRefusal(reason) ? reason : "calendar-error";
+        return {
+          [outcome]: false,
+          error: known,
+          ...(known === "outside-open-hours"
+            ? openHoursForAgent(org.businessHours, {
+                closures: await ctx.runQuery(internal.closures.forOrg, {
+                  orgId: context.orgId,
+                }),
+                todayIso: todayInZone(org.timezone),
+              })
+            : {}),
+          ...extra,
+          note: changeRefusalNote(known, did, "chat"),
+        };
+      };
+      // The cap answers first, before cal.com is asked anything.
+      if (own.changesToday >= CHANGES_PER_DAY) return await refuse("too-many-changes");
+
       if (name === "cancel_appointment") {
-        if (found.externalUid && org.calcomApiKey) {
+        if (providerUid && calcomKey) {
           const result = await cancelBooking({
-            apiKey: org.calcomApiKey,
-            uid: found.externalUid,
+            apiKey: calcomKey,
+            uid: providerUid,
             reason: "Cancelled by chat",
           });
-          if (!result.ok) return { cancelled: false, error: result.reason };
+          if (!result.ok) {
+            return await refuse("calendar-error", { provider_error: result.reason });
+          }
         }
-        await ctx.runMutation(internal.appointments.markCancelled, {
-          appointmentId: found.appointmentId,
+        const done = await ctx.runMutation(internal.agentAppointments.cancelOwn, {
+          ...target,
+          ...(providerUid ? { providerConfirmed: true } : {}),
         });
-        return { cancelled: true };
+        if (!done.ok) return await refuse(done.reason);
+        return { cancelled: true, spoken_time: spokenOf(next.startAt) };
       }
+
       const startAt = parseLocalStart(String(input.start ?? ""), org.timezone);
+      // The start instant first, for the rich refusal. moveOwn then judges
+      // the whole span, capacity and the customer's other bookings in the
+      // transaction that writes.
       const refusal = await refuseStart(startAt, "moved");
       if (refusal) return refusal;
+      if (startAt === next.startAt) {
+        return {
+          rescheduled: false,
+          spoken_time: spokenOf(startAt),
+          note: "That is the time it is already booked for. Tell the customer it stays as it is.",
+        };
+      }
       let newUid: string | undefined;
-      if (found.externalUid && org.calcomApiKey) {
+      if (providerUid && calcomKey) {
+        // cal.com is about to be told, so the move has to be known to be
+        // allowed first; afterwards there is no refusing it.
+        const check = await ctx.runQuery(internal.agentAppointments.checkMove, {
+          ...target,
+          to: startAt,
+        });
+        if (!check.ok) return await refuse(check.reason);
         const result = await rescheduleBooking({
-          apiKey: org.calcomApiKey,
-          uid: found.externalUid,
+          apiKey: calcomKey,
+          uid: providerUid,
           startIso: new Date(startAt).toISOString(),
           reason: "Rescheduled by chat",
         });
-        if (!result.ok) return { rescheduled: false, error: result.reason };
+        if (!result.ok) {
+          return await refuse("calendar-error", { provider_error: result.reason });
+        }
         newUid = result.uid;
       }
-      await ctx.runMutation(internal.appointments.markRescheduled, {
-        appointmentId: found.appointmentId,
-        startAt,
-        externalUid: newUid,
+      const done = await ctx.runMutation(internal.agentAppointments.moveOwn, {
+        ...target,
+        to: startAt,
+        ...(newUid ? { externalUid: newUid } : {}),
+        ...(providerUid ? { providerConfirmed: true } : {}),
       });
+      if (!done.ok) return await refuse(done.reason);
       return { rescheduled: true, spoken_time: spokenOf(startAt) };
     }
 

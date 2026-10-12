@@ -40,6 +40,7 @@ import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
+import { withChange } from "./lib/agentChange";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -2443,6 +2444,13 @@ export const voiceBook = internalMutation({
     });
     await syncAppointmentSchedule(ctx, appointmentId);
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
+    // Every caller of this mutation is an assistant (phone or chat), so every
+    // booking here counts toward the customer's daily change cap
+    // (lib/agentChange.ts). Counted, never refused: the count is what stops a
+    // cancel-and-rebook loop, and the refusal belongs to moves and cancels.
+    await ctx.db.patch(customer._id, {
+      agentChangesAt: withChange(customer.agentChangesAt, Date.now()),
+    });
     return {
       appointmentId,
       serviceName: line?.name,
@@ -2553,47 +2561,11 @@ export const callerOfCall = internalQuery({
   },
 });
 
-// Cancel and reschedule are split into a lookup and a write because a Convex
-// mutation cannot reach the network, and cal.com has to be told first: it owns
-// the slot inventory, the salon's Google Calendar and the notification emails.
-// The old single mutation patched status locally and stopped, so Resepta said
-// cancelled while cal.com kept the slot blocked for a customer who was not
-// coming. http.ts calls this, then cal.com, then the write below.
-export const nextAppointmentForPhone = internalQuery({
-  args: { orgId: v.id("orgs"), phone: v.string() },
-  returns: v.union(
-    v.null(),
-    v.object({
-      appointmentId: v.id("appointments"),
-      externalUid: v.optional(v.string()),
-      startAt: v.number(),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    const phone = toE164(args.phone);
-    if (!phone) return null;
-    const customer = await ctx.db
-      .query("customers")
-      .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
-      .unique();
-    if (!customer) return null;
-    const appointments = await ctx.db
-      .query("appointments")
-      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
-      .collect();
-    const next = nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"]);
-    if (!next) return null;
-    return {
-      appointmentId: next._id,
-      externalUid: next.externalUid,
-      startAt: next.startAt,
-    };
-  },
-});
-
-// The writes themselves live in appointments.ts (markCancelled,
-// markRescheduled) — the WhatsApp lane cancels through the same pair, and an
-// appointment state transition does not belong in the voice module.
+// Finding, moving and cancelling a caller's appointment lives in
+// agentAppointments.ts since 2026-10-13, keyed on the customer the call leg
+// resolved (callerOfCall above) and shared with the WhatsApp assistant. The
+// phone-keyed lookup that used to sit here is gone with the phone argument
+// it served. cal.com is still told first; see that file's header.
 
 // ---- Contact properties written by the voice agent ----
 //

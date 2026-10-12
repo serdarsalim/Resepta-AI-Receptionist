@@ -9,6 +9,7 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as agentAppointments from "../agentAppointments.js";
 import type * as agentReports from "../agentReports.js";
 import type * as agentTools from "../agentTools.js";
 import type * as appointments from "../appointments.js";
@@ -34,6 +35,7 @@ import type * as http from "../http.js";
 import type * as industryPresets from "../industryPresets.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_activity from "../lib/activity.js";
+import type * as lib_agentChange from "../lib/agentChange.js";
 import type * as lib_agentDrafts from "../lib/agentDrafts.js";
 import type * as lib_agentMode from "../lib/agentMode.js";
 import type * as lib_agentVariables from "../lib/agentVariables.js";
@@ -134,6 +136,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  agentAppointments: typeof agentAppointments;
   agentReports: typeof agentReports;
   agentTools: typeof agentTools;
   appointments: typeof appointments;
@@ -159,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   industryPresets: typeof industryPresets;
   knowledge: typeof knowledge;
   "lib/activity": typeof lib_activity;
+  "lib/agentChange": typeof lib_agentChange;
   "lib/agentDrafts": typeof lib_agentDrafts;
   "lib/agentMode": typeof lib_agentMode;
   "lib/agentVariables": typeof lib_agentVariables;

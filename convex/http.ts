@@ -35,6 +35,13 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import { queueOrgAlert } from "./lib/alerts";
+import { formatAppointmentTime } from "./lib/format";
+import {
+  CHANGES_PER_DAY,
+  changeRefusalNote,
+  isChangeRefusal,
+} from "./lib/agentChange";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -831,55 +838,123 @@ http.route({
       });
     }
 
-    // Everything below addresses an appointment the caller already has, so it
-    // shares one lookup. cal.com is told BEFORE our status moves: it owns the
-    // slot inventory, the salon's Google Calendar and the notification emails,
-    // and a local-only write leaves the salon holding a slot for someone who
-    // is not coming. A walk-in typed in by hand has no externalUid and so has
-    // nothing on cal.com to move — that branch stays local by design.
+    // Everything below addresses an appointment the caller already has. The
+    // only one reachable is the CALLER'S OWN next one: who from the call leg
+    // (callerOfCall), which one from agentAppointments.ownNext. No tool here
+    // takes an appointment, a customer or a phone from the model. The write
+    // re-checks that it is still theirs, still next and still at the time the
+    // agent named, re-runs the booking page's calendar rules for a move at the
+    // moment of the change, and stops at six changes a day (lib/agentChange).
+    //
+    // cal.com is told BEFORE our status moves: it owns the slot inventory, the
+    // salon's Google Calendar and the notification emails, and a local-only
+    // write leaves the salon holding a slot for someone who is not coming. A
+    // walk-in typed in by hand has no externalUid and so has nothing on
+    // cal.com to move — that branch stays local by design.
     if (
       name === "find_appointment" ||
       name === "cancel_appointment" ||
       name === "reschedule_appointment"
     ) {
-      const callerPhone = (await callerOfCall()).phone;
-      if (!callerPhone) return respond(NO_CALLER_NUMBER.appointments);
-      const found = await ctx.runQuery(internal.retell.nextAppointmentForPhone, {
-        orgId: org._id,
-        phone: callerPhone,
-      });
+      const who = await callerOfCall();
+      if (!who.phone) return respond(NO_CALLER_NUMBER.appointments);
+      // A number nobody is filed under has nothing booked.
+      const own = who.customerId
+        ? await ctx.runQuery(internal.agentAppointments.ownNext, {
+            orgId: org._id,
+            customerId: who.customerId,
+          })
+        : null;
+      const next = own?.next ?? null;
       const spokenOf = (at: number) =>
         spokenDateTime(at, org.timezone, org.language);
 
       // Lets the agent name the appointment before acting on it, instead of
       // cancelling whatever happens to be next for a caller with two bookings.
+      // A caller with more than one is told plainly that only this one can be
+      // changed here, rather than finding out when the wrong one moves.
       if (name === "find_appointment") {
-        return respond(
-          found
-            ? { found: true, spoken_time: spokenOf(found.startAt) }
-            : { found: false },
-        );
+        if (!own || !next) return respond({ found: false });
+        return respond({
+          found: true,
+          spoken_time: spokenOf(next.startAt),
+          ...(next.services.length > 0 ? { services: next.services } : {}),
+          ...(own.later > 0
+            ? {
+                later_appointments: own.later,
+                note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this one can be moved or cancelled on this call; a colleague can change the others.`,
+              }
+            : {}),
+        });
       }
-      if (!found) return respond({ error: "no-upcoming-appointment" });
-      if (found.externalUid && !org.calcomApiKey) {
+      if (!own || !next || !who.customerId) {
+        return respond({ error: "no-upcoming-appointment" });
+      }
+      if (next.externalUid && !org.calcomApiKey) {
         // The booking lives on a calendar we can no longer reach. Saying so
         // beats moving our row and letting the two drift apart.
         return respond({ error: "no-calendar-connected" });
       }
+      const target = {
+        orgId: org._id,
+        customerId: who.customerId,
+        appointmentId: next.appointmentId,
+        from: next.startAt,
+      };
+      const calcomKey: string | undefined = org.calcomApiKey;
+      const providerUid: string | undefined =
+        next.externalUid && calcomKey ? next.externalUid : undefined;
+      const did = name === "cancel_appointment" ? "cancelled" : "moved";
+      const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
+      // A change the agent cannot make, answered so it can say what happens
+      // next. When that is "a colleague will be in touch" (the cap, or the
+      // calendar failing), the team is emailed in the same breath: nobody is
+      // reading a live call, and a promise with no owner is worse than none.
+      const refuse = async (reason: string, extra?: Record<string, unknown>) => {
+        const known = isChangeRefusal(reason) ? reason : "calendar-error";
+        if (known === "too-many-changes" || known === "calendar-error") {
+          await queueOrgAlert(ctx, {
+            orgId: org._id,
+            template: did === "cancelled" ? "cancelNeedsPerson" : "moveNeedsPerson",
+            who: own.customerName,
+            detail: formatAppointmentTime(next.startAt, org.timezone, org.language),
+          });
+        }
+        return respond({
+          [outcome]: false,
+          error: known,
+          // A move that would leave the day's hours: hand back the hours, so
+          // the agent can counter with a time that fits.
+          ...(known === "outside-open-hours"
+            ? openHoursForAgent(org.businessHours ?? null, {
+                closures,
+                todayIso: todayInZone(org.timezone),
+              })
+            : {}),
+          ...extra,
+          note: changeRefusalNote(known, did, "voice"),
+        });
+      };
+      // The cap answers first, before cal.com is asked anything.
+      if (own.changesToday >= CHANGES_PER_DAY) return await refuse("too-many-changes");
 
       if (name === "cancel_appointment") {
-        if (found.externalUid && org.calcomApiKey) {
+        if (providerUid && calcomKey) {
           const result = await cancelBooking({
-            apiKey: org.calcomApiKey,
-            uid: found.externalUid,
+            apiKey: calcomKey,
+            uid: providerUid,
             reason: "Cancelled by phone",
           });
-          if (!result.ok) return respond({ cancelled: false, error: result.reason });
+          if (!result.ok) {
+            return await refuse("calendar-error", { provider_error: result.reason });
+          }
         }
-        await ctx.runMutation(internal.appointments.markCancelled, {
-          appointmentId: found.appointmentId,
+        const done = await ctx.runMutation(internal.agentAppointments.cancelOwn, {
+          ...target,
+          ...(providerUid ? { providerConfirmed: true } : {}),
         });
-        return respond({ cancelled: true });
+        if (!done.ok) return await refuse(done.reason);
+        return respond({ cancelled: true, spoken_time: spokenOf(next.startAt) });
       }
 
       // Wall time at the BUSINESS, not UTC — the same parse book_appointment
@@ -890,27 +965,46 @@ http.route({
       // then read "eight o'clock" back down the phone to someone who said five.
       const startAt = parseLocalStart(String(args.start ?? ""), org.timezone);
       if (Number.isNaN(startAt)) return respond({ error: "missing-or-bad-start" });
-      // This branch used to check nothing but NaN, so it would move a booking
-      // into the past or onto a closed Sunday that book_appointment refuses.
+      // The start instant first, for the rich refusal (the hours, the
+      // closures, the reason). moveOwn then judges the whole span, capacity
+      // and the caller's other bookings in the transaction that writes.
       const refusal = startRefusal(startAt, "moved");
       if (refusal) return respond(refusal);
+      if (startAt === next.startAt) {
+        return respond({
+          rescheduled: false,
+          spoken_time: spokenOf(startAt),
+          note: "That is the time it is already booked for. Tell the caller it stays as it is.",
+        });
+      }
       let newUid: string | undefined;
-      if (found.externalUid && org.calcomApiKey) {
+      if (providerUid && calcomKey) {
+        // cal.com is about to be told, so the move has to be known to be
+        // allowed first; afterwards there is no refusing it.
+        const check = await ctx.runQuery(internal.agentAppointments.checkMove, {
+          ...target,
+          to: startAt,
+        });
+        if (!check.ok) return await refuse(check.reason);
         const result = await rescheduleBooking({
-          apiKey: org.calcomApiKey,
-          uid: found.externalUid,
+          apiKey: calcomKey,
+          uid: providerUid,
           startIso: new Date(startAt).toISOString(),
           reason: "Rescheduled by phone",
         });
-        if (!result.ok) return respond({ rescheduled: false, error: result.reason });
+        if (!result.ok) {
+          return await refuse("calendar-error", { provider_error: result.reason });
+        }
         // cal.com minted a new booking; carry its uid or the next cancel 404s.
         newUid = result.uid;
       }
-      await ctx.runMutation(internal.appointments.markRescheduled, {
-        appointmentId: found.appointmentId,
-        startAt,
-        externalUid: newUid,
+      const done = await ctx.runMutation(internal.agentAppointments.moveOwn, {
+        ...target,
+        to: startAt,
+        ...(newUid ? { externalUid: newUid } : {}),
+        ...(providerUid ? { providerConfirmed: true } : {}),
       });
+      if (!done.ok) return await refuse(done.reason);
       return respond({ rescheduled: true, spoken_time: spokenOf(startAt) });
     }
 

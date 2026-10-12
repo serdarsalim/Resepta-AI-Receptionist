@@ -621,6 +621,27 @@ minted inside the value memo re-triggers every effect that lists it in deps
 — the header search's claiming effect ran per keystroke and its cleanup
 wiped the query.
 
+## The assistants touch only the customer's own next appointment (2026-10-13)
+
+Both agents (phone and WhatsApp) find, move and cancel through
+[`convex/agentAppointments.ts`](convex/agentAppointments.ts). Ported from
+Nudge's `meetingTools.ts`; do not grow a second path.
+
+- **Whose comes from the channel**, the call leg or the conversation, never a
+  tool argument. The only reachable appointment is that customer's next open
+  one in that org, and the write re-reads it: still theirs, still next, still
+  at the time the agent named (`from`), else `appointment-changed`.
+- **A move is judged in the transaction that writes it**, with the booking
+  page's own helpers exported from `booking.ts`: the span fits that day's
+  hours, no closure, capacity with the row not blocking itself, no clash with
+  the customer's other bookings, a good's lead time.
+- **Six changes a day per customer** (`customers.agentChangesAt`,
+  `lib/agentChange.ts`, Nudge's number). `voiceBook` counts every booking and
+  never refuses one; a move or cancel past the sixth is refused. On the phone
+  the team is emailed (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send
+  switch) because the agent promised a colleague; in chat the agent is told
+  to call `escalate_to_staff`, which follows the handover setting.
+
 ## An action belongs to the card it acts on (2026-08-21)
 
 `Card` takes an **`action`** node, rendered hard right on the title line. Add

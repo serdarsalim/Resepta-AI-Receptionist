@@ -1174,7 +1174,11 @@ something else, which is all of them.
   tool executes bound to the (orgId, customerId) the webhook resolved; the
   model chooses arguments, never identities. No tool reads another customer,
   and no prompt text is load-bearing for safety. Do not add a tool that takes
-  a customerId or searches customers.
+  a customerId or searches customers. Existing appointments go through
+  `convex/agentAppointments.ts`, shared with the phone agent: only the
+  customer's own next one, re-read in the write, moves judged at the moment of
+  the change, six changes a day (AGENTS.md, "The assistants touch only the
+  customer's own next appointment").
 - **The disclosure line is mechanical.** `chatAgent.respond` prepends it to
   the first SENT message per customer; it is never the model's job and never
   removable per org (WhatsApp 2026 AI policy + EU AI Act Art. 50).
