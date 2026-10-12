@@ -713,7 +713,8 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   "whatever is next now": a repeat finds it already cancelled or moved and is
   a no-op answer. A voice engine older than template v14 has no
   `appointment_start`; it keeps "the next one" but is refused for three
-  minutes after any change.
+  minutes after any change, and that refusal promises a colleague, so it
+  emails the team like every other phone handover.
 - **A move is judged in the transaction that writes it**, with the booking
   page's own helpers exported from `booking.ts`: the span fits that day's
   hours, no closure, capacity with the row not blocking itself, no clash with

@@ -1076,6 +1076,16 @@ http.route({
       } else {
         if (!next) return respond({ error: "no-upcoming-appointment" });
         if (own.lastChangeAt !== null && Date.now() - own.lastChangeAt < LEGACY_REPEAT_MS) {
+          // The note promises a colleague, so the team is emailed in the same
+          // breath, as for every other handover below: nobody reads a live
+          // call, and a promise with no owner is worse than none.
+          await queueOrgAlert(ctx, {
+            orgId: org._id,
+            template:
+              name === "cancel_appointment" ? "cancelNeedsPerson" : "moveNeedsPerson",
+            who: own.customerName,
+            detail: formatAppointmentTime(next.startAt, org.timezone, org.language),
+          });
           return respond({
             error: "just-changed",
             note: "Something was just changed for this caller, so nothing more is changed on this call. If they need another change, tell them a colleague will be in touch about it.",
