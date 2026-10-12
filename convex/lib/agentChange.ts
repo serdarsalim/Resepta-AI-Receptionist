@@ -184,6 +184,7 @@ export type ApprovalFailure =
   | "change-time-not-allowed"
   | "change-appointment-changed"
   | "change-too-many"
+  | "change-too-many-upcoming"
   | "change-failed"
   | "changed-not-sent";
 
@@ -206,5 +207,6 @@ export function approvalFailureOf(reason: string): ApprovalFailure {
     return "change-appointment-changed";
   }
   if (reason === "too-many-changes") return "change-too-many";
+  if (reason.startsWith("too-many-upcoming")) return "change-too-many-upcoming";
   return "change-failed";
 }

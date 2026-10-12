@@ -19,7 +19,7 @@ import {
 import { loadClosures } from "./lib/closureRows";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
-import { MAX_LINES_PER_BOOKING } from "./lib/bookingLimits";
+import { MAX_LINES_PER_BOOKING, MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
@@ -55,10 +55,9 @@ const SLOT_STEP_MINUTES = 30;
 const MIN_NOTICE_MS = 60 * 60_000;
 // Same far-future guard as the voice lane.
 const MAX_AHEAD_MS = 400 * 24 * 60 * 60_000;
-// One phone number holds at most this many open bookings. Not a business
-// rule — a brake on a bored teenager with the link. A real family books four;
-// nobody real books six.
-const MAX_UPCOMING_PER_PHONE = 5;
+// One phone number holds at most MAX_UPCOMING_PER_PHONE open bookings
+// (lib/bookingLimits, shared with the assistants' booking path since
+// 2026-10-13).
 
 // Queries and mutations both call the helpers below, so they ask for the
 // read half of the db only — the same narrowing messageRules.rulesForOrg does.

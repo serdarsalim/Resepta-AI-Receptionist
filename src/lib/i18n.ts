@@ -1520,6 +1520,11 @@ const dictionary = {
     en: "This customer's appointments were changed through the assistant too many times today. The reply was not sent; you can make the change yourself in the calendar.",
     de: "Die Termine dieses Kunden wurden heute zu oft über den Assistenten geändert. Die Antwort wurde nicht gesendet; Sie können die Änderung selbst im Kalender vornehmen.",
   },
+  "error.change-too-many-upcoming": {
+    tr: "Randevu oluşturulmadı: müşterinin yaklaşan randevu sayısı üst sınırda. Yanıt gönderilmedi.",
+    en: "The appointment was not booked: the customer already holds as many upcoming appointments as one person can. The reply was not sent.",
+    de: "Der Termin wurde nicht gebucht: Der Kunde hat bereits so viele anstehende Termine, wie eine Person haben kann. Die Antwort wurde nicht gesendet.",
+  },
   "error.change-failed": {
     tr: "Takvimdeki değişiklik yapılamadı, bu yüzden yanıt gönderilmedi.",
     en: "The calendar change could not be made, so the reply was not sent.",

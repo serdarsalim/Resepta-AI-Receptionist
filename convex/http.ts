@@ -354,6 +354,11 @@ async function retellGuard(
   return { ok: true, payload, agentId, orgId: String(auth.orgId) };
 }
 
+// The same booking asked for twice is one booking (retell.voiceBook): the
+// agent is told so, rather than reading a second confirmation as news.
+const ALREADY_BOOKED_NOTE =
+  "They already had exactly this booked, so nothing new was made. Confirm the booking they have, once.";
+
 // What the voice tools answer when the call carries no usable caller number:
 // a hidden caller ID, a web call, or a leg that resolved to the business's own
 // line (retell.callerOfCall). Sentences the agent can act on, never a bare code
@@ -761,7 +766,7 @@ http.route({
           externalUid = booking.uid;
         }
       }
-      let booking: { serviceName?: string; serviceNames?: string[] };
+      let booking: { serviceName?: string; serviceNames?: string[]; existing?: boolean };
       try {
         booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
@@ -786,6 +791,8 @@ http.route({
         // rather than the first line of it. Shorter than what was asked for
         // means the rest matched nothing.
         services: booking.serviceNames,
+        // A retried call or a repeated yes: they already held exactly this.
+        ...(booking.existing ? { already_booked: true, note: ALREADY_BOOKED_NOTE } : {}),
       });
     }
 

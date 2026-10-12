@@ -2194,6 +2194,10 @@ async function executeTool(
             : {}),
         });
         if (!preview.ok) return { error: preview.error };
+        // Already held: approving would make nothing, so nothing is recorded.
+        if ("existing" in preview && preview.existing) {
+          return bookedAnswer(context, plan, preview);
+        }
         dry({
           kind: "book",
           name: customerName,
@@ -2503,9 +2507,17 @@ type BookingPlan = {
 function bookedAnswer(
   context: TurnContext,
   plan: BookingPlan,
-  booking: { serviceName?: string; serviceNames?: string[] },
+  booking: { serviceName?: string; serviceNames?: string[]; existing?: boolean },
 ): Record<string, unknown> {
   return {
+    // A retried call or a repeated yes (retell.voiceBook): they already held
+    // exactly this, and the reply should say so rather than book "again".
+    ...(booking.existing
+      ? {
+          already_booked: true,
+          note: "They already had exactly this booked, so nothing new was made. Confirm the booking they have, once.",
+        }
+      : {}),
     booked: true,
     // An ASAP order has no promised minute, and handing the agent one is how
     // it reads a time back that nobody agreed to.

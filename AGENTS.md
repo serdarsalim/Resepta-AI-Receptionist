@@ -641,6 +641,11 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   the team is emailed (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send
   switch) because the agent promised a colleague; in chat the agent is told
   to call `escalate_to_staff`, which follows the handover setting.
+- **A booking asked for twice is one booking**: `voiceBook` returns the
+  customer's open appointment at that exact minute (a recent ASAP order with
+  the same lines) instead of making a second, and the agents obey the booking
+  page's `MAX_UPCOMING_PER_PHONE` (`lib/bookingLimits`) through
+  `bookingProblem`, the guard list `voiceBook` and its dry run share.
 - **A chat reply that only suggests changes nothing.** In suggest and shadow
   the write tools (book, move, cancel, save) run every check, write nothing
   and record the change on the turn (`chatAgentTurns.intents`). Sending the

@@ -24,3 +24,10 @@
 // ticking a twelfth line made the slot grid answer "no free times" — a lie —
 // and the real refusal arrived after the phone number was typed.
 export const MAX_LINES_PER_BOOKING = 10;
+
+// How many open bookings one customer may hold at once. Not a business rule:
+// a brake on a bored teenager with the booking link. A real family books
+// four; nobody real books six. Moved here from booking.ts on 2026-10-13 when
+// the assistants started obeying it too (retell.bookingProblem): one brake
+// for every door a booking can come through, whatever the door.
+export const MAX_UPCOMING_PER_PHONE = 5;

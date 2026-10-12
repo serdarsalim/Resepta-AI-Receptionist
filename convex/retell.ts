@@ -41,6 +41,7 @@ import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { withChange } from "./lib/agentChange";
+import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -2146,6 +2147,46 @@ export const classifyServices = internalQuery({
   },
 });
 
+// THE SAME BOOKING ASKED FOR TWICE IS ONE BOOKING (2026-10-13). A tool call
+// the provider retried after a slow answer, or a caller saying "yes, book it"
+// a second time, used to arrive as a second booking for a person who already
+// holds that exact minute, and came back as "customer-busy" about their own
+// appointment. The booking they already hold is the answer. An ASAP order has
+// no minute to match (its startAt is when it was placed), so a recent open
+// ASAP order with the same lines stands in for it.
+const SAME_ASAP_WINDOW_MS = 5 * 60_000;
+
+async function alreadyBooked(
+  ctx: QueryCtx,
+  a: {
+    orgId: Id<"orgs">;
+    customerId: Id<"customers">;
+    startAt: number;
+    asap: boolean;
+    lineNames: string[];
+  },
+): Promise<Doc<"appointments"> | null> {
+  const rows = await ctx.db
+    .query("appointments")
+    .withIndex("by_customer", (q) => q.eq("customerId", a.customerId))
+    .collect();
+  const now = Date.now();
+  const sameLines = (row: Doc<"appointments">) =>
+    (row.items ?? []).map((item) => item.name).join("\n") === a.lineNames.join("\n");
+  return (
+    rows.find(
+      (row) =>
+        row.orgId === a.orgId &&
+        (row.status === "scheduled" || row.status === "confirmed") &&
+        (a.asap
+          ? row.fulfillment?.asap === true &&
+            now - row._creationTime < SAME_ASAP_WINDOW_MS &&
+            sameLines(row)
+          : row.startAt === a.startAt && !row.fulfillment?.asap),
+    ) ?? null
+  );
+}
+
 // Every guard a booking must clear before it is written, as the sentence the
 // agent reads back when it does not: lead time, the caller's own clash,
 // capacity, closures over the whole span, a handover the business offers.
@@ -2175,6 +2216,25 @@ async function bookingProblem(
 ): Promise<string | null> {
   const lines = a.lines;
   const totalMinutes = a.totalMinutes;
+  // The booking page's brake on how many open bookings one person may hold
+  // (lib/bookingLimits), counted the page's way: an open ASAP order counts
+  // even though its startAt is already behind us. Every door obeys it.
+  if (a.customerId) {
+    const now = Date.now();
+    const upcoming = (
+      await ctx.db
+        .query("appointments")
+        .withIndex("by_customer", (q) => q.eq("customerId", a.customerId!))
+        .collect()
+    ).filter(
+      (row) =>
+        (row.startAt > now || row.fulfillment?.asap) &&
+        (row.status === "scheduled" || row.status === "confirmed"),
+    ).length;
+    if (upcoming >= MAX_UPCOMING_PER_PHONE) {
+      return `too-many-upcoming: this customer already has ${upcoming} upcoming appointments, the most one person can hold, so nothing new was booked. Say so; they can move or cancel one of the ones they have.`;
+    }
+  }
   if (!a.providerHeld) {
     // Goods-only orders sum to 0 and fall through every occupancy guard
     // below by construction — a cake holds no chair. What a good DOES
@@ -2370,6 +2430,8 @@ export const voiceBook = internalMutation({
     // whole visit.
     serviceName: v.optional(v.string()),
     serviceNames: v.optional(v.array(v.string())),
+    // The customer already held exactly this booking; nothing was created.
+    existing: v.optional(v.boolean()),
   }),
   handler: async (ctx, args) => {
     const phone = assertE164(args.phone);
@@ -2377,6 +2439,47 @@ export const voiceBook = internalMutation({
       .query("customers")
       .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
       .unique();
+    const spokenServices =
+      args.services && args.services.length > 0
+        ? args.services
+        : args.service
+          ? [args.service]
+          : [];
+    const lines = await matchServices(ctx, args.orgId, spokenServices);
+    const line = lines[0];
+    // Double-booking guard, but only when Resepta's own book is the truth. An
+    // externalUid means cal.com already accepted this slot — it owns the
+    // inventory, and refusing here after it said yes would leave the two
+    // calendars telling different stories.
+    // The whole visit, not the first service. A haircut then a beard trim is
+    // one 45-minute block, and guarding only the first 30 would leave the
+    // second half of it bookable by somebody else.
+    const totalMinutes = lines.length
+      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
+      : undefined;
+    // Goods through and through, the same test classifyServices runs — and
+    // the same rule the booking page holds: a visit IS its own handover, so a
+    // fulfillment riding along with a haircut is dropped rather than refused.
+    const goodsOnly = lines.length > 0 && totalMinutes === 0;
+    const fulfillment = goodsOnly ? args.fulfillment : undefined;
+    if (customer) {
+      const same = await alreadyBooked(ctx, {
+        orgId: args.orgId,
+        customerId: customer._id,
+        startAt: args.startAt,
+        asap: args.fulfillment?.asap === true,
+        lineNames: lines.map((item) => item.name),
+      });
+      if (same) {
+        const names = (same.items ?? []).map((item) => item.name);
+        return {
+          appointmentId: same._id,
+          ...(names[0] ? { serviceName: names[0] } : {}),
+          ...(names.length > 0 ? { serviceNames: names } : {}),
+          existing: true,
+        };
+      }
+    }
     if (!customer) {
       const [firstName, ...rest] = args.name.trim().split(/\s+/).filter(Boolean);
       const customerId = await ctx.db.insert("customers", {
@@ -2428,29 +2531,6 @@ export const voiceBook = internalMutation({
     if (customer.consentAt === undefined) {
       await ctx.db.patch(customer._id, { consentAt: Date.now() });
     }
-    const spokenServices =
-      args.services && args.services.length > 0
-        ? args.services
-        : args.service
-          ? [args.service]
-          : [];
-    const lines = await matchServices(ctx, args.orgId, spokenServices);
-    const line = lines[0];
-    // Double-booking guard, but only when Resepta's own book is the truth. An
-    // externalUid means cal.com already accepted this slot — it owns the
-    // inventory, and refusing here after it said yes would leave the two
-    // calendars telling different stories.
-    // The whole visit, not the first service. A haircut then a beard trim is
-    // one 45-minute block, and guarding only the first 30 would leave the
-    // second half of it bookable by somebody else.
-    const totalMinutes = lines.length
-      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
-      : undefined;
-    // Goods through and through, the same test classifyServices runs — and
-    // the same rule the booking page holds: a visit IS its own handover, so a
-    // fulfillment riding along with a haircut is dropped rather than refused.
-    const goodsOnly = lines.length > 0 && totalMinutes === 0;
-    const fulfillment = goodsOnly ? args.fulfillment : undefined;
     // Every guard, in the one place the dry run shares (bookingProblem),
     // thrown as the sentence the agent reads back.
     const problem = await bookingProblem(ctx, {
@@ -2536,6 +2616,9 @@ export const previewBook = internalQuery({
       ok: v.literal(true),
       serviceName: v.optional(v.string()),
       serviceNames: v.optional(v.array(v.string())),
+      // Already held: approving would create nothing, so there is nothing to
+      // record either.
+      existing: v.optional(v.boolean()),
     }),
     v.object({ ok: v.literal(false), error: v.string() }),
   ),
@@ -2551,6 +2634,22 @@ export const previewBook = internalQuery({
           ? [args.service]
           : [];
     const lines = await matchServices(ctx, args.orgId, spoken);
+    const same = await alreadyBooked(ctx, {
+      orgId: args.orgId,
+      customerId: customer._id,
+      startAt: args.startAt,
+      asap: args.fulfillment?.asap === true,
+      lineNames: lines.map((line) => line.name),
+    });
+    if (same) {
+      const names = (same.items ?? []).map((item) => item.name);
+      return {
+        ok: true as const,
+        ...(names[0] ? { serviceName: names[0] } : {}),
+        ...(names.length > 0 ? { serviceNames: names } : {}),
+        existing: true,
+      };
+    }
     const totalMinutes = lines.length
       ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
       : undefined;

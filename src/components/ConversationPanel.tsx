@@ -93,6 +93,7 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "change-time-not-allowed": "error.change-time-not-allowed",
   "change-appointment-changed": "error.change-appointment-changed",
   "change-too-many": "error.change-too-many",
+  "change-too-many-upcoming": "error.change-too-many-upcoming",
   "change-failed": "error.change-failed",
   "changed-not-sent": "error.changed-not-sent",
   "change-needs-plain-send": "error.change-needs-plain-send",
