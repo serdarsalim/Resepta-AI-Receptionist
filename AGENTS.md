@@ -937,8 +937,14 @@ customer knows), and it never touches cal.com (300 rows are not 300 provider
 calls; the absent `externalUid` is what every reader already treats as "ours
 alone"). Customers are never minted here — `create_customers` is the door that
 asks about KVKK consent. Unplaceable rows are reported with their number and
-the reason, never dropped. Undo deletes what it created, keeping anything the
-customer has since been messaged about.
+the reason, never dropped. Undo deletes what it created that is still as it
+wrote it: an appointment the business has since moved, cancelled, re-staffed or
+otherwise changed stays, and so does one the customer has been messaged about.
+The journal records what each row was written as (since 2026-10-13), and the
+hourly auto-completion of a past booking is not a change; an import journalled
+earlier is judged by the activity feed alone. Undoing `create_customers` keeps
+anyone with an appointment, message, call or note since and deletes the rest
+through the customer deletion, never a bare row delete.
 
 ## Explanations ride the (i); surfaces carry controls and facts (2026-08-25, standing)
 

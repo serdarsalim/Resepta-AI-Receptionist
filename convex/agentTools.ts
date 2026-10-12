@@ -540,6 +540,84 @@ export const createCustomers = internalMutation({
   },
 });
 
+// What create_appointments wrote on one row, as its journal records it. The
+// undo compares against this to tell "still as imported" from "the business
+// has changed it since".
+type WrittenAppointment = {
+  startAt: number;
+  durationMinutes: number | null;
+  status: string;
+  staffId: string | null;
+  items: string;
+  notes: string | null;
+};
+
+// The services on a booking as one comparable string: which, at what price,
+// how many, how long.
+function itemsFingerprint(items: Doc<"appointments">["items"]): string {
+  return (items ?? [])
+    .map(
+      (item) =>
+        `${item.serviceId ?? ""}:${item.name}:${item.price ?? ""}:${item.quantity ?? 1}:${item.durationMinutes}`,
+    )
+    .join("|");
+}
+
+// Why an imported appointment must survive the undo of its import, or null
+// when it is still exactly what the import wrote and nothing hangs off it.
+async function importDrift(
+  ctx: MutationCtx,
+  appointment: Doc<"appointments">,
+  was: WrittenAppointment | undefined,
+  importedAt: number,
+): Promise<"moved" | "changed" | "messaged" | null> {
+  // The customer has been told about it: their thread points at this row.
+  const message = await ctx.db
+    .query("messages")
+    .withIndex("by_appointment", (q) => q.eq("appointmentId", appointment._id))
+    .first();
+  if (message) return "messaged";
+  // What a person did to it since the import, as the activity feed recorded
+  // it. A move always writes a row; a status change does when a person made
+  // it, and the hourly completePast never does.
+  const since = (
+    await ctx.db
+      .query("activityLog")
+      .withIndex("by_customer", (q) => q.eq("customerId", appointment.customerId))
+      .order("desc")
+      .take(200)
+  ).filter((row) => row.appointmentId === appointment._id && row._creationTime > importedAt);
+  const personMoved = since.some((row) => row.kind === "appointment_moved");
+  const personSetStatus = since.some((row) => row.kind === "appointment_status");
+  // Journalled before rows were recorded: the feed is the only witness, and a
+  // change nobody logged (a customer cancelling on their own) cannot be seen.
+  if (!was) return personMoved ? "moved" : personSetStatus ? "changed" : null;
+  if (
+    personMoved ||
+    appointment.startAt !== was.startAt ||
+    (appointment.durationMinutes ?? null) !== was.durationMinutes
+  ) {
+    return "moved";
+  }
+  if (appointment.status !== was.status) {
+    // The one change that is nobody's decision: a booking whose time passed,
+    // completed by the hourly sweep.
+    const completedByTheClock =
+      appointment.status === "completed" &&
+      (was.status === "scheduled" || was.status === "confirmed") &&
+      !personSetStatus;
+    if (!completedByTheClock) return "changed";
+  }
+  if (
+    (appointment.staffId ?? null) !== was.staffId ||
+    itemsFingerprint(appointment.items) !== was.items ||
+    (appointment.notes ?? null) !== was.notes
+  ) {
+    return "changed";
+  }
+  return null;
+}
+
 // Seed the calendar: appointments a business already has, brought in from
 // whatever it kept the book in before.
 //
@@ -639,6 +717,9 @@ export const createAppointments = internalMutation({
     ]);
 
     const created: { id: string; when: number; customer: string }[] = [];
+    // What each row was written as, journalled so an undo can tell an
+    // appointment the business has since changed from one still as imported.
+    const written: Record<string, WrittenAppointment> = {};
     const skipped: { row: number; why: string }[] = [];
 
     for (const [index, row] of appointments.entries()) {
@@ -794,6 +875,14 @@ export const createAppointments = internalMutation({
         agent: { actorId: userId, connectionId, agentActionId: undefined },
       });
       created.push({ id: appointmentId, when: startAt, customer: fullName(customer) });
+      written[appointmentId] = {
+        startAt,
+        durationMinutes: durationMinutes ?? null,
+        status,
+        staffId: staff?._id ?? null,
+        items: itemsFingerprint(items),
+        notes: row.notes?.trim() || null,
+      };
     }
 
     if (created.length === 0) {
@@ -812,7 +901,7 @@ export const createAppointments = internalMutation({
       targetTable: "appointments",
       targetId: created[0]?.id ?? "",
       before: null,
-      after: { createdIds: created.map((row) => row.id) },
+      after: { createdIds: created.map((row) => row.id), written },
       reversible: true,
     });
 
@@ -2045,64 +2134,83 @@ export const undo = internalMutation({
       const kept: string[] = [];
       for (const id of ids) {
         const customer = await ctx.db.get(id as Id<"customers">).catch(() => null);
-        if (!customer || customer.orgId !== orgId) continue;
-        // A customer who has DONE something since is no longer just an
-        // imported row. Deleting one with an appointment on the book leaves a
-        // dangling customerId that every read path dereferences, so the import
-        // is unwound around them and they are named back. Same rule as the
-        // other branches: undo takes back its own change, it does not win
-        // races with the business.
-        const appointment = await ctx.db
-          .query("appointments")
-          .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
-          .first();
-        const message = await ctx.db
-          .query("messages")
-          .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
-          .first();
-        if (appointment || message) {
+        // Gone already, or on its way out through a delete of its own.
+        if (!customer || customer.orgId !== orgId || isDeleting(customer)) continue;
+        // A customer who has DONE something since, or whom a person has
+        // written about, is no longer just an imported row: a booking, a
+        // message, a call or a note is the business's record, not the
+        // import's. The import is unwound around them and they are named
+        // back. Same rule as the other branches: undo takes back its own
+        // change, it does not win races with the business.
+        const since = await Promise.all(
+          (["appointments", "messages", "calls", "notes"] as const).map((table) =>
+            ctx.db
+              .query(table)
+              .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+              .first(),
+          ),
+        );
+        if (since.some((row) => row !== null)) {
           kept.push(fullName(customer));
           continue;
         }
-        await ctx.db.delete(customer._id);
+        // Through the one deletion path, so whatever else hangs off an
+        // imported row (its activity line, a read mark, a run entry) goes
+        // with it instead of pointing at nobody. Quiet: this undo's own feed
+        // line is the record.
+        await beginCustomerDeletion(ctx, customer, { quiet: true });
         removed += 1;
       }
       summary =
         `Removed ${removed} imported customer${removed === 1 ? "" : "s"}.` +
         (kept.length > 0
-          ? ` Kept ${kept.length} who already have appointments or messages: ${kept.join(", ")}.`
+          ? ` Kept ${kept.length} who already have appointments, messages, calls or notes: ${kept.join(", ")}.`
           : "");
     } else if (action.tool === "create_appointments") {
-      // Only what this call inserted. An appointment the salon has since
-      // MOVED, cancelled or marked no-show is theirs now, not the import's —
-      // deleting it would take a real decision with it, and the drift rule
-      // everywhere else in this file says undo takes back its own change and
-      // does not win races. Anything with a message hanging off it stays too:
-      // a customer who has been told about this appointment has an
+      // Only what this call inserted, and only what is still as it wrote it.
+      // An appointment the business has since MOVED, cancelled, marked
+      // no-show, re-staffed or otherwise changed is theirs now, not the
+      // import's: deleting it would take a real decision with it, and the
+      // drift rule everywhere else in this file says undo takes back its own
+      // change and does not win races. Anything with a message hanging off it
+      // stays too: a customer who has been told about this appointment has an
       // appointmentId in their thread that every read path dereferences.
-      const ids = ((after as unknown as { createdIds?: string[] }).createdIds ?? []);
+      //
+      // This comment promised that before the journal could keep it: the row
+      // recorded only the ids, so a moved or cancelled import was deleted
+      // anyway. Since 2026-10-13 the journal records what each row was
+      // written as (importDrift compares against it); a row journalled
+      // earlier is judged by the activity feed alone.
+      const recorded = after as unknown as {
+        createdIds?: string[];
+        written?: Record<string, WrittenAppointment>;
+      };
       let removed = 0;
-      const kept: string[] = [];
-      for (const id of ids) {
+      const kept = { moved: 0, changed: 0, messaged: 0 };
+      for (const id of recorded.createdIds ?? []) {
         const appointment = await ctx.db
           .get(id as Id<"appointments">)
           .catch(() => null);
         if (!appointment || appointment.orgId !== orgId) continue;
-        const message = await ctx.db
-          .query("messages")
-          .withIndex("by_customer", (q) => q.eq("customerId", appointment.customerId))
-          .filter((q) => q.eq(q.field("appointmentId"), appointment._id))
-          .first();
-        if (message) {
-          kept.push("one the customer has already been messaged about");
+        const why = await importDrift(ctx, appointment, recorded.written?.[id], action.at);
+        if (why) {
+          kept[why] += 1;
           continue;
         }
         await ctx.db.delete(appointment._id);
         removed += 1;
       }
+      const keptParts = [
+        kept.moved > 0 ? `${kept.moved} moved since` : null,
+        kept.changed > 0 ? `${kept.changed} cancelled or otherwise changed since` : null,
+        kept.messaged > 0
+          ? `${kept.messaged} the customer has been messaged about`
+          : null,
+      ].filter((part): part is string => part !== null);
+      const keptTotal = kept.moved + kept.changed + kept.messaged;
       summary =
         `Removed ${removed} seeded appointment${removed === 1 ? "" : "s"}.` +
-        (kept.length > 0 ? ` Kept ${kept.length}: ${kept[0]}.` : "");
+        (keptTotal > 0 ? ` Kept ${keptTotal}: ${keptParts.join(", ")}.` : "");
     } else if (action.tool === "log_activity") {
       const callIds = ((after as unknown as { callIds?: string[] }).callIds ?? []);
       const messageIds = ((after as unknown as { messageIds?: string[] }).messageIds ?? []);
