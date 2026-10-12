@@ -50,6 +50,16 @@ function fold(word: string): string {
     .trim();
 }
 
+// A name as a recogniser hint: letters, digits, spaces and the punctuation
+// names really carry (apostrophe, hyphen, full stop, ampersand). Brackets,
+// slashes and symbols are not words, so "Saç kesimi (kadın)" is sent as "Saç
+// kesimi kadın", and nothing the provider might refuse rides a publish that
+// also carries the owner's prompt. Applied to OUR words only; a word somebody
+// else placed on the agent goes back exactly as they wrote it.
+function tidy(word: string): string {
+  return word.replace(/[^\p{L}\p{N}\s'’.&-]+/gu, " ").replace(/\s+/g, " ").trim();
+}
+
 // First spelling wins, blanks and over-long entries dropped, capped.
 function dedupe(words: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -88,7 +98,9 @@ export function orgKeywords(args: {
   staff: readonly Ordered[];
   services: readonly Ordered[];
 }): string[] {
-  return dedupe([args.businessName, ...inOrder(args.staff), ...inOrder(args.services)]);
+  return dedupe(
+    [args.businessName, ...inOrder(args.staff), ...inOrder(args.services)].map(tidy),
+  );
 }
 
 /** The list to publish: words somebody else placed on the agent, then ours.
