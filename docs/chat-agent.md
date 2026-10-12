@@ -88,6 +88,10 @@ with per-visitor rate limits if the demo needs it.
   result shape; `appendToolRound` hides the two dialects' tool-replay
   asymmetry from the agent loop. Model, prices and the template version are
   recorded on every turn.
+- **Only a round with no tool call is a reply** (2026-10-13, Nudge's rule).
+  Text the model writes beside a tool call was written before the tool
+  answered, so it is never sent; a turn that hits `MAX_TOOL_ROUNDS` still
+  calling tools is recorded as `tool-limit` with nothing sent.
 - **Provider choice** is a fleet-page setting (`chatAgentProvider`,
   anthropic | openai) with both keys storable at once, an optional
   per-provider deployment-wide model pick (`anthropicModel` / `openaiModel`,

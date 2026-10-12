@@ -1449,6 +1449,9 @@ export const respond = internalAction({
     let inputTokens = 0;
     let outputTokens = 0;
     let finalText = "";
+    // Whether a round came back with no tool call: the only kind of round
+    // whose text is a reply.
+    let answered = false;
 
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
       const result = await chatComplete({
@@ -1471,11 +1474,22 @@ export const respond = internalAction({
       }
       inputTokens += result.inputTokens;
       outputTokens += result.outputTokens;
-      finalText = result.text || finalText;
-      if (result.toolUses.length === 0) break;
+      // Only a round that calls no tool is an ANSWER (2026-10-13, Nudge's
+      // chatEngine rule: "a respond written beside a tool call is not sent").
+      // Text the model writes in the same breath as a tool call was written
+      // before the tool replied: "let me check" at best, "you're booked" for
+      // a booking the tool then refused at worst. It used to become the reply
+      // whenever no later round wrote anything.
+      if (result.toolUses.length === 0) {
+        finalText = result.text;
+        answered = true;
+        break;
+      }
       if (round === MAX_TOOL_ROUNDS) {
-        // The model is still asking for tools at the cap. Whatever text it
-        // produced stands; an unfinished plan must not loop the budget away.
+        // Still asking for tools at the cap, so there is no answer, and this
+        // round's text was written blind like any other. Recorded below as
+        // tool-limit, never sent; an unfinished plan must not loop the
+        // budget away either.
         break;
       }
       // Execute every requested tool, then hand the results back in the
@@ -1495,13 +1509,13 @@ export const respond = internalAction({
       appendToolRound(llm.provider, messages, result, toolResults);
     }
 
-    if (!finalText.trim()) {
+    if (!answered || !finalText.trim()) {
       await record({
         status: "error",
         toolCalls: toolLog,
         inputTokens,
         outputTokens,
-        error: "empty-reply",
+        error: answered ? "empty-reply" : "tool-limit",
       });
       return null;
     }
