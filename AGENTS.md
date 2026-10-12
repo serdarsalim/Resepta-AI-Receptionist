@@ -639,10 +639,10 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   `lib/agentChange.ts`, Nudge's number), shared with the customer's own manage
   page (`/appt/<token>`, whose every move re-sends a confirmation).
   `voiceBook` counts every booking and never refuses one; a move or cancel
-  past the sixth is refused. On the phone
-  the team is emailed (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send
-  switch) because the agent promised a colleague; in chat the agent is told
-  to call `escalate_to_staff`, which follows the handover setting.
+  past the sixth is refused. On the phone the team is emailed
+  (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send switch) because the
+  agent promised a colleague; in chat the agent is told to call
+  `escalate_to_staff`, which follows the handover setting.
 - **A "no" about a time carries the nearest free times**
   (`retell.nearestFreeTimes`, built on the booking page's `freeStarts`, so
   what it offers the write will accept). Both lanes' `check_availability`
