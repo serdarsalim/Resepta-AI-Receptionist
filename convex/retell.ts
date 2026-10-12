@@ -1890,11 +1890,15 @@ export const verifyRuntimeToken = internalQuery({
   },
 });
 
+// The legacy MCP's get_call_context (voiceMcp.ts). It takes NO phone since
+// 2026-10-13: the only number that request could carry was one the model typed,
+// so it answered with whichever customer owned that number. It now returns the
+// business half only. The caller's own card already reached the agent as ring-
+// time variables (beforeCallContext), from the call leg.
 export const runtimeCallContext = internalQuery({
   args: {
     orgId: v.id("orgs"),
     retellAgentId: v.string(),
-    phone: v.string(),
   },
   returns: v.any(),
   handler: async (ctx, args) => {
@@ -1907,13 +1911,6 @@ export const runtimeCallContext = internalQuery({
     }
     const org = await ctx.db.get(args.orgId);
     if (!org) throw new Error("business-not-found");
-    const phone = toE164(args.phone);
-    const customer = phone
-      ? await ctx.db
-          .query("customers")
-          .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
-          .unique()
-      : null;
     // The services table is deliberately NOT read here any more. Nothing in
     // the response needs it, and this query runs while a caller is holding.
     const [variables, fields, staffRows] = await Promise.all([
@@ -1950,14 +1947,11 @@ export const runtimeCallContext = internalQuery({
         // prompt already carries the same rule once.
         note: "Business local time now. Resolve relative times against this.",
       },
-      caller: customer
-        ? {
-            known: true,
-            name: [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim(),
-            phone: customer.phone,
-            language: customer.language ?? org.language,
-          }
-        : { known: false, phone: phone ?? args.phone },
+      // A note, not a record: see the header. Saying "unknown" here would
+      // contradict the caller's card the agent was given at ring time.
+      caller: {
+        note: "Who the caller is was given in your instructions before the call. This tool does not identify callers.",
+      },
       // Both destinations that end up on the customer. A row the agent is
       // never told about is a row it never collects, so "customer" has to be
       // here or the name goes on being asked for and dropped.
@@ -1987,17 +1981,6 @@ export const runtimeCallContext = internalQuery({
           return !field || field.source === "voice";
         })
         .map((variable) => {
-          const field = variable.contactFieldId
-            ? fieldsById.get(String(variable.contactFieldId))
-            : null;
-          const builtIn =
-            variable.destination === "customer" && customer
-              ? variable.customerField === "email"
-                ? customer.email ?? null
-                : variable.customerField === "lastName"
-                  ? customer.lastName ?? null
-                  : customer.firstName || null
-              : null;
           return {
             key: variable.key,
             label: variable.label,
@@ -2011,7 +1994,9 @@ export const runtimeCallContext = internalQuery({
                 : variable.duringMode === "if_missing"
                   ? "ask when missing"
                   : "do not ask",
-            currentValue: field && customer ? customer.custom?.[field.key] ?? null : builtIn,
+            // What the caller already has on file arrived as ring-time
+            // variables; this request cannot say whose record to read.
+            currentValue: null,
           };
         }),
       // Who works here. The agent has never been told, so a caller asking for
@@ -2523,6 +2508,48 @@ export const bookedBetween = internalQuery({
         durationMinutes: row.durationMinutes ?? null,
       })),
     };
+  },
+});
+
+// WHO IS ON THIS CALL, decided from the call and nothing else (2026-10-13).
+// The customer's leg by direction, exactly the reading recordCall makes after
+// the call: from_number on an inbound call, to_number on an outbound one,
+// where from_number is the business's own line. Read with the org's dial code,
+// because the trunk delivers national-format caller IDs (05386906897, live 18
+// Aug 2026), and never one of the business's own numbers (orgOwnNumbers).
+//
+// A phone number the MODEL passes is not an input here, and that is the point.
+// /retell/functions used to prefer `args.phone` over the call itself, so a
+// caller who read out somebody else's number could have the agent find, move
+// or cancel that person's appointment, or save details onto their record. The
+// agent hears whatever it is told; the call leg is what Retell signed.
+//
+// Both null when the call carries no usable number: a hidden caller ID, a web
+// call, or a leg that resolved to the business itself. Callers refuse the
+// tools that need to know who this is rather than guessing.
+export const callerOfCall = internalQuery({
+  args: {
+    orgId: v.id("orgs"),
+    direction: v.optional(v.string()),
+    fromNumber: v.optional(v.string()),
+    toNumber: v.optional(v.string()),
+  },
+  returns: v.object({
+    phone: v.union(v.string(), v.null()),
+    customerId: v.union(v.id("customers"), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const none = { phone: null, customerId: null };
+    const org = await ctx.db.get(args.orgId);
+    if (!org) return none;
+    const raw = args.direction === "outbound" ? args.toNumber : args.fromNumber;
+    const phone = raw ? toE164(raw, dialCodeForTimezone(org.timezone)) : null;
+    if (!phone || (await orgOwnNumbers(ctx, args.orgId)).has(phone)) return none;
+    const customer = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
+      .unique();
+    return { phone, customerId: customer?._id ?? null };
   },
 });
 

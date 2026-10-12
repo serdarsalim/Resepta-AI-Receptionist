@@ -202,11 +202,18 @@ and neither read nor write anything.
 The runtime connection is private and agent-specific:
 
 - `/retell/inbound` injects current before-call context for an incoming caller.
-- `/retell/mcp` exposes only `get_call_context` and `save_customer_details`.
-  The clear runtime token is written once to the provider; Resepta stores only
-  its hash.
+- `/retell/mcp` exposes only `get_call_context` and `save_customer_details`,
+  and only to agents published before template v10. The clear runtime token is
+  written once to the provider; Resepta stores only its hash. The token names
+  the agent, not the call, so since 2026-10-13 neither tool identifies a
+  caller: `get_call_context` returns the business context only, and
+  `save_customer_details` refuses (the caller used to be whatever `phone` the
+  model passed). One publish moves an agent to the custom function, which
+  reads its caller from the call.
 - `/retell/functions` handles appointment availability, booking, lookup,
-  cancellation and rescheduling.
+  cancellation and rescheduling. It knows the caller from the call leg Retell
+  signs (`retell.callerOfCall`), never from a tool argument; a call with no
+  usable number gets spoken refusals from every tool that needs one.
 - `/retell/call-ended` receives both the immediate call-ended event and the
   later analyzed event.
 

@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import {
   verifyMetaSignature,
@@ -34,7 +35,6 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
-import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 
 const http = httpRouter();
 auth.addHttpRoutes(http);
@@ -351,6 +351,31 @@ async function retellGuard(
   return { ok: true, payload, agentId, orgId: String(auth.orgId) };
 }
 
+// What the voice tools answer when the call carries no usable caller number:
+// a hidden caller ID, a web call, or a leg that resolved to the business's own
+// line (retell.callerOfCall). Sentences the agent can act on, never a bare code
+// that turns into "something went wrong" down the phone. Each one tells the
+// agent NOT to take a number from the caller instead: a number read out loud
+// is anybody's, and acting on it is the hole the call leg closes.
+const NO_CALLER_NUMBER = {
+  book: {
+    error: "no-caller-number",
+    note:
+      "This call has no caller number (hidden caller ID or an internet call), so no booking can be made on it. Do not ask for their number to book with instead. Say so plainly and ask them to call back from their own phone with caller ID on.",
+  },
+  appointments: {
+    error: "no-caller-number",
+    note:
+      "This call has no caller number (hidden caller ID or an internet call), so their appointments cannot be looked up or changed on it. Do not ask for their number to look one up instead. Say so plainly and ask them to call back from the phone they booked with, with caller ID on.",
+  },
+  save: {
+    saved: false,
+    reason: "no-caller-number",
+    message:
+      "This call has no caller number, so nothing can be saved to a customer record during it. Carry on with the call and do not say anything was saved.",
+  },
+};
+
 // Short English sentence for the model to relay in the call's own language.
 // The arrays next to it are what a transcript reader checks. Each rejection
 // bucket gets its own clause: "did not stick" is useless to whoever reads the
@@ -473,21 +498,29 @@ http.route({
     });
     if (!context) return respond({ error: "agent-not-configured" });
     const { org } = context;
-    // The customer's leg by direction — on an outbound call from_number is the
-    // agent's own line — normalized once with the org's dial code, because the
-    // trunk delivers national-format caller IDs (05386906897, live 18 Aug
-    // 2026). Everything downstream (voiceBook's assertE164, cal.com, contact
-    // updates) then speaks one identity. Kept raw when unreadable so the
-    // failure stays visible in the responses rather than becoming "".
-    const rawCallerPhone = String(
-      args.phone ??
-        ((call as { direction?: string }).direction === "outbound"
-          ? call.to_number
-          : call.from_number) ??
-        "",
-    );
-    const callerPhone =
-      normalisePhone(rawCallerPhone, dialCodeForTimezone(org.timezone)) ?? rawCallerPhone;
+    // WHO IS CALLING comes from the call, never from the model (2026-10-13).
+    // The customer's leg by direction, normalized with the org's dial code and
+    // never the business's own line: retell.callerOfCall, the same reading
+    // recordCall makes once the call ends. This used to prefer `args.phone`,
+    // so a caller who read out somebody else's number could have that
+    // person's appointment found, moved or cancelled, or details saved onto
+    // their record. A phone argument an older agent still sends is ignored.
+    //
+    // null = no usable number: a hidden caller ID, a web call, or a leg that
+    // resolved to the business itself. Every tool that needs to know whose
+    // record this is refuses then, with a sentence the agent can say.
+    //
+    // Resolved on first use, not up front: check_availability is the tool an
+    // agent calls most and needs no caller, and every round trip here is
+    // silence on a live line.
+    let caller: { phone: string | null; customerId: Id<"customers"> | null } | null = null;
+    const callerOfCall = async () =>
+      (caller ??= await ctx.runQuery(internal.retell.callerOfCall, {
+        orgId: org._id,
+        direction: String(call.direction ?? "") || undefined,
+        fromNumber: String(call.from_number ?? "") || undefined,
+        toNumber: String(call.to_number ?? "") || undefined,
+      }));
 
     // Loaded once for the whole tool call, because startRefusal below is a
     // synchronous closure and check_availability needs the same rows — two
@@ -677,8 +710,13 @@ http.route({
       // book two hours late in summer Vienna.
       const startAt = parseLocalStart(String(args.start ?? ""), org.timezone);
       const customerName = String(args.name ?? "").trim();
-      if (Number.isNaN(startAt) || !customerName || !callerPhone) {
-        return respond({ error: "missing-name-phone-or-start" });
+      // Nudge's rule for a booking nobody can be identified for: refuse it and
+      // say why. A number the caller reads out is exactly what must not be
+      // booked against, so the agent is told not to ask for one.
+      const callerPhone = (await callerOfCall()).phone;
+      if (!callerPhone) return respond(NO_CALLER_NUMBER.book);
+      if (Number.isNaN(startAt) || !customerName) {
+        return respond({ error: "missing-name-or-start" });
       }
       const refusal = startRefusal(startAt, "booked");
       if (refusal) return respond(refusal);
@@ -756,7 +794,8 @@ http.route({
     // prompt teaches — it arrived here from the runtime MCP surface (template
     // v10), where Retell's round trip cost ~12 seconds of dead air per save.
     if (name === "update_contact" || name === "save_customer_details") {
-      if (!callerPhone) return respond({ saved: false, message: "No number for this contact." });
+      const callerPhone = (await callerOfCall()).phone;
+      if (!callerPhone) return respond(NO_CALLER_NUMBER.save);
       const values = voiceValuesFromToolArgs(args);
       if (Object.keys(values).length === 0) {
         return respond({ saved: false, updated: [], ignored: [], message: "Nothing to save." });
@@ -803,7 +842,8 @@ http.route({
       name === "cancel_appointment" ||
       name === "reschedule_appointment"
     ) {
-      if (!callerPhone) return respond({ error: "missing-phone" });
+      const callerPhone = (await callerOfCall()).phone;
+      if (!callerPhone) return respond(NO_CALLER_NUMBER.appointments);
       const found = await ctx.runQuery(internal.retell.nextAppointmentForPhone, {
         orgId: org._id,
         phone: callerPhone,

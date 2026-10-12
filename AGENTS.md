@@ -569,6 +569,18 @@ E.164" is disproven and must not return as an assumption. `orgOwnNumbers` is
 a hard guard wherever voice creates or matches a contact — the business is
 never its own customer.
 
+**The agent's tools read the caller from that same leg, never from a model
+argument** (2026-10-13). `/retell/functions` resolves who is calling through
+`retell.callerOfCall` and ignores any `phone` an agent sends: a number read out
+loud is anybody's, and the old `args.phone ?? from_number` let a caller act on
+another customer's record. No usable number (hidden caller ID, web call, the
+business's own line) means book, save and find/cancel/reschedule refuse with a
+sentence the agent can say, which also tells it not to take a number instead.
+The legacy `/retell/mcp` carries no call at all, so it identifies nobody:
+`get_call_context` answers the business half and `save_customer_details`
+refuses. Never add a tool argument that names a customer, a phone or an
+appointment.
+
 **Numbers.** `agentLines` is the per-number, per-direction binding table
 (inbound and outbound may be different agents), reconciled from every clean
 roster read and written directly by `attachLine`/`detachLine`. Provisioning

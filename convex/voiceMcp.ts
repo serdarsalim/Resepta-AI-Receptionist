@@ -9,6 +9,19 @@
 // publish. This server stays up for agents whose owners have published
 // nothing since v10 — their engines still hold the MCP tool and it must keep
 // answering. Remove it only when no enabled agent predates v10.
+//
+// NO TOOL HERE KNOWS WHO IS CALLING (2026-10-13). Both tools used to take the
+// caller's identity as a `phone` argument the model filled in from
+// {{user_number}}, which made identity whatever the model was told: a caller
+// reading out somebody else's number got that person's record read back and
+// written to. /retell/functions now reads the caller from the call leg Retell
+// signs (retell.callerOfCall). This transport carries no call at all, only the
+// agent's bearer token: the MCP entry these agents were published with has an
+// Authorization header and nothing per call, and the publish that could add
+// one also removes these tools (retellAgent.withRuntimeSaveTool). So the
+// business context still answers, nothing customer-specific does, and a save
+// is refused. One publish moves an agent onto the custom function, which
+// knows its caller.
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -18,10 +31,8 @@ import {
   jsonResponse,
   NOT_STREAMABLE_HTTP,
   serveMcp,
-  str,
   type ToolDef,
 } from "./lib/mcpProtocol";
-import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 import {
   agentFromVoiceRuntimeToken,
   hashVoiceRuntimeToken,
@@ -39,26 +50,17 @@ const TOOLS: ToolDef<ActionCtx, Who>[] = [
     name: "get_call_context",
     title: "Get the latest customer and business context",
     description:
-      "Read this caller's Resepta record, the information this business collects, who works here, and the local date and time right now. Services and prices are NOT here and do not need to be — they are already in your instructions, injected before the call. Call this before asking for customer details, and before turning anything the caller says about timing into a booking. For a phone call, pass the system {{user_number}} value as phone.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        phone: {
-          type: "string",
-          description: "Caller number in international form. Use {{user_number}}.",
-        },
-      },
-      required: ["phone"],
-      additionalProperties: false,
-    },
+      "Read the information this business collects, who works here, and the local date and time right now. Who the caller is was given in your instructions before the call. Services and prices are NOT here and do not need to be: they are already in your instructions, injected before the call. Call this before turning anything the caller says about timing into a booking.",
+    // No `phone` any more, and no additionalProperties lock: an engine
+    // published before 2026-10-13 still sends the argument it was taught, and
+    // that call must keep answering rather than fail validation. It is read
+    // by nothing.
+    inputSchema: { type: "object", properties: {} },
     annotations: { readOnlyHint: true, idempotentHint: true },
-    handler: async (ctx, args, who) => {
-      const phone = str(args, "phone");
-      if (!phone) throw new Error("phone is required");
+    handler: async (ctx, _args, who) => {
       const context = await ctx.runQuery(internal.retell.runtimeCallContext, {
         orgId: who.orgId,
         retellAgentId: who.retellAgentId,
-        phone,
       });
       // Stringified HERE rather than left to toolContent, which pretty-prints
       // with two-space indentation. That is right for the office MCP, whose
@@ -77,14 +79,10 @@ const TOOLS: ToolDef<ActionCtx, Who>[] = [
     name: "save_customer_details",
     title: "Save details the caller provided",
     description:
-      "Save information immediately after the caller provides or explicitly confirms it. Use only keys returned by get_call_context. Never guess a value. For a phone call, pass {{user_number}} as phone. Repeating the same save is safe.",
+      "Not available on this connection: details the caller gives cannot be saved during the call here. Do not tell the caller anything was saved.",
     inputSchema: {
       type: "object",
       properties: {
-        phone: {
-          type: "string",
-          description: "Caller number in international form. Use {{user_number}}.",
-        },
         values: {
           type: "object",
           description: "Configured information key to the caller-confirmed value.",
@@ -93,28 +91,20 @@ const TOOLS: ToolDef<ActionCtx, Who>[] = [
           },
         },
       },
-      required: ["phone", "values"],
-      additionalProperties: false,
     },
     annotations: { idempotentHint: true },
-    handler: async (ctx, args, who) => {
-      const phone = str(args, "phone");
-      if (!phone) throw new Error("phone is required");
-      const values = voiceValuesFromToolArgs(args);
-      if (Object.keys(values).length === 0) throw new Error("values are required");
-      const result = await ctx.runMutation(internal.retell.updateContactFromVoice, {
-        retellAgentId: who.retellAgentId,
-        phone,
-        values,
-      });
-      if (!result.ok) return { saved: false, reason: result.reason };
-      return {
-        saved: result.updated.length > 0,
-        updated: result.updated,
-        rejected: result.rejected,
-        ignored: result.ignored,
-      };
-    },
+    // Refused, never written. The only identity this request carries is the
+    // one the model typed into `phone`, and writing to whichever customer
+    // owns that number is the hole this file closed (see the header). The
+    // values still reach the record the way every call's do: the post-call
+    // analysis, which identifies the caller from the call (voiceEvents →
+    // retell.updateContactFromVoice, fill-only-missing).
+    handler: async () => ({
+      saved: false,
+      reason: "caller-not-identified",
+      message:
+        "Saving is not available on this connection. Carry on with the call and do not say anything was saved.",
+    }),
   },
 ];
 
@@ -136,6 +126,6 @@ export const handler = httpAction(async (ctx, req) => {
     tools: TOOLS,
     serverInfo: SERVER_INFO,
     instructions:
-      "Resepta is the source of truth for what this business sells, what it charges and what time it is where it is. Quote prices only from the service list in your instructions, never from memory, and read the wording there aloud as written — it is already shaped for speech, with no symbols, abbreviations or thousands separators. Resolve every relative time the caller says against the local date and time this returns. Read call context before collecting customer information. Save only details the caller actually provided or confirmed, using the exact configured keys. Never invent or infer a value during the live call; post-call reconciliation handles missed information separately.",
+      "Resepta is the source of truth for what this business sells, what it charges and what time it is where it is. Quote prices only from the service list in your instructions, never from memory, and read the wording there aloud as written — it is already shaped for speech, with no symbols, abbreviations or thousands separators. Resolve every relative time the caller says against the local date and time this returns. Who the caller is was given in your instructions before the call; nothing here identifies a caller or saves to their record. Never invent or infer a value during the live call.",
   });
 });
