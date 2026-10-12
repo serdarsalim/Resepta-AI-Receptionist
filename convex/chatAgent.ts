@@ -3000,12 +3000,14 @@ async function applyIntentsTx(
               from: intent.from,
               ...named,
               to: intent.to,
+              reach: "whatsapp",
             })
           : await cancelOwnTx(ctx, {
               orgId: a.orgId,
               customerId: a.customerId,
               from: intent.from,
               ...named,
+              reach: "whatsapp",
             });
       if (!done.ok) throw draftRefusal(index, done.reason, undefined, done.choices);
       results.push({

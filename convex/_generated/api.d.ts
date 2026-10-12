@@ -63,6 +63,7 @@ import type * as lib_inboundAddress from "../lib/inboundAddress.js";
 import type * as lib_industryPresetStore from "../lib/industryPresetStore.js";
 import type * as lib_industryPresets from "../lib/industryPresets.js";
 import type * as lib_keys from "../lib/keys.js";
+import type * as lib_lifecycleSend from "../lib/lifecycleSend.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
 import type * as lib_mediaKind from "../lib/mediaKind.js";
@@ -194,6 +195,7 @@ declare const fullApi: ApiFromModules<{
   "lib/industryPresetStore": typeof lib_industryPresetStore;
   "lib/industryPresets": typeof lib_industryPresets;
   "lib/keys": typeof lib_keys;
+  "lib/lifecycleSend": typeof lib_lifecycleSend;
   "lib/llm": typeof lib_llm;
   "lib/mcpProtocol": typeof lib_mcpProtocol;
   "lib/mediaKind": typeof lib_mediaKind;

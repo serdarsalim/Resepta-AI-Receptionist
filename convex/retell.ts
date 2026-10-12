@@ -51,6 +51,7 @@ import {
   sameServiceNames,
   withChange,
 } from "./lib/agentChange";
+import { lifecycleReaches } from "./lib/lifecycleSend";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { callErased } from "./lib/customerDeletion";
@@ -2775,8 +2776,21 @@ export async function agentBookTx(
     customerId: customer._id,
     appointmentId,
   });
+  // Whether the business's own confirmation will REACH them where this
+  // assistant speaks, judged by the send path's own predicates
+  // (lib/lifecycleSend): the chat assistant stays quiet on it, so only their
+  // WhatsApp conversation counts there; the phone agent may promise "a
+  // message will follow" for any channel. A scheduled message that is bound
+  // to fail (no approved template in their language, an email-only rule)
+  // used to count, and the chat customer heard nothing at all.
   const notified =
-    (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0;
+    (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0 &&
+    (await lifecycleReaches(
+      ctx,
+      appointmentId,
+      "booking",
+      args.source === "chat" ? "whatsapp" : "any",
+    ));
   // Every caller of this mutation is an assistant (phone or chat), so every
   // booking here counts toward the customer's daily change cap
   // (lib/agentChange.ts); past it, bookingProblem refuses the next one.

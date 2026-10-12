@@ -78,6 +78,7 @@ import {
 import { loadClosures } from "./lib/closureRows";
 import { customerConflict } from "./lib/overlap";
 import { recordActivity, statusChange } from "./lib/activity";
+import { lifecycleReaches } from "./lib/lifecycleSend";
 
 // The agents' own tolerances, the same two numbers their booking guards use:
 // a start a few minutes behind the clock is someone finishing a sentence, and
@@ -373,6 +374,11 @@ async function moveRefusal(
   return null;
 }
 
+// Where a change's message must reach the customer for `notified` to say it
+// will (lib/lifecycleSend.lifecycleReaches).
+type Reach = "whatsapp" | "any";
+const reachValidator = v.union(v.literal("whatsapp"), v.literal("any"));
+
 const targetArgs = {
   orgId: v.id("orgs"),
   customerId: v.id("customers"),
@@ -475,6 +481,9 @@ export async function moveOwnTx(
     externalUid?: string;
     // cal.com already moved it; see the header.
     providerConfirmed?: boolean;
+    // Where `notified` must reach the customer: their WhatsApp conversation
+    // for the chat assistant, any channel for the phone agent (default).
+    reach?: Reach;
   },
 ): Promise<ChangeResult> {
   const now = Date.now();
@@ -500,7 +509,12 @@ export async function moveOwnTx(
   await ctx.db.patch(customer._id, {
     agentChangesAt: withChange(customer.agentChangesAt, now),
   });
-  return { ok: true, notified: sent > 0 };
+  return {
+    ok: true,
+    notified:
+      sent > 0 &&
+      (await lifecycleReaches(ctx, appointment._id, "booking", args.reach ?? "any")),
+  };
 }
 
 export async function cancelOwnTx(
@@ -511,6 +525,7 @@ export async function cancelOwnTx(
     from: number;
     services?: string[];
     providerConfirmed?: boolean;
+    reach?: Reach;
   },
 ): Promise<ChangeResult> {
   const now = Date.now();
@@ -541,7 +556,12 @@ export async function cancelOwnTx(
   await ctx.db.patch(customer._id, {
     agentChangesAt: withChange(customer.agentChangesAt, now),
   });
-  return { ok: true, notified: sent > 0 };
+  return {
+    ok: true,
+    notified:
+      sent > 0 &&
+      (await lifecycleReaches(ctx, appointment._id, "cancellation", args.reach ?? "any")),
+  };
 }
 
 export const moveOwn = internalMutation({
@@ -550,13 +570,18 @@ export const moveOwn = internalMutation({
     to: v.number(),
     externalUid: v.optional(v.string()),
     providerConfirmed: v.optional(v.boolean()),
+    reach: v.optional(reachValidator),
   },
   returns: changeResult,
   handler: async (ctx, args) => await moveOwnTx(ctx, args),
 });
 
 export const cancelOwn = internalMutation({
-  args: { ...targetArgs, providerConfirmed: v.optional(v.boolean()) },
+  args: {
+    ...targetArgs,
+    providerConfirmed: v.optional(v.boolean()),
+    reach: v.optional(reachValidator),
+  },
   returns: changeResult,
   handler: async (ctx, args) => await cancelOwnTx(ctx, args),
 });
@@ -600,6 +625,9 @@ export async function writeOwnChange(
   if (externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
   const apiKey = a.calcomApiKey;
   const uid = externalUid && apiKey ? externalUid : undefined;
+  // The chat assistant stays quiet only on a message that lands in the
+  // customer's WhatsApp conversation; the phone agent may promise any channel.
+  const reach: Reach = a.via === "chat" ? "whatsapp" : "any";
   if (a.change.kind === "cancel") {
     if (uid && apiKey) {
       const told = await cancelBooking({
@@ -612,6 +640,7 @@ export async function writeOwnChange(
     const done: ChangeResult = await ctx.runMutation(internal.agentAppointments.cancelOwn, {
       ...a.target,
       ...(uid ? { providerConfirmed: true } : {}),
+      reach,
     });
     return done;
   }
@@ -633,6 +662,7 @@ export async function writeOwnChange(
     to,
     ...(newUid ? { externalUid: newUid } : {}),
     ...(uid ? { providerConfirmed: true } : {}),
+    reach,
   });
   return done;
 }

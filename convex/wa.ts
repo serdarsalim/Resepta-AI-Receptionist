@@ -49,6 +49,7 @@ import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { isDeleting } from "./lib/customerDeletion";
+import { emailVerdict, lifecycleTemplates, whatsappVerdict } from "./lib/lifecycleSend";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -916,20 +917,12 @@ export const sendAppointmentMessage = internalAction({
     // first, the kind-level row for everything the owner has not worded
     // specifically.
     const language = customer.language ?? org.language;
-    const ruleTemplate = rule
-      ? templates.find(
-          (t: { ruleId?: string; language: string }) =>
-            t.ruleId === rule._id && t.language === language,
-        )
-      : undefined;
-    const kindTemplate = templates.find(
-      (t: { kind: string; language: string; ruleId?: string }) =>
-        t.ruleId === undefined && t.kind === args.kind && t.language === language,
-    );
-    const contentTemplate = ruleTemplate ?? kindTemplate;
-    // The Cloud lane needs both halves of the Meta registration: the approved
-    // status AND the name to send under. metaName went optional the day orgs
-    // without a Cloud number stopped being forced to invent one.
+    // The content row and the Cloud registration, chosen by the same function
+    // that tells the assistants in advance whether this send can go
+    // (lib/lifecycleSend). The Cloud lane needs both halves of the Meta
+    // registration: the approved status AND the name to send under. metaName
+    // went optional the day orgs without a Cloud number stopped being forced
+    // to invent one.
     //
     // Registration resolves SEPARATELY from content, and falls back to the
     // kind-level row: authoring per-rule wording must not cut off a Cloud lane
@@ -937,12 +930,14 @@ export const sendAppointmentMessage = internalAction({
     // own wording is registered and approved with Meta, Cloud sends the
     // generic approved string while email and the shop phone carry the words
     // the owner actually wrote.
-    const metaSource =
-      ruleTemplate && ruleTemplate.status === "approved" && ruleTemplate.metaName
-        ? ruleTemplate
-        : kindTemplate;
+    const { content: contentTemplate, registered: metaSource } = lifecycleTemplates(
+      templates,
+      rule,
+      args.kind,
+      language,
+    );
     const cloudTemplate =
-      metaSource && metaSource.status === "approved" && metaSource.metaName
+      metaSource
         ? {
             metaName: metaSource.metaName,
             language: metaSource.language,
@@ -1217,19 +1212,25 @@ export const sendAppointmentMessage = internalAction({
     // first contact after silence, which is precisely what Evolution drops
     // silently (Reachout Timelock, ACK 463, while the send returns success).
     const lane = channelPref === "email" ? null : laneForOutbound(available);
+    // Which lane goes, or why none does: lib/lifecycleSend, the same verdict
+    // the assistants read in advance to know whether this message will reach
+    // the customer (2026-10-13).
+    const onWhatsApp = whatsappVerdict({
+      channel: channelPref,
+      lane,
+      cloud: Boolean(waAccount),
+      evolution: Boolean(evolution),
+      hasWords: Boolean(body),
+      registered: Boolean(cloudTemplate),
+      language,
+    });
 
-    if (lane === "evolution" && evolution) {
+    if (onWhatsApp.send === "evolution" && evolution && body) {
       // No Meta template here and none needed — this lane has no approval to
-      // satisfy. It does need WORDS: a row whose owner never authored a body
-      // and whose bodyPreview is empty has nothing to say, and before this
-      // guard the customer received the string "undefined".
-      if (!body) {
-        await fail(`no-template-text-${language}`);
-        return null;
-      }
-      // What the buttons would have been, in words: Baileys never delivers
-      // quick replies, so the customer is told which words to type, and
-      // webhook.ts already understands every one of them.
+      // satisfy (its need for words is the verdict's). What the buttons would
+      // have been, in words: Baileys never delivers quick replies, so the
+      // customer is told which words to type, and webhook.ts already
+      // understands every one of them.
       const text = `${body}\n\n${evolutionReplyHint(language)}`;
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
@@ -1257,25 +1258,19 @@ export const sendAppointmentMessage = internalAction({
           appointmentId: appointment._id,
         });
       }
-    } else if (channelPref === "email") {
-      // Email-only by choice. Not a failure of any kind: the WhatsApp rows
-      // below would tell the owner a channel they switched off is broken.
-    } else if (!waAccount && !evolution) {
-      // Never connected, which is not the same as broken — and the same
-      // reasoning as the branch above, one step further out. The rule stays
-      // "both" until someone edits it, so a salon that only ever wanted email
-      // still had every booking log a red WhatsApp row. The rule editor
-      // already shows these businesses "Email" as the channel; this is the
-      // send path finally agreeing with it.
-      //
-      // Only total absence is silent. A business that HAS WhatsApp and cannot
-      // send falls through to the rows below, because that one is a real
-      // fault and hiding it is how deliveries fail unnoticed.
-    } else if (!waAccount) {
-      await fail("wa-not-configured");
-    } else if (!cloudTemplate) {
-      await fail(`no-approved-template-${language}`);
-    } else {
+    } else if (onWhatsApp.send === null) {
+      // No WhatsApp send. Silent when the owner chose email-only (the rows
+      // would tell them a channel they switched off is broken) or never
+      // connected WhatsApp at all (the rule stays "both" until someone edits
+      // it, and the editor already shows such a business "Email"). Only total
+      // absence is silent: a business that HAS WhatsApp and cannot send logs
+      // the row (wa-not-configured, no-approved-template-<lang>), because that
+      // one is a real fault and hiding it is how deliveries fail unnoticed. A
+      // shop phone with no words to send (a row nobody authored once sent the
+      // customer the string "undefined") ends the send there.
+      if (onWhatsApp.reason) await fail(onWhatsApp.reason);
+      if (onWhatsApp.stop) return null;
+    } else if (onWhatsApp.send === "cloud" && waAccount && cloudTemplate) {
       const messageId = await ctx.runMutation(internal.messages.logOutQueued, {
         orgId: appointment.orgId,
         customerId: customer._id,
@@ -1330,15 +1325,20 @@ export const sendAppointmentMessage = internalAction({
     // The From address, resolved rather than required: the salon's own domain
     // if they have one, otherwise the address they already own on ours.
     const sender = customerSender(org, mailConfig);
-    if (channelPref === "whatsapp") {
-      // Switched off. Same reasoning as the mirror case above.
-    } else if (channelPref === "email" && (!emailLaneConfigured(mailConfig) || !sender)) {
-      await fail("email-not-configured");
-    } else if (channelPref === "email" && !customer.email) {
-      await fail("no-email-address");
-    } else if (channelPref === "email" && !body) {
-      await fail(`no-template-text-${language}`);
-    } else if (emailLaneConfigured(mailConfig) && customer.email && sender && body) {
+    // Switched off on a WhatsApp-only rule, skipped silently on "both" for a
+    // customer it cannot reach, a visible row on email-only: the verdict in
+    // lib/lifecycleSend, shared with the assistants' advance check.
+    const byEmail = emailVerdict({
+      channel: channelPref,
+      configured: emailLaneConfigured(mailConfig),
+      sender: Boolean(sender),
+      address: Boolean(customer.email),
+      hasWords: Boolean(body),
+      language,
+    });
+    if (byEmail.reason) {
+      await fail(byEmail.reason);
+    } else if (byEmail.send && customer.email && sender && body) {
       // The authored subject, rendered with the same tokens as the body. The
       // "name, time" fallback covers rows without one — and an authored
       // subject that renders to nothing for this customer falls through too,
