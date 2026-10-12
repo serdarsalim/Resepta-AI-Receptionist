@@ -65,6 +65,7 @@ import {
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
 import { customerConflict } from "./lib/overlap";
+import { recordActivity, statusChange } from "./lib/activity";
 
 // The agents' own tolerances, the same two numbers their booking guards use:
 // a start a few minutes behind the clock is someone finishing a sentence, and
@@ -368,6 +369,18 @@ export const cancelOwn = internalMutation({
     // No actor: the customer cancelled, through their assistant. That is
     // exactly the cancellation the team's booking-cancelled alert is for.
     await cancelAppointment(ctx, appointment);
+    // The feed row cancelAppointment writes only for a cancel started inside
+    // the salon. An assistant's cancel deserves its own answer to "who
+    // cancelled this?", the same row a booking and a move leave.
+    if (appointment.status !== "cancelled") {
+      await recordActivity(ctx, {
+        orgId: appointment.orgId,
+        kind: "appointment_status",
+        customerId: appointment.customerId,
+        appointmentId: appointment._id,
+        detail: statusChange(appointment.status, "cancelled"),
+      });
+    }
     await ctx.db.patch(customer._id, {
       agentChangesAt: withChange(customer.agentChangesAt, now),
     });

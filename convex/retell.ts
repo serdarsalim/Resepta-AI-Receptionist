@@ -41,6 +41,7 @@ import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { withChange } from "./lib/agentChange";
+import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
@@ -2572,6 +2573,16 @@ export const voiceBook = internalMutation({
       externalUid: args.externalUid,
     });
     await syncAppointmentSchedule(ctx, appointmentId);
+    // The feed's answer to "who booked this?", as staff bookings
+    // (schedule.ts) and the office MCP (agentTools) already give it. No
+    // session on a call or a live chat, so it reads as the system; a drafted
+    // chat booking a person sent carries that person.
+    await recordActivity(ctx, {
+      orgId: args.orgId,
+      kind: "appointment_created",
+      customerId: customer._id,
+      appointmentId,
+    });
     await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
     // Every caller of this mutation is an assistant (phone or chat), so every
     // booking here counts toward the customer's daily change cap
