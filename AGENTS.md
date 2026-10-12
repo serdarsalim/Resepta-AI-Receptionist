@@ -665,13 +665,16 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   hours, no closure, capacity with the row not blocking itself, no clash with
   the customer's other bookings, a good's lead time.
 - **Six changes a day per customer** (`customers.agentChangesAt`,
-  `lib/agentChange.ts`, Nudge's number), shared with the customer's own manage
-  page (`/appt/<token>`, whose every move re-sends a confirmation).
-  `voiceBook` counts every booking and never refuses one; a move or cancel
-  past the sixth is refused. On the phone the team is emailed
-  (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send switch) because the
-  agent promised a colleague; in chat the agent is told to call
-  `escalate_to_staff`, which follows the handover setting.
+  `lib/agentChange.ts`, Nudge's number). Bookings, moves and cancels by the
+  assistants, moves and cancels on the customer's own manage page
+  (`/appt/<token>`) and their own WhatsApp cancel (İPTAL, the cancel button)
+  all count. Past the sixth the assistants refuse moves, cancels AND new
+  bookings, and the manage page refuses moves; a customer's own cancel is
+  counted and never refused (Serdar's call via the coordinator, 2026-10-13).
+  On the phone the team is emailed (`bookNeedsPerson`/`moveNeedsPerson`/
+  `cancelNeedsPerson`, failed-send switch) because the agent promised a
+  colleague; in chat the agent is told to call `escalate_to_staff`, which
+  follows the handover setting.
 - **A "no" about a time carries the nearest free times**
   (`retell.nearestFreeTimes`, built on the booking page's `freeStarts`, so
   what it offers the write will accept). Both lanes' `check_availability`

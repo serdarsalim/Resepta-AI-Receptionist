@@ -9,12 +9,18 @@ import { v, type Infer } from "convex/values";
 //
 // Ported from Nudge (bookingLinks.CHANGES_PER_DAY, meetingTools.ts,
 // 2026-10-11), with Nudge's number: six changes a day per customer, counted
-// over the trailing 24 hours on customers.agentChangesAt. A BOOKING is counted
-// and never refused, because the count is what stops a cancel-and-rebook loop.
-// A move or a cancel past the sixth is refused, and the agent is told to hand
-// it to a person. It is one person changing one diary whichever door they
-// use, so the phone, WhatsApp and the customer's own manage page
-// (booking.reschedule / booking.cancel) count against the same six.
+// over the trailing 24 hours on customers.agentChangesAt. It is one person
+// changing one diary whichever door they use, so the phone and WhatsApp
+// assistants, the customer's own manage page (booking.reschedule /
+// booking.cancel) and their own WhatsApp cancel (typed İPTAL or the cancel
+// button, webhook.ts) all count against the same six.
+//
+// Who is refused past it (decided 2026-10-13, after a review showed a
+// cancel-by-button and rebook-by-assistant loop the count never stopped):
+// the assistants refuse moves, cancels AND new bookings, and hand over to a
+// person; the manage page refuses moves. A customer's own CANCEL, on the
+// manage page or by WhatsApp, is counted and never refused: cancelling is
+// always theirs.
 
 export const CHANGES_PER_DAY = 6;
 export const CHANGE_WINDOW_MS = 24 * 60 * 60_000;
@@ -106,7 +112,7 @@ export function isChangeRefusal(reason: string): reason is ChangeRefusal {
 // handover setting rather than a second rule here.
 export function changeRefusalNote(
   reason: ChangeRefusal,
-  did: "moved" | "cancelled",
+  did: "moved" | "cancelled" | "booked",
   lane: "voice" | "chat",
 ): string {
   const who = lane === "voice" ? "caller" : "customer";

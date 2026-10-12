@@ -3,6 +3,7 @@ import { internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
+import { withChange } from "./lib/agentChange";
 import { noteMessageById } from "./lib/thread";
 import { nextUpcomingOf, scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
@@ -577,6 +578,10 @@ export async function processInboundMessage(
   const appointment = await ctx.db.get(appointmentId);
   // Org check: a spoofed payload must not reach another salon's row.
   if (!appointment || appointment.orgId !== orgId) return;
+  // And the SENDER's own row (2026-10-13). A button names its appointment by
+  // id, and the typed path already reads only the sender's appointments; a
+  // tap is honoured on the tapper's own booking and nobody else's.
+  if (appointment.customerId !== contactId) return;
   if (appointment.status === "completed") return;
 
   // Confirming is Resepta's own concept — cal.com bookings are already
@@ -598,6 +603,19 @@ export async function processInboundMessage(
     // the recompute has to run or the field drifts from the row.
     await syncAppointmentSchedule(ctx, appointment._id);
     return;
+  }
+
+  // A second İPTAL, or a tap on a reminder for an appointment already
+  // cancelled, changes nothing, and must not send the cancellation again.
+  if (appointment.status === "cancelled") return;
+  // The customer's own cancel COUNTS toward the daily change cap
+  // (lib/agentChange.ts) and is NEVER refused: cancelling is always theirs.
+  // Counting it is what stops a cancel-and-rebook loop that alternates this
+  // button with an assistant's bookings.
+  if (contact) {
+    await ctx.db.patch(contact._id, {
+      agentChangesAt: withChange(contact.agentChangesAt, Date.now()),
+    });
   }
 
   // Cancelling is not ours to record alone: cal.com holds the slot, the

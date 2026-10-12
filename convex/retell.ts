@@ -44,7 +44,7 @@ import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { answerOrEmpty, isNonAnswer } from "./lib/nonAnswer";
 import { orgKeywords } from "./lib/boostedKeywords";
-import { withChange } from "./lib/agentChange";
+import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { freeStarts, goodsLeadMs } from "./booking";
@@ -2290,6 +2290,14 @@ async function bookingProblem(
     if (upcoming >= MAX_UPCOMING_PER_PHONE) {
       return `too-many-upcoming: this customer already has ${upcoming} upcoming appointments, the most one person can hold, so nothing new was booked. Say so; they can move or cancel one of the ones they have.`;
     }
+    // Past the day's change cap the assistants refuse BOOKINGS too, and hand
+    // over to a person (decided 2026-10-13): counted-but-never-refused let a
+    // cancel by button and a rebook by assistant loop all day. A slug, not a
+    // sentence: each lane words the handover its own way (changeRefusalNote).
+    const holder = await ctx.db.get(a.customerId);
+    if (holder && changesToday(holder.agentChangesAt, now) >= CHANGES_PER_DAY) {
+      return "too-many-changes";
+    }
   }
   if (!a.providerHeld) {
     // Goods-only orders sum to 0 and fall through every occupancy guard
@@ -2656,8 +2664,7 @@ export const voiceBook = internalMutation({
       (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0;
     // Every caller of this mutation is an assistant (phone or chat), so every
     // booking here counts toward the customer's daily change cap
-    // (lib/agentChange.ts). Counted, never refused: the count is what stops a
-    // cancel-and-rebook loop, and the refusal belongs to moves and cancels.
+    // (lib/agentChange.ts); past it, bookingProblem refuses the next one.
     await ctx.db.patch(customer._id, {
       agentChangesAt: withChange(customer.agentChangesAt, Date.now()),
     });

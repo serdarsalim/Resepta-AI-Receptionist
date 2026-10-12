@@ -853,6 +853,22 @@ http.route({
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "book-failed";
+        // Past the day's change cap nothing more is booked here: the agent
+        // says a colleague will be in touch, and the team is emailed so that
+        // promise has an owner (bookingProblem, decided 2026-10-13).
+        if (message === "too-many-changes") {
+          await queueOrgAlert(ctx, {
+            orgId: org._id,
+            template: "bookNeedsPerson",
+            who: customerName || callerPhone,
+            detail: formatAppointmentTime(startAt, org.timezone, org.language),
+          });
+          return respond({
+            booked: false,
+            error: message,
+            note: changeRefusalNote("too-many-changes", "booked", "voice"),
+          });
+        }
         // A taken time or the caller's own clash: the nearest free times
         // either side, so the agent counters instead of stalling.
         const near = /^(slot-taken|customer-busy)/.test(message)

@@ -115,6 +115,7 @@ export type AlertTemplate =
   | "failedCalendarCancel"
   | "moveNeedsPerson"
   | "cancelNeedsPerson"
+  | "bookNeedsPerson"
   | "newContact"
   | "newBooking"
   | "bookingCancelled"
@@ -134,6 +135,7 @@ export const alertTemplateValidator = v.union(
   v.literal("failedCalendarCancel"),
   v.literal("moveNeedsPerson"),
   v.literal("cancelNeedsPerson"),
+  v.literal("bookNeedsPerson"),
   v.literal("newContact"),
   v.literal("newBooking"),
   v.literal("bookingCancelled"),
@@ -401,6 +403,22 @@ const ALERT_COPY: Record<
       tr: "{who}, {detail} randevusunu telefonda taşımak istedi. Asistan bunu kendisi yapamadı ve ekipten birinin döneceğini söyledi. Müşteriye ulaşıp yeni saati birlikte belirleyin.",
       en: "{who} called to move their appointment on {detail}. The assistant could not make the change itself and said someone from the team would get back to them. Please contact them to agree a new time.",
       de: "{who} hat angerufen, um den Termin am {detail} zu verschieben. Der Assistent konnte das nicht selbst erledigen und hat gesagt, dass sich jemand aus dem Team meldet. Bitte nehmen Sie Kontakt auf und vereinbaren Sie eine neue Zeit.",
+    },
+  },
+  // The same promise for a booking: past the day's change cap the phone agent
+  // books nothing more and says a colleague will be in touch. {detail} is the
+  // time the caller asked for.
+  bookNeedsPerson: {
+    kind: "failed-send",
+    subject: {
+      tr: "{who} randevu almak istedi",
+      en: "{who} wants to book an appointment",
+      de: "{who} möchte einen Termin buchen",
+    },
+    body: {
+      tr: "{who}, telefonda {detail} için randevu almak istedi. Bu müşterinin randevuları bugün asistan üzerinden çok kez değiştiği için asistan randevu oluşturmadı ve ekipten birinin döneceğini söyledi. Müşteriye ulaşıp randevuyu birlikte ayarlayın.",
+      en: "{who} called to book an appointment for {detail}. Their appointments had already been changed through the assistant too many times today, so it booked nothing and said someone from the team would get back to them. Please contact them to arrange it.",
+      de: "{who} hat angerufen, um einen Termin am {detail} zu buchen. Die Termine wurden heute schon zu oft über den Assistenten geändert, deshalb hat er nichts gebucht und gesagt, dass sich jemand aus dem Team meldet. Bitte nehmen Sie Kontakt auf und vereinbaren Sie den Termin.",
     },
   },
   cancelNeedsPerson: {

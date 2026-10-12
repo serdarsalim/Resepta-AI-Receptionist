@@ -953,13 +953,12 @@ export const cancel = mutation({
     const { appointment, org } = found;
     if (appointment.status === "cancelled") return { ok: true };
     if (appointment.status === "completed") return { ok: false, reason: "not-open" };
-    // Counted like a move (see reschedule above). A cancel is the last change
-    // an appointment can take, but it still mails the customer and the team.
+    // Counted like a move (see reschedule above), but NEVER refused: a
+    // customer's own cancel is always theirs to make, past the cap or not
+    // (2026-10-13). The count still stops a cancel-and-rebook loop, because
+    // the assistants refuse the rebooking once it is spent.
     const customer = await ctx.db.get(appointment.customerId);
     const now = Date.now();
-    if (customer && changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
-      return { ok: false, reason: "too-many-changes" };
-    }
     if (customer) {
       await ctx.db.patch(customer._id, {
         agentChangesAt: withChange(customer.agentChangesAt, now),

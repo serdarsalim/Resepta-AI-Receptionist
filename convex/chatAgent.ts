@@ -2206,6 +2206,15 @@ async function executeTool(
       // A taken time or the customer's own clash: the nearest free times
       // either side, so the assistant counters instead of stalling.
       const bookingRefused = async (error: string) => {
+        // Past the day's change cap: a person takes it from here, through
+        // escalate_to_staff and the business's handover setting.
+        if (error === "too-many-changes") {
+          return {
+            booked: false,
+            error,
+            note: changeRefusalNote("too-many-changes", "booked", "chat"),
+          };
+        }
         const near = /^(slot-taken|customer-busy)/.test(error)
           ? await nearestFree({ at: startAt, services: spoken })
           : {};
