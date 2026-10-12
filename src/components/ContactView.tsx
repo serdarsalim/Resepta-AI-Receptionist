@@ -10,6 +10,7 @@ import type { ModalDraft } from "./AppointmentModal";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
 import { CheckSwitch } from "./CheckSwitch";
+import { useConfirm } from "./ConfirmDialog";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
@@ -115,6 +116,23 @@ export function ContactView({
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setMuted = useMutation(api.customers.setMuted);
   const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
+  const setMarketingEmailOptOut = useMutation(api.customers.setMarketingEmailOptOut);
+  const [confirmResubscribe, confirmResubscribeDialog] = useConfirm();
+  // Switching Unsubscribed off sends this person marketing email again, which
+  // is theirs to ask for: the switch asks before doing it. On is immediate.
+  const changeUnsubscribed = async (next: boolean) => {
+    if (!next) {
+      const ok = await confirmResubscribe({
+        title: t("customers.resubscribeTitle"),
+        body: t("customers.resubscribeBody"),
+        confirmLabel: t("customers.resubscribe"),
+        destructive: false,
+        focusCancel: true,
+      });
+      if (!ok) return;
+    }
+    await setMarketingEmailOptOut({ customerId, on: next });
+  };
   const removeCustomer = useMutation(api.customers.remove);
   const markConversationRead = useMutation(api.messages.markConversationRead);
   // Deleting is an owner's call, server-side too (customers.remove); the menu
@@ -384,14 +402,15 @@ export function ContactView({
             </div>
 
             {/* Record meta, the way Nudge's contact footer works: when this
-                customer arrived, when they last wrote, their consent, and
-                whether they are muted.
+                customer arrived, when they last wrote, their consent, whether
+                they are muted, and the two requests a customer makes about
+                how they are contacted (No AI calls, Unsubscribed; 2026-10-13).
 
                 Two by two, and directly under the last field rather than
                 pinned to the bottom of the panel. Pinned, it floated away from
                 the fields on a tall screen and read as a separate thing the
                 panel happened to be carrying. Sitting where the fields end, it
-                reads as what it is: the last four facts on the record.
+                reads as what it is: the last facts on the record.
 
                 Consent sits HERE rather than up among the identity fields on
                 purpose. It is not a detail somebody types, it is a legal fact
@@ -410,7 +429,7 @@ export function ContactView({
                 reserves a 7.5rem label track so every field above lines up. At
                 half width that track is most of the cell, and the values it
                 left behind wrapped: a date broke across three lines to say "26
-                Jul 2026". These four pairs FLOW through one 4-column grid with
+                Jul 2026". These pairs FLOW through one 4-column grid with
                 `auto` label columns instead, so each label column sizes to its
                 own widest label and the two halves still line up with each
                 other.
@@ -420,9 +439,17 @@ export function ContactView({
                 narrow on exactly the wide screens a `sm:` breakpoint calls
                 roomy: asking the viewport how much space this grid has is the
                 same mistake that made the values wrap in the first place.
-                20rem is measured, not guessed. German is the widest of the
-                three languages and needs 315px for four columns; below that it
-                stacks rather than overflow. */}
+                20rem is measured, not guessed. Re-measured 2026-10-13 with all
+                six pairs, in the container's content box, Geist at text-xs,
+                the (i) included: German is the widest and needs 19.45rem,
+                English 19.1rem, Turkish 18.4rem (German alone was 19.0rem
+                before the last two pairs). Below 20rem it stacks rather than
+                overflow, and a 375px phone (20.3rem) keeps four columns. The
+                new labels are short for exactly this reason, with their detail
+                in the (i), Nudge's trade for the same footer ("fit in one row
+                rather than be super accurate in wording we can explain in
+                (i)"): "Keine KI-Anrufe" and "Abgemeldet" took German past
+                20rem. A longer label here moves this number; measure first. */}
             <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
             <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)] @min-[20rem]:grid-cols-[auto_1fr_auto_1fr]">
               {/* Added keeps a date and Last reply takes an age, the same split
@@ -514,23 +541,31 @@ export function ContactView({
                   onChange={(next) => void setNoAiCalls({ customerId, on: next })}
                 />
               </span>
-              {/* Marketing email (2026-10-13): a fact, not a switch. It is
-                  set by the customer's own unsubscribe link and by nothing in
-                  the app, so there is nothing here to flip. Blank until then,
-                  the Last reply rule; the date rides the title. */}
+              {/* Unsubscribed from marketing email (2026-10-13). The
+                  customer's own link turns it on; so can whoever hears "stop
+                  sending me offers" at the counter, the do-not-call reasoning.
+                  Turning it OFF puts somebody back on the marketing list, so
+                  that direction asks first, with Cancel holding focus, and
+                  both directions land in the activity feed. A switch rather
+                  than a word: "Unsubscribed" as a value overflowed the column
+                  in every language (see the 20rem note above). */}
               <MetaLabel
-                label={t("customers.marketingEmail")}
-                hint={t("customers.marketingEmailHint")}
+                label={t("customers.unsubscribed")}
+                hint={t("customers.unsubscribedHint")}
               />
               <span
-                className="whitespace-nowrap"
+                className="flex items-center"
                 title={
                   customer.marketingEmailOptOutAt !== undefined
                     ? formatDateTime(customer.marketingEmailOptOutAt, language)
                     : undefined
                 }
               >
-                {customer.marketingEmailOptOutAt !== undefined ? t("customers.unsubscribed") : ""}
+                <CheckSwitch
+                  label={t("customers.unsubscribed")}
+                  on={customer.marketingEmailOptOutAt !== undefined}
+                  onChange={(next) => void changeUnsubscribed(next)}
+                />
               </span>
             </div>
             </div>
@@ -583,6 +618,7 @@ export function ContactView({
       </div>
 
       {booking.render()}
+      {confirmResubscribeDialog}
       {deleteOpen && (
         <CustomerDeleteSheet
           customerId={customerId}

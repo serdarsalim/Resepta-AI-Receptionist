@@ -1298,8 +1298,9 @@ export default defineSchema({
     // campaign, bulk and win-back mail stop, at fan-out and again at claim;
     // confirmations, reminders and replies keep going, and WhatsApp is not
     // touched (Meta keeps its own marketing opt-out). Not consent: consent
-    // stops every channel. The record shows it; nothing in the app sets or
-    // clears it but the customer's own link. Set = unsubscribed; when.
+    // stops every channel. Also set from the record's Unsubscribed switch for
+    // a request made in person (customers.setMarketingEmailOptOut), which asks
+    // before clearing it. Set = unsubscribed; when.
     marketingEmailOptOutAt: v.optional(v.number()),
     // The conversation summary the inbox list, its badge and the Contacts dot
     // read INSTEAD of scanning messages. Kept by the write paths; lib/thread.ts

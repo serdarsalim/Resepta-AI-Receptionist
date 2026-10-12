@@ -832,7 +832,7 @@ const dictionary = {
   "bulk.skipUnsubscribed": {
     tr: "Abonelikten çıktı",
     en: "Unsubscribed",
-    de: "Abgemeldet",
+    de: "Abbestellt",
   },
   "bulk.skipNoAiCalls": {
     tr: "Asistanla aranmak istemiyor",
@@ -906,38 +906,50 @@ const dictionary = {
     en: "A muted customer stays out of the inbox and never lights an attention dot. You can still message them; they sit at the bottom of Contacts.",
     de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
   },
-  // "No AI calls" (customers.noAiCallsAt), the record footer's third switch.
-  // Short, because it shares an auto-width label column with Consent; the
-  // detail rides the hint. The voice agent is "Asistan" in the Turkish
-  // navigation, so the label says asistan.
+  // "No AI calls" (customers.noAiCallsAt), the record footer's switch. Short,
+  // because it shares an auto-width label column with Consent and the footer
+  // must keep four columns at 20rem (ContactView's note); the detail rides the
+  // hint. Nudge's Turkish label for the same switch is "AI aramaz".
   "customers.noAiCalls": {
-    tr: "Asistan aramasın",
+    tr: "AI aramaz",
     en: "No AI calls",
-    de: "Keine KI-Anrufe",
+    de: "Kein KI-Anruf",
   },
   "customers.noAiCallsHint": {
     tr: "Müşteri, sesli asistanın kendisini aramamasını istedi. Toplu aramalar onu atlar; buradan arama başlatırken önce sorulur. Hatırlatmalar ve mesajlar gitmeye devam eder. Bir aramada bunu isteyen arayanı asistan kendisi işaretler; işareti yalnızca bir kişi kaldırabilir.",
     en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
     de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
   },
-  // The marketing-email opt-out (customers.marketingEmailOptOutAt), a fact in
-  // the record footer: the value reads Unsubscribed once the customer used the
-  // link, blank before. Read-only, because only the customer's own link sets
-  // it.
-  "customers.marketingEmail": {
-    tr: "Pazarlama e-postası",
-    en: "Marketing email",
-    de: "Werbe-E-Mails",
-  },
-  "customers.marketingEmailHint": {
-    tr: "Kampanya, toplu işlem ve geri kazanım e-postalarının altında abonelikten çıkma bağlantısı olur. Müşteri bunu kullanınca burada Abonelikten çıktı yazar ve bu e-postalar ona artık gitmez. Onaylar, hatırlatmalar ve WhatsApp etkilenmez. Bunu yalnızca müşterinin kendi bağlantısı değiştirir.",
-    en: "Campaign, bulk and win-back emails end with an unsubscribe link. Once the customer uses it, this reads Unsubscribed and those emails stop for them. Confirmations, reminders and WhatsApp are not affected. Only the customer's own link changes it.",
-    de: "Kampagnen-, Sammel- und Rückgewinnungs-E-Mails enden mit einem Abmeldelink. Nutzt der Kunde ihn, steht hier Abgemeldet, und diese E-Mails gehen nicht mehr an ihn. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen. Ändern kann das nur der Link des Kunden selbst.",
-  },
+  // The marketing-email opt-out (customers.marketingEmailOptOutAt), the
+  // footer's last switch. On = unsubscribed, the same direction as Mute and
+  // No AI calls beside it. Short for the footer's column (ContactView's 20rem
+  // note): "Abonelikten çıktı" and "Abgemeldet" pushed it over.
   "customers.unsubscribed": {
-    tr: "Abonelikten çıktı",
+    tr: "Abone değil",
     en: "Unsubscribed",
-    de: "Abgemeldet",
+    de: "Abbestellt",
+  },
+  "customers.unsubscribedHint": {
+    tr: "Açıkken müşteriye pazarlama e-postası gitmez: kampanya, toplu işlem ve geri kazanım e-postaları durur. Bu e-postaların altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz. Onaylar, hatırlatmalar ve WhatsApp etkilenmez.",
+    en: "On means the customer gets no marketing email from you: campaign, bulk and win-back emails stop. The unsubscribe link at the foot of those emails turns it on, and you can turn it on when they ask you in person. Confirmations, reminders and WhatsApp are not affected.",
+    de: "Ist es an, bekommt der Kunde keine Werbe-E-Mails von Ihnen: Kampagnen-, Sammel- und Rückgewinnungs-E-Mails stoppen. Der Abmeldelink am Ende dieser E-Mails schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen.",
+  },
+  // Switching Unsubscribed off puts the customer back on marketing email, so
+  // the switch asks first.
+  "customers.resubscribeTitle": {
+    tr: "Pazarlama e-postaları yeniden gönderilsin mi?",
+    en: "Send them marketing email again?",
+    de: "Wieder Werbe-E-Mails senden?",
+  },
+  "customers.resubscribeBody": {
+    tr: "Bunu yalnızca müşteri yeniden almak istediğini söylediyse yapın. Kampanya, toplu işlem ve geri kazanım e-postaları ona yeniden gider.",
+    en: "Only do this if the customer asked to get them again. Campaign, bulk and win-back emails will reach them again.",
+    de: "Nur, wenn der Kunde sie wieder erhalten möchte. Kampagnen-, Sammel- und Rückgewinnungs-E-Mails gehen dann wieder an ihn.",
+  },
+  "customers.resubscribe": {
+    tr: "Yeniden gönder",
+    en: "Send again",
+    de: "Wieder senden",
   },
   // The record's ⋯ menu and its delete sheet (CustomerDeleteSheet). Owners
   // only; the menu is not drawn for anybody else.

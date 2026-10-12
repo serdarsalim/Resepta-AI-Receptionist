@@ -304,8 +304,10 @@ new marketing kind goes into that set.
   `delivery.claimForRetry`, which every queued marketing mail crosses and which
   is the backstop. A new marketing send path checks it before the provider.
 - **Email only.** WhatsApp marketing is untouched (Meta keeps its own opt-out),
-  and it is not consent. Only the customer's own link sets it; the record shows
-  it and offers no switch, because re-subscribing is the customer's act.
+  and it is not consent. The customer's link sets it, and so does the record's
+  Unsubscribed switch (`customers.setMarketingEmailOptOut`, any member) for a
+  request made in person. Turning the switch OFF puts someone back on marketing
+  mail, so it asks first; both directions write an activity row.
 
 ## Two kinds of template, never conflate them
 

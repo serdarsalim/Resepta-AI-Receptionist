@@ -3,6 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { assertE164, requireOrg, requireOwner } from "./lib/orgAuth";
 import { normalisePhone } from "./lib/phone";
+import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
@@ -373,6 +374,39 @@ export const setNoAiCalls = mutation({
     // Turning it on keeps the first moment it was asked, the consent rule.
     await ctx.db.patch(args.customerId, {
       noAiCallsAt: args.on ? (customer.noAiCallsAt ?? Date.now()) : undefined,
+    });
+    return null;
+  },
+});
+
+// The marketing-email opt-out (schema customers.marketingEmailOptOutAt), the
+// record's switch. The customer's own unsubscribe link sets it too
+// (messages.unsubscribeByToken). Any member, like consent: whoever hears "stop
+// sending me offers" at the counter records it, and the same person can put
+// back what a customer asks to have back. The record's switch asks before
+// turning it off; this records who did either, because "who put this person
+// back on the marketing list?" is exactly the question the feed is for.
+export const setMarketingEmailOptOut = mutation({
+  args: { customerId: v.id("customers"), on: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
+    const was = customer.marketingEmailOptOutAt !== undefined;
+    if (was === args.on) return null;
+    await ctx.db.patch(args.customerId, {
+      marketingEmailOptOutAt: args.on ? Date.now() : undefined,
+    });
+    await recordActivity(ctx, {
+      orgId,
+      kind: "customer_updated",
+      customerId: args.customerId,
+      // Field names only, so the line survives a later deletion of the
+      // customer (customerDeletion's STRUCTURAL_DETAIL).
+      detail: args.on ? "marketingEmailOptOut" : "marketingEmailOptOut cleared",
     });
     return null;
   },

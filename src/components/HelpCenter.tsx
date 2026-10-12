@@ -228,7 +228,8 @@ const CATEGORIES: Category[] = [
           "If a customer asks not to be called by the voice agent, turn on No AI calls at the bottom of their record. Bulk call runs skip them, and their reminders and messages keep going.",
           "The voice agent turns No AI calls on by itself when a caller asks for it on a call. Only someone on your team can turn it off.",
           "To call a customer who asked for no AI calls, use Place call on their record and choose Call anyway. Do that only when they agreed to the call.",
-          "Campaign, bulk and win-back emails end with an unsubscribe link. When a customer uses it, their record shows Unsubscribed next to Marketing email, and those emails stop for them. Confirmations, reminders and WhatsApp messages keep going.",
+          "Campaign, bulk and win-back emails end with an unsubscribe link. When a customer uses it, Unsubscribed turns on at the bottom of their record and those emails stop for them. Confirmations, reminders and WhatsApp messages keep going.",
+          "If a customer asks you in person to stop marketing emails, turn on Unsubscribed yourself. Turn it off only if they ask to get those emails again; Resepta asks you to confirm.",
         ],
         note: "Deleting cannot be undone, and nothing is sent to the customer about it. Their record leaves every list at once, and anything still waiting to be sent to them is cancelled.",
         keywords: [
