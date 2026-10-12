@@ -12,8 +12,9 @@
 export type LlmProvider = "anthropic" | "openai";
 
 // Per-provider defaults, overridable deployment-wide via the platformConfig
-// rows anthropicModel / openaiModel — so a new model name is an admin edit,
-// not a deploy.
+// rows anthropicModel / openaiModel — so switching to a model MODELS below
+// already knows is an admin edit, not a deploy. A model it does not know
+// needs its row first: until then it is refused rather than run unmetered.
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   anthropic: "claude-sonnet-5",
   openai: "gpt-5.2",
@@ -31,8 +32,8 @@ export const MAX_COMPLETION_TOKENS = 2048;
 
 // How hard the model thinks, Anthropic-side (output_config.effort, GA — the
 // parameter is nested, and a top-level `effort` is ignored). The API default
-// is "high", which is a reasoning budget for a receptionist answering "are you
-// open Sunday" — real money, no better answer.
+// is "high" on most models, which is a reasoning budget for a receptionist
+// answering "are you open Sunday" — real money, no better answer.
 //
 // Do NOT reach for thinking:{type:"disabled"} to get the same saving. It is
 // accepted on Sonnet 5, but with thinking off a model sometimes writes a tool
@@ -44,6 +45,11 @@ export const MAX_COMPLETION_TOKENS = 2048;
 //
 // budget_tokens is not the dial either — it is REJECTED with a 400 on
 // Sonnet 5, Opus 5 and Fable 5.
+//
+// Sent only to a model that takes it (MODELS below, 2026-10-13): Haiku 4.5
+// and Sonnet 4.5 answer the parameter with a 400, and /admin offers every
+// model the platform key can reach, so "low" on every request meant a model
+// pick in the console could stop every org's assistant mid-sentence.
 export const ANTHROPIC_EFFORT = "low";
 
 // Per-org monthly LLM budget when the org has no override, in micro-USD.
@@ -52,53 +58,143 @@ export const ANTHROPIC_EFFORT = "low";
 // customer should ever meet.
 export const DEFAULT_MONTHLY_BUDGET_MICRO_USD = 20_000_000;
 
-// ── Price table ─────────────────────────────────────────────────────────────
-// USD per million tokens. Versioned, and every turn snapshots the cost it was
-// billed at (chatAgentTurns.costMicroUsd), so editing this table never
-// rewrites history — it only changes turns that have not happened yet.
-// Bump the version when a rate changes so a turn row names its rate card.
-// An unknown model (an operator's model override this table has not met)
-// records cost 0 — and zero never accumulates, so the monthly budget cap goes
-// silently inert behind a confident $0.00. isPricedModel below exists so the
-// admin panel can say so out loud instead.
+// ── The model table ─────────────────────────────────────────────────────────
+// One row per model /admin can offer: what it costs and, for Anthropic, what
+// its Messages API accepts. One table on purpose. A model priced here but not
+// described would get a request it might refuse, and one described but not
+// priced would run for free, so a model is either fully known or not at all.
+//
+// Prices are USD per million tokens, as published. Versioned, and every turn
+// snapshots the cost it was billed at (chatAgentTurns.costMicroUsd), so
+// editing this table never rewrites history — it only changes turns that
+// have not happened yet. Bump the version when a rate changes so a turn row
+// names its rate card.
 //
 // v3 (2026-08-28): claude-sonnet-5 was carrying 3/15 — Sonnet 4.6's rate,
 // inherited when the model name changed and the numbers didn't. Every Sonnet
 // turn since was metered at 1.5x its real cost. Turns snapshot their own rate,
 // so this corrects turns from here on and rewrites nothing already recorded.
-// The rest of the current lineup is listed now so a model swap in /admin
-// cannot silently disarm the budget.
-export const PRICE_TABLE_VERSION = 3;
+//
+// v4 (2026-10-13): every model the platform key lists, the Nudge port's
+// guard (Nudge 08311abc). The 5.5 family was missing, so a pick of
+// claude-opus-5-5 or claude-haiku-5-5 in /admin metered every turn at $0 and
+// the monthly budget never closed. Rates checked against Anthropic's pricing
+// page on 2026-10-13; the OpenAI rows are Nudge's (checked 2026-08-28). Dated
+// ids are listed one by one rather than matched by stripping the date: a
+// snapshot nobody checked is exactly the model that should stay unpriced.
+// Models retired from the Claude API (Opus 4.1, Opus 4, Sonnet 4, Haiku 3.5)
+// are left out; the platform key cannot reach them.
+export const PRICE_TABLE_VERSION = 4;
 
-const PRICES: Record<string, { inUsdPerMTok: number; outUsdPerMTok: number }> = {
-  "claude-opus-5": { inUsdPerMTok: 5, outUsdPerMTok: 25 },
-  "claude-fable-5": { inUsdPerMTok: 10, outUsdPerMTok: 50 },
-  "claude-sonnet-5": { inUsdPerMTok: 2, outUsdPerMTok: 10 },
-  "claude-sonnet-4-6": { inUsdPerMTok: 3, outUsdPerMTok: 15 },
-  "claude-haiku-4-5": { inUsdPerMTok: 1, outUsdPerMTok: 5 },
-  "claude-haiku-4-5-20251001": { inUsdPerMTok: 1, outUsdPerMTok: 5 },
-  "gpt-5.2": { inUsdPerMTok: 1.75, outUsdPerMTok: 14 },
+type Rate = { inUsdPerMTok: number; outUsdPerMTok: number };
+
+type ModelRow = Rate & {
+  // A request whose prompt is longer than this pays these rates for the
+  // WHOLE request (Haiku 5.5 above 100K prompt tokens). Per request, not per
+  // turn: costMicroUsd is called once per completion.
+  longPrompt?: Rate & { overInputTokens: number };
+  // Anthropic only: whether the model takes output_config.effort. Haiku 4.5
+  // and Sonnet 4.5 refuse it with a 400.
+  effort?: boolean;
+  // Anthropic only: how thinking stays on at ANTHROPIC_EFFORT. "default"
+  // runs adaptive thinking when the parameter is left out (the 5.x lineup).
+  // "adaptive" runs WITHOUT thinking unless {type:"adaptive"} is sent (Opus
+  // 4.6 to 4.8, Sonnet 4.6), and thinking off is the visible-tool-call
+  // failure described above. Unset: the model has no adaptive thinking
+  // (budget_tokens only), so nothing is sent and it answers without.
+  thinking?: "default" | "adaptive";
 };
 
-// Whether a model's spend is real or a placeholder zero. The budget cap is
-// only a cap over models this table knows.
+const FABLE: ModelRow = { inUsdPerMTok: 10, outUsdPerMTok: 50, effort: true, thinking: "default" };
+const OPUS_45: ModelRow = { inUsdPerMTok: 5, outUsdPerMTok: 25, effort: true };
+const SONNET_45: ModelRow = { inUsdPerMTok: 3, outUsdPerMTok: 15 };
+const HAIKU_45: ModelRow = { inUsdPerMTok: 1, outUsdPerMTok: 5 };
+
+const MODELS: Record<string, ModelRow> = {
+  "claude-fable-5-1": FABLE,
+  "claude-fable-5": FABLE,
+  // Project Glasswing only; same model, same price as its Fable twin.
+  "claude-mythos-5-1": FABLE,
+  "claude-mythos-5": FABLE,
+  "claude-opus-5-5": { inUsdPerMTok: 4, outUsdPerMTok: 20, effort: true, thinking: "default" },
+  "claude-opus-5": { inUsdPerMTok: 5, outUsdPerMTok: 25, effort: true, thinking: "default" },
+  "claude-opus-4-8": { inUsdPerMTok: 5, outUsdPerMTok: 25, effort: true, thinking: "adaptive" },
+  "claude-opus-4-7": { inUsdPerMTok: 5, outUsdPerMTok: 25, effort: true, thinking: "adaptive" },
+  "claude-opus-4-6": { inUsdPerMTok: 5, outUsdPerMTok: 25, effort: true, thinking: "adaptive" },
+  "claude-opus-4-5": OPUS_45,
+  "claude-opus-4-5-20251101": OPUS_45,
+  "claude-sonnet-5-5": { inUsdPerMTok: 2, outUsdPerMTok: 10, effort: true, thinking: "default" },
+  "claude-sonnet-5": { inUsdPerMTok: 2, outUsdPerMTok: 10, effort: true, thinking: "default" },
+  "claude-sonnet-4-6": { inUsdPerMTok: 3, outUsdPerMTok: 15, effort: true, thinking: "adaptive" },
+  "claude-sonnet-4-5": SONNET_45,
+  "claude-sonnet-4-5-20250929": SONNET_45,
+  "claude-haiku-5-5": {
+    inUsdPerMTok: 0.1,
+    outUsdPerMTok: 0.5,
+    longPrompt: { overInputTokens: 100_000, inUsdPerMTok: 0.5, outUsdPerMTok: 2.5 },
+    effort: true,
+    thinking: "default",
+  },
+  "claude-haiku-4-5": HAIKU_45,
+  "claude-haiku-4-5-20251001": HAIKU_45,
+  "gpt-5.2": { inUsdPerMTok: 1.75, outUsdPerMTok: 14 },
+  "gpt-4.1": { inUsdPerMTok: 2, outUsdPerMTok: 8 },
+  "gpt-4.1-mini": { inUsdPerMTok: 0.4, outUsdPerMTok: 1.6 },
+  "gpt-4.1-nano": { inUsdPerMTok: 0.1, outUsdPerMTok: 0.4 },
+  "gpt-4o": { inUsdPerMTok: 2.5, outUsdPerMTok: 10 },
+  "gpt-4o-mini": { inUsdPerMTok: 0.15, outUsdPerMTok: 0.6 },
+};
+
+// Whether a model can run here at all. An unpriced model would meter at
+// nothing, and nothing never reaches the monthly budget, so chatAgent refuses
+// it before the turn starts (skip "model-unpriced") and /admin offers only
+// models that pass this.
 export function isPricedModel(model: string): boolean {
-  return PRICES[model] !== undefined;
+  return MODELS[model] !== undefined;
 }
 
-// Integer micro-USD, rounded up: a fraction of a micro-dollar owed is a
-// micro-dollar owed, and rounding down across thousands of turns is a slow
-// leak in the platform's favor to report and the org's favor to bill.
+// The dearest rate in the table, for a model that is somehow metered without
+// a row of its own. Nothing should reach that today, since an unpriced model
+// never runs, but a caller that skips the gate is billed high, never free.
+const CEILING: Rate = Object.values(MODELS).reduce<Rate>(
+  (top, row) => ({
+    inUsdPerMTok: Math.max(top.inUsdPerMTok, row.inUsdPerMTok, row.longPrompt?.inUsdPerMTok ?? 0),
+    outUsdPerMTok: Math.max(top.outUsdPerMTok, row.outUsdPerMTok, row.longPrompt?.outUsdPerMTok ?? 0),
+  }),
+  { inUsdPerMTok: 0, outUsdPerMTok: 0 },
+);
+
+// The cost of ONE completion, in integer micro-USD, rounded up: a fraction of
+// a micro-dollar owed is a micro-dollar owed, and rounding down across
+// thousands of turns is a slow leak in the platform's favor to report and the
+// org's favor to bill. Per completion because a long-prompt rate is decided
+// per request; a turn sums its rounds.
 export function costMicroUsd(
   model: string,
   inputTokens: number,
   outputTokens: number,
 ): number {
-  const price = PRICES[model];
-  if (!price) return 0;
-  return Math.ceil(
-    inputTokens * price.inUsdPerMTok + outputTokens * price.outUsdPerMTok,
-  );
+  const row = MODELS[model];
+  const rate: Rate = !row
+    ? CEILING
+    : row.longPrompt && inputTokens > row.longPrompt.overInputTokens
+      ? row.longPrompt
+      : row;
+  return Math.ceil(inputTokens * rate.inUsdPerMTok + outputTokens * rate.outUsdPerMTok);
+}
+
+// What this model's Messages API takes beyond the request every model
+// accepts: effort where the model has it, and the explicit adaptive switch
+// where thinking is otherwise off. A model the table does not know gets
+// neither, the one request nothing refuses. It never runs today anyway (see
+// isPricedModel), but the builder must not depend on that gate to be safe.
+export function anthropicModelParams(model: string): Record<string, unknown> {
+  const row = MODELS[model];
+  if (!row) return {};
+  return {
+    ...(row.effort ? { output_config: { effort: ANTHROPIC_EFFORT } } : {}),
+    ...(row.thinking === "adaptive" ? { thinking: { type: "adaptive" } } : {}),
+  };
 }
 
 // ── Wire types ──────────────────────────────────────────────────────────────
@@ -203,10 +299,11 @@ async function anthropicComplete(args: {
       body: JSON.stringify({
         model: args.model,
         max_tokens: MAX_COMPLETION_TOKENS,
-        // Thinking stays on (adaptive, the default when the parameter is
-        // omitted) and is turned DOWN here rather than off — see
-        // ANTHROPIC_EFFORT.
-        output_config: { effort: ANTHROPIC_EFFORT },
+        // Thinking stays on and is turned DOWN rather than off (see
+        // ANTHROPIC_EFFORT), in whichever words this model understands: the
+        // effort field only where it is accepted, and the adaptive switch
+        // only where leaving it out would mean no thinking at all.
+        ...anthropicModelParams(args.model),
         system: args.system,
         messages: args.messages,
         ...(args.tools?.length ? { tools: args.tools } : {}),

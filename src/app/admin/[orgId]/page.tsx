@@ -1155,12 +1155,13 @@ export default function TenantPage() {
         <div className="grid grid-cols-2 gap-x-5 gap-y-2 py-2.5">
           <Fact label="Model">
             {assistant.llmKeyConfigured ? (
-              // A model with no row in the price table meters every turn at
-              // zero, which leaves the monthly budget capping nothing. Say it
-              // here, next to the model that caused it.
+              // A model with no row in the price table fails closed: the
+              // agent skips every turn (model-unpriced) rather than run with
+              // a budget that can never fill. Say it here, next to the model
+              // that caused it.
               <Pill tone={assistant.llmModelPriced ? "ok" : "warn"}>
                 {assistant.llmProvider === "openai" ? "OpenAI" : "Anthropic"} · {assistant.llmModel}
-                {!assistant.llmModelPriced && " · unpriced, so spend reads $0 and the budget cannot cap it"}
+                {!assistant.llmModelPriced && " · unpriced, so the agent skips every turn until lib/llm.ts prices it"}
               </Pill>
             ) : (
               <Pill tone="warn">

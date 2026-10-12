@@ -592,7 +592,7 @@ export default function AdminPage() {
                   : mail.chatAgentProvider === "anthropic"
                     ? "The active key: powers every org's chat agent unless the org has its own."
                     : "Kept for when the provider switches back; inactive while OpenAI is selected."
-              } The model beside it is what every org runs on this provider — pick from what the key can reach or type any name; blank = claude-sonnet-5. A model lib/llm.ts has not priced meters at $0 until its row is added.`}
+              } The model beside it is what every org runs on this provider — the list holds what the key can reach and lib/llm.ts can price; blank = claude-sonnet-5. A name typed outside the list that lib/llm.ts has not priced is refused, and every org's assistant skips its turns until the row is added.`}
               masked={mail.anthropicApiKey}
               onSaveKey={(value) => setConfig({ key: "anthropicApiKey", value })}
               model={mail.anthropicModel}
@@ -612,7 +612,7 @@ export default function AdminPage() {
                   : mail.chatAgentProvider === "openai"
                     ? "The active key: powers every org's chat agent unless the org has its own."
                     : "Kept for when the provider switches; inactive while Anthropic is selected."
-              } The model beside it is what every org runs on this provider — pick from what the key can reach or type any name; blank = gpt-5.2. A model lib/llm.ts has not priced meters at $0 until its row is added.`}
+              } The model beside it is what every org runs on this provider — the list holds what the key can reach and lib/llm.ts can price; blank = gpt-5.2. A name typed outside the list that lib/llm.ts has not priced is refused, and every org's assistant skips its turns until the row is added.`}
               masked={mail.openaiApiKey}
               onSaveKey={(value) => setConfig({ key: "openaiApiKey", value })}
               model={mail.openaiModel}

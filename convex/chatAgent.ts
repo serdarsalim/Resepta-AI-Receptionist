@@ -19,6 +19,7 @@ import {
   appendToolRound,
   chatComplete,
   costMicroUsd,
+  isPricedModel,
   textMessage,
   type LlmProvider,
   type ProviderMessage,
@@ -210,6 +211,11 @@ export const loadTurnContext = internalQuery({
     // never disagree.
     const llm = await resolveChatLlm(ctx, customer.orgId);
     if (!skip && !llm.apiKey) skip = "llm-not-configured";
+    // A model the price table does not know fails CLOSED (2026-10-13): its
+    // turns would meter at nothing, nothing never reaches the budget below,
+    // and the cap would be off for exactly the model nobody checked. /admin
+    // names the model as unpriced beside this skip.
+    if (!skip && !isPricedModel(llm.model)) skip = "model-unpriced";
 
     // Rate limit: generated turns (sent or shadowed) in the last hour. A
     // skipped turn does not count, or the limit would extend itself.
@@ -1336,6 +1342,12 @@ export const respond = internalAction({
         ? undefined
         : (intent: AgentIntent) => addIntent(intents, intent);
 
+    // Priced per completion as each one returns, then summed, because a
+    // long-prompt rate (lib/llm MODELS) is decided per request: pricing the
+    // turn's summed tokens once would put a five-round turn on the long rate
+    // when no single request was long.
+    let meteredMicroUsd = 0;
+
     const record = (fields: {
       status: "sent" | "shadow" | "suggested" | "skipped" | "error";
       reply?: string;
@@ -1360,11 +1372,7 @@ export const respond = internalAction({
         voicePromptVersion: context.voicePromptVersion ?? undefined,
         inputTokens: fields.inputTokens ?? 0,
         outputTokens: fields.outputTokens ?? 0,
-        costMicroUsd: costMicroUsd(
-          model,
-          fields.inputTokens ?? 0,
-          fields.outputTokens ?? 0,
-        ),
+        costMicroUsd: meteredMicroUsd,
         latencyMs: Date.now() - started,
         error: fields.error,
         month: context.month,
@@ -1476,6 +1484,7 @@ export const respond = internalAction({
       }
       inputTokens += result.inputTokens;
       outputTokens += result.outputTokens;
+      meteredMicroUsd += costMicroUsd(model, result.inputTokens, result.outputTokens);
       // Only a round that calls no tool is an ANSWER (2026-10-13, Nudge's
       // chatEngine rule: "a respond written beside a tool call is not sent").
       // Text the model writes in the same breath as a tool call was written

@@ -25,6 +25,7 @@ import {
 } from "./lib/platformConfig";
 import { resolvePlatformHighPriority } from "./lib/voiceModels";
 import { resolveWaRateTable } from "./lib/waPricing";
+import { isPricedModel } from "./lib/llm";
 
 export const emailConfigValidator = v.object({
   apiKey: v.union(v.string(), v.null()),
@@ -311,6 +312,11 @@ export const llmKey = internalQuery({
 // its project was granted — a static list would confidently offer models the
 // key 403s on. Returns [] with a reason instead of throwing, so the picker
 // degrades to plain free text rather than blocking the field.
+//
+// Narrowed to models lib/llm prices (2026-10-13). An unpriced model fails
+// closed in chatAgent (every org's assistant skips its turns), so offering
+// one in the list would offer a switch that silences the product. A name the
+// table has not met can still be typed; the org page then says why it skips.
 export const listModels = action({
   args: { provider: v.union(v.literal("anthropic"), v.literal("openai")) },
   returns: v.object({
@@ -332,8 +338,11 @@ export const listModels = action({
         });
         if (!res.ok) return { models: [], reason: `anthropic-http-${res.status}` };
         const data = (await res.json()) as { data?: Array<{ id?: string }> };
-        // Already newest-first and all chat-capable; nothing to filter.
-        const ids = (data.data ?? []).map((m) => String(m.id ?? "")).filter(Boolean);
+        // Already newest-first and all chat-capable; only the price filter.
+        const ids = (data.data ?? [])
+          .map((m) => String(m.id ?? ""))
+          .filter(Boolean)
+          .filter(isPricedModel);
         return { models: Array.from(new Set(ids)), reason: null };
       }
       const res = await fetch("https://api.openai.com/v1/models", {
@@ -351,6 +360,7 @@ export const listModels = action({
           (id) =>
             !/(audio|realtime|transcribe|tts|image|search|embed|moderation)/i.test(id),
         )
+        .filter(isPricedModel)
         // Newest first: OpenAI returns creation order, and the model the
         // operator wants is nearly always the most recent one.
         .sort((a, b) => b.localeCompare(a));

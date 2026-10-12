@@ -1933,11 +1933,11 @@ Carried back from the Nudge port, which found them:
   metered at 1.5x its real cost. Turns snapshot their own rate, so correcting
   the table is forward-only and rewrote nothing. Correct rates as of
   2026-08-28: opus-5 5/25, fable-5 10/50, sonnet-5 2/10, sonnet-4-6 3/15,
-  haiku-4-5 1/5, gpt-5.2 1.75/14. `PRICE_TABLE_VERSION` is 3.
-- **An unpriced model makes the budget cap a decoration.** An unknown model
-  meters at zero, zero never accumulates, and the cap never trips — behind a
-  confident $0.00. `isPricedModel` now says so in the /admin row that names
-  the model.
+  haiku-4-5 1/5, gpt-5.2 1.75/14. `PRICE_TABLE_VERSION` was 3; the table
+  grew to every listed model on 2026-10-13 (next section).
+- **An unpriced model made the budget cap a decoration.** An unknown model
+  metered at zero, zero never accumulates, and the cap never tripped, behind
+  a confident $0.00. Since 2026-10-13 it fails closed instead (next section).
 - **`output_config.effort` was never set**, so every receptionist turn ran at
   the API default of "high". It is now `"low"`. Thinking stays ON: disabling
   it is *accepted* on Sonnet 5, but a model with thinking off sometimes writes
@@ -1948,6 +1948,34 @@ Carried back from the Nudge port, which found them:
   `MAX_COMPLETION_TOKENS` went 1024 → 2048, because thinking tokens draw from
   that same budget and 1024 is a reply truncated mid-sentence — one we would
   still send.
+
+### Each model gets the request it accepts; an unpriced one never runs (2026-10-13)
+
+`/admin` offers every model the platform key lists, and two of them broke the
+seam above. Haiku 4.5 answers `output_config.effort` with a 400, so picking it
+silenced every org's assistant; the 5.5 family had no price row, so picking
+one metered every turn at $0 and the budget never closed. Nudge found both
+(08311abc). What stands now, all in `convex/lib/llm.ts`:
+
+- **One table, `MODELS`, per model: its price and what it accepts.** A model
+  is either fully known or not at all, because a priced-but-undescribed model
+  gets a request it may refuse and a described-but-unpriced one runs free.
+  `anthropicModelParams` sends `effort` only where the model takes it (not
+  Haiku 4.5 or Sonnet 4.5) and sends `thinking: {type: "adaptive"}` to Opus
+  4.6 to 4.8 and Sonnet 4.6, which otherwise answer with thinking OFF, the
+  visible-tool-call failure above. A model it does not know gets neither.
+  Dated ids are rows of their own, never matched by stripping the date.
+- **Priced per completion, summed per turn** (`meteredMicroUsd` in
+  `chatAgent.respond`), because Haiku 5.5 bills a request whose prompt passes
+  100K tokens at its long rate, and the turn's summed tokens would put a
+  five-round turn on that rate when no request was long.
+- **An unpriced model fails closed.** The turn context skips with
+  `model-unpriced` before any spend, `platformConfig.listModels` offers only
+  priced models, and the org page's model pill says why turns are skipping.
+  `costMicroUsd` bills a model with no row at the table's dearest rate, so a
+  future caller that forgets the gate is overcharged, never free.
+- **The default stays `claude-sonnet-5`** (Serdar's call); Nudge moved its own
+  to Haiku 5.5, which is not a decision this port makes.
 
 ### Where the controls live, and why not elsewhere
 
