@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, type Infer, type ObjectType } from "convex/values";
 import { builtinAgentVariables } from "./lib/agentVariables";
 import {
   action,
@@ -2180,18 +2180,25 @@ async function matchServices(
 // not least because an externalUid would skip voiceBook's own guards, lead
 // time included. Anything unmatched or mixed keeps the current cal.com path;
 // unknown words defaulting to "not goods" is the conservative reading.
+export async function isGoodsOnly(
+  ctx: QueryCtx,
+  orgId: Id<"orgs">,
+  spoken: string[],
+): Promise<boolean> {
+  const lines = await matchServices(ctx, orgId, spoken);
+  return (
+    lines.length > 0 &&
+    lines.length === spoken.length &&
+    lines.every((line) => line.durationMinutes === 0)
+  );
+}
+
 export const classifyServices = internalQuery({
   args: { orgId: v.id("orgs"), spoken: v.array(v.string()) },
   returns: v.object({ goodsOnly: v.boolean() }),
-  handler: async (ctx, args) => {
-    const lines = await matchServices(ctx, args.orgId, args.spoken);
-    return {
-      goodsOnly:
-        lines.length > 0 &&
-        lines.length === args.spoken.length &&
-        lines.every((line) => line.durationMinutes === 0),
-    };
-  },
+  handler: async (ctx, args) => ({
+    goodsOnly: await isGoodsOnly(ctx, args.orgId, args.spoken),
+  }),
 });
 
 // THE SAME BOOKING ASKED FOR TWICE IS ONE BOOKING (2026-10-13). A tool call
@@ -2247,10 +2254,10 @@ async function alreadyBooked(
 // Every guard a booking must clear before it is written, as the sentence the
 // agent reads back when it does not: lead time, the caller's own clash,
 // capacity, closures over the whole span, a handover the business offers.
-// null = clear. Extracted from voiceBook (2026-10-13) so the WRITE and the dry
-// run a suggested chat reply takes (previewBook) cannot disagree: a draft must
-// never promise a booking its approval will refuse for a reason the draft
-// could have known.
+// null = clear. Extracted from voiceBook (2026-10-13); a suggested chat reply's
+// dry run reaches it through the same agentBookTx (chatAgent.simulateDraft),
+// so a draft never promises a booking its sending will refuse for a reason
+// the draft could have known.
 async function bookingProblem(
   ctx: QueryCtx,
   a: {
@@ -2451,315 +2458,246 @@ async function bookingProblem(
 // Voice booking: find/create the customer by phone, insert the appointment.
 // externalUid (cal.com's uid when the booking went through cal.com) is what
 // dedupes the webhook echo via by_org_external.
-export const voiceBook = internalMutation({
-  args: {
-    orgId: v.id("orgs"),
-    name: v.string(),
-    phone: v.string(),
-    startAt: v.number(),
-    externalUid: v.optional(v.string()),
-    durationMinutes: v.optional(v.number()),
-    // What the caller asked for, in their own words. Matched below rather
-    // than by the agent, so a salon renaming a service does not mean editing
-    // a prompt in Retell.
-    //
-    // Both shapes, because an agent provisioned before template v4 still
-    // sends the singular one and must keep working until its owner clicks the
-    // update banner. `services` wins when present.
-    service: v.optional(v.string()),
-    services: v.optional(v.array(v.string())),
-    // Which agent made this booking. Unset = "voice", which every existing
-    // caller means; the chat agent passes "chat" so the appointment row says
-    // honestly which lane wrote it (docs/chat-agent.md).
-    source: v.optional(v.union(v.literal("voice"), v.literal("chat"))),
-    // How a GOODS order reaches its customer — the same field the booking page
-    // writes (schema appointments.fulfillment). Applied only when the matched
-    // lines are goods through and through; a visit is fulfilled in the chair
-    // and an agent that sends this alongside a haircut gets it dropped, not a
-    // refusal. ASAP is the caller's promise, not a time: pass startAt = now
-    // with asap set, exactly as the page does.
-    fulfillment: v.optional(
-      v.object({
-        kind: v.union(v.literal("pickup"), v.literal("delivery")),
-        asap: v.optional(v.boolean()),
-        address: v.optional(v.string()),
-      }),
-    ),
-  },
-  // The matched name goes back to the agent so it can read the booking back
-  // to the caller in the salon's own vocabulary — and so a miss is visible to
-  // whoever is reading the call rather than silent.
-  returns: v.object({
-    appointmentId: v.id("appointments"),
-    // The first match, kept for the singular caller. serviceNames carries the
-    // whole visit.
-    serviceName: v.optional(v.string()),
-    serviceNames: v.optional(v.array(v.string())),
-    // The customer already held exactly this booking; nothing was created.
-    existing: v.optional(v.boolean()),
-    // Whether a message from the business's own rules about this booking was
-    // scheduled to the customer. The chat agent stands down on it, and only
-    // on it: an existing booking schedules nothing, so the agent must answer.
-    notified: v.optional(v.boolean()),
-  }),
-  handler: async (ctx, args) => {
-    const phone = assertE164(args.phone);
-    let customer = await ctx.db
-      .query("customers")
-      .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
-      .unique();
-    const spokenServices =
-      args.services && args.services.length > 0
-        ? args.services
-        : args.service
-          ? [args.service]
-          : [];
-    const lines = await matchServices(ctx, args.orgId, spokenServices);
-    const line = lines[0];
-    // Double-booking guard, but only when Resepta's own book is the truth. An
-    // externalUid means cal.com already accepted this slot — it owns the
-    // inventory, and refusing here after it said yes would leave the two
-    // calendars telling different stories.
-    // The whole visit, not the first service. A haircut then a beard trim is
-    // one 45-minute block, and guarding only the first 30 would leave the
-    // second half of it bookable by somebody else.
-    const totalMinutes = lines.length
-      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
-      : undefined;
-    // Goods through and through, the same test classifyServices runs — and
-    // the same rule the booking page holds: a visit IS its own handover, so a
-    // fulfillment riding along with a haircut is dropped rather than refused.
-    const goodsOnly = lines.length > 0 && totalMinutes === 0;
-    const fulfillment = goodsOnly ? args.fulfillment : undefined;
-    if (customer) {
-      const same = await alreadyBooked(ctx, {
-        orgId: args.orgId,
-        customerId: customer._id,
-        startAt: args.startAt,
-        asap: args.fulfillment?.asap === true,
-        lineNames: lines.map((item) => item.name),
-      });
-      if (same) {
-        const names = (same.items ?? []).map((item) => item.name);
-        return {
-          appointmentId: same._id,
-          ...(names[0] ? { serviceName: names[0] } : {}),
-          ...(names.length > 0 ? { serviceNames: names } : {}),
-          existing: true,
-        };
-      }
-    }
-    // A placeholder handed over as the caller's name ("Bilinmiyor", "Yok") is
-    // no name at all (lib/nonAnswer), so it never becomes one: the record
-    // keeps its number as the name, as for a caller who gave none.
-    const givenName = answerOrEmpty(args.name.trim(), "name");
-    if (!customer) {
-      const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
-      const customerId = await ctx.db.insert("customers", {
-        orgId: args.orgId,
-        firstName: firstName || phone,
-        lastName: rest.join(" ") || undefined,
-        phone,
-        // Booking by calling the salon IS the opt-in moment (same reasoning
-        // as the cal.com page).
-        consentAt: Date.now(),
-      });
-      await recordCustomerCreated(ctx, {
-        orgId: args.orgId,
-        customerId,
-        source: "voice",
-      });
-      customer = await ctx.db.get(customerId);
-    } else if (
-      !customer.firstName ||
-      customer.firstName === phone ||
-      // A placeholder stored before the filter existed is replaced the same
-      // way an empty name is.
-      isNonAnswer(customer.firstName, "name")
-    ) {
-      // A caller the agent already saved details for exists BEFORE the
-      // booking — save_customer_details creates them from the number alone —
-      // so this branch, not the insert above, is the common one on a real
-      // call. It used to leave the name it was just handed on the floor, and
-      // the card kept showing the phone number where a name belongs.
-      //
-      // Still split here, because book_appointment takes ONE name argument:
-      // it is the caller's name for the booking, not a customer record edit.
-      // A record that already has its first and last name from the agent's
-      // own capture never reaches this branch.
-      const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
-      if (firstName) {
-        await ctx.db.patch(customer._id, {
-          firstName,
-          ...(rest.length > 0 ? { lastName: rest.join(" ") } : {}),
-        });
-      }
-    }
-    if (!customer) throw new Error("customer-failed");
-    // Consent, on the branch that was missing it. The insert above stamps it
-    // because booking by calling the salon IS the opt-in moment — and that is
-    // just as true of a caller who ALREADY has a record. On a real call they
-    // always do: save_customer_details creates them from the number before
-    // the booking, with no consent on it, so every voice booking by an
-    // agent that collects details first landed here unconsented.
-    //
-    // wa.ts gates EVERY channel on consentAt, so the confirmation did not
-    // fail on its way out — it never left. It was logged as a bodyless
-    // no-consent failure, which reads in the feed as a template message that
-    // simply did nothing.
-    if (customer.consentAt === undefined) {
-      await ctx.db.patch(customer._id, { consentAt: Date.now() });
-    }
-    // Every guard, in the one place the dry run shares (bookingProblem),
-    // thrown as the sentence the agent reads back.
-    const problem = await bookingProblem(ctx, {
-      orgId: args.orgId,
-      customerId: customer._id,
-      startAt: args.startAt,
-      lines,
-      totalMinutes,
-      durationMinutes: args.durationMinutes,
-      providerHeld: Boolean(args.externalUid),
-      fulfillment,
-    });
-    if (problem) throw new Error(problem);
-    const appointmentId = await ctx.db.insert("appointments", {
-      orgId: args.orgId,
-      customerId: customer._id,
-      startAt: args.startAt,
-      ...(fulfillment
-        ? {
-            fulfillment: {
-              kind: fulfillment.kind,
-              ...(fulfillment.asap ? { asap: true } : {}),
-              ...(fulfillment.address?.trim()
-                ? { address: fulfillment.address.trim().slice(0, 500) }
-                : {}),
-            },
-          }
-        : {}),
-      // The services' own durations win over anything the call reported: they
-      // are what the salon says the work takes, and the block staff read.
-      durationMinutes: totalMinutes ?? args.durationMinutes,
-      // leadMinutes is matcher plumbing, not a line fact — the stored
-      // snapshot carries what was sold, not the baker's scheduling rule.
-      items: lines.length
-        ? lines.map(({ leadMinutes: _lead, ...item }) => item)
-        : undefined,
-      status: "scheduled",
-      source: args.source ?? "voice",
-      externalUid: args.externalUid,
-    });
-    await syncAppointmentSchedule(ctx, appointmentId);
-    // The feed's answer to "who booked this?", as staff bookings
-    // (schedule.ts) and the office MCP (agentTools) already give it. No
-    // session on a call or a live chat, so it reads as the system; a drafted
-    // chat booking a person sent carries that person.
-    await recordActivity(ctx, {
-      orgId: args.orgId,
-      kind: "appointment_created",
-      customerId: customer._id,
-      appointmentId,
-    });
-    const notified =
-      (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0;
-    // Every caller of this mutation is an assistant (phone or chat), so every
-    // booking here counts toward the customer's daily change cap
-    // (lib/agentChange.ts); past it, bookingProblem refuses the next one.
-    await ctx.db.patch(customer._id, {
-      agentChangesAt: withChange(customer.agentChangesAt, Date.now()),
-    });
-    return {
-      appointmentId,
-      serviceName: line?.name,
-      serviceNames: lines.length ? lines.map((item) => item.name) : undefined,
-      notified,
-    };
-  },
-});
-
-// voiceBook's dry run, for a chat reply that only SUGGESTS (and for shadow):
-// the same matching and the same guards (bookingProblem), nothing written
-// (2026-10-13). The customer is the conversation's, asserted to be in this org;
-// the model supplies only what it supplies to book_appointment itself. What
-// comes back is what the draft may promise, and the approval runs the real
-// voiceBook again, so a slot taken in between is refused there.
-export const previewBook = internalQuery({
-  args: {
-    orgId: v.id("orgs"),
-    customerId: v.id("customers"),
-    startAt: v.number(),
-    services: v.optional(v.array(v.string())),
-    service: v.optional(v.string()),
-    // cal.com will hold this booking once it is made: capacity is its call.
-    providerHeld: v.optional(v.boolean()),
-    fulfillment: v.optional(
-      v.object({
-        kind: v.union(v.literal("pickup"), v.literal("delivery")),
-        asap: v.optional(v.boolean()),
-        address: v.optional(v.string()),
-      }),
-    ),
-  },
-  returns: v.union(
+const voiceBookArgs = {
+  orgId: v.id("orgs"),
+  name: v.string(),
+  phone: v.string(),
+  startAt: v.number(),
+  externalUid: v.optional(v.string()),
+  durationMinutes: v.optional(v.number()),
+  // What the caller asked for, in their own words. Matched below rather
+  // than by the agent, so a salon renaming a service does not mean editing
+  // a prompt in Retell.
+  //
+  // Both shapes, because an agent provisioned before template v4 still
+  // sends the singular one and must keep working until its owner clicks the
+  // update banner. `services` wins when present.
+  service: v.optional(v.string()),
+  services: v.optional(v.array(v.string())),
+  // Which agent made this booking. Unset = "voice", which every existing
+  // caller means; the chat agent passes "chat" so the appointment row says
+  // honestly which lane wrote it (docs/chat-agent.md).
+  source: v.optional(v.union(v.literal("voice"), v.literal("chat"))),
+  // How a GOODS order reaches its customer — the same field the booking page
+  // writes (schema appointments.fulfillment). Applied only when the matched
+  // lines are goods through and through; a visit is fulfilled in the chair
+  // and an agent that sends this alongside a haircut gets it dropped, not a
+  // refusal. ASAP is the caller's promise, not a time: pass startAt = now
+  // with asap set, exactly as the page does.
+  fulfillment: v.optional(
     v.object({
-      ok: v.literal(true),
-      serviceName: v.optional(v.string()),
-      serviceNames: v.optional(v.array(v.string())),
-      // Already held: approving would create nothing, so there is nothing to
-      // record either.
-      existing: v.optional(v.boolean()),
+      kind: v.union(v.literal("pickup"), v.literal("delivery")),
+      asap: v.optional(v.boolean()),
+      address: v.optional(v.string()),
     }),
-    v.object({ ok: v.literal(false), error: v.string() }),
   ),
-  handler: async (ctx, args) => {
-    const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== args.orgId) {
-      return { ok: false as const, error: "no-such-customer" };
-    }
-    const spoken =
-      args.services && args.services.length > 0
-        ? args.services
-        : args.service
-          ? [args.service]
-          : [];
-    const lines = await matchServices(ctx, args.orgId, spoken);
+};
+
+// The matched name goes back to the agent so it can read the booking back
+// to the caller in the salon's own vocabulary — and so a miss is visible to
+// whoever is reading the call rather than silent.
+const voiceBookReturns = v.object({
+  appointmentId: v.id("appointments"),
+  // The first match, kept for the singular caller. serviceNames carries the
+  // whole visit.
+  serviceName: v.optional(v.string()),
+  serviceNames: v.optional(v.array(v.string())),
+  // The customer already held exactly this booking; nothing was created.
+  existing: v.optional(v.boolean()),
+  // Whether a message from the business's own rules about this booking was
+  // scheduled to the customer. The chat agent stands down on it, and only
+  // on it: an existing booking schedules nothing, so the agent must answer.
+  notified: v.optional(v.boolean()),
+});
+export type AgentBooking = Infer<typeof voiceBookReturns>;
+
+// The booking itself, as a plain function: voiceBook below is its mutation
+// for the live tools, and a drafted reply's changes run it inside ONE
+// transaction with the others (chatAgent.applyIntentsTx), so a draft's
+// changes land together or not at all (2026-10-13). Throws the sentence
+// the agent reads back when a guard refuses.
+export async function agentBookTx(
+  ctx: MutationCtx,
+  args: ObjectType<typeof voiceBookArgs>,
+): Promise<AgentBooking> {
+  const phone = assertE164(args.phone);
+  let customer = await ctx.db
+    .query("customers")
+    .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
+    .unique();
+  const spokenServices =
+    args.services && args.services.length > 0
+      ? args.services
+      : args.service
+        ? [args.service]
+        : [];
+  const lines = await matchServices(ctx, args.orgId, spokenServices);
+  const line = lines[0];
+  // Double-booking guard, but only when Resepta's own book is the truth. An
+  // externalUid means cal.com already accepted this slot — it owns the
+  // inventory, and refusing here after it said yes would leave the two
+  // calendars telling different stories.
+  // The whole visit, not the first service. A haircut then a beard trim is
+  // one 45-minute block, and guarding only the first 30 would leave the
+  // second half of it bookable by somebody else.
+  const totalMinutes = lines.length
+    ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
+    : undefined;
+  // Goods through and through, the same test classifyServices runs — and
+  // the same rule the booking page holds: a visit IS its own handover, so a
+  // fulfillment riding along with a haircut is dropped rather than refused.
+  const goodsOnly = lines.length > 0 && totalMinutes === 0;
+  const fulfillment = goodsOnly ? args.fulfillment : undefined;
+  if (customer) {
     const same = await alreadyBooked(ctx, {
       orgId: args.orgId,
       customerId: customer._id,
       startAt: args.startAt,
       asap: args.fulfillment?.asap === true,
-      lineNames: lines.map((line) => line.name),
+      lineNames: lines.map((item) => item.name),
     });
     if (same) {
       const names = (same.items ?? []).map((item) => item.name);
       return {
-        ok: true as const,
+        appointmentId: same._id,
         ...(names[0] ? { serviceName: names[0] } : {}),
         ...(names.length > 0 ? { serviceNames: names } : {}),
         existing: true,
       };
     }
-    const totalMinutes = lines.length
-      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
-      : undefined;
-    const goodsOnly = lines.length > 0 && totalMinutes === 0;
-    const problem = await bookingProblem(ctx, {
+  }
+  // A placeholder handed over as the caller's name ("Bilinmiyor", "Yok") is
+  // no name at all (lib/nonAnswer), so it never becomes one: the record
+  // keeps its number as the name, as for a caller who gave none.
+  const givenName = answerOrEmpty(args.name.trim(), "name");
+  if (!customer) {
+    const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
+    const customerId = await ctx.db.insert("customers", {
       orgId: args.orgId,
-      customerId: customer._id,
-      startAt: args.startAt,
-      lines,
-      totalMinutes,
-      providerHeld: args.providerHeld === true,
-      fulfillment: goodsOnly ? args.fulfillment : undefined,
+      firstName: firstName || phone,
+      lastName: rest.join(" ") || undefined,
+      phone,
+      // Booking by calling the salon IS the opt-in moment (same reasoning
+      // as the cal.com page).
+      consentAt: Date.now(),
     });
-    if (problem) return { ok: false as const, error: problem };
-    return {
-      ok: true as const,
-      ...(lines[0] ? { serviceName: lines[0].name } : {}),
-      ...(lines.length > 0 ? { serviceNames: lines.map((item) => item.name) } : {}),
-    };
-  },
+    await recordCustomerCreated(ctx, {
+      orgId: args.orgId,
+      customerId,
+      source: "voice",
+    });
+    customer = await ctx.db.get(customerId);
+  } else if (
+    !customer.firstName ||
+    customer.firstName === phone ||
+    // A placeholder stored before the filter existed is replaced the same
+    // way an empty name is.
+    isNonAnswer(customer.firstName, "name")
+  ) {
+    // A caller the agent already saved details for exists BEFORE the
+    // booking — save_customer_details creates them from the number alone —
+    // so this branch, not the insert above, is the common one on a real
+    // call. It used to leave the name it was just handed on the floor, and
+    // the card kept showing the phone number where a name belongs.
+    //
+    // Still split here, because book_appointment takes ONE name argument:
+    // it is the caller's name for the booking, not a customer record edit.
+    // A record that already has its first and last name from the agent's
+    // own capture never reaches this branch.
+    const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
+    if (firstName) {
+      await ctx.db.patch(customer._id, {
+        firstName,
+        ...(rest.length > 0 ? { lastName: rest.join(" ") } : {}),
+      });
+    }
+  }
+  if (!customer) throw new Error("customer-failed");
+  // Consent, on the branch that was missing it. The insert above stamps it
+  // because booking by calling the salon IS the opt-in moment — and that is
+  // just as true of a caller who ALREADY has a record. On a real call they
+  // always do: save_customer_details creates them from the number before
+  // the booking, with no consent on it, so every voice booking by an
+  // agent that collects details first landed here unconsented.
+  //
+  // wa.ts gates EVERY channel on consentAt, so the confirmation did not
+  // fail on its way out — it never left. It was logged as a bodyless
+  // no-consent failure, which reads in the feed as a template message that
+  // simply did nothing.
+  if (customer.consentAt === undefined) {
+    await ctx.db.patch(customer._id, { consentAt: Date.now() });
+  }
+  // Every guard, in the one place the dry run shares (bookingProblem),
+  // thrown as the sentence the agent reads back.
+  const problem = await bookingProblem(ctx, {
+    orgId: args.orgId,
+    customerId: customer._id,
+    startAt: args.startAt,
+    lines,
+    totalMinutes,
+    durationMinutes: args.durationMinutes,
+    providerHeld: Boolean(args.externalUid),
+    fulfillment,
+  });
+  if (problem) throw new Error(problem);
+  const appointmentId = await ctx.db.insert("appointments", {
+    orgId: args.orgId,
+    customerId: customer._id,
+    startAt: args.startAt,
+    ...(fulfillment
+      ? {
+          fulfillment: {
+            kind: fulfillment.kind,
+            ...(fulfillment.asap ? { asap: true } : {}),
+            ...(fulfillment.address?.trim()
+              ? { address: fulfillment.address.trim().slice(0, 500) }
+              : {}),
+          },
+        }
+      : {}),
+    // The services' own durations win over anything the call reported: they
+    // are what the salon says the work takes, and the block staff read.
+    durationMinutes: totalMinutes ?? args.durationMinutes,
+    // leadMinutes is matcher plumbing, not a line fact — the stored
+    // snapshot carries what was sold, not the baker's scheduling rule.
+    items: lines.length
+      ? lines.map(({ leadMinutes: _lead, ...item }) => item)
+      : undefined,
+    status: "scheduled",
+    source: args.source ?? "voice",
+    externalUid: args.externalUid,
+  });
+  await syncAppointmentSchedule(ctx, appointmentId);
+  // The feed's answer to "who booked this?", as staff bookings
+  // (schedule.ts) and the office MCP (agentTools) already give it. No
+  // session on a call or a live chat, so it reads as the system; a drafted
+  // chat booking a person sent carries that person.
+  await recordActivity(ctx, {
+    orgId: args.orgId,
+    kind: "appointment_created",
+    customerId: customer._id,
+    appointmentId,
+  });
+  const notified =
+    (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0;
+  // Every caller of this mutation is an assistant (phone or chat), so every
+  // booking here counts toward the customer's daily change cap
+  // (lib/agentChange.ts); past it, bookingProblem refuses the next one.
+  await ctx.db.patch(customer._id, {
+    agentChangesAt: withChange(customer.agentChangesAt, Date.now()),
+  });
+  return {
+    appointmentId,
+    serviceName: line?.name,
+    serviceNames: lines.length ? lines.map((item) => item.name) : undefined,
+    notified,
+  };
+}
+
+export const voiceBook = internalMutation({
+  args: voiceBookArgs,
+  returns: voiceBookReturns,
+  handler: async (ctx, args) => await agentBookTx(ctx, args),
 });
 
 // Two free times either side of one that was refused or asked about
@@ -3145,10 +3083,6 @@ export async function applyVoiceContactValues(
     // in its custom map. Resolved by the caller from the agent's own
     // variables, so a key only reaches a built-in if the owner said it should.
     identity?: Record<string, { field: "firstName" | "lastName" | "email"; label: string }>;
-    // Every rule applied, nothing written: the result says what WOULD be
-    // saved. A suggested chat reply records that and saves it only when a
-    // person sends the draft (chatAgent.sendSuggestion).
-    dryRun?: boolean;
   },
 ): Promise<ContactUpdateResult> {
   const phone = toE164(args.phone);
@@ -3264,7 +3198,7 @@ export async function applyVoiceContactValues(
     updated.push(key);
     updatedLabels.push(field.label);
   }
-  if (updated.length > 0 && !args.dryRun) {
+  if (updated.length > 0) {
     await ctx.db.patch(customer._id, { custom, ...identityPatch });
     // The email arriving NOW is what an earlier no-email-address confirmation
     // was waiting for — the agent asks for the address after booking, so the

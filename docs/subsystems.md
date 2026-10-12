@@ -1819,15 +1819,22 @@ Facts the next reader should not re-derive:
   `recordTurn`, in the same transaction as the insert, so a thread can never
   show two and nobody can send one written for a message already followed up.
 - **A draft changes nothing until it is sent** (2026-10-13, Nudge's Approve
-  rule). In suggest the write tools run every check, write nothing and record
-  the change on the turn (`intents`); the composer shows it above the box
+  rule). In suggest the write tools record the change on the turn
+  (`intents`) instead of making it; the composer shows it above the box
   ("Sending this books …", with an × that drops it by retiring the draft).
-  `sendSuggestion` makes the changes FIRST, each re-checked at that moment
-  (still the customer's next appointment at the time the draft named, the
-  booking path run again), and sends the words only if every one took. A
-  refusal retires the draft with the reason and sends nothing; a send that
-  fails after the change says so (`changed-not-sent`) and puts the words back
-  without making the change twice (`intentsAppliedAt`). An attachment, quote
+  `sendSuggestion` makes the changes FIRST and ALL OR NOTHING: one mutation
+  (`applyDraftChanges` → `applyIntentsTx`) makes every change in the model's
+  order, each judged against the calendar as the ones before it left it, and
+  stamps `intentsAppliedAt` in the same transaction. A refusal throws, rolls
+  back every change and every message they scheduled, retires the draft with
+  the reason and sends nothing; a send that fails after the change says so
+  (`changed-not-sent`) and puts the words back without making the change
+  twice. The dry run at generation is the same function inside a nested
+  mutation that always throws (`simulateDraft` / `simulateDraftInner`), so a
+  draft is judged exactly as sending will judge it and keeps nothing; a
+  scheduled job inside a rolled-back nested mutation does not survive
+  (checked on the local backend, 2026-10-13). A change cal.com would have to
+  hold is refused in a draft: it cannot be part of a transaction. An attachment, quote
   or scheduled send cannot carry the change, so the composer refuses those
   while one is pending. The automation stand-down is LIVE ONLY now, and fires
   only when a write actually scheduled the business's own message to the

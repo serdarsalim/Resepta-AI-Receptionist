@@ -1,4 +1,4 @@
-import { v, type Infer } from "convex/values";
+import { ConvexError, v, type Infer } from "convex/values";
 import {
   action,
   internalAction,
@@ -7,9 +7,10 @@ import {
   mutation,
   query,
   type ActionCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { monthKey } from "./lib/usage";
 
@@ -49,6 +50,7 @@ import { builtinAgentVariables } from "./lib/agentVariables";
 import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
   type ActiveWindow,
+  type Closure,
   closureBlocks,
   getLocalPartsSafe,
   hasBusinessHours,
@@ -70,9 +72,11 @@ import { sendEvolutionText } from "./lib/evolution";
 import { nextUpcomingOf } from "./appointments";
 import { rulesForOrg } from "./messageRules";
 import {
+  agentBookTx,
   applyVoiceContactValues,
   contactUpdateFailure,
   contactUpdateResult,
+  isGoodsOnly,
 } from "./retell";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 import { answerOrEmpty } from "./lib/nonAnswer";
@@ -87,7 +91,8 @@ import {
   type AgentIntent,
   type ApprovalFailure,
 } from "./lib/agentChange";
-import { writeOwnChange } from "./agentAppointments";
+import { cancelOwnTx, moveOwnTx, writeOwnChange } from "./agentAppointments";
+import { loadClosures } from "./lib/closureRows";
 
 // The WhatsApp chat agent's runtime (docs/chat-agent.md). One inbound
 // customer message → one TURN: guards, context, a bounded tool loop against
@@ -970,65 +975,6 @@ export const refuseSuggestion = internalMutation({
   },
 });
 
-// The draft's changes are made. Stamped BEFORE the reply goes out: a send
-// that then fails puts the draft back (releaseSuggestion), and the next try
-// must send the words without making the changes a second time.
-export const markIntentsApplied = internalMutation({
-  args: { turnId: v.id("chatAgentTurns") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const turn = await ctx.db.get(args.turnId);
-    if (turn && turn.intentsAppliedAt === undefined) {
-      await ctx.db.patch(args.turnId, { intentsAppliedAt: Date.now() });
-    }
-    return null;
-  },
-});
-
-// What making a drafted change needs to know about the business and the
-// customer, in the shape the tools take (TurnContext). Internal and keyed on
-// the customer: the only caller is sendSuggestion, AFTER claimSuggestion has
-// checked the draft belongs to the signed-in member's org and to this
-// customer. The mode reads "live" because this is the change being made for
-// real, by a person.
-export const approvalContext = internalQuery({
-  args: { customerId: v.id("customers") },
-  returns: v.any(),
-  handler: async (ctx, args) => {
-    const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
-    const org = await ctx.db.get(customer.orgId);
-    if (!org) return null;
-    const context: TurnContext = {
-      orgId: customer.orgId,
-      org: {
-        name: org.name,
-        timezone: org.timezone,
-        language: org.language,
-        businessHours: org.businessHours ?? null,
-        priceDecimals: org.priceDecimals ?? false,
-        calcomApiKey: org.calcomApiKey ?? null,
-        calcomEventTypeId: org.calcomEventTypeId ?? null,
-        mode: "live",
-        stopOnHandover: false,
-        currency: org.currency ?? "TRY",
-        pickup: org.pickupEnabled ?? true,
-        delivery: org.deliveryEnabled ?? true,
-      },
-      customer: {
-        _id: customer._id,
-        phone: customer.phone,
-        firstName: customer.firstName,
-        lastName: customer.lastName ?? null,
-        language: customer.language ?? org.language,
-        alreadyFlagged: customer.agentFlaggedAt !== undefined,
-      },
-      automations: { booking: false, cancellation: false },
-    };
-    return context;
-  },
-});
-
 // Put a claimed draft back, for the one case that reaches here: the send
 // failed, so nothing arrived and the draft is still the best text anybody has.
 // Without this a WhatsApp outage would quietly eat every draft it prevented.
@@ -1103,29 +1049,38 @@ export const sendSuggestion = action({
     if (!claimed.ok) return { ok: false, reason: "already-decided" };
     // THE CHANGE FIRST, THEN THE WORDS (Nudge's approveMeetings). A draft that
     // books, moves, cancels or saves recorded those changes instead of making
-    // them; sending is the approval, so they are made now, each re-checked at
-    // this moment, and the reply goes only if every one of them took. A
-    // "you're booked" with nothing booked is the one reply worse than none.
+    // them; sending is the approval, so they are made now, ALL OR NOTHING in
+    // one transaction (applyDraftChanges), judged at this moment, and the
+    // reply goes only if they took. A "you're booked" with nothing booked is
+    // the one reply worse than none, and a half-made draft (booked, then the
+    // cancel refused) is worse still.
     if (claimed.intents.length > 0 && !claimed.intentsApplied) {
-      // A throw is a refusal too: the draft is claimed, and leaving it
-      // claimed with nothing sent would make it vanish without a word.
-      const applied = await applyIntents(ctx, args.customerId, claimed.intents).catch(
-        (err: unknown) => ({
-          ok: false as const,
-          reason: "change-failed" as const,
-          error: err instanceof Error ? err.message : "apply-failed",
-        }),
-      );
-      if (!applied.ok) {
+      let refused: { reason: ApprovalFailure; error: string } | null = null;
+      try {
+        await ctx.runMutation(internal.chatAgent.applyDraftChanges, {
+          turnId: args.turnId,
+          customerId: args.customerId,
+        });
+      } catch (err) {
+        // A throw of any kind is a refusal: the transaction rolled back, and
+        // leaving the draft claimed with nothing sent would make it vanish
+        // without a word.
+        const outcome = draftOutcomeOf(err);
+        const error =
+          outcome && !outcome.ok
+            ? outcome.reason
+            : err instanceof Error
+              ? err.message
+              : "apply-failed";
+        refused = { reason: approvalFailureOf(error), error };
+      }
+      if (refused) {
         await ctx.runMutation(internal.chatAgent.refuseSuggestion, {
           turnId: args.turnId,
-          error: applied.error,
+          error: refused.error,
         });
-        return { ok: false, reason: applied.reason };
+        return { ok: false, reason: refused.reason };
       }
-      await ctx.runMutation(internal.chatAgent.markIntentsApplied, {
-        turnId: args.turnId,
-      });
     }
     // Put the disclosure back if the reader took it out. It is the one part
     // of the draft that is not theirs to edit away — see claimSuggestion.
@@ -1151,88 +1106,6 @@ export const sendSuggestion = action({
   },
 });
 
-// Make the changes a suggested reply recorded, in the order the model made
-// them, each re-checked NOW (Nudge's executeMeetingIntent). The first refusal
-// stops it: nothing after it is attempted and the reply is not sent. A move
-// or a cancel acts only while the appointment is still the customer's next
-// one at the time the draft named; a booking runs the whole booking path
-// again. Saves go last and never stop a send: they pass the same gate again
-// when written, and a field made staff-only a minute ago is not a reason to
-// withhold the reply.
-async function applyIntents(
-  ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
-  customerId: Id<"customers">,
-  intents: AgentIntent[],
-): Promise<{ ok: true } | { ok: false; reason: ApprovalFailure; error: string }> {
-  const context = (await ctx.runQuery(internal.chatAgent.approvalContext, {
-    customerId,
-  })) as TurnContext | null;
-  if (!context) return { ok: false, reason: "change-failed", error: "no-context" };
-  const { org } = context;
-  const fail = (error: string) => ({
-    ok: false as const,
-    reason: approvalFailureOf(error),
-    error,
-  });
-  for (const intent of intents) {
-    if (intent.kind === "save") continue;
-    if (intent.kind === "book") {
-      // An asap order is placed when it is approved, not when it was drafted.
-      const startAt = intent.asap ? Date.now() : intent.start;
-      if (!intent.asap) {
-        const refusal = await startRefusal(ctx, context, startAt, "booked");
-        if (refusal) return fail(String(refusal.error ?? "outside-open-hours"));
-      }
-      const goodsOnly =
-        org.calcomApiKey && org.calcomEventTypeId
-          ? (
-              await ctx.runQuery(internal.retell.classifyServices, {
-                orgId: context.orgId,
-                spoken: intent.services,
-              })
-            ).goodsOnly
-          : false;
-      const result = await commitBooking(ctx, context, {
-        name: intent.name,
-        startAt,
-        asap: intent.asap === true,
-        spokenServices: intent.services,
-        goodsOnly,
-        ...(intent.fulfillment ? { fulfillment: intent.fulfillment } : {}),
-      });
-      if (result.booked !== true) return fail(String(result.error ?? "book-failed"));
-      continue;
-    }
-    // The appointment the draft was written about, and nothing else: the
-    // customer's own open one at the start the draft named. The write finds
-    // it by that start and refuses if it is gone.
-    const own = await ctx.runQuery(internal.agentAppointments.ownNext, {
-      orgId: context.orgId,
-      customerId,
-    });
-    if (own.changesToday >= CHANGES_PER_DAY) return fail("too-many-changes");
-    const done = await writeOwnChange(ctx, {
-      target: { orgId: context.orgId, customerId, from: intent.from },
-      calcomApiKey: org.calcomApiKey ?? undefined,
-      change: intent.kind === "cancel" ? { kind: "cancel" } : { kind: "move", to: intent.to },
-      via: "chat",
-    });
-    if (!done.ok) return fail(done.reason);
-  }
-  for (const intent of intents) {
-    if (intent.kind !== "save") continue;
-    try {
-      await ctx.runMutation(internal.chatAgent.saveCustomerDetails, {
-        customerId,
-        values: intent.values,
-      });
-    } catch (err) {
-      console.warn("drafted save failed", err instanceof Error ? err.message : err);
-    }
-  }
-  return { ok: true };
-}
-
 // The chat lane's pen — save_customer_details, bound to the customer the
 // WEBHOOK resolved (the isolation invariant: the model picks values, never
 // identities). Thin on purpose: every rule about WHAT may be written — the
@@ -1245,10 +1118,6 @@ export const saveCustomerDetails = internalMutation({
   args: {
     customerId: v.id("customers"),
     values: v.record(v.string(), v.string()),
-    // A suggest or shadow turn: what WOULD be saved, nothing written. Runs as
-    // a mutation that writes nothing, because the gate is a mutation-side
-    // function and a second, query-side copy of it is how two copies drift.
-    dryRun: v.optional(v.boolean()),
   },
   returns: contactUpdateResult,
   handler: async (ctx, args) => {
@@ -1258,7 +1127,6 @@ export const saveCustomerDetails = internalMutation({
       orgId: customer.orgId,
       phone: customer.phone,
       values: args.values,
-      dryRun: args.dryRun,
       identity: {
         firstname: { field: "firstName", label: "firstname" },
         lastname: { field: "lastName", label: "lastname" },
@@ -1326,11 +1194,8 @@ export const respond = internalAction({
     // change here; it lands on the turn row, and a suggested reply's changes
     // are made only when a person sends it (sendSuggestion). Live writes as it
     // goes: a live reply IS the business answering.
-    const intents: AgentIntent[] = [];
-    const dry =
-      context.org.mode === "live"
-        ? undefined
-        : (intent: AgentIntent) => addIntent(intents, intent);
+    const draft: DraftBuffer | undefined =
+      context.org.mode === "live" ? undefined : { intents: [] };
 
     // Priced per completion as each one returns, then summed, because a
     // long-prompt rate (lib/llm MODELS) is decided per request: pricing the
@@ -1367,7 +1232,7 @@ export const respond = internalAction({
         error: fields.error,
         month: context.month,
         autoSendAt: fields.autoSendAt,
-        ...(intents.length > 0 ? { intents } : {}),
+        ...(draft && draft.intents.length > 0 ? { intents: draft.intents } : {}),
       });
 
     if (context.skip) {
@@ -1497,13 +1362,13 @@ export const respond = internalAction({
       // provider's own dialect — appendToolRound owns that asymmetry.
       const toolResults: { id: string; content: string }[] = [];
       for (const use of result.toolUses) {
-        const toolResult = await executeTool(ctx, context, use.name, use.input, dry);
+        const toolResult = await executeTool(ctx, context, use.name, use.input, draft);
         toolLog.push({
           name: use.name,
           args: use.input,
           result: toolResult,
           // The flight recorder must not read a dry "booked: true" as a booking.
-          ...(dry && WRITE_TOOLS.has(use.name) ? { dry: true } : {}),
+          ...(draft && WRITE_TOOLS.has(use.name) ? { dry: true } : {}),
         });
         toolResults.push({ id: use.id, content: JSON.stringify(toolResult) });
       }
@@ -1931,11 +1796,47 @@ async function executeTool(
   name: string,
   input: Record<string, unknown>,
   // Present when the reply only suggests (suggest) or is never sent
-  // (shadow): every write tool runs its checks, writes NOTHING, hands its
-  // change here, and answers as though it had made it. See AgentIntent.
-  dry?: (intent: AgentIntent) => void,
+  // (shadow): every write tool runs its checks, writes NOTHING, adds its
+  // change to the draft, and answers as though it had made it.
+  draft?: DraftBuffer,
 ): Promise<Record<string, unknown>> {
   const { org, customer } = context;
+  const dry = draft !== undefined;
+  // A change for the draft, judged the way sending it would judge it: the
+  // draft's changes so far plus this one, made in a transaction that always
+  // rolls back (simulateDraft), so this one is weighed against the calendar
+  // as the earlier ones leave it. Kept only when the caller says so, because
+  // a repeat or a booking already held adds nothing to send.
+  const tryDraft = async (
+    candidate: AgentIntent,
+  ): Promise<
+    | {
+        ok: true;
+        outcome: IntentOutcome | null;
+        keep: (adjust?: (intent: AgentIntent) => void) => void;
+      }
+    | { ok: false; reason: string }
+  > => {
+    if (!draft) return { ok: false, reason: "calendar-error" };
+    const merged = JSON.parse(JSON.stringify(draft.intents)) as AgentIntent[];
+    const position = addIntent(merged, candidate);
+    const verdict = JSON.parse(
+      await ctx.runMutation(internal.chatAgent.simulateDraft, {
+        orgId: context.orgId,
+        customerId: customer._id,
+        intents: merged,
+      }),
+    ) as DraftOutcome;
+    if (!verdict.ok) return { ok: false, reason: verdict.reason };
+    return {
+      ok: true,
+      outcome: position >= 0 ? (verdict.results[position] ?? null) : null,
+      keep: (adjust) => {
+        if (adjust && position >= 0) adjust(merged[position]);
+        draft.intents.splice(0, draft.intents.length, ...merged);
+      },
+    };
+  };
   const spokenOf = (at: number) =>
     formatAppointmentTime(at, org.timezone, customer.language);
   // The free times nearest one that is taken or shut, so a "no" arrives with
@@ -2215,41 +2116,32 @@ async function executeTool(
         };
       };
       if (dry) {
-        // Every check the booking would face, nothing written: the draft may
-        // promise only what the approval can then make (see AgentIntent).
-        const preview = await ctx.runQuery(internal.retell.previewBook, {
-          orgId: context.orgId,
-          customerId: customer._id,
-          startAt,
-          services: spokenServices,
-          service: spokenService,
-          providerHeld: Boolean(org.calcomApiKey && org.calcomEventTypeId && !goodsOnly),
-          ...(plan.fulfillment
-            ? {
-                fulfillment: {
-                  ...plan.fulfillment,
-                  ...(askedAsap ? { asap: true } : {}),
-                },
-              }
-            : {}),
-        });
-        if (!preview.ok) return await bookingRefused(preview.error);
-        // Already held: approving would make nothing, so nothing is recorded.
-        if ("existing" in preview && preview.existing) {
-          return bookedAnswer(context, plan, preview);
-        }
-        dry({
+        // Every check the booking would face, after the draft's earlier
+        // changes, nothing kept: the draft may promise only what sending can
+        // then make.
+        const sim = await tryDraft({
           kind: "book",
           name: customerName,
           start: startAt,
           ...(askedAsap ? { asap: true } : {}),
           services: spoken,
-          serviceNames: preview.serviceNames ?? [],
+          serviceNames: [],
           ...(plan.fulfillment ? { fulfillment: plan.fulfillment } : {}),
         });
+        if (!sim.ok) return await bookingRefused(sim.reason);
+        const made: Extract<IntentOutcome, { kind: "book" }> =
+          sim.outcome?.kind === "book" ? sim.outcome : { kind: "book" };
+        // Already held: sending would make nothing, so nothing is kept.
+        if (!made.existing) {
+          sim.keep((intent) => {
+            if (intent.kind === "book") intent.serviceNames = made.serviceNames ?? [];
+          });
+        }
         return {
-          ...bookedAnswer(context, plan, preview),
-          ...(context.automations.booking ? { note: AUTOMATION_SPEAKS.booking } : {}),
+          ...bookedAnswer(context, plan, { ...made, notified: false }),
+          ...(context.automations.booking && !made.existing
+            ? { note: AUTOMATION_SPEAKS.booking }
+            : {}),
         };
       }
       const made = await commitBooking(ctx, context, plan);
@@ -2349,10 +2241,17 @@ async function executeTool(
 
       if (name === "cancel_appointment") {
         if (dry) {
-          // There must be an open appointment of theirs at that start.
-          const at = await ctx.runQuery(internal.agentAppointments.ownAt, target);
-          if (!at) return await refuse("appointment-changed");
-          dry({ kind: "cancel", appointmentId: at.appointmentId, from });
+          const sim = await tryDraft({ kind: "cancel", from });
+          if (!sim.ok) return await refuse(sim.reason);
+          if (sim.outcome?.kind === "cancel" && sim.outcome.noop) {
+            return {
+              cancelled: true,
+              spoken_time: spokenOf(from),
+              already_cancelled: true,
+              note: "It was already cancelled; nothing else will change. Tell the customer it is cancelled, once.",
+            };
+          }
+          sim.keep();
           return {
             cancelled: true,
             spoken_time: spokenOf(from),
@@ -2390,30 +2289,25 @@ async function executeTool(
         };
       }
       if (dry) {
-        // The whole judgement a move faces, now; the approval asks again.
-        const check = await ctx.runQuery(internal.agentAppointments.checkMove, {
-          ...target,
-          to: startAt,
-        });
-        if (!check.ok) return await refuse(check.reason, undefined, startAt);
-        if (!check.noop) {
-          const at = await ctx.runQuery(internal.agentAppointments.ownAt, target);
-          dry({
-            kind: "move",
-            ...(at ? { appointmentId: at.appointmentId } : {}),
-            from,
-            to: startAt,
-          });
+        // The whole judgement a move faces, after the draft's earlier
+        // changes; sending asks again.
+        const sim = await tryDraft({ kind: "move", from, to: startAt });
+        if (!sim.ok) return await refuse(sim.reason, undefined, startAt);
+        if (sim.outcome?.kind === "move" && sim.outcome.noop) {
+          return {
+            rescheduled: true,
+            spoken_time: spokenOf(startAt),
+            already_moved: true,
+            note: "It is already booked at that time; nothing else will change. Tell the customer, once.",
+          };
         }
+        sim.keep();
         return {
           rescheduled: true,
           spoken_time: spokenOf(startAt),
-          ...(check.noop ? { already_moved: true } : {}),
           // A move re-sends the booking confirmation (markRescheduled), so
           // it reads the booking switch.
-          ...(context.automations.booking && !check.noop
-            ? { note: AUTOMATION_SPEAKS.booking }
-            : {}),
+          ...(context.automations.booking ? { note: AUTOMATION_SPEAKS.booking } : {}),
         };
       }
       const done = await write({ kind: "move", to: startAt });
@@ -2439,23 +2333,39 @@ async function executeTool(
       if (Object.keys(values).length === 0) {
         return { saved: false, note: "Nothing to save." };
       }
-      const result = await ctx.runMutation(internal.chatAgent.saveCustomerDetails, {
-        customerId: customer._id,
-        values,
-        ...(dry ? { dryRun: true } : {}),
-      });
-      if (dry && result.updated.length > 0) {
-        // Only what the gate accepted is kept for the approval, which runs
-        // the gate again before writing.
-        const byKey = new Map(
-          Object.entries(values).map(([key, value]) => [key.trim(), value]),
-        );
-        dry({
-          kind: "save",
-          values: Object.fromEntries(
-            result.updated.map((key) => [key, byKey.get(key) ?? ""]),
-          ),
-          labels: result.updatedLabels,
+      let result: {
+        updated: string[];
+        updatedLabels: string[];
+        ignored: string[];
+        notForVoice: string[];
+        rejected: string[];
+      };
+      if (dry) {
+        // Through the same gate, inside the same rolled-back transaction as
+        // the draft's other changes; only what it accepted is kept.
+        const sim = await tryDraft({ kind: "save", values, labels: [] });
+        if (!sim.ok) return { saved: false, error: sim.reason };
+        result =
+          sim.outcome?.kind === "save"
+            ? sim.outcome
+            : { updated: [], updatedLabels: [], ignored: [], notForVoice: [], rejected: [] };
+        if (result.updated.length > 0) {
+          const accepted = new Set(result.updated);
+          const labels = result.updatedLabels;
+          sim.keep((intent) => {
+            if (intent.kind !== "save") return;
+            intent.values = Object.fromEntries(
+              Object.entries(intent.values)
+                .map(([key, value]) => [key.trim(), value] as const)
+                .filter(([key]) => accepted.has(key)),
+            );
+            intent.labels = labels;
+          });
+        }
+      } else {
+        result = await ctx.runMutation(internal.chatAgent.saveCustomerDetails, {
+          customerId: customer._id,
+          values,
         });
       }
       return {
@@ -2539,7 +2449,9 @@ const WRITE_TOOLS = new Set([
 // (`from`), so that is what is compared. A move or cancel of a booking this
 // same draft makes is folded into the booking: cancelling it drops both,
 // moving it moves the booking, so sending never books and unbooks in one go.
-function addIntent(list: AgentIntent[], intent: AgentIntent): void {
+// Returns where the change's own outcome sits in the list, or -1 when it was
+// folded into a drafted booking and has none.
+function addIntent(list: AgentIntent[], intent: AgentIntent): number {
   if (intent.kind === "move" || intent.kind === "cancel") {
     const drafted = list.findIndex(
       (prior) => prior.kind === "book" && !prior.asap && sameMinute(prior.start, intent.from),
@@ -2548,7 +2460,7 @@ function addIntent(list: AgentIntent[], intent: AgentIntent): void {
       const booking = list[drafted];
       if (intent.kind === "cancel") list.splice(drafted, 1);
       else if (booking.kind === "book") booking.start = intent.to;
-      return;
+      return -1;
     }
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const prior = list[i];
@@ -2561,15 +2473,21 @@ function addIntent(list: AgentIntent[], intent: AgentIntent): void {
     }
   }
   if (intent.kind === "save") {
-    const prior = list.find((item) => item.kind === "save");
+    const at = list.findIndex((item) => item.kind === "save");
+    const prior = list[at];
     if (prior && prior.kind === "save") {
       prior.values = { ...prior.values, ...intent.values };
       prior.labels = [...new Set([...prior.labels, ...intent.labels])];
-      return;
+      return at;
     }
   }
   list.push(intent);
+  return list.length - 1;
 }
+
+// The changes a suggest or shadow turn is building up, in the order the model
+// made them (addIntent's merge rules applied).
+type DraftBuffer = { intents: AgentIntent[] };
 
 // What a dry booking, move or cancel tells the model when one of the
 // business's own rules already tells the customer about it. That message
@@ -2756,3 +2674,265 @@ async function startRefusal(
   }
   return null;
 }
+
+// ── A draft's changes, in one transaction ───────────────────────────────────
+//
+// ALL OR NOTHING (review fix, 2026-10-13). Sending a draft used to make its
+// changes one transaction at a time, so "book me Wednesday instead and cancel
+// Friday" could book Wednesday (and send its confirmation), have the cancel
+// refused, drop the reply and tell staff nothing had changed. Now every change
+// a draft recorded is made inside ONE mutation: the first refusal throws, the
+// whole mutation rolls back (the bookings, the moves, the activity rows and
+// every message they scheduled), and only then may the composer say that
+// nothing changed.
+//
+// The dry run runs the SAME function, so a draft is judged against the
+// calendar as its own earlier changes would leave it: "switch my 14:00
+// haircut to a colour" cancels the haircut first and then books the colour
+// into the slot it freed, the customer's clash and the five-open brake no
+// longer count the appointment being cancelled. It runs inside a nested
+// mutation that always throws, so nothing it does survives (verified on the
+// local backend: a scheduled job inside a rolled-back nested mutation is gone).
+//
+// A change cal.com would have to make cannot be part of a transaction (it is
+// a network call), so a draft refuses one rather than make half of it.
+
+type IntentOutcome =
+  | {
+      kind: "book";
+      existing?: boolean;
+      serviceName?: string;
+      serviceNames?: string[];
+      notified?: boolean;
+    }
+  | { kind: "move" | "cancel"; noop?: boolean; notified?: boolean }
+  | {
+      kind: "save";
+      updated: string[];
+      updatedLabels: string[];
+      ignored: string[];
+      notForVoice: string[];
+      rejected: string[];
+    };
+
+type DraftOutcome =
+  | { ok: true; results: IntentOutcome[] }
+  | { ok: false; index: number; reason: string };
+
+// A refusal, as the error that rolls the transaction back. JSON in a
+// ConvexError so it survives the trip out of a nested mutation intact.
+function draftRefusal(index: number, reason: string): ConvexError<string> {
+  return new ConvexError(JSON.stringify({ ok: false, index, reason }));
+}
+
+// What a thrown error says about a draft, when it is one of ours.
+function draftOutcomeOf(err: unknown): DraftOutcome | null {
+  if (!(err instanceof ConvexError) || typeof err.data !== "string") return null;
+  try {
+    const parsed = JSON.parse(err.data) as DraftOutcome;
+    return typeof parsed === "object" && parsed !== null && "ok" in parsed ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// startRefusal's verdict without the words, for the transaction: the start
+// instant against the clock, the opening hours and the closures.
+function startProblem(
+  org: Doc<"orgs">,
+  closures: Closure[],
+  startAt: number,
+  now: number,
+): string | null {
+  if (Number.isNaN(startAt)) return "missing-or-bad-start";
+  if (startAt < now - 5 * 60_000) return "start-is-in-the-past";
+  if (startAt > now + 400 * 24 * 60 * 60_000) return "start-is-too-far-ahead";
+  const local = getLocalPartsSafe(startAt, org.timezone);
+  const shut = closureBlocks(closures, local, local.minutesOfDay, local.minutesOfDay);
+  const hours = org.businessHours;
+  if (
+    shut ||
+    (hours &&
+      hasBusinessHours(hours) &&
+      !isWithinActiveWindow(startAt, org.timezone, hours, closures))
+  ) {
+    return "outside-open-hours";
+  }
+  return null;
+}
+
+// Make a draft's changes, in the model's order, each judged against the
+// calendar as the ones before it left it. Throws draftRefusal on the first
+// one refused; the caller's transaction then rolls back whole.
+async function applyIntentsTx(
+  ctx: MutationCtx,
+  a: { orgId: Id<"orgs">; customerId: Id<"customers">; intents: AgentIntent[] },
+): Promise<IntentOutcome[]> {
+  const customer = await ctx.db.get(a.customerId);
+  const org = await ctx.db.get(a.orgId);
+  if (!customer || customer.orgId !== a.orgId || !org) throw draftRefusal(0, "not-found");
+  const closures = await loadClosures(ctx, a.orgId);
+  const results: IntentOutcome[] = [];
+  for (let index = 0; index < a.intents.length; index += 1) {
+    const intent = a.intents[index];
+    const now = Date.now();
+    if (intent.kind === "book") {
+      // An ASAP order is placed when it is sent, not when it was drafted.
+      const startAt = intent.asap ? now : intent.start;
+      if (!intent.asap) {
+        const problem = startProblem(org, closures, startAt, now);
+        if (problem) throw draftRefusal(index, problem);
+      }
+      if (
+        org.calcomApiKey &&
+        org.calcomEventTypeId &&
+        !(await isGoodsOnly(ctx, a.orgId, intent.services))
+      ) {
+        throw draftRefusal(index, "calendar-error");
+      }
+      let made;
+      try {
+        made = await agentBookTx(ctx, {
+          orgId: a.orgId,
+          name: intent.name,
+          phone: customer.phone,
+          startAt,
+          services: intent.services,
+          source: "chat",
+          ...(intent.fulfillment
+            ? {
+                fulfillment: {
+                  kind: intent.fulfillment.kind,
+                  ...(intent.asap ? { asap: true } : {}),
+                  ...(intent.fulfillment.address
+                    ? { address: intent.fulfillment.address }
+                    : {}),
+                },
+              }
+            : {}),
+        });
+      } catch (err) {
+        throw draftRefusal(index, err instanceof Error ? err.message : "book-failed");
+      }
+      results.push({
+        kind: "book",
+        ...(made.existing ? { existing: true } : {}),
+        ...(made.serviceName ? { serviceName: made.serviceName } : {}),
+        ...(made.serviceNames ? { serviceNames: made.serviceNames } : {}),
+        ...(made.notified ? { notified: true } : {}),
+      });
+      continue;
+    }
+    if (intent.kind === "move" || intent.kind === "cancel") {
+      // Judged by the start the draft named, against the calendar as the
+      // changes above left it. A cal.com booking refuses here (calendar-error).
+      const done =
+        intent.kind === "move"
+          ? await moveOwnTx(ctx, {
+              orgId: a.orgId,
+              customerId: a.customerId,
+              from: intent.from,
+              to: intent.to,
+            })
+          : await cancelOwnTx(ctx, {
+              orgId: a.orgId,
+              customerId: a.customerId,
+              from: intent.from,
+            });
+      if (!done.ok) throw draftRefusal(index, done.reason);
+      results.push({
+        kind: intent.kind,
+        ...(done.noop ? { noop: true } : {}),
+        ...(done.notified ? { notified: true } : {}),
+      });
+      continue;
+    }
+    // A save never refuses: the gate keeps what fits and reports the rest.
+    const saved = await applyVoiceContactValues(ctx, {
+      orgId: a.orgId,
+      phone: customer.phone,
+      values: intent.values,
+      identity: {
+        firstname: { field: "firstName", label: "firstname" },
+        lastname: { field: "lastName", label: "lastname" },
+        email: { field: "email", label: "email" },
+      },
+    });
+    results.push({
+      kind: "save",
+      updated: saved.updated,
+      updatedLabels: saved.updatedLabels,
+      ignored: saved.ignored,
+      notForVoice: saved.notForVoice,
+      rejected: saved.rejected,
+    });
+  }
+  return results;
+}
+
+// Sending a draft: its changes, all or nothing, and the stamp that says they
+// are made, in one transaction. Only the draft this send just claimed
+// (claimSuggestion, which checked the org), and only once. A refusal throws
+// and leaves nothing behind; sendSuggestion turns it into the composer's
+// reason.
+export const applyDraftChanges = internalMutation({
+  args: { turnId: v.id("chatAgentTurns"), customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const turn = await ctx.db.get(args.turnId);
+    if (
+      !turn ||
+      turn.customerId !== args.customerId ||
+      turn.status !== "suggested" ||
+      turn.suggestionOutcome !== "sent"
+    ) {
+      throw draftRefusal(0, "appointment-changed");
+    }
+    if (turn.intentsAppliedAt !== undefined || !turn.intents?.length) return null;
+    await applyIntentsTx(ctx, {
+      orgId: turn.orgId,
+      customerId: turn.customerId,
+      intents: turn.intents,
+    });
+    await ctx.db.patch(turn._id, { intentsAppliedAt: Date.now() });
+    return null;
+  },
+});
+
+// The dry run: what sending these changes would do, judged now, keeping
+// nothing. The work happens in simulateDraftInner, which always throws so its
+// subtransaction rolls back; this catches the verdict and returns it.
+export const simulateDraft = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    intents: v.array(agentIntentValidator),
+  },
+  // A DraftOutcome as JSON: the shapes are internal to this file.
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    try {
+      await ctx.runMutation(internal.chatAgent.simulateDraftInner, args);
+    } catch (err) {
+      if (draftOutcomeOf(err)) return (err as ConvexError<string>).data;
+      throw err;
+    }
+    // Unreachable: the inner mutation never returns normally.
+    return JSON.stringify({ ok: false, index: 0, reason: "calendar-error" });
+  },
+});
+
+export const simulateDraftInner = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    intents: v.array(agentIntentValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const results = await applyIntentsTx(ctx, args);
+    // Nothing a dry run does may stay: thrown so this subtransaction, and
+    // every write and scheduled message in it, rolls back.
+    throw new ConvexError(JSON.stringify({ ok: true, results }));
+  },
+});

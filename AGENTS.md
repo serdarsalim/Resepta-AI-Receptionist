@@ -691,11 +691,16 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   page's `MAX_UPCOMING_PER_PHONE` (`lib/bookingLimits`) through
   `bookingProblem`, the guard list `voiceBook` and its dry run share.
 - **A chat reply that only suggests changes nothing.** In suggest and shadow
-  the write tools (book, move, cancel, save) run every check, write nothing
-  and record the change on the turn (`chatAgentTurns.intents`). Sending the
-  draft makes the changes first, re-checked at that moment, and the words go
-  only if they took. The composer shows the change above the box. Live
-  writes as it goes. Any new write tool must take the `dry` path too.
+  the write tools (book, move, cancel, save) record the change on the turn
+  (`chatAgentTurns.intents`) instead of making it. Sending the draft makes
+  ALL of its changes in ONE transaction (`chatAgent.applyDraftChanges`): one
+  refusal rolls back every change and every message they scheduled, nothing
+  is sent, and only then does the composer say nothing changed. The dry run
+  is the same code (`applyIntentsTx`) in a nested mutation that always throws
+  (`simulateDraft`), so each change is judged after the draft's earlier ones.
+  A change cal.com would have to make is refused in a draft. The composer
+  shows the change above the box. Live writes as it goes. Any new write tool
+  must take the draft path too.
 
 ## An action belongs to the card it acts on (2026-08-21)
 
