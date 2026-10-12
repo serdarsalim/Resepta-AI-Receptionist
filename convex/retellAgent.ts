@@ -31,6 +31,7 @@ import {
   VOICE_SUMMARY_FIELD,
   type VoiceAgentLanguage,
 } from "./lib/voiceAgentTemplate";
+import { mergeBoostedKeywords } from "./lib/boostedKeywords";
 
 const API = "https://api.retellai.com";
 
@@ -76,6 +77,9 @@ type AgentDoc = {
     action?: { type?: string; text?: string };
     detection_prompt?: string;
   } | null;
+  // Words the speech recogniser should expect. Read so a publish can keep
+  // the ones Resepta did not put there (lib/boostedKeywords).
+  boosted_keywords?: string[];
 };
 
 type LlmDoc = {
@@ -129,6 +133,9 @@ type EditorContext = {
   signatureRejectedAt: number | null;
   voiceLockedIdentity: Array<"firstname" | "lastname" | "email">;
   voiceIdentityDescriptions: Partial<Record<"firstname" | "lastname" | "email", string>>;
+  // This org's recogniser words now, and the ones Resepta published last
+  // time (agentEditorContext, lib/boostedKeywords).
+  keywords: KeywordPlan;
   fields: Array<{
     _id: string;
     key: string;
@@ -141,6 +148,41 @@ type EditorContext = {
     source?: "manual" | "voice";
   }>;
 };
+
+type KeywordPlan = { ours: string[]; previous: string[] | null };
+
+// The boosted_keywords a publish sends: this org's words merged over the ones
+// somebody else placed on the agent (lib/boostedKeywords). Every publish that
+// already writes the agent doc carries it, the way withRuntimeSaveTool rides
+// every engine write, so a renamed service reaches the recogniser the next
+// time anything about the agent is published. Empty patch when the merged
+// list would be empty: a publish never strips an agent's words.
+function keywordPatch(
+  live: AgentDoc,
+  plan: KeywordPlan,
+): { patch: { boosted_keywords?: string[] }; ours: string[] | null } {
+  const next = mergeBoostedKeywords({
+    live: live.boosted_keywords,
+    ours: plan.ours,
+    previous: plan.previous,
+  });
+  return next
+    ? { patch: { boosted_keywords: next }, ours: plan.ours }
+    : { patch: {}, ours: null };
+}
+
+// Records which words were ours, after the publish that sent them succeeded.
+async function stampKeywords(
+  ctx: Pick<ActionCtx, "runMutation">,
+  agentId: string,
+  ours: string[] | null,
+): Promise<void> {
+  if (!ours) return;
+  await ctx.runMutation(internal.retell.markBoostedKeywords, {
+    retellAgentId: agentId,
+    keywords: ours,
+  });
+}
 
 async function editorContext(
   ctx: Pick<ActionCtx, "runQuery">,
@@ -556,10 +598,14 @@ async function publishViaDraft(
   // it says" land as ONE published version: two writes would mean a window
   // where a caller hears the new voice reading the old script.
   agentPatch?: Record<string, unknown>,
-): Promise<number | null> {
+  // The recogniser's words (keywordPatch), merged against this same live
+  // read so they land in the same version as the prompt.
+  keywords?: KeywordPlan,
+): Promise<{ version: number | null; keywords: string[] | null }> {
   const id = encodeURIComponent(agentId);
   const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
   if (live.version === undefined) throw new Error("Agent has no version to clone.");
+  const boosted = keywords ? keywordPatch(live, keywords) : { patch: {}, ours: null };
 
   const draft = (await (
     await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
@@ -575,14 +621,15 @@ async function publishViaDraft(
     ...(llmVersion !== undefined ? { version: llmVersion } : {}),
     ...patch,
   });
-  if (agentPatch && Object.keys(agentPatch).length > 0) {
+  const agentFields = { ...(agentPatch ?? {}), ...boosted.patch };
+  if (Object.keys(agentFields).length > 0) {
     await call(key, "PATCH", `update-agent/${id}`, {
       version: draft.version,
-      ...agentPatch,
+      ...agentFields,
     });
   }
   await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
-  return draft.version;
+  return { version: draft.version, keywords: boosted.ours };
 }
 
 export const publishPrompt = action({
@@ -612,13 +659,15 @@ export const publishPrompt = action({
       await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
     ).json()) as LlmDoc;
 
-    const version = await publishViaDraft(key, agentId, llmId, {
+    const published = await publishViaDraft(key, agentId, llmId, {
       general_prompt: generalPrompt,
       ...(beginMessage !== undefined ? { begin_message: beginMessage } : {}),
       mcps: await runtimeMcpConfig(ctx, agentId, context, before),
       general_tools: withRuntimeSaveTool(before.general_tools),
     },
-    voiceId?.trim() ? { voice_id: voiceId.trim() } : undefined);
+    voiceId?.trim() ? { voice_id: voiceId.trim() } : undefined,
+    context.keywords);
+    const version = published.version;
     if (siteUrl()) {
       await ctx.runMutation(internal.retell.markRuntimeConnected, {
         retellAgentId: agentId,
@@ -631,6 +680,7 @@ export const publishPrompt = action({
       generalPrompt,
       promptVersion: version,
     });
+    await stampKeywords(ctx, agentId, published.keywords);
     // Returned so the caller can offer "undo" without a second round trip. The
     // LLM is patched in place, so there is no earlier version to point at.
     return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
@@ -710,11 +760,19 @@ export const publishPromptForOrg = internalAction({
     // deliberate omissions: no beginMessage and no voiceId, so publishing a
     // prompt from a chat client cannot quietly drag the opening line or the
     // voice along with it.
-    const version = await publishViaDraft(key, agentId, llmId, {
-      general_prompt: generalPrompt,
-      mcps: await runtimeMcpConfig(ctx, agentId, context, before),
-      general_tools: withRuntimeSaveTool(before.general_tools),
-    });
+    const published = await publishViaDraft(
+      key,
+      agentId,
+      llmId,
+      {
+        general_prompt: generalPrompt,
+        mcps: await runtimeMcpConfig(ctx, agentId, context, before),
+        general_tools: withRuntimeSaveTool(before.general_tools),
+      },
+      undefined,
+      context.keywords,
+    );
+    const version = published.version;
     if (siteUrl()) {
       await ctx.runMutation(internal.retell.markRuntimeConnected, {
         retellAgentId: agentId,
@@ -725,6 +783,7 @@ export const publishPromptForOrg = internalAction({
       generalPrompt,
       promptVersion: version,
     });
+    await stampKeywords(ctx, agentId, published.keywords);
     return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
   },
 });
@@ -1067,9 +1126,11 @@ async function publishVariableSet(
       mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {}),
     });
   }
+  const boosted = keywordPatch(live, context.keywords);
   await call(key, "PATCH", `update-agent/${id}`, {
     version: draft.version,
     post_call_analysis_data: postCallAnalysis,
+    ...boosted.patch,
   });
   await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
   await ctx.runMutation(internal.retell.replaceAgentVariables, {
@@ -1077,6 +1138,7 @@ async function publishVariableSet(
     retellVersion: draft.version,
     variables: next,
   });
+  await stampKeywords(ctx, agentId, boosted.ours);
   if (siteUrl()) {
     await ctx.runMutation(internal.retell.markRuntimeConnected, {
       retellAgentId: agentId,
@@ -1132,15 +1194,18 @@ export const renameAgent = action({
       await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
     ).json()) as { version?: number };
     if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+    const boosted = keywordPatch(live, context.keywords);
     await call(key, "PATCH", `update-agent/${id}`, {
       version: draft.version,
       agent_name: trimmed,
+      ...boosted.patch,
     });
     await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
     await ctx.runMutation(internal.retell.rememberAgentName, {
       retellAgentId: agentId,
       name: trimmed,
     });
+    await stampKeywords(ctx, agentId, boosted.ours);
     return null;
   },
 });
@@ -1180,8 +1245,16 @@ async function wireAgent(
       general_tools: withRuntimeSaveTool(liveLlm.general_tools),
     });
   }
-  await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, webhook_url: url });
+  // The recogniser's words ride this publish too, which is also how a newly
+  // provisioned agent gets them: provisioning ends here.
+  const boosted = keywordPatch(live, context.keywords);
+  await call(key, "PATCH", `update-agent/${id}`, {
+    version: draft.version,
+    webhook_url: url,
+    ...boosted.patch,
+  });
   await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
+  await stampKeywords(ctx, agentId, boosted.ours);
 
   // Agent webhooks deliver the result. Number-level inbound webhooks run
   // before the call is answered and are the only point where caller-specific
@@ -1807,11 +1880,15 @@ export const syncTemplate = action({
           detection_prompt: live.voicemail_option.detection_prompt,
         }
       : templateVoicemail;
+    // The recogniser's words (template v14): the same merge bargain once
+    // more, ours replaced and anybody else's kept, and never an empty list.
+    const boosted = keywordPatch(live, context.keywords);
     await call(key, "PATCH", `update-agent/${id}`, {
       version: draft.version,
       ...engineering,
       voicemail_option: voicemail,
       post_call_analysis_data: [...liveAnalysis, summaryAnalysisField(language)],
+      ...boosted.patch,
     });
     await call(key, "POST", `publish-agent-version/${id}`, {
       version: draft.version,
@@ -1821,6 +1898,7 @@ export const syncTemplate = action({
       retellAgentId: agentId,
       templateVersion: VOICE_AGENT_TEMPLATE_VERSION,
     });
+    await stampKeywords(ctx, agentId, boosted.ours);
     return { ok: true, version: draft.version };
   },
 });

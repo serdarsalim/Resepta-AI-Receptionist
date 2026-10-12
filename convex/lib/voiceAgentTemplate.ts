@@ -92,7 +92,12 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 //     confirmation saying it again (Nudge f2a44605, HOLDING_LINES below);
 //   - `start` described as the business's local wall time, YYYY-MM-DDTHH:MM,
 //     the way the chat tools and Nudge's tools already ask for it, instead of
-//     "an ISO 8601 timestamp", which invites a model to write UTC with a Z.
+//     "an ISO 8601 timestamp", which invites a model to write UTC with a Z;
+//   - boosted keywords: the business name, its team and its services as the
+//     recogniser's vocabulary (lib/boostedKeywords, Nudge 3379705e and
+//     61788709). Not a template field, since they are per business, but
+//     syncTemplate carries them, and so does every other publish that writes
+//     the agent doc.
 // None of the new wording names a tool. Tool answers are served live to every
 // template version, and descriptions arrive with the tools they describe, so
 // neither can promise a tool an older agent lacks (Nudge ba2d956a).

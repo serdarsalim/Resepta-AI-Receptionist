@@ -42,6 +42,7 @@ import type * as lib_agentVariables from "../lib/agentVariables.js";
 import type * as lib_alerts from "../lib/alerts.js";
 import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_bookingLimits from "../lib/bookingLimits.js";
+import type * as lib_boostedKeywords from "../lib/boostedKeywords.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_chatAgentTemplate from "../lib/chatAgentTemplate.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   "lib/alerts": typeof lib_alerts;
   "lib/awayReply": typeof lib_awayReply;
   "lib/bookingLimits": typeof lib_bookingLimits;
+  "lib/boostedKeywords": typeof lib_boostedKeywords;
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
   "lib/chatAgentTemplate": typeof lib_chatAgentTemplate;

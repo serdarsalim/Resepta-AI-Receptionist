@@ -926,6 +926,14 @@ export default defineSchema({
     // retell:backfillCallCounters.
     callCount: v.optional(v.number()),
     lastCallStartedAt: v.optional(v.number()),
+    // The words Resepta last put in this agent's boosted_keywords
+    // (lib/boostedKeywords): the business name and its active team and
+    // services as of that publish, at most fifty. Kept so the next publish
+    // replaces exactly these and leaves alone any word somebody typed into the
+    // provider's dashboard. Absent until the first publish that sends them;
+    // until then every word the agent carries counts as somebody else's and
+    // is kept. Stamped only after the publish succeeded.
+    boostedKeywords: v.optional(v.array(v.string())),
   })
     .index("by_org", ["orgId"])
     .index("by_agent", ["retellAgentId"])

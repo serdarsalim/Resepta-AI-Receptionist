@@ -590,6 +590,15 @@ name only the five calendar tools every version has carried since v1, never
 tool at all (Nudge ba2d956a). A time a tool takes is the business's wall time,
 `YYYY-MM-DDTHH:MM`, never UTC.
 
+**Recogniser hints are derived, and only ours are replaced** (2026-10-13). An
+agent's `boosted_keywords` are this org's name, active team and active
+services (`lib/boostedKeywords`), read by org after the agent is proven to be
+the org's, never another business's: the provider account is shared. Every
+publish that writes the agent doc sends them through `keywordPatch`, and a new
+one must too. `retellAgents.boostedKeywords` records which words Resepta sent,
+so the next publish swaps only those and keeps anything typed in the
+provider's dashboard; a list that would come out empty is never sent.
+
 **Numbers.** `agentLines` is the per-number, per-direction binding table
 (inbound and outbound may be different agents), reconciled from every clean
 roster read and written directly by `attachLine`/`detachLine`. Provisioning

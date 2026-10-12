@@ -43,6 +43,7 @@ import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { answerOrEmpty, isNonAnswer } from "./lib/nonAnswer";
+import { orgKeywords } from "./lib/boostedKeywords";
 import { withChange } from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
@@ -870,7 +871,7 @@ export const agentEditorContext = internalQuery({
     if (!agent || agent.orgId !== orgId) throw new Error("no-such-agent");
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("no-org");
-    const [variables, fields] = await Promise.all([
+    const [variables, fields, services, staff] = await Promise.all([
       ctx.db
         .query("voiceAgentVariables")
         .withIndex("by_org_agent", (q) =>
@@ -879,6 +880,17 @@ export const agentEditorContext = internalQuery({
         .collect(),
       ctx.db
         .query("contactFields")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+      // The recogniser's vocabulary (lib/boostedKeywords), from THIS org's
+      // rows only: the agent was proven to be the org's just above, and the
+      // provider account it lives in is shared with every other business.
+      ctx.db
+        .query("services")
+        .withIndex("by_org", (q) => q.eq("orgId", orgId))
+        .collect(),
+      ctx.db
+        .query("staff")
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
         .collect(),
     ]);
@@ -909,7 +921,30 @@ export const agentEditorContext = internalQuery({
       // reads this so a locked column is never offered as a question.
       voiceLockedIdentity: org.voiceLockedIdentity ?? [],
       voiceIdentityDescriptions: org.voiceIdentityDescriptions ?? {},
+      // Boosted keywords for the next publish: this org's words now, and the
+      // ones Resepta published last time, which are the only ones it replaces.
+      keywords: {
+        ours: orgKeywords({ businessName: org.name, staff, services }),
+        previous: agent.boostedKeywords ?? null,
+      },
     };
+  },
+});
+
+// The words a publish just put in the agent's boosted_keywords, recorded
+// only after the provider accepted it, so the record never claims a list the
+// agent is not carrying (the markTemplateSynced contract).
+export const markBoostedKeywords = internalMutation({
+  args: { retellAgentId: v.string(), keywords: v.array(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, keywords }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) throw new Error("no-such-agent");
+    await ctx.db.patch(agent._id, { boostedKeywords: keywords });
+    return null;
   },
 });
 

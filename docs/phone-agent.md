@@ -466,6 +466,19 @@ field, so `syncTemplate` delivers all of it to existing agents.
   shape chat's tools already ask for; the server reads a zone-less stamp at
   the business (`parseLocalStart`) and still takes a stamp with an explicit
   offset as the instant it names.
+- **The recogniser is told the business's words.** The agent's
+  `boosted_keywords` are the business name, its active team and its active
+  services (`lib/boostedKeywords`, Nudge 3379705e and 61788709), read from
+  this org's rows only. Derived, never edited: `syncTemplate` sends them, and
+  so does every other publish that writes the agent doc (prompt save, fields
+  publish, rename, webhook fix, which is also the end of provisioning), so a
+  new service reaches the recogniser the next time anything is published.
+  Ours replaces ours and anybody else's survives: `retellAgents.boostedKeywords`
+  remembers what Resepta sent, and only those words are swapped. A list that
+  would come out empty is never sent, and the list stops at fifty, inside the
+  sixty-one Nudge runs in production, because a list the provider refused
+  would fail the whole publish. The engine-only toggles (hang-up switch,
+  operator model change) do not carry them.
 - **Wording never names another tool.** Tool answers from `/retell/functions`
   reach every template version at once, while descriptions and holding lines
   arrive with their own tools, so only the five calendar tools (present since
