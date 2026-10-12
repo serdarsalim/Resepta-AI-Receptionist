@@ -536,8 +536,9 @@ export const recordTurn = internalMutation({
     // The changes a suggest or shadow turn recorded instead of making.
     intents: v.optional(v.array(agentIntentValidator)),
   },
-  // The inserted turn's id, so the live path can schedule its own fire.
-  returns: v.id("chatAgentTurns"),
+  // The inserted turn's id, so the live path can schedule its own fire. Null
+  // when the customer was deleted while the model ran: nothing is kept.
+  returns: v.union(v.id("chatAgentTurns"), v.null()),
   handler: async (ctx, args) => {
     const at = Date.now();
     // The org's price per AI reply (schema: orgs.chatRateMicroUsdPerTurn),
@@ -564,6 +565,16 @@ export const recordTurn = internalMutation({
     // turns too — a draft the rate limiter stopped us from replacing is still
     // a draft answering a stale message, and a stale draft that looks current
     // is worse than none.
+    //
+    // A turn that finishes after its customer was deleted keeps nothing. The
+    // model ran and is counted as any turn is (deleting never changes the
+    // ledger), but the row would hold their words under a customer the sweep
+    // may already have finished removing.
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || isDeleting(customer)) {
+      await countTurnUsage(ctx, args, org, billedMicroUsd, at);
+      return null;
+    }
     await supersedePendingSuggestions(ctx, args.customerId);
     const turnId = await ctx.db.insert("chatAgentTurns", {
       orgId: args.orgId,
@@ -586,47 +597,65 @@ export const recordTurn = internalMutation({
       intents: args.intents,
       at,
     });
-    // Nothing consumed, nothing counted — a skipped turn must not creep the
-    // month toward its own budget cap.
-    if (args.inputTokens === 0 && args.outputTokens === 0) return turnId;
-    const usage = await ctx.db
-      .query("usageMonthly")
-      .withIndex("by_org_month", (q) =>
-        q.eq("orgId", args.orgId).eq("month", args.month),
-      )
-      .unique();
-    if (usage) {
-      await ctx.db.patch(usage._id, {
-        llmTurns: usage.llmTurns + 1,
-        llmInputTokens: usage.llmInputTokens + args.inputTokens,
-        llmOutputTokens: usage.llmOutputTokens + args.outputTokens,
-        llmCostMicroUsd: usage.llmCostMicroUsd + args.costMicroUsd,
-        llmBilledMicroUsd: (usage.llmBilledMicroUsd ?? 0) + (billedMicroUsd ?? 0),
-        llmBilledTurns:
-          (usage.llmBilledTurns ?? 0) + (billedMicroUsd === undefined ? 0 : 1),
-        updatedAt: at,
-      });
-    } else {
-      await ctx.db.insert("usageMonthly", {
-        orgId: args.orgId,
-        month: args.month,
-        llmTurns: 1,
-        llmInputTokens: args.inputTokens,
-        llmOutputTokens: args.outputTokens,
-        llmCostMicroUsd: args.costMicroUsd,
-        llmBilledMicroUsd: billedMicroUsd ?? 0,
-        llmBilledTurns: billedMicroUsd === undefined ? 0 : 1,
-        updatedAt: at,
-      });
-    }
-    // The prepaid drawdown, same mutation as the stamp (the meterCall rule,
-    // via the shared debit path). A rate of zero writes no debit.
-    if (org && (billedMicroUsd ?? 0) > 0 && org.billingMode === "prepaid") {
-      await applyWalletDebit(ctx, org, billedMicroUsd ?? 0);
-    }
+    await countTurnUsage(ctx, args, org, billedMicroUsd, at);
     return turnId;
   },
 });
+
+// The usage ledger's half of recordTurn: tokens, cost and what the org pays,
+// on the month's row, and the prepaid drawdown in the same transaction.
+async function countTurnUsage(
+  ctx: MutationCtx,
+  args: {
+    orgId: Id<"orgs">;
+    month: string;
+    inputTokens: number;
+    outputTokens: number;
+    costMicroUsd: number;
+  },
+  org: Doc<"orgs"> | null,
+  billedMicroUsd: number | undefined,
+  at: number,
+): Promise<void> {
+  // Nothing consumed, nothing counted — a skipped turn must not creep the
+  // month toward its own budget cap.
+  if (args.inputTokens === 0 && args.outputTokens === 0) return;
+  const usage = await ctx.db
+    .query("usageMonthly")
+    .withIndex("by_org_month", (q) =>
+      q.eq("orgId", args.orgId).eq("month", args.month),
+    )
+    .unique();
+  if (usage) {
+    await ctx.db.patch(usage._id, {
+      llmTurns: usage.llmTurns + 1,
+      llmInputTokens: usage.llmInputTokens + args.inputTokens,
+      llmOutputTokens: usage.llmOutputTokens + args.outputTokens,
+      llmCostMicroUsd: usage.llmCostMicroUsd + args.costMicroUsd,
+      llmBilledMicroUsd: (usage.llmBilledMicroUsd ?? 0) + (billedMicroUsd ?? 0),
+      llmBilledTurns:
+        (usage.llmBilledTurns ?? 0) + (billedMicroUsd === undefined ? 0 : 1),
+      updatedAt: at,
+    });
+  } else {
+    await ctx.db.insert("usageMonthly", {
+      orgId: args.orgId,
+      month: args.month,
+      llmTurns: 1,
+      llmInputTokens: args.inputTokens,
+      llmOutputTokens: args.outputTokens,
+      llmCostMicroUsd: args.costMicroUsd,
+      llmBilledMicroUsd: billedMicroUsd ?? 0,
+      llmBilledTurns: billedMicroUsd === undefined ? 0 : 1,
+      updatedAt: at,
+    });
+  }
+  // The prepaid drawdown, same mutation as the stamp (the meterCall rule,
+  // via the shared debit path). A rate of zero writes no debit.
+  if (org && (billedMicroUsd ?? 0) > 0 && org.billingMode === "prepaid") {
+    await applyWalletDebit(ctx, org, billedMicroUsd ?? 0);
+  }
+}
 
 // ── Takeover (spec §5) ──────────────────────────────────────────────────────
 
@@ -1516,6 +1545,8 @@ export const respond = internalAction({
       outputTokens,
       autoSendAt: Date.now() + AUTO_SEND_GRACE_MS,
     });
+    // No row means the customer was deleted while the model ran: no reply.
+    if (!turnId) return null;
     await ctx.scheduler.runAfter(AUTO_SEND_GRACE_MS, internal.chatAgent.fireAutoSend, {
       turnId,
       customerId: args.customerId,

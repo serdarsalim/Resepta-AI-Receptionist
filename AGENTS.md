@@ -245,8 +245,11 @@ nothing else deletes a customer row. How it runs is in `docs/subsystems.md` →
   row saying who did it and never whom.
 - **An erased call stays erased.** Its provider events become one
   `customer_deleted` marker in `voiceEvents`; `voiceEvents.enqueue`,
-  `retell.recordCall` and the analysis recovery check it, because a late
-  webhook would otherwise write the call back with a new customer.
+  `retell.recordCall`, the post-call `updateContactFromVoice` and the analysis
+  recovery check it, because a late webhook or a processor already in flight
+  would otherwise write the call, or its answers, back onto a new customer.
+  Likewise an assistant turn that finishes after the deletion keeps no row
+  (`recordTurn` returns null) and sends nothing.
 - **Provider copies are not touched**, as in Nudge: the phone provider keeps
   its recording and transcript, the messaging and email providers keep theirs.
 

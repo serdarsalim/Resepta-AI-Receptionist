@@ -3252,6 +3252,10 @@ export const updateContactFromVoice = internalMutation({
     phone: v.string(),
     values: v.record(v.string(), v.string()),
     fillOnlyMissing: v.optional(v.boolean()),
+    // The call these values came from, when there is one. A call erased with
+    // its customer while its event was being processed must not land its
+    // answers either: with no contact on the number this would create one.
+    retellCallId: v.optional(v.string()),
   },
   returns: contactUpdateResult,
   handler: async (ctx, args) => {
@@ -3260,6 +3264,9 @@ export const updateContactFromVoice = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent || !agent.enabled) return contactUpdateFailure("agent-not-configured");
+    if (args.retellCallId && (await callErased(ctx, agent.orgId, args.retellCallId))) {
+      return contactUpdateFailure("call-erased");
+    }
     const org = await ctx.db.get(agent.orgId);
     const phone = toE164(args.phone, org ? dialCodeForTimezone(org.timezone) : undefined);
     if (!phone) return contactUpdateFailure("phone-not-recognised");

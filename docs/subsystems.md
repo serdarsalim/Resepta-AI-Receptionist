@@ -1490,7 +1490,10 @@ the customers to restart are the rows with `deletingAt` set.
 **Known gaps.** Messages and calls logged before unknown senders got a record
 (before 2026-07-25) can carry no `customerId`, and nothing ties them to a
 person. A call still ringing at the moment of deletion ends afterwards and
-starts a new customer from that number, as any new call would. Owner calendar
+starts a new customer from that number, as any new call would; so does a
+booking a live assistant makes in the seconds a turn was already running
+(the agents book by number). That turn itself keeps no row and its reply is
+never sent. Owner calendar
 invites for deleted bookings are not retracted, and a booking cal.com holds
 (parked lane) is not cancelled there. `voiceBackfill.run` and
 `sendBackfill.run` rebuild usage counters from rows, so re-running them after

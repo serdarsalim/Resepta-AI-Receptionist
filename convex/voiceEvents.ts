@@ -321,6 +321,7 @@ export const process = internalAction({
           phone,
           values: inferred,
           fillOnlyMissing: true,
+          retellCallId: row.retellCallId,
         });
       }
       if (phone && Object.keys(confirmed).length > 0) {
@@ -328,6 +329,7 @@ export const process = internalAction({
           retellAgentId: row.retellAgentId,
           phone,
           values: confirmed,
+          retellCallId: row.retellCallId,
         });
       }
 
