@@ -401,6 +401,78 @@ export function parseLocalStart(raw: string, tz: string): number {
 // the two agents can never disagree about the doors. English on purpose —
 // this goes to a model, not a person, and the model answers in the
 // customer's language.
+// Is the time a customer asked for free, judged the way both agents judge it
+// (2026-10-13: the voice tool gained the chat tool's `time` answer). A FULL
+// block (capacity exhausted, retell.bookedBetween) covering it, outside the
+// day's hours or a closure, or already past. null when `time` is not HH:MM.
+// The asked minute only: the booking itself still judges the whole visit.
+export function judgeRequestedTime(args: {
+  dayIso: string;
+  time: string;
+  tz: string;
+  hours: ActiveWindow | null | undefined;
+  full: { startAt: number; durationMinutes: number | null }[];
+  closures?: Closure[] | null;
+  nowMs: number;
+}): {
+  at: number;
+  available: boolean;
+  reason?: "already-booked" | "outside-open-hours" | "in-the-past";
+} | null {
+  const match = args.time.trim().match(/^(\d{1,2}):(\d{2})$/);
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.dayIso);
+  if (!match || !day) return null;
+  let at: number;
+  try {
+    at = localWallTimeToUtcMs(
+      Number(day[1]),
+      Number(day[2]) - 1,
+      Number(day[3]),
+      Number(match[1]),
+      Number(match[2]),
+      args.tz,
+    );
+  } catch {
+    return null;
+  }
+  const conflict = args.full.some(
+    (slot) =>
+      at >= slot.startAt && at < slot.startAt + (slot.durationMinutes ?? 30) * 60_000,
+  );
+  const withinHours = isWithinActiveWindow(at, args.tz, args.hours ?? {}, args.closures);
+  const inPast = at < args.nowMs;
+  return {
+    at,
+    available: !conflict && withinHours && !inPast,
+    ...(conflict
+      ? { reason: "already-booked" as const }
+      : !withinHours
+        ? { reason: "outside-open-hours" as const }
+        : inPast
+          ? { reason: "in-the-past" as const }
+          : {}),
+  };
+}
+
+// The week as people say it, Monday first, over the 0=Sunday storage index.
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const weekRank = (day: number) => (day + 6) % 7;
+
+// Two free starts around `target`: the last one before it and the first after
+// it, or the two closest on whichever side has any (Nudge's meetingSpeech
+// `nearest`). Either side, not merely the closest two: asked about a full
+// Saturday afternoon, "Saturday at 11 or Monday at 9" is an answer, and
+// "Saturday at 11 or 10:30" is two versions of the same no.
+export function nearestStarts(starts: readonly number[], target: number): number[] {
+  const sorted = [...new Set(starts)].sort((a, b) => a - b);
+  const before = sorted.filter((ms) => ms < target);
+  const after = sorted.filter((ms) => ms > target);
+  if (before.length > 0 && after.length > 0) {
+    return [before[before.length - 1], after[0]];
+  }
+  return before.length > 0 ? before.slice(-2) : after.slice(0, 2);
+}
+
 const WEEKDAY_NAMES = [
   "Sunday",
   "Monday",
@@ -524,9 +596,12 @@ export function openHoursForAgent(
   // Per-day windows, resolved through the one normaliser so a legacy org and a
   // per-weekday org produce the same sentences.
   const windows = WEEKDAY_NAMES.map((_, day) => windowForWeekday(hours, day));
-  const open = windows
-    .map((win, day) => ({ day, win }))
-    .filter((row): row is { day: number; win: DayWindow } => row.win !== null);
+  // Listed Monday first, the way the week is spoken in every market this
+  // serves: "Saturday, Sunday", never "Sunday, Saturday" (Nudge's
+  // closedWeekdays fix, 2026-10-09). The storage index stays 0=Sunday.
+  const open = WEEK_ORDER.map((day) => ({ day, win: windows[day] })).filter(
+    (row): row is { day: number; win: DayWindow } => row.win !== null,
+  );
 
   // Same reason suggestFreeSlots bails: an unset legacy bound is "unrestricted",
   // and rendering it as a clock told callers the salon closes at 24:00.
@@ -553,7 +628,9 @@ export function openHoursForAgent(
   // The agent needs the COMPLEMENT — the days it must not offer — because "we
   // are open Mon-Sat" is a fact it has to invert under time pressure, and
   // inverting it is how Sunday gets offered.
-  const closedDays = WEEKDAY_NAMES.filter((_, day) => windows[day] === null);
+  const closedDays = WEEK_ORDER.filter((day) => windows[day] === null).map(
+    (day) => WEEKDAY_NAMES[day],
+  );
   // Suppressed when nothing is open at all: "closed every day" alongside no
   // open_hours reads to a model as a business that does not exist, and the
   // caller's own no-hours wording is the better answer there.
@@ -571,7 +648,7 @@ export function openHoursForAgent(
           : `${asClock(c.startMinute ?? 0)}-${asClock(c.endMinute ?? 24 * 60)}`;
       const days = c
         .weekdays!.slice()
-        .sort((a, b) => a - b)
+        .sort((a, b) => weekRank(a) - weekRank(b))
         .map((day) => WEEKDAY_NAMES[day])
         .filter(Boolean)
         .join(", ");

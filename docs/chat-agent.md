@@ -124,9 +124,12 @@ The webhook resolved the org from `phone_number_id` and the customer from their
 phone. Every tool the model can call is a server-side function already bound to
 that `(orgId, customerId)`:
 
-- `check_availability(date)` — same data the voice lane serves: cal.com slots
-  when connected, otherwise full-slot arithmetic from our own table
-  (`retell.bookedBetween`) plus open hours.
+- `check_availability(date, time?)` — same data the voice lane serves: cal.com
+  slots when connected, otherwise full-slot arithmetic from our own table
+  (`retell.bookedBetween`) plus open hours. The asked `time` is answered as a
+  fact, with the nearest free times either side when it is taken (shared with
+  the voice tool since 2026-10-13); booking and move refusals for a time carry
+  the same `nearest_free`.
 - `book_appointment(start?, services?, name?, fulfillment?, asap?, address?)` —
   books for THIS customer's phone. `fulfillment` (pickup/delivery), `asap` and
   `address` are PRODUCT-only and the server says so: the handler classifies the

@@ -643,6 +643,10 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   the team is emailed (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send
   switch) because the agent promised a colleague; in chat the agent is told
   to call `escalate_to_staff`, which follows the handover setting.
+- **A "no" about a time carries the nearest free times**
+  (`retell.nearestFreeTimes`, built on the booking page's `freeStarts`, so
+  what it offers the write will accept). Both lanes' `check_availability`
+  answer the asked `time` through one verdict (`judgeRequestedTime`).
 - **A booking asked for twice is one booking**: `voiceBook` returns the
   customer's open appointment at that exact minute (a recent ASAP order with
   the same lines) instead of making a second, and the agents obey the booking

@@ -34,6 +34,8 @@ import {
   closureBlocks,
   getLocalPartsSafe,
   localWallTimeToUtcMs,
+  nearestStarts,
+  todayInZone,
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
 import { voiceVariableInput } from "./lib/voiceVariables";
@@ -43,6 +45,8 @@ import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { withChange } from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
+import { freeStarts, goodsLeadMs } from "./booking";
+import { durationOf } from "./agentAppointments";
 
 // Voice lane (spec Phase C). Function calls and the post-call webhook resolve
 // the org by retellAgentId — never by caller number.
@@ -2680,6 +2684,77 @@ export const previewBook = internalQuery({
       ...(lines[0] ? { serviceName: lines[0].name } : {}),
       ...(lines.length > 0 ? { serviceNames: lines.map((item) => item.name) } : {}),
     };
+  },
+});
+
+// Two free times either side of one that was refused or asked about
+// (2026-10-13, Nudge's "a refusal answered with one free time either side").
+// Judged by the booking page's own slot rules (booking.freeStarts): capacity,
+// the customer's other bookings, closures over the whole visit, that day's
+// hours, a good's lead time, and the page's hour of notice. So whatever this
+// offers, the booking or the move that follows will accept. The asked day
+// first, then outward a day at a time (a week ahead, three days back, never
+// before today) until there is a time on each side, which is how a full
+// Saturday afternoon gets "Saturday at 11 or Monday at 9" rather than "no".
+// The visit's length comes from the appointment being moved, else from the
+// services asked for, else the half-hour grid.
+export const nearestFreeTimes = internalQuery({
+  args: {
+    orgId: v.id("orgs"),
+    at: v.number(),
+    customerId: v.optional(v.id("customers")),
+    // A move: its own length, its own lead time, and it never blocks itself.
+    appointmentId: v.optional(v.id("appointments")),
+    services: v.optional(v.array(v.string())),
+  },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org || !Number.isFinite(args.at)) return [];
+    let duration = 30;
+    let leadMs = 0;
+    let ignoreId: Id<"appointments"> | undefined;
+    if (args.appointmentId) {
+      const appointment = await ctx.db.get(args.appointmentId);
+      if (!appointment || appointment.orgId !== args.orgId) return [];
+      duration = durationOf(appointment);
+      leadMs = await goodsLeadMs(ctx, appointment);
+      ignoreId = appointment._id;
+    } else if (args.services && args.services.length > 0) {
+      const lines = await matchServices(ctx, args.orgId, args.services);
+      if (lines.length > 0) {
+        duration = lines.reduce((sum, item) => sum + item.durationMinutes, 0);
+        leadMs = lines.reduce(
+          (max, item) => Math.max(max, (item.leadMinutes ?? 0) * 60_000),
+          0,
+        );
+      }
+    }
+    // Only this org's customer: the clash test reads their bookings.
+    const customer = args.customerId ? await ctx.db.get(args.customerId) : null;
+    const customerId =
+      customer && customer.orgId === args.orgId ? customer._id : undefined;
+    const today = todayInZone(org.timezone);
+    const local = getLocalPartsSafe(args.at, org.timezone);
+    const dayAt = (offset: number) =>
+      new Date(Date.UTC(local.y, local.m0, local.d + offset)).toISOString().slice(0, 10);
+    const starts: number[] = [];
+    for (let step = 0; step <= 7; step += 1) {
+      for (const offset of step === 0 ? [0] : [step, -step]) {
+        if (offset < -3) continue;
+        const date = dayAt(offset);
+        if (date < today) continue;
+        starts.push(
+          ...(await freeStarts(ctx, org, date, duration, {
+            ignoreId,
+            customerId,
+            leadMs,
+          })),
+        );
+      }
+      if (starts.some((at) => at < args.at) && starts.some((at) => at > args.at)) break;
+    }
+    return nearestStarts(starts, args.at);
   },
 });
 

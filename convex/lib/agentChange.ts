@@ -74,6 +74,22 @@ export const CHANGE_REFUSALS: readonly ChangeRefusal[] = [
   "calendar-error",
 ];
 
+// The refusals a different TIME fixes, and so the ones answered with the
+// nearest free times (retell.nearestFreeTimes) rather than a bare no.
+export function isTimeRefusal(reason: string): boolean {
+  return (
+    reason === "slot-taken" ||
+    reason === "customer-busy" ||
+    reason === "outside-open-hours" ||
+    reason === "lead-time" ||
+    reason === "past"
+  );
+}
+
+// What the agent is told beside a nearest_free list.
+export const NEAREST_FREE_NOTE =
+  "nearest_free lists the closest free times either side of the one asked for: offer those rather than a bare no.";
+
 export function isChangeRefusal(reason: string): reason is ChangeRefusal {
   return (CHANGE_REFUSALS as readonly string[]).includes(reason);
 }

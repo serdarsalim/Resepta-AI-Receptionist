@@ -73,7 +73,15 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // three minutes of a receptionist reading availability to a beep. An
 // agent-doc field, so it rides the same PATCH syncTemplate already sends and
 // reaches existing agents when their owner clicks update.
-export const VOICE_AGENT_TEMPLATE_VERSION = 13;
+// v14 (2026-10-13): check_availability takes the caller's `time`, the chat
+// tool's parameter, and its description now says to ask which day and time
+// suit the caller BEFORE listing any. The server answers that time as a fact
+// (requested_time, judgeRequestedTime) and, when it is taken, with the
+// nearest free times either side. A tool schema and description, so this is
+// the honest kind of bump: Update genuinely reaches existing agents. The
+// stale "if the calendar is not connected" clause went with it: Resepta is
+// always the calendar.
+export const VOICE_AGENT_TEMPLATE_VERSION = 14;
 
 // Voicemail handling, learned from Nudge's implementation rather than from the
 // provider's docs (its docs/journal/2026-08.md → 2026-08-25 session 2, where every claim
@@ -182,7 +190,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "RANDEVU",
     "Hiçbir şeyi uydurma. Müsaitlik, kayıt ve değişiklik her zaman araçlarla yapılır.",
-    "Müsaitlik sorulduğunda araçtan gelen suggested_slots içinden iki üç somut saat öner. Çalışma saatlerini okuyup saati arayana seçtirme.",
+    "Müsaitlik sorulduğunda önce hangi gün ve saatin uygun olduğunu sor ve o saati kontrol et. Doluysa araçtan gelen en yakın boş saatleri öner; aklında bir saat yoksa suggested_slots içinden iki üç somut saat öner. Çalışma saatlerini okuyup saati arayana seçtirme.",
     "Birden fazla hizmet tek bir book_appointment çağrısıdır: tek randevu, süreler toplanır, hizmetler arka arkaya yapılır.",
     "Süresi olmayan kalemler ÜRÜNDÜR (örneğin pasta, teslimat): takvimde yer tutmaz, müsaitlik kontrolü gerekmez, sadece teslim zamanı sorulur. Aynı üründen birden fazla isteniyorsa adını listede adet kadar tekrarla: üç pasta üç kayıttır.",
     "book_appointment lead-time derse ürün daha fazla ön süre ister: özür dile, ne kadar önceden sipariş gerektiğini söyle ve uygun en erken günü öner.",
@@ -232,7 +240,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "BOOKING",
     "Invent nothing. Availability, saving and changes always go through the tools.",
-    "When asked for availability, offer two or three concrete times from the tool's suggested_slots. Never read out the opening hours and leave the caller to choose.",
+    "When asked for availability, first ask which day and time suit them and check that time. If it is taken, offer the nearest free times the tool gives; if they have no time in mind, offer two or three concrete times from suggested_slots. Never read out the opening hours and leave the caller to choose.",
     "Several services are ONE book_appointment call: one appointment, durations summed, services back to back.",
     "Items listed without a duration are GOODS (a cake, a delivery): they take no calendar slot and need no availability check — only ask when they want to pick it up or have it delivered. For several of the same good, repeat its name in the services list once per piece: three cakes is three entries.",
     "If book_appointment answers lead-time, the item needs more notice: apologise, say how much warning it needs, and offer the earliest day that satisfies it.",
@@ -282,7 +290,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "",
     "TERMIN",
     "Erfinde nichts. Verfügbarkeit, Speichern und Änderungen laufen immer über die Werkzeuge.",
-    "Biete bei Verfügbarkeitsfragen zwei oder drei konkrete Zeiten aus suggested_slots des Werkzeugs an. Lies nie die Öffnungszeiten vor und überlass dem Anrufer nicht die Wahl.",
+    "Frag bei Verfügbarkeitsfragen zuerst, welcher Tag und welche Uhrzeit passen, und prüfe diese Zeit. Ist sie belegt, biete die nächsten freien Zeiten aus dem Werkzeug an; hat der Anrufer keine Zeit im Kopf, biete zwei oder drei konkrete Zeiten aus suggested_slots an. Lies nie die Öffnungszeiten vor und überlass dem Anrufer nicht die Wahl.",
     "Mehrere Leistungen sind EIN book_appointment-Aufruf: ein Termin, Dauern summiert, Leistungen nacheinander.",
     "Einträge ohne Dauer sind WAREN (eine Torte, eine Lieferung): sie belegen keinen Termin und brauchen keine Verfügbarkeitsprüfung — frage nur nach dem Abhol- oder Lieferzeitpunkt. Für mehrere Stück derselben Ware wiederhole ihren Namen in der Liste einmal pro Stück: drei Torten sind drei Einträge.",
     "Antwortet book_appointment mit lead-time, braucht die Ware mehr Vorlauf: entschuldige dich, nenne die nötige Vorlaufzeit und biete den frühesten passenden Tag an.",
@@ -487,13 +495,18 @@ export function appointmentReceptionistTemplate(args: {
     customTool(
       args.site,
       "check_availability",
-      "Check appointment times for one local calendar date before offering a slot. If the calendar is not connected, ask for the caller's preferred time and continue without inventing availability.",
+      "Check appointment times for one local calendar date. Ask the caller which day and time suit them BEFORE listing any times, then call this with that date and, when they named one, the time: the result says whether that time is free and, if it is not, the nearest free times to offer instead. Without a time it returns a few free times for the day.",
       {
         type: "object",
         properties: {
           date: {
             type: "string",
             description: "Local date in YYYY-MM-DD format.",
+          },
+          time: {
+            type: "string",
+            description:
+              "The time the caller asked for, 24h HH:MM, when they named one. The result's requested_time then says whether it is free; trust that answer.",
           },
         },
         required: ["date"],

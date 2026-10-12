@@ -23,6 +23,7 @@ import { openHoursForAgent } from "./lib/businessHours";
 import {
   hasBusinessHours,
   isWithinActiveWindow,
+  judgeRequestedTime,
   localDayRangeUtc,
   parseLocalStart,
   closureBlocks,
@@ -35,8 +36,10 @@ import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
 import {
   CHANGES_PER_DAY,
+  NEAREST_FREE_NOTE,
   changeRefusalNote,
   isChangeRefusal,
+  isTimeRefusal,
 } from "./lib/agentChange";
 
 const http = httpRouter();
@@ -530,6 +533,29 @@ http.route({
         toNumber: String(call.to_number ?? "") || undefined,
       }));
 
+    // The free times nearest one that is taken or shut, spoken, so a "no"
+    // arrives with something to say yes to (retell.nearestFreeTimes, the
+    // booking page's own slot rules). Only on refusals: it reads a few days
+    // of the book, and the happy path must not pay for it.
+    const nearestFree = async (a: {
+      at: number;
+      services?: string[];
+      appointmentId?: Id<"appointments">;
+    }): Promise<{ nearest_free?: string[] }> => {
+      if (!Number.isFinite(a.at)) return {};
+      const who = await callerOfCall();
+      const near = await ctx.runQuery(internal.retell.nearestFreeTimes, {
+        orgId: org._id,
+        at: a.at,
+        ...(who.customerId ? { customerId: who.customerId } : {}),
+        ...(a.appointmentId ? { appointmentId: a.appointmentId } : {}),
+        ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
+      });
+      return near.length > 0
+        ? { nearest_free: near.map((ms) => spokenDateTime(ms, org.timezone, org.language)) }
+        : {};
+    };
+
     // Loaded once for the whole tool call, because startRefusal below is a
     // synchronous closure and check_availability needs the same rows — two
     // reads of one table inside one request that must agree with each other.
@@ -653,8 +679,35 @@ http.route({
           closures,
           nowMs: Date.now(),
         });
+        // The time the caller asked for, answered as a fact: the chat tool's
+        // `time`, given to the phone too (2026-10-13). Without it the agent
+        // read a list of booked times and worked out the answer itself, and
+        // a taken time came back as a bare no.
+        const asked =
+          typeof args.time === "string"
+            ? judgeRequestedTime({
+                dayIso,
+                time: args.time,
+                tz: org.timezone,
+                hours,
+                full: booked.full,
+                closures,
+                nowMs: Date.now(),
+              })
+            : null;
+        const requested = asked
+          ? {
+              requested_time: {
+                time: spokenDateTime(asked.at, org.timezone, org.language),
+                available: asked.available,
+                ...(asked.reason ? { reason: asked.reason } : {}),
+                ...(asked.available ? {} : await nearestFree({ at: asked.at })),
+              },
+            }
+          : {};
         return respond({
           date: dayIso,
+          ...requested,
           // Speakable ranges, not raw timestamps: this body goes to the LLM
           // verbatim and gets read down a phone line.
           // FULL times, not merely booked ones — a shop with four people
@@ -677,6 +730,10 @@ http.route({
           // salon is shut.
           ...openness,
           note:
+            (asked
+              ? "requested_time answers the time the caller asked for; trust it." +
+                (asked.available ? " " : ` ${NEAREST_FREE_NOTE} `)
+              : "") +
             (suggested.length > 0
               ? "Offer two or three of suggested_slots as concrete times." +
                 " Never answer by reciting the opening hours. "
@@ -726,8 +783,6 @@ http.route({
       if (Number.isNaN(startAt) || !customerName) {
         return respond({ error: "missing-name-or-start" });
       }
-      const refusal = startRefusal(startAt, "booked");
-      if (refusal) return respond(refusal);
       // Whatever the caller called them. Matching against the org's own
       // list happens in voiceBook, not here and not in the agent's prompt.
       //
@@ -743,6 +798,16 @@ http.route({
             .filter(Boolean)
         : undefined;
       const spokenService = String(args.service ?? "").trim() || undefined;
+      const asked = spokenServices ?? (spokenService ? [spokenService] : undefined);
+      const refusal = startRefusal(startAt, "booked");
+      if (refusal) {
+        return respond({
+          ...refusal,
+          ...(refusal.error === "outside-open-hours"
+            ? await nearestFree({ at: startAt, services: asked })
+            : {}),
+        });
+      }
       let externalUid: string | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
         // Goods-only orders never touch cal.com: nothing zero-length exists
@@ -778,7 +843,17 @@ http.route({
           service: spokenService,
         });
       } catch (err) {
-        return respond({ error: err instanceof Error ? err.message : "book-failed" });
+        const message = err instanceof Error ? err.message : "book-failed";
+        // A taken time or the caller's own clash: the nearest free times
+        // either side, so the agent counters instead of stalling.
+        const near = /^(slot-taken|customer-busy)/.test(message)
+          ? await nearestFree({ at: startAt, services: asked })
+          : {};
+        return respond({
+          error: message,
+          ...near,
+          ...(near.nearest_free ? { note: NEAREST_FREE_NOTE } : {}),
+        });
       }
       return respond({
         booked: true,
@@ -910,8 +985,12 @@ http.route({
       // next. When that is "a colleague will be in touch" (the cap, or the
       // calendar failing), the team is emailed in the same breath: nobody is
       // reading a live call, and a promise with no owner is worse than none.
-      const refuse = async (reason: string, providerError?: string) => {
+      const refuse = async (reason: string, providerError?: string, at?: number) => {
         const known = isChangeRefusal(reason) ? reason : "calendar-error";
+        const near =
+          at !== undefined && isTimeRefusal(known)
+            ? await nearestFree({ at, appointmentId: next.appointmentId })
+            : {};
         if (known === "too-many-changes" || known === "calendar-error") {
           await queueOrgAlert(ctx, {
             orgId: org._id,
@@ -932,7 +1011,10 @@ http.route({
               })
             : {}),
           ...(providerError ? { provider_error: providerError } : {}),
-          note: changeRefusalNote(known, did, "voice"),
+          ...near,
+          note:
+            changeRefusalNote(known, did, "voice") +
+            (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         });
       };
       // The cap answers first, before cal.com is asked anything.
@@ -964,7 +1046,14 @@ http.route({
       // closures, the reason). moveOwn then judges the whole span, capacity
       // and the caller's other bookings in the transaction that writes.
       const refusal = startRefusal(startAt, "moved");
-      if (refusal) return respond(refusal);
+      if (refusal) {
+        return respond({
+          ...refusal,
+          ...(refusal.error === "outside-open-hours"
+            ? await nearestFree({ at: startAt, appointmentId: next.appointmentId })
+            : {}),
+        });
+      }
       if (startAt === next.startAt) {
         return respond({
           rescheduled: false,
@@ -973,7 +1062,7 @@ http.route({
         });
       }
       const done = await write({ kind: "move", to: startAt });
-      if (!done.ok) return await refuse(done.reason, done.providerError);
+      if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
       return respond({ rescheduled: true, spoken_time: spokenOf(startAt) });
     }
 

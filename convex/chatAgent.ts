@@ -52,8 +52,8 @@ import {
   getLocalPartsSafe,
   hasBusinessHours,
   isWithinActiveWindow,
+  judgeRequestedTime,
   localDayRangeUtc,
-  localWallTimeToUtcMs,
   openHoursForAgent,
   parseLocalStart,
   suggestFreeSlots,
@@ -74,10 +74,12 @@ import {
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
 import {
   CHANGES_PER_DAY,
+  NEAREST_FREE_NOTE,
   agentIntentValidator,
   approvalFailureOf,
   changeRefusalNote,
   isChangeRefusal,
+  isTimeRefusal,
   type AgentIntent,
   type ApprovalFailure,
 } from "./lib/agentChange";
@@ -1938,6 +1940,24 @@ async function executeTool(
   const { org, customer } = context;
   const spokenOf = (at: number) =>
     formatAppointmentTime(at, org.timezone, customer.language);
+  // The free times nearest one that is taken or shut, so a "no" arrives with
+  // something to say yes to (retell.nearestFreeTimes, the booking page's own
+  // slot rules). Only on refusals.
+  const nearestFree = async (a: {
+    at: number;
+    services?: string[];
+    appointmentId?: Id<"appointments">;
+  }): Promise<{ nearest_free?: string[] }> => {
+    if (!Number.isFinite(a.at)) return {};
+    const near: number[] = await ctx.runQuery(internal.retell.nearestFreeTimes, {
+      orgId: context.orgId,
+      at: a.at,
+      customerId: customer._id,
+      ...(a.appointmentId ? { appointmentId: a.appointmentId } : {}),
+      ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
+    });
+    return near.length > 0 ? { nearest_free: near.map((ms) => spokenOf(ms)) } : {};
+  };
   try {
     if (name === "check_availability") {
       const today = todayInZone(org.timezone);
@@ -1971,45 +1991,29 @@ async function executeTool(
         // instead of hoping the model derives it. Found live on Bella
         // (2026-08-28): gpt-4.1-mini read the free-slot examples as an
         // exhaustive list and told a customer 11:00 was taken on an empty
-        // Friday.
-        let requestedTime: Record<string, unknown> | undefined;
-        const timeRaw = typeof input.time === "string" ? input.time.trim() : "";
-        const timeMatch = timeRaw.match(/^(\d{1,2}):(\d{2})$/);
-        if (timeMatch) {
-          const [y, m, d] = dayIso.split("-").map(Number);
-          const askedMs = localWallTimeToUtcMs(
-            y,
-            m - 1,
-            d,
-            Number(timeMatch[1]),
-            Number(timeMatch[2]),
-            org.timezone,
-          );
-          const conflict = booked.full.find(
-            (slot: { startAt: number; durationMinutes: number | null }) => {
-              const end = slot.startAt + (slot.durationMinutes ?? 30) * 60_000;
-              return askedMs >= slot.startAt && askedMs < end;
-            },
-          );
-          const withinHours = isWithinActiveWindow(
-            askedMs,
-            org.timezone,
-            org.businessHours ?? {},
-            closures,
-          );
-          const inPast = askedMs < Date.now();
-          requestedTime = {
-            time: spokenOf(askedMs),
-            available: !conflict && withinHours && !inPast,
-            ...(conflict
-              ? { reason: "already-booked" }
-              : !withinHours
-                ? { reason: "outside-open-hours" }
-                : inPast
-                  ? { reason: "in-the-past" }
-                  : {}),
-          };
-        }
+        // Friday. One verdict for both lanes since 2026-10-13
+        // (judgeRequestedTime), and a taken time comes back with the nearest
+        // free ones either side.
+        const asked =
+          typeof input.time === "string"
+            ? judgeRequestedTime({
+                dayIso,
+                time: input.time,
+                tz: org.timezone,
+                hours: org.businessHours,
+                full: booked.full,
+                closures,
+                nowMs: Date.now(),
+              })
+            : null;
+        const requestedTime = asked
+          ? {
+              time: spokenOf(asked.at),
+              available: asked.available,
+              ...(asked.reason ? { reason: asked.reason } : {}),
+              ...(asked.available ? {} : await nearestFree({ at: asked.at })),
+            }
+          : undefined;
         return {
           date: dayIso,
           ...(requestedTime ? { requested_time: requestedTime } : {}),
@@ -2037,7 +2041,8 @@ async function executeTool(
               : "") +
             ". " +
             (requestedTime
-              ? "requested_time answers the customer's asked time; trust it. "
+              ? "requested_time answers the customer's asked time; trust it." +
+                (requestedTime.available ? " " : ` ${NEAREST_FREE_NOTE} `)
               : "") +
             (suggested.length > 0
               ? "example_free_times are examples to offer, NOT the only free times. Offer two or three as concrete times; never answer by reciting the opening hours."
@@ -2155,7 +2160,14 @@ async function executeTool(
         : parseLocalStart(String(input.start ?? ""), org.timezone);
       if (!askedAsap) {
         const refusal = await refuseStart(startAt, "booked");
-        if (refusal) return refusal;
+        if (refusal) {
+          return {
+            ...refusal,
+            ...(refusal.error === "outside-open-hours"
+              ? await nearestFree({ at: startAt, services: spoken })
+              : {}),
+          };
+        }
       }
       const address = String(input.address ?? "").trim();
       const plan: BookingPlan = {
@@ -2173,6 +2185,18 @@ async function executeTool(
               },
             }
           : {}),
+      };
+      // A taken time or the customer's own clash: the nearest free times
+      // either side, so the assistant counters instead of stalling.
+      const bookingRefused = async (error: string) => {
+        const near = /^(slot-taken|customer-busy)/.test(error)
+          ? await nearestFree({ at: startAt, services: spoken })
+          : {};
+        return {
+          error,
+          ...near,
+          ...(near.nearest_free ? { note: NEAREST_FREE_NOTE } : {}),
+        };
       };
       if (dry) {
         // Every check the booking would face, nothing written: the draft may
@@ -2193,7 +2217,7 @@ async function executeTool(
               }
             : {}),
         });
-        if (!preview.ok) return { error: preview.error };
+        if (!preview.ok) return await bookingRefused(preview.error);
         // Already held: approving would make nothing, so nothing is recorded.
         if ("existing" in preview && preview.existing) {
           return bookedAnswer(context, plan, preview);
@@ -2212,7 +2236,8 @@ async function executeTool(
           ...(context.automations.booking ? { note: AUTOMATION_SPEAKS.booking } : {}),
         };
       }
-      return await commitBooking(ctx, context, plan);
+      const made = await commitBooking(ctx, context, plan);
+      return typeof made.error === "string" ? await bookingRefused(made.error) : made;
     }
 
     // Existing appointments: the customer's OWN next one only, through the
@@ -2264,8 +2289,13 @@ async function executeTool(
       const refuse = async (
         reason: string,
         providerError?: string,
+        at?: number,
       ): Promise<Record<string, unknown>> => {
         const known = isChangeRefusal(reason) ? reason : "calendar-error";
+        const near =
+          at !== undefined && isTimeRefusal(known)
+            ? await nearestFree({ at, appointmentId: next.appointmentId })
+            : {};
         return {
           [outcome]: false,
           error: known,
@@ -2278,7 +2308,10 @@ async function executeTool(
               })
             : {}),
           ...(providerError ? { provider_error: providerError } : {}),
-          note: changeRefusalNote(known, did, "chat"),
+          ...near,
+          note:
+            changeRefusalNote(known, did, "chat") +
+            (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         };
       };
       // The cap answers first, before cal.com is asked anything. Asked in a
@@ -2315,7 +2348,14 @@ async function executeTool(
       // the whole span, capacity and the customer's other bookings in the
       // transaction that writes.
       const refusal = await refuseStart(startAt, "moved");
-      if (refusal) return refusal;
+      if (refusal) {
+        return {
+          ...refusal,
+          ...(refusal.error === "outside-open-hours"
+            ? await nearestFree({ at: startAt, appointmentId: next.appointmentId })
+            : {}),
+        };
+      }
       if (startAt === next.startAt) {
         return {
           rescheduled: false,
@@ -2329,7 +2369,7 @@ async function executeTool(
           ...target,
           to: startAt,
         });
-        if (!check.ok) return await refuse(check.reason);
+        if (!check.ok) return await refuse(check.reason, undefined, startAt);
         dry({
           kind: "move",
           appointmentId: next.appointmentId,
@@ -2345,7 +2385,7 @@ async function executeTool(
         };
       }
       const done = await write({ kind: "move", to: startAt });
-      if (!done.ok) return await refuse(done.reason, done.providerError);
+      if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
       return { rescheduled: true, spoken_time: spokenOf(startAt) };
     }
 

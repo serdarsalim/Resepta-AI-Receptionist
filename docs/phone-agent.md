@@ -290,6 +290,15 @@ appointments through Resepta. Two availability lanes exist:
   Slot picking is deterministic code, not model judgment, because on a live
   call an empty Friday came back as `booked_slots: []` and the agent recited
   the opening hours at the caller. The chat agent shares the same helper.
+- **The asked time, and the nearest free ones (2026-10-13, template v14).**
+  The tool takes the caller's `time` as chat's does, and its description has
+  the agent ask which day and time suit the caller before listing any. That
+  time is answered as a fact (`requested_time`, `judgeRequestedTime`, one
+  verdict for both lanes); a taken or shut time, and every booking or move
+  refused for its time, comes back with `nearest_free`: two free times either
+  side (`retell.nearestFreeTimes`, the booking page's own `freeStarts`, the
+  asked day first, then outward). Days are listed Monday first everywhere the
+  agents read hours.
 
 Booking writes re-verify everything server-side (hours, closed days,
 capacity, lead time) regardless of which lane answered the availability

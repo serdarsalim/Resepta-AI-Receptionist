@@ -348,7 +348,7 @@ export const page = query({
 // customerId keeps the grid from offering a time the caller is already busy
 // at, which the write would then refuse. A picker that offers what the
 // mutation rejects is worse than one that offers less.
-async function freeStarts(
+export async function freeStarts(
   ctx: ReadCtx,
   org: Doc<"orgs">,
   date: string,
