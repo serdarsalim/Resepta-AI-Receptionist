@@ -1221,9 +1221,11 @@ export default defineSchema({
     // behind the daily change cap (lib/agentChange.ts, Nudge's six a day).
     // Trimmed to the trailing 24 hours and at most 20 entries on every write,
     // so it never grows. A move or cancel past the cap is refused and handed
-    // to a person; a booking is counted and never refused. Only the
-    // assistants write it, never staff: the cap stops a talked-round agent
-    // churning a diary, not the salon managing its own.
+    // to a person; a booking is counted and never refused. The assistants
+    // write it, and so does the customer's own manage page (/appt/<token>),
+    // whose every move re-sends a confirmation. Never staff: the cap stops a
+    // talked-round agent or an idle finger churning a diary, not the salon
+    // managing its own.
     agentChangesAt: v.optional(v.array(v.number())),
     // The inbound message the webhook most recently scheduled an agent turn
     // for. The debounce compares against THIS, never against "the newest

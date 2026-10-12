@@ -20,6 +20,7 @@ import { loadClosures } from "./lib/closureRows";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
 import { MAX_LINES_PER_BOOKING, MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
+import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
 import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
@@ -862,11 +863,19 @@ export const reschedule = mutation({
       // this answers only a hand-crafted request.
       return { ok: false, reason: "provider-managed" };
     }
+    // The assistants' daily cap counts this door too (lib/agentChange.ts,
+    // 2026-10-13): every move re-sends the confirmation below, so a page left
+    // open under an idle finger would otherwise message the customer as often
+    // as it is tapped. One person changing one diary, whichever door.
+    const customer = await ctx.db.get(appointment.customerId);
+    const now = Date.now();
+    if (customer && changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
+      return { ok: false, reason: "too-many-changes" };
+    }
     const duration =
       appointment.durationMinutes ??
       appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
       30;
-    const now = Date.now();
     const noticeMs = Math.max(MIN_NOTICE_MS, await goodsLeadMs(ctx, appointment));
     if (args.startMs < now + noticeMs - 60_000) {
       return {
@@ -922,6 +931,11 @@ export const reschedule = mutation({
       icsSequence: (appointment.icsSequence ?? 0) + 1,
     });
     await syncAppointmentSchedule(ctx, appointment._id);
+    if (customer) {
+      await ctx.db.patch(customer._id, {
+        agentChangesAt: withChange(customer.agentChangesAt, now),
+      });
+    }
     // The confirmation goes again with the new time. Its ICS rides the same
     // UID (the appointment id) at a bumped SEQUENCE, so the customer's
     // calendar entry MOVES rather than gaining a twin or keeping the old slot.
@@ -939,6 +953,18 @@ export const cancel = mutation({
     const { appointment, org } = found;
     if (appointment.status === "cancelled") return { ok: true };
     if (appointment.status === "completed") return { ok: false, reason: "not-open" };
+    // Counted like a move (see reschedule above). A cancel is the last change
+    // an appointment can take, but it still mails the customer and the team.
+    const customer = await ctx.db.get(appointment.customerId);
+    const now = Date.now();
+    if (customer && changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
+      return { ok: false, reason: "too-many-changes" };
+    }
+    if (customer) {
+      await ctx.db.patch(customer._id, {
+        agentChangesAt: withChange(customer.agentChangesAt, now),
+      });
+    }
     // Provider-owned goes through cal.com first — the same route the WhatsApp
     // İPTAL reply takes, for the same reason (webhook.ts).
     if (appointment.externalUid && org.calcomApiKey && org.calcomEventTypeId) {

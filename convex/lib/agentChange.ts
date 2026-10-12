@@ -12,8 +12,9 @@ import { v, type Infer } from "convex/values";
 // over the trailing 24 hours on customers.agentChangesAt. A BOOKING is counted
 // and never refused, because the count is what stops a cancel-and-rebook loop.
 // A move or a cancel past the sixth is refused, and the agent is told to hand
-// it to a person. It is one person changing one diary whichever assistant they
-// reach, so the phone and WhatsApp count against the same six.
+// it to a person. It is one person changing one diary whichever door they
+// use, so the phone, WhatsApp and the customer's own manage page
+// (booking.reschedule / booking.cancel) count against the same six.
 
 export const CHANGES_PER_DAY = 6;
 export const CHANGE_WINDOW_MS = 24 * 60 * 60_000;

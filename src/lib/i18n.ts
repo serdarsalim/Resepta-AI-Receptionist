@@ -1348,6 +1348,13 @@ const dictionary = {
   // Not the same as slotTaken, and saying so matters: the salon has room, the
   // person does not. Told plainly, the reader knows to pick a later time
   // rather than assume the shop is full.
+  // The manage page, past the daily change cap (lib/agentChange.ts): every
+  // move re-sends the confirmation, so changes stop for the day.
+  "booking.tooManyChanges": {
+    tr: "Bu randevu bugün yeterince değiştirildi. Yeni bir değişiklik için lütfen işletmeyi arayın.",
+    en: "This appointment has been changed enough times today. To change it again, please call the business.",
+    de: "Dieser Termin wurde heute schon oft genug geändert. Für eine weitere Änderung rufen Sie bitte den Betrieb an.",
+  },
   "booking.customerBusy": {
     tr: "Bu saatte zaten bir randevunuz var. Lütfen daha sonrası için bir saat seçin.",
     en: "You already have an appointment at that time. Please pick a later one.",

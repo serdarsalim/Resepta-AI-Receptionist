@@ -245,7 +245,9 @@ export default function ManageAppointmentPage({
               ? t("booking.slotTaken")
               : error === "customer-busy"
                 ? t("booking.customerBusy")
-                : t("forms.failed")}
+                : error === "too-many-changes"
+                  ? t("booking.tooManyChanges")
+                  : t("forms.failed")}
           </p>
         )}
       </div>
