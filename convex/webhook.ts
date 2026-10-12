@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
-import { withChange } from "./lib/agentChange";
-import { noteMessageById } from "./lib/thread";
-import { nextUpcomingOf, scheduleLifecycleMessages } from "./appointments";
+import { REPEAT_WINDOW_MS, withChange } from "./lib/agentChange";
+import { channelOfMessage, noteMessageById } from "./lib/thread";
+import { scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -64,6 +64,68 @@ function intentOf(text: string, bareOnly: boolean): "confirm" | "cancel" | null 
   if (CONFIRM_WORDS.some(hit)) return "confirm";
   if (CANCEL_WORDS.some(hit)) return "cancel";
   return null;
+}
+
+// WHICH appointment a typed EVET or İPTAL answers (2026-10-13): the one the
+// latest WhatsApp reminder or confirmation to this customer was about, since
+// that is the message they are replying to. Both used to fall back to "the
+// next upcoming", so İPTAL typed twice cancelled two appointments: the second
+// "next" was the one after the appointment just cancelled.
+//
+// A cancel whose appointment was cancelled inside REPEAT_WINDOW_MS of the
+// customer's last change is the same İPTAL again: that appointment comes
+// back, already cancelled, and the caller changes nothing. With no such
+// message, or one about an appointment long settled, the next upcoming one is
+// used only when it is the only one. With several, nothing is guessed: the
+// message goes where any other text goes, to the assistant or the team.
+async function typedReplyTarget(
+  ctx: MutationCtx,
+  customer: Doc<"customers">,
+  intent: "confirm" | "cancel",
+  now: number,
+): Promise<Id<"appointments"> | null> {
+  const open = (row: Doc<"appointments">) =>
+    (row.status === "scheduled" || row.status === "confirmed") && row.startAt > now;
+  // Newest first, bounded: the reply answers something recent, and these
+  // rows carry bodies.
+  const recent = await ctx.db
+    .query("messages")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .order("desc")
+    .take(50);
+  const answered = recent.find(
+    (message) =>
+      message.direction === "out" &&
+      message.appointmentId !== undefined &&
+      message.status !== "failed" &&
+      channelOfMessage(message.kind) === "whatsapp" &&
+      (message.kind === "confirmation" || message.kind.startsWith("reminder")),
+  );
+  if (answered?.appointmentId) {
+    const appointment = await ctx.db.get(answered.appointmentId);
+    if (
+      appointment &&
+      appointment.orgId === customer.orgId &&
+      appointment.customerId === customer._id
+    ) {
+      if (open(appointment)) return appointment._id;
+      const lastChange = Math.max(0, ...(customer.agentChangesAt ?? []));
+      if (
+        intent === "cancel" &&
+        appointment.status === "cancelled" &&
+        now - lastChange < REPEAT_WINDOW_MS
+      ) {
+        return appointment._id;
+      }
+    }
+  }
+  const upcoming = (
+    await ctx.db
+      .query("appointments")
+      .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+      .collect()
+  ).filter((row) => row.orgId === customer.orgId && open(row));
+  return upcoming.length === 1 ? upcoming[0]._id : null;
 }
 
 // Meta's inbound payload, already parsed by http.ts. One entry can carry both
@@ -465,8 +527,9 @@ export async function processInboundMessage(
     (org?.status ?? "active") !== "suspended" &&
     Boolean(text.trim());
 
-  // A button payload names its exact appointment; typed text falls
-  // back to the customer's next upcoming one.
+  // A button payload names its exact appointment; typed text answers the
+  // appointment the latest reminder or confirmation was about
+  // (typedReplyTarget).
   const match = /^(confirm|cancel):(.+)$/.exec(payload);
   let intent: "confirm" | "cancel" | null = null;
   let appointmentId: Id<"appointments"> | null = null;
@@ -476,13 +539,7 @@ export async function processInboundMessage(
   } else if (customer) {
     intent = intentOf(text, agentEligible);
     if (intent) {
-      const appointments = await ctx.db
-        .query("appointments")
-        .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
-        .collect();
-      appointmentId =
-        nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"])
-          ?._id ?? null;
+      appointmentId = await typedReplyTarget(ctx, customer, intent, Date.now());
     }
   }
   // Nothing actionable: they typed something that isn't a confirm or
@@ -593,8 +650,8 @@ export async function processInboundMessage(
     // — and this used to patch it back to confirmed, re-arming every reminder
     // the cancellation disarmed and re-blocking the slot it freed, while
     // cal.com kept its own cancelled state and was never told. The typed-text
-    // path never had this hole, because nextUpcomingOf already filters to
-    // scheduled/confirmed; the button path had to be told the same thing.
+    // path never had this hole, because typedReplyTarget hands a confirm only
+    // an open appointment; the button path had to be told the same thing.
     if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
       return;
     }
@@ -605,7 +662,8 @@ export async function processInboundMessage(
     return;
   }
 
-  // A second İPTAL, or a tap on a reminder for an appointment already
+  // A second İPTAL (typedReplyTarget hands it back the appointment the first
+  // one cancelled), or a tap on a reminder for an appointment already
   // cancelled, changes nothing, and must not send the cancellation again.
   if (appointment.status === "cancelled") return;
   // The customer's own cancel COUNTS toward the daily change cap

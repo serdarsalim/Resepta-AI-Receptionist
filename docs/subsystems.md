@@ -20,8 +20,13 @@ wins. Moved out of AGENTS.md on 2026-09-03, text as it stood then.
 - Inbound comes through one webhook (`convex/http.ts`, `/whatsapp/webhook`),
   resolved to an org by `metadata.phone_number_id` — never by guessing from the
   customer's number alone. Button payloads confirm/cancel the exact
-  appointment; bare "EVET"/"İPTAL" text falls back to the customer's next
-  upcoming appointment.
+  appointment; bare "EVET"/"İPTAL" text answers the appointment the latest
+  WhatsApp reminder or confirmation to that customer was about
+  (`webhook.typedReplyTarget`, 2026-10-13). An İPTAL whose appointment was
+  cancelled inside the last three minutes of the customer's changes is the
+  same İPTAL again and changes nothing. With no such message the next upcoming
+  appointment is used only when it is the only one; with several, nothing is
+  guessed and the text goes to the assistant or the team like any other.
 - **A delivery seen twice is one message (2026-10-13).** Meta retries a
   webhook it did not see acknowledged and Evolution replays events, so
   `webhook.processInboundMessage` (both lanes' one entry) returns at once when
