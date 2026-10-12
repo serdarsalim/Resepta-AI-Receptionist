@@ -22,6 +22,12 @@ wins. Moved out of AGENTS.md on 2026-09-03, text as it stood then.
   customer's number alone. Button payloads confirm/cancel the exact
   appointment; bare "EVET"/"İPTAL" text falls back to the customer's next
   upcoming appointment.
+- **A delivery seen twice is one message (2026-10-13).** Meta retries a
+  webhook it did not see acknowledged and Evolution replays events, so
+  `webhook.processInboundMessage` (both lanes' one entry) returns at once when
+  a row in the SAME org already holds the message's wamid. Before that every
+  retry was a second bubble, a second staff alert and a second agent turn.
+  `by_wamid` spans all orgs, so the org is matched in code.
 - **Attachments, both directions (2026-08-26).** Meta hangs every media type
   under a key named after `message.type` with the SAME shape — `{ id, mime_type,
   caption?, filename? }` — so `webhook.ts` reads it generically rather than

@@ -264,6 +264,25 @@ export async function processInboundMessage(
   },
 ): Promise<void> {
   const { orgId, phone, text, payload } = args;
+  // A DELIVERY SEEN TWICE IS ONE MESSAGE (2026-10-13). Meta retries any
+  // webhook it did not see acknowledged in time and Evolution replays events,
+  // and every retry used to land as a second bubble, a second alert to the
+  // staff and a second turn for the assistant (which then answered twice).
+  // Only the shop phone's own replies were deduped (handleEvolutionEvent).
+  // The wamid is the message's own id, so a row already holding it in THIS
+  // org means this delivery has been handled. The index spans every org,
+  // hence the org check; take() rather than unique(), because a duplicate
+  // that slipped in before this guard must not make every later delivery
+  // throw. Race-free: a mutation's read of this index range conflicts with
+  // a concurrent insert into it, so two simultaneous deliveries serialise
+  // and the second one finds the first.
+  if (args.wamid) {
+    const seen = await ctx.db
+      .query("messages")
+      .withIndex("by_wamid", (q) => q.eq("wamid", args.wamid))
+      .take(10);
+    if (seen.some((row) => row.orgId === orgId && row.direction === "in")) return;
+  }
   const customer = await ctx.db
     .query("customers")
     .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", phone))
