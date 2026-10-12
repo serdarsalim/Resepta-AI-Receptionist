@@ -217,6 +217,18 @@ const CATEGORIES: Category[] = [
         ],
         keywords: ["customer", "contact", "history", "phone", "email", "search"],
       },
+      {
+        id: "customer-privacy",
+        title: "Delete a customer, or limit how you contact them",
+        summary:
+          "Act on a customer's request about their data or about how they want to be contacted, from their record.",
+        steps: [
+          "To delete a customer, open their record, choose ⋯ at the top right of the record, then Delete customer. Only the business owner sees this.",
+          "The confirmation lists what goes with them: appointments, messages, calls, notes and assistant replies. Choose Delete permanently to erase it all.",
+        ],
+        note: "Deleting cannot be undone, and nothing is sent to the customer about it. Their record leaves every list at once, and anything still waiting to be sent to them is cancelled.",
+        keywords: ["delete", "erase", "remove", "privacy", "kvkk", "gdpr", "data request"],
+      },
     ],
   },
   {

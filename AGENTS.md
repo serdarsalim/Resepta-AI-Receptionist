@@ -216,11 +216,20 @@ memberships still belongs in `platform.ts`.
 
 ## Deleting a customer deletes them (2026-10-13)
 
-KVKK lets a person ask a business to erase them. `customers.remove`, the office
-MCP's `delete_customer` and the undo of `create_customers` all go through
-`beginCustomerDeletion` in [`convex/customerDeletion.ts`](convex/customerDeletion.ts);
-nothing else deletes a customer row. How it runs is in `docs/subsystems.md` →
-"Deleting a customer".
+KVKK lets a person ask a business to erase them. `customers.remove` (the
+customer record's ⋯ → Delete customer), the office MCP's `delete_customer` and
+the undo of `create_customers` all go through `beginCustomerDeletion` in
+[`convex/customerDeletion.ts`](convex/customerDeletion.ts); nothing else deletes
+a customer row. How it runs is in `docs/subsystems.md` → "Deleting a customer".
+
+- **Deleting a customer is an owner's decision, checked on the server** (since
+  2026-10-13; it was any member). `customers.remove` takes `requireOwner`, and
+  the MCP's `preview_delete_customer` and `delete_customer` re-derive the role
+  from `memberships` (`assertOwner`) on every call. A new door gets the same
+  check. The one exception is the undo of `create_customers`, which stays with
+  whoever ran the import: it removes only rows that same call created and that
+  nothing has happened to since (no appointment, message, call or note), so it
+  cannot erase a customer the business holds.
 
 - **`FOOTPRINT` is the one list of every table that holds a customer**, by
   `customerId` or by their number, and it serves both the MCP preview's counts

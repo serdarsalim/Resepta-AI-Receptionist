@@ -517,7 +517,7 @@ const TOOLS: ToolDef[] = [
     name: "preview_delete_customer",
     title: "Preview deleting a customer",
     description:
-      "Step one of erasing a person from this business, for a data-removal request. Takes the exact customer id (from search_customers or get_customer, never a name) and returns who that is and what would go with them: appointments, messages, calls, notes, assistant replies, bulk-send entries and inbox marks, plus the audit rows that would be emptied of them. Returns a confirmToken that delete_customer needs, valid for 10 minutes. Show the person the name and the counts and get a clear yes before deleting.",
+      "Step one of erasing a person from this business, for a data-removal request. Owners only: a team member's request is refused. Takes the exact customer id (from search_customers or get_customer, never a name) and returns who that is and what would go with them: appointments, messages, calls, notes, assistant replies, bulk-send entries and inbox marks, plus the audit rows that would be emptied of them. Returns a confirmToken that delete_customer needs, valid for 10 minutes. Show the person the name and the counts and get a clear yes before deleting.",
     inputSchema: {
       type: "object",
       properties: {
@@ -532,6 +532,7 @@ const TOOLS: ToolDef[] = [
       if (!customerId) throw new Error("customerId is required");
       const res = await ctx.runQuery(internal.agentTools.previewDeleteCustomer, {
         orgId: who.orgId as never,
+        userId: who.userId as never,
         customerId,
       });
       const { counts, capped } = res.footprint;
@@ -564,7 +565,7 @@ const TOOLS: ToolDef[] = [
     name: "delete_customer",
     title: "Delete a customer permanently",
     description:
-      "Step two. Permanently erases the customer and everything this business holds on them, and cancels anything still waiting to be sent to them. Needs the confirmToken from preview_delete_customer for the same customer, less than 10 minutes old; if anything changed since the preview (a message arrived, a note was added), this refuses and you preview again. Not undoable: undo refuses it. Only call after the person has seen the preview and said yes.",
+      "Step two. Permanently erases the customer and everything this business holds on them, and cancels anything still waiting to be sent to them. Owners only. Needs the confirmToken from preview_delete_customer for the same customer, less than 10 minutes old; if anything changed since the preview (a message arrived, a note was added), this refuses and you preview again. Not undoable: undo refuses it. Only call after the person has seen the preview and said yes.",
     inputSchema: {
       type: "object",
       properties: {

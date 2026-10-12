@@ -15,7 +15,12 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { recordActivity } from "./lib/activity";
 import { foundOrg } from "./lib/foundOrg";
@@ -1054,10 +1059,13 @@ export const logActivity = internalMutation({
 // back a confirm token bound to those counts and to a ten-minute window; the
 // delete recounts and refuses a token that no longer matches. A message that
 // lands in between changes the count, so the person always approves what
-// actually goes. Any member may do it, as in the app (customers.remove).
+// actually goes. Owners only, both steps, as in the app (customers.remove):
+// the role is re-derived from memberships on every call, like every other
+// owner-gated tool here, so a staff member's connector cannot delete a
+// customer the app would not let them delete.
 
 export const previewDeleteCustomer = internalQuery({
-  args: { orgId: v.id("orgs"), customerId: v.string() },
+  args: { orgId: v.id("orgs"), userId: v.id("users"), customerId: v.string() },
   returns: v.object({
     customer: v.object({
       id: v.id("customers"),
@@ -1068,7 +1076,8 @@ export const previewDeleteCustomer = internalQuery({
     footprint: footprintValidator,
     signature: v.string(),
   }),
-  handler: async (ctx, { orgId, customerId }) => {
+  handler: async (ctx, { orgId, userId, customerId }) => {
+    await assertOwner(ctx, orgId, userId, "delete a customer");
     const customer = await ctx.db.get(customerId as Id<"customers">).catch(() => null);
     if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
       throw new Error("No customer with that id.");
@@ -1095,6 +1104,7 @@ export const deleteCustomer = internalMutation({
     actionId: v.id("agentActions"),
   }),
   handler: async (ctx, { orgId, userId, connectionId, customerId, confirmToken }) => {
+    await assertOwner(ctx, orgId, userId, "delete a customer");
     const customer = await customerInOrg(ctx, orgId, customerId);
     const expiresAt = deleteConfirmExpiry(confirmToken);
     const now = Date.now();
@@ -1145,7 +1155,7 @@ export const deleteCustomer = internalMutation({
 // because the connector must not become a way around the app's own rules.
 
 async function assertOwner(
-  ctx: MutationCtx,
+  ctx: QueryCtx,
   orgId: Id<"orgs">,
   userId: Id<"users">,
   what: string,

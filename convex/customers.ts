@@ -1,12 +1,16 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { assertE164, requireOrg } from "./lib/orgAuth";
+import { assertE164, requireOrg, requireOwner } from "./lib/orgAuth";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
 import { isDeleting } from "./lib/customerDeletion";
-import { beginCustomerDeletion } from "./customerDeletion";
+import {
+  beginCustomerDeletion,
+  customerFootprint,
+  footprintValidator,
+} from "./customerDeletion";
 
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
@@ -347,16 +351,49 @@ export const setMuted = mutation({
   },
 });
 
+// What deleting this customer would remove, per kind: the counts the customer
+// page's delete sheet shows before anything goes, from the same FOOTPRINT list
+// the sweep empties (customerDeletion.ts), so what the owner is shown is what
+// goes. Owner-only like the delete itself; anyone else gets null, which the
+// sheet never asks for because the menu that opens it is not drawn for them.
+//
+// Subscribed only while the sheet is open. Its read set is the customer's
+// whole history (capped per kind), so a live subscription re-runs on every
+// message they send, which is the point while the owner is deciding and a
+// waste the rest of the time.
+export const deletionPreview = query({
+  args: { customerId: v.id("customers") },
+  returns: v.union(
+    v.object({ name: v.string(), footprint: footprintValidator }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const { orgId, role } = await requireOrg(ctx);
+    if (role !== "owner") return null;
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
+    return {
+      name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+      footprint: await customerFootprint(ctx, customer),
+    };
+  },
+});
+
 // Deletes the customer and everything held on them (customerDeletion.ts):
 // gone from every screen in this commit, every queued send cancelled, the
-// rest swept in the background. Nothing is sent to them about it. Staff may
-// do it, like every other edit to a customer; the activity feed records who
-// did, and never whom.
+// rest swept in the background. Nothing is sent to them about it.
+//
+// Owners only, since 2026-10-13 (it was any member). Staff edit customers all
+// day, but erasing one is a KVKK decision that takes the business's own
+// history with it and cannot be undone, so it belongs to whoever answers for
+// the business. Every other deletion door checks the same (AGENTS.md,
+// "Deleting a customer deletes them"). The activity feed records who did it,
+// and never whom.
 export const remove = mutation({
   args: { customerId: v.id("customers") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOrg(ctx);
+    const { orgId } = await requireOwner(ctx);
     const customer = await ctx.db.get(args.customerId);
     if (!customer || customer.orgId !== orgId) throw new Error("not-found");
     // A second press while the first is being swept changes nothing.

@@ -1455,12 +1455,25 @@ The rules are in AGENTS.md → "Deleting a customer deletes them"; this is how
 it runs. Code: `convex/customerDeletion.ts`, vocabulary in
 `convex/lib/customerDeletion.ts`.
 
-**Doors.** `customers.remove` (any member, like every other customer edit; no
-screen calls it yet), the office MCP's `preview_delete_customer` →
-`delete_customer` pair, the undo of `create_customers`, and the operator's
+**Doors.** `customers.remove` (owners only), the office MCP's
+`preview_delete_customer` → `delete_customer` pair (owners only, role re-read
+from `memberships` per call), the undo of `create_customers` (whoever ran the
+import; it only takes rows nothing has happened to), and the operator's
 `voiceBackfill.removeOwnNumberContacts`. Each calls
 `beginCustomerDeletion(ctx, customer, how)`. A customer already being deleted
 is a no-op.
+
+**The record's Delete** (2026-10-13). The customer record card carries a ⋯
+(`RowMenu`, on `useAnchoredPanel`) at the right of its first line, drawn only
+for owners. Its one item opens `CustomerDeleteSheet`, which subscribes to
+`customers.deletionPreview` only while open: the same `customerFootprint`
+counts the MCP preview shows, per kind, with "+" on a capped kind, kinds with
+nothing left out, and the emptied audit rows as one line. Cancel takes focus,
+not the red button, because there is no undo. The confirm runs
+`customers.remove` and then `onDeleted`, which `AppHome` answers by closing the
+record and opening the Customers tab; `ContactView` renders nothing in the
+moment between the record's query answering null and the page moving, so the
+deleted person never flashes "No customers".
 
 **Step one, inside the caller's transaction.** The row is `replace`d with
 `{ orgId, firstName: "", phone: "deleted:<id>", deletingAt, deletingPhone }`,

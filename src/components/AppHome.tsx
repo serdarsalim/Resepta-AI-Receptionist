@@ -170,6 +170,13 @@ export function AppHome() {
             initialItemId={contactItem}
             onTitle={setContactName}
             onOpenContact={openContact}
+            // A deleted customer's page has nothing left on it, so it lands
+            // on the customer list, whichever tab it was opened from: that is
+            // where the owner sees the person is gone.
+            onDeleted={() => {
+              setContactId(null);
+              setTab("customers");
+            }}
           />
         ) : (
           <>

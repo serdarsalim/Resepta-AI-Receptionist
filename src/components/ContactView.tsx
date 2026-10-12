@@ -16,6 +16,8 @@ import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldRow, InlineEditValue } from "./RecordField";
 import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
+import { RowMenu } from "./RowMenu";
+import { CustomerDeleteSheet } from "./CustomerDeleteSheet";
 import { DEFAULT_DURATION } from "@/lib/calendarDrag";
 import { useBookingSheet } from "./useBookingSheet";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
@@ -80,6 +82,7 @@ export function ContactView({
   initialItemId,
   onTitle,
   onOpenContact,
+  onDeleted,
 }: {
   customerId: Id<"customers">;
   // Reported up so the SHELL header can carry this person's name; the tab
@@ -98,6 +101,9 @@ export function ContactView({
   // Passed straight through to the feed — see ConversationPanel, which is
   // where a channel that lists before it reads gets opened on a row.
   initialItemId?: string;
+  // Where to go once this customer has been deleted from the ⋯ menu. The
+  // record has nothing left to show, so the page it sat on decides.
+  onDeleted?: () => void;
 }) {
   const { t, language } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
@@ -108,7 +114,26 @@ export function ContactView({
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setMuted = useMutation(api.customers.setMuted);
+  const removeCustomer = useMutation(api.customers.remove);
   const markConversationRead = useMutation(api.messages.markConversationRead);
+  // Deleting is an owner's call, server-side too (customers.remove); the menu
+  // is simply not drawn for staff rather than offered and refused.
+  const isOwner = settings?.me.role === "owner";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // Set the moment a delete starts. The record's own query answers null as
+  // soon as the deletion commits, a beat before the page moves on, and
+  // without this that beat reads "No customers" on the person just deleted.
+  const [leaving, setLeaving] = useState(false);
+  const confirmDelete = async () => {
+    setLeaving(true);
+    try {
+      await removeCustomer({ customerId });
+    } catch (error) {
+      setLeaving(false);
+      throw error;
+    }
+    onDeleted?.();
+  };
 
   // Reading a conversation happens HERE now, so this is where it gets marked
   // read. Since 2026-08-22 an inbox row navigates to this page instead of
@@ -209,6 +234,7 @@ export function ContactView({
   const orgFields: Doc<"contactFields">[] = fields ?? [];
 
   if (customer === null) {
+    if (leaving) return null;
     return <p className="text-sm text-[var(--muted)]">{t("customers.none")}</p>;
   }
   if (!customer) {
@@ -260,6 +286,24 @@ export function ContactView({
                 appointments={appointments}
                 currency={currency}
                 priceDecimals={settings?.org.priceDecimals}
+                // The record's own verbs, hard right on the card's first
+                // line: the card IS the customer, and an action belongs to
+                // the card it acts on. Delete is the only one today.
+                menu={
+                  isOwner ? (
+                    <RowMenu
+                      label={t("customers.actions")}
+                      items={[
+                        {
+                          key: "delete",
+                          label: t("customers.delete"),
+                          danger: true,
+                          onSelect: () => setDeleteOpen(true),
+                        },
+                      ]}
+                    />
+                  ) : undefined
+                }
                 onAdd={() =>
                   booking.open({
                     // Next round hour, the same default the calendar's own
@@ -498,6 +542,13 @@ export function ContactView({
       </div>
 
       {booking.render()}
+      {deleteOpen && (
+        <CustomerDeleteSheet
+          customerId={customerId}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   );
 }
@@ -524,12 +575,16 @@ function CustomerAppointments({
   priceDecimals,
   onAdd,
   onOpen,
+  menu,
 }: {
   appointments: CustomerAppointment[] | undefined;
   currency: string;
   priceDecimals?: boolean;
   onAdd: () => void;
   onOpen: (draft: ModalDraft, anchor: Rect) => void;
+  // The record's ⋯, sharing this first line rather than spending one of its
+  // own. Absent for staff.
+  menu?: React.ReactNode;
 }) {
   const { t, language } = useLanguage();
   const setStatus = useMutation(api.appointments.setStatus);
@@ -699,6 +754,7 @@ function CustomerAppointments({
         >
           + {t("appointments.addForCustomer")}
         </button>
+        {menu}
       </div>
 
       {/* Nothing upcoming says nothing (Serdar, 2026-08-31): the empty state

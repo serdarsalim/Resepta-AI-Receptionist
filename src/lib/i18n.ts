@@ -893,6 +893,82 @@ const dictionary = {
     en: "A muted customer stays out of the inbox and never lights an attention dot. You can still message them; they sit at the bottom of Contacts.",
     de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
   },
+  // The record's ⋯ menu and its delete sheet (CustomerDeleteSheet). Owners
+  // only; the menu is not drawn for anybody else.
+  "customers.actions": {
+    tr: "Müşteri işlemleri",
+    en: "Customer actions",
+    de: "Kundenaktionen",
+  },
+  "customers.delete": {
+    tr: "Müşteriyi sil",
+    en: "Delete customer",
+    de: "Kunden löschen",
+  },
+  "customers.deleteTitle": {
+    tr: "{name} silinsin mi?",
+    en: "Delete {name}?",
+    de: "{name} löschen?",
+  },
+  // A caller the voice agent filed has no name until somebody gives one.
+  "customers.deleteTitleUnnamed": {
+    tr: "Bu müşteri silinsin mi?",
+    en: "Delete this customer?",
+    de: "Diesen Kunden löschen?",
+  },
+  "customers.deleteHint": {
+    tr: "Müşteri hemen tüm listelerden ve aramalardan kalkar; ona gönderilmeyi bekleyen her mesaj iptal edilir. Kendisine bu konuda bir şey gönderilmez. Etkinlik kaydında bir müşterinin silindiği ve kimin sildiği kalır, silinen kişinin adı kalmaz. Telefon, WhatsApp ve e-posta hizmetlerinin kendi kopyalarına dokunulmaz.",
+    en: "They leave every list and search at once, and anything still waiting to be sent to them is cancelled. Nothing is sent to them about it. The activity log keeps a line saying a customer was deleted and by whom, never who. Copies kept by the phone, WhatsApp and email services are not touched.",
+    de: "Der Kunde verschwindet sofort aus allen Listen und Suchen, und alles, was noch an ihn gesendet werden sollte, wird abgebrochen. Er erhält darüber keine Nachricht. Das Aktivitätsprotokoll behält einen Eintrag, dass ein Kunde gelöscht wurde und von wem, aber nicht, wer. Kopien bei den Telefon-, WhatsApp- und E-Mail-Diensten bleiben unberührt.",
+  },
+  "customers.deleteLead": {
+    tr: "Onunla birlikte silinecekler:",
+    en: "Deleted with them:",
+    de: "Mit gelöscht werden:",
+  },
+  "customers.deleteNothingElse": {
+    tr: "Başka kaydı yok.",
+    en: "Nothing else is held on them.",
+    de: "Sonst ist zu diesem Kunden nichts gespeichert.",
+  },
+  "customers.deleteKindMessages": { tr: "Mesajlar", en: "Messages", de: "Nachrichten" },
+  "customers.deleteKindCalls": { tr: "Aramalar", en: "Calls", de: "Anrufe" },
+  "customers.deleteKindChatTurns": {
+    tr: "Asistan yanıtları",
+    en: "Assistant replies",
+    de: "Antworten des Assistenten",
+  },
+  "customers.deleteKindBulk": {
+    tr: "Toplu işlem kayıtları",
+    en: "Bulk send entries",
+    de: "Einträge in Sammelaktionen",
+  },
+  "customers.deleteKindInboxMarks": {
+    tr: "Gelen kutusu işaretleri",
+    en: "Inbox pins and read marks",
+    de: "Markierungen im Posteingang",
+  },
+  "customers.deleteActivityKept": {
+    tr: "Etkinlik kaydında adı olmadan kalan satırlar: {n}",
+    en: "Activity log entries kept without their name: {n}",
+    de: "Einträge im Aktivitätsprotokoll, die ohne Namen bleiben: {n}",
+  },
+  "customers.deleteFinal": {
+    tr: "Bu işlem geri alınamaz.",
+    en: "This can't be undone.",
+    de: "Das lässt sich nicht rückgängig machen.",
+  },
+  "customers.deleteConfirm": {
+    tr: "Kalıcı olarak sil",
+    en: "Delete permanently",
+    de: "Endgültig löschen",
+  },
+  "customers.deleting": { tr: "Siliniyor…", en: "Deleting…", de: "Wird gelöscht…" },
+  "customers.deleteFailed": {
+    tr: "Silinemedi. Tekrar deneyin.",
+    en: "Could not delete. Try again.",
+    de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
+  },
   "customers.noConsent": {
     tr: "İzin yok",
     en: "No consent",
