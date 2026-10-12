@@ -99,11 +99,14 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 //     syncTemplate carries them, and so does every other publish that writes
 //     the agent doc;
 //   - cancel_appointment and reschedule_appointment name their appointment by
-//     `appointment_start`, the start find_appointment gave (review fix, same
-//     day). They acted on whatever was next when they ran, so a provider
-//     retry or a second "yes" cancelled the appointment after the one meant.
-//     /retell/functions reads templateVersion to know which engines carry it,
-//     and an older one keeps "the next one" with a guard after each change.
+//     `appointment_start`, the start find_appointment gave, and
+//     `appointment_services`, its services as given (review fixes, same day:
+//     two orders can share a minute). They acted on whatever was next when
+//     they ran, so a provider retry or a second "yes" cancelled the
+//     appointment after the one meant. /retell/functions reads
+//     templateVersion to know which engines carry them, and an older one
+//     keeps "the next one", pinned by its services, with a guard after each
+//     change.
 // None of the new wording names a tool. Tool answers are served live to every
 // template version, and descriptions arrive with the tools they describe, so
 // neither can promise a tool an older agent lacks (Nudge ba2d956a).
@@ -635,7 +638,7 @@ export function appointmentReceptionistTemplate(args: {
     customTool(
       args.site,
       "find_appointment",
-      "Find the caller's next appointment, with its appointment_start, before discussing, cancelling or moving it.",
+      "Find the caller's next appointment, with its appointment_start and appointment_services, before discussing, cancelling or moving it.",
       empty,
       holding.find,
     ),
@@ -650,6 +653,12 @@ export function appointmentReceptionistTemplate(args: {
             type: "string",
             description:
               "The appointment_start find_appointment gave for the appointment to cancel, exactly as given.",
+          },
+          appointment_services: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The appointment_services given with that appointment_start, exactly as given, when there were any.",
           },
         },
         required: ["appointment_start"],
@@ -667,6 +676,12 @@ export function appointmentReceptionistTemplate(args: {
             type: "string",
             description:
               "The appointment_start find_appointment gave for the appointment to move, exactly as given.",
+          },
+          appointment_services: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The appointment_services given with that appointment_start, exactly as given, when there were any.",
           },
           start: {
             type: "string",

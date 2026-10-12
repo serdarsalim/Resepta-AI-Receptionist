@@ -11,7 +11,7 @@ import {
 import { handler as mcpHandler } from "./mcp";
 import { handler as voiceMcpHandler } from "./voiceMcp";
 import { createBooking, getAvailableSlots, releaseHeldBooking } from "./lib/calcomApi";
-import { writeOwnChange } from "./agentAppointments";
+import { writeOwnChange, type Choice } from "./agentAppointments";
 import {
   fetchReceivedEmail,
   htmlToText,
@@ -40,6 +40,7 @@ import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
 import {
   NEAREST_FREE_NOTE,
+  REPEAT_WINDOW_MS,
   changeRefusalNote,
   isChangeRefusal,
   isTimeRefusal,
@@ -360,12 +361,6 @@ async function retellGuard(
   return { ok: true, payload, agentId, orgId: String(auth.orgId) };
 }
 
-// How long after a change an engine without appointment_start (template < 14)
-// is refused another one: long enough to cover a provider retry and a caller
-// repeating "yes", short enough that a real second change later in a long
-// call still goes through, against the next appointment as it always did.
-const LEGACY_REPEAT_MS = 3 * 60_000;
-
 // The same booking asked for twice is one booking (retell.voiceBook): the
 // agent is told so, rather than reading a second confirmation as news.
 const ALREADY_BOOKED_NOTE =
@@ -549,8 +544,8 @@ http.route({
     const nearestFree = async (a: {
       at: number;
       services?: string[];
-      // A move: the start of the caller's appointment being moved.
-      moving?: number;
+      // A move: the caller's appointment being moved, as the agent named it.
+      moving?: { from: number; services?: string[] };
     }): Promise<{ nearest_free?: string[] }> => {
       if (!Number.isFinite(a.at)) return {};
       const who = await callerOfCall();
@@ -558,7 +553,12 @@ http.route({
         orgId: org._id,
         at: a.at,
         ...(who.customerId ? { customerId: who.customerId } : {}),
-        ...(a.moving !== undefined ? { moving: a.moving } : {}),
+        ...(a.moving
+          ? {
+              moving: a.moving.from,
+              ...(a.moving.services ? { movingServices: a.moving.services } : {}),
+            }
+          : {}),
         ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
       });
       return near.length > 0
@@ -1033,7 +1033,14 @@ http.route({
           found: true,
           spoken_time: spokenOf(next.startAt),
           ...(namesStart
-            ? { appointment_start: localMinuteIso(next.startAt, org.timezone) }
+            ? {
+                appointment_start: localMinuteIso(next.startAt, org.timezone),
+                // With the start, what tells it apart from another booking
+                // at the same minute (two orders for 10:00).
+                ...(next.services.length > 0
+                  ? { appointment_services: next.services }
+                  : {}),
+              }
             : {}),
           ...(next.services.length > 0 ? { services: next.services } : {}),
           ...(own.later > 0 ? { later_appointments: own.later } : {}),
@@ -1042,7 +1049,7 @@ http.route({
                 note: [
                   later,
                   namesStart
-                    ? "To move or cancel it, pass appointment_start exactly as given here."
+                    ? "To move or cancel it, pass appointment_start and appointment_services exactly as given here."
                     : "",
                 ]
                   .filter(Boolean)
@@ -1055,15 +1062,22 @@ http.route({
         return respond({ error: "no-upcoming-appointment" });
       }
 
-      // WHICH appointment. The one the agent read back, by its start. An
-      // engine published before appointment_start (template < 14) can only
-      // mean "the next one", so it gets that, but never straight after a
-      // change: a provider retry or a second "yes" would otherwise land on
-      // the appointment after the one just changed (review, same day).
+      // WHICH appointment. The one the agent read back, by its start and its
+      // services (two orders can share a minute). An engine published before
+      // appointment_start (template < 14) can only mean "the next one", so it
+      // gets exactly that row, but never straight after a change: a provider
+      // retry or a second "yes" would otherwise land on the appointment after
+      // the one just changed (review, same day).
       const named =
         typeof args.appointment_start === "string"
           ? parseLocalStart(args.appointment_start, org.timezone)
           : Number.NaN;
+      const rawServices = args.appointment_services;
+      let services: string[] | undefined = Array.isArray(rawServices)
+        ? rawServices.map((one) => String(one ?? "").trim()).filter(Boolean)
+        : typeof rawServices === "string" && rawServices.trim()
+          ? [rawServices.trim()]
+          : undefined;
       let from: number;
       if (Number.isFinite(named)) {
         from = named;
@@ -1074,7 +1088,7 @@ http.route({
         });
       } else {
         if (!next) return respond({ error: "no-upcoming-appointment" });
-        if (own.lastChangeAt !== null && Date.now() - own.lastChangeAt < LEGACY_REPEAT_MS) {
+        if (own.lastChangeAt !== null && Date.now() - own.lastChangeAt < REPEAT_WINDOW_MS) {
           // The note promises a colleague, so the team is emailed in the same
           // breath, as for every other handover below: nobody reads a live
           // call, and a promise with no owner is worse than none.
@@ -1091,21 +1105,39 @@ http.route({
           });
         }
         from = next.startAt;
+        services = next.services;
       }
-      const target = { orgId: org._id, customerId: who.customerId, from };
+      const target = {
+        orgId: org._id,
+        customerId: who.customerId,
+        from,
+        ...(services ? { services } : {}),
+      };
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
       // A change the agent cannot make, answered so it can say what happens
-      // next. When that is "a colleague will be in touch" (the cap, or the
-      // calendar failing), the team is emailed in the same breath: nobody is
-      // reading a live call, and a promise with no owner is worse than none.
-      const refuse = async (reason: string, providerError?: string, at?: number) => {
-        const known = isChangeRefusal(reason) ? reason : "calendar-error";
+      // next. When that is "a colleague will be in touch" (the cap, the
+      // calendar failing, or two appointments nothing can tell apart), the
+      // team is emailed in the same breath: nobody is reading a live call,
+      // and a promise with no owner is worse than none.
+      const refuse = async (
+        failed: { reason: string; providerError?: string; choices?: Choice[] },
+        at?: number,
+      ) => {
+        const given = isChangeRefusal(failed.reason) ? failed.reason : "calendar-error";
+        // An engine without appointment_services cannot answer "which one":
+        // a person sorts it out instead.
+        const known =
+          given === "appointment-ambiguous" && !namesStart ? "appointment-duplicate" : given;
         const near =
           at !== undefined && isTimeRefusal(known)
-            ? await nearestFree({ at, moving: from })
+            ? await nearestFree({ at, moving: { from, services } })
             : {};
-        if (known === "too-many-changes" || known === "calendar-error") {
+        if (
+          known === "too-many-changes" ||
+          known === "calendar-error" ||
+          known === "appointment-duplicate"
+        ) {
           await queueOrgAlert(ctx, {
             orgId: org._id,
             template: did === "cancelled" ? "cancelNeedsPerson" : "moveNeedsPerson",
@@ -1124,7 +1156,15 @@ http.route({
                 todayIso: todayInZone(org.timezone),
               })
             : {}),
-          ...(providerError ? { provider_error: providerError } : {}),
+          ...(failed.providerError ? { provider_error: failed.providerError } : {}),
+          ...(known === "appointment-ambiguous" && failed.choices
+            ? {
+                appointments_at_that_time: failed.choices.map((choice) => ({
+                  appointment_services: choice.services,
+                  ...(choice.cancelled ? { already_cancelled: true } : {}),
+                })),
+              }
+            : {}),
           ...near,
           note:
             changeRefusalNote(known, did, "voice") +
@@ -1144,7 +1184,7 @@ http.route({
 
       if (name === "cancel_appointment") {
         const done = await write({ kind: "cancel" });
-        if (!done.ok) return await refuse(done.reason, done.providerError);
+        if (!done.ok) return await refuse(done);
         return respond({
           cancelled: true,
           spoken_time: spokenOf(from),
@@ -1174,12 +1214,12 @@ http.route({
         return respond({
           ...refusal,
           ...(refusal.error === "outside-open-hours"
-            ? await nearestFree({ at: startAt, moving: from })
+            ? await nearestFree({ at: startAt, moving: { from, services } })
             : {}),
         });
       }
       const done = await write({ kind: "move", to: startAt });
-      if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
+      if (!done.ok) return await refuse(done, startAt);
       return respond({
         rescheduled: true,
         spoken_time: spokenOf(startAt),

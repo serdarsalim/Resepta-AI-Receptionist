@@ -66,10 +66,12 @@ export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // dated holiday — because the two facts above it stopped being the whole story
 // the day a business could shut inside its own opening hours.
 // v10 (2026-10-13): cancel_appointment and reschedule_appointment name their
-// appointment by `appointment_start`, the start my_appointments gave. They
-// used to act on whatever was next when they ran, so a repeated cancel
-// cancelled the appointment after the one meant, and "book Wednesday, cancel
-// Friday" cancelled the new Wednesday. A repeat now finds it already done.
+// appointment by `appointment_start`, the start my_appointments gave, and
+// `appointment_services`, its services as given (two orders can share a
+// minute). They used to act on whatever was next when they ran, so a
+// repeated cancel cancelled the appointment after the one meant, and "book
+// Wednesday, cancel Friday" cancelled the new Wednesday. A repeat now finds
+// it already done; a start that fits two appointments is asked about.
 export const CHAT_AGENT_TEMPLATE_VERSION = 10;
 
 // How many completion rounds one inbound message may chain (each tool round
@@ -181,7 +183,7 @@ export function chatAgentTools(stopOnHandover: boolean): LlmTool[] {
     {
       name: "my_appointments",
       description:
-        "This customer's own next appointment, with its appointment_start. Use before discussing, moving or cancelling anything.",
+        "This customer's own next appointment, with its appointment_start and appointment_services. Use before discussing, moving or cancelling anything.",
       input_schema: { type: "object", properties: {} },
     },
     {
@@ -195,6 +197,12 @@ export function chatAgentTools(stopOnHandover: boolean): LlmTool[] {
             type: "string",
             description:
               "The appointment_start my_appointments gave for the appointment to cancel, exactly as given.",
+          },
+          appointment_services: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The appointment_services given with that appointment_start, exactly as given, when there were any.",
           },
         },
         required: ["appointment_start"],
@@ -211,6 +219,12 @@ export function chatAgentTools(stopOnHandover: boolean): LlmTool[] {
             type: "string",
             description:
               "The appointment_start my_appointments gave for the appointment to move, exactly as given.",
+          },
+          appointment_services: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The appointment_services given with that appointment_start, exactly as given, when there were any.",
           },
           start: {
             type: "string",

@@ -152,12 +152,16 @@ that `(orgId, customerId)`:
   with right away and record nothing about how it reaches them.
 - `my_appointments()` — this customer's next appointment, and how many more
   they have after it.
-- `cancel_appointment(appointment_start)` /
-  `reschedule_appointment(appointment_start, start)` — act only on this
-  customer's own open appointment starting at exactly `appointment_start`
-  (the start `my_appointments` gave), through `convex/agentAppointments.ts`,
-  the module the voice tools use too (2026-10-13, template v10). A repeat
-  finds it already cancelled or moved and answers so; a move is
+- `cancel_appointment(appointment_start, appointment_services?)` /
+  `reschedule_appointment(appointment_start, appointment_services?, start)` —
+  act only on this customer's own open appointment starting at exactly
+  `appointment_start` with those services (both as `my_appointments` gave
+  them; two orders can share a minute), through
+  `convex/agentAppointments.ts`, the module the voice tools use too
+  (2026-10-13, template v10). A start that fits more than one appointment is
+  answered `appointment-ambiguous` with `appointments_at_that_time`, and the
+  model asks which; two identical ones go to a person. A repeat finds it
+  already cancelled or moved and answers so; a move is
   judged against the booking page's rules (span in the day's hours,
   closures, capacity, the customer's other bookings, lead time) in the same
   transaction that writes it; and six changes a day per customer is the cap,

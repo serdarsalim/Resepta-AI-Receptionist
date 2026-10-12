@@ -707,14 +707,19 @@ Nudge's `meetingTools.ts`; do not grow a second path.
 
 - **Whose comes from the channel**, the call leg or the conversation, never a
   tool argument. **Which comes from what the agent read back**: cancel and
-  reschedule take `appointment_start`, the start find_appointment /
-  my_appointments gave, and act only on the customer's own open appointment
-  at exactly that minute in that org, else `appointment-changed`. Never
+  reschedule take `appointment_start` and `appointment_services`, as
+  find_appointment / my_appointments gave them, and act only on the
+  customer's own open appointment at exactly that minute with those services
+  in that org, else `appointment-changed`. A minute is not an identity (two
+  orders share 10:00): when what was named fits more than one appointment,
+  or a bare start meets a minute where something changed in the last three
+  minutes (`REPEAT_WINDOW_MS`), the tool answers `appointment-ambiguous` with
+  the list and the agent asks; identical twins go to a person. Never
   "whatever is next now": a repeat finds it already cancelled or moved and is
-  a no-op answer. A voice engine older than template v14 has no
-  `appointment_start`; it keeps "the next one" but is refused for three
-  minutes after any change, and that refusal promises a colleague, so it
-  emails the team like every other phone handover.
+  a no-op answer. A voice engine older than template v14 has neither
+  parameter; it keeps "the next one" (pinned by that row's services) but is
+  refused for three minutes after any change, and that refusal promises a
+  colleague, so it emails the team like every other phone handover.
 - **A move is judged in the transaction that writes it**, with the booking
   page's own helpers exported from `booking.ts`: the span fits that day's
   hours, no closure, capacity with the row not blocking itself, no clash with

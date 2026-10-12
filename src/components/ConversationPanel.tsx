@@ -2595,12 +2595,18 @@ function AgentThreadStrip({
           : t("agent.change.book").replace("{when}", when(change.at));
         return change.services.length > 0 ? `${head} · ${change.services.join(", ")}` : head;
       }
-      case "move":
-        return t("agent.change.move")
+      // Which appointment, when the assistant named it by its services too:
+      // two orders can share a minute, and the line has to say which goes.
+      case "move": {
+        const head = t("agent.change.move")
           .replace("{from}", when(change.from))
           .replace("{to}", when(change.to));
-      case "cancel":
-        return t("agent.change.cancel").replace("{when}", when(change.at));
+        return change.services?.length ? `${head} · ${change.services.join(", ")}` : head;
+      }
+      case "cancel": {
+        const head = t("agent.change.cancel").replace("{when}", when(change.at));
+        return change.services?.length ? `${head} · ${change.services.join(", ")}` : head;
+      }
       case "save":
         return t("agent.change.save").replace("{fields}", change.labels.join(", "));
     }

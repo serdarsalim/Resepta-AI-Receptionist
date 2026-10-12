@@ -10,9 +10,12 @@
 //    CHANNEL resolved: the call leg on the phone, the conversation on
 //    WhatsApp. Never anything the model said about identity. WHICH
 //    appointment is the one the agent read back: its wall-clock start
-//    (`from`), as find_appointment / my_appointments gave it. The write acts
-//    only on this customer's own open appointment at exactly that minute, in
-//    this org; there is none, it is "appointment-changed" and nothing moves.
+//    (`from`) and its services, as find_appointment / my_appointments gave
+//    them (two orders can share a minute). The write acts only on this
+//    customer's own open appointment at exactly that minute, in this org;
+//    there is none, it is "appointment-changed" and nothing moves. When what
+//    was named fits more than one, the agent is asked which
+//    ("appointment-ambiguous", with the list), never left to the write.
 //    It used to act on whatever was NEXT when the write landed, so a repeated
 //    cancel (a provider retry, a second "yes") cancelled the appointment
 //    after the one meant, and "book Wednesday, then cancel Friday" cancelled
@@ -52,7 +55,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { cancelBooking, rescheduleBooking } from "./lib/calcomApi";
 import {
   CHANGES_PER_DAY,
+  REPEAT_WINDOW_MS,
   changesToday,
+  sameServiceNames,
   withChange,
   type ChangeRefusal,
 } from "./lib/agentChange";
@@ -197,6 +202,14 @@ export const ownNext = internalQuery({
   },
 });
 
+// One of the customer's appointments at the minute named, as the agent is
+// shown it when it has to ask which one was meant.
+export type Choice = { services: string[]; cancelled?: boolean };
+const choiceValidator = v.object({
+  services: v.array(v.string()),
+  cancelled: v.optional(v.boolean()),
+});
+
 type Target =
   | { ok: true; customer: Doc<"customers">; appointment: Doc<"appointments"> }
   | {
@@ -206,7 +219,14 @@ type Target =
       // repeated cancel or move is told apart from one that came too late.
       cancelledAtFrom?: boolean;
       openAtTo?: boolean;
+      // appointment-ambiguous: what is booked at `from`, to ask from.
+      choices?: Choice[];
     };
+
+// The services an appointment holds, by the names the agents read back.
+function servicesOf(row: Doc<"appointments">): string[] {
+  return (row.items ?? []).map((item) => item.name);
+}
 
 // This customer's rows in this org that start in `at`'s minute.
 async function rowsAt(
@@ -226,12 +246,24 @@ async function rowsAt(
 // second "yes" is answered "already done" and never meets the cap. `strict`
 // is everything but a provider-confirmed write, whose caller already ran
 // these checks (checkChange) before cal.com acted.
+//
+// WHICH, by the start AND the services the agent read back (2026-10-13). A
+// minute does not name one appointment: two orders for 10:00 share it, and
+// the write used to act on whichever row came first, so a repeated cancel of
+// the cake cancelled the bread. Services that match nothing at that minute
+// are read as not given (a model paraphrasing a name), and then the minute
+// alone must be unambiguous: one open appointment there, and, straight
+// after a change (REPEAT_WINDOW_MS, the drafts' own one-change-per-minute
+// rule in time), nothing beside it that the change could have been about.
+// Anything else is asked about, never picked.
 async function ownTarget(
   ctx: ReadCtx,
   args: {
     orgId: Id<"orgs">;
     customerId: Id<"customers">;
     from: number;
+    // The services the agent read back with the start, when it gave them.
+    services?: string[];
     // A move's destination, so a repeated move can be recognised.
     to?: number;
   },
@@ -241,24 +273,57 @@ async function ownTarget(
   const customer = await customerIn(ctx, args.orgId, args.customerId);
   if (!customer) return { ok: false, reason: "not-found" };
   const atFrom = await rowsAt(ctx, customer, args.from);
-  const appointment = atFrom.find(
+  const services = args.services;
+  const named = services
+    ? atFrom.filter((row) => sameServiceNames(servicesOf(row), services))
+    : [];
+  const exact = named.length > 0;
+  const pool = exact ? named : atFrom;
+  const open = pool.filter(
     (row) => OPEN.includes(row.status) && (!strict || row.startAt > now),
   );
-  if (!appointment) {
-    const openAtTo =
-      args.to !== undefined &&
-      (await rowsAt(ctx, customer, args.to)).some((row) => OPEN.includes(row.status));
+  const openAtTo =
+    args.to !== undefined &&
+    (await rowsAt(ctx, customer, args.to)).some(
+      (row) =>
+        OPEN.includes(row.status) &&
+        (!exact || sameServiceNames(servicesOf(row), services ?? [])),
+    );
+  if (open.length === 0) {
     return {
       ok: false,
       reason: "appointment-changed",
-      cancelledAtFrom: atFrom.some((row) => row.status === "cancelled"),
+      cancelledAtFrom: pool.some((row) => row.status === "cancelled"),
       openAtTo,
     };
+  }
+  if (exact && open.length > 1) {
+    // Identical twins: no words the agent could say tell them apart.
+    return { ok: false, reason: "appointment-duplicate" };
+  }
+  if (!exact) {
+    const lastChange = Math.max(0, ...(customer.agentChangesAt ?? []));
+    const justChanged = now - lastChange < REPEAT_WINDOW_MS;
+    if (
+      open.length > 1 ||
+      (justChanged && (atFrom.length > 1 || openAtTo))
+    ) {
+      return {
+        ok: false,
+        reason: "appointment-ambiguous",
+        choices: atFrom
+          .filter((row) => OPEN.includes(row.status) || row.status === "cancelled")
+          .map((row) => ({
+            services: servicesOf(row),
+            ...(row.status === "cancelled" ? { cancelled: true } : {}),
+          })),
+      };
+    }
   }
   if (strict && changesToday(customer.agentChangesAt, now) >= CHANGES_PER_DAY) {
     return { ok: false, reason: "too-many-changes" };
   }
-  return { ok: true, customer, appointment };
+  return { ok: true, customer, appointment: open[0] };
 }
 
 // Rule 2: could THIS appointment start at `startAt`, judged now. The booking
@@ -313,6 +378,9 @@ const targetArgs = {
   customerId: v.id("customers"),
   // The appointment's start as the agent read it back: which one, exactly.
   from: v.number(),
+  // Its services as the agent read them back, when it gave them: what tells
+  // two appointments at one minute apart.
+  services: v.optional(v.array(v.string())),
 };
 
 const changeResult = v.union(
@@ -324,13 +392,33 @@ const changeResult = v.union(
     // Nothing to do: a repeat of a change already made (the appointment at
     // `from` is already cancelled, or already moved to `to`).
     noop: v.optional(v.boolean()),
+    // checkChange only: the target's cal.com booking, when it has one.
+    externalUid: v.optional(v.string()),
   }),
-  v.object({ ok: v.literal(false), reason: v.string() }),
+  v.object({
+    ok: v.literal(false),
+    reason: v.string(),
+    // appointment-ambiguous: what is booked at that minute, to ask from.
+    choices: v.optional(v.array(choiceValidator)),
+  }),
 );
 
 export type ChangeResult =
-  | { ok: true; notified?: boolean; noop?: boolean }
-  | { ok: false; reason: string };
+  | { ok: true; notified?: boolean; noop?: boolean; externalUid?: string }
+  | { ok: false; reason: string; choices?: Choice[] };
+
+// A target that could not be acted on, as a result: a repeat is "done".
+function missed(
+  target: Extract<Target, { ok: false }>,
+  repeat: boolean | undefined,
+): ChangeResult {
+  if (repeat) return { ok: true, noop: true };
+  return {
+    ok: false,
+    reason: target.reason,
+    ...(target.choices ? { choices: target.choices } : {}),
+  };
+}
 
 // Everything a change would have to clear, writing nothing: the cal.com
 // lane must know a cancel or a move is allowed BEFORE telling cal.com, and a
@@ -344,12 +432,14 @@ export const checkChange = internalQuery({
     const now = Date.now();
     const target = await ownTarget(ctx, args, now, true);
     if (!target.ok) {
-      const repeat = args.to === undefined ? target.cancelledAtFrom : target.openAtTo;
-      return repeat
-        ? { ok: true as const, noop: true }
-        : { ok: false as const, reason: target.reason };
+      return missed(
+        target,
+        args.to === undefined ? target.cancelledAtFrom : target.openAtTo,
+      );
     }
-    if (args.to === undefined) return { ok: true as const };
+    const uid = target.appointment.externalUid;
+    const found = uid ? { externalUid: uid } : {};
+    if (args.to === undefined) return { ok: true as const, ...found };
     if (sameMinute(target.appointment.startAt, args.to)) {
       return { ok: true as const, noop: true };
     }
@@ -363,7 +453,9 @@ export const checkChange = internalQuery({
       now,
       providerOwned(target.appointment, org),
     );
-    return refusal ? { ok: false as const, reason: refusal } : { ok: true as const };
+    return refusal
+      ? { ok: false as const, reason: refusal }
+      : { ok: true as const, ...found };
   },
 });
 
@@ -377,6 +469,7 @@ export async function moveOwnTx(
     orgId: Id<"orgs">;
     customerId: Id<"customers">;
     from: number;
+    services?: string[];
     to: number;
     // cal.com's new uid: its reschedule mints a fresh booking.
     externalUid?: string;
@@ -387,12 +480,8 @@ export async function moveOwnTx(
   const now = Date.now();
   const confirmed = args.providerConfirmed === true;
   const target = await ownTarget(ctx, args, now, !confirmed);
-  if (!target.ok) {
-    // Already where it was asked to go: a repeat, nothing more to do.
-    return target.openAtTo
-      ? { ok: true, noop: true }
-      : { ok: false, reason: target.reason };
-  }
+  // Already where it was asked to go: a repeat, nothing more to do.
+  if (!target.ok) return missed(target, target.openAtTo);
   const { customer, appointment } = target;
   if (sameMinute(appointment.startAt, args.to)) return { ok: true, noop: true };
   if (!confirmed) {
@@ -420,19 +509,16 @@ export async function cancelOwnTx(
     orgId: Id<"orgs">;
     customerId: Id<"customers">;
     from: number;
+    services?: string[];
     providerConfirmed?: boolean;
   },
 ): Promise<ChangeResult> {
   const now = Date.now();
   const confirmed = args.providerConfirmed === true;
   const target = await ownTarget(ctx, args, now, !confirmed);
-  if (!target.ok) {
-    // Already cancelled: a repeat, nothing more to do, and never the
-    // appointment after it.
-    return target.cancelledAtFrom
-      ? { ok: true, noop: true }
-      : { ok: false, reason: target.reason };
-  }
+  // Already cancelled: a repeat, nothing more to do, and never the
+  // appointment after it.
+  if (!target.ok) return missed(target, target.cancelledAtFrom);
   const { customer, appointment } = target;
   if (!confirmed) {
     const org = await ctx.db.get(args.orgId);
@@ -475,45 +561,23 @@ export const cancelOwn = internalMutation({
   handler: async (ctx, args) => await cancelOwnTx(ctx, args),
 });
 
-// The customer's own open appointment at a wall-clock start, for the cal.com
-// lane (its uid) and for a move's nearest free times (its length).
-export const ownAt = internalQuery({
-  args: targetArgs,
-  returns: v.union(
-    v.null(),
-    v.object({
-      appointmentId: v.id("appointments"),
-      startAt: v.number(),
-      externalUid: v.optional(v.string()),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    const customer = await customerIn(ctx, args.orgId, args.customerId);
-    if (!customer) return null;
-    const open = (await rowsAt(ctx, customer, args.from)).find((row) =>
-      OPEN.includes(row.status),
-    );
-    return open
-      ? {
-          appointmentId: open._id,
-          startAt: open.startAt,
-          ...(open.externalUid ? { externalUid: open.externalUid } : {}),
-        }
-      : null;
-  },
-});
-
-// The write half of a move or a cancel, from an action: cal.com first when it
-// holds the booking (checkChange before it, so cal.com is never told about a
-// change we would refuse, and a repeat is answered without asking it), then
-// the transaction that re-checks everything. Shared by the phone agent's and
-// the chat agent's live tools, so the order of those steps exists once. The
-// daily cap is judged in here, never before: a lane that counted it first
-// refused a repeat at the cap instead of answering "already done".
+// The write half of a move or a cancel, from an action: checkChange first
+// (which appointment, a repeat answered without asking anyone, the cap, the
+// new time), then cal.com when it holds the booking, so it is never told
+// about a change we would refuse, then the transaction that re-checks
+// everything. Shared by the phone agent's and the chat agent's live tools,
+// so the order of those steps exists once. The daily cap is judged in here,
+// never before: a lane that counted it first refused a repeat at the cap
+// instead of answering "already done".
 export async function writeOwnChange(
   ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
   a: {
-    target: { orgId: Id<"orgs">; customerId: Id<"customers">; from: number };
+    target: {
+      orgId: Id<"orgs">;
+      customerId: Id<"customers">;
+      from: number;
+      services?: string[];
+    };
     // The org's cal.com key, only when cal.com is connected.
     calcomApiKey: string | undefined;
     change: { kind: "cancel" } | { kind: "move"; to: number };
@@ -521,21 +585,21 @@ export async function writeOwnChange(
     via: "phone" | "chat";
   },
 ): Promise<ChangeResult & { providerError?: string }> {
-  const found: { appointmentId: Id<"appointments">; externalUid?: string } | null =
-    await ctx.runQuery(internal.agentAppointments.ownAt, a.target);
-  const externalUid = found?.externalUid;
+  // Everything the change must clear, read first: which appointment (and
+  // whether this is a repeat), the cap, and for a move its new time. The
+  // transaction below asks again; this read is what keeps cal.com from
+  // hearing about a change we would refuse.
+  const check: ChangeResult = await ctx.runQuery(internal.agentAppointments.checkChange, {
+    ...a.target,
+    ...(a.change.kind === "move" ? { to: a.change.to } : {}),
+  });
+  if (!check.ok || check.noop) return check;
+  const externalUid = check.externalUid;
   // A booking cal.com holds, on a calendar no longer connected: saying so
   // beats changing our row and letting the two drift apart.
   if (externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
   const apiKey = a.calcomApiKey;
   const uid = externalUid && apiKey ? externalUid : undefined;
-  if (uid) {
-    const check: ChangeResult = await ctx.runQuery(internal.agentAppointments.checkChange, {
-      ...a.target,
-      ...(a.change.kind === "move" ? { to: a.change.to } : {}),
-    });
-    if (!check.ok || check.noop) return check;
-  }
   if (a.change.kind === "cancel") {
     if (uid && apiKey) {
       const told = await cancelBooking({

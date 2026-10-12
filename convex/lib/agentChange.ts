@@ -24,6 +24,14 @@ import { v, type Infer } from "convex/values";
 
 export const CHANGES_PER_DAY = 6;
 export const CHANGE_WINDOW_MS = 24 * 60 * 60_000;
+// How long after a change a second one that names its appointment loosely
+// is read as a possible repeat: long enough to cover a provider retry and a
+// customer saying "yes" twice, short enough that a real second change later
+// in a long call goes through. A start alone, with something else changed
+// at that minute or at the destination within it, is asked about rather
+// than acted on (agentAppointments.ownTarget); a phone engine with no
+// appointment_start is refused a second change inside it (http.ts).
+export const REPEAT_WINDOW_MS = 3 * 60_000;
 // Bounds the stored array. Bookings are never refused, so a busy day can hold
 // more than six entries; twenty is far past anything the cap needs to read.
 const KEPT = 20;
@@ -53,6 +61,15 @@ export type ChangeRefusal =
   // No longer their next appointment, no longer open, or its time moved since
   // the agent looked. The agent must look again rather than act on old facts.
   | "appointment-changed"
+  // What the agent named fits more than one of the customer's appointments:
+  // a start alone, at a minute holding several (two orders for 10:00), or a
+  // minute where one was just changed. The agent asks which, from the list
+  // the refusal carries, instead of the write picking one.
+  | "appointment-ambiguous"
+  // Two of their appointments at that minute are identical, services and
+  // all (or an engine that cannot name services meets two): nothing the
+  // agent can say picks one, so a person does.
+  | "appointment-duplicate"
   | "too-many-changes"
   | "past"
   | "too-far"
@@ -70,6 +87,8 @@ export type ChangeRefusal =
 export const CHANGE_REFUSALS: readonly ChangeRefusal[] = [
   "not-found",
   "appointment-changed",
+  "appointment-ambiguous",
+  "appointment-duplicate",
   "too-many-changes",
   "past",
   "too-far",
@@ -127,6 +146,10 @@ export function changeRefusalNote(
       return `This ${who}'s appointments have already been changed too many times today, so it was NOT ${did}. ${person}`;
     case "appointment-changed":
       return `That appointment changed since you looked it up, so it was NOT ${did}. ${lookAgain} before saying anything about it.`;
+    case "appointment-ambiguous":
+      return `More than one of the ${who}'s appointments is at that time, so nothing was ${did}. appointments_at_that_time lists them: ask which one they mean, then call this again with that one's appointment_services exactly as listed.`;
+    case "appointment-duplicate":
+      return `More than one appointment fits, and nothing you can pass tells them apart, so nothing was ${did}. ${person}`;
     case "not-found":
       return `There is no upcoming appointment to change, so nothing was ${did}.`;
     case "slot-taken":
@@ -144,6 +167,21 @@ export function changeRefusalNote(
     case "calendar-error":
       return `The calendar could not make the change just now, so it was NOT ${did}. ${person}`;
   }
+}
+
+// Whether two lists name the same services: what the agent read back against
+// what a row holds (its items' names), ignoring order, case and spacing. An
+// appointment with no services is the empty list, and matches only that.
+export function sameServiceNames(
+  a: readonly string[],
+  b: readonly string[],
+): boolean {
+  const key = (names: readonly string[]) =>
+    names
+      .map((name) => name.trim().toLocaleLowerCase("tr-TR"))
+      .sort()
+      .join("\n");
+  return a.length === b.length && key(a) === key(b);
 }
 
 // A change a chat reply would make, recorded on its chatAgentTurns row
@@ -177,16 +215,20 @@ export const agentIntentValidator = v.union(
   v.object({
     kind: v.literal("move"),
     // Which appointment: the customer's own open one starting at `from`, the
-    // start the assistant read back. The id is a note of which row that was
-    // when the draft was written; the target is always found by `from`.
+    // start the assistant read back, with the services it read back when it
+    // gave them (two orders can share a minute). The id is a note of which
+    // row that was when the draft was written; the target is always found by
+    // `from` and `services`.
     appointmentId: v.optional(v.id("appointments")),
     from: v.number(),
+    services: v.optional(v.array(v.string())),
     to: v.number(),
   }),
   v.object({
     kind: v.literal("cancel"),
     appointmentId: v.optional(v.id("appointments")),
     from: v.number(),
+    services: v.optional(v.array(v.string())),
   }),
   v.object({
     kind: v.literal("save"),
@@ -227,7 +269,11 @@ export function approvalFailureOf(reason: string): ApprovalFailure {
   ) {
     return "change-time-not-allowed";
   }
-  if (reason === "appointment-changed" || reason === "not-found") {
+  if (
+    reason === "appointment-changed" ||
+    reason === "appointment-ambiguous" ||
+    reason === "not-found"
+  ) {
     return "change-appointment-changed";
   }
   if (reason === "too-many-changes") return "change-too-many";

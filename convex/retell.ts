@@ -45,7 +45,12 @@ import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
 import { answerOrEmpty, isNonAnswer } from "./lib/nonAnswer";
 import { orgKeywords } from "./lib/boostedKeywords";
-import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
+import {
+  CHANGES_PER_DAY,
+  changesToday,
+  sameServiceNames,
+  withChange,
+} from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { callErased } from "./lib/customerDeletion";
@@ -2810,8 +2815,10 @@ export const nearestFreeTimes = internalQuery({
     at: v.number(),
     customerId: v.optional(v.id("customers")),
     // A move: the start of the customer's own appointment being moved, which
-    // lends its length and lead time and never blocks itself.
+    // lends its length and lead time and never blocks itself, and its
+    // services when the agent named them (two orders can share a minute).
     moving: v.optional(v.number()),
+    movingServices: v.optional(v.array(v.string())),
     services: v.optional(v.array(v.string())),
   },
   returns: v.array(v.number()),
@@ -2823,17 +2830,27 @@ export const nearestFreeTimes = internalQuery({
     let ignoreId: Id<"appointments"> | undefined;
     if (args.moving !== undefined && args.customerId) {
       const moving = args.moving;
-      const appointment = (
+      const atMinute = (
         await ctx.db
           .query("appointments")
           .withIndex("by_customer", (q) => q.eq("customerId", args.customerId!))
           .collect()
-      ).find(
+      ).filter(
         (row) =>
           row.orgId === args.orgId &&
           sameMinute(row.startAt, moving) &&
           (row.status === "scheduled" || row.status === "confirmed"),
       );
+      const movingServices = args.movingServices;
+      const named = movingServices
+        ? atMinute.filter((row) =>
+            sameServiceNames(
+              (row.items ?? []).map((item) => item.name),
+              movingServices,
+            ),
+          )
+        : [];
+      const appointment = (named.length > 0 ? named : atMinute)[0];
       if (!appointment) return [];
       duration = durationOf(appointment);
       leadMs = await goodsLeadMs(ctx, appointment);

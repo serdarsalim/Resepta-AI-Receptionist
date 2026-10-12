@@ -1182,8 +1182,9 @@ something else, which is all of them.
   and no prompt text is load-bearing for safety. Do not add a tool that takes
   a customerId or searches customers. Existing appointments go through
   `convex/agentAppointments.ts`, shared with the phone agent: only the
-  customer's own appointment at the exact start the assistant read back
-  (`appointment_start`), found again in the write, moves judged at the moment
+  customer's own appointment at the exact start and services the assistant
+  read back (`appointment_start`, `appointment_services`), found again in the
+  write and asked about when they fit more than one, moves judged at the moment
   of the change, six changes a day (AGENTS.md, "The assistants touch only the
   customer's own appointments").
 - **The disclosure line is mechanical.** `chatAgent.respond` prepends it to

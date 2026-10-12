@@ -88,10 +88,16 @@ import {
   changeRefusalNote,
   isChangeRefusal,
   isTimeRefusal,
+  sameServiceNames,
   type AgentIntent,
   type ApprovalFailure,
 } from "./lib/agentChange";
-import { cancelOwnTx, moveOwnTx, writeOwnChange } from "./agentAppointments";
+import {
+  cancelOwnTx,
+  moveOwnTx,
+  writeOwnChange,
+  type Choice,
+} from "./agentAppointments";
 import { cleanError } from "./lib/mcpProtocol";
 import { loadClosures } from "./lib/closureRows";
 
@@ -790,8 +796,18 @@ const changeLineValidator = v.union(
     asap: v.optional(v.boolean()),
     services: v.array(v.string()),
   }),
-  v.object({ kind: v.literal("move"), from: v.number(), to: v.number() }),
-  v.object({ kind: v.literal("cancel"), at: v.number() }),
+  // services: which appointment at that minute, when the model named it.
+  v.object({
+    kind: v.literal("move"),
+    from: v.number(),
+    to: v.number(),
+    services: v.optional(v.array(v.string())),
+  }),
+  v.object({
+    kind: v.literal("cancel"),
+    at: v.number(),
+    services: v.optional(v.array(v.string())),
+  }),
   v.object({ kind: v.literal("save"), labels: v.array(v.string()) }),
 );
 
@@ -805,9 +821,18 @@ function changeLines(intents: AgentIntent[]): Infer<typeof changeLineValidator>[
           services: intent.serviceNames,
         }
       : intent.kind === "move"
-        ? { kind: "move" as const, from: intent.from, to: intent.to }
+        ? {
+            kind: "move" as const,
+            from: intent.from,
+            to: intent.to,
+            ...(intent.services?.length ? { services: intent.services } : {}),
+          }
         : intent.kind === "cancel"
-          ? { kind: "cancel" as const, at: intent.from }
+          ? {
+              kind: "cancel" as const,
+              at: intent.from,
+              ...(intent.services?.length ? { services: intent.services } : {}),
+            }
           : { kind: "save" as const, labels: intent.labels },
   );
 }
@@ -1860,7 +1885,7 @@ async function executeTool(
         outcome: IntentOutcome | null;
         keep: (adjust?: (intent: AgentIntent) => void) => void;
       }
-    | { ok: false; reason: string; note?: string }
+    | { ok: false; reason: string; note?: string; choices?: Choice[] }
   > => {
     if (!draft) return { ok: false, reason: "calendar-error" };
     const merged = JSON.parse(JSON.stringify(draft.intents)) as AgentIntent[];
@@ -1872,7 +1897,14 @@ async function executeTool(
         intents: merged,
       }),
     ) as DraftOutcome;
-    if (!verdict.ok) return { ok: false, reason: verdict.reason, note: verdict.note };
+    if (!verdict.ok) {
+      return {
+        ok: false,
+        reason: verdict.reason,
+        note: verdict.note,
+        ...(verdict.choices ? { choices: verdict.choices } : {}),
+      };
+    }
     return {
       ok: true,
       outcome: position >= 0 ? (verdict.results[position] ?? null) : null,
@@ -1890,15 +1922,20 @@ async function executeTool(
   const nearestFree = async (a: {
     at: number;
     services?: string[];
-    // A move: the start of the customer's appointment being moved.
-    moving?: number;
+    // A move: the customer's appointment being moved, as the model named it.
+    moving?: { from: number; services?: string[] };
   }): Promise<{ nearest_free?: string[] }> => {
     if (!Number.isFinite(a.at)) return {};
     const near: number[] = await ctx.runQuery(internal.retell.nearestFreeTimes, {
       orgId: context.orgId,
       at: a.at,
       customerId: customer._id,
-      ...(a.moving !== undefined ? { moving: a.moving } : {}),
+      ...(a.moving
+        ? {
+            moving: a.moving.from,
+            ...(a.moving.services ? { movingServices: a.moving.services } : {}),
+          }
+        : {}),
       ...(a.services && a.services.length > 0 ? { services: a.services } : {}),
     });
     return near.length > 0 ? { nearest_free: near.map((ms) => spokenOf(ms)) } : {};
@@ -2215,6 +2252,11 @@ async function executeTool(
         next: {
           spoken_time: spokenOf(own.next.startAt),
           appointment_start: localMinuteIso(own.next.startAt, org.timezone),
+          // With the start, what tells it apart from another booking at the
+          // same minute (two orders for 10:00).
+          ...(own.next.services.length > 0
+            ? { appointment_services: own.next.services }
+            : {}),
           service: own.next.services.join(", ") || undefined,
         },
         ...(own.later > 0 ? { later_appointments: own.later } : {}),
@@ -2222,7 +2264,7 @@ async function executeTool(
           (own.later > 0
             ? `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this next one can be moved or cancelled here. `
             : "") +
-          "To move or cancel it, pass its appointment_start exactly as given here.",
+          "To move or cancel it, pass its appointment_start and appointment_services exactly as given here.",
       };
     }
 
@@ -2240,21 +2282,30 @@ async function executeTool(
           note: "Call my_appointments, name the appointment it returns, get a clear yes, then call this again with its appointment_start.",
         };
       }
-      const target = { orgId: context.orgId, customerId: customer._id, from };
+      // And which one at that minute: the services read back with the start
+      // (two orders can share a minute). Absent, the minute alone must be
+      // unambiguous, or the tool asks (agentAppointments.ownTarget).
+      const rawServices = input.appointment_services;
+      const services: string[] | undefined = Array.isArray(rawServices)
+        ? rawServices.map((one) => String(one ?? "").trim()).filter(Boolean)
+        : typeof rawServices === "string" && rawServices.trim()
+          ? [rawServices.trim()]
+          : undefined;
+      const named = services ? { services } : {};
+      const target = { orgId: context.orgId, customerId: customer._id, from, ...named };
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
       // A change the assistant cannot make, answered as a fact it can act on.
       // "A person will take care of it" goes through escalate_to_staff, so
       // the business's own handover setting decides what that means here.
       const refuse = async (
-        reason: string,
-        providerError?: string,
+        failed: { reason: string; providerError?: string; choices?: Choice[] },
         at?: number,
       ): Promise<Record<string, unknown>> => {
-        const known = isChangeRefusal(reason) ? reason : "calendar-error";
+        const known = isChangeRefusal(failed.reason) ? failed.reason : "calendar-error";
         const near =
           at !== undefined && isTimeRefusal(known)
-            ? await nearestFree({ at, moving: from })
+            ? await nearestFree({ at, moving: { from, services } })
             : {};
         return {
           [outcome]: false,
@@ -2267,7 +2318,15 @@ async function executeTool(
                 todayIso: todayInZone(org.timezone),
               })
             : {}),
-          ...(providerError ? { provider_error: providerError } : {}),
+          ...(failed.providerError ? { provider_error: failed.providerError } : {}),
+          ...(known === "appointment-ambiguous" && failed.choices
+            ? {
+                appointments_at_that_time: failed.choices.map((choice) => ({
+                  appointment_services: choice.services,
+                  ...(choice.cancelled ? { already_cancelled: true } : {}),
+                })),
+              }
+            : {}),
           ...near,
           note:
             changeRefusalNote(known, did, "chat") +
@@ -2287,8 +2346,8 @@ async function executeTool(
 
       if (name === "cancel_appointment") {
         if (dry) {
-          const sim = await tryDraft({ kind: "cancel", from });
-          if (!sim.ok) return await refuse(sim.reason);
+          const sim = await tryDraft({ kind: "cancel", from, ...named });
+          if (!sim.ok) return await refuse(sim);
           if (sim.outcome?.kind === "cancel" && sim.outcome.noop) {
             return {
               cancelled: true,
@@ -2307,7 +2366,7 @@ async function executeTool(
           };
         }
         const done = await write({ kind: "cancel" });
-        if (!done.ok) return await refuse(done.reason, done.providerError);
+        if (!done.ok) return await refuse(done);
         return {
           cancelled: true,
           spoken_time: spokenOf(from),
@@ -2330,15 +2389,15 @@ async function executeTool(
         return {
           ...refusal,
           ...(refusal.error === "outside-open-hours"
-            ? await nearestFree({ at: startAt, moving: from })
+            ? await nearestFree({ at: startAt, moving: { from, services } })
             : {}),
         };
       }
       if (dry) {
         // The whole judgement a move faces, after the draft's earlier
         // changes; sending asks again.
-        const sim = await tryDraft({ kind: "move", from, to: startAt });
-        if (!sim.ok) return await refuse(sim.reason, undefined, startAt);
+        const sim = await tryDraft({ kind: "move", from, ...named, to: startAt });
+        if (!sim.ok) return await refuse(sim, startAt);
         if (sim.outcome?.kind === "move" && sim.outcome.noop) {
           return {
             rescheduled: true,
@@ -2357,7 +2416,7 @@ async function executeTool(
         };
       }
       const done = await write({ kind: "move", to: startAt });
-      if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
+      if (!done.ok) return await refuse(done, startAt);
       return {
         rescheduled: true,
         spoken_time: spokenOf(startAt),
@@ -2494,19 +2553,33 @@ const WRITE_TOOLS = new Set([
 // One change per target, the model's last word winning: moving the same
 // appointment twice in one turn is one move, a cancel after a move is a
 // cancel, and two saves are one save. Targets are named by their start
-// (`from`), so that is what is compared. A move or cancel of a booking this
-// same draft makes is folded into the booking: cancelling it drops both,
-// moving it moves the booking, so sending never books and unbooks in one go.
+// (`from`) and, when the model gave them, their services: two orders at one
+// minute are two targets, and a change that names no services is read as
+// the same target as one at that minute that did. A move or cancel of a
+// booking this same draft makes is folded into the booking: cancelling it
+// drops both, moving it moves the booking, so sending never books and
+// unbooks in one go. Only when exactly one drafted booking fits; otherwise
+// the change is kept and the dry run asks which one (appointment-ambiguous).
 // Returns where the change's own outcome sits in the list, or -1 when it was
 // folded into a drafted booking and has none.
 function addIntent(list: AgentIntent[], intent: AgentIntent): number {
   if (intent.kind === "move" || intent.kind === "cancel") {
-    const drafted = list.findIndex(
-      (prior) => prior.kind === "book" && !prior.asap && sameMinute(prior.start, intent.from),
+    const named = intent.services;
+    const sameTarget = (services: string[] | undefined) =>
+      !named || !services || sameServiceNames(named, services);
+    const drafted = list.flatMap((prior, index) =>
+      prior.kind === "book" &&
+      !prior.asap &&
+      sameMinute(prior.start, intent.from) &&
+      (!named ||
+        sameServiceNames(named, prior.serviceNames) ||
+        sameServiceNames(named, prior.services))
+        ? [index]
+        : [],
     );
-    if (drafted >= 0) {
-      const booking = list[drafted];
-      if (intent.kind === "cancel") list.splice(drafted, 1);
+    if (drafted.length === 1) {
+      const booking = list[drafted[0]];
+      if (intent.kind === "cancel") list.splice(drafted[0], 1);
       else if (booking.kind === "book") booking.start = intent.to;
       return -1;
     }
@@ -2514,7 +2587,8 @@ function addIntent(list: AgentIntent[], intent: AgentIntent): number {
       const prior = list[i];
       if (
         (prior.kind === "move" || prior.kind === "cancel") &&
-        sameMinute(prior.from, intent.from)
+        sameMinute(prior.from, intent.from) &&
+        sameTarget(prior.services)
       ) {
         list.splice(i, 1);
       }
@@ -2796,13 +2870,25 @@ type IntentOutcome =
 type DraftOutcome =
   | { ok: true; results: IntentOutcome[] }
   // `note`: the sentence the model reads, when the refusal came with one.
-  | { ok: false; index: number; reason: string; note?: string };
+  // `choices`: appointment-ambiguous, what is booked at that minute.
+  | { ok: false; index: number; reason: string; note?: string; choices?: Choice[] };
 
 // A refusal, as the error that rolls the transaction back. JSON in a
 // ConvexError so it survives the trip out of a nested mutation intact.
-function draftRefusal(index: number, reason: string, note?: string): ConvexError<string> {
+function draftRefusal(
+  index: number,
+  reason: string,
+  note?: string,
+  choices?: Choice[],
+): ConvexError<string> {
   return new ConvexError(
-    JSON.stringify({ ok: false, index, reason, ...(note ? { note } : {}) }),
+    JSON.stringify({
+      ok: false,
+      index,
+      reason,
+      ...(note ? { note } : {}),
+      ...(choices ? { choices } : {}),
+    }),
   );
 }
 
@@ -2905,20 +2991,23 @@ async function applyIntentsTx(
     if (intent.kind === "move" || intent.kind === "cancel") {
       // Judged by the start the draft named, against the calendar as the
       // changes above left it. A cal.com booking refuses here (calendar-error).
+      const named = intent.services ? { services: intent.services } : {};
       const done =
         intent.kind === "move"
           ? await moveOwnTx(ctx, {
               orgId: a.orgId,
               customerId: a.customerId,
               from: intent.from,
+              ...named,
               to: intent.to,
             })
           : await cancelOwnTx(ctx, {
               orgId: a.orgId,
               customerId: a.customerId,
               from: intent.from,
+              ...named,
             });
-      if (!done.ok) throw draftRefusal(index, done.reason);
+      if (!done.ok) throw draftRefusal(index, done.reason, undefined, done.choices);
       results.push({
         kind: intent.kind,
         ...(done.noop ? { noop: true } : {}),
