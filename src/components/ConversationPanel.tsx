@@ -607,22 +607,41 @@ export function ConversationPanel({
       // genuinely billed, and the UI must ask first. The dialog names the
       // number, because "call this customer" and "call +90 533…" are different
       // amounts of certainty.
+      //
+      // A customer who asked not to be called by the AI (noAiCallsAt) gets
+      // the question asked differently: the request first, "Call anyway" as
+      // the verb, Cancel holding focus. Nudge's rule: an automated run never
+      // rings them, and a person may, knowing it. The server refuses the call
+      // unless this acknowledgement comes with it.
+      const askedNoAiCalls = customerRecord?.noAiCallsAt !== undefined;
       const ok = await confirmCall({
         title: t("calls.placeConfirm").replace("{number}", dialTo),
-        body: t("calls.placeConfirmBody"),
-        confirmLabel: t("calls.place"),
-        destructive: false,
+        body: askedNoAiCalls ? t("calls.noAiCallsWarning") : t("calls.placeConfirmBody"),
+        confirmLabel: askedNoAiCalls ? t("calls.callAnyway") : t("calls.place"),
+        destructive: askedNoAiCalls,
+        focusCancel: askedNoAiCalls,
       });
       if (!ok) return;
       setCalling(true);
       try {
-        await placeCall({ agentId: dialAgent!, toNumber: dialTo });
+        await placeCall({
+          agentId: dialAgent!,
+          toNumber: dialTo,
+          ...(askedNoAiCalls ? { callAnyway: true } : {}),
+        });
         toast(t("calls.placing"));
       } catch (error) {
         // The action throws English strings for a bad number or a workspace
         // with no key. Shown as-is rather than swallowed: a call that never
-        // dialled must not look like one that did.
-        toast(error instanceof Error ? error.message : t("message.failed"));
+        // dialled must not look like one that did. The one coded refusal is
+        // a request not to be called that landed after this page loaded.
+        toast(
+          error instanceof Error && error.message.includes("no-ai-calls")
+            ? t("calls.noAiCallsRefused")
+            : error instanceof Error
+              ? error.message
+              : t("message.failed"),
+        );
       } finally {
         setCalling(false);
       }

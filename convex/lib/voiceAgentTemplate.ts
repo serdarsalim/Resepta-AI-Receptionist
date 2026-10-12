@@ -110,7 +110,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // None of the new wording names a tool. Tool answers are served live to every
 // template version, and descriptions arrive with the tools they describe, so
 // neither can promise a tool an older agent lacks (Nudge ba2d956a).
-export const VOICE_AGENT_TEMPLATE_VERSION = 14;
+// v15 (2026-10-13, P2b of the Nudge port): a second analysis field of ours,
+// `resepta_no_ai_calls` (NO_AI_CALLS_FIELD below), a boolean the post-call
+// analysis sets when the caller asked not to be called again. An analysis
+// field is sync-deliverable, so Update genuinely reaches existing agents; the
+// registry publish installs it too, like the summary. v14 had not shipped, so
+// an owner still clicks Update once for both.
+export const VOICE_AGENT_TEMPLATE_VERSION = 15;
 
 // The longest one call may run before the provider ends it. Ten minutes,
 // Nudge's number on the same field (7bf2c681): its median answered call ran
@@ -428,6 +434,45 @@ export function summaryAnalysisField(language: string) {
       `If nothing was settled, say what was missing.`,
     ].join(" "),
   };
+}
+
+// "Don't call me again", asked for by name (customers.noAiCallsAt). A BOOLEAN,
+// on Nudge's evidence: its first version was a one-choice enum, and the
+// analysis model, given one choice, picked it on every call (fourteen hosts
+// marked who never asked, 1bbb4797). A boolean reports false on an ordinary
+// call, and only a true is ever written (retell.markNoAiCallsFromCall), so a
+// later call can never clear a request.
+//
+// Post-call rather than a tool the agent calls mid-conversation, because the
+// sentence usually comes at the end of an outbound call, and the caller who
+// says it often hangs up straight after: the analysis still reads it in the
+// transcript. English for every agent, like the summary's instruction: the
+// analysis reads any language and answers true or false.
+export const NO_AI_CALLS_FIELD = "resepta_no_ai_calls";
+
+export function noAiCallsAnalysisField() {
+  return {
+    type: "boolean",
+    name: NO_AI_CALLS_FIELD,
+    description: [
+      `True only if the caller clearly asked not to be called again, by this assistant or by automated calls, in their own words`,
+      `(for example "don't call me again", "take me off your list", "bir daha aramayın", "rufen Sie mich nicht mehr an").`,
+      `False in every other case: declining an offer, being busy, hanging up, asking to be called at another time, or asking to talk to a person.`,
+    ].join(" "),
+  };
+}
+
+// The analysis fields that are ours rather than the salon's. Every publish
+// path replaces exactly these and keeps whatever else the agent carries, and
+// none of them is ever offered to the owner as a field to rename
+// (retellAgent.importVariables).
+export const TEMPLATE_ANALYSIS_FIELDS: ReadonlySet<string> = new Set([
+  VOICE_SUMMARY_FIELD,
+  NO_AI_CALLS_FIELD,
+]);
+
+export function templateAnalysisFields(language: string) {
+  return [summaryAnalysisField(language), noAiCallsAnalysisField()];
 }
 
 type JsonSchema = {
@@ -755,7 +800,7 @@ export function appointmentReceptionistTemplate(args: {
       // so new agents are born with it and syncTemplate's PATCH carries it to
       // existing ones.
       max_call_duration_ms: MAX_CALL_DURATION_MS,
-      post_call_analysis_data: [summaryAnalysisField(args.language)],
+      post_call_analysis_data: templateAnalysisFields(args.language),
     },
   };
 }

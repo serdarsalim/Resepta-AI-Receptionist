@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { assertE164, requireOrg, requireOwner } from "./lib/orgAuth";
+import { normalisePhone } from "./lib/phone";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
@@ -34,6 +35,8 @@ const customerFields = {
   attentionClearedAt: v.optional(v.number()),
   arrivedAt: v.optional(v.number()),
   mutedAt: v.optional(v.number()),
+  // Asked not to be called by the AI (schema customers.noAiCallsAt).
+  noAiCallsAt: v.optional(v.number()),
   // Chat-agent takeover stamp (docs/chat-agent.md §5) — when a human took
   // this conversation over. Display only now; agentModeOverride decides.
   agentPausedAt: v.optional(v.number()),
@@ -348,6 +351,53 @@ export const setMuted = mutation({
       mutedAt: args.muted ? Date.now() : undefined,
     });
     return null;
+  },
+});
+
+// "No AI calls" (schema customers.noAiCallsAt), the record's switch. Any member,
+// like mute: whoever heard the customer say it on the phone or on WhatsApp is
+// the one who records it, and it is still the customer's own request. Both
+// directions are a person's; the phone agent can only ever set it
+// (retell.markNoAiCallsFromCall). Its own mutation for setMuted's reason.
+export const setNoAiCalls = mutation({
+  args: { customerId: v.id("customers"), on: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
+    // Turning it on keeps the first moment it was asked, the consent rule.
+    await ctx.db.patch(args.customerId, {
+      noAiCallsAt: args.on ? (customer.noAiCallsAt ?? Date.now()) : undefined,
+    });
+    return null;
+  },
+});
+
+// Whether a number about to be dialled by the AI belongs to a customer of this
+// business who asked not to be (customers.noAiCallsAt). Read by
+// retellAgent.testCall, the one door where a person places an AI call by hand,
+// before anything reaches the provider; that door then needs the person to say
+// "call anyway". The org comes from the agent the action already resolved,
+// never from the caller.
+export const noAiCallsForNumber = internalQuery({
+  args: { orgId: v.id("orgs"), phone: v.string() },
+  returns: v.union(v.object({ name: v.string() }), v.null()),
+  handler: async (ctx, { orgId, phone }) => {
+    const e164 = normalisePhone(phone);
+    if (!e164) return null;
+    // take, not unique: a number filed twice by some old path must not turn
+    // this check into an error at the moment somebody presses Call.
+    const rows = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", orgId).eq("phone", e164))
+      .take(5);
+    const asked = rows.find(
+      (row) => row.orgId === orgId && !isDeleting(row) && row.noAiCallsAt !== undefined,
+    );
+    return asked ? { name: `${asked.firstName} ${asked.lastName ?? ""}`.trim() } : null;
   },
 });
 

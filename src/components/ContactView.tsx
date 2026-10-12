@@ -114,6 +114,7 @@ export function ContactView({
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
   const setMuted = useMutation(api.customers.setMuted);
+  const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
   const removeCustomer = useMutation(api.customers.remove);
   const markConversationRead = useMutation(api.messages.markConversationRead);
   // Deleting is an owner's call, server-side too (customers.remove); the menu
@@ -489,6 +490,28 @@ export function ContactView({
                   label={t("customers.mute")}
                   on={customer.mutedAt !== undefined}
                   onChange={(next) => void setMuted({ customerId, muted: next })}
+                />
+              </span>
+              {/* No AI calls (2026-10-13, Nudge's do-not-call): a decision
+                  about contacting this person, so it sits with consent and
+                  mute, and like them it saves on the tap. Its own switch, not
+                  consent: a customer who refuses robot calls still gets their
+                  reminders. On by a person here, or by the phone agent when
+                  the caller asks on a call; off only by a person. The date it
+                  was asked rides the title, as consent's does. */}
+              <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
+              <span
+                className="flex items-center"
+                title={
+                  customer.noAiCallsAt !== undefined
+                    ? formatDateTime(customer.noAiCallsAt, language)
+                    : undefined
+                }
+              >
+                <CheckSwitch
+                  label={t("customers.noAiCalls")}
+                  on={customer.noAiCallsAt !== undefined}
+                  onChange={(next) => void setNoAiCalls({ customerId, on: next })}
                 />
               </span>
             </div>

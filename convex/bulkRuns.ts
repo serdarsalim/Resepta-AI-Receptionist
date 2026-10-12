@@ -109,6 +109,12 @@ export function skipReason(
   // anything, and their item goes with them in the sweep.
   if (isDeleting(customer)) return "customer-deleted";
   if (customer.consentAt === undefined) return "no-consent";
+  // They asked not to be called by the AI (customers.noAiCallsAt). A run is
+  // automated by definition, so there is nobody to say "call anyway"; their
+  // messages are another channel and go on as normal. Read again at every
+  // claim (claimNextCall), so a request made on an earlier call in the same
+  // run, or switched on mid-run, still keeps the phone from ringing.
+  if (channel === "call" && customer.noAiCallsAt !== undefined) return "no-ai-calls";
   if (channel === "email") return customer.email ? null : "no-email";
   // Both phone channels want a dialable/messageable number. customers.phone is
   // E.164-gated on write (orgAuth.assertE164), so this only catches rows that

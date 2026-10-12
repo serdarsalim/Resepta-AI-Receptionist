@@ -1277,6 +1277,18 @@ export default defineSchema({
     // someone silently revoked their consent, which is exactly the sort of
     // quiet state change KVKK punishes.
     mutedAt: v.optional(v.number()),
+    // "Don't call me again", said to the phone agent or to a person: when the
+    // customer asked not to be called by the AI. Its own fact, deliberately
+    // NOT consentAt: someone who refuses robot calls still wants their
+    // reminders, and consent switches off every channel at once.
+    //
+    // Bulk call runs skip them (bulkRuns.skipReason, read again at each
+    // claim), and a call placed from their record asks first and needs the
+    // person to say "call anyway" (retellAgent.testCall). Set by staff on the
+    // record, or by the phone agent's post-call analysis when the caller asks
+    // (retell.markNoAiCallsFromCall); the agent can only ever SET it, a
+    // person clears it. Set = asked; the timestamp is when.
+    noAiCallsAt: v.optional(v.number()),
     // The conversation summary the inbox list, its badge and the Contacts dot
     // read INSTEAD of scanning messages. Kept by the write paths; lib/thread.ts
     // has the rule, and the two indexes below are its readers. Absent until

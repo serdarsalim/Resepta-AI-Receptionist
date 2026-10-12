@@ -826,6 +826,13 @@ const dictionary = {
   "bulk.skipNoConsent": { tr: "İzin yok", en: "No consent", de: "Keine Einwilligung" },
   "bulk.skipNoEmail": { tr: "E-posta yok", en: "No email", de: "Keine E-Mail" },
   "bulk.skipBadPhone": { tr: "Numara geçersiz", en: "Bad number", de: "Nummer ungültig" },
+  // The customer asked not to be called by the AI (the record's switch, or
+  // the phone agent hearing it on an earlier call).
+  "bulk.skipNoAiCalls": {
+    tr: "Asistanla aranmak istemiyor",
+    en: "Asked for no AI calls",
+    de: "Möchte keine KI-Anrufe",
+  },
   "bulk.skipOther": { tr: "Atlandı", en: "Skipped", de: "Übersprungen" },
   "bulk.itemPending": { tr: "Sırada", en: "Waiting", de: "Wartet" },
   "bulk.itemQueued": { tr: "Kuyrukta", en: "Queued", de: "In Warteschlange" },
@@ -892,6 +899,20 @@ const dictionary = {
     tr: "Sessize alınan müşteri gelen kutusunda görünmez ve hiçbir yerde bildirim noktası yakmaz. Mesaj göndermeye devam edebilirsiniz; kişi listenin sonuna iner.",
     en: "A muted customer stays out of the inbox and never lights an attention dot. You can still message them; they sit at the bottom of Contacts.",
     de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
+  },
+  // "No AI calls" (customers.noAiCallsAt), the record footer's third switch.
+  // Short, because it shares an auto-width label column with Consent; the
+  // detail rides the hint. The voice agent is "Asistan" in the Turkish
+  // navigation, so the label says asistan.
+  "customers.noAiCalls": {
+    tr: "Asistan aramasın",
+    en: "No AI calls",
+    de: "Keine KI-Anrufe",
+  },
+  "customers.noAiCallsHint": {
+    tr: "Müşteri, sesli asistanın kendisini aramamasını istedi. Toplu aramalar onu atlar; buradan arama başlatırken önce sorulur. Hatırlatmalar ve mesajlar gitmeye devam eder. Bir aramada bunu isteyen arayanı asistan kendisi işaretler; işareti yalnızca bir kişi kaldırabilir.",
+    en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
+    de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
   },
   // The record's ⋯ menu and its delete sheet (CustomerDeleteSheet). Owners
   // only; the menu is not drawn for anybody else.
@@ -2435,6 +2456,20 @@ const dictionary = {
     en: "Call {number}?",
     de: "{number} anrufen?",
   },
+  // Place call on a customer who asked not to be called by the AI. Replaces
+  // the usual body; the confirm button becomes "calls.callAnyway".
+  "calls.noAiCallsWarning": {
+    tr: "Bu müşteri sesli asistanın kendisini aramamasını istedi. Toplu aramalar onu atlar. Yalnızca bu aramayı kabul ettiyse yine de arayın; telefon gerçekten çalar ve dakikalar faturalanır.",
+    en: "This customer asked not to be called by the voice agent, and bulk call runs skip them. Call anyway only if they agreed to this call. The phone really rings and the minutes are billed.",
+    de: "Dieser Kunde möchte nicht vom Sprachassistenten angerufen werden; Sammelaktionen per Anruf überspringen ihn. Rufen Sie nur an, wenn er diesem Anruf zugestimmt hat. Das Telefon klingelt wirklich und die Minuten werden berechnet.",
+  },
+  "calls.callAnyway": { tr: "Yine de ara", en: "Call anyway", de: "Trotzdem anrufen" },
+  // The server refused because the request landed after the page loaded.
+  "calls.noAiCallsRefused": {
+    tr: "Aranmadı: müşteri az önce sesli asistanla aranmak istemediğini bildirdi.",
+    en: "Not called: the customer has just asked not to be called by the voice agent.",
+    de: "Nicht angerufen: Der Kunde hat gerade gebeten, nicht vom Sprachassistenten angerufen zu werden.",
+  },
   "calls.placeConfirmBody": {
     tr: "Sesli asistan şimdi arayacak. Telefon gerçekten çalar ve dakikalar faturalanır.",
     en: "The voice agent will call now. The phone really rings and the minutes are billed.",
@@ -3720,6 +3755,13 @@ const dictionary = {
     tr: "Numarayı uluslararası biçimde girin, örn. +905321234567.",
     en: "Enter the number in full international form, e.g. +905321234567.",
     de: "Geben Sie die Nummer im internationalen Format ein, z. B. +4915123456789.",
+  },
+  // A test call to a number filed under a customer who asked not to be called
+  // by the AI. The test has nobody to say "call anyway"; the record does.
+  "voiceDetail.noAiCalls": {
+    tr: "Aranmadı: bu numara, sesli asistanla aranmak istemeyen bir müşteriye ait. Bu aramayı kabul ettiyse müşterinin kaydından arayın.",
+    en: "Not called: this number belongs to a customer who asked not to be called by the voice agent. If they agreed to this call, place it from their record.",
+    de: "Nicht angerufen: Diese Nummer gehört einem Kunden, der nicht vom Sprachassistenten angerufen werden möchte. Wenn er diesem Anruf zugestimmt hat, rufen Sie aus seinem Kundendatensatz an.",
   },
 
   // The AI connectors card: keys for talking to this workspace from Claude or

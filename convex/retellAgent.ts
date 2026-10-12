@@ -25,11 +25,11 @@ import { enginePatchFor } from "./lib/voiceModels";
 import {
   appointmentReceptionistTemplate,
   saveCustomerDetailsTool,
-  summaryAnalysisField,
+  templateAnalysisFields,
   DEFAULT_VOICE_IDS,
   END_CALL_TOOL_NAME,
+  TEMPLATE_ANALYSIS_FIELDS,
   VOICE_AGENT_TEMPLATE_VERSION,
-  VOICE_SUMMARY_FIELD,
   type VoiceAgentLanguage,
 } from "./lib/voiceAgentTemplate";
 import { mergeBoostedKeywords } from "./lib/boostedKeywords";
@@ -383,12 +383,13 @@ function importVariables(
   }
   for (const item of agent.post_call_analysis_data ?? []) {
     if (item.type === "system-presets") continue;
-    // Ours, not the salon's. It shares the analysis list with the contact
-    // fields because that is the only list Retell gives us, but it is the call
-    // summary — surfacing it here would offer the owner a "field" to rename
-    // and retype, and publishing that back would rewrite the instruction that
-    // keeps summaries in their language.
-    if (String(item.name ?? "") === VOICE_SUMMARY_FIELD) continue;
+    // Ours, not the salon's. They share the analysis list with the contact
+    // fields because that is the only list Retell gives us, but they are the
+    // call summary and the "don't call me again" flag — surfacing them here
+    // would offer the owner a "field" to rename and retype, and publishing
+    // that back would rewrite the instructions that keep summaries in their
+    // language and the flag a strict yes/no.
+    if (TEMPLATE_ANALYSIS_FIELDS.has(String(item.name ?? ""))) continue;
     const row = ensure(String(item.name ?? ""));
     const type = analysisType(item.type);
     if (!row || !type) continue;
@@ -1082,12 +1083,13 @@ async function publishVariableSet(
     ...(live.post_call_analysis_data ?? []).filter(
       (item) => item.type === "system-presets",
     ),
-    // Rebuilt from the agent's CURRENT language rather than carried over from
-    // the live copy, so switching an agent to German also switches the
-    // summaries. Also the line that installs it on agents provisioned before
-    // it existed: this list is rewritten in full on every publish, so the
-    // field arrives the next time anything here saves.
-    summaryAnalysisField(live.language ?? "en-US"),
+    // Ours, rebuilt from the agent's CURRENT language rather than carried
+    // over from the live copy, so switching an agent to German also switches
+    // the summaries. Also the line that installs them on agents provisioned
+    // before they existed: this list is rewritten in full on every publish,
+    // so the summary and the no-AI-calls flag arrive the next time anything
+    // here saves.
+    ...templateAnalysisFields(live.language ?? "en-US"),
     // The abstention rule is appended HERE, not written into the owner's
     // description: analysis is an inference pass over the transcript, and
     // left uninstructed it answers every field it can rationalise — the 20
@@ -1898,7 +1900,8 @@ export const syncTemplate = action({
     // template.agent, minus what must not follow the template: the agent
     // keeps its own language, and the analysis list is a merge — the live
     // fields stay (system presets, the owner's collected fields), only OUR
-    // summary field is replaced so its language instruction tracks the agent.
+    // fields are replaced (the summary, whose language instruction tracks the
+    // agent, and the no-AI-calls flag).
     const {
       language: _templateLanguage,
       post_call_analysis_data: _templateAnalysis,
@@ -1906,7 +1909,7 @@ export const syncTemplate = action({
       ...engineering
     } = template.agent;
     const liveAnalysis = (live.post_call_analysis_data ?? []).filter(
-      (item) => String(item.name ?? "") !== VOICE_SUMMARY_FIELD,
+      (item) => !TEMPLATE_ANALYSIS_FIELDS.has(String(item.name ?? "")),
     );
     // Voicemail is the template's, EXCEPT for detection_prompt. That field
     // says what counts as an answering machine, it can only be written in the
@@ -1928,7 +1931,7 @@ export const syncTemplate = action({
       version: draft.version,
       ...engineering,
       voicemail_option: voicemail,
-      post_call_analysis_data: [...liveAnalysis, summaryAnalysisField(language)],
+      post_call_analysis_data: [...liveAnalysis, ...templateAnalysisFields(language)],
       ...boosted.patch,
     });
     await call(key, "POST", `publish-agent-version/${id}`, {
@@ -2368,19 +2371,40 @@ async function releaseLineIfHeld(
 // fake one from here — the phone genuinely rings and the minutes are genuinely
 // billed. The UI asks before calling this; do not add a caller that does not.
 export const testCall = action({
-  args: { agentId: v.string(), toNumber: v.string(), fromNumber: v.optional(v.string()) },
+  args: {
+    agentId: v.string(),
+    toNumber: v.string(),
+    fromNumber: v.optional(v.string()),
+    // The person placing the call has been told this customer asked not to
+    // be called by the AI, and is calling anyway. Nudge's rule: an automated
+    // run never rings them, and a human may, knowingly.
+    callAnyway: v.optional(v.boolean()),
+  },
   returns: v.object({
     ok: v.boolean(),
     callId: v.union(v.string(), v.null()),
     from: v.string(),
     to: v.string(),
   }),
-  handler: async (ctx, { agentId, toNumber, fromNumber }) => {
+  handler: async (ctx, { agentId, toNumber, fromNumber, callAnyway }) => {
+    // Refuses the demo org before anything else, and resolves the org from
+    // the agent row rather than from anything the caller sent.
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const to = toNumber.trim();
     if (!/^\+[1-9]\d{6,14}$/.test(to)) {
       throw new Error("Enter the number in full international form, e.g. +905321234567.");
+    }
+    // A customer who asked not to be called by the AI (customers.noAiCallsAt).
+    // Checked before the provider hears anything, including the number list
+    // below. The record's Place call asks first and sends callAnyway; the
+    // agent page's test call has no such question and shows the refusal.
+    if (callAnyway !== true) {
+      const asked = await ctx.runQuery(internal.customers.noAiCallsForNumber, {
+        orgId: context.orgId,
+        phone: to,
+      });
+      if (asked) throw new Error("no-ai-calls");
     }
 
     // Pick a from-number bound to this agent when one was not given: Retell

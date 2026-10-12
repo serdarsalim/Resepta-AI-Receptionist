@@ -11,8 +11,17 @@ import { connectionField } from "./lib/connections";
 import { requireOrg } from "./lib/orgAuth";
 import { coerceVoiceValues } from "./lib/voicePayload";
 import { withoutNonAnswers } from "./lib/nonAnswer";
-import { VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
+import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 import { callErased, erasedCallMarker } from "./lib/customerDeletion";
+
+// A boolean analysis field arrives as a JSON boolean; a stringified one is
+// read the same way rather than dropped.
+function isYes(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value !== "string") return false;
+  const answer = value.trim().toLowerCase();
+  return answer === "true" || answer === "yes";
+}
 
 const PROCESS_BACKOFF = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
 const ANALYSIS_BACKOFF = [2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
@@ -251,6 +260,11 @@ export const process = internalAction({
       // an unnamed collected value.
       const localizedSummary = String(afterValues[VOICE_SUMMARY_FIELD] ?? "");
       delete afterValues[VOICE_SUMMARY_FIELD];
+      // The "don't call me again" flag (template v15) is ours too, and a
+      // request rather than an answer: lifted out so it never lands as a
+      // contact field, and written below only when it is a yes.
+      const askedNoAiCalls = isYes(afterValues[NO_AI_CALLS_FIELD]);
+      delete afterValues[NO_AI_CALLS_FIELD];
       // Confirmed live values win over transcript inference.
       //
       // beforeValues is deliberately NOT merged in. It is Retell's whole
@@ -329,6 +343,15 @@ export const process = internalAction({
           retellAgentId: row.retellAgentId,
           phone,
           values: confirmed,
+          retellCallId: row.retellCallId,
+        });
+      }
+      // "Don't call me again": only a yes reaches the record, through a
+      // one-way mutation, so a later call analysed as a no never clears it.
+      if (phone && askedNoAiCalls) {
+        await ctx.runMutation(internal.retell.markNoAiCallsFromCall, {
+          retellAgentId: row.retellAgentId,
+          phone,
           retellCallId: row.retellCallId,
         });
       }

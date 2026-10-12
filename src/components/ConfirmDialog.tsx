@@ -28,6 +28,10 @@ type ConfirmRequest = {
   // Red button. On by default — everything routed through here is a deletion
   // today, and an accidental blue "Delete" is worse than a needless red one.
   destructive?: boolean;
+  // Cancel takes focus instead of the confirming button. For the confirm that
+  // overrides somebody's own request (calling a customer who asked not to be
+  // called by the AI): there, Enter must not be how it happens.
+  focusCancel?: boolean;
 };
 
 export function useConfirm(): [
@@ -64,6 +68,7 @@ export function useConfirm(): [
       <div className="mt-4 flex items-center justify-end gap-2">
         <button
           type="button"
+          data-sheet-autofocus={pending.focusCancel ? true : undefined}
           onClick={() => settle(false)}
           className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
         >
@@ -73,7 +78,8 @@ export function useConfirm(): [
           type="button"
           // The confirming button takes focus, not the cancel: somebody who
           // opened this meant to do the thing, and Escape is right there.
-          data-sheet-autofocus
+          // Unless the caller asked otherwise (focusCancel).
+          data-sheet-autofocus={pending.focusCancel ? undefined : true}
           onClick={() => settle(true)}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors ${
             pending.destructive === false

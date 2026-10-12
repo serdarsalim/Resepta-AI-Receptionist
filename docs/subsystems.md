@@ -1531,6 +1531,26 @@ invites for deleted bookings are not retracted, and a booking cal.com holds
 `sendBackfill.run` rebuild usage counters from rows, so re-running them after
 deletions would undercount.
 
+## How a customer limits contact: No AI calls (2026-10-13)
+
+The rules are in AGENTS.md; this is how it runs.
+
+**No AI calls** (`customers.noAiCallsAt`, set = asked, the timestamp is when).
+
+| Door | What it does |
+|---|---|
+| Record footer switch | `customers.setNoAiCalls` (any member), both directions. Keeps the first time it was asked when switched on again. |
+| Phone agent | Template v15 adds `resepta_no_ai_calls` (boolean) to the post-call analysis, next to the summary. `voiceEvents.process` lifts it out of the analysis bag (so it never becomes a contact field or a "collected" value on the call card) and, on a yes only, runs `retell.markNoAiCallsFromCall`: org from the agent row, customer by the call leg with the org's dial code, never the org's own line, a deleting customer, an erased call or the demo org; creates nobody; writes one `customer_updated` activity row (`detail: "noAiCalls"`, system). |
+| Bulk call run | `bulkRuns.skipReason(customer, "call")` answers `no-ai-calls` (after `customer-deleted` and `no-consent`). Read at launch (the composer's count mirrors it in `BulkActions.canReach`), at fan-out, and again in `claimNextCall` before each dial. The run detail shows "Asked for no AI calls". |
+| Place call on the record | The confirm swaps its body for the request, its button for "Call anyway" (red), and puts focus on Cancel (`ConfirmDialog`'s `focusCancel`). Confirmed, it sends `callAnyway: true`. |
+| `retellAgent.testCall` | After `editorContext` (which refuses the demo org and resolves the org from the agent), and before anything reaches Retell, `customers.noAiCallsForNumber` looks the number up in that org; a flagged customer without `callAnyway` throws `no-ai-calls`. The agent page's test call shows a sentence pointing to the record. |
+
+Every publish path treats the field as ours, like the summary
+(`TEMPLATE_ANALYSIS_FIELDS`): `syncTemplate` replaces both and keeps the rest,
+the registry publish rebuilds both, and `importVariables` never offers either
+to the owner as a field. An agent gets it at creation, on Update (v15), or the
+next time its variables are published; until then only the switch sets it.
+
 ## The app lives at app.resepta.xyz (2026-08-24)
 
 Marketing left. `resepta.xyz` and `www` are a SEPARATE repo on a separate

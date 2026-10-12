@@ -264,6 +264,24 @@ a customer row. How it runs is in `docs/subsystems.md` → "Deleting a customer"
 - **Provider copies are not touched**, as in Nudge: the phone provider keeps
   its recording and transcript, the messaging and email providers keep theirs.
 
+## "No AI calls" is its own fact, never consent (2026-10-13)
+
+`customers.noAiCallsAt`: the customer asked not to be called by the AI. It is
+NOT `consentAt` and must never be folded into it: a customer who refuses robot
+calls still wants their reminders, and consent switches every channel off.
+
+- **Every path where the AI dials out checks it.** Bulk call runs skip them
+  through `bulkRuns.skipReason` (launch, fan-out and every `claimNextCall`, so a
+  request made mid-run holds). `retellAgent.testCall`, the one door where a
+  person places an AI call by hand, refuses `no-ai-calls` unless the caller
+  sends `callAnyway`, which the record's Place call does only after the person
+  confirms. A new dial-out path gets the same check before it reaches Retell.
+- **The phone agent can set it and never clear it.** The post-call analysis
+  field `resepta_no_ai_calls` (a boolean, template v15) reaches the record only
+  as a yes, through `retell.markNoAiCallsFromCall`. Only a person clears it, on
+  the record's switch (`customers.setNoAiCalls`, any member).
+- It changes nothing in the demo org, which never dials.
+
 ## Two kinds of template, never conflate them
 
 - **Meta template messages** are business-initiated, registered with Meta and

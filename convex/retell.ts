@@ -54,7 +54,8 @@ import {
 import { lifecycleReaches } from "./lib/lifecycleSend";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
-import { callErased } from "./lib/customerDeletion";
+import { callErased, isDeleting } from "./lib/customerDeletion";
+import { isDemo } from "./demo";
 import { freeStarts, goodsLeadMs } from "./booking";
 import { durationOf } from "./agentAppointments";
 
@@ -3451,6 +3452,57 @@ export const updateContactFromVoice = internalMutation({
       fillOnlyMissing: args.fillOnlyMissing,
       identity,
     });
+  },
+});
+
+// The phone agent's half of "No AI calls" (customers.noAiCallsAt): the
+// post-call analysis heard the caller ask not to be called again (template
+// v15's NO_AI_CALLS_FIELD), and voiceEvents.process hands over only a yes.
+//
+// ONE-WAY. This sets the flag and never clears it; clearing is a person's job,
+// on the record. A later call analysed as an ordinary "no" therefore cannot
+// undo a request, which is the half of Nudge's 1bbb4797 that matters.
+//
+// Resolved like every other webhook write: the org from the agent row, never
+// from the payload; the customer from the call leg with the org's dial code;
+// never the business's own line, a customer being deleted, or an erased call.
+// Creates nobody: recordCall has already filed an unknown caller by the time
+// the analysis lands, and a number with no record has nothing to protect. In
+// the demo org it does nothing at all.
+export const markNoAiCallsFromCall = internalMutation({
+  args: { retellAgentId: v.string(), phone: v.string(), retellCallId: v.string() },
+  // Whether the flag was set by this call (false when already set, or refused).
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent) return false;
+    const org = await ctx.db.get(agent.orgId);
+    if (!org || isDemo(org)) return false;
+    if (await callErased(ctx, agent.orgId, args.retellCallId)) return false;
+    const phone = toE164(args.phone, dialCodeForTimezone(org.timezone));
+    if (!phone) return false;
+    if ((await orgOwnNumbers(ctx, agent.orgId)).has(phone)) return false;
+    const customer = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", agent.orgId).eq("phone", phone))
+      .first();
+    if (!customer || isDeleting(customer) || customer.noAiCallsAt !== undefined) {
+      return false;
+    }
+    await ctx.db.patch(customer._id, { noAiCallsAt: Date.now() });
+    // A switch nobody at the business flipped: the feed says the system did
+    // it, on this customer, so "who turned that on?" has an answer.
+    await recordActivity(ctx, {
+      orgId: agent.orgId,
+      kind: "customer_updated",
+      customerId: customer._id,
+      detail: "noAiCalls",
+      system: true,
+    });
+    return true;
   },
 });
 

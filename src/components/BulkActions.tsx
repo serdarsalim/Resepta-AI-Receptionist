@@ -35,6 +35,9 @@ export type BulkChannel = "email" | "whatsapp" | "call";
 // and anybody it drops that this did not shows up as a skipped row.
 function canReach(customer: Doc<"customers">, channel: BulkChannel): boolean {
   if (customer.consentAt === undefined) return false;
+  // Asked not to be called by the AI. A call run skips them; their messages
+  // are another channel.
+  if (channel === "call" && customer.noAiCallsAt !== undefined) return false;
   if (channel === "email") return Boolean(customer.email);
   return /^\+[1-9]\d{6,14}$/.test(customer.phone);
 }
@@ -600,7 +603,9 @@ function ItemOutcome({ item }: { item: RunItem }) {
               ? "bulk.skipNoEmail"
               : item.reason === "bad-phone"
                 ? "bulk.skipBadPhone"
-                : "bulk.skipOther",
+                : item.reason === "no-ai-calls"
+                  ? "bulk.skipNoAiCalls"
+                  : "bulk.skipOther",
         )}
       </span>
     );

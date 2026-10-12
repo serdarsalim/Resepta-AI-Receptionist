@@ -371,10 +371,19 @@ export function VoiceAgentPage({
     setTestOpen(false);
     setTestError(null);
     void run(t("voiceDetail.calling"), async () => {
-      const res = (await testCall({ agentId, toNumber: to })) as {
-        from: string;
-        to: string;
-      };
+      let res: { from: string; to: string };
+      try {
+        res = (await testCall({ agentId, toNumber: to })) as { from: string; to: string };
+      } catch (error) {
+        // The number belongs to a customer who asked not to be called by the
+        // AI. A test call has nobody to say "call anyway" on their behalf;
+        // their record's Place call does.
+        if (error instanceof Error && error.message.includes("no-ai-calls")) {
+          setStatus(t("voiceDetail.noAiCalls"));
+          return;
+        }
+        throw error;
+      }
       setStatus(
         t("voiceDetail.callingFromTo").replace("{to}", res.to).replace("{from}", res.from),
       );
