@@ -5,8 +5,29 @@ import {
 } from "@convex-dev/auth/nextjs/server";
 import { NextResponse } from "next/server";
 import { DEMO_HOST, DOCS_HOST, hostFromHeader } from "@/lib/hosts";
+import { resolveSiteUrl } from "@/lib/siteUrl";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
+
+// The links inside customer email: the open pixel (/e/o/<token>) and the
+// unsubscribe page (/e/u/<token>). They are minted on this app's own origin
+// (SITE_URL, convex/lib/email.ts emailLinkOrigin) so a mail never shows a bare
+// *.convex.site address, and forwarded here to the Convex routes of the same
+// name (convex/http.ts), which hold all the logic. A rewrite, not a redirect:
+// the reader's address bar keeps our domain, and the unsubscribe page's form
+// posts back to the same path. Method, headers and body travel with it, so
+// a mail client's one-click POST (RFC 8058) arrives as it was sent. Mail sent
+// before 2026-10-13 points at convex.site directly, which still answers.
+//
+// Exactly one token segment, nothing after it: this forwards two routes, not
+// a prefix of the backend.
+const EMAIL_LINK = /^\/e\/[ou]\/[^/]+$/;
+
+function emailLinkTarget(pathname: string): URL | null {
+  if (!EMAIL_LINK.test(pathname)) return null;
+  const { url } = resolveSiteUrl();
+  return url ? new URL(pathname, url) : null;
+}
 
 // The public pages. Whoever opens /book/<slug> is a customer of the salon, not
 // a user of this product — they have no account and never will. Sending them
@@ -67,6 +88,12 @@ const isPublicPage = createRouteMatcher([
 // separate default-export interop path, and a bad module shape there surfaces
 // only as the opaque `adapterFn is not a function` request-time crash.
 export const proxy = convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+  // First of all, on every host: a mail client loading a pixel has no
+  // session, needs none, and must not be bounced to /signin. The token is
+  // the whole permission, checked by the Convex route.
+  const emailLink = emailLinkTarget(request.nextUrl.pathname);
+  if (emailLink) return NextResponse.rewrite(emailLink);
+
   // Keep help content in the product repository so it cannot drift from the
   // shipped interface, while giving it a clean public docs origin.
   const host = hostFromHeader(request.headers.get("host"));

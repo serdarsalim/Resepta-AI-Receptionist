@@ -92,14 +92,29 @@ export function emailLaneConfigured(config: EmailConfig): boolean {
   return Boolean(config.apiKey);
 }
 
-// Open-pixel injection, winback and campaign mail only. The URL is this
-// deployment's own convex.site route (/e/o/<token>, convex/http.ts), so the
-// hit lands in the right deployment's database. Appended after the body — our
-// customer mail is a single paragraph, there is no </body> to slot before.
-// No token or no site URL means the mail simply goes untracked; a missing
-// pixel must never block a send.
+// The origin every link inside customer mail is built on: the app's own site
+// (SITE_URL, https://app.resepta.xyz in production), not this deployment's
+// bare *.convex.site host (2026-10-13). A link domain that matches nothing
+// the mail is from reads as unbranded to the reader and as a warning sign to
+// spam filters, and every business sends from our one shared domain, so all
+// of them paid for it. src/proxy.ts forwards /e/o/ and /e/u/ on that origin,
+// method and body intact, to the Convex routes in convex/http.ts, which still
+// hold the logic and still answer the convex.site links in mail sent before
+// this. Falls back to the Convex site when SITE_URL is unset, so a deployment
+// configured without it keeps tracking and unsubscribing.
+function emailLinkOrigin(): string | undefined {
+  const site = process.env.SITE_URL || process.env.CONVEX_SITE_URL;
+  return site ? site.replace(/\/+$/, "") : undefined;
+}
+
+// Open-pixel injection: rule mail (confirmations, reminders, cancellation
+// notices, follow-ups, win-backs), campaign and bulk mail. The route
+// (/e/o/<token>) records the open on the row in this deployment's database.
+// Appended after the body — our customer mail is a single paragraph, there is
+// no </body> to slot before. No token or no site URL means the mail simply
+// goes untracked; a missing pixel must never block a send.
 export function withOpenPixel(html: string, token: string | undefined): string {
-  const site = process.env.CONVEX_SITE_URL;
+  const site = emailLinkOrigin();
   if (!token || !site) return html;
   return `${html}<img src="${site}/e/o/${token}" width="1" height="1" alt="" style="display:none;max-height:1px;max-width:1px;" />`;
 }
@@ -125,13 +140,14 @@ export function isMarketingEmailKind(kind: string): boolean {
   return MARKETING_EMAIL_KINDS.has(kind);
 }
 
-// The link behind "Unsubscribe", on this deployment's own site
-// (convex/http.ts /e/u/<token>). The token is the message row's trackingToken:
-// random, minted per message, resolving to exactly one business and one
-// customer. Every business sends from the same domain, so nothing about the
-// link may name or reach another business; a token is all it carries.
+// The link behind "Unsubscribe", on the app's own origin (emailLinkOrigin
+// above; the route is convex/http.ts /e/u/<token>). The token is the message
+// row's trackingToken: random, minted per message, resolving to exactly one
+// business and one customer. Every business sends from the same domain, so
+// nothing about the link may name or reach another business; a token is all
+// it carries.
 export function unsubscribeUrl(token: string | undefined): string | undefined {
-  const site = process.env.CONVEX_SITE_URL;
+  const site = emailLinkOrigin();
   if (!token || !site) return undefined;
   return `${site}/e/u/${token}`;
 }

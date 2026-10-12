@@ -292,12 +292,21 @@ notices, composer replies) carries neither and never stops for an opt-out. A
 new marketing kind goes into that set.
 
 - **The link is the message's token and nothing else.** `/e/u/<trackingToken>`
-  on the deployment's site; `messages.unsubscribeTarget` resolves it to the
+  on the app's own origin (below); `messages.unsubscribeTarget` resolves it to the
   row's org and the row's customer, checks they match, and accepts only a
   marketing row's token. Every business sends from one shared domain, so never
   key an unsubscribe on the email address, and never let the page name any
   business but the one the token resolved to. The GET only asks; the POST (the
   page's button, or the mail client's one-click) unsubscribes.
+- **Links in customer mail live on the app's origin, never on convex.site**
+  (2026-10-13). `lib/email.emailLinkOrigin` builds the unsubscribe link and the
+  open pixel on `SITE_URL`, and `src/proxy.ts` rewrites exactly `/e/o/<token>`
+  and `/e/u/<token>` to the Convex routes of the same name, method and body
+  intact. A bare `*.convex.site` link reads as unbranded and costs every
+  business deliverability, since they all send from our one domain. The
+  Convex routes never move: mail already sent points at them directly. A new
+  link in customer mail takes the same path, a route in `convex/http.ts` plus
+  one line in the proxy's pattern.
 - **`customers.marketingEmailOptOutAt` is respected at every marketing send:**
   bulk email fan-out (`skipReason` → `unsubscribed`), campaign email fan-out,
   the win-back's email half (`emailVerdict`), and at claim in
@@ -333,11 +342,11 @@ registration, which gates only the Cloud send. `metaName` is optional
 (shop-phone/email-only orgs register nothing with Meta); `bodyPreview` doubles
 as the legacy content fallback for rows with no authored body. The editor is
 the templates card in Reminders; the Meta row renders only while a Cloud
-number is connected. Winback and campaign email carries an open pixel
-(`/e/o/<token>` in `convex/http.ts`, `messages.recordEmailOpen`, 15s prefetch
-guard); opens surface as a RATE on the winback template row and the campaign
-row — never as a per-customer "opened" badge, because relay prefetch makes the
-individual fact a guess. The same token is what the unsubscribe link at the
+number is connected. Rule, campaign and bulk email carries an open pixel
+(`/e/o/<token>` on the app's origin, routed to `convex/http.ts`,
+`messages.recordEmailOpen`, 15s prefetch guard); opens surface as a RATE on
+the template row and the campaign row — never as a per-customer "opened"
+badge, because relay prefetch makes the individual fact a guess. The same token is what the unsubscribe link at the
 foot of marketing mail resolves ("Marketing email carries an unsubscribe",
 above).
 

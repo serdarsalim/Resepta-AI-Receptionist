@@ -1270,16 +1270,19 @@ http.route({
   }),
 });
 
-// The MCP control surface — this URL is what gets pasted into Claude or
-// ChatGPT as a custom connector. An exact path, not a prefix: MCP is a single
 // ── Email open pixel ────────────────────────────────────────────────────────
 //
-// Winback and campaign mail carries <img src=".../e/o/<token>"> (injected by
-// lib/email.withOpenPixel); this route resolves the token to its message row
-// (messages.recordEmailOpen) and always answers with a 1×1 transparent GIF —
-// unknown or expired tokens included, so a broken image never shows in the
-// mail client. No auth on purpose: the token is the capability, and the route
-// reveals nothing. Ported from Nudge.
+// Rule, campaign and bulk mail carries <img src=".../e/o/<token>"> (injected
+// by lib/email.withOpenPixel); this route resolves the token to its message
+// row (messages.recordEmailOpen) and always answers with a 1×1 transparent
+// GIF — unknown or expired tokens included, so a broken image never shows in
+// the mail client. No auth on purpose: the token is the capability, and the
+// route reveals nothing. Ported from Nudge.
+//
+// Since 2026-10-13 the mail links to the app's own origin (SITE_URL) and
+// src/proxy.ts forwards /e/o/ and /e/u/ here; mail sent before that links to
+// this deployment's convex.site address directly. Both must keep working, so
+// these paths do not move.
 const PIXEL_GIF = new Uint8Array([
   0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
   0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00,
@@ -1319,7 +1322,10 @@ http.route({
 // RFC 8058) unsubscribes. The token resolves to one business and one customer
 // in messages.unsubscribeTarget, which checks they match; the page names that
 // business and no other (lib/unsubscribePage). No auth: the token is the
-// capability, as with the pixel above.
+// capability, as with the pixel above. Reached through the app's origin the
+// same way, which is why the page's form posts to a RELATIVE /e/u/<token>:
+// it lands back on whichever origin the reader opened, ours or (old mail)
+// convex.site.
 function unsubscribeToken(request: Request): string {
   const token = new URL(request.url).pathname.slice("/e/u/".length).trim();
   // Minted tokens are UUIDs. Anything else is not worth an index read.
@@ -1452,6 +1458,8 @@ http.route({
   }),
 });
 
+// The MCP control surface — this URL is what gets pasted into Claude or
+// ChatGPT as a custom connector. An exact path, not a prefix: MCP is a single
 // JSON-RPC endpoint, not a REST tree. GET is routed so the handler can explain
 // itself to a client probing for the deprecated SSE transport.
 for (const method of ["GET", "POST"] as const) {

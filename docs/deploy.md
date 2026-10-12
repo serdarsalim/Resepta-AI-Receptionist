@@ -82,6 +82,12 @@ Consequences, each of which has bitten once already:
   what Convex Auth redirects to after the Google callback, and what builds
   `/appt/<token>` and `/join?t=` links. Pointed at the apex, sign-in completed
   and then dropped people on the marketing site.
+- `SITE_URL` is also the origin of the open pixel (`/e/o/<token>`) and the
+  unsubscribe link (`/e/u/<token>`) in customer email (2026-10-13).
+  `src/proxy.ts` forwards both to the Convex routes, using
+  `NEXT_PUBLIC_CONVEX_SITE_URL` (or the `.convex.site` twin of
+  `NEXT_PUBLIC_CONVEX_URL`) on the Vercel side. Without it the frontend cannot
+  forward them and those links fall through to `/signin`.
 - The Google authorized redirect URI does NOT change with any of this. It is
   `https://<deployment>.convex.site/api/auth/callback/google` and belongs to
   Convex, not to Vercel.
