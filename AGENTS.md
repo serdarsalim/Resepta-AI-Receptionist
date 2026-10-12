@@ -641,6 +641,12 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   the team is emailed (`moveNeedsPerson`/`cancelNeedsPerson`, failed-send
   switch) because the agent promised a colleague; in chat the agent is told
   to call `escalate_to_staff`, which follows the handover setting.
+- **A chat reply that only suggests changes nothing.** In suggest and shadow
+  the write tools (book, move, cancel, save) run every check, write nothing
+  and record the change on the turn (`chatAgentTurns.intents`). Sending the
+  draft makes the changes first, re-checked at that moment, and the words go
+  only if they took. The composer shows the change above the box. Live
+  writes as it goes. Any new write tool must take the `dry` path too.
 
 ## An action belongs to the card it acts on (2026-08-21)
 

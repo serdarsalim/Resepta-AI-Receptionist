@@ -1,8 +1,11 @@
-// The assistants' daily change cap, and the words both lanes use when a move
-// or a cancel is refused.
+// The assistants' daily change cap, the words both lanes use when a move or a
+// cancel is refused, and the shape of a change a draft is still waiting to
+// make.
 //
-// A LEAF: it imports nothing, so http.ts, chatAgent.ts and agentAppointments.ts
-// can all read it without an import cycle between them.
+// A LEAF: it imports only convex/values, so http.ts, chatAgent.ts,
+// agentAppointments.ts and the schema can all read it without an import cycle
+// between them.
+import { v, type Infer } from "convex/values";
 //
 // Ported from Nudge (bookingLinks.CHANGES_PER_DAY, meetingTools.ts,
 // 2026-10-11), with Nudge's number: six changes a day per customer, counted
@@ -118,4 +121,90 @@ export function changeRefusalNote(
     case "calendar-error":
       return `The calendar could not make the change just now, so it was NOT ${did}. ${person}`;
   }
+}
+
+// A change a chat reply would make, recorded on its chatAgentTurns row
+// instead of made (2026-10-13, Nudge's lib/meetingChange.ts meetingIntentV in
+// Resepta's words). In suggest and shadow the tools run every check and write
+// nothing; a suggested reply's changes are made only when a person sends it
+// (chatAgent.sendSuggestion), re-checked at that moment, and the reply goes
+// only if every one of them took.
+export const agentIntentValidator = v.union(
+  v.object({
+    kind: v.literal("book"),
+    // The name to book under, as book_appointment resolved it.
+    name: v.string(),
+    // The confirmed start, UTC ms. An asap order carries the moment the
+    // draft was written, and approval places it "now" instead.
+    start: v.number(),
+    asap: v.optional(v.boolean()),
+    // What the customer asked for, in their own words: matched again at
+    // approval against what the business sells then.
+    services: v.array(v.string()),
+    // What those words matched when the draft was written, for the line
+    // above the composer.
+    serviceNames: v.array(v.string()),
+    fulfillment: v.optional(
+      v.object({
+        kind: v.union(v.literal("pickup"), v.literal("delivery")),
+        address: v.optional(v.string()),
+      }),
+    ),
+  }),
+  v.object({
+    kind: v.literal("move"),
+    appointmentId: v.id("appointments"),
+    // When it started when the draft was written. Approval refuses if this
+    // no longer holds: the appointment changed in between.
+    from: v.number(),
+    to: v.number(),
+  }),
+  v.object({
+    kind: v.literal("cancel"),
+    appointmentId: v.id("appointments"),
+    from: v.number(),
+  }),
+  v.object({
+    kind: v.literal("save"),
+    // Only the keys the write gate accepted in the dry run.
+    values: v.record(v.string(), v.string()),
+    // Their labels, for the line above the composer.
+    labels: v.array(v.string()),
+  }),
+);
+export type AgentIntent = Infer<typeof agentIntentValidator>;
+
+// Why sending a draft did not go through, as the composer shows it. The
+// change comes FIRST and the words only if it took, so every one of these
+// but the last means nothing was sent; the last means the change was made
+// and the reply was not.
+export type ApprovalFailure =
+  | "change-slot-taken"
+  | "change-customer-busy"
+  | "change-time-not-allowed"
+  | "change-appointment-changed"
+  | "change-too-many"
+  | "change-failed"
+  | "changed-not-sent";
+
+// A refusal from any change path, booking included, as one of the above.
+// The booking path answers in sentences ("customer-busy: this caller…"),
+// hence the prefix tests.
+export function approvalFailureOf(reason: string): ApprovalFailure {
+  if (reason.startsWith("slot-taken")) return "change-slot-taken";
+  if (reason.startsWith("customer-busy")) return "change-customer-busy";
+  if (
+    reason === "past" ||
+    reason === "too-far" ||
+    reason === "outside-open-hours" ||
+    reason.startsWith("lead-time") ||
+    reason.startsWith("start-is-")
+  ) {
+    return "change-time-not-allowed";
+  }
+  if (reason === "appointment-changed" || reason === "not-found") {
+    return "change-appointment-changed";
+  }
+  if (reason === "too-many-changes") return "change-too-many";
+  return "change-failed";
 }

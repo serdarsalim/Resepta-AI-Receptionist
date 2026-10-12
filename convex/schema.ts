@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 import { threadValidator } from "./lib/thread";
+import { agentIntentValidator } from "./lib/agentChange";
 
 // Multi-org invariant (see AGENTS.md): every app table carries orgId and every
 // index used by app queries starts with it. `orgs` and the auth tables are the
@@ -2551,6 +2552,18 @@ export default defineSchema({
     // autoSendAt; cancelling clears the field and leaves an ordinary draft.
     // Absent on suggest-mode drafts, which never fire on their own.
     autoSendAt: v.optional(v.number()),
+    // The changes this reply would make, recorded INSTEAD of made (2026-10-13).
+    // In suggest and shadow the tools run every check and write nothing, so a
+    // draft can say "booked for 14:00" while nothing is booked yet. Sending the
+    // draft makes them first, re-checked at that moment, and the reply goes
+    // only if they took (chatAgent.sendSuggestion); a shadow turn's stay here
+    // as the record of what it would have done. A live turn has none: its
+    // tools wrote as they ran.
+    intents: v.optional(v.array(agentIntentValidator)),
+    // When a send made the changes above. Set before the reply goes out, so a
+    // send that fails afterwards puts the draft back WITHOUT making them twice
+    // on the next try.
+    intentsAppliedAt: v.optional(v.number()),
     // The reply text as generated (shadow and suggested keep it too — that is
     // the point).
     reply: v.optional(v.string()),

@@ -38,9 +38,12 @@ import { v } from "convex/values";
 import {
   internalMutation,
   internalQuery,
+  type ActionCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { cancelBooking, rescheduleBooking } from "./lib/calcomApi";
 import {
   CHANGES_PER_DAY,
   changesToday,
@@ -371,3 +374,79 @@ export const cancelOwn = internalMutation({
     return { ok: true as const };
   },
 });
+
+// The write half of a move or a cancel, from an action: cal.com first when it
+// holds the booking (checkMove before a move, so cal.com is never told about
+// a move we would refuse), then the transaction that re-checks everything.
+// Shared by the phone agent, the chat agent's live tools and the approval of
+// a drafted change, so the order of those steps exists once.
+//
+// `externalUid` is the booking's, from ownNext; the caller passes the org's
+// cal.com key only when cal.com is connected.
+type ChangeOutcome = { ok: true } | { ok: false; reason: string; providerError?: string };
+
+export async function writeOwnChange(
+  ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
+  a: {
+    target: {
+      orgId: Id<"orgs">;
+      customerId: Id<"customers">;
+      appointmentId: Id<"appointments">;
+      from: number;
+    };
+    externalUid: string | undefined;
+    calcomApiKey: string | undefined;
+    change: { kind: "cancel" } | { kind: "move"; to: number };
+    // Who asked, for cal.com's own record of the change.
+    via: "phone" | "chat";
+  },
+): Promise<ChangeOutcome> {
+  // A booking cal.com holds, on a calendar no longer connected: saying so
+  // beats changing our row and letting the two drift apart.
+  if (a.externalUid && !a.calcomApiKey) return { ok: false, reason: "calendar-error" };
+  const apiKey = a.calcomApiKey;
+  const uid = a.externalUid && apiKey ? a.externalUid : undefined;
+  if (a.change.kind === "cancel") {
+    if (uid && apiKey) {
+      const told = await cancelBooking({
+        apiKey,
+        uid,
+        reason: a.via === "phone" ? "Cancelled by phone" : "Cancelled by chat",
+      });
+      if (!told.ok) return { ok: false, reason: "calendar-error", providerError: told.reason };
+    }
+    const done: { ok: true } | { ok: false; reason: string } = await ctx.runMutation(
+      internal.agentAppointments.cancelOwn,
+      { ...a.target, ...(uid ? { providerConfirmed: true } : {}) },
+    );
+    return done;
+  }
+  const to = a.change.to;
+  let newUid: string | undefined;
+  if (uid && apiKey) {
+    const check: { ok: true } | { ok: false; reason: string } = await ctx.runQuery(
+      internal.agentAppointments.checkMove,
+      { ...a.target, to },
+    );
+    if (!check.ok) return check;
+    const told = await rescheduleBooking({
+      apiKey,
+      uid,
+      startIso: new Date(to).toISOString(),
+      reason: a.via === "phone" ? "Rescheduled by phone" : "Rescheduled by chat",
+    });
+    if (!told.ok) return { ok: false, reason: "calendar-error", providerError: told.reason };
+    // cal.com minted a new booking; carry its uid or the next cancel 404s.
+    newUid = told.uid;
+  }
+  const done: { ok: true } | { ok: false; reason: string } = await ctx.runMutation(
+    internal.agentAppointments.moveOwn,
+    {
+      ...a.target,
+      to,
+      ...(newUid ? { externalUid: newUid } : {}),
+      ...(uid ? { providerConfirmed: true } : {}),
+    },
+  );
+  return done;
+}

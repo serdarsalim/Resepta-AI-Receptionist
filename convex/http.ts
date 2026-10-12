@@ -10,12 +10,8 @@ import {
 } from "./lib/metaSig";
 import { handler as mcpHandler } from "./mcp";
 import { handler as voiceMcpHandler } from "./voiceMcp";
-import {
-  cancelBooking,
-  createBooking,
-  getAvailableSlots,
-  rescheduleBooking,
-} from "./lib/calcomApi";
+import { createBooking, getAvailableSlots } from "./lib/calcomApi";
+import { writeOwnChange } from "./agentAppointments";
 import {
   fetchReceivedEmail,
   htmlToText,
@@ -882,7 +878,7 @@ http.route({
           ...(own.later > 0
             ? {
                 later_appointments: own.later,
-                note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this one can be moved or cancelled on this call; a colleague can change the others.`,
+                note: `They have ${own.later} more appointment${own.later === 1 ? "" : "s"} after this one. Only this one can be moved or cancelled on this call.`,
               }
             : {}),
         });
@@ -901,16 +897,13 @@ http.route({
         appointmentId: next.appointmentId,
         from: next.startAt,
       };
-      const calcomKey: string | undefined = org.calcomApiKey;
-      const providerUid: string | undefined =
-        next.externalUid && calcomKey ? next.externalUid : undefined;
       const did = name === "cancel_appointment" ? "cancelled" : "moved";
       const outcome = did === "cancelled" ? "cancelled" : "rescheduled";
       // A change the agent cannot make, answered so it can say what happens
       // next. When that is "a colleague will be in touch" (the cap, or the
       // calendar failing), the team is emailed in the same breath: nobody is
       // reading a live call, and a promise with no owner is worse than none.
-      const refuse = async (reason: string, extra?: Record<string, unknown>) => {
+      const refuse = async (reason: string, providerError?: string) => {
         const known = isChangeRefusal(reason) ? reason : "calendar-error";
         if (known === "too-many-changes" || known === "calendar-error") {
           await queueOrgAlert(ctx, {
@@ -931,29 +924,24 @@ http.route({
                 todayIso: todayInZone(org.timezone),
               })
             : {}),
-          ...extra,
+          ...(providerError ? { provider_error: providerError } : {}),
           note: changeRefusalNote(known, did, "voice"),
         });
       };
       // The cap answers first, before cal.com is asked anything.
       if (own.changesToday >= CHANGES_PER_DAY) return await refuse("too-many-changes");
+      const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
+        writeOwnChange(ctx, {
+          target,
+          externalUid: next.externalUid,
+          calcomApiKey: org.calcomApiKey ?? undefined,
+          change,
+          via: "phone",
+        });
 
       if (name === "cancel_appointment") {
-        if (providerUid && calcomKey) {
-          const result = await cancelBooking({
-            apiKey: calcomKey,
-            uid: providerUid,
-            reason: "Cancelled by phone",
-          });
-          if (!result.ok) {
-            return await refuse("calendar-error", { provider_error: result.reason });
-          }
-        }
-        const done = await ctx.runMutation(internal.agentAppointments.cancelOwn, {
-          ...target,
-          ...(providerUid ? { providerConfirmed: true } : {}),
-        });
-        if (!done.ok) return await refuse(done.reason);
+        const done = await write({ kind: "cancel" });
+        if (!done.ok) return await refuse(done.reason, done.providerError);
         return respond({ cancelled: true, spoken_time: spokenOf(next.startAt) });
       }
 
@@ -977,34 +965,8 @@ http.route({
           note: "That is the time it is already booked for. Tell the caller it stays as it is.",
         });
       }
-      let newUid: string | undefined;
-      if (providerUid && calcomKey) {
-        // cal.com is about to be told, so the move has to be known to be
-        // allowed first; afterwards there is no refusing it.
-        const check = await ctx.runQuery(internal.agentAppointments.checkMove, {
-          ...target,
-          to: startAt,
-        });
-        if (!check.ok) return await refuse(check.reason);
-        const result = await rescheduleBooking({
-          apiKey: calcomKey,
-          uid: providerUid,
-          startIso: new Date(startAt).toISOString(),
-          reason: "Rescheduled by phone",
-        });
-        if (!result.ok) {
-          return await refuse("calendar-error", { provider_error: result.reason });
-        }
-        // cal.com minted a new booking; carry its uid or the next cancel 404s.
-        newUid = result.uid;
-      }
-      const done = await ctx.runMutation(internal.agentAppointments.moveOwn, {
-        ...target,
-        to: startAt,
-        ...(newUid ? { externalUid: newUid } : {}),
-        ...(providerUid ? { providerConfirmed: true } : {}),
-      });
-      if (!done.ok) return await refuse(done.reason);
+      const done = await write({ kind: "move", to: startAt });
+      if (!done.ok) return await refuse(done.reason, done.providerError);
       return respond({ rescheduled: true, spoken_time: spokenOf(startAt) });
     }
 

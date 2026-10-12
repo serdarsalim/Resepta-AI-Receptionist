@@ -173,8 +173,9 @@ assembly reads only this customer's rows.
 - **Two halves, two owners.** The operator owns the **lifecycle**
   (`orgs.chatAgentMode`: off → shadow → live, unset = off, /admin only) —
   which is also the entitlement gate, so a business cannot switch a paid agent
-  on for itself. Shadow generates and records but never sends and is invisible
-  to the tenant: pre-launch QA and canarying. The owner owns the **behaviour**
+  on for itself. Shadow generates and records but never sends, never writes
+  (its write tools record the change on the turn instead, as suggest does)
+  and is invisible to the tenant: pre-launch QA and canarying. The owner owns the **behaviour**
   once live (`orgs.chatAgentBehavior`: off | suggest | live, Settings →
   Messages). Unset behaviour reads as **live**, because the field is younger
   than the orgs that predate it and defaulting those to drafts would silence a

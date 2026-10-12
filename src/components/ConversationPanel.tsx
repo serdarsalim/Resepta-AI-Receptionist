@@ -86,6 +86,16 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "missing-phone": "error.missing-phone",
   "agent-not-configured": "error.agent-not-configured",
   "no-calendar-connected": "error.no-calendar-connected",
+  // Sending a draft that also changes an appointment: the change goes first
+  // and the reply only if it took (chatAgent.sendSuggestion).
+  "change-slot-taken": "error.change-slot-taken",
+  "change-customer-busy": "error.change-customer-busy",
+  "change-time-not-allowed": "error.change-time-not-allowed",
+  "change-appointment-changed": "error.change-appointment-changed",
+  "change-too-many": "error.change-too-many",
+  "change-failed": "error.change-failed",
+  "changed-not-sent": "error.changed-not-sent",
+  "change-needs-plain-send": "error.change-needs-plain-send",
   // Email lane.
   "missing-email": "error.missing-email",
   "no-from-address": "error.no-from-address",
@@ -215,6 +225,7 @@ export function ConversationPanel({
   const agentState = useQuery(api.chatAgent.stateForCustomer, { customerId });
   const setConversationMode = useMutation(api.chatAgent.setConversationMode);
   const cancelAutoSend = useMutation(api.chatAgent.cancelAutoSend);
+  const discardSuggestion = useMutation(api.chatAgent.discardSuggestion);
   const sendSuggestion = useAction(api.chatAgent.sendSuggestion);
   const sendSession = useAction(api.wa.sendSession);
   const react = useAction(api.wa.reactToMessage);
@@ -1498,6 +1509,13 @@ export function ConversationPanel({
             const p = agentState.pending;
             if (p?.autoSendAt) void cancelAutoSend({ customerId, turnId: p.turnId });
           }}
+          // Same click-time read: drops the drafted change by retiring the
+          // draft. Words the reader edited stay in the box and go out as an
+          // ordinary message; untouched draft text leaves with the draft.
+          onDropChanges={() => {
+            const p = agentState.pending;
+            if (p) void discardSuggestion({ customerId, turnId: p.turnId });
+          }}
         />
       )}
       {canCompose && (
@@ -1536,6 +1554,16 @@ export function ConversationPanel({
                 !attached &&
                 !replyTo &&
                 !(when !== undefined && when > Date.now());
+              // A draft that also changes an appointment only makes the
+              // change on the draft path (sendSuggestion). Sent any other way
+              // its words would promise a change nobody made, so that is
+              // refused here; the × on the change line drops the change and
+              // lets the words go as an ordinary message.
+              if (pendingNow?.changes?.length && !viaDraft) {
+                setSending(false);
+                setSendError("change-needs-plain-send");
+                return;
+              }
               const result = viaDraft
                 ? await sendSuggestion({
                     customerId,
@@ -2545,14 +2573,37 @@ function AgentThreadStrip({
   state,
   onMode,
   onStopAutoSend,
+  onDropChanges,
 }: {
   state: NonNullable<FunctionReturnType<typeof api.chatAgent.stateForCustomer>>;
   onMode: (mode: "off" | "suggest" | "live") => void;
   onStopAutoSend: () => void;
+  onDropChanges: () => void;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const pending = state.pending;
   const live = state.effective === "live";
+  // In the BUSINESS's zone, the one the calendar runs on: a draft that moves
+  // an appointment to 14:00 means the salon's 14:00.
+  const when = (ms: number) => formatDateTimeWithWeekday(ms, language, state.timezone);
+  const changeText = (change: NonNullable<NonNullable<typeof pending>["changes"]>[number]) => {
+    switch (change.kind) {
+      case "book": {
+        const head = change.asap
+          ? t("agent.change.bookAsap")
+          : t("agent.change.book").replace("{when}", when(change.at));
+        return change.services.length > 0 ? `${head} · ${change.services.join(", ")}` : head;
+      }
+      case "move":
+        return t("agent.change.move")
+          .replace("{from}", when(change.from))
+          .replace("{to}", when(change.to));
+      case "cancel":
+        return t("agent.change.cancel").replace("{when}", when(change.at));
+      case "save":
+        return t("agent.change.save").replace("{fields}", change.labels.join(", "));
+    }
+  };
   return (
     <div className="space-y-2 px-[var(--pane-inline)] pt-2">
       {/* A caption line, not a card (Serdar, 2026-08-31: "more out of the
@@ -2621,6 +2672,42 @@ function AgentThreadStrip({
           discard. Only a live reply counting down to its own send still
           earns a line, in amber — "about to happen" — because that state is
           invisible from the text alone and Stop has to live somewhere. */}
+      {/* What sending this draft will ALSO do. A suggested reply that books,
+          moves, cancels or saves changes nothing until it is sent (2026-10-13),
+          so the change sits right above the box it goes out from, where the
+          person pressing Send reads it. Neutral, not amber: amber means
+          unsaved, and nothing here is unsaved. */}
+      {pending?.changes && pending.changes.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--muted-bg)] py-1 pl-2.5 pr-1 text-xs text-[var(--foreground)]">
+          <ul className="min-w-0 flex-1 space-y-0.5 py-0.5">
+            {pending.changes.map((change, i) => {
+              const text = changeText(change);
+              return (
+                <li key={i} className="flex items-center gap-2" title={text}>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--muted-strong)]" aria-hidden />
+                  <span className="min-w-0 truncate">{text}</span>
+                </li>
+              );
+            })}
+          </ul>
+          {/* The way to keep the words and not the change: retires the
+              draft, so whatever the reader typed goes out as an ordinary
+              message. An × in a quiet square, the word on its label. */}
+          <button
+            type="button"
+            onClick={onDropChanges}
+            aria-label={t("agent.change.drop")}
+            title={t("agent.change.drop")}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {pending?.autoSendAt && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-2.5 py-1.5 text-xs">
           <AutoSendCountdown deadline={pending.autoSendAt} />

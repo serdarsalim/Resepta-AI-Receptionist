@@ -1492,6 +1492,49 @@ const dictionary = {
     en: "No consent from customer",
     de: "Keine Einwilligung des Kunden",
   },
+  // Sending a suggested reply that would also book, move or cancel: the
+  // change is made FIRST and the reply goes only if it took (2026-10-13).
+  // Each of these but the last means nothing went to the customer.
+  "error.change-slot-taken": {
+    tr: "Randevu değiştirilmedi: o saat artık dolu. Yanıt gönderilmedi.",
+    en: "The appointment was not changed: that time is no longer free. The reply was not sent.",
+    de: "Der Termin wurde nicht geändert: Die Zeit ist nicht mehr frei. Die Antwort wurde nicht gesendet.",
+  },
+  "error.change-customer-busy": {
+    tr: "Randevu değiştirilmedi: müşterinin o saatte başka bir randevusu var. Yanıt gönderilmedi.",
+    en: "The appointment was not changed: the customer already has an appointment at that time. The reply was not sent.",
+    de: "Der Termin wurde nicht geändert: Der Kunde hat zu dieser Zeit schon einen Termin. Die Antwort wurde nicht gesendet.",
+  },
+  "error.change-time-not-allowed": {
+    tr: "Randevu değiştirilmedi: o saat çalışma saatlerinizin dışında ya da artık mümkün değil. Yanıt gönderilmedi.",
+    en: "The appointment was not changed: that time is outside your opening hours or no longer possible. The reply was not sent.",
+    de: "Der Termin wurde nicht geändert: Die Zeit liegt außerhalb Ihrer Öffnungszeiten oder ist nicht mehr möglich. Die Antwort wurde nicht gesendet.",
+  },
+  "error.change-appointment-changed": {
+    tr: "Randevu, taslak yazıldıktan sonra değişti. Hiçbir şey değiştirilmedi ve yanıt gönderilmedi.",
+    en: "The appointment changed after the draft was written. Nothing was changed and the reply was not sent.",
+    de: "Der Termin hat sich geändert, nachdem der Entwurf geschrieben wurde. Es wurde nichts geändert und die Antwort nicht gesendet.",
+  },
+  "error.change-too-many": {
+    tr: "Bu müşterinin randevuları bugün asistan üzerinden çok kez değiştirildi. Yanıt gönderilmedi; değişikliği takvimden kendiniz yapabilirsiniz.",
+    en: "This customer's appointments were changed through the assistant too many times today. The reply was not sent; you can make the change yourself in the calendar.",
+    de: "Die Termine dieses Kunden wurden heute zu oft über den Assistenten geändert. Die Antwort wurde nicht gesendet; Sie können die Änderung selbst im Kalender vornehmen.",
+  },
+  "error.change-failed": {
+    tr: "Takvimdeki değişiklik yapılamadı, bu yüzden yanıt gönderilmedi.",
+    en: "The calendar change could not be made, so the reply was not sent.",
+    de: "Die Änderung im Kalender war nicht möglich, deshalb wurde die Antwort nicht gesendet.",
+  },
+  "error.change-needs-plain-send": {
+    tr: "Bu taslak bir randevuyu da değiştiriyor. Değişiklikle göndermek için eki, alıntıyı ya da zamanlamayı kaldırın; değişiklik olmadan göndermek için önce × ile değişikliği kaldırın.",
+    en: "This draft also changes an appointment. To send it with the change, remove the attachment, quote or schedule. To send without it, remove the change with × first.",
+    de: "Dieser Entwurf ändert auch einen Termin. Um ihn mit der Änderung zu senden, entfernen Sie Anhang, Zitat oder Zeitplanung. Um ihn ohne Änderung zu senden, entfernen Sie die Änderung zuerst mit ×.",
+  },
+  "error.changed-not-sent": {
+    tr: "Randevu değişikliği yapıldı ama yanıt gönderilemedi. Müşteriye kendiniz yazın.",
+    en: "The appointment change was made, but the reply did not send. Write to the customer yourself.",
+    de: "Die Terminänderung wurde vorgenommen, aber die Antwort ging nicht raus. Schreiben Sie dem Kunden selbst.",
+  },
   "error.session-window-closed": {
     tr: "24 saatlik pencere kapalı",
     en: "24h window closed",
@@ -4219,6 +4262,42 @@ const dictionary = {
   },
   // Stops the countdown, keeps the text as an editable draft.
   "agent.autoSendStop": { tr: "Durdur", en: "Stop", de: "Stoppen" },
+  // What sending a suggested reply will ALSO do (2026-10-13). A draft that
+  // books, moves, cancels or saves changes nothing until it is sent, so the
+  // person sending it has to see the change before they press Send.
+  // {when}, {from}, {to}: a date and time. {services}, {fields}: a list.
+  "agent.change.book": {
+    tr: "Gönderdiğinizde randevu oluşturulur: {when}",
+    en: "Sending this books {when}",
+    de: "Beim Senden wird gebucht: {when}",
+  },
+  "agent.change.bookAsap": {
+    tr: "Gönderdiğinizde sipariş hemen verilir",
+    en: "Sending this places the order now",
+    de: "Beim Senden wird die Bestellung sofort aufgegeben",
+  },
+  "agent.change.move": {
+    tr: "Gönderdiğinizde randevu taşınır: {from} → {to}",
+    en: "Sending this moves the appointment from {from} to {to}",
+    de: "Beim Senden wird der Termin verschoben: {from} → {to}",
+  },
+  "agent.change.cancel": {
+    tr: "Gönderdiğinizde {when} randevusu iptal edilir",
+    en: "Sending this cancels the appointment on {when}",
+    de: "Beim Senden wird der Termin am {when} abgesagt",
+  },
+  // The × on that line: drops the change by retiring the draft. Words the
+  // reader has edited stay in the box.
+  "agent.change.drop": {
+    tr: "Bu değişikliği yapma",
+    en: "Don't make this change",
+    de: "Diese Änderung nicht vornehmen",
+  },
+  "agent.change.save": {
+    tr: "Gönderdiğinizde kaydedilir: {fields}",
+    en: "Sending this saves {fields}",
+    de: "Beim Senden wird gespeichert: {fields}",
+  },
 
   // Settings → Messages: the business default and the handover policy.
   "settings.chatAgent": { tr: "WhatsApp asistanı", en: "WhatsApp assistant", de: "WhatsApp-Assistent" },

@@ -2146,6 +2146,183 @@ export const classifyServices = internalQuery({
   },
 });
 
+// Every guard a booking must clear before it is written, as the sentence the
+// agent reads back when it does not: lead time, the caller's own clash,
+// capacity, closures over the whole span, a handover the business offers.
+// null = clear. Extracted from voiceBook (2026-10-13) so the WRITE and the dry
+// run a suggested chat reply takes (previewBook) cannot disagree: a draft must
+// never promise a booking its approval will refuse for a reason the draft
+// could have known.
+async function bookingProblem(
+  ctx: QueryCtx,
+  a: {
+    orgId: Id<"orgs">;
+    // null for a caller who has no record yet: nothing of theirs to clash with.
+    customerId: Id<"customers"> | null;
+    startAt: number;
+    lines: MatchedLine[];
+    totalMinutes: number | undefined;
+    durationMinutes?: number;
+    // cal.com holds the slot (or is about to): capacity is its question.
+    providerHeld: boolean;
+    // Already narrowed to goods-only orders by the caller.
+    fulfillment?: {
+      kind: "pickup" | "delivery";
+      asap?: boolean;
+      address?: string;
+    };
+  },
+): Promise<string | null> {
+  const lines = a.lines;
+  const totalMinutes = a.totalMinutes;
+  if (!a.providerHeld) {
+    // Goods-only orders sum to 0 and fall through every occupancy guard
+    // below by construction — a cake holds no chair. What a good DOES
+    // enforce is its lead time: the baker's warning is a real constraint
+    // where the chair count is not.
+    const leadMs = lines.reduce(
+      (max, item) => Math.max(max, (item.leadMinutes ?? 0) * 60_000),
+      0,
+    );
+    if (leadMs > 0 && a.startAt < Date.now() + leadMs) {
+      const needed = lines.find(
+        (item) => (item.leadMinutes ?? 0) * 60_000 === leadMs,
+      );
+      // Read only on the failure path — the happy path must not pay for it.
+      const bookingOrg = await ctx.db.get(a.orgId);
+      const notice =
+        spokenLead(leadMs / 60_000, bookingOrg?.language) ?? `${leadMs / 60_000} minutes`;
+      // A sentence, not a slug, for the same reason as customer-busy below:
+      // the agent reads this back, and it must name the remedy.
+      return (
+        `lead-time: "${needed?.name ?? "this item"}" must be ordered ${notice} in advance. Apologise, say how much notice it needs, and offer the earliest day that satisfies it.`
+      );
+    }
+    const duration = totalMinutes ?? a.durationMinutes ?? 30;
+    const endAt = a.startAt + duration * 60_000;
+    // One day either side is enough: nothing a salon books runs longer.
+    const nearby = await ctx.db
+      .query("appointments")
+      .withIndex("by_org_start", (q) =>
+        q
+          .eq("orgId", a.orgId)
+          .gte("startAt", a.startAt - 24 * 60 * 60_000)
+          .lt("startAt", endAt),
+      )
+      .collect();
+    // Before capacity, the caller themselves. Capacity asks whether the shop
+    // has a free chair; a two-chair salon says yes to 14:00 twice, and on a
+    // real call that booked one man a haircut and a beard trim at the same
+    // minute. The message is the tool result the agent reads back, so it
+    // says what to do instead — the prompt already tells it to run a second
+    // service back to back.
+    // A caller with no record yet has nothing to clash with.
+    const clash = a.customerId
+      ? customerConflict(nearby, a.customerId, a.startAt, duration)
+      : null;
+    if (clash) {
+      // A sentence, not a slug: http.ts hands err.message to the agent
+      // verbatim, and "customer-busy" alone leaves it guessing at the
+      // remedy. This names the remedy the prompt already asks for.
+      const freeAt = clash.startAt + (clash.durationMinutes ?? 30) * 60_000;
+      // Read only on the failure path — the happy path must not pay for it.
+      const bookingOrg = await ctx.db.get(a.orgId);
+      const when = bookingOrg
+        ? spokenClock(freeAt, bookingOrg.timezone, bookingOrg.language)
+        : new Date(freeAt).toISOString();
+      return (
+        `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`
+      );
+    }
+    // Goods rows (an explicit 0 — unset means a legacy row, assume 30)
+    // hold no chair, so they never count toward a full shop.
+    const overlapping = nearby.filter(
+      (row) =>
+        (row.status === "scheduled" || row.status === "confirmed") &&
+        row.durationMinutes !== 0 &&
+        row.startAt < endAt &&
+        a.startAt < row.startAt + (row.durationMinutes ?? 30) * 60_000,
+    ).length;
+    // How many people can be working at once. One booking at 14:00 used to
+    // close 14:00 for the whole shop, which in a salon with four chairs
+    // refuses three slots that are genuinely free — and refuses them more
+    // often the bigger the salon gets.
+    //
+    // Counted here rather than assigned: the booking still lands on the shop
+    // and not on a named person, so what this guards is CAPACITY, not
+    // Elif's afternoon. Which chair the caller gets is the salon's to decide
+    // when they look at the day. A staff argument on book_appointment is the
+    // version where the caller chooses, and that is a bigger conversation.
+    //
+    // An org with nobody on the roster still books one at a time: a shop
+    // that has not filled in its team is not a shop with no chairs.
+    const capacity = Math.max(
+      1,
+      (
+        await ctx.db
+          .query("staff")
+          .withIndex("by_org", (q) => q.eq("orgId", a.orgId))
+          .collect()
+      ).filter((row) => row.active).length,
+    );
+    if (duration > 0 && overlapping >= capacity) {
+      // The message is the tool result the agent reads back, so it names
+      // the conflict in a way the agent can act on: offer another time.
+      return "slot-taken";
+    }
+  }
+  // The closure test on the WHOLE SPAN, and here rather than in either
+  // agent's guard, because this mutation is where the real duration is
+  // finally known — both agents check the start instant before the services
+  // are resolved, so a 60-minute booking at 12:30 cleared their guard and
+  // ran half an hour into a 13:00 lunch break. The public booking page has
+  // always tested the span (booking.ts fitsOpenHours), and the two must not
+  // disagree about the same request.
+  //
+  // Goods (duration 0) are tested at their instant, the same rule
+  // fitsOpenHours holds: a closure is a locked door, not a busy chair.
+  {
+    const org = await ctx.db.get(a.orgId);
+    const closures = await loadClosures(ctx, a.orgId);
+    if (org && closures.length > 0) {
+      // Recomputed rather than reused: the capacity block above scopes its
+      // own `duration`, and this guard has to run for an externalUid booking
+      // too — cal.com holds the inventory, but it has never been told about
+      // a Resepta closure.
+      const span = totalMinutes ?? a.durationMinutes ?? 30;
+      const at = getLocalPartsSafe(a.startAt, org.timezone);
+      const shut = closureBlocks(
+        closures,
+        at,
+        at.minutesOfDay,
+        at.minutesOfDay + span,
+      );
+      // Same error the capacity guard throws: the agent's job either way is
+      // to offer another time, and the facts it needs to pick one already
+      // rode out with check_availability.
+      if (shut) return "slot-taken";
+    }
+  }
+  const fulfillment = a.fulfillment;
+  if (fulfillment) {
+    // The business's own answer, checked where both agent lanes pass. An
+    // agent offering delivery a business does not do is a promise in that
+    // business's voice, and the model will happily make it if the prompt
+    // drifts. A sentence, not a slug: this reaches the agent verbatim.
+    const bookingOrg = await ctx.db.get(a.orgId);
+    const offered =
+      fulfillment.kind === "pickup"
+        ? (bookingOrg?.pickupEnabled ?? true)
+        : (bookingOrg?.deliveryEnabled ?? true);
+    if (!offered) {
+      return (
+        `not-offered: this business does not do ${fulfillment.kind} for products. Offer the other way, and never promise ${fulfillment.kind}.`
+      );
+    }
+  }
+  return null;
+}
+
 // Voice booking: find/create the customer by phone, insert the appointment.
 // externalUid (cal.com's uid when the booking went through cal.com) is what
 // dedupes the webhook echo via by_org_external.
@@ -2269,152 +2446,24 @@ export const voiceBook = internalMutation({
     const totalMinutes = lines.length
       ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
       : undefined;
-    if (!args.externalUid) {
-      // Goods-only orders sum to 0 and fall through every occupancy guard
-      // below by construction — a cake holds no chair. What a good DOES
-      // enforce is its lead time: the baker's warning is a real constraint
-      // where the chair count is not.
-      const leadMs = lines.reduce(
-        (max, item) => Math.max(max, (item.leadMinutes ?? 0) * 60_000),
-        0,
-      );
-      if (leadMs > 0 && args.startAt < Date.now() + leadMs) {
-        const needed = lines.find(
-          (item) => (item.leadMinutes ?? 0) * 60_000 === leadMs,
-        );
-        // Read only on the failure path — the happy path must not pay for it.
-        const bookingOrg = await ctx.db.get(args.orgId);
-        const notice =
-          spokenLead(leadMs / 60_000, bookingOrg?.language) ?? `${leadMs / 60_000} minutes`;
-        // A sentence, not a slug, for the same reason as customer-busy below:
-        // the agent reads this back, and it must name the remedy.
-        throw new Error(
-          `lead-time: "${needed?.name ?? "this item"}" must be ordered ${notice} in advance. Apologise, say how much notice it needs, and offer the earliest day that satisfies it.`,
-        );
-      }
-      const duration = totalMinutes ?? args.durationMinutes ?? 30;
-      const endAt = args.startAt + duration * 60_000;
-      // One day either side is enough: nothing a salon books runs longer.
-      const nearby = await ctx.db
-        .query("appointments")
-        .withIndex("by_org_start", (q) =>
-          q
-            .eq("orgId", args.orgId)
-            .gte("startAt", args.startAt - 24 * 60 * 60_000)
-            .lt("startAt", endAt),
-        )
-        .collect();
-      // Before capacity, the caller themselves. Capacity asks whether the shop
-      // has a free chair; a two-chair salon says yes to 14:00 twice, and on a
-      // real call that booked one man a haircut and a beard trim at the same
-      // minute. The message is the tool result the agent reads back, so it
-      // says what to do instead — the prompt already tells it to run a second
-      // service back to back.
-      const clash = customerConflict(nearby, customer._id, args.startAt, duration);
-      if (clash) {
-        // A sentence, not a slug: http.ts hands err.message to the agent
-        // verbatim, and "customer-busy" alone leaves it guessing at the
-        // remedy. This names the remedy the prompt already asks for.
-        const freeAt = clash.startAt + (clash.durationMinutes ?? 30) * 60_000;
-        // Read only on the failure path — the happy path must not pay for it.
-        const bookingOrg = await ctx.db.get(args.orgId);
-        const when = bookingOrg
-          ? spokenClock(freeAt, bookingOrg.timezone, bookingOrg.language)
-          : new Date(freeAt).toISOString();
-        throw new Error(
-          `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`,
-        );
-      }
-      // Goods rows (an explicit 0 — unset means a legacy row, assume 30)
-      // hold no chair, so they never count toward a full shop.
-      const overlapping = nearby.filter(
-        (row) =>
-          (row.status === "scheduled" || row.status === "confirmed") &&
-          row.durationMinutes !== 0 &&
-          row.startAt < endAt &&
-          args.startAt < row.startAt + (row.durationMinutes ?? 30) * 60_000,
-      ).length;
-      // How many people can be working at once. One booking at 14:00 used to
-      // close 14:00 for the whole shop, which in a salon with four chairs
-      // refuses three slots that are genuinely free — and refuses them more
-      // often the bigger the salon gets.
-      //
-      // Counted here rather than assigned: the booking still lands on the shop
-      // and not on a named person, so what this guards is CAPACITY, not
-      // Elif's afternoon. Which chair the caller gets is the salon's to decide
-      // when they look at the day. A staff argument on book_appointment is the
-      // version where the caller chooses, and that is a bigger conversation.
-      //
-      // An org with nobody on the roster still books one at a time: a shop
-      // that has not filled in its team is not a shop with no chairs.
-      const capacity = Math.max(
-        1,
-        (
-          await ctx.db
-            .query("staff")
-            .withIndex("by_org", (q) => q.eq("orgId", args.orgId))
-            .collect()
-        ).filter((row) => row.active).length,
-      );
-      if (duration > 0 && overlapping >= capacity) {
-        // The message is the tool result the agent reads back, so it names
-        // the conflict in a way the agent can act on: offer another time.
-        throw new Error("slot-taken");
-      }
-    }
-    // The closure test on the WHOLE SPAN, and here rather than in either
-    // agent's guard, because this mutation is where the real duration is
-    // finally known — both agents check the start instant before the services
-    // are resolved, so a 60-minute booking at 12:30 cleared their guard and
-    // ran half an hour into a 13:00 lunch break. The public booking page has
-    // always tested the span (booking.ts fitsOpenHours), and the two must not
-    // disagree about the same request.
-    //
-    // Goods (duration 0) are tested at their instant, the same rule
-    // fitsOpenHours holds: a closure is a locked door, not a busy chair.
-    {
-      const org = await ctx.db.get(args.orgId);
-      const closures = await loadClosures(ctx, args.orgId);
-      if (org && closures.length > 0) {
-        // Recomputed rather than reused: the capacity block above scopes its
-        // own `duration`, and this guard has to run for an externalUid booking
-        // too — cal.com holds the inventory, but it has never been told about
-        // a Resepta closure.
-        const span = totalMinutes ?? args.durationMinutes ?? 30;
-        const at = getLocalPartsSafe(args.startAt, org.timezone);
-        const shut = closureBlocks(
-          closures,
-          at,
-          at.minutesOfDay,
-          at.minutesOfDay + span,
-        );
-        // Same error the capacity guard throws: the agent's job either way is
-        // to offer another time, and the facts it needs to pick one already
-        // rode out with check_availability.
-        if (shut) throw new Error("slot-taken");
-      }
-    }
     // Goods through and through, the same test classifyServices runs — and
     // the same rule the booking page holds: a visit IS its own handover, so a
     // fulfillment riding along with a haircut is dropped rather than refused.
     const goodsOnly = lines.length > 0 && totalMinutes === 0;
     const fulfillment = goodsOnly ? args.fulfillment : undefined;
-    if (fulfillment) {
-      // The business's own answer, checked where both agent lanes pass. An
-      // agent offering delivery a business does not do is a promise in that
-      // business's voice, and the model will happily make it if the prompt
-      // drifts. A sentence, not a slug: this reaches the agent verbatim.
-      const bookingOrg = await ctx.db.get(args.orgId);
-      const offered =
-        fulfillment.kind === "pickup"
-          ? (bookingOrg?.pickupEnabled ?? true)
-          : (bookingOrg?.deliveryEnabled ?? true);
-      if (!offered) {
-        throw new Error(
-          `not-offered: this business does not do ${fulfillment.kind} for products. Offer the other way, and never promise ${fulfillment.kind}.`,
-        );
-      }
-    }
+    // Every guard, in the one place the dry run shares (bookingProblem),
+    // thrown as the sentence the agent reads back.
+    const problem = await bookingProblem(ctx, {
+      orgId: args.orgId,
+      customerId: customer._id,
+      startAt: args.startAt,
+      lines,
+      totalMinutes,
+      durationMinutes: args.durationMinutes,
+      providerHeld: Boolean(args.externalUid),
+      fulfillment,
+    });
+    if (problem) throw new Error(problem);
     const appointmentId = await ctx.db.insert("appointments", {
       orgId: args.orgId,
       customerId: customer._id,
@@ -2455,6 +2504,71 @@ export const voiceBook = internalMutation({
       appointmentId,
       serviceName: line?.name,
       serviceNames: lines.length ? lines.map((item) => item.name) : undefined,
+    };
+  },
+});
+
+// voiceBook's dry run, for a chat reply that only SUGGESTS (and for shadow):
+// the same matching and the same guards (bookingProblem), nothing written
+// (2026-10-13). The customer is the conversation's, asserted to be in this org;
+// the model supplies only what it supplies to book_appointment itself. What
+// comes back is what the draft may promise, and the approval runs the real
+// voiceBook again, so a slot taken in between is refused there.
+export const previewBook = internalQuery({
+  args: {
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    startAt: v.number(),
+    services: v.optional(v.array(v.string())),
+    service: v.optional(v.string()),
+    // cal.com will hold this booking once it is made: capacity is its call.
+    providerHeld: v.optional(v.boolean()),
+    fulfillment: v.optional(
+      v.object({
+        kind: v.union(v.literal("pickup"), v.literal("delivery")),
+        asap: v.optional(v.boolean()),
+        address: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.union(
+    v.object({
+      ok: v.literal(true),
+      serviceName: v.optional(v.string()),
+      serviceNames: v.optional(v.array(v.string())),
+    }),
+    v.object({ ok: v.literal(false), error: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== args.orgId) {
+      return { ok: false as const, error: "no-such-customer" };
+    }
+    const spoken =
+      args.services && args.services.length > 0
+        ? args.services
+        : args.service
+          ? [args.service]
+          : [];
+    const lines = await matchServices(ctx, args.orgId, spoken);
+    const totalMinutes = lines.length
+      ? lines.reduce((sum, item) => sum + item.durationMinutes, 0)
+      : undefined;
+    const goodsOnly = lines.length > 0 && totalMinutes === 0;
+    const problem = await bookingProblem(ctx, {
+      orgId: args.orgId,
+      customerId: customer._id,
+      startAt: args.startAt,
+      lines,
+      totalMinutes,
+      providerHeld: args.providerHeld === true,
+      fulfillment: goodsOnly ? args.fulfillment : undefined,
+    });
+    if (problem) return { ok: false as const, error: problem };
+    return {
+      ok: true as const,
+      ...(lines[0] ? { serviceName: lines[0].name } : {}),
+      ...(lines.length > 0 ? { serviceNames: lines.map((item) => item.name) } : {}),
     };
   },
 });
@@ -2759,6 +2873,10 @@ export async function applyVoiceContactValues(
     // in its custom map. Resolved by the caller from the agent's own
     // variables, so a key only reaches a built-in if the owner said it should.
     identity?: Record<string, { field: "firstName" | "lastName" | "email"; label: string }>;
+    // Every rule applied, nothing written: the result says what WOULD be
+    // saved. A suggested chat reply records that and saves it only when a
+    // person sends the draft (chatAgent.sendSuggestion).
+    dryRun?: boolean;
   },
 ): Promise<ContactUpdateResult> {
   const phone = toE164(args.phone);
@@ -2860,7 +2978,7 @@ export async function applyVoiceContactValues(
     updated.push(key);
     updatedLabels.push(field.label);
   }
-  if (updated.length > 0) {
+  if (updated.length > 0 && !args.dryRun) {
     await ctx.db.patch(customer._id, { custom, ...identityPatch });
     // The email arriving NOW is what an earlier no-email-address confirmation
     // was waiting for — the agent asks for the address after booking, so the

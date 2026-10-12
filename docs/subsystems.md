@@ -1183,8 +1183,11 @@ something else, which is all of them.
   the first SENT message per customer; it is never the model's job and never
   removable per org (WhatsApp 2026 AI policy + EU AI Act Art. 50).
 - **off → shadow → live** (`orgs.chatAgentMode`) is operator-set from /admin
-  only. Shadow runs everything and sends nothing; its replies live in
-  `chatAgentTurns`, the flight recorder that is also the raw LLM ledger.
+  only. Shadow runs everything, sends nothing and (since 2026-10-13) WRITES
+  nothing: its booking, move, cancel and save tools record what they would
+  have done on the turn (`chatAgentTurns.intents`) instead of doing it. Its
+  replies live in `chatAgentTurns`, the flight recorder that is also the raw
+  LLM ledger.
   `usageMonthly` is incremented in the same mutation as the turn — never
   write one without the other.
 - **The voice meter follows the same ledger rule.** `retell.meterCall`
@@ -1808,6 +1811,20 @@ Facts the next reader should not re-derive:
   it sitting beside it. Retiring the previous pending draft happens inside
   `recordTurn`, in the same transaction as the insert, so a thread can never
   show two and nobody can send one written for a message already followed up.
+- **A draft changes nothing until it is sent** (2026-10-13, Nudge's Approve
+  rule). In suggest the write tools run every check, write nothing and record
+  the change on the turn (`intents`); the composer shows it above the box
+  ("Sending this books …", with an × that drops it by retiring the draft).
+  `sendSuggestion` makes the changes FIRST, each re-checked at that moment
+  (still the customer's next appointment at the time the draft named, the
+  booking path run again), and sends the words only if every one took. A
+  refusal retires the draft with the reason and sends nothing; a send that
+  fails after the change says so (`changed-not-sent`) and puts the words back
+  without making the change twice (`intentsAppliedAt`). An attachment, quote
+  or scheduled send cannot carry the change, so the composer refuses those
+  while one is pending. The automation stand-down is LIVE ONLY now: a dry
+  tool tells the model a business rule will send the confirmation once the
+  draft is sent, so the draft stays short instead of vanishing.
 - **An edited send still records as "sent".** The acceptance rate asks "was
   this worth sending", not "did the model get every word right" — a rate that
   only counted untouched drafts would punish exactly the edit that made one
