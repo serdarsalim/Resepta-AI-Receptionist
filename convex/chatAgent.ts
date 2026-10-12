@@ -1591,18 +1591,17 @@ export const respond = internalAction({
     // change and fires the rule, and the dry tool told the model to keep its
     // reply short where a rule will speak (AUTOMATION_SPEAKS). Standing down
     // here would drop the customer's request with nothing to approve.
+    //
+    // And only when the write ACTUALLY scheduled that message
+    // (confirmation_sent, from scheduleLifecycleMessages' count), never on
+    // "a rule exists" (review, same day). A booking the customer already
+    // held, a repeated cancel and a move to the time it already had schedule
+    // nothing, and standing down on them left the customer with no answer.
     const automationAnswered = context.org.mode === "live" && toolLog.some((call) => {
       const result = call.result as Record<string, unknown> | null;
-      if (!result || typeof result !== "object") return false;
-      if (call.name === "book_appointment" && result.booked === true)
-        return context.automations.booking;
-      // A reschedule re-fires the BOOKING trigger (markRescheduled sends the
-      // confirmation again at the new time), so it reads the same switch.
-      if (call.name === "reschedule_appointment" && result.rescheduled === true)
-        return context.automations.booking;
-      if (call.name === "cancel_appointment" && result.cancelled === true)
-        return context.automations.cancellation;
-      return false;
+      return Boolean(
+        result && typeof result === "object" && result.confirmation_sent === true,
+      );
     });
     if (automationAnswered) {
       await record({
@@ -2358,7 +2357,11 @@ async function executeTool(
         }
         const done = await write({ kind: "cancel" });
         if (!done.ok) return await refuse(done.reason, done.providerError);
-        return { cancelled: true, spoken_time: spokenOf(next.startAt) };
+        return {
+          cancelled: true,
+          spoken_time: spokenOf(next.startAt),
+          ...(done.notified ? { confirmation_sent: true } : {}),
+        };
       }
 
       const startAt = parseLocalStart(String(input.start ?? ""), org.timezone);
@@ -2404,7 +2407,11 @@ async function executeTool(
       }
       const done = await write({ kind: "move", to: startAt });
       if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
-      return { rescheduled: true, spoken_time: spokenOf(startAt) };
+      return {
+        rescheduled: true,
+        spoken_time: spokenOf(startAt),
+        ...(done.notified ? { confirmation_sent: true } : {}),
+      };
     }
 
     if (name === "save_customer_details") {
@@ -2565,7 +2572,12 @@ type BookingPlan = {
 function bookedAnswer(
   context: TurnContext,
   plan: BookingPlan,
-  booking: { serviceName?: string; serviceNames?: string[]; existing?: boolean },
+  booking: {
+    serviceName?: string;
+    serviceNames?: string[];
+    existing?: boolean;
+    notified?: boolean;
+  },
 ): Record<string, unknown> {
   return {
     // A retried call or a repeated yes (retell.voiceBook): they already held
@@ -2576,6 +2588,9 @@ function bookedAnswer(
           note: "They already had exactly this booked, so nothing new was made. Confirm the booking they have, once.",
         }
       : {}),
+    // The business's own confirmation is on its way to them (and the live
+    // turn stands down on exactly this; see automationAnswered).
+    ...(booking.notified ? { confirmation_sent: true } : {}),
     booked: true,
     // An ASAP order has no promised minute, and handing the agent one is how
     // it reads a time back that nobody agreed to.

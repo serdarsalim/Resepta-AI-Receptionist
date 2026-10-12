@@ -677,8 +677,9 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   what it offers the write will accept). Both lanes' `check_availability`
   answer the asked `time` through one verdict (`judgeRequestedTime`).
 - **A booking asked for twice is one booking**: `voiceBook` returns the
-  customer's open appointment at that exact minute (a recent ASAP order with
-  the same lines) instead of making a second, and the agents obey the booking
+  customer's open appointment at that exact minute with the same services (a
+  recent ASAP order with the same lines) instead of making a second; a
+  different visit at that minute is their own clash, and the agents obey the booking
   page's `MAX_UPCOMING_PER_PHONE` (`lib/bookingLimits`) through
   `bookingProblem`, the guard list `voiceBook` and its dry run share.
 - **A chat reply that only suggests changes nothing.** In suggest and shadow

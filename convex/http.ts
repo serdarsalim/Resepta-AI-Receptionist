@@ -835,7 +835,12 @@ http.route({
           externalUid = booking.uid;
         }
       }
-      let booking: { serviceName?: string; serviceNames?: string[]; existing?: boolean };
+      let booking: {
+        serviceName?: string;
+        serviceNames?: string[];
+        existing?: boolean;
+        notified?: boolean;
+      };
       try {
         booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
@@ -872,6 +877,9 @@ http.route({
         services: booking.serviceNames,
         // A retried call or a repeated yes: they already held exactly this.
         ...(booking.existing ? { already_booked: true, note: ALREADY_BOOKED_NOTE } : {}),
+        // The business's own confirmation is on its way, so the agent can
+        // say a message will follow only when one will.
+        ...(booking.notified ? { confirmation_sent: true } : {}),
       });
     }
 
@@ -1035,7 +1043,11 @@ http.route({
       if (name === "cancel_appointment") {
         const done = await write({ kind: "cancel" });
         if (!done.ok) return await refuse(done.reason, done.providerError);
-        return respond({ cancelled: true, spoken_time: spokenOf(next.startAt) });
+        return respond({
+          cancelled: true,
+          spoken_time: spokenOf(next.startAt),
+          ...(done.notified ? { confirmation_sent: true } : {}),
+        });
       }
 
       // Wall time at the BUSINESS, not UTC — the same parse book_appointment
@@ -1067,7 +1079,11 @@ http.route({
       }
       const done = await write({ kind: "move", to: startAt });
       if (!done.ok) return await refuse(done.reason, done.providerError, startAt);
-      return respond({ rescheduled: true, spoken_time: spokenOf(startAt) });
+      return respond({
+        rescheduled: true,
+        spoken_time: spokenOf(startAt),
+        ...(done.notified ? { confirmation_sent: true } : {}),
+      });
     }
 
     return respond({ error: `unknown-function-${name}` });

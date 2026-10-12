@@ -1828,9 +1828,12 @@ Facts the next reader should not re-derive:
   fails after the change says so (`changed-not-sent`) and puts the words back
   without making the change twice (`intentsAppliedAt`). An attachment, quote
   or scheduled send cannot carry the change, so the composer refuses those
-  while one is pending. The automation stand-down is LIVE ONLY now: a dry
-  tool tells the model a business rule will send the confirmation once the
-  draft is sent, so the draft stays short instead of vanishing.
+  while one is pending. The automation stand-down is LIVE ONLY now, and fires
+  only when a write actually scheduled the business's own message to the
+  customer (`confirmation_sent`, counted by `scheduleLifecycleMessages`),
+  never on "a rule exists"; a dry tool tells the model a business rule will
+  send the confirmation once the draft is sent, so the draft stays short
+  instead of vanishing.
 - **An edited send still records as "sent".** The acceptance rate asks "was
   this worth sending", not "did the model get every word right" — a rate that
   only counted untouched drafts would punish exactly the edit that made one

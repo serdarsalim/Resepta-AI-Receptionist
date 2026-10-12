@@ -276,7 +276,12 @@ const targetArgs = {
 };
 
 const changeResult = v.union(
-  v.object({ ok: v.literal(true) }),
+  v.object({
+    ok: v.literal(true),
+    // A message from the business's own rules went to the customer about
+    // this change. The chat agent stands down on it, and only on it.
+    notified: v.optional(v.boolean()),
+  }),
   v.object({ ok: v.literal(false), reason: v.string() }),
 );
 
@@ -339,14 +344,14 @@ export const moveOwn = internalMutation({
       const refusal = await moveRefusal(ctx, org, appointment, args.to, now, false);
       if (refusal) return { ok: false as const, reason: refusal };
     }
-    await rescheduleAppointment(ctx, appointment, {
+    const sent = await rescheduleAppointment(ctx, appointment, {
       startAt: args.to,
       externalUid: args.externalUid,
     });
     await ctx.db.patch(customer._id, {
       agentChangesAt: withChange(customer.agentChangesAt, now),
     });
-    return { ok: true as const };
+    return { ok: true as const, notified: sent > 0 };
   },
 });
 
@@ -368,7 +373,7 @@ export const cancelOwn = internalMutation({
     }
     // No actor: the customer cancelled, through their assistant. That is
     // exactly the cancellation the team's booking-cancelled alert is for.
-    await cancelAppointment(ctx, appointment);
+    const sent = await cancelAppointment(ctx, appointment);
     // The feed row cancelAppointment writes only for a cancel started inside
     // the salon. An assistant's cancel deserves its own answer to "who
     // cancelled this?", the same row a booking and a move leave.
@@ -384,7 +389,7 @@ export const cancelOwn = internalMutation({
     await ctx.db.patch(customer._id, {
       agentChangesAt: withChange(customer.agentChangesAt, now),
     });
-    return { ok: true as const };
+    return { ok: true as const, notified: sent > 0 };
   },
 });
 
@@ -396,7 +401,9 @@ export const cancelOwn = internalMutation({
 //
 // `externalUid` is the booking's, from ownNext; the caller passes the org's
 // cal.com key only when cal.com is connected.
-type ChangeOutcome = { ok: true } | { ok: false; reason: string; providerError?: string };
+type ChangeOutcome =
+  | { ok: true; notified?: boolean }
+  | { ok: false; reason: string; providerError?: string };
 
 export async function writeOwnChange(
   ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
@@ -428,7 +435,7 @@ export async function writeOwnChange(
       });
       if (!told.ok) return { ok: false, reason: "calendar-error", providerError: told.reason };
     }
-    const done: { ok: true } | { ok: false; reason: string } = await ctx.runMutation(
+    const done: ChangeOutcome = await ctx.runMutation(
       internal.agentAppointments.cancelOwn,
       { ...a.target, ...(uid ? { providerConfirmed: true } : {}) },
     );
@@ -437,7 +444,7 @@ export async function writeOwnChange(
   const to = a.change.to;
   let newUid: string | undefined;
   if (uid && apiKey) {
-    const check: { ok: true } | { ok: false; reason: string } = await ctx.runQuery(
+    const check: ChangeOutcome = await ctx.runQuery(
       internal.agentAppointments.checkMove,
       { ...a.target, to },
     );
@@ -452,7 +459,7 @@ export async function writeOwnChange(
     // cal.com minted a new booking; carry its uid or the next cancel 404s.
     newUid = told.uid;
   }
-  const done: { ok: true } | { ok: false; reason: string } = await ctx.runMutation(
+  const done: ChangeOutcome = await ctx.runMutation(
     internal.agentAppointments.moveOwn,
     {
       ...a.target,

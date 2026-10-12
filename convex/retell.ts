@@ -2200,6 +2200,12 @@ export const classifyServices = internalQuery({
 // appointment. The booking they already hold is the answer. An ASAP order has
 // no minute to match (its startAt is when it was placed), so a recent open
 // ASAP order with the same lines stands in for it.
+//
+// "The same booking" is the same minute AND the same services, in any order.
+// Matching on the minute alone answered "add a beard trim at 14:00" to a
+// 14:00 haircut with "they already had exactly this", and "switch my 14:00
+// haircut to a colour" with the haircut (review, same day): a different visit
+// at the same minute is the customer's own clash, and bookingProblem says so.
 const SAME_ASAP_WINDOW_MS = 5 * 60_000;
 
 async function alreadyBooked(
@@ -2217,17 +2223,21 @@ async function alreadyBooked(
     .withIndex("by_customer", (q) => q.eq("customerId", a.customerId))
     .collect();
   const now = Date.now();
+  const wanted = [...a.lineNames].sort().join("\n");
   const sameLines = (row: Doc<"appointments">) =>
-    (row.items ?? []).map((item) => item.name).join("\n") === a.lineNames.join("\n");
+    (row.items ?? [])
+      .map((item) => item.name)
+      .sort()
+      .join("\n") === wanted;
   return (
     rows.find(
       (row) =>
         row.orgId === a.orgId &&
         (row.status === "scheduled" || row.status === "confirmed") &&
+        sameLines(row) &&
         (a.asap
           ? row.fulfillment?.asap === true &&
-            now - row._creationTime < SAME_ASAP_WINDOW_MS &&
-            sameLines(row)
+            now - row._creationTime < SAME_ASAP_WINDOW_MS
           : row.startAt === a.startAt && !row.fulfillment?.asap),
     ) ?? null
   );
@@ -2478,6 +2488,10 @@ export const voiceBook = internalMutation({
     serviceNames: v.optional(v.array(v.string())),
     // The customer already held exactly this booking; nothing was created.
     existing: v.optional(v.boolean()),
+    // Whether a message from the business's own rules about this booking was
+    // scheduled to the customer. The chat agent stands down on it, and only
+    // on it: an existing booking schedules nothing, so the agent must answer.
+    notified: v.optional(v.boolean()),
   }),
   handler: async (ctx, args) => {
     const phone = assertE164(args.phone);
@@ -2638,7 +2652,8 @@ export const voiceBook = internalMutation({
       customerId: customer._id,
       appointmentId,
     });
-    await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId);
+    const notified =
+      (await scheduleConfirmationIfConfigured(ctx, args.orgId, appointmentId)) > 0;
     // Every caller of this mutation is an assistant (phone or chat), so every
     // booking here counts toward the customer's daily change cap
     // (lib/agentChange.ts). Counted, never refused: the count is what stops a
@@ -2650,6 +2665,7 @@ export const voiceBook = internalMutation({
       appointmentId,
       serviceName: line?.name,
       serviceNames: lines.length ? lines.map((item) => item.name) : undefined,
+      notified,
     };
   },
 });

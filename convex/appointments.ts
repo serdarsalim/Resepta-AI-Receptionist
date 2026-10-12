@@ -305,9 +305,12 @@ export async function scheduleLifecycleMessages(
     // booking the first time through and must not hear about it again.
     suppressOwnerAlert?: boolean;
   },
-) {
+  // How many messages to the CUSTOMER were scheduled: one per live rule on
+  // this trigger. The assistants read it to know whether the business's own
+  // confirmation is on its way, and stand down only when it is (2026-10-13).
+): Promise<number> {
   const org = await ctx.db.get(orgId);
-  if (!org) return;
+  if (!org) return 0;
   const appointment = await ctx.db.get(appointmentId);
   // Every booking the customer hears about carries a manage token, whichever
   // door it came in through — [manage_link] in a confirmation has to resolve
@@ -360,6 +363,7 @@ export async function scheduleLifecycleMessages(
   // in prod, seedDefaultRules stamps every new org migrated at creation, and two
   // maintained answers to "what should fire on booking" was one too many.
   const rules = await loadOrgRules(ctx, orgId);
+  let scheduled = 0;
   for (const rule of rules) {
     if (rule.trigger !== trigger || rule.paused) continue;
     await ctx.scheduler.runAfter(0, internal.wa.sendAppointmentMessage, {
@@ -367,7 +371,9 @@ export async function scheduleLifecycleMessages(
       kind: trigger === "booking" ? "confirmation" : "cancellation",
       ruleId: rule._id,
     });
+    scheduled += 1;
   }
+  return scheduled;
 }
 
 // A confirmation that failed only because the customer had no email yet is
@@ -419,8 +425,8 @@ export async function scheduleConfirmationIfConfigured(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
   appointmentId: Id<"appointments">,
-) {
-  await scheduleLifecycleMessages(ctx, orgId, appointmentId, "booking");
+): Promise<number> {
+  return await scheduleLifecycleMessages(ctx, orgId, appointmentId, "booking");
 }
 
 export const setStatus = mutation({
@@ -546,12 +552,15 @@ export const markCancelled = internalMutation({
 // The cancellation write itself, shared by markCancelled and the assistants'
 // own cancel (agentAppointments.cancelOwn), so a cancel by phone, by chat and
 // by cal.com's echo all retire the reminders and tell the same people.
+// Returns how many messages to the customer it scheduled (none when the row
+// was already cancelled).
 export async function cancelAppointment(
   ctx: MutationCtx,
   appointment: Doc<"appointments">,
   actor?: string,
-): Promise<void> {
+): Promise<number> {
   const wasCancelled = appointment.status === "cancelled";
+  let scheduled = 0;
   await ctx.db.patch(appointment._id, { status: "cancelled" });
   await syncAppointmentSchedule(ctx, appointment._id);
   // cal.com can deliver the same cancellation more than once (the push we
@@ -561,7 +570,7 @@ export async function cancelAppointment(
     // (the cal.com push carries their name back here); their own act must
     // not email them. Absent means the customer or cal.com did it, and the
     // booking-cancelled alert is exactly for that.
-    await scheduleLifecycleMessages(
+    scheduled = await scheduleLifecycleMessages(
       ctx,
       appointment.orgId,
       appointment._id,
@@ -578,6 +587,7 @@ export async function cancelAppointment(
       });
     }
   }
+  return scheduled;
 }
 
 // externalUid moves because cal.com's reschedule mints a new booking and
@@ -602,11 +612,13 @@ export const markRescheduled = internalMutation({
 // move (agentAppointments.moveOwn). It checks nothing: every caller decided
 // the new time is allowed before it got here, and each decides differently
 // (cal.com's word, the booking page's rules at the moment of the change).
+// Returns how many messages to the customer it scheduled (the confirmation
+// again, at the new time).
 export async function rescheduleAppointment(
   ctx: MutationCtx,
   appointment: Doc<"appointments">,
   args: { startAt: number; durationMinutes?: number; externalUid?: string },
-): Promise<void> {
+): Promise<number> {
   await ctx.db.patch(appointment._id, {
     startAt: args.startAt,
     // A new time invalidates the reminders already sent for the old one.
@@ -635,7 +647,7 @@ export async function rescheduleAppointment(
       ? formatAppointmentTime(args.startAt, org.timezone, org.language)
       : undefined,
   });
-  await scheduleConfirmationIfConfigured(ctx, appointment.orgId, appointment._id);
+  return await scheduleConfirmationIfConfigured(ctx, appointment.orgId, appointment._id);
 }
 
 export function nextUpcomingOf(
