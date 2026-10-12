@@ -95,11 +95,17 @@ with per-visitor rate limits if the demo needs it.
 - **Provider choice** is a fleet-page setting (`chatAgentProvider`,
   anthropic | openai) with both keys storable at once, an optional
   per-provider deployment-wide model pick (`anthropicModel` / `openaiModel`,
-  chosen on /admin from what the platform key can reach via
-  `platformConfig.listModels`; the legacy single `chatAgentModel` row still
-  reads as their fallback), and a per-org provider
+  chosen on /admin from what the platform key can reach AND `lib/llm.ts`
+  prices, via `platformConfig.listModels`; the legacy single `chatAgentModel`
+  row still reads as their fallback), and a per-org provider
   + key override in `connections` ("llm"). `lib/chatLlm.ts` is the ONE
   resolution, shared by the runtime and the admin health fact.
+- **Each model gets only what it accepts, and an unpriced model never runs**
+  (2026-10-13). `lib/llm.ts` `MODELS` holds every listed model's price and
+  request parameters: effort only where accepted, the explicit adaptive
+  thinking switch where leaving it out means no thinking. A model with no row
+  skips every turn as `model-unpriced` rather than meter at $0 under a budget
+  that can never fill (docs/subsystems.md, the LLM seam).
 - **Key resolution (two patterns, each matching an existing doctrine):**
   - The platform key lives in `platformConfig` (`anthropicApiKey`, env fallback
     `ANTHROPIC_API_KEY`) — the Resend pattern: one deployment-wide key shared
@@ -330,6 +336,10 @@ Operator actions write `settings_changed` activity rows as `viaOperator`.
 - Set `ANTHROPIC_API_KEY` on the deployment (or the `anthropicApiKey` platform
   row). Without it, turns fail with `llm-not-configured` and the agent stays
   effectively off.
+- A model row naming a model `lib/llm.ts` does not price stops every org's
+  agent the same way (`model-unpriced`, and the org page's model pill says
+  so). Add the model's row, or pick one from the /admin list, which offers
+  only priced models.
 - Per org: flip to **shadow**, read a week of turns in the Assistant tab, then
   go **live**. Going live without shadow is possible and inadvisable.
 - The disclosure line is not removable per org. WhatsApp's 2026 AI policy and
