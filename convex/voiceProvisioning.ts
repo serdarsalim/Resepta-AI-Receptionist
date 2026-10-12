@@ -105,6 +105,9 @@ export const begin = internalMutation({
     // has an inbound agent at the provider right now, so a line provisioned
     // to another salon, or one it dials out from, could be taken by naming it
     // here, from the app or from the MCP's create_phone_agent (2026-10-13).
+    // This is the early answer for the number asked for; the action checks
+    // again, at bind time, for the number the job actually binds (a resumed
+    // job keeps its own).
     if (inboundNumber) {
       const usable = await ctx.runQuery(internal.retell.lineUsable, {
         orgId,

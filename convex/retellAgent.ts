@@ -1371,6 +1371,8 @@ async function provisionAgent(
     platformHighPriority: boolean | null;
     row: {
       _id: string;
+      // The job row as stored: begin hands back the whole document.
+      orgId: Id<"orgs">;
       status: string;
       name: string;
       language: VoiceAgentLanguage;
@@ -1499,6 +1501,18 @@ async function provisionAgent(
       promptVersion: initialVersion,
     });
     if (started.row.inboundNumber) {
+      // Judged HERE, for the number actually being bound, not only when the
+      // request arrived: begin resumes the newest unfinished job, keeps that
+      // job's number once its agent exists, and a line can be given to
+      // another business while a job sits waiting. The provider-side check in
+      // bindInboundNumber sees only whether an agent answers it right now.
+      const usable = await ctx.runQuery(internal.retell.lineUsable, {
+        orgId: started.row.orgId,
+        number: started.row.inboundNumber,
+      });
+      if (!usable.ok) {
+        throw new Error(usable.reason ?? "number-not-assigned-to-this-workspace");
+      }
       await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
     }
     const context = await editorContext(ctx, agentId, args.orgId);
