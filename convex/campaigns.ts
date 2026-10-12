@@ -29,6 +29,7 @@
 // built and once by the send path itself. Do not add a bypass.
 
 import { noteMessageById } from "./lib/thread";
+import { isDeleting } from "./lib/customerDeletion";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -88,8 +89,9 @@ async function matchSegment(
   const now = Date.now();
   const out: Doc<"customers">[] = [];
   for (const customer of customers) {
-    // First gate, before any other work: no consent, no campaign. Ever.
-    if (customer.consentAt === undefined) continue;
+    // First gate, before any other work: no consent, no campaign. Ever. A
+    // customer being deleted has neither.
+    if (customer.consentAt === undefined || isDeleting(customer)) continue;
 
     const needsHistory =
       segment.notSeenForDays !== undefined ||
@@ -343,8 +345,9 @@ export const fanOut = internalMutation({
       if (!customer || customer.orgId !== campaign.orgId) continue;
       // Second consent check, at the moment of writing the row. The segment
       // already filtered, but the two are separated by a fan-out that can span
-      // minutes and consent can be withdrawn in between.
-      if (customer.consentAt === undefined) continue;
+      // minutes and consent can be withdrawn in between, or the customer
+      // deleted.
+      if (customer.consentAt === undefined || isDeleting(customer)) continue;
 
       const customValues: Record<string, string> = {};
       for (const field of contactFields) {

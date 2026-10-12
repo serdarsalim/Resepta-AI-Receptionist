@@ -1267,6 +1267,19 @@ export default defineSchema({
     // has the rule, and the two indexes below are its readers. Absent until
     // the first entry lands (or threads:backfill runs).
     thread: v.optional(threadValidator),
+    // Set the moment someone deletes this customer (convex/customerDeletion.ts).
+    // From then on the row is on its way out: every list, search and send
+    // treats it as gone (lib/customerDeletion isDeleting), and a scheduled
+    // sweep is emptying every table that holds them before it deletes this
+    // row last. The same transaction replaces the row with this mark and
+    // nothing personal, so a half-deleted customer is never readable.
+    deletingAt: v.optional(v.number()),
+    // The number the row held when deletion began. `phone` itself becomes a
+    // tombstone at that moment, so by_org_phone stops resolving it and a new
+    // message or call from that number starts a NEW customer instead of
+    // landing on this one. Kept only for the sweep, which matches provider
+    // events still queued under this number; gone with the row.
+    deletingPhone: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"])

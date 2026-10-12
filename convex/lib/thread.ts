@@ -32,6 +32,7 @@
 import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { isDeleting } from "./customerDeletion";
 
 export const channel = v.union(
   v.literal("whatsapp"),
@@ -281,6 +282,11 @@ async function writeThread(
   customer: Doc<"customers">,
   next: Thread | undefined,
 ): Promise<void> {
+  // A customer being deleted had its summary taken off in the same write that
+  // marked it, which is what drops it from the inbox and the badge at once. A
+  // late send result or call analysis must not put it back, or the inbox
+  // lists a blank row until the sweep finishes (lib/customerDeletion).
+  if (isDeleting(customer)) return;
   if (sameThread(customer.thread, next)) return;
   await ctx.db.patch(customer._id, { thread: next });
 }

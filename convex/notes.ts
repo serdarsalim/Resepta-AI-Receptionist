@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
 import { hasNoteText } from "./lib/noteBody";
+import { isDeleting } from "./lib/customerDeletion";
 
 // Notes on a customer. There is no `list` here on purpose: a note is a row in
 // the conversation feed, not a separate list living beside it, so reading them
@@ -20,7 +21,9 @@ export const add = mutation({
   handler: async (ctx, args) => {
     const { orgId, user } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const body = args.body.trim();
     // Not `!body`. A note written in the rich editor arrives as markup, and an
     // empty document serialises to "<p></p>" — a non-empty string carrying no

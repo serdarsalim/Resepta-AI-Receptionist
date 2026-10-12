@@ -28,6 +28,7 @@ import { clampOffset, sortRules } from "./messageRules";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
 import { noteCall, noteMessageById, recomputeThread } from "./lib/thread";
+import { isDeleting, liveCustomer } from "./lib/customerDeletion";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -45,7 +46,11 @@ async function customerInOrg(
   customerId: string,
 ): Promise<Doc<"customers">> {
   const row = await ctx.db.get(customerId as Id<"customers">).catch(() => null);
-  if (!row || row.orgId !== orgId) throw new Error("No customer with that id.");
+  // A customer being deleted is gone for every tool: nothing may be written
+  // onto a record the sweep is emptying.
+  if (!row || row.orgId !== orgId || isDeleting(row)) {
+    throw new Error("No customer with that id.");
+  }
   return row;
 }
 
@@ -94,17 +99,18 @@ export const searchCustomers = internalQuery({
       .query("customers")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    const live = rows.filter((c) => !isDeleting(c));
     const needle = query?.trim().toLowerCase();
     // Diacritics fold, because a salon's book is full of names a phone keyboard
     // will not reproduce exactly — searching "gul" has to find "Gül".
     const fold = (s: string) =>
       s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
     const matched = needle
-      ? rows.filter((c) => {
+      ? live.filter((c) => {
           const hay = fold(`${c.firstName} ${c.lastName ?? ""} ${c.phone} ${c.email ?? ""}`);
           return hay.includes(fold(needle));
         })
-      : rows;
+      : live;
     return {
       count: Math.min(matched.length, take),
       totalMatches: matched.length,
@@ -124,7 +130,7 @@ export const getCustomer = internalQuery({
   returns: v.any(),
   handler: async (ctx, { orgId, customerId }) => {
     const c = await ctx.db.get(customerId as Id<"customers">).catch(() => null);
-    if (!c || c.orgId !== orgId) throw new Error("No customer with that id.");
+    if (!c || c.orgId !== orgId || isDeleting(c)) throw new Error("No customer with that id.");
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_customer", (q) => q.eq("customerId", c._id))
@@ -183,7 +189,7 @@ export const schedule = internalQuery({
     const customerIds = [...new Set(rows.map((r) => r.customerId))];
     const names = new Map(
       (await Promise.all(customerIds.map((id) => ctx.db.get(id)))).flatMap((c) =>
-        c ? [[c._id, fullName(c)] as const] : [],
+        liveCustomer(c) ? [[c._id, fullName(c)] as const] : [],
       ),
     );
     // Counted here rather than handed over as rows to tally. Same reason as the
@@ -631,7 +637,7 @@ export const createAppointments = internalMutation({
       let customer: Doc<"customers"> | null = null;
       if (row.customerId) {
         customer = await ctx.db.get(row.customerId as Id<"customers">).catch(() => null);
-        if (!customer || customer.orgId !== orgId) customer = null;
+        if (!customer || customer.orgId !== orgId || isDeleting(customer)) customer = null;
       } else if (row.phone) {
         const phone = normalisePhone(row.phone, dialCode);
         if (phone) {

@@ -6,6 +6,7 @@ import { assertE164, requireOwner } from "./lib/orgAuth";
 import { splitName } from "./lib/emailInbound";
 import { hasNoteText } from "./lib/noteBody";
 import { resolvePublicPhone } from "./lib/publicPhone";
+import { liveCustomer } from "./lib/customerDeletion";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import {
   closureBlocks,
@@ -776,6 +777,9 @@ async function appointmentByToken(
     .withIndex("by_manage_token", (q) => q.eq("manageToken", trimmed))
     .unique();
   if (!appointment) return null;
+  // The link dies with its customer. Their appointments are deleted with
+  // them, but between the request and the sweep the token still resolves.
+  if (!liveCustomer(await ctx.db.get(appointment.customerId))) return null;
   const org = await ctx.db.get(appointment.orgId);
   if (!org) return null;
   return { appointment, org };

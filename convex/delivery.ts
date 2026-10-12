@@ -37,6 +37,7 @@
 // reported back may have been delivered, so it is failed rather than retried.
 
 import { recomputeThread } from "./lib/thread";
+import { isDeleting } from "./lib/customerDeletion";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -110,6 +111,13 @@ export const claimForRetry = internalMutation({
         : Promise.resolve(null),
     ]);
     if (!org || !customer) return null;
+    // A retry owed to a customer who is being deleted is cancelled, not sent:
+    // deleting the queued row is the cancellation (wa.cancelScheduled's rule),
+    // and the row was going with the customer anyway.
+    if (isDeleting(customer)) {
+      await ctx.db.delete(message._id);
+      return null;
+    }
     // Two reasons a queued row must not reach a provider, both refused here at
     // claim time and reported through applySendResult like any other outcome:
     // the operator suspended the org (docs/chat-agent.md §8), or this is the

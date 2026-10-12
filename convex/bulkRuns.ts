@@ -39,6 +39,7 @@
 // not grade on whether the button was small. Do not add a bypass.
 
 import { noteMessageById } from "./lib/thread";
+import { isDeleting } from "./lib/customerDeletion";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -103,6 +104,9 @@ export function skipReason(
   customer: Doc<"customers">,
   channel: BulkChannel,
 ): string | null {
+  // Ahead even of consent: a customer being deleted is not a recipient of
+  // anything, and their item goes with them in the sweep.
+  if (isDeleting(customer)) return "customer-deleted";
   if (customer.consentAt === undefined) return "no-consent";
   if (channel === "email") return customer.email ? null : "no-email";
   // Both phone channels want a dialable/messageable number. customers.phone is
@@ -160,7 +164,9 @@ export const loadForLaunch = internalQuery({
     const customers: Doc<"customers">[] = [];
     for (const id of args.customerIds.slice(0, MAX_RECIPIENTS)) {
       const customer = await ctx.db.get(id);
-      if (customer && customer.orgId === orgId) customers.push(customer);
+      if (customer && customer.orgId === orgId && !isDeleting(customer)) {
+        customers.push(customer);
+      }
     }
 
     return {

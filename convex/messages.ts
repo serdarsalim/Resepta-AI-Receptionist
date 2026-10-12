@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { isDeleting } from "./lib/customerDeletion";
 import { buttonsFor, buttonLabelsFor } from "./lib/metaTemplate";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
@@ -102,6 +103,14 @@ export const logOutQueued = internalMutation({
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
+    // Every send path logs its row HERE before it reaches a provider, so this
+    // is the one place a send to a customer who is being deleted (or is gone)
+    // can be stopped whatever loaded it. Each path's own context query
+    // already returns nothing for such a customer; this catches the race
+    // where it loaded first. Throwing stops the action before the POST, and a
+    // row inserted now would outlive the sweep that is removing theirs.
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || isDeleting(customer)) throw new Error("customer-deleted");
     const id = await ctx.db.insert("messages", {
       orgId: args.orgId,
       customerId: args.customerId,
@@ -402,7 +411,14 @@ export const attachMedia = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
-    if (!message) return null;
+    const customer = message?.customerId ? await ctx.db.get(message.customerId) : null;
+    if (!message || (customer !== null && isDeleting(customer))) {
+      // The download outlived the row it was for: the customer was deleted
+      // while the file was on its way. Stored now, it would be a blob nothing
+      // points at, holding their photo or voice note after their record went.
+      if (args.storageId) await ctx.storage.delete(args.storageId);
+      return null;
+    }
     await ctx.db.patch(args.messageId, {
       mediaStorageId: args.storageId,
       mediaPending: undefined,
@@ -522,8 +538,9 @@ export const feedForCustomer = query({
     // one in React state. The next consistent snapshot then asks this org
     // about the previous org's customer, and a throw from a live query with
     // no error boundary above it takes down the whole app rather than the one
-    // pane that asked. Nothing crosses the boundary either way.
-    if (!customer || customer.orgId !== orgId) return [];
+    // pane that asked. Nothing crosses the boundary either way. A customer
+    // being deleted reads the same way: their thread is being emptied.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return [];
 
     // Fallback labels for rows that predate buttonLabels (stamped at send
     // since 2026-09-01), resolved the way those sends resolved their language
@@ -693,7 +710,9 @@ export const setAttention = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     await ctx.db.patch(args.customerId, {
       attentionClearedAt: args.cleared ? Date.now() : undefined,
     });
@@ -782,7 +801,9 @@ export const markConversationRead = mutation({
   handler: async (ctx, args) => {
     const { user, orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    // No read mark for a customer being deleted: the sweep removes theirs,
+    // and one written after it passed would outlive the customer.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const now = Date.now();
     const existing = await ctx.db
       .query("inboxReads")
@@ -871,7 +892,7 @@ export const inboxPin = query({
   handler: async (ctx, args) => {
     const { user, orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return false;
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return false;
     const pin = await ctx.db
       .query("inboxPins")
       .withIndex("by_org_user_customer", (q) =>
@@ -896,7 +917,9 @@ export const setInboxPin = mutation({
   handler: async (ctx, args) => {
     const { user, orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const existing = await ctx.db
       .query("inboxPins")
       .withIndex("by_org_user_customer", (q) =>

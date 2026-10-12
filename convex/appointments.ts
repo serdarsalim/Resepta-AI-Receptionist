@@ -4,6 +4,7 @@ import { internalMutation, mutation, query, type MutationCtx } from "./_generate
 import type { Doc, Id } from "./_generated/dataModel";
 import { appointmentStatus } from "./schema";
 import { requireOrg } from "./lib/orgAuth";
+import { isDeleting } from "./lib/customerDeletion";
 import { getLocalPartsSafe } from "./lib/businessHours";
 import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity, statusChange } from "./lib/activity";
@@ -187,6 +188,9 @@ export const listRange = query({
     const out = [];
     for (const row of rows) {
       const customer = await ctx.db.get(row.customerId);
+      // Off the calendar the moment its customer is deleted; the deletion
+      // removes the row itself a moment later.
+      if (customer && isDeleting(customer)) continue;
       const staff = row.staffId ? await ctx.db.get(row.staffId) : null;
       out.push({
         _id: row._id,
@@ -258,7 +262,7 @@ export const listForCustomer = query({
     // Empty rather than a throw, for the reason spelled out in
     // messages.feedForCustomer: the contact page asks both queries about one
     // id, and that id outlives a workspace switch.
-    if (!customer || customer.orgId !== orgId) return [];
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return [];
     const rows = await ctx.db
       .query("appointments")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))

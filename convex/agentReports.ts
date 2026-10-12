@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { channelOfMessage } from "./messages";
+import { isDeleting } from "./lib/customerDeletion";
 
 const DAY = 86_400_000;
 
@@ -106,7 +107,9 @@ export const activityReport = internalQuery({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(1000);
-    const arrived = newCustomers.filter((c) => c._creationTime >= since).length;
+    const arrived = newCustomers.filter(
+      (c) => c._creationTime >= since && !isDeleting(c),
+    ).length;
 
     const pct = (n: number, d: number) =>
       d === 0 ? null : Math.round((n / d) * 1000) / 10;
@@ -169,7 +172,9 @@ export const customerHistory = internalQuery({
     const customer = await ctx.db
       .get(customerId as Id<"customers">)
       .catch(() => null);
-    if (!customer || customer.orgId !== orgId) throw new Error("No customer with that id.");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("No customer with that id.");
+    }
     const cap = Math.min(Math.max(limit ?? 50, 1), 200);
 
     const [messages, calls, notes, appointments] = await Promise.all([

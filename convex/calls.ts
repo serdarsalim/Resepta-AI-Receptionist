@@ -7,6 +7,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
+import { isDeleting } from "./lib/customerDeletion";
 
 export const list = query({
   args: { paginationOpts: paginationOptsValidator },
@@ -24,15 +25,21 @@ export const list = query({
     const customerIds = [
       ...new Set(result.page.flatMap((c) => (c.customerId ? [c.customerId] : []))),
     ];
+    const customers = await Promise.all(customerIds.map((id) => ctx.db.get(id)));
     const names = new Map(
-      (await Promise.all(customerIds.map((id) => ctx.db.get(id)))).flatMap((c) =>
+      customers.flatMap((c) =>
         c ? [[c._id, `${c.firstName} ${c.lastName ?? ""}`.trim()] as const] : [],
       ),
     );
+    // A customer being deleted takes their calls with them; until the sweep
+    // reaches these rows they are already off the list.
+    const gone = new Set(customers.flatMap((c) => (c && isDeleting(c) ? [c._id] : [])));
 
     return {
       ...result,
-      page: result.page.map((c) => ({
+      page: result.page
+        .filter((c) => !(c.customerId && gone.has(c.customerId)))
+        .map((c) => ({
         _id: c._id,
         startedAt: c.startedAt,
         direction: c.direction,

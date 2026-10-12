@@ -48,6 +48,7 @@ import { EVOLUTION_NO_MEDIA, EVOLUTION_NO_REACTION } from "./lib/sendFailure";
 import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
 import { resolvePublicPhone } from "./lib/publicPhone";
+import { isDeleting } from "./lib/customerDeletion";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -71,7 +72,8 @@ export const loadSessionContext = internalQuery({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    // A customer being deleted is gone: nothing more goes out to them.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const [waAccount, org, contactFields] = await Promise.all([
       // Resolved here, not at the send: the platform-token fallback
       // (lib/platformConfig resolveWaAccount) needs ctx.db, and the action
@@ -407,7 +409,8 @@ export const markThreadRead = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    // A customer being deleted is gone: nothing more goes out to them.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     // Evolution is a linked handset: the phone itself owns its read state, and
     // Baileys needs the full message key, which that lane never stored — the
     // same wall the reaction path hits.
@@ -508,7 +511,7 @@ export const loadReadReceiptContext = internalQuery({
     // identity (the lesson loadScheduledSendContext records). The org comes
     // off the customer row the mutation already scoped to the caller's org.
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     return {
       waAccount: await resolveWaAccount(
         ctx,
@@ -525,6 +528,10 @@ export const stampReadReceipt = internalMutation({
   args: { customerId: v.id("customers"), wamid: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
+    // The receipt is an action's afterthought; the customer may have been
+    // deleted while it ran, and a patch on a row the sweep removed throws.
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || isDeleting(customer)) return null;
     await ctx.db.patch(args.customerId, { lastReadReceiptWamid: args.wamid });
     return null;
   },
@@ -554,7 +561,7 @@ export const loadReactionTarget = internalQuery({
     if (!message || message.orgId !== orgId) return null;
     if (!message.customerId) return null;
     const customer = await ctx.db.get(message.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const org = await ctx.db.get(orgId);
     const waAccount = await resolveWaAccount(
       ctx,
@@ -659,7 +666,7 @@ export const loadAwayReplyContext = internalQuery({
     // user. The org comes from the customer row, which the webhook already
     // resolved by phone_number_id.
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const [waAccount, rule, templates, contactFields] = await Promise.all([
@@ -789,6 +796,10 @@ export const loadSendContext = internalQuery({
           .withIndex("by_org", (q) => q.eq("orgId", appointment.orgId))
           .collect(),
       ]);
+    // The reminder, confirmation, follow-up, winback and cancellation of a
+    // customer being deleted: nothing goes, on any channel. Their appointments
+    // are deleted with them, but a send already scheduled can run first.
+    if (customer && isDeleting(customer)) return null;
     const evolution = org
       ? await loadEvolutionCreds(ctx, appointment.orgId, org.evolutionInstance)
       : null;
@@ -1531,7 +1542,7 @@ export const loadScheduledSendContext = internalQuery({
   returns: v.any(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const waAccount = await resolveWaAccount(
@@ -1601,6 +1612,17 @@ export const claimScheduled = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.messageId);
     if (!row || row.status !== "queued" || row.scheduledFor === undefined) return false;
+    // Cancelled rather than sent when its customer is being deleted. The
+    // deletion cancels queued rows itself; this is the race where the cron
+    // read the row first. Deleting is how a parked send is cancelled
+    // (cancelScheduled below), and the row was going with the customer anyway.
+    if (row.customerId) {
+      const customer = await ctx.db.get(row.customerId);
+      if (!customer || isDeleting(customer)) {
+        await ctx.db.delete(args.messageId);
+        return false;
+      }
+    }
     // sendingAt marks it in flight so delivery.reapStuck can find it if this
     // action dies before reporting a result. Without it a parked send whose
     // dispatch was killed would sit queued with nothing left to pick it up.

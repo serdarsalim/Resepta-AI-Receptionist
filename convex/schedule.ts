@@ -14,6 +14,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity } from "./lib/activity";
 import { queueOrgAlert } from "./lib/alerts";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { isDeleting } from "./lib/customerDeletion";
 
 const lineInput = v.object({
   serviceId: v.id("services"),
@@ -165,7 +166,9 @@ export const prepareCreate = internalMutation({
       }
     } else {
       const customer = await ctx.db.get(customerId);
-      if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+      if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+        throw new Error("not-found");
+      }
     }
     const customer = await ctx.db.get(customerId);
     if (!customer) throw new Error("customer-failed");

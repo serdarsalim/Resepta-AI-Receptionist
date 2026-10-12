@@ -19,6 +19,7 @@ import {
 } from "./lib/emailInbound";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { noteMessageById } from "./lib/thread";
+import { isDeleting } from "./lib/customerDeletion";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { outOfHoursMessage } from "./lib/awayReply";
 import { resolvePublicPhone } from "./lib/publicPhone";
@@ -234,7 +235,7 @@ export const loadOutOfHoursContext = internalQuery({
   returns: v.any(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const [rule, templates, contactFields, mailConfig] = await Promise.all([
@@ -372,7 +373,7 @@ export const loadSendContext = internalQuery({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const org = await ctx.db.get(orgId);
     if (!org) return null;
     const mailConfig = await emailConfig(ctx);

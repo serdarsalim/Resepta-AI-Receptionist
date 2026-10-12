@@ -49,6 +49,7 @@ import type * as lib_chatAgentTemplate from "../lib/chatAgentTemplate.js";
 import type * as lib_chatLlm from "../lib/chatLlm.js";
 import type * as lib_closureRows from "../lib/closureRows.js";
 import type * as lib_connections from "../lib/connections.js";
+import type * as lib_customerDeletion from "../lib/customerDeletion.js";
 import type * as lib_discardOrg from "../lib/discardOrg.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
@@ -178,6 +179,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chatLlm": typeof lib_chatLlm;
   "lib/closureRows": typeof lib_closureRows;
   "lib/connections": typeof lib_connections;
+  "lib/customerDeletion": typeof lib_customerDeletion;
   "lib/discardOrg": typeof lib_discardOrg;
   "lib/email": typeof lib_email;
   "lib/emailInbound": typeof lib_emailInbound;

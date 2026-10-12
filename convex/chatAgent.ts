@@ -12,6 +12,7 @@ import {
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
+import { isDeleting } from "./lib/customerDeletion";
 import { monthKey } from "./lib/usage";
 
 import { platformValue, resolveWaAccount } from "./lib/platformConfig";
@@ -121,7 +122,8 @@ export const loadTurnContext = internalQuery({
   returns: v.any(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    // A turn scheduled for a customer who has since been deleted stands down.
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
 
@@ -646,7 +648,7 @@ export const pauseForCustomer = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org) return null;
     const who = conversationAgentMode(org, customer);
@@ -680,7 +682,9 @@ export const flagForCustomer = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.agentFlaggedAt !== undefined) return null;
+    if (!customer || isDeleting(customer) || customer.agentFlaggedAt !== undefined) {
+      return null;
+    }
     await ctx.db.patch(args.customerId, { agentFlaggedAt: Date.now() });
     return null;
   },
@@ -714,7 +718,9 @@ export const setConversationMode = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const org = await ctx.db.get(orgId);
     if (!org) throw new Error("not-found");
     const who = conversationAgentMode(org, customer);
@@ -825,7 +831,7 @@ export const stateForCustomer = query({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const org = await ctx.db.get(orgId);
     if (!org) return null;
     const who = conversationAgentMode(org, customer);
@@ -918,6 +924,10 @@ export const claimSuggestion = internalMutation({
     if (turn.status !== "suggested" || turn.suggestionOutcome !== undefined) {
       return refused;
     }
+    // A draft to a customer who is being deleted is never sent; the sweep
+    // takes the draft with everything else.
+    const target = await ctx.db.get(args.customerId);
+    if (!target || isDeleting(target)) return refused;
     await ctx.db.patch(args.turnId, { suggestionOutcome: "sent" });
 
     // Whether this customer still has to be told they are talking to an
@@ -1122,7 +1132,7 @@ export const saveCustomerDetails = internalMutation({
   returns: contactUpdateResult,
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return contactUpdateFailure("no-such-customer");
+    if (!customer || isDeleting(customer)) return contactUpdateFailure("no-such-customer");
     return await applyVoiceContactValues(ctx, {
       orgId: customer.orgId,
       phone: customer.phone,
@@ -1542,6 +1552,10 @@ export const claimAutoSend = internalMutation({
     ) {
       return null;
     }
+    // The countdown on a reply to a customer who is being deleted ends here,
+    // unsent. The sweep removes the turn itself.
+    const customer = await ctx.db.get(turn.customerId);
+    if (!customer || isDeleting(customer)) return null;
     await ctx.db.patch(args.turnId, { suggestionOutcome: "sent" });
     return { orgId: turn.orgId, customerId: turn.customerId, body: turn.reply };
   },
@@ -1623,7 +1637,7 @@ export const loadAutoSendContext = internalQuery({
   returns: v.any(),
   handler: async (ctx, args) => {
     const customer = await ctx.db.get(args.customerId);
-    if (!customer) return null;
+    if (!customer || isDeleting(customer)) return null;
     const org = await ctx.db.get(customer.orgId);
     if (!org || (org.status ?? "active") === "suspended") return null;
     const waAccount = await ctx.db
@@ -2770,7 +2784,9 @@ async function applyIntentsTx(
 ): Promise<IntentOutcome[]> {
   const customer = await ctx.db.get(a.customerId);
   const org = await ctx.db.get(a.orgId);
-  if (!customer || customer.orgId !== a.orgId || !org) throw draftRefusal(0, "not-found");
+  if (!customer || customer.orgId !== a.orgId || isDeleting(customer) || !org) {
+    throw draftRefusal(0, "not-found");
+  }
   const closures = await loadClosures(ctx, a.orgId);
   const results: IntentOutcome[] = [];
   for (let index = 0; index < a.intents.length; index += 1) {

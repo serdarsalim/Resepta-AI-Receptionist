@@ -6,6 +6,7 @@ import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
+import { isDeleting } from "./lib/customerDeletion";
 
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
@@ -58,6 +59,12 @@ const customerFields = {
   // The conversation summary the write paths keep (lib/thread.ts). Read here
   // for the dot; the inbox reads it through its own indexes.
   thread: v.optional(threadValidator),
+  // The deletion mark (schema customers.deletingAt). Every read here drops a
+  // row that carries it, so these never reach a client; declared anyway,
+  // because a column the schema has and this mirror lacks is the read that
+  // throws (see above).
+  deletingAt: v.optional(v.number()),
+  deletingPhone: v.optional(v.string()),
 };
 
 // The row plus the dot, which both the list and the record page carry.
@@ -96,7 +103,9 @@ export const get = query({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) return null;
+    // A customer being deleted is already gone as far as any screen is
+    // concerned: the row is blank and a sweep is emptying it out.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     // The record page carries the dot too, so it has to answer the same
     // question the table does — and answer it the same way, through
     // resolveAttention, rather than by looking at two of the three timestamps
@@ -112,7 +121,9 @@ export const setCustomValue = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const custom = { ...(customer.custom ?? {}) };
     if (args.value.trim()) custom[args.key] = args.value.trim();
     else delete custom[args.key];
@@ -154,6 +165,7 @@ export const quickSearch = query({
       .collect();
     const out: Array<{ id: Doc<"customers">["_id"]; name: string; phone: string }> = [];
     for (const c of rows) {
+      if (isDeleting(c)) continue;
       const hay = fold(`${c.firstName} ${c.lastName ?? ""} ${c.phone} ${c.email ?? ""}`);
       if (!hay.includes(needle)) continue;
       out.push({
@@ -184,10 +196,12 @@ export const list = query({
     // before the page is. This list is one unpaginated take that the table
     // re-sorts by whichever column is active, so a server-side order would be
     // thrown away on arrival. One place decides, and it is the sort.
-    return rows.map((row) => ({
-      ...row,
-      needsAttention: resolveAttention(row),
-    }));
+    return rows
+      .filter((row) => !isDeleting(row))
+      .map((row) => ({
+        ...row,
+        needsAttention: resolveAttention(row),
+      }));
   },
 });
 
@@ -218,7 +232,7 @@ export const options = query({
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
       .take(1000);
-    return rows.map((row) => ({
+    return rows.filter((row) => !isDeleting(row)).map((row) => ({
       _id: row._id,
       firstName: row.firstName,
       lastName: row.lastName,
@@ -276,7 +290,9 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const patch: Record<string, unknown> = {};
     if (args.firstName !== undefined && args.firstName.trim()) {
       patch.firstName = args.firstName.trim();
@@ -321,7 +337,9 @@ export const setMuted = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     await ctx.db.patch(args.customerId, {
       mutedAt: args.muted ? Date.now() : undefined,
     });
@@ -335,7 +353,9 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
     const appointments = await ctx.db
       .query("appointments")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
